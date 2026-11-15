@@ -3,6 +3,7 @@ package twod //nolint:testpackage // white-box: shares twod's test helpers
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -178,6 +179,57 @@ func TestWhatADeclaredClassRefusesIsAnErrorNamingIt(t *testing.T) {
 		_, err := LoadTiled(classMap(c.object, c.tile), "one.tmj", crypt())
 		require.Error(t, err, c.name)
 		assert.Contains(t, err.Error(), c.want, c.name)
+	}
+}
+
+func TestAnUndeclaredClassIsAnErrorListingTheClassesOfItsUse(t *testing.T) {
+	for _, c := range []struct{ name, object, tile, want string }{
+		{"a close name", `, "type": "exi"`, "",
+			"object 1 (): class exi is not declared; is it exit? (object classes: exit, ember.Object)"},
+		{"a name close to none", `, "type": "lava"`, "",
+			"object 1 (): class lava is not declared (object classes: exit, ember.Object)"},
+		{"a tile's", "", `, "type": "lava"`, "tile 0: class lava is not declared (tile classes: wall)"},
+	} {
+		_, err := LoadTiled(classMap(c.object, c.tile), "one.tmj", crypt())
+		require.Error(t, err, c.name)
+		assert.True(t, strings.HasSuffix(err.Error(), c.want), "%s: %v", c.name, err)
+	}
+}
+
+func TestAPropertyAClassLacksHintsOnlyACloseName(t *testing.T) {
+	exit := `, "type": "exit", "properties": [{"name": "to", "type": "string", "value": "hall"}`
+	for _, c := range []struct{ name, object, tile, want string }{
+		{"two edits in four letters, from the engine's tint", exit + `, {"name": "kind", "type": "string", "value": "x"}]`,
+			"", "property kind: class exit has no such property"},
+		{"a member", exit + `, {"name": "look", "type": "class", "propertytype": "look", "value": {"kind": 1}}]`,
+			"", "member kind: class look has no such property"},
+		{"a tile's", "", `, "type": "wall", "properties": [{"name": "kind", "type": "string", "value": "x"}]`,
+			"tile 0: property kind: class wall has no such property"},
+	} {
+		_, err := LoadTiled(classMap(c.object, c.tile), "one.tmj", crypt())
+		require.Error(t, err, c.name)
+		assert.True(t, strings.HasSuffix(err.Error(), c.want), "%s: %v", c.name, err)
+	}
+}
+
+func TestAHintIsTheNearestNameWithinAnEditInThreeLetters(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		names []string
+		want  string
+	}{
+		{"exi", []string{"exit"}, "; is it exit?"},
+		{"too", []string{"to"}, "; is it to?"},
+		{"durabilty", []string{"art", "durability"}, "; is it durability?"},
+		{"drability", []string{"durabilty", "durability"}, "; is it durability?"},
+		{"dorabilty", []string{"durability"}, "; is it durability?"},
+		{"kind", []string{"tint"}, ""},
+		{"lit", []string{"tint"}, ""},
+		{"tp", []string{"to"}, ""},
+		{"lava", []string{"zone", "wall"}, ""},
+		{"lava", nil, ""},
+	} {
+		assert.Equal(t, c.want, nearOf(c.name, c.names), "%s among %v", c.name, c.names)
 	}
 }
 

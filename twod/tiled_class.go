@@ -86,7 +86,8 @@ func (l *tiledLoad) class(name string) (*Class, bool) {
 
 // classOf is the declared class of an element of use whose class Tiled
 // names name: nil for an element of no class, or of one when no class is
-// declared for its use; an error for a class not declared for it.
+// declared for its use; an error for a class not declared for it, listing
+// the classes that are, the engine's among them.
 func (l *tiledLoad) classOf(name string, use ClassUse) (*Class, error) {
 	if name == "" {
 		return nil, nil //nolint:nilnil // an element of no class has none
@@ -114,7 +115,13 @@ func (l *tiledLoad) classOf(name string, use ClassUse) (*Class, error) {
 	if len(names) == 0 {
 		return nil, nil //nolint:nilnil // no class is declared for its use: it stays loose
 	}
-	return nil, fmt.Errorf("class %s is not declared%s", name, nearOf(name, names))
+	for _, c := range engineClasses() {
+		if c.On&use != 0 {
+			names = append(names, c.Name)
+		}
+	}
+	return nil, fmt.Errorf("class %s is not declared%s (%s classes: %s)", name, nearOf(name, names), useName(use),
+		strings.Join(names, ", "))
 }
 
 func useName(use ClassUse) string {
@@ -126,14 +133,21 @@ func useName(use ClassUse) string {
 	return "thing"
 }
 
-// nearOf says which of names name is likely a misspelling of.
+// nearOf says which of names name is likely a misspelling of: the one
+// fewest edits away, the first among equals, when that is at most an edit
+// for three letters of name. Farther, a name is another word (kind is two
+// edits from tint), and a hint would mislead.
 func nearOf(name string, names []string) string {
+	best, least := "", 0
 	for _, n := range names {
-		if edits(name, n) <= 2 {
-			return fmt.Sprintf("; is it %s?", n)
+		if d := edits(name, n); best == "" || d < least {
+			best, least = n, d
 		}
 	}
-	return ""
+	if best == "" || 3*least > len(name) {
+		return ""
+	}
+	return fmt.Sprintf("; is it %s?", best)
 }
 
 // propertiesOf are list's values for an element of use and class c, nil
