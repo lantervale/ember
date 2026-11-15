@@ -65,15 +65,15 @@ func TestASwapAtAnAlphaLeavesTheColourAtOthers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	orb, ember, haloed := sprites[3].Texture(), sprites[4].Texture(), sprites[5].Texture()
+	orb, orange, haloed := sprites[3].Texture(), sprites[4].Texture(), sprites[5].Texture()
 	// The orb's core, at 8,8, and its glow, at 8,2, are one colour.
 	if core, glow := rgba(t, orb.Image, 8, 8), rgba(t, orb.Image, 8, 2); core.A != 255 || glow.A != 128 || core.R != glow.R || core.G != glow.G || core.B != glow.B {
 		t.Fatalf("the orb draws its core opaque and its glow half clear in one colour: %v, %v", core, glow)
 	}
-	if got := rgba(t, ember.Image, 8, 8); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0xff}) {
+	if got := rgba(t, orange.Image, 8, 8); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0xff}) {
 		t.Fatalf("a swap turns the core into %v", got)
 	}
-	if got := rgba(t, ember.Image, 8, 2); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0x80}) {
+	if got := rgba(t, orange.Image, 8, 2); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0x80}) {
 		t.Fatalf("a swap turns the glow too, keeping its alpha: %v", got)
 	}
 	if got := rgba(t, haloed.Image, 8, 8); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0xff}) {

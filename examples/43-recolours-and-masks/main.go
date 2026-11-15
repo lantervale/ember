@@ -82,7 +82,7 @@ func variants() ([]*twod.Sprite, error) {
 		twod.Swap(core, color.Hex("#f2803a")),
 		twod.Swap(color.Hex("#306082"), color.Hex("#8a3b1c")),
 	}
-	ember, err := twod.Recolour(orb, twod.NewPalette(swaps...))
+	orange, err := twod.Recolour(orb, twod.NewPalette(swaps...))
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func variants() ([]*twod.Sprite, error) {
 		twod.NewSprite(mossy, twod.At(320, 110), twod.Scale(6, 6)),
 		twod.NewSprite(stony, twod.At(480, 110), twod.Scale(6, 6)),
 		twod.NewSprite(orb, twod.At(160, 255), twod.Scale(6, 6)),
-		twod.NewSprite(ember, twod.At(320, 255), twod.Scale(6, 6)),
+		twod.NewSprite(orange, twod.At(320, 255), twod.Scale(6, 6)),
 		twod.NewSprite(haloed, twod.At(480, 255), twod.Scale(6, 6)),
 		twod.NewSprite(tiles, twod.Region(wall), twod.At(160, 400), twod.Scale(6, 6)),
 		twod.NewSprite(cut, twod.At(320, 400), twod.Scale(6, 6)),
