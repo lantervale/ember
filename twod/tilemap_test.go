@@ -341,3 +341,31 @@ func TestATallTileSortsByTheFootOfItsArt(t *testing.T) {
 		"the whole tile round its pivot at the foot, in pixels before its scale",
 	)
 }
+
+func TestSettingACellStandsTurnsOrDropsItsTallTileAlone(t *testing.T) {
+	ts := NewTileset(atlas(64, 16), Cell(16, 16), Tall(2, 3))
+	m := NewTileMap(ts, Cells([][]int{{1, 2, 1}, {1, 1, 3}}), CellSize(32, 32))
+	require.Len(t, m.TallSprites(), 2)
+	first, last := m.TallSprites()[0], m.TallSprites()[1]
+
+	m.Set(0, 0, 3)
+	require.Len(t, m.TallSprites(), 3, "a tall tile set in a plain cell stands")
+	stood := m.TallSprites()[0]
+	assert.Equal(t, geom.Rect{X: 32, W: 16, H: 16}, stood.Region())
+	assert.Equal(t, geom.V2(16, 32), stood.Position(), "at the foot of its cell")
+
+	m.Set(0, 0, 2)
+	require.Len(t, m.TallSprites(), 3)
+	assert.Same(t, stood, m.TallSprites()[0], "another tall tile keeps the cell's sprite")
+	assert.Equal(t, geom.Rect{X: 16, W: 16, H: 16}, stood.Region(), "showing the new tile")
+
+	m.SetFlip(0, 0, TileFlipX)
+	across, down := stood.Flip()
+	assert.True(t, across, "a flip turns the cell's sprite")
+	assert.False(t, down)
+
+	m.Set(0, 0, 1)
+	assert.Equal(t, []*Sprite{first, last}, m.TallSprites(), "a plain tile drops it, the others as they were")
+	across, _ = first.Flip()
+	assert.False(t, across)
+}

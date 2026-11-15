@@ -81,7 +81,7 @@ func (m *TileMap) SetFlip(x, y int, f TileFlip) {
 	m.flips[i] = f
 	m.version++
 	m.relook(i)
-	m.syncTalls()
+	m.syncTall(i)
 }
 
 func (m *TileMap) index(x, y int) (int, bool) {
@@ -266,7 +266,7 @@ func (m *TileMap) Set(x, y, id int) {
 	m.cells[y*m.columns+x] = id
 	m.version++
 	m.relook(y*m.columns + x)
-	m.syncTalls()
+	m.syncTall(y*m.columns + x)
 }
 
 // Picture is what cell x, y shows, in the map's parent's space, trimmed
@@ -350,31 +350,38 @@ func (m *TileMap) TallSprites() []*Sprite {
 // tall tile keeps its shape, scaled to the cell's width, so one taller
 // than wide rises above its cell.
 func (m *TileMap) syncTalls() {
+	for i := range m.cells {
+		m.syncTall(i)
+	}
+}
+
+// syncTall is syncTalls for cell i alone: what Set and SetFlip change, so
+// they cost the same whatever the map's size.
+func (m *TileMap) syncTall(i int) {
 	if m.tileset == nil {
 		return
 	}
-	for i, id := range m.cells {
-		s, has := m.talls[i]
-		switch {
-		case m.tileset.Tall(id) && !has:
-			s = m.tallSprite(i, id)
-			m.talls[i] = s
-			parent := Entity(m)
-			if m.tallIn != nil {
-				parent = m.tallIn
-			}
-			add(parent, []world.BasicFace{s})
-		case !m.tileset.Tall(id) && has:
-			drop(s)
-			delete(m.talls, i)
-		case has:
-			tex, r := m.tileset.drawn(id, 0, m.cellLook(i, id))
-			s.SetTexture(tex)
-			s.SetRegion(r)
-			s.SetTint(m.tallTint(i, id))
-			f := m.Flip(i%m.columns, i/m.columns)
-			s.SetFlip(f&TileFlipX != 0, f&TileFlipY != 0)
+	id := m.cells[i]
+	s, has := m.talls[i]
+	switch {
+	case m.tileset.Tall(id) && !has:
+		s = m.tallSprite(i, id)
+		m.talls[i] = s
+		parent := Entity(m)
+		if m.tallIn != nil {
+			parent = m.tallIn
 		}
+		add(parent, []world.BasicFace{s})
+	case !m.tileset.Tall(id) && has:
+		drop(s)
+		delete(m.talls, i)
+	case has:
+		tex, r := m.tileset.drawn(id, 0, m.cellLook(i, id))
+		s.SetTexture(tex)
+		s.SetRegion(r)
+		s.SetTint(m.tallTint(i, id))
+		f := m.Flip(i%m.columns, i/m.columns)
+		s.SetFlip(f&TileFlipX != 0, f&TileFlipY != 0)
 	}
 }
 

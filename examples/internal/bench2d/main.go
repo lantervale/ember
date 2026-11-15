@@ -17,6 +17,12 @@
 //
 //	EMBER_HIDDEN=1 [EMBER_STATS=1] go run ./examples/internal/bench2d \
 //		[-scene wave23|wide|crowd|20k|200k] [-w 2000 -h 1125 -frames 300] [-cpuprofile f]
+//
+// What a painted level's size costs the CPU, without a GPU, is the Level
+// benchmarks beside it (level_test.go): a frame, a cell set during play and
+// a load, on levels of 40×40 and 400×400 cells.
+//
+//	go test -run xxx -bench Level ./examples/internal/bench2d
 package main
 
 import (
