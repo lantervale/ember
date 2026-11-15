@@ -3,6 +3,8 @@ package paint
 import (
 	"sync"
 
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/twod"
 )
 
@@ -48,4 +50,22 @@ func pixelated(tex *twod.Texture) *twod.Texture {
 		c.Touch()
 	}
 	return c
+}
+
+// tieBias is how far up and left of a pixel's centre a pixelated picture
+// is sampled, in texels: far less than a texel, so only a pixel whose
+// centre falls on the line between two texels changes texel.
+const tieBias = 1.0 / 1024
+
+// texels is the whole of tex for a draw: when tex is sampled by its
+// nearest pixels, nudged up and left by tieBias, so a pixel whose centre
+// falls on the line between two texels (a texel a whole and a half
+// pixels wide, as a 16-texel picture over 72) takes the upper left one,
+// as Chrome's does; the GPU alone gives it the lower right one.
+func texels(tex *twod.Texture) geom.Rect {
+	size := tex.Size()
+	if tex.Filter != render.FilterNearest || size.X <= 0 || size.Y <= 0 {
+		return whole
+	}
+	return geom.Rect{X: -tieBias / size.X, Y: -tieBias / size.Y, W: 1, H: 1}
 }

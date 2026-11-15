@@ -19,3 +19,11 @@ func TestThePagesRunAtTwoPixelsAPointUnlessToldOtherwise(t *testing.T) {
 	assert.Contains(t, env, "EMBER_CRASH_DIR=/mine")
 	assert.NotContains(t, env, "EMBER_CRASH_DIR=/tmp/run", "a crash folder set is kept")
 }
+
+func TestAPageAtAFractionalZoomHasANameOfItsOwn(t *testing.T) {
+	assert.Equal(t, "zoom-snap", pageName("./internal/pages/zoom-snap", 3), "a whole zoom keeps the page's name")
+	assert.Equal(t, "states", pageName("./internal/pages/states", 1))
+	assert.Equal(t, "img-zoomed@1.5", pageName("./internal/pages/img-zoomed", 1.5))
+	assert.Equal(t, "img-zoomed@2.5", pageName("./internal/pages/img-zoomed", 2.5),
+		"one page at two zooms keeps two reports and two results")
+}
