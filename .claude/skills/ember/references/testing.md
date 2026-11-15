@@ -122,6 +122,10 @@ EMBER_HIDDEN=1 EMBER_CAPTURE=walk.gif EMBER_CAPTURE_FRAMES=90 go run ./path   # 
 
 Captures are at the screen's scale (2× on a Retina Mac): a 640×360 window saves 1280×720. Look at every capture before reporting it; extra windows save as `name-2.png`…
 
+## Hold screens to reference pictures
+
+`golden.Run(t, ".", "testdata/golden", []golden.Scene{{Name: "title", Pkg: ".", Frame: 60}})` captures each scene hidden on a GPU machine and compares it with its PNG; `-update` rewrites the references. `EMBER_GOLDEN_TIMEOUT=10m` is the longest one scene may run, counted once it is built: a scene over it is killed and the test says what it printed.
+
 ## Before saying it's done
 
 - `go vet ./...` and `go test ./...` from `ember`, clean.
