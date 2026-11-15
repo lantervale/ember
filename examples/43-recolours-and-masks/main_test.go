@@ -67,7 +67,9 @@ func TestASwapAtAnAlphaLeavesTheColourAtOthers(t *testing.T) {
 	}
 	orb, orange, haloed := sprites[3].Texture(), sprites[4].Texture(), sprites[5].Texture()
 	// The orb's core, at 8,8, and its glow, at 8,2, are one colour.
-	if core, glow := rgba(t, orb.Image, 8, 8), rgba(t, orb.Image, 8, 2); core.A != 255 || glow.A != 128 || core.R != glow.R || core.G != glow.G || core.B != glow.B {
+	core, glow := rgba(t, orb.Image, 8, 8), rgba(t, orb.Image, 8, 2)
+	blue := stdcolor.NRGBA{0x5f, 0xcd, 0xe4, 0xff}
+	if core != blue || glow != (stdcolor.NRGBA{blue.R, blue.G, blue.B, 0x80}) {
 		t.Fatalf("the orb draws its core opaque and its glow half clear in one colour: %v, %v", core, glow)
 	}
 	if got := rgba(t, orange.Image, 8, 8); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0xff}) {
