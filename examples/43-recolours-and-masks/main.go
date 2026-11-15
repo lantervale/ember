@@ -1,7 +1,9 @@
 // Recolours and masks: variants of a picture made once, at load. Above, the
 // crate in its own colours, through a palette made in code, and through
-// one loaded from a picture of swatches; below, a wall tile as it is, cut
-// by a disc mask, and by the same mask inverted.
+// one loaded from a picture of swatches; in the middle, an orb whose glow
+// is its core's colour half clear, as it is, through swaps at any alpha,
+// and with one more swap at the glow's alpha only; below, a wall tile as
+// it is, cut by a disc mask, and by the same mask inverted.
 //
 //	go run ./examples/43-recolours-and-masks
 package main
@@ -17,13 +19,13 @@ import (
 	"github.com/lantervale/ember/twod"
 )
 
-//go:embed crate.png stone.png tiles.png disc.png
+//go:embed crate.png stone.png orb.png tiles.png disc.png
 var files embed.FS
 
 func main() {
 	win := platform.NewWindow(
 		platform.Title("ember · recolours and masks"),
-		platform.Size(640, 360),
+		platform.Size(640, 510),
 		platform.FixedSize(),
 	)
 	sprites, err := variants()
@@ -39,7 +41,7 @@ func main() {
 		MustRun()
 }
 
-// variants makes the six pictures and stands them in two rows.
+// variants makes the nine pictures and stands them in three rows.
 func variants() ([]*twod.Sprite, error) {
 	// wall is the brick tile in tiles.png, and disc the whole of disc.png.
 	wall := geom.Rect{X: 16, W: 16, H: 16}
@@ -68,6 +70,27 @@ func variants() ([]*twod.Sprite, error) {
 		return nil, err
 	}
 
+	orb, err := twod.LoadTexture(files, "orb.png", twod.Pixelated())
+	if err != nil {
+		return nil, err
+	}
+	// glow is the alpha orb.png draws its glow at, in its core's colour.
+	const glow = 128
+	core := color.Hex("#5fcde4")
+	swaps := []twod.ColorSwap{
+		twod.Swap(color.Hex("#cbf1f7"), color.Hex("#ffd9a0")),
+		twod.Swap(core, color.Hex("#f2803a")),
+		twod.Swap(color.Hex("#306082"), color.Hex("#8a3b1c")),
+	}
+	ember, err := twod.Recolour(orb, twod.NewPalette(swaps...))
+	if err != nil {
+		return nil, err
+	}
+	haloed, err := twod.Recolour(orb, twod.NewPalette(append(swaps, twod.SwapAt(core, glow, color.Hex("#ffe08a")))...))
+	if err != nil {
+		return nil, err
+	}
+
 	tiles, err := twod.LoadTexture(files, "tiles.png", twod.Pixelated())
 	if err != nil {
 		return nil, err
@@ -89,8 +112,11 @@ func variants() ([]*twod.Sprite, error) {
 		twod.NewSprite(crate, twod.At(160, 110), twod.Scale(6, 6)),
 		twod.NewSprite(mossy, twod.At(320, 110), twod.Scale(6, 6)),
 		twod.NewSprite(stony, twod.At(480, 110), twod.Scale(6, 6)),
-		twod.NewSprite(tiles, twod.Region(wall), twod.At(160, 260), twod.Scale(6, 6)),
-		twod.NewSprite(cut, twod.At(320, 260), twod.Scale(6, 6)),
-		twod.NewSprite(holed, twod.At(480, 260), twod.Scale(6, 6)),
+		twod.NewSprite(orb, twod.At(160, 255), twod.Scale(6, 6)),
+		twod.NewSprite(ember, twod.At(320, 255), twod.Scale(6, 6)),
+		twod.NewSprite(haloed, twod.At(480, 255), twod.Scale(6, 6)),
+		twod.NewSprite(tiles, twod.Region(wall), twod.At(160, 400), twod.Scale(6, 6)),
+		twod.NewSprite(cut, twod.At(320, 400), twod.Scale(6, 6)),
+		twod.NewSprite(holed, twod.At(480, 400), twod.Scale(6, 6)),
 	}, nil
 }

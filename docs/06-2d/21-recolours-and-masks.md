@@ -1,14 +1,22 @@
 # Recolours and masks
 
-Variants of a picture, made once when the game loads them: the same crate in other colours, the same wall cut to a shape. A variant is a new texture, drawn like any other, so it costs nothing per frame ([decision 0069](../99-decisions/0069-variants-of-a-picture-are-made-at-load.md)). Above, the crate in its own colours, through a palette made in code and through one loaded from a picture; below, a wall tile as it is, cut by a disc and by the same disc inverted.
+Variants of a picture, made once when the game loads them: the same crate in other colours, the same wall cut to a shape. A variant is a new texture, drawn like any other, so it costs nothing per frame ([decision 0069](../99-decisions/0069-variants-of-a-picture-are-made-at-load.md)). Above, the crate in its own colours, through a palette made in code and through one loaded from a picture; in the middle, an orb and its glow, recoloured together and apart; below, a wall tile as it is, cut by a disc and by the same disc inverted.
 
-![Above, three crates: wood, moss and stone; below, a brick wall tile, the same tile cut to a disc, and the tile with a disc-shaped hole](recolours-and-masks.png "ember · recolours and masks")
+![Above, three crates: wood, moss and stone; in the middle, three orbs in a glow: blue in a blue glow, orange in an orange glow, orange in a pale gold glow; below, a brick wall tile, the same tile cut to a disc, and the tile with a disc-shaped hole](recolours-and-masks.png "ember · recolours and masks")
 
 ## Recolours
 
 A `twod.Palette` swaps exact colours: `twod.NewPalette(twod.Swap(from, to)…)` makes one in code, and its `Swaps()` lists them. `twod.Recolour(tex, pal)` gives a new texture where each colour the palette swaps becomes its `to`, everywhere in the picture, each frame and tile of a sheet included. Colours match exactly, as 8-bit sRGB; alpha is kept, and every colour the palette doesn't name stays as drawn. A palette that matches no colour of the picture is an error, so a palette written for another picture doesn't pass unnoticed.
 
 `twod.LoadPalette(fsys, name)` reads a palette from a picture of two rows of square swatches: the colours to swap above, what they become below. `stone.png` holds the crate's four browns over four greys. `twod.Recoloured(pal)`, given to `LoadTexture`, recolours the picture as it loads, and the texture's `Recoloured()` says which palette it went through.
+
+## One colour at two alphas
+
+A sheet often draws one colour twice: opaque for a shape and half clear for its shadow or its glow. `twod.Swap` matches a colour at any alpha, so it turns both. `twod.SwapAt(from, alpha, to)` matches it only where a pixel has that 8-bit alpha, and leaves it as drawn everywhere else. `orb.png` draws its core opaque and its glow in the same blue at alpha 128: three swaps turn the orb and its glow orange, and one more, `twod.SwapAt(core, 128, …)`, gives the glow a colour of its own.
+
+A `SwapAt` wins over a `Swap` of the same colour, whatever their order in the palette, so a palette can swap a colour everywhere and name the one alpha that differs. The pixel keeps its alpha here too, and alpha 0 matches nothing: a clear pixel has no colour to swap. A colour swapped twice at the same alpha, or twice at any, takes the last `to`. Each `ColorSwap` in `Swaps()` says which kind it is: `AtAlpha` is true for a `SwapAt`, and `Alpha` is the alpha it names.
+
+In a palette picture, the swatch's own opacity says it: an opaque swatch swaps its colour at any alpha, and a half-clear one only at its own alpha, as `SwapAt` does. The swatch below a half-clear one is as clear as it is, and a fully clear swatch is an error that names it, as is a colour swapped to two colours at one alpha.
 
 ## Masks
 
