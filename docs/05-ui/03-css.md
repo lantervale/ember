@@ -44,6 +44,8 @@ A `border-image` draws its corners and sides `border-image-width` thick and lays
 
 `border-image-width` takes one to four values, as margins do: a number times the border's width, a length, a percentage of the box's side, or `auto` for the slice's own size. Its initial 1 is the border's widths, so `border: 8px solid` with an 8-texel slice draws the slice as it is, a thinner border draws it thinner, and `border-width: 0 16px` draws no top or bottom row, stretching the slice's middle band over the box. The shorthand takes it after the slice: `border-image: url(frame.png) 8 / 16px`. When opposite sides would overlap, all four shrink by the same factor, and repeated copies scale with their side: an 8-texel slice drawn 16 thick tiles 16-long copies.
 
+`image-rendering: pixelated` draws an `<img>` or a background from its nearest texels. A pixel whose centre falls exactly on the line between two texels takes the upper left one, as Chrome does; that happens when a texel is a whole number and a half of device pixels wide, such as 16 texels over 24 points under a `Zoom` of 1.5 on a 2× screen. Smooth images are not concerned.
+
 | Refused | Use |
 |---|---|
 | `float`, `clear` | flex or grid |

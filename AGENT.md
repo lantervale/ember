@@ -82,6 +82,7 @@ EMBER_CAPTURE_PAD=...   # scripted gamepad buttons and sticks in captures (see d
 EMBER_CAPTURE_DRAW=all   # draw every frame of a hidden still capture; without it only the captured frame is drawn, and those a light probe is answered from (decision 0072)
 EMBER_CRASH_DIR=dir   # where crash.log and errors.log go (dir/<slug of the window's title>/) when the program gave no ember.CrashLog, in place of the user's config folder; golden.Run, task shots, the ui Chrome pixel pages and emberdiff set it to their own temp folder, so set it too in any new harness that runs a program
 go test -run xxx -bench BulletHell .  # the busiest frame: 500 enemies, 1,000 bullets, particles, 300 bars (CPU)
+EMBER_GOLDEN_TIMEOUT=10m   # the longest one golden scene may run (a Go duration), counted once the scene is built; a scene over it, or still running when the test's own time is nearly out, is killed and the test says what it printed
 # Example numbers follow the guide's page order; inserting a page renumbers the examples after it (also in gpu/golden_gpu_test.go: run `task golden`).
 task docs                           # the guide: plain Markdown in docs/ (served under /docs/; H1 title, NN- order, README = section page). A page is steps: a link alone on its line to examples/NN-name/file.go shows that file, and a link to examples/NN-name ends it with "Try it" (go run + output). Hugo adapter, hooks and landing in .hugo
 
