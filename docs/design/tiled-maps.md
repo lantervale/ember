@@ -212,8 +212,9 @@ twod.Classes(
   error naming the file, the layer, the object or tile, and the property. `Required` refuses a property left empty;
   `Shape` refuses an object of the wrong shape.
 - **Unknown names are caught.** An object or a tile whose class is not declared, once any class is declared for its
-  kind, is an error with the nearest name (`NearMiss` exists for properties). A property the class does not have is
-  an error too. A game that wants loose maps declares nothing and gets today's behaviour.
+  kind, is an error listing the classes declared for its use, with the nearest name when one is close (`NearMiss`
+  exists for properties). A property the class does not have is an error too. A game that wants loose maps declares
+  nothing and gets today's behaviour.
 - **The project file is written from the declarations.** `twod.TiledProject` writes every class with its use, its
   members and their defaults, so Tiled offers them typed. A test in the game fails when its `.tiled-project` is not
   what the declarations write, so the two cannot drift.
