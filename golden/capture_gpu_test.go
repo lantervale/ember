@@ -29,7 +29,7 @@ func TestACaptureIsTheSamePictureWithOnlyItsFrameDrawn(t *testing.T) {
 				dir := t.TempDir()
 				shot := filepath.Join(dir, name+".png")
 				s.Env = env
-				if out, _, err := run(context.Background(), "..", s, shot, dir); err != nil {
+				if out, _, err := run(context.Background(), "..", s, built(t, s, dir), shot, dir); err != nil {
 					if os.Getenv(optionalEnv) == "1" && strings.Contains(string(out), "no graphics adapter") {
 						t.Skipf("no GPU adapter here, and %s=1: %s", optionalEnv, out)
 					}
@@ -62,7 +62,7 @@ func TestAHiddenCaptureKeepsTheSizeTheWindowAsked(t *testing.T) {
 	dir := t.TempDir()
 	shot := filepath.Join(dir, "large.png")
 	s := Scene{Name: "large", Pkg: "golden/testdata/large", Frame: 2}
-	if out, _, err := run(context.Background(), "..", s, shot, dir); err != nil {
+	if out, _, err := run(context.Background(), "..", s, built(t, s, dir), shot, dir); err != nil {
 		if os.Getenv(optionalEnv) == "1" && strings.Contains(string(out), "no graphics adapter") {
 			t.Skipf("no GPU adapter here, and %s=1: %s", optionalEnv, out)
 		}

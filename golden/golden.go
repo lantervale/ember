@@ -12,8 +12,9 @@
 // -update writes the references from the current renderer, of only the
 // scenes that fail or that -run names whole (Golden/title), so the others
 // keep theirs byte for byte. A scene still running when the test's time is
-// nearly out, or after EMBER_GOLDEN_TIMEOUT (10m, say), is killed and the
-// test says what it printed. EMBER_GOLDEN_SHARE lets that share of a scene's
+// nearly out, or after EMBER_GOLDEN_TIMEOUT (10m, say, counted once the
+// scene is built), is killed and the test says what it printed.
+// EMBER_GOLDEN_SHARE lets that share of a scene's
 // pixels be over the levels, for a software adapter on a CI runner;
 // EMBER_GOLDEN_REPORT names a Markdown file each comparison appends its row
 // to, with how long the scene ran; with EMBER_GPU_OPTIONAL=1 a machine
@@ -152,11 +153,10 @@ func (s Scene) environ(base []string, shot, dir string) []string {
 	return append(env, s.Env...)
 }
 
-// run builds s from root into dir and runs it hidden, its frame s.Frame
-// captured into shot and its own files kept in dir. It gives what the
-// scene printed and how long it ran, its build apart; a scene still
-// running when ctx ends is killed, what it printed so far kept.
-func run(ctx context.Context, root string, s Scene, shot, dir string) ([]byte, time.Duration, error) {
+// build builds s from root into dir and gives its program, or what the
+// build printed. A scene is built before its deadline is set, so a slow
+// build takes nothing from the time the scene has to run.
+func build(root string, s Scene, dir string) (string, []byte, error) {
 	pkg := s.Pkg
 	if pkg != "." {
 		pkg = "./" + pkg
@@ -165,11 +165,19 @@ func run(ctx context.Context, root string, s Scene, shot, dir string) ([]byte, t
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	build := exec.CommandContext(context.WithoutCancel(ctx), "go", "build", "-o", bin, pkg)
-	build.Dir = root
-	if out, err := build.CombinedOutput(); err != nil {
-		return out, 0, fmt.Errorf("go build %s: %w", pkg, err)
+	cmd := exec.Command("go", "build", "-o", bin, pkg) //nolint:noctx // a build is left to end
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", out, fmt.Errorf("go build %s: %w", pkg, err)
 	}
+	return bin, nil, nil
+}
+
+// run runs bin, the program of s, hidden from root, its frame s.Frame
+// captured into shot and its own files kept in dir. It gives what the
+// scene printed and how long it ran; a scene still running when ctx ends
+// is killed, what it printed so far kept.
+func run(ctx context.Context, root string, s Scene, bin, shot, dir string) ([]byte, time.Duration, error) {
 	cmd := exec.CommandContext(ctx, bin) //nolint:gosec // the scene this test has just built, in its own folder
 	cmd.Dir = root
 	cmd.Env = s.environ(os.Environ(), shot, dir)
@@ -205,10 +213,15 @@ func limit(env string, left time.Duration) (time.Duration, error) {
 	return d, nil
 }
 
-// capture runs s hidden from root, captures its frame s.Frame into path
-// and gives how long the scene ran.
+// capture builds s, runs it hidden from root, captures its frame s.Frame
+// into path and gives how long the scene ran. The scene's limit is counted
+// once it is built, from the time the test then has left.
 func capture(t *testing.T, root string, s Scene, path, dir string) time.Duration {
 	t.Helper()
+	bin, out, err := build(root, s, dir)
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
 	var left time.Duration
 	if end, ok := t.Deadline(); ok {
 		left = time.Until(end)
@@ -223,7 +236,7 @@ func capture(t *testing.T, root string, s Scene, path, dir string) time.Duration
 		ctx, cancel = context.WithTimeout(ctx, d)
 		defer cancel()
 	}
-	out, took, err := run(ctx, root, s, path, dir)
+	out, took, err := run(ctx, root, s, bin, path, dir)
 	t.Logf("%s: ran %s", s.Name, took.Round(time.Millisecond))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {

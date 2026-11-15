@@ -33,6 +33,16 @@ func elsewhere(t *testing.T) string {
 	return home
 }
 
+// built is the program of s, built into dir.
+func built(t *testing.T, s Scene, dir string) string {
+	t.Helper()
+	bin, out, err := build("..", s, dir)
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	return bin
+}
+
 func TestASceneThatFailsLeavesNothingInThePlayersConfigFolder(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and runs a program")
@@ -43,7 +53,7 @@ func TestASceneThatFailsLeavesNothingInThePlayersConfigFolder(t *testing.T) {
 		t.Fatalf("the config folder is not under the test's home: %s, %v", config, err)
 	}
 	s := Scene{Name: "fails", Pkg: "golden/testdata/fails", Frame: 5}
-	out, _, err := run(context.Background(), "..", s, filepath.Join(dir, "fails.png"), dir)
+	out, _, err := run(context.Background(), "..", s, built(t, s, dir), filepath.Join(dir, "fails.png"), dir)
 	if err == nil {
 		t.Fatalf("the scene fails: %s", out)
 	}
@@ -64,19 +74,19 @@ func TestASceneStillRunningAtItsDeadlineIsKilledAndWhatItWroteKept(t *testing.T)
 		t.Skip("builds and runs a program")
 	}
 	dir := t.TempDir()
+	s := Scene{Name: "stalls", Pkg: "golden/testdata/stalls", Frame: 5}
+	bin := built(t, s, dir)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	s := Scene{Name: "stalls", Pkg: "golden/testdata/stalls", Frame: 5}
-	began := time.Now()
-	out, took, err := run(ctx, "..", s, filepath.Join(dir, "stalls.png"), dir)
+	out, took, err := run(ctx, "..", s, bin, filepath.Join(dir, "stalls.png"), dir)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("the scene is stopped at its deadline: %v: %s", err, out)
 	}
 	if !strings.Contains(string(out), "frame 3") {
 		t.Errorf("what it wrote before is kept: %q", out)
 	}
-	if took < time.Second || took > time.Minute || time.Since(began) > 5*time.Minute {
-		t.Errorf("it ran for its 2 s, its build apart: %s", took)
+	if took < 1900*time.Millisecond || took > time.Minute {
+		t.Errorf("it ran for its 2 s, however long its build took: %s", took)
 	}
 }
 
