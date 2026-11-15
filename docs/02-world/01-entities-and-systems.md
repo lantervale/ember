@@ -26,7 +26,7 @@ A component's fields and getters sit on the entity as if they were its own, so a
 
 ## The World
 
-`main` adds the entities and the system, and a function added with `On` stops the World once it is empty.
+`newWorld` adds the entities and the system, and a function added with `On` stops the World once it is empty. `main` runs it with `MustRun`, in real time. The World is built in a function of its own so that the example's test can run the same World with `RunFrames`, frame by frame at the fixed step, without waiting on the clock.
 
 [main.go](../../examples/02-entities-and-systems/main.go)
 
