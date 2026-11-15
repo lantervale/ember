@@ -1245,18 +1245,21 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 	}
 }
 
-// states sets each element's hover, active and focus pseudo-classes.
+// states sets each element's hover, active and focus pseudo-classes. While
+// another owns d's window (a modal of another Document), d's focused
+// element keeps the focus but matches neither :focus nor :focus-visible
+// (decision 0073).
 //
 // Only the elements that held a state last frame or hold one now can
 // change, so it visits those rather than the tree.
 func (d *Document) states() {
-	focused := d.focused()
+	focused, takes := d.focused(), d.takes()
 	set := func(n *Node) {
 		held := d.pinned[n]
 		n.SetState(dom.Hover, contains(d.hovered, n) || held&dom.Hover != 0)
 		n.SetState(dom.Active, contains(d.pressed, n) || held&dom.Active != 0)
-		n.SetState(dom.Focus, n == focused || held&dom.Focus != 0)
-		n.SetState(dom.FocusVisible, n == focused && d.focus.Active() || held&dom.FocusVisible != 0)
+		n.SetState(dom.Focus, n == focused && takes || held&dom.Focus != 0)
+		n.SetState(dom.FocusVisible, n == focused && takes && d.focus.Active() || held&dom.FocusVisible != 0)
 	}
 	for _, n := range d.stated {
 		set(n)

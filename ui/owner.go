@@ -59,3 +59,10 @@ func (d *Document) cover(c *twod.Canvas) {
 		wm.Cover(w, win, e)
 	}
 }
+
+// takes reports whether d takes its window's input: nothing owns the
+// window, or d does (decision 0053). Before d is drawn anywhere, it does.
+func (d *Document) takes() bool {
+	o := &d.owner
+	return o.w == nil || wm.Takes(o.w, o.win, o.e)
+}

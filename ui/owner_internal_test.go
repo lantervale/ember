@@ -208,3 +208,47 @@ func TestAUIElementOverAGames2DEntityTakesItsClick(t *testing.T) {
 	click()
 	assert.Equal(t, 1, game.n, "with pointer-events: none it lets the click through to the game")
 }
+
+// TestAFocusedElementUnderAnotherDocumentsModalLooksUnfocused: the page
+// keeps its focus while another Document's modal owns the window, but
+// its focused element matches neither :focus nor :focus-visible until
+// the page takes the input again (decision 0073).
+func TestAFocusedElementUnderAnotherDocumentsModalLooksUnfocused(t *testing.T) {
+	o := newOwned(t)
+	o.page.Focus(o.behind)
+	o.win.Input().SetKey(input.KeyTab, true)
+	o.frames(1)
+	o.win.Input().SetKey(input.KeyTab, false)
+	o.frames(1)
+	focused := o.page.focused()
+	require.NotNil(t, focused)
+	require.True(t, focused.State().Has(dom.Focus), "focused, it looks it")
+	require.True(t, focused.State().Has(dom.FocusVisible), "and ringed after a key")
+
+	o.top.ShowModal(o.dlg)
+	o.frames(2)
+	assert.Same(t, focused, o.page.focused(), "under the modal the page keeps its focus")
+	assert.True(t, o.page.Focused(focused))
+	assert.False(t, focused.State().Has(dom.Focus), "but its element no longer matches :focus")
+	assert.False(t, focused.State().Has(dom.FocusVisible), "nor :focus-visible")
+	assert.True(t, o.top.focused() != nil && o.top.focused().State().Has(dom.Focus),
+		"the modal's own focused element looks focused")
+
+	o.top.Close(o.dlg, "")
+	o.frames(2)
+	assert.Same(t, focused, o.page.focused())
+	assert.True(t, focused.State().Has(dom.Focus), "closed, the look comes back")
+	assert.True(t, focused.State().Has(dom.FocusVisible), "its ring too")
+}
+
+func TestAHiddenModalsDocumentLeavesTheFocusLookToThePage(t *testing.T) {
+	o := newOwned(t)
+	o.page.Focus(o.behind)
+	o.frames(1)
+	o.top.ShowModal(o.dlg)
+	o.frames(2)
+	require.False(t, o.behind.State().Has(dom.Focus))
+	o.top.SetHidden(true)
+	o.frames(2)
+	assert.True(t, o.behind.State().Has(dom.Focus), "its owner hidden, the page takes the input and looks focused again")
+}
