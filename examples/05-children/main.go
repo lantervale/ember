@@ -12,19 +12,22 @@ import (
 )
 
 func main() {
+	newWorld().MustRun()
+}
+
+func newWorld() *world.World {
 	campfire := newFlame("campfire", 1)
 	campfire.AppendChild(newFlame("spark", 5))
 	campfire.AppendChild(newFlame("spark", 5))
 
-	world.New().
+	return world.New().
 		AddEntities(
 			campfire,
 			newFlame("candle", 2),
 		).
 		AddSystems(&Cooling{}).
 		On(world.Startup, "count", countFlames).
-		On(world.Update, "quit", quitWhenAllOut).
-		MustRun()
+		On(world.Update, "quit", quitWhenAllOut)
 }
 
 func countFlames(f world.Frame) {

@@ -12,6 +12,12 @@ import (
 )
 
 func main() {
+	w, census := newWorld()
+	w.MustRun()
+	report(w, census)
+}
+
+func newWorld() (*world.World, *Census) {
 	census := &Census{}
 
 	w := world.New().
@@ -23,8 +29,10 @@ func main() {
 		).
 		AddSystems(&Cooling{}).
 		On(world.Update, "quit", quitWhenNothingBurns(census))
-	w.MustRun()
+	return w, census
+}
 
+func report(w *world.World, census *Census) {
 	fmt.Fprintf(os.Stdout, "%d burning, %d in the world\n", census.Len(), w.Len())
 }
 

@@ -10,15 +10,18 @@ package main
 import "github.com/lantervale/ember/world"
 
 func main() {
-	world.New().
+	newWorld().MustRun()
+}
+
+func newWorld() *world.World {
+	return world.New().
 		Insert(&Weather{Wind: 0}).
 		AddEntities(
 			newFlame("candle", 1),
 			newFlame("campfire", 4),
 		).
 		AddSystems(&Gusts{}, &Cooling{}).
-		On(world.Update, "quit", quitWhenAllOut).
-		MustRun()
+		On(world.Update, "quit", quitWhenAllOut)
 }
 
 func quitWhenAllOut(f world.Frame) {

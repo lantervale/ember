@@ -10,7 +10,7 @@ A view is a group the World keeps in sync but never updates. Here a `Census` fol
 
 ## Using it
 
-`AddView` registers it, and anything can read it: the quit function while the game runs, and `main` after it ends.
+`AddView` registers it, and anything can read it: the quit function while the game runs, and `report` after it ends.
 
 [main.go](../../examples/06-views/main.go)
 

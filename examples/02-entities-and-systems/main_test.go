@@ -12,10 +12,19 @@ func TestTheFlamesGoOutOneByOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(stdoutOf(t, main), "\n") + "\n"; got != string(want) {
-		t.Fatalf("main prints\n%s\nwant output.txt\n%s", got, want)
+	w := newWorld()
+	got := strings.Join(stdoutOf(t, func() { w.RunFrames(tenSeconds) }), "\n") + "\n"
+	if !w.ShouldQuit() {
+		t.Fatal("the World still runs after ten seconds")
+	}
+	if got != string(want) {
+		t.Fatalf("the World prints\n%s\nwant output.txt\n%s", got, want)
 	}
 }
+
+// tenSeconds is ten seconds of frames at the fixed step, more than the
+// World needs: RunFrames stops when it quits.
+const tenSeconds = 600
 
 func stdoutOf(t *testing.T, run func()) []string {
 	t.Helper()
