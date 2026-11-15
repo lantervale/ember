@@ -2,6 +2,7 @@ package twod
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lantervale/ember/color"
@@ -69,6 +70,8 @@ type TiledLayer struct {
 	objects []TiledObject
 	layers  []*TiledLayer
 	parent  *TiledLayer
+	// tiled is the map the layer is of.
+	tiled *Tiled
 	// recolour is the palette its recolour property names, tinted its tint
 	// property, white for none, and masks a mask layer's cells.
 	recolour *Palette
@@ -78,6 +81,44 @@ type TiledLayer struct {
 
 // TileMap is a tile layer's map, else nil.
 func (l *TiledLayer) TileMap() *TileMap { return l.tileMap }
+
+// TileAt is the tile a tile layer's cell x, y holds now, as a tile object
+// carries its own: the map's tileset it is from, its id in that tileset
+// and the cell's flip. A layer of several tilesets draws from one tileset
+// numbered by global id, whose Source is empty, so its TileMap's At is not
+// an id of the tile's own tileset; TileAt is, whichever the layer draws
+// from. There is none for an empty cell, a cell outside the map, a cell
+// set to an id under the map's first, a layer that isn't a tile layer, a
+// mask layer included, or a tile layer given another tileset than the
+// map's.
+func (l *TiledLayer) TileAt(x, y int) (TiledTile, bool) {
+	if l.tileMap == nil || l.tiled == nil {
+		return TiledTile{}, false
+	}
+	id := l.tileMap.At(x, y)
+	if id <= 0 {
+		return TiledTile{}, false
+	}
+	t, flip := l.tiled, l.tileMap.Flip(x, y)
+	set := slices.Index(t.tilesets, l.tileMap.Tileset())
+	switch {
+	case set >= 0:
+		id += t.firsts[set] - 1
+	case t.merged != nil && l.tileMap.Tileset() == t.merged:
+		set = tilesetOf(t.firsts, uint32(id)) //nolint:gosec // a cell's id is positive
+	default:
+		return TiledTile{}, false
+	}
+	if id < t.firsts[set] {
+		return TiledTile{}, false
+	}
+	return TiledTile{
+		GID:     uint32(id) | flipBits(flip), //nolint:gosec // a tile's global id is positive
+		Tileset: t.tilesets[set],
+		ID:      id - t.firsts[set] + 1,
+		Flip:    flip,
+	}, true
+}
 
 // Objects are an object layer's objects, in the file's order.
 func (l *TiledLayer) Objects() []TiledObject { return l.objects }

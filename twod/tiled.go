@@ -38,7 +38,9 @@ type Tiled struct {
 	layers         []*TiledLayer
 	byID           map[int]TiledObject
 	tilesets       []*Tileset
-	properties     TiledProperties
+	// firsts are the tilesets' first global ids, in the tilesets' order.
+	firsts     []int
+	properties TiledProperties
 	// merged is every tileset as one, numbered by global id, for layers
 	// whose tiles come from several, made the first time one asks.
 	merged *Tileset
@@ -115,7 +117,8 @@ const (
 	TiledText
 )
 
-// TiledTile is the tile a tile object shows.
+// TiledTile is the tile a tile object shows, or a tile layer's cell holds
+// (TiledLayer.TileAt).
 type TiledTile struct {
 	// GID is Tiled's global id of the tile, its flip bits included.
 	GID uint32
@@ -123,7 +126,7 @@ type TiledTile struct {
 	// counted from 1 as a Tileset counts: Tiled's tile 5 is ID 6.
 	Tileset *Tileset
 	ID      int
-	// Flip is how the object flips its picture.
+	// Flip is how the object or the cell flips its picture.
 	Flip TileFlip
 }
 
@@ -482,6 +485,7 @@ func LoadTiled(fsys fs.FS, name string, opts ...TileMapOption) (*Tiled, error) {
 	for i, ts := range m.Tilesets {
 		firsts[i] = ts.FirstGID
 	}
+	t.firsts = firsts
 	if err = t.readCells(&m, firsts); err != nil {
 		return nil, fmt.Errorf("twod: %s: %w", name, err)
 	}
@@ -679,7 +683,7 @@ func (t *Tiled) layerOf(
 	layer := &TiledLayer{
 		ID: l.ID, Name: l.Name, Class: l.Class, Properties: props,
 		Visible: l.Visible == nil || *l.Visible, Opacity: 1, Offset: geom.V2(l.OffsetX, l.OffsetY),
-		Tint: color.White, Parallax: geom.V2(1, 1), parent: parent,
+		Tint: color.White, Parallax: geom.V2(1, 1), parent: parent, tiled: t,
 	}
 	if l.Opacity != nil {
 		layer.Opacity = *l.Opacity
@@ -859,6 +863,21 @@ func tilesetOf(firsts []int, g uint32) int {
 		}
 	}
 	return s
+}
+
+// flipBits are Tiled's high bits for f, what flipOf reads back.
+func flipBits(f TileFlip) uint32 {
+	var g uint32
+	if f&TileFlipX != 0 {
+		g |= tiledFlipX
+	}
+	if f&TileFlipY != 0 {
+		g |= tiledFlipY
+	}
+	if f&TileFlipDiagonal != 0 {
+		g |= tiledFlipDiag
+	}
+	return g
 }
 
 // flipOf is the flips Tiled's high bits on g ask for.
