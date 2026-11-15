@@ -43,7 +43,9 @@
 //	                        resize the primary window through those sizes (points)
 //	                        at those frames, in straight lines; a GIF puts smaller
 //	                        frames on a dark desk as large as the largest
-//	EMBER_HIDDEN=1          create invisible windows, and play no sound
+//	EMBER_HIDDEN=1          create invisible windows, and play no sound; a
+//	                        window keeps the size it asks for, larger than
+//	                        the screen too (unless maximized or fullscreen)
 //	EMBER_SCALE=2           in a hidden run, pixels per point the windows draw
 //	                        at, whatever the screen's (a CI screen is 1×)
 //	EMBER_FRAMES=n          quit after n frames
@@ -203,6 +205,9 @@ type native struct {
 	configured [2]int
 	// hiddenFrame is what a hidden window draws into instead.
 	hiddenFrame *wgpu.Texture
+	// askedW and askedH are the size in points the window asked for in a
+	// hidden run, 0 in any other.
+	askedW, askedH int
 	// presented is when the window last showed a frame without vsync.
 	presented time.Time
 	// windowed is where the window was before going fullscreen, and
@@ -278,7 +283,17 @@ func (n *native) ScreenCursor() (float64, float64) {
 	cx, cy := n.h.GetCursorPos()
 	return float64(wx) + cx, float64(wy) + cy
 }
-func (n *native) SetSize(w, h int) { n.h.SetSize(w, h) }
+
+func (n *native) SetSize(w, h int) {
+	if n.askedW == 0 {
+		n.h.SetSize(w, h)
+		return
+	}
+	// The system tells of no change when it fits both sizes to the screen.
+	n.askedW, n.askedH = w, h
+	n.h.SetSize(w, h)
+	n.sync()
+}
 
 func (n *native) Clipboard() string        { return glfw.GetClipboardString() }
 func (n *native) SetClipboard(text string) { glfw.SetClipboardString(text) }
@@ -286,8 +301,26 @@ func (n *native) SetClipboard(text string) { glfw.SetClipboardString(text) }
 func (n *native) sync() {
 	ww, wh := n.h.GetSize()
 	fw, fh := n.h.GetFramebufferSize()
+	if n.h.GetMonitor() == nil && n.h.GetAttrib(glfw.Maximized) != glfw.True {
+		ww, wh, fw, fh = asked(ww, wh, fw, fh, n.askedW, n.askedH)
+	}
 	fw, fh = framebuffer(ww, wh, fw, fh, n.pixels)
 	n.window.Sync(geom.V2(float32(ww), float32(wh)), geom.V2(float32(fw), float32(fh)), n.focused)
+}
+
+// asked is the size of a window the system made ww×wh points and fw×fh
+// pixels, once it is the askW×askH points it asked for: a system fits a
+// window to its screen (Windows, a hidden one too), and a hidden window
+// draws offscreen, so it keeps its size at the screen's pixels a point.
+// Nothing asked leaves the system's.
+func asked(ww, wh, fw, fh, askW, askH int) (int, int, int, int) {
+	if askW <= 0 || askH <= 0 || (ww == askW && wh == askH) {
+		return ww, wh, fw, fh
+	}
+	if ww <= 0 || wh <= 0 {
+		return askW, askH, askW, askH
+	}
+	return askW, askH, (askW*fw + ww/2) / ww, (askH*fh + wh/2) / wh
 }
 
 // framebuffer is the size a window of ww×wh points draws at: the system's
@@ -775,6 +808,9 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 		order:    d.opened,
 		scripted: d.scripted,
 		pixels:   d.pixels,
+	}
+	if d.hidden {
+		n.askedW, n.askedH = int(size.X), int(size.Y)
 	}
 	if err = d.attach(n); err != nil {
 		h.Destroy()
