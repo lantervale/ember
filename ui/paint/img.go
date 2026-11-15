@@ -32,7 +32,7 @@ func (p *painter) img(e entry, alpha float32) {
 		p.s.PushClip(box)
 		defer p.s.PopClip()
 	}
-	p.s.Image(at, tex, whole, fade(color.White, alpha))
+	p.s.Image(at, tex, texels(tex), fade(color.White, alpha))
 }
 
 // objectFit is where a picture of natural size goes in box by fit, placed

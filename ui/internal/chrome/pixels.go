@@ -103,13 +103,25 @@ func Pixels(t testing.TB, pkg string, w, h int) Diff {
 // EMBER_UI_ZOOM: ember's window is w×h points at that zoom, and Chrome
 // shows the w/zoom × h/zoom page at zoom times the capture's scale, so a
 // point of the page is as many device pixels in both. w and h are whole
-// multiples of zoom.
-func PixelsZoomed(t testing.TB, pkg string, w, h, zoom int) Diff {
+// multiples of zoom, which may be fractional (1.5, an art zoom of 3 on a
+// 2× screen).
+func PixelsZoomed(t testing.TB, pkg string, w, h int, zoom float32) Diff {
 	t.Helper()
 	return pixelsAt(t, pkg, w, h, zoom)
 }
 
-func pixelsAt(t testing.TB, pkg string, w, h, zoom int) Diff {
+// pageName is the name of pkg's report and result at zoom: the page's,
+// with its zoom after an @ when it is fractional, so one page compared at
+// several zooms keeps a report and a result for each.
+func pageName(pkg string, zoom float32) string {
+	name := filepath.Base(pkg)
+	if zoom != float32(int(zoom)) {
+		name += fmt.Sprintf("@%g", zoom)
+	}
+	return name
+}
+
+func pixelsAt(t testing.TB, pkg string, w, h int, zoom float32) Diff {
 	t.Helper()
 	dir, reports := t.TempDir(), t.TempDir()
 	if out := os.Getenv("EMBER_UI_REPORTS"); out != "" {
@@ -118,7 +130,7 @@ func pixelsAt(t testing.TB, pkg string, w, h, zoom int) Diff {
 	shot, page := filepath.Join(dir, "ember.png"), filepath.Join(dir, "page.html")
 	run := func(env ...string) {
 		cmd := exec.CommandContext(t.Context(), "go", "run", pkg)
-		cmd.Env = append(pageEnv(os.Environ(), filepath.Join(dir, "crash")), fmt.Sprintf("EMBER_UI_ZOOM=%d", zoom))
+		cmd.Env = append(pageEnv(os.Environ(), filepath.Join(dir, "crash")), fmt.Sprintf("EMBER_UI_ZOOM=%g", zoom))
 		cmd.Env = append(cmd.Env, env...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s: %v: %s", pkg, err, out)
@@ -131,9 +143,9 @@ func pixelsAt(t testing.TB, pkg string, w, h, zoom int) Diff {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scale := float32(a.Bounds().Dx()) / float32(w) * float32(zoom)
+	scale := float32(a.Bounds().Dx()) / float32(w) * zoom
 	cpng := filepath.Join(dir, "chrome.png")
-	if err = ScreenshotScaled(html, geom.V2(float32(w/zoom), float32(h/zoom)), scale, cpng); err != nil {
+	if err = ScreenshotScaled(html, geom.V2(float32(w), float32(h)).Scale(1/zoom), scale, cpng); err != nil {
 		t.Fatal(err)
 	}
 	b := load(t, cpng)
@@ -141,7 +153,8 @@ func pixelsAt(t testing.TB, pkg string, w, h, zoom int) Diff {
 		t.Fatalf("ember's capture is %v, Chrome's %v", a.Bounds().Size(), b.Bounds().Size())
 	}
 	d := Compare(a, b)
-	report := filepath.Join(reports, filepath.Base(pkg)+".png")
+	name := pageName(pkg, zoom)
+	report := filepath.Join(reports, name+".png")
 	// The report is for reading the difference; failing to write it
 	// leaves the comparison as it is.
 	f, err := os.Create(report) //nolint:gosec // the folder the gate names in EMBER_UI_REPORTS
@@ -153,7 +166,7 @@ func pixelsAt(t testing.TB, pkg string, w, h, zoom int) Diff {
 	}
 	t.Logf(
 		"%s: mean difference %.4f, %d of %d pixels differ; report %s",
-		filepath.Base(pkg),
+		name,
 		d.Mean,
 		d.Pixels,
 		d.Total,

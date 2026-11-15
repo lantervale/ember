@@ -58,11 +58,11 @@ func Within(t testing.TB, pkg string, w, h int, threshold float64) Diff {
 	return d
 }
 
-// WithinZoomed is Within for a page at a whole Document zoom (PixelsZoomed).
-func WithinZoomed(t testing.TB, pkg string, w, h, zoom int, threshold float64) Diff {
+// WithinZoomed is Within for a page at a Document zoom (PixelsZoomed).
+func WithinZoomed(t testing.TB, pkg string, w, h int, zoom float32, threshold float64) Diff {
 	t.Helper()
 	d := PixelsZoomed(t, pkg, w, h, zoom)
-	check(t, "page", filepath.Base(pkg), d, threshold)
+	check(t, "page", pageName(pkg, zoom), d, threshold)
 	return d
 }
 

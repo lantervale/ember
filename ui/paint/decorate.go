@@ -173,7 +173,7 @@ func (p *painter) backgroundImage(area geom.Rect, st *style.Computed, alpha floa
 	p.s.PushClip(area)
 	defer p.s.PopClip()
 	if st.BackgroundNoRepeat {
-		p.s.Image(geom.Rect{X: x, Y: y, W: size.X, H: size.Y}, tex, whole, tint)
+		p.s.Image(geom.Rect{X: x, Y: y, W: size.X, H: size.Y}, tex, texels(tex), tint)
 		return
 	}
 	x0 := x - float32(math.Ceil(float64((x-area.X)/size.X)))*size.X
@@ -184,7 +184,7 @@ func (p *painter) backgroundImage(area geom.Rect, st *style.Computed, alpha floa
 			if n++; n > maxTiles {
 				return
 			}
-			p.s.Image(geom.Rect{X: tx, Y: ty, W: size.X, H: size.Y}, tex, whole, tint)
+			p.s.Image(geom.Rect{X: tx, Y: ty, W: size.X, H: size.Y}, tex, texels(tex), tint)
 		}
 	}
 }
