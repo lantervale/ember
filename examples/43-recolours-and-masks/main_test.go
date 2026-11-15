@@ -24,8 +24,8 @@ func TestTheVariantsRecolourAndCut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sprites) != 6 {
-		t.Fatalf("three crates and three walls: %d", len(sprites))
+	if len(sprites) != 9 {
+		t.Fatalf("three crates, three orbs and three walls: %d", len(sprites))
 	}
 
 	crate, mossy, stony := sprites[0].Texture(), sprites[1].Texture(), sprites[2].Texture()
@@ -48,7 +48,7 @@ func TestTheVariantsRecolourAndCut(t *testing.T) {
 		t.Fatal("the stone crate was recoloured as it loaded")
 	}
 
-	cut, holed := sprites[4].Texture(), sprites[5].Texture()
+	cut, holed := sprites[7].Texture(), sprites[8].Texture()
 	if cut.Size() != geom.V2(16, 16) || holed.Size() != geom.V2(16, 16) {
 		t.Fatalf("a masked tile is its region's size: %v, %v", cut.Size(), holed.Size())
 	}
@@ -57,6 +57,32 @@ func TestTheVariantsRecolourAndCut(t *testing.T) {
 	}
 	if rgba(t, holed.Image, 8, 8).A != 0 || rgba(t, holed.Image, 0, 0).A != 255 {
 		t.Fatal("the inverted disc cuts the middle of the wall and keeps its corners")
+	}
+}
+
+func TestASwapAtAnAlphaLeavesTheColourAtOthers(t *testing.T) {
+	sprites, err := variants()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orb, orange, haloed := sprites[3].Texture(), sprites[4].Texture(), sprites[5].Texture()
+	// The orb's core, at 8,8, and its glow, at 8,2, are one colour.
+	core, glow := rgba(t, orb.Image, 8, 8), rgba(t, orb.Image, 8, 2)
+	blue := stdcolor.NRGBA{0x5f, 0xcd, 0xe4, 0xff}
+	if core != blue || glow != (stdcolor.NRGBA{blue.R, blue.G, blue.B, 0x80}) {
+		t.Fatalf("the orb draws its core opaque and its glow half clear in one colour: %v, %v", core, glow)
+	}
+	if got := rgba(t, orange.Image, 8, 8); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0xff}) {
+		t.Fatalf("a swap turns the core into %v", got)
+	}
+	if got := rgba(t, orange.Image, 8, 2); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0x80}) {
+		t.Fatalf("a swap turns the glow too, keeping its alpha: %v", got)
+	}
+	if got := rgba(t, haloed.Image, 8, 8); got != (stdcolor.NRGBA{0xf2, 0x80, 0x3a, 0xff}) {
+		t.Fatalf("a swap at the glow's alpha leaves the core to the swap at any: %v", got)
+	}
+	if got := rgba(t, haloed.Image, 8, 2); got != (stdcolor.NRGBA{0xff, 0xe0, 0x8a, 0x80}) {
+		t.Fatalf("a swap at the glow's alpha wins there over the swap at any: %v", got)
 	}
 }
 

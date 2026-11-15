@@ -6,7 +6,7 @@ ember's code is under the MIT licence ([LICENSE](LICENSE)). This file lists wher
 
 Drawn for ember in this repository, with no outside source, and given to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/):
 
-- the examples' sprites, tiles and panels: every `walker.png`, `tiles.png`, `objects.png`, `crate.png` and `panel.png` under `examples/` (outside `examples/internal/crypt`), `examples/15-themes/wood.png`, `examples/24-many-sprites/bunny.png`, `examples/45-bitmap-font/arcade.png`, and `examples/48-mouse/move.png` and `move@2x.png`;
+- the examples' sprites, tiles and panels: every `walker.png`, `tiles.png`, `objects.png`, `crate.png` and `panel.png` under `examples/` (outside `examples/internal/crypt`), `examples/15-themes/wood.png`, `examples/24-many-sprites/bunny.png`, `disc.png`, `orb.png` and `stone.png` in `examples/43-recolours-and-masks`, `examples/45-bitmap-font/arcade.png`, and `examples/48-mouse/move.png` and `move@2x.png`;
 - the ui pages' pictures: `panel.png` in `ui/internal/pages/kit-04-image`, `kit-26-thumbnails`, `nine-patch` and `pixelated`, and `beach.png` in the four `ui/internal/pages/kit-32*` pages;
 - the ui kit's pictures and test icons: `ui/kit/images/*.png`, `ui/css/images/select-arrow.png`, `ui/kit/testdata/icons/icons.ttf` and `ui/internal/pages/kit-03-icons/icons.ttf`;
 - the site's brand: the favicons, `site.webmanifest` and `images/logo.svg` in `.hugo/static`;
