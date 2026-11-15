@@ -18,6 +18,15 @@
 
 The cells are 32 points while the tiles are 16 pixels, so object positions are already in screen points. A map drawn smaller than its screen loads with `twod.PixelScale(n)`: each map pixel takes n points, a cell is the map's tile size times n, and `level.Scale()` returns n; given beside `twod.CellSize`, the later of the two wins. A layer may draw from several tilesets, a floor grid and a collection of wall pieces, for instance: the map's tilesets are merged, and each cell keeps its global id over them.
 
+`layer.TileAt(x, y)` gives a cell back as the map's own tile, whichever way its layer draws: a `twod.TiledTile` with the `Tileset` the tile is from, one of `level.Tilesets()` and never the merged one, its `ID` in that tileset, counted from 1, the cell's `Flip`, and Tiled's `GID`. `x` and `y` are the cell's column and row, as `TileMap.At` takes them. It reads the cell as it is now, so after `Set` or `SetFlip` it gives the new tile. Its second result is false for an empty cell or one outside the map, for a layer that isn't a tile layer, a mask layer included, for a merged layer's cell set to an id under the map's first global id, and for a tile map that was given a tileset that isn't the map's. With it an error can name the tile it is about:
+
+```go
+if tile, ok := layer.TileAt(x, y); ok {
+	file, _ := tile.Tileset.ImageFile(tile.ID)
+	return fmt.Errorf("%s, tile %d (%s): no trap can stand here", tile.Tileset.Source(), tile.ID, file)
+}
+```
+
 Only the tilesets the map places a tile from are loaded, pictures and all ([0067](../99-decisions/0067-a-tiled-map-reads-only-the-tilesets-it-uses.md)), so a level can carry a whole library of tilesets to pick pieces from in Tiled at no cost. `level.UsedTilesets()` lists those; `level.Tilesets()` lists them all, in order: an unused tileset of its own file isn't even read (its .tsj may be left out of the game) and is empty but for its `Source()`; an unused one embedded in the map keeps its properties and shapes, without pictures. A used tileset whose .tsj is missing is an error naming that file. `ImageFile(id)` names a tile's picture file. To draw a tile from a tileset the map never places, load that tileset with `twod.LoadTiledTileset`.
 
 [main.go](../../examples/29-tiled/main.go)
@@ -51,7 +60,7 @@ for _, o := range layer.Objects() {
 }
 ```
 
-`Tile.ID` counts from 1 as a `Tileset` does, so Tiled's tile 5 is ID 6; `Tile.GID` is Tiled's own global id, flip bits included.
+`Tile.ID` counts from 1 as a `Tileset` does, so Tiled's tile 5 is ID 6; `Tile.GID` is Tiled's own global id, flip bits included. A tile layer's cell gives the same `TiledTile` through [`TileAt`](#loading-it).
 
 Custom properties come with their Tiled types. `level.Properties()` are the map's own, such as a room's name, tier or weight for a dungeon generator, a layer's are its `Properties` (or `level.LayerProperties("walls")`), and an object's are its `Properties`. A property that points to an object holds its id, a file property the file's path in the map's file system, and a property of a custom class its own `TiledProperties`, from `Class(name)`. Each reads by type, with whether it's there and of that type:
 

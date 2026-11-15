@@ -21,6 +21,8 @@
 
 A key nothing takes is a `KeyPressed` on the focused element; with nothing focused and no modal dialog, the keys are the game's.
 
+A window can hold several Documents, a screen and a dialog of its own, for instance. While a modal dialog of another Document is open in the window, a Document's focused element keeps the focus: `doc.Focused(n)` stays true and no event is sent. It matches neither `:focus` nor `:focus-visible`, though, so it doesn't look focused under the dialog; both return when the dialog closes or its Document is hidden ([decision 0073](../99-decisions/0073-a-focused-element-under-anothers-modal-looks-unfocused.md)).
+
 A Document takes no key or pad press in its first frame, nor in the first frame it draws after being hidden: the Escape that opened a pause menu is never also that menu's `BackPressed`.
 
 ```

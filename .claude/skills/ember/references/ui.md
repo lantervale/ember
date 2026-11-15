@@ -132,7 +132,7 @@ Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`
 | keyboard order | Tab and Shift-Tab once something has the focus; the arrows move it spatially |
 | keys left to the game | with nothing focused and no modal open; read `win.Input()` as usual |
 
-Escape and the pad's East are Back. Enter, Space and the pad's South press the focused element. A modal dialog keeps the focus and its window's input until it closes.
+Escape and the pad's East are Back. Enter, Space and the pad's South press the focused element. A modal dialog keeps the focus and its window's input until it closes. While a modal dialog of another Document is open in the window, a Document's focused element keeps the focus (`doc.Focused(n)` stays true, no event) but matches neither `:focus` nor `:focus-visible`; they return when the dialog closes or its Document is hidden (decision 0073).
 
 ## Test a screen
 
