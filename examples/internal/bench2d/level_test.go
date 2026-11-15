@@ -218,13 +218,20 @@ func BenchmarkLevelLoad(b *testing.B) {
 }
 
 // setCost is how long a Set and a SetFlip of a cell take on a level of side
-// cells, averaged over calls of each, or over those two seconds allow.
+// cells, averaged over calls of each, or over those two seconds allow. A
+// tall tile is set to itself and a plain one to another plain one, so no
+// tall tile's sprite comes or goes: BenchmarkLevelSet times those.
 func setCost(side int, tall bool, calls int) time.Duration {
 	_, m := level{side: side, layers: 1, tall: tall}.build()
 	began := time.Now()
 	done := 0
 	for done < calls && time.Since(began) < 2*time.Second {
-		m.Set(done%side, done*7%side, 1+done%3)
+		x, y := done%side, done*7%side
+		id := 1 + done%2
+		if tall && m.At(x, y) == 3 {
+			id = 3
+		}
+		m.Set(x, y, id)
 		m.SetFlip(done*3%side, done%side, twod.TileFlip(done%2))
 		done++
 	}
@@ -232,21 +239,18 @@ func setCost(side int, tall bool, calls int) time.Duration {
 }
 
 // TestSettingACellCostsTheSameOnALargeLevel holds TileMap.Set and SetFlip
-// to the cell they change: on a level a hundred times the cells, a plain
-// tile may take ten times as long at most, where walking the map took a
-// hundred. With tall tiles it may take fifty: a tall tile set to a plain
-// one takes its sprite out of its parent, which looks through the parent's
-// children (node's detach), 26,700 here; walking the map took two hundred.
+// to the cell they change: on a level a hundred times the cells they may
+// take ten times as long at most, where walking the map took a hundred
+// times, two hundred with tall tiles. A tall tile coming or going is not
+// held: taking its sprite out of its parent looks through the parent's
+// children (node's detach), 26,700 on the large level.
 func TestSettingACellCostsTheSameOnALargeLevel(t *testing.T) {
 	if testing.Short() {
 		t.Skip("times thousands of calls")
 	}
-	for _, c := range []struct {
-		tall bool
-		most int
-	}{{false, 10}, {true, 50}} {
-		small, large := setCost(40, c.tall, 20000), setCost(400, c.tall, 20000)
-		t.Logf("tall tiles %v: %s a cell on 40×40, %s on 400×400", c.tall, small, large)
-		assert.LessOrEqual(t, large, time.Duration(c.most)*small, "tall tiles %v: 400×400 against 40×40", c.tall)
+	for _, tall := range []bool{false, true} {
+		small, large := setCost(40, tall, 20000), setCost(400, tall, 20000)
+		t.Logf("tall tiles %v: %s a cell on 40×40, %s on 400×400", tall, small, large)
+		assert.LessOrEqual(t, large, 10*small, "tall tiles %v: 400×400 against 40×40", tall)
 	}
 }
