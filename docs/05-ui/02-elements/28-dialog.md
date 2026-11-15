@@ -33,6 +33,8 @@ doc.Open(quit)
 
 A modal ignores keys and pad buttons still held from before it opened, until they're released: the Enter that opened it doesn't press its first button.
 
+While it is open, a focused element of another Document in the window keeps its focus but matches neither `:focus` nor `:focus-visible`, until the dialog closes or the dialog's Document is hidden ([Focus and keys](../05-focus-and-keys.md)).
+
 Automation: while open, its `id` (`quit`), else `data-name`, `aria-label`, then the slug of its text; labelled by its `aria-label` or first heading, its value whether it is modal.
 
 ```
