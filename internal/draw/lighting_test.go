@@ -69,28 +69,36 @@ func TestALitAroundListMarksItsVerticesWithTheBoxsMiddleAndHalfSize(t *testing.T
 	}
 }
 
-func TestALitFacingDrawingIsLitRoundItsBoxAndThenAsBefore(t *testing.T) {
+func TestADrawingLitRoundABoxIsLitFacingOrAroundAndThenAsBefore(t *testing.T) {
 	toLight := draw.ToLight(geom.V2(200, 100))
 	var l draw.List
 	l.Reset(0)
 	l.SetLight(draw.Unlit, toLight, geom.Vec2{})
-	l.SetLightFacing(geom.Rect{X: 90, Y: 40, W: 20, H: 10})
+	l.SetLightBox(geom.Rect{X: 90, Y: 40, W: 20, H: 10}, draw.LitFacing)
 	l.Rect(geom.Rect{W: 4, H: 4}, color.White)
 	if v := l.Vertices[0]; v.Lit() != 0 {
 		t.Fatalf("on a list that isn't lit per pixel, nothing changes: %+v", v)
 	}
 	l.SetLight(draw.LitPerPixel, toLight, geom.Vec2{})
 	before := l.Light()
-	l.SetLightFacing(geom.Rect{X: 90, Y: 40, W: 20, H: 10})
+	l.SetLightBox(geom.Rect{X: 90, Y: 40, W: 20, H: 10}, draw.LitFacing)
 	l.Rect(geom.Rect{W: 4, H: 4}, color.White)
 	l.RestoreLight(before)
 	l.Rect(geom.Rect{X: 10, W: 4, H: 4}, color.White)
+	l.SetLightBox(geom.Rect{X: 90, Y: 40, W: 20, H: 10}, draw.LitAround)
+	l.Rect(geom.Rect{W: 4, H: 4}, color.White)
+	l.RestoreLight(before)
 	for _, v := range l.Vertices[4:8] {
 		if v.Lit() != 3 || v.LightUV.Sub(toLight.Xform(geom.V2(100, 45))).Len() > 1e-6 {
 			t.Fatalf("lit facing, round the box's middle: %+v", v)
 		}
 	}
-	for _, v := range l.Vertices[8:] {
+	for _, v := range l.Vertices[12:] {
+		if v.Lit() != 2 || v.LightUV.Sub(toLight.Xform(geom.V2(100, 45))).Len() > 1e-6 {
+			t.Fatalf("lit around, round the box's middle: %+v", v)
+		}
+	}
+	for _, v := range l.Vertices[8:12] {
 		if v.Lit() != 1 || v.LightUV != toLight.Xform(v.Pos) {
 			t.Fatalf("restored, per pixel again: %+v", v)
 		}

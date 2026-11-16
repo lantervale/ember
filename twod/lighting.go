@@ -119,7 +119,8 @@ func litAtBase(s *Sprite, mapLight lt.Mode, k float32, blocks []geom.Rect) {
 // drawLit draws tile id as draw does at corner; one that blocks light,
 // on a layer lit per pixel, takes its light just past the left, right and
 // bottom of what it blocks with, standing on the cell at origin, never in
-// its own shadow, never from behind it.
+// its own shadow, never from behind it; or past any of its sides when it
+// is lit around, a wall seen from above.
 func (t *Tileset) drawLit(
 	c *Canvas,
 	id int,
@@ -129,13 +130,17 @@ func (t *Tileset) drawLit(
 	tint color.Color,
 	look *tileLook,
 ) {
-	box, ok := t.face(id, cell, f)
+	face, ok := t.face(id, cell, f)
 	if !ok {
 		t.draw(c, id, corner, cell, time, f, tint, look)
 		return
 	}
 	saved := c.list.Light()
-	c.list.SetLightFacing(geom.Rect{X: origin.X + box.X, Y: origin.Y + box.Y, W: box.W, H: box.H})
+	box, m := face.box, draw.LitFacing
+	if face.around {
+		m = draw.LitAround
+	}
+	c.list.SetLightBox(geom.Rect{X: origin.X + box.X, Y: origin.Y + box.Y, W: box.W, H: box.H}, m)
 	t.draw(c, id, corner, cell, time, f, tint, look)
 	c.list.RestoreLight(saved)
 }
@@ -157,17 +162,17 @@ func (t *Tileset) blocksOf(dst []geom.Rect, id int, origin, cell geom.Vec2, f Ti
 	return lt.TileBlocks(t, id, origin, cell, uint8(f), dst)
 }
 
-// face is the box round what tile id blocks light with, grown by
-// baseFront, from the corner of its cell, and whether it blocks any.
-func (t *Tileset) face(id int, cell geom.Vec2, f TileFlip) (geom.Rect, bool) {
+// face is how tile id is lit when it blocks light, and whether it blocks
+// any.
+func (t *Tileset) face(id int, cell geom.Vec2, f TileFlip) (faceEntry, bool) {
 	if t.faceVersion != t.version {
 		t.faceVersion, t.faces, t.faceList = t.version, nil, t.faceList[:0]
 	}
 	if f == 0 && cell == t.faceCell && id >= 0 && id < len(t.faceList) && t.faceList[id].known {
 		e := t.faceList[id]
-		return e.box, e.box.W > 0
+		return e, e.box.W > 0
 	}
-	box, ok := t.faceOf(id, cell, f)
+	e := t.faceOf(id, cell, f)
 	if f == 0 {
 		if cell != t.faceCell {
 			t.faceCell, t.faceList = cell, t.faceList[:0]
@@ -176,23 +181,26 @@ func (t *Tileset) face(id int, cell geom.Vec2, f TileFlip) (geom.Rect, bool) {
 			for len(t.faceList) <= id {
 				t.faceList = append(t.faceList, faceEntry{})
 			}
-			t.faceList[id] = faceEntry{box, true}
+			t.faceList[id] = e
 		}
 	}
-	return box, ok
+	return e, e.box.W > 0
 }
 
-// faceEntry is a tile's face box, known once worked out.
+// faceEntry is how a tile that blocks light is lit: round box, what it
+// blocks with grown by baseFront, from the corner of its cell, from every
+// side when around, else from its sides and below; known once worked out.
 type faceEntry struct {
-	box   geom.Rect
-	known bool
+	box    geom.Rect
+	around bool
+	known  bool
 }
 
 // faceOf is face, through the map of every cell size and flip.
-func (t *Tileset) faceOf(id int, cell geom.Vec2, f TileFlip) (geom.Rect, bool) {
+func (t *Tileset) faceOf(id int, cell geom.Vec2, f TileFlip) faceEntry {
 	k := faceKey{id, cell, f}
-	if b, ok := t.faces[k]; ok {
-		return b, b.W > 0
+	if e, ok := t.faces[k]; ok {
+		return e
 	}
 	var box geom.Rect
 	for i, r := range t.blocksOf(nil, id, geom.Vec2{}, cell, f) {
@@ -205,11 +213,12 @@ func (t *Tileset) faceOf(id int, cell geom.Vec2, f TileFlip) (geom.Rect, bool) {
 	if box.W > 0 {
 		box = geom.Rect{X: box.X - baseFront, Y: box.Y - baseFront, W: box.W + 2*baseFront, H: box.H + 2*baseFront}
 	}
+	e := faceEntry{box: box, around: box.W > 0 && lt.TileAround != nil && lt.TileAround(t, id), known: true}
 	if t.faces == nil {
-		t.faces = map[faceKey]geom.Rect{}
+		t.faces = map[faceKey]faceEntry{}
 	}
-	t.faces[k] = box
-	return box, box.W > 0
+	t.faces[k] = e
+	return e
 }
 
 // listLight sets how u's current list lights en, drawn through view, the

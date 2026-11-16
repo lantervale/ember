@@ -11,6 +11,9 @@ import (
 // The tile properties and shape class light reads, and the collision
 // property it reads too: a solid cell with no shapes blocks light whole.
 const (
+	propLit    = "lit"
+	litFront   = "front"
+	litAround  = "around"
 	propShadow = "shadow"
 	propGroup  = "occluder_group"
 	propHeight = "height"
@@ -22,8 +25,8 @@ const (
 )
 
 // TileProperties declares the tile properties light reads, for the loader
-// to check and Tiled to show: shadow, occluder_group and height. A shape
-// of class "shadow" on a tile blocks light only.
+// to check and Tiled to show: shadow, occluder_group, height and lit. A
+// shape of class "shadow" on a tile blocks light only.
 func TileProperties() twod.TiledOption {
 	return twod.TileProperties(
 		twod.Property{
@@ -35,6 +38,11 @@ func TileProperties() twod.TiledOption {
 			Name: propHeight, Kind: twod.KindFloat, Default: 0.0, Min: 0, Max: 4096,
 			Doc: "how tall it stands, in its pixels, for shadow length; " +
 				"0: its picture's height when tall, its cell's when solid",
+		},
+		twod.Property{
+			Name: propLit, Kind: twod.KindEnum, Default: litFront, Values: []string{litFront, litAround},
+			Doc: "how a tile that blocks light is lit: front, a wall's face, from its sides and below; " +
+				"around, a wall seen from above, from every side",
 		},
 	)
 }
@@ -49,6 +57,13 @@ func TileShadow(on bool, ids ...int) twod.TilesetOption {
 	}
 	return eachTile(propShadow, v, ids)
 }
+
+// TileLitAround lights tiles that block light from every side, the
+// brightest light just past any side of what they block with: a wall seen
+// from above, such as the rim of rock round a cave, whose floor may lie on
+// any side of it. By default such a tile is lit as a wall's face, from its
+// sides and below, never from behind it. For a tileset made in code.
+func TileLitAround(ids ...int) twod.TilesetOption { return eachTile(propLit, litAround, ids) }
 
 // TileOccluderGroup puts tiles' shadows in occluder group n (0, 1 or 2),
 // for lights BlockedBy only some groups. For a tileset made in code.
@@ -78,12 +93,14 @@ func eachTile(name string, v any, ids []int) twod.TilesetOption {
 }
 
 // caster is what a tile blocks light with: its whole cell, or rects in its
-// pixels, in an occluder group, standing height pixels tall.
+// pixels, in an occluder group, standing height pixels tall; around when
+// it is lit from every side.
 type caster struct {
 	whole  bool
 	rects  []geom.Rect
 	group  int
 	height float32
+	around bool
 }
 
 // table is light's reading of a tileset, by tile id, and how far its
@@ -162,6 +179,9 @@ func casterOf(ts *twod.Tileset, id int) caster {
 		c.group = min(max(g.Int(), 0), 2)
 	}
 	c.height = heightOf(ts, id, solid)
+	if v, ok := ts.Value(id, propLit); ok {
+		c.around = v.String() == litAround
+	}
 	return c
 }
 
@@ -224,7 +244,7 @@ func place(dst []shadow, ts *twod.Tileset, tb *table, id int, origin, cell geom.
 	return dst
 }
 
-//nolint:gochecknoinits // gives twod the shapes its lit tiles take their light round
+//nolint:gochecknoinits // gives twod the shapes its lit tiles take their light round, and from which sides
 func init() {
 	lit.TileBlocks = func(tileset any, id int, origin, cell geom.Vec2, flip uint8, dst []geom.Rect) []geom.Rect {
 		ts, ok := tileset.(*twod.Tileset)
@@ -236,5 +256,9 @@ func init() {
 			dst = append(dst, s.rect)
 		}
 		return dst
+	}
+	lit.TileAround = func(tileset any, id int) bool {
+		ts, ok := tileset.(*twod.Tileset)
+		return ok && tableOf(ts).at(id).around
 	}
 }

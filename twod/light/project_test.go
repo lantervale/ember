@@ -19,8 +19,8 @@ import (
 var updateProject = flag.Bool("update", false, "write twod/tiled/ember.tiled-project")
 
 // The engine's Tiled project declares every tile property the engine
-// reads: twod's tall, collide/tiles' solid, light's shadow, occluder_group
-// and height. It lives beside twod's tilesets; light writes it, as it can
+// reads: twod's tall, collide/tiles' solid, light's shadow, occluder_group,
+// height and lit. It lives beside twod's tilesets; light writes it, as it can
 // import every system that declares one.
 func TestTheCheckedInTiledProjectIsTheEnginesProperties(t *testing.T) {
 	const file = "../tiled/ember.tiled-project"

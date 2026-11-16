@@ -31,8 +31,10 @@ type level struct {
 	// side is the level's width and height in cells, layers its tile
 	// layers, props its still y-sorted sprites and lights its point lights.
 	side, layers, props, lights int
-	// tall makes a sixth of the cells tall tiles, a sprite each.
-	tall bool
+	// tall makes a sixth of the cells tall tiles, a sprite each; lit
+	// lights the tile layers per pixel, their solid tiles round what they
+	// block with, and around lights those from every side.
+	tall, lit, around bool
 }
 
 // levelTile is the tile of cell x, y of a layer: 2 and 3 are solid, a
@@ -60,11 +62,15 @@ func levelCells(side, layer int) [][]int {
 
 func blank(w, h int) *twod.Texture { return twod.NewTexture(image.NewNRGBA(image.Rect(0, 0, w, h))) }
 
-// levelTileset is four 16-pixel tiles, 2 and 3 solid, 3 tall when asked.
-func levelTileset(tall bool) *twod.Tileset {
+// levelTileset is four 16-pixel tiles, 2 and 3 solid, 3 tall when asked,
+// both lit from every side when asked.
+func levelTileset(tall, around bool) *twod.Tileset {
 	opts := []twod.TilesetOption{twod.TileValue(2, "solid", true), twod.TileValue(3, "solid", true)}
 	if tall {
 		opts = append(opts, twod.Tall(3))
+	}
+	if around {
+		opts = append(opts, light.TileLitAround(2, 3))
 	}
 	return twod.NewTileset(blank(64, 16), twod.Cell(16, 16), opts...)
 }
@@ -78,8 +84,11 @@ func (l level) build() (*world.World, *twod.TileMap) {
 	if l.lights > 0 {
 		light.Ambient(color.RGB(0.1, 0.1, 0.15))(cam)
 	}
-	ts := levelTileset(l.tall)
+	ts := levelTileset(l.tall, l.around)
 	ground, things := twod.NewLayer(0), twod.NewLayer(1, twod.SortByY())
+	if l.lit {
+		light.Lit()(ground)
+	}
 	var first *twod.TileMap
 	for i := range l.layers {
 		m := twod.NewTileMap(ts, twod.Cells(levelCells(l.side, i)), twod.CellSize(32, 32), twod.TallIn(things))
@@ -119,6 +128,8 @@ func BenchmarkLevelFrame(b *testing.B) {
 		{"400x400", level{side: 400, layers: 4}},
 		{"400x400-20000props", level{side: 400, layers: 4, props: 20000}},
 		{"400x400-300lights", level{side: 400, layers: 4, lights: 300}},
+		{"400x400-300lights-lit", level{side: 400, layers: 4, lights: 300, lit: true}},
+		{"400x400-300lights-lit-around", level{side: 400, layers: 4, lights: 300, lit: true, around: true}},
 		{"400x400-tall", level{side: 400, layers: 1, tall: true}},
 	} {
 		b.Run(c.name, func(b *testing.B) {

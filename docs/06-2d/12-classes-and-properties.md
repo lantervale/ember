@@ -17,6 +17,7 @@ level, err := twod.LoadTiled(files, "level.tmj", tiles.Properties(), light.TileP
 | `shadow` | twod/light, `light.TileProperties()` | `cast` or `none` | `cast` | `none`: it blocks bodies but not light |
 | `occluder_group` | twod/light, `light.TileProperties()` | int, 0 to 2 | 0 | its occluder group, for lights `BlockedBy` others |
 | `height` | twod/light, `light.TileProperties()` | float, in its pixels | 0 | how tall it stands, for the length of its shadows; 0 is its picture's height when it's tall, its cell's when it's solid, and nothing otherwise |
+| `lit` | twod/light, `light.TileProperties()` | `front` or `around` | `front` | how it is lit when it blocks light: `front`, a wall's face, from its sides and below; `around`, a wall seen from above, from every side ([decision 0075](../99-decisions/0075-a-wall-seen-from-above-is-lit-from-every-side.md)) |
 | `tint` | twod, `twod.EngineTileProperties()` | color | none | multiplies its colours and opacity when drawn; also on a tile object and a layer, where it multiplies Tiled's own tint; see [Recolours and masks](21-recolours-and-masks.md#in-tiled) ([decision 0069](../99-decisions/0069-variants-of-a-picture-are-made-at-load.md)) |
 | `recolour` | twod, `twod.EngineTileProperties()` | string | none | the palette, given to the loader by `twod.Palettes`, its colours are swapped by; also on a tile object and a layer |
 | `mask` | twod, `twod.EngineTileProperties()` | string | none | the tile of the mask tileset, given by `twod.Masks`, by its `name`, that cuts it; also on a tile object |
