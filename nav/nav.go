@@ -1,7 +1,9 @@
 // Package nav finds paths around the solid cells of a grid, such as a
 // twod.TileMap: A* with diagonal moves that never cut a wall's corner, the
 // path pulled straight wherever the way is clear, and routes that plan
-// again when the grid changes. It is pure Go, for games and servers alike.
+// again when the grid changes. A grid whose ground is slower in places (a
+// Coster) gets the quickest way rather than the shortest. It is pure Go,
+// for games and servers alike.
 //
 //	m := nav.New(level)
 //	route := m.Route(hero.Position(), click)
@@ -28,12 +30,24 @@ type Grid interface {
 	Center(x, y int) geom.Vec2
 }
 
+// Coster is a Grid whose ground is slower to cross in places. Cost is how
+// many times longer cell x, y takes than quick ground: 1 for quick ground,
+// 3 for ground crossed at a third of the speed, and anything below 1
+// counts as 1. A Map then finds the quickest way, crossing slow ground
+// only where going round takes longer, and pulls it straight only where
+// that is no slower. A cell nothing may cross is Solid, not costly.
+type Coster interface {
+	Grid
+	Cost(x, y int) float32
+}
+
 // versioned is a grid that says when its cells change.
 type versioned interface{ Version() uint64 }
 
 // Map finds paths over a grid, keeping the memory its searches use.
 type Map struct {
 	grid      Grid
+	cost      Coster
 	diagonals bool
 
 	cols, rows int
@@ -43,6 +57,7 @@ type Map struct {
 	closed     []uint32
 	search     uint32
 	open       openSet
+	along      []float64
 }
 
 // Option sets up a Map.
@@ -65,6 +80,7 @@ func NoDiagonals() SharedOption { return noDiagonals{} }
 // New returns a map finding paths over grid.
 func New(grid Grid, opts ...Option) *Map {
 	m := &Map{grid: grid, diagonals: true}
+	m.cost, _ = grid.(Coster)
 	for _, o := range opts {
 		o.mapOption(m)
 	}
@@ -153,6 +169,7 @@ func (m *Map) cells(from, to geom.Vec2) ([]int, bool) {
 			break
 		}
 		cx, cy := cur%m.cols, cur/m.cols
+		slow := m.cellCost(cx, cy)
 		for _, d := range steps {
 			if d.diagonal && !m.diagonals {
 				continue
@@ -165,7 +182,7 @@ func (m *Map) cells(from, to geom.Vec2) ([]int, bool) {
 			if m.closed[next] == m.search {
 				continue
 			}
-			g := m.g[cur] + d.cost
+			g := m.g[cur] + m.stepCost(d.cost, slow, nx, ny)
 			if m.stamp[next] == m.search && g >= m.g[next] {
 				continue
 			}
@@ -189,14 +206,50 @@ func (m *Map) trace(end int) []int {
 	return out
 }
 
+// cellCost is the cost of cell x, y over a Coster, 0 over a plain grid.
+func (m *Map) cellCost(x, y int) float32 {
+	if m.cost == nil {
+		return 0
+	}
+	return m.costAt(x, y)
+}
+
+// stepCost is what a step of length long from a cell costing from to cell
+// x, y takes: its length over a plain grid, half of it in each cell over a
+// Coster.
+func (m *Map) stepCost(long, from float32, x, y int) float32 {
+	if m.cost == nil {
+		return long
+	}
+	return long * (from + m.costAt(x, y)) / 2
+}
+
+// costAt is the cost of cell x, y, never below 1 so that the search's
+// estimate of what is left stays below the truth.
+func (m *Map) costAt(x, y int) float32 {
+	if c := m.cost.Cost(x, y); c >= 1 {
+		return c
+	}
+	return 1
+}
+
 // pull keeps only the waypoints the straight way can't skip, going as far
 // ahead from each as is clear, and drops points[0], where the walk starts.
+// Over a Coster the straight way must also be no slower than the stretch
+// of path it replaces.
 func (m *Map) pull(points []geom.Vec2) []geom.Vec2 {
+	if m.cost != nil {
+		m.along = append(m.along[:0], 0)
+		for i := 1; i < len(points); i++ {
+			took, _ := m.time(points[i-1], points[i])
+			m.along = append(m.along, m.along[i-1]+float64(took))
+		}
+	}
 	var out []geom.Vec2
 	at := 0
 	for at < len(points)-1 {
 		next := at + 1
-		for next+1 < len(points) && m.Clear(points[at], points[next+1]) {
+		for next+1 < len(points) && m.skips(points, at, next+1) {
 			next++
 		}
 		out = append(out, points[next])
@@ -205,17 +258,46 @@ func (m *Map) pull(points []geom.Vec2) []geom.Vec2 {
 	return out
 }
 
+// skips reports whether the straight way from points[at] to points[to] may
+// replace the path between them.
+func (m *Map) skips(points []geom.Vec2, at, to int) bool {
+	if m.cost == nil {
+		return m.Clear(points[at], points[to])
+	}
+	took, open := m.time(points[at], points[to])
+	return open && float64(took) <= (m.along[to]-m.along[at])*pullSlack
+}
+
+// time is how long the straight way from a to b takes over a Coster, as a
+// length on quick ground, and whether it is clear.
+func (m *Map) time(a, b geom.Vec2) (float32, bool) {
+	took, open := m.line(a, b, true)
+	return took * a.Dist(b), open
+}
+
+// pullSlack lets a straight way that takes as long as the path replace it,
+// whatever the sums round to.
+const pullSlack = 1 + 1e-4
+
 // Clear reports whether the straight way from a to b crosses no solid
 // cell, nor slips between two diagonal ones.
 func (m *Map) Clear(a, b geom.Vec2) bool {
+	_, open := m.line(a, b, false)
+	return open
+}
+
+// line walks the straight way from a to b cell by cell: whether it is
+// clear, and when timed over a Coster, how long it takes in lengths of the
+// way, each cell's part counted cost times.
+func (m *Map) line(a, b geom.Vec2, timed bool) (float32, bool) {
 	ax, ay, ok := m.grid.Cell(a)
 	if !ok {
-		return false
+		return 0, false
 	}
 	o := m.grid.Center(0, 0)
 	size := m.grid.Center(1, 1).Sub(o)
 	if size.X == 0 || size.Y == 0 {
-		return false
+		return 0, false
 	}
 	// u, v are a and b in cells, the centre of cell 0, 0 at 0.5, 0.5.
 	ua, va := (a.X-o.X)/size.X+0.5, (a.Y-o.Y)/size.Y+0.5
@@ -226,12 +308,25 @@ func (m *Map) Clear(a, b geom.Vec2) bool {
 	stepX, stepY := sign(du), sign(dv)
 	tMaxX, tMaxY := boundary(ua, du), boundary(va, dv)
 	tDeltaX, tDeltaY := inverse(du), inverse(dv)
+	// t is how far along the cell x, y is entered, took the cost so far, in
+	// fractions of the way.
+	var t, took float32
 	for range 2*(m.cols+m.rows) + 4 {
 		if m.grid.Solid(x, y) {
-			return false
+			return took, false
 		}
-		if x == bx && y == by || min(tMaxX, tMaxY) > 1 {
-			return true
+		leaves := min(tMaxX, tMaxY)
+		last := x == bx && y == by || leaves > 1
+		if timed {
+			end := leaves
+			if last {
+				end = 1
+			}
+			took += (end - t) * m.costAt(x, y)
+			t = end
+		}
+		if last {
+			return took, true
 		}
 		switch {
 		case tMaxX < tMaxY-1e-6:
@@ -242,14 +337,14 @@ func (m *Map) Clear(a, b geom.Vec2) bool {
 			tMaxY += tDeltaY
 		default:
 			if m.grid.Solid(x+stepX, y) || m.grid.Solid(x, y+stepY) {
-				return false
+				return took, false
 			}
 			x, y = x+stepX, y+stepY
 			tMaxX += tDeltaX
 			tMaxY += tDeltaY
 		}
 	}
-	return false
+	return took, false
 }
 
 // boundary is the fraction of the way, d long from u, at which the first
