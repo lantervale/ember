@@ -222,7 +222,7 @@ func (m *InfiniteMap) standTalls(k chunkKey, c *chunk) {
 				o = o.Add(m.position)
 			}
 			s := m.tileset.sprite(id, o, m.tileSize, 0, m.tileset.lookOf(id))
-			litAtBase(s, m.light.Mode, m.tileset.scale(m.tileSize), m.tileset.blocksOf(nil, id, o, m.tileSize, 0))
+			litAtBase(s, m.light.Mode, m.tileset.scale(m.tileSize), m.tileset.blocksOf(id, o, m.tileSize, 0))
 			c.talls = append(c.talls, s)
 			add(parent, []world.BasicFace{s})
 		}

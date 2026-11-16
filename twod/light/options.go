@@ -98,7 +98,8 @@ func SetAmbientMap(cam *twod.Camera, pic *twod.TiledPicture) {
 
 // NoShadows makes a tile map's tiles cast no shadows, whatever their
 // properties say: a map drawn as a picture only, whose walls something
-// else stands for.
+// else stands for. On a sprite made from a Tiled tile object, its tile
+// casts none.
 func NoShadows() twod.Option { return func(e twod.Entity) { state(e).NoShadows = true } }
 
 // NoShadowsOf reports whether e is made with NoShadows.

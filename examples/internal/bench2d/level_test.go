@@ -29,8 +29,9 @@ import (
 // level is a painted level's make-up.
 type level struct {
 	// side is the level's width and height in cells, layers its tile
-	// layers, props its still y-sorted sprites and lights its point lights.
-	side, layers, props, lights int
+	// layers, props its still y-sorted sprites, lights its point lights
+	// and rocks its Tiled tile objects casting from a strip at their foot.
+	side, layers, props, lights, rocks int
 	// tall makes a sixth of the cells tall tiles, a sprite each; lit
 	// lights the tile layers per pixel, their solid tiles round what they
 	// block with, and around lights those from every side.
@@ -105,6 +106,16 @@ func (l level) build() (*world.World, *twod.TileMap) {
 	for i := range l.props {
 		things.Add(twod.NewSprite(prop, twod.At(at(i, 0, 7).X, at(i, 0, 7).Y)))
 	}
+	if l.rocks > 0 {
+		rocks, err := twod.LoadTiled(rockFile(l.rocks, l.side*16), "rocks.tmj", twod.CellSize(32, 32),
+			light.TileProperties())
+		if err != nil {
+			panic(err)
+		}
+		for _, o := range rocks.Objects("rocks") {
+			things.Add(rocks.Sprite(o))
+		}
+	}
 	for i := range l.lights {
 		lamp := light.NewPoint(200, color.RGB(1, 0.8, 0.5))
 		lamp.SetPosition(at(i, 13, 101))
@@ -131,6 +142,7 @@ func BenchmarkLevelFrame(b *testing.B) {
 		{"400x400-300lights-lit", level{side: 400, layers: 4, lights: 300, lit: true}},
 		{"400x400-300lights-lit-around", level{side: 400, layers: 4, lights: 300, lit: true, around: true}},
 		{"400x400-tall", level{side: 400, layers: 1, tall: true}},
+		{"400x400-300lights-2000rocks", level{side: 400, layers: 4, lights: 300, rocks: 2000}},
 	} {
 		b.Run(c.name, func(b *testing.B) {
 			w, _ := c.l.build()
@@ -209,6 +221,27 @@ func levelFile(side, layers, objects int) fstest.MapFS {
 		"t.png":     {Data: picture(64, 16)},
 		"u.png":     {Data: picture(64, 16)},
 	}
+}
+
+// rockFile is a map of n rock tile objects spread over span pixels: a
+// tall tile blocking light with a strip at its foot, 24 pixels high.
+func rockFile(n, span int) fstest.MapFS {
+	var sb strings.Builder
+	sb.WriteString(`{"orientation":"orthogonal","width":1,"height":1,"tilewidth":16,"tileheight":16,` +
+		`"tilesets":[{"firstgid":1,"name":"r","image":"r.png","tilewidth":16,"tileheight":16,"tiles":[{"id":0,` +
+		`"properties":[{"name":"tall","type":"bool","value":true},{"name":"height","type":"float","value":24}],` +
+		`"objectgroup":{"type":"objectgroup","objects":[{"id":1,"type":"shadow","x":2,"y":12,"width":12,"height":4}]}}]}],` +
+		`"layers":[{"type":"objectgroup","id":1,"name":"rocks","objects":[`)
+	for i := range n {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		fmt.Fprintf(&sb, `{"id":%d,"gid":1,"x":%d,"y":%d,"width":16,"height":16}`, i+1, i*53%span, i*97%span)
+	}
+	sb.WriteString("]}]}")
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, image.NewNRGBA(image.Rect(0, 0, 16, 16)))
+	return fstest.MapFS{"rocks.tmj": {Data: []byte(sb.String())}, "r.png": {Data: buf.Bytes()}}
 }
 
 // BenchmarkLevelLoad is twod.LoadTiled of a level's file, its pictures

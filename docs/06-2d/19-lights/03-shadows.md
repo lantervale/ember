@@ -39,7 +39,7 @@ light.NoShadowsOf(ruins)                                          // true
 seen := light.TileShadowsIn(nil, walls, area) // []light.TileShadowRect{Rect, Group, Height}
 ```
 
-`light.NoShadows()` keeps a map from casting, whatever its tiles say: a map drawn as a picture only, whose walls something else stands for. `light.TileShadowsIn(dst, m, area)` appends what a map's tiles block light with in `area`, as light casts it, in the map's parent's space: for a game's rules that follow light, such as what blocks sight. It needs no window and reads the map as it is, `NoShadows` or not.
+`light.NoShadows()` keeps a map from casting, whatever its tiles say: a map drawn as a picture only, whose walls something else stands for. A Tiled tile object made a sprite by `level.Sprite(o)` casts as its tile does on the cell under its foot: its shapes, or its whole cell when it is solid with none, scaled to the object and flipped as it is, at its tile's `height` and in its `occluder_group`; it is lit as that tile is in a map too, a tall one at its base, round what it blocks with, and `light.NoShadows()` on the sprite stops it casting ([decision 0076](../../99-decisions/0076-a-tile-object-casts-as-its-tile.md)). `light.TileShadowsIn(dst, m, area)` appends what a map's tiles block light with in `area`, as light casts it, in the map's parent's space: for a game's rules that follow light, such as what blocks sight. It needs no window and reads the map as it is, `NoShadows` or not.
 
 ## Height
 
