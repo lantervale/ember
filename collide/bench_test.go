@@ -36,7 +36,12 @@ func newHorde(n int, radius float32, opts ...BodyOption) *horde {
 }
 
 func benchHorde(b *testing.B, settle int, opts ...BodyOption) {
-	h := newHorde(20000, 1712, opts...)
+	benchHordeOf(b, 20000, 1712, settle, opts...)
+}
+
+func benchHordeOf(b *testing.B, n int, radius float32, settle int, opts ...BodyOption) {
+	b.Helper()
+	h := newHorde(n, radius, opts...)
 	h.w.RunFrames(settle)
 	before := cpu()
 	for b.Loop() {
@@ -51,3 +56,9 @@ func BenchmarkHorde20k(b *testing.B) { benchHorde(b, 60) }
 // BenchmarkSoftPile20k once it has settled into one pile on its goal.
 func BenchmarkSoftHorde20k(b *testing.B) { benchHorde(b, 60, Soft(1)) }
 func BenchmarkSoftPile20k(b *testing.B)  { benchHorde(b, 2000, Soft(1)) }
+
+// BenchmarkSoftHorde300Wide is a level's few hundred monsters spread over
+// a span as wide as a level, and BenchmarkSoftPile300Wide once they have
+// piled on their goal.
+func BenchmarkSoftHorde300Wide(b *testing.B) { benchHordeOf(b, 300, 1300, 60, Soft(1)) }
+func BenchmarkSoftPile300Wide(b *testing.B)  { benchHordeOf(b, 300, 1300, 1500, Soft(1)) }

@@ -1,6 +1,6 @@
 # 0028. A soft crowd spreads by density
 
-- Status: Accepted
+- Status: Superseded by [0074](0074-a-soft-crowd-never-stacks-on-one-point.md)
 - Date: 2026-10-30
 - Area: core
 - Owner: architect
