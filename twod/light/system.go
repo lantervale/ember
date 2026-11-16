@@ -32,7 +32,8 @@ func (Plugin) Build(w *world.World) {
 	draw.InstallLighting(w, s)
 }
 
-// occluders are the 2D entities made with Occluder.
+// occluders are the 2D entities made with Occluder, and the sprites that
+// stand for a tile, such as Tiled tile objects, which cast as it.
 type occluders struct{ world.Group[twod.Entity] }
 
 // emissives are the sprites made with Emissive.
@@ -58,7 +59,18 @@ type glowKey struct {
 
 func (g *occluders) Matches(o world.Identifier) bool {
 	e, ok := o.(twod.Entity)
-	return ok && lit.Of(e).Occluder
+	return ok && (lit.Of(e).Occluder || castsTile(lit.Of(e)))
+}
+
+// castsTile reports whether the tile a sprite stands for, st its state,
+// blocks light: one that blocks none, such as a decal, costs nothing.
+func castsTile(st *lit.State) bool {
+	ts, ok := st.Tile.(*twod.Tileset)
+	if !ok || st.NoShadows {
+		return false
+	}
+	c := tableOf(ts).at(st.TileID)
+	return c.whole || len(c.rects) > 0
 }
 
 func (g *occluders) AddByInterface(o world.Identifier) {
@@ -388,6 +400,10 @@ func (s *system) addOccluders(w *world.World) {
 		if !ok || !sized || win == nil || !s.used[win] {
 			continue
 		}
+		if st := lit.Of(e); !st.Occluder {
+			s.addTile(win, t, st)
+			continue
+		}
 		if sp, isSprite := e.(*twod.Sprite); isSprite && lit.Of(e).Silhouette {
 			if s.silhouettes == nil {
 				s.silhouettes = map[*platform.Window][]silhouette{}
@@ -404,6 +420,21 @@ func (s *system) addOccluders(w *world.World) {
 			lit.Of(e).Groups,
 			lit.Of(e).Height*t.X.Len(),
 		)
+	}
+}
+
+// addTile adds what the tile a sprite stands for, st its state, blocks
+// light with in win, as it does on the sprite's cell of a map, t the
+// sprite's transform to win's points.
+func (s *system) addTile(win *platform.Window, t geom.Transform2D, st *lit.State) {
+	ts, ok := st.Tile.(*twod.Tileset)
+	if !ok || st.NoShadows {
+		return
+	}
+	r := draw.LightRect(win.Size())
+	s.scratch = place(s.scratch[:0], ts, tableOf(ts), st.TileID, st.TileOrigin, st.TileCell, twod.TileFlip(st.TileFlip))
+	for _, sh := range s.scratch {
+		quad(s.byWin[win].Occluders, s.blockedOf(win, r), t, sh.rect, r, 1<<sh.group, sh.height*t.X.Len())
 	}
 }
 

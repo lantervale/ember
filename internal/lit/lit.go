@@ -56,8 +56,18 @@ type State struct {
 	// Emissive is how far, in points, a sprite's own picture glows round
 	// it, 0 for not at all.
 	Emissive float32
-	// NoShadows makes a tile map's tiles cast nothing, whatever they say.
+	// NoShadows makes a tile map's tiles, or a tile sprite's tile, cast
+	// nothing, whatever they say.
 	NoShadows bool
+	// Tile is, on a sprite standing for a tile of a map, such as a Tiled
+	// tile object, its *twod.Tileset, kept untyped; TileID is the tile,
+	// TileFlip its twod.TileFlip, and TileOrigin and TileCell the cell it
+	// stands on, in the sprite's own space: it casts and is lit as that
+	// tile does on that cell of a map.
+	Tile                 any
+	TileID               int
+	TileFlip             uint8
+	TileOrigin, TileCell geom.Vec2
 	// AmbientMap is a camera's *twod.TiledPicture of ambient light, nil
 	// for none.
 	AmbientMap any

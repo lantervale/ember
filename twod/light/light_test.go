@@ -579,3 +579,20 @@ func TestALayerShadedBySomeGroupsMarksWhatItDrawsAndItsChildrenFollow(t *testing
 	w.RunFrames(1)
 	assert.Equal(t, uint8(0), draw.FrontFor(w, win).Vertices[4].Shade(), "shaded by none")
 }
+
+func TestATallTileFlippedAfterItStandsIsLitRoundWhatItBlocksWithFlipped(t *testing.T) {
+	w, win, _ := scene(t)
+	set := twod.NewTileset(picture(16, 16), twod.Cell(16, 16), twod.Tall(1),
+		TileShadowShapes(1, geom.Rect{X: 2, Y: 12, W: 8, H: 4}))
+	m := twod.NewTileMap(set, twod.Cells([][]int{{1}}), twod.CellSize(32, 32))
+	m.SetFlip(0, 0, twod.TileFlipX)
+	layer := twod.NewLayer(0, Lit()).Add(m)
+	win.Add(layer)
+	w.AddEntities(layer)
+	w.RunFrames(2)
+	vs := draw.FrontFor(w, win).Vertices
+	require.Len(t, vs, 4)
+	mid := draw.ToLight(win.Size()).Xform(geom.V2(400+(16-6)*2*2, 300+14*2*2))
+	assert.InDelta(t, mid.X, vs[0].LightUV.X, 1e-5, "round the strip flipped, 6 to 14 of its pixels across")
+	assert.InDelta(t, mid.Y, vs[0].LightUV.Y, 1e-5)
+}

@@ -248,7 +248,9 @@ func (t *Tiled) Sprite(o TiledObject, opts ...SpriteOption) *Sprite {
 		tint.A *= o.Opacity
 		all = append(all, Tint(tint))
 	}
-	return NewSprite(tex, append(all, opts...)...)
+	s := NewSprite(tex, append(all, opts...)...)
+	s.standFor(tile.Tileset, tile.ID, tile.Flip)
+	return s
 }
 
 // mapOptions are what the layer's folded settings make of its TileMap: not

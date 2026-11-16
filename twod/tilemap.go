@@ -382,26 +382,33 @@ func (m *TileMap) syncTall(i int) {
 		s.SetTint(m.tallTint(i, id))
 		f := m.Flip(i%m.columns, i/m.columns)
 		s.SetFlip(f&TileFlipX != 0, f&TileFlipY != 0)
+		m.lightTall(s, i, id)
 	}
+}
+
+// lightTall lights s, cell i's tall tile id, at its base, round what the
+// tile blocks light with as it stands on the cell, flipped as it is.
+func (m *TileMap) lightTall(s *Sprite, i, id int) {
+	x, y := i%m.columns, i/m.columns
+	cell := m.origin(x, y)
+	if m.tallIn != nil {
+		cell = cell.Add(m.position)
+	}
+	litAtBase(s, m.light.Mode, m.tileset.scale(m.tileSize), m.tileset.blocksOf(id, cell, m.tileSize, m.Flip(x, y)))
 }
 
 func (m *TileMap) tallSprite(i, id int) *Sprite {
 	x, y := i%m.columns, i/m.columns
-	o, cell := m.cellCorner(x, y), m.origin(x, y)
+	o := m.cellCorner(x, y)
 	if m.tallIn != nil {
-		o, cell = o.Add(m.position), cell.Add(m.position)
+		o = o.Add(m.position)
 	}
 	s := m.tileset.sprite(id, o, m.tileSize, m.Flip(x, y), m.cellLook(i, id))
 	s.SetTint(m.tallTint(i, id))
 	if m.tallIn != nil {
 		s.SetHidden(m.hidden)
 	}
-	litAtBase(
-		s,
-		m.light.Mode,
-		m.tileset.scale(m.tileSize),
-		m.tileset.blocksOf(nil, id, cell, m.tileSize, m.Flip(x, y)),
-	)
+	m.lightTall(s, i, id)
 	return s
 }
 

@@ -101,8 +101,19 @@ func litAtBase(s *Sprite, mapLight lt.Mode, k float32, blocks []geom.Rect) {
 		st.Mode = mapLight
 		return
 	}
-	k = max(k, 1e-6)
-	st.Mode, st.Anchor, st.Spread = lt.Base, geom.V2(0, baseFront/k), geom.Vec2{}
+	at := s.Position()
+	for i, r := range blocks {
+		blocks[i] = geom.Rect{X: r.X - at.X, Y: r.Y - at.Y, W: r.W, H: r.H}
+	}
+	litRound(st, geom.Vec2{}, max(k, 1e-6), blocks)
+}
+
+// litRound lights what st is the state of at its base: the brightest
+// light just past the sides of blocks' box, in its own space, or, blocking
+// none, just in front of foot; k is its scale, from its own space to its
+// parent's.
+func litRound(st *lt.State, foot geom.Vec2, k float32, blocks []geom.Rect) {
+	st.Mode, st.Anchor, st.Spread = lt.Base, foot.Add(geom.V2(0, baseFront/k)), geom.Vec2{}
 	if len(blocks) == 0 {
 		return
 	}
@@ -111,9 +122,43 @@ func litAtBase(s *Sprite, mapLight lt.Mode, k float32, blocks []geom.Rect) {
 		lo, hi = geom.V2(min(lo.X, r.X), min(lo.Y, r.Y)), geom.V2(max(hi.X, r.X+r.W), max(hi.Y, r.Y+r.H))
 	}
 	box := boxOf(lo, hi)
-	at := s.Position()
-	st.Anchor = geom.V2(box.X+box.W/2-at.X, box.Y+box.H/2-at.Y).Scale(1 / k)
+	st.Anchor = geom.V2(box.X+box.W/2, box.Y+box.H/2).Scale(1 / k)
 	st.Spread = geom.V2(box.W/2+baseFront, box.H/2+baseFront).Scale(1 / k)
+}
+
+// standFor makes s stand for tile id of t, flipped by f, as a Tiled tile
+// object does: standing on the cell under its picture's foot, scaled as
+// its width, it casts as the tile does on that cell of a map, through the
+// light package, and is lit as it: a tall tile at its base, round what it
+// blocks light with, another that blocks light by its face (Draw).
+func (s *Sprite) standFor(t *Tileset, id int, f TileFlip) {
+	r := s.Rect()
+	_, region := s.Picture()
+	if t == nil || region.W <= 0 {
+		return
+	}
+	k := r.W / region.W
+	cell := geom.V2(float32(t.tileW)*k, float32(t.tileH)*k)
+	origin := geom.V2(r.X, r.Y+r.H-cell.Y)
+	st := &s.GetDrawLook().light
+	st.Tile, st.TileID, st.TileFlip, st.TileOrigin, st.TileCell = t, id, uint8(f), origin, cell
+	if t.Tall(id) {
+		litRound(st, geom.V2(r.X+r.W/2, r.Y+r.H), 1, t.blocksOf(id, origin, cell, f))
+	}
+}
+
+// tileFace is how the tile s stands for is lit by its face, its box in
+// s's own space, and whether it blocks any light: a tile that is not
+// tall.
+func (s *Sprite) tileFace() (faceEntry, bool) {
+	st := s.GetDrawLook().light
+	t, ok := st.Tile.(*Tileset)
+	if !ok || t.Tall(st.TileID) {
+		return faceEntry{}, false
+	}
+	e, ok := t.face(st.TileID, st.TileCell, TileFlip(st.TileFlip))
+	e.box.X, e.box.Y = e.box.X+st.TileOrigin.X, e.box.Y+st.TileOrigin.Y
+	return e, ok
 }
 
 // drawLit draws tile id as draw does at corner; one that blocks light,
@@ -152,14 +197,14 @@ type faceKey struct {
 	flip TileFlip
 }
 
-// blocksOf appends the rects tile id blocks light with, standing on the
-// cell at origin, of size cell, flipped by f, as the light package reads
-// them; none without it, when nothing is lit.
-func (t *Tileset) blocksOf(dst []geom.Rect, id int, origin, cell geom.Vec2, f TileFlip) []geom.Rect {
+// blocksOf is the rects tile id blocks light with, standing on the cell
+// at origin, of size cell, flipped by f, as the light package reads them;
+// none without it, when nothing is lit.
+func (t *Tileset) blocksOf(id int, origin, cell geom.Vec2, f TileFlip) []geom.Rect {
 	if lt.TileBlocks == nil {
-		return dst
+		return nil
 	}
-	return lt.TileBlocks(t, id, origin, cell, uint8(f), dst)
+	return lt.TileBlocks(t, id, origin, cell, uint8(f), nil)
 }
 
 // face is how tile id is lit when it blocks light, and whether it blocks
@@ -203,7 +248,7 @@ func (t *Tileset) faceOf(id int, cell geom.Vec2, f TileFlip) faceEntry {
 		return e
 	}
 	var box geom.Rect
-	for i, r := range t.blocksOf(nil, id, geom.Vec2{}, cell, f) {
+	for i, r := range t.blocksOf(id, geom.Vec2{}, cell, f) {
 		if i == 0 {
 			box = r
 			continue

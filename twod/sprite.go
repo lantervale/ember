@@ -226,6 +226,19 @@ func (s *Sprite) Draw(c *Canvas) {
 	if s.flipY {
 		uv.Y, uv.H = uv.Y+uv.H, -uv.H
 	}
+	if st := s.GetDrawLook().light; st.Tile != nil && !st.Occluder && st.Mode == lt.Inherit {
+		if face, ok := s.tileFace(); ok {
+			saved := c.list.Light()
+			m := draw.LitFacing
+			if face.around {
+				m = draw.LitAround
+			}
+			c.list.SetLightBox(face.box, m)
+			c.Image(s.Rect(), tex, uv, color.White)
+			c.list.RestoreLight(saved)
+			return
+		}
+	}
 	if st := s.GetDrawLook().light; st.Occluder && st.Mode == lt.Inherit {
 		k := max(c.Transform().X.Len(), 1e-6)
 		r := s.Rect()
