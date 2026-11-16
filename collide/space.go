@@ -120,7 +120,9 @@ func (s *Space) file(b *Body) {
 	}
 	box := b.Bounds()
 	if b.soft() {
-		s.unfile(b)
+		if b.filed.ok {
+			s.unfile(b)
+		}
 		switch {
 		case b.indexed:
 			s.crowd.moved(b, box)

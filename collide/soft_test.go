@@ -128,3 +128,12 @@ func TestABodyLeavingTheWorldLeavesTheCrowd(t *testing.T) {
 	w.RunFrames(1)
 	assert.InDelta(t, before-space.BodyOf(things[1]).share, covered(), 1e-4)
 }
+
+func TestASoftBodysMoveWidensTheCrowdsQueriesOnlyByHowFarItWent(t *testing.T) {
+	things := pile(4, geom.V2(500, 300))
+	w, space := setup(things...)
+	w.RunFrames(1)
+	space.crowd.rebuild(space)
+	space.Move(things[0], geom.V2(1, 0))
+	assert.InDelta(t, 1, space.crowd.slack, 0.01, "a query near the crowd looks a point further, not across the plane")
+}
