@@ -77,6 +77,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0071 | [Each system reads its own tile properties](0071-each-system-reads-its-own-tile-properties.md) | assets |
 | 0072 | [A hidden capture draws only its frame](0072-a-hidden-capture-draws-only-its-frame.md) | rendering |
 | 0073 | [A focused element under another's modal looks unfocused](0073-a-focused-element-under-anothers-modal-looks-unfocused.md) | core |
+| 0074 | [A soft crowd never stacks on one point](0074-a-soft-crowd-never-stacks-on-one-point.md) | core |
 
 ## Writing one
 
