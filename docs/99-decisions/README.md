@@ -80,6 +80,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0074 | [A soft crowd never stacks on one point](0074-a-soft-crowd-never-stacks-on-one-point.md) | core |
 | 0075 | [A wall seen from above is lit from every side](0075-a-wall-seen-from-above-is-lit-from-every-side.md) | rendering |
 | 0076 | [A tile object casts as its tile](0076-a-tile-object-casts-as-its-tile.md) | rendering |
+| 0077 | [What is lit around takes light past its corners](0077-what-is-lit-around-takes-light-past-its-corners.md) | rendering |
 
 ## Writing one
 

@@ -32,7 +32,8 @@ type State struct {
 	Anchor geom.Vec2
 	// Spread is, on a tall tile blocking light, the half-size round Anchor
 	// of what it blocks with, grown a little: it takes the light of the
-	// brightest of the four points past its sides, never its own shadow.
+	// brightest of the eight points past its sides and corners, never its
+	// own shadow.
 	Spread     geom.Vec2
 	Ambient    color.Color
 	HasAmbient bool

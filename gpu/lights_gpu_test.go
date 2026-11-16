@@ -686,13 +686,21 @@ func TestATallTileAtAnotherTallTilesShadowEdgeStaysDark(t *testing.T) {
 // camera's Occluders, lit by a light at from.
 func wallRow(t *testing.T, from geom.Vec2) *image.RGBA {
 	t.Helper()
+	return walls(t, [][]int{{1, 1, 1}}, geom.V2(-15, 0), from)
+}
+
+// walls draws cells of white solid tiles 10 points square, tile 1 lit by
+// its face and tile 2 around, from corner, as wallRow does.
+func walls(t *testing.T, cells [][]int, corner, from geom.Vec2) *image.RGBA {
+	t.Helper()
 	d := device(t)
 	r := &webgpu2D{}
 	if err := r.init(d); err != nil {
 		t.Fatal(err)
 	}
-	set := twod.NewTileset(filled(10, 10, stdcolor.RGBA{255, 255, 255, 255}), twod.Cell(10, 10), tiles.Solid(1))
-	m := twod.NewTileMap(set, twod.Cells([][]int{{1, 1, 1}}), twod.CellSize(10, 10), twod.At(-15, 0))
+	set := twod.NewTileset(filled(20, 10, stdcolor.RGBA{255, 255, 255, 255}), twod.Cell(10, 10), tiles.Solid(1, 2),
+		light.TileLitAround(2))
+	m := twod.NewTileMap(set, twod.Cells(cells), twod.CellSize(10, 10), twod.At(corner.X, corner.Y))
 	space := collide.NewSpace()
 	space.AddSolid(tiles.Of(m))
 	w := world.New().AddPlugins(wm.Plugin{}, twod.Plugin{}, light.Plugin{})
@@ -714,6 +722,17 @@ func wallRow(t *testing.T, from geom.Vec2) *image.RGBA {
 		t.Fatal(err)
 	}
 	return img
+}
+
+func TestATileLitAroundMeetingTheFloorAtACornerIsLitFromThere(t *testing.T) {
+	inside := [][]int{{2, 2, 0}, {2, 2, 2}, {2, 2, 2}}
+	if v := at(walls(t, inside, geom.V2(-15, -15), geom.V2(40, -40)), 0, 0); v < 80 {
+		t.Fatalf("the middle tile, its floor only past its top-right corner, draws dark: %d", v)
+	}
+	shut := [][]int{{2, 2, 2}, {2, 2, 2}, {2, 2, 2}}
+	if v := at(walls(t, shut, geom.V2(-15, -15), geom.V2(40, -40)), 0, 0); v > 5 {
+		t.Fatalf("with no floor round it, it stays dark: %d", v)
+	}
 }
 
 func TestASolidTilesFaceIsLitFromTheRoomNeverFromBehindIt(t *testing.T) {

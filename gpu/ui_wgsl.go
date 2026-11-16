@@ -14,8 +14,8 @@ func uiShader(shaded bool) string {
 
 // plainLightWGSL reads the light picture alone.
 const plainLightWGSL = `	// lightSpread says how the light is read: (0, 0) not at all, x −1 at
-	// lightUV, else round it, all four sides, or all but the top when y is
-	// negative.
+	// lightUV, else round it, all four sides and corners, or the sides but
+	// the top when y is negative.
 	let spread = in.lightSpread;
 	var light = textureSampleLevel(lightPicture, lightSampler, in.lightUV, 0.0).rgb;
 	if (spread.x > 0.0) {
@@ -24,16 +24,20 @@ const plainLightWGSL = `	// lightSpread says how the light is read: (0, 0) not a
 			textureSampleLevel(lightPicture, lightSampler, in.lightUV - vec2f(s.x, 0.0), 0.0).rgb),
 			textureSampleLevel(lightPicture, lightSampler, in.lightUV + vec2f(0.0, s.y), 0.0).rgb);
 		if (spread.y > 0.0) {
-			light = max(light, textureSampleLevel(lightPicture, lightSampler, in.lightUV - vec2f(0.0, s.y), 0.0).rgb);
+			light = max(max(light, textureSampleLevel(lightPicture, lightSampler, in.lightUV - vec2f(0.0, s.y), 0.0).rgb),
+				max(max(textureSampleLevel(lightPicture, lightSampler, in.lightUV + s, 0.0).rgb,
+					textureSampleLevel(lightPicture, lightSampler, in.lightUV - s, 0.0).rgb),
+					max(textureSampleLevel(lightPicture, lightSampler, in.lightUV + vec2f(s.x, -s.y), 0.0).rgb,
+						textureSampleLevel(lightPicture, lightSampler, in.lightUV + vec2f(-s.x, s.y), 0.0).rgb)));
 		}
 	}
 `
 
 // shadedLightWGSL reads the light picture the vertex's groups pick.
 const shadedLightWGSL = `	// lightSpread says how the light is read: (0, 0) not at all, x −1 − k
-	// at lightUV, else round it by x − 2k, all four sides, or all but the
-	// top when y is negative; k is the occluder groups left out, which
-	// picks the light picture.
+	// at lightUV, else round it by x − 2k, all four sides and corners, or
+	// the sides but the top when y is negative; k is the occluder groups
+	// left out, which picks the light picture.
 	let spread = in.lightSpread;
 	var left = 0.0;
 	var sx = spread.x;
@@ -51,7 +55,9 @@ const shadedLightWGSL = `	// lightSpread says how the light is read: (0, 0) not 
 		light = max(max(lightAt(picture, in.lightUV + vec2f(s.x, 0.0)), lightAt(picture, in.lightUV - vec2f(s.x, 0.0))),
 			lightAt(picture, in.lightUV + vec2f(0.0, s.y)));
 		if (spread.y > 0.0) {
-			light = max(light, lightAt(picture, in.lightUV - vec2f(0.0, s.y)));
+			light = max(max(light, lightAt(picture, in.lightUV - vec2f(0.0, s.y))),
+				max(max(lightAt(picture, in.lightUV + s), lightAt(picture, in.lightUV - s)),
+					max(lightAt(picture, in.lightUV + vec2f(s.x, -s.y)), lightAt(picture, in.lightUV + vec2f(-s.x, s.y)))));
 		}
 	}
 `
