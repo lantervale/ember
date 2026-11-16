@@ -34,9 +34,12 @@ type FlowField struct {
 	shown, next *field
 	done        chan struct{}
 	// base is the grid's cells as last read, kept while the grid is the
-	// same and its version too, so a new goal reads nothing of it.
-	base        *field
-	baseVersion uint64
+	// same and its version too, so a new goal reads nothing of it. cut
+	// counts the grids Around cut, so the same grid is known without
+	// comparing grids, which a game's own grid type may not allow.
+	base         *field
+	baseVersion  uint64
+	cut, baseCut int
 }
 
 // field is one made flow field, over the grid as it was then.
@@ -159,6 +162,7 @@ func (f *FlowField) SetTarget(at geom.Vec2) {
 	f.wait()
 	if f.area != nil && (f.grid == nil || f.stray(at)) {
 		f.grid, f.made = f.area(at), false
+		f.cut++
 	}
 	if f.grid == nil {
 		return
@@ -208,7 +212,7 @@ func (f *FlowField) build() {
 	n.grid, n.goal, n.diagonals, n.body = f.grid, f.goal, f.diagonals, f.body
 	n.origin = f.grid.Center(0, 0)
 	n.size = f.grid.Center(1, 1).Sub(n.origin)
-	if _, kept := f.grid.(versioned); kept && f.base != nil && f.base.grid == f.grid && f.baseVersion == f.version {
+	if _, kept := f.grid.(versioned); kept && f.base != nil && f.baseCut == f.cut && f.baseVersion == f.version {
 		n.adopt(f.base)
 	} else {
 		n.solids()
@@ -217,7 +221,7 @@ func (f *FlowField) build() {
 				f.base = &field{}
 			}
 			f.base.adopt(n)
-			f.baseVersion = f.version
+			f.baseVersion, f.baseCut = f.version, f.cut
 		}
 	}
 	if !f.background || f.shown == nil {

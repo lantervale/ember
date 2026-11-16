@@ -50,6 +50,8 @@ enemy.Add(collide.NewBody(collide.Box(16, 10), collide.Group(foes), collide.Coll
 
 `ember/nav` finds ways round the solid cells of a grid, such as a tile map, in pure Go for games and servers alike. Paths move diagonally but never cut a wall's corner, and are pulled straight wherever the way is clear; `nav.NoDiagonals()` keeps them to the four straight directions.
 
+A grid is anything with `Columns`, `Rows`, `Solid`, `Cell` and `Center` (a `nav.Grid`), and nav never compares two, so a game's own grid type may hold funcs, maps or slices.
+
 For one walker, `nav.New(tiles.Of(level))` is a map over the grid. `Find(from, to)` is the way as waypoints, and `ok` is false when `to` is solid or out of reach, the way then ending as near as it gets. `Route(from, to)` is a way to walk: each step, `route.Toward(at, reach)` is the direction to the next waypoint, moving on once within `reach` of it, and it plans again by itself when the grid changes or the way ahead closes. `Clear(a, b)` says whether the straight line between two points crosses no solid cell.
 
 ```go

@@ -17,7 +17,8 @@ import (
 )
 
 // Grid is cells, some of them solid, laid out in a plane: a twod.TileMap,
-// or a server's own level.
+// or a server's own level. nav never compares grids, so a grid's type may
+// hold funcs, maps or slices.
 type Grid interface {
 	Columns() int
 	Rows() int
