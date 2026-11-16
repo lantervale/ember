@@ -75,7 +75,7 @@ things := twod.NewTileMap(set, twod.TallIn(room), light.PerPixel())
 pillar := twod.NewSprite(tex, light.LitAt(0, 24)) // one light, taken at its base
 ```
 
-A tall tile that blocks light takes the brightest light just past its sides; a flat wall tile takes it past its left, right and bottom sides, so it lights from the room, not from behind.
+A tall tile that blocks light takes the brightest light just past its sides; a flat wall tile takes it past its left, right and bottom sides, so it lights from the room, not from behind. A wall seen from above, such as the rim of rock round a cave, may have its floor on any side: its tile property `lit` set to `around`, or `light.TileLitAround(ids…)` in code, lights it from every side ([decision 0075](../../99-decisions/0075-a-wall-seen-from-above-is-lit-from-every-side.md)).
 
 ## Affects
 

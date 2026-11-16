@@ -3,6 +3,7 @@ package twod
 import (
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/draw"
 	lt "github.com/lantervale/ember/internal/lit"
 	"github.com/lantervale/ember/node"
 )
@@ -229,8 +230,9 @@ func (s *Sprite) Draw(c *Canvas) {
 		k := max(c.Transform().X.Len(), 1e-6)
 		r := s.Rect()
 		saved := c.list.Light()
-		c.list.SetLightFacing(
+		c.list.SetLightBox(
 			geom.Rect{X: r.X - baseFront/k, Y: r.Y - baseFront/k, W: r.W + 2*baseFront/k, H: r.H + 2*baseFront/k},
+			draw.LitFacing,
 		)
 		c.Image(r, tex, uv, color.White)
 		c.list.RestoreLight(saved)

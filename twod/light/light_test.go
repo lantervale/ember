@@ -327,6 +327,38 @@ func TestATallTileThatBlocksLightTakesItRoundWhatItBlocksWith(t *testing.T) {
 	}
 }
 
+func TestASolidTileIsLitByItsFaceAndOneLitAroundFromEverySide(t *testing.T) {
+	w, win, _ := scene(t)
+	set := twod.NewTileset(picture(32, 16), twod.Cell(16, 16), tiles.Solid(1, 2), TileLitAround(2))
+	m := twod.NewTileMap(set, twod.Cells([][]int{{1, 2}}), twod.CellSize(16, 16))
+	layer := twod.NewLayer(0, Lit()).Add(m)
+	win.Add(layer)
+	w.AddEntities(layer)
+	w.RunFrames(2)
+	vs := draw.FrontFor(w, win).Vertices
+	require.Len(t, vs, 8)
+	toLight := draw.ToLight(win.Size())
+	for i, v := range vs {
+		want, mid := 3, toLight.Xform(geom.V2(400+8*2, 300+8*2))
+		if i >= 4 {
+			want, mid = 2, toLight.Xform(geom.V2(400+24*2, 300+8*2))
+		}
+		assert.Equal(t, want, v.Lit(), "tile 1 from its sides and below, tile 2 from every side")
+		assert.InDelta(t, mid.X, v.LightUV.X, 1e-5, "round its own cell")
+		assert.InDelta(t, mid.Y, v.LightUV.Y, 1e-5)
+	}
+}
+
+func TestTheLitPropertyIsDeclaredFrontByDefault(t *testing.T) {
+	set := twod.NewTileset(picture(32, 16), twod.Cell(16, 16), tiles.Solid(1, 2), TileLitAround(2))
+	v, ok := set.Value(2, "lit")
+	require.True(t, ok)
+	assert.Equal(t, "around", v.String())
+	project := string(twod.TiledProject(TileProperties()))
+	assert.Contains(t, project, `"name": "lit"`)
+	assert.Contains(t, project, `"front"`)
+}
+
 func TestALightsElevationSizeAndFadeReachItsWindowZoomed(t *testing.T) {
 	w, win, _ := scene(t)
 	lamp := NewPoint(100, color.White, Elevation(30), Size(4), ShadowFade(FadeSmooth), FadeFrom(0.25))

@@ -37,9 +37,9 @@ type Tileset struct {
 	version uint64
 	cached  map[any]cachedTable
 	cacheMu sync.Mutex
-	// faces caches, by tile, cell size and flip, the box a tile that
-	// blocks light takes its light round.
-	faces map[faceKey]geom.Rect
+	// faces caches, by tile, cell size and flip, how a tile that blocks
+	// light takes its light: round which box, and from which sides.
+	faces map[faceKey]faceEntry
 	// faceList holds the faces of tiles unflipped on cells of faceCell,
 	// by id: what a map's every cell asks each frame.
 	faceCell geom.Vec2

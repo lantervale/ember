@@ -78,6 +78,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0072 | [A hidden capture draws only its frame](0072-a-hidden-capture-draws-only-its-frame.md) | rendering |
 | 0073 | [A focused element under another's modal looks unfocused](0073-a-focused-element-under-anothers-modal-looks-unfocused.md) | core |
 | 0074 | [A soft crowd never stacks on one point](0074-a-soft-crowd-never-stacks-on-one-point.md) | core |
+| 0075 | [A wall seen from above is lit from every side](0075-a-wall-seen-from-above-is-lit-from-every-side.md) | rendering |
 
 ## Writing one
 

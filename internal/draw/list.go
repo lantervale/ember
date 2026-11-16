@@ -249,12 +249,13 @@ func (c *List) SetLightAround(toLight geom.Transform2D, box geom.Rect) {
 	c.spreadUV = geom.V2(abs(hi.X-lo.X)/2, abs(hi.Y-lo.Y)/2)
 }
 
-// SetLightFacing lights what is drawn next by the brightest of the points
-// just past box's left, right and bottom sides, box in the space of what
-// is drawn: a solid tile's face. It applies only while the list draws
-// lit per pixel, and holds until RestoreLight.
-func (c *List) SetLightFacing(box geom.Rect) {
-	if c.light != LitPerPixel {
+// SetLightBox lights what is drawn next round box, in the space of what
+// is drawn, as m says: LitFacing by the brightest of the points just past
+// its left, right and bottom sides, a solid tile's face; LitAround past
+// any of its four, a wall seen from above. It applies only while the list
+// draws lit per pixel, and holds until RestoreLight.
+func (c *List) SetLightBox(box geom.Rect, m LightMode) {
+	if c.light != LitPerPixel || m != LitFacing && m != LitAround {
 		return
 	}
 	if c.transformed {
@@ -262,7 +263,7 @@ func (c *List) SetLightFacing(box geom.Rect) {
 		box = geom.Rect{X: min(a.X, b.X), Y: min(a.Y, b.Y), W: abs(b.X - a.X), H: abs(b.Y - a.Y)}
 	}
 	c.SetLightAround(c.toLight, box)
-	c.light = LitFacing
+	c.light = m
 }
 
 // SetShadedBy makes only the shadows of the occluder groups in groups

@@ -20,14 +20,31 @@
             "valuesAsFlags": false
         },
         {
+            "id": 2,
+            "name": "lit",
+            "storageType": "string",
+            "type": "enum",
+            "values": [
+                "front",
+                "around"
+            ],
+            "valuesAsFlags": false
+        },
+        {
             "color": "#ffa0a0a4",
             "drawFill": true,
-            "id": 2,
+            "id": 3,
             "members": [
                 {
                     "name": "height",
                     "type": "float",
                     "value": 0
+                },
+                {
+                    "name": "lit",
+                    "propertyType": "lit",
+                    "type": "string",
+                    "value": "front"
                 },
                 {
                     "name": "mask",
@@ -75,7 +92,7 @@
         {
             "color": "#ffa0a0a4",
             "drawFill": true,
-            "id": 3,
+            "id": 4,
             "members": [
                 {
                     "name": "recolour",
@@ -98,7 +115,7 @@
         {
             "color": "#ffa0a0a4",
             "drawFill": true,
-            "id": 4,
+            "id": 5,
             "members": [
                 {
                     "name": "mask",
@@ -126,7 +143,7 @@
         {
             "color": "#ffa0a0a4",
             "drawFill": true,
-            "id": 5,
+            "id": 6,
             "members": [
                 {
                     "name": "cuts",

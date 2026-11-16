@@ -105,6 +105,13 @@ var Tiles func(picture any, list any, view geom.Rect, t geom.Transform2D)
 //nolint:gochecknoglobals // a hook another package fills at init, keeping the imports acyclic
 var TileBlocks func(tileset any, id int, origin, cell geom.Vec2, flip uint8, dst []geom.Rect) []geom.Rect
 
+// TileAround reports whether tile id of tileset, a *twod.Tileset, that
+// blocks light takes it from every side of what it blocks with, rather
+// than from its sides and below. The light package sets it.
+//
+//nolint:gochecknoglobals // a hook another package fills at init, keeping the imports acyclic
+var TileAround func(tileset any, id int) bool
+
 // FromMap marks a collide solid that reads a tile map's cells, such as
 // collide/tiles' Layer, by a method `ReadsTileMap() lit.FromMap`: light
 // casts tile maps from its own reading of them and skips such a solid.

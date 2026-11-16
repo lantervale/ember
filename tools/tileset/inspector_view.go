@@ -16,7 +16,7 @@ import (
 //
 // Automation IDs, the leaves of the inspector's paths: the properties
 // solid and tall (toggles, each with a <name>-default label while unset),
-// shadow and occluder_group (combos), height and emissive (text inputs),
+// shadow, occluder_group and lit (combos), height and emissive (text inputs),
 // animation and near-misses (labels), all under a node named properties;
 // under one named objects, each folded object's object-<n>, pressed to
 // select it, and its object-<n>-summary (a label of its line), n from 1
