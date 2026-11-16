@@ -2,6 +2,7 @@ package light //nolint:testpackage // white-box: shares light's test scene, reac
 
 import (
 	"image"
+	"math"
 	"testing"
 
 	"github.com/lantervale/ember/collide"
@@ -347,6 +348,36 @@ func TestASolidTileIsLitByItsFaceAndOneLitAroundFromEverySide(t *testing.T) {
 		assert.InDelta(t, mid.X, v.LightUV.X, 1e-5, "round its own cell")
 		assert.InDelta(t, mid.Y, v.LightUV.Y, 1e-5)
 	}
+}
+
+func TestATileLitAroundIsLitRoundItsBodyThoughItCastsFromAStrip(t *testing.T) {
+	w, win, _ := scene(t)
+	cell, strip := geom.Rect{W: 16, H: 16}, geom.Rect{Y: 14, W: 16, H: 2}
+	set := twod.NewTileset(picture(32, 16), twod.Cell(16, 16), tiles.Solid(1, 2),
+		tiles.BodyShapes(1, cell), tiles.BodyShapes(2, cell),
+		TileShadowShapes(1, strip), TileShadowShapes(2, strip), TileLitAround(2))
+	m := twod.NewTileMap(set, twod.Cells([][]int{{1, 2}}), twod.CellSize(16, 16))
+	layer := twod.NewLayer(0, Lit()).Add(m)
+	win.Add(layer)
+	w.AddEntities(layer)
+	w.RunFrames(2)
+	vs := draw.FrontFor(w, win).Vertices
+	require.Len(t, vs, 8)
+	toLight := draw.ToLight(win.Size())
+	face, round := toLight.Xform(geom.V2(400+8*2, 300+15*2)), toLight.Xform(geom.V2(400+24*2, 300+8*2))
+	faceHalf := toLight.Xform(geom.V2(400+(8+8+3)*2, 300+(15+1+3)*2)).Sub(face)
+	roundHalf := toLight.Xform(geom.V2(400+(24+8+3)*2, 300+(8+8+3)*2)).Sub(round)
+	for i, v := range vs {
+		mid, half, what := face, faceHalf, "tile 1, lit by its face, round its strip as before"
+		if i >= 4 {
+			mid, half, what = round, roundHalf, "tile 2, lit around, round its whole body"
+		}
+		assert.InDelta(t, mid.X, v.LightUV.X, 1e-5, what)
+		assert.InDelta(t, mid.Y, v.LightUV.Y, 1e-5, what)
+		assert.InDelta(t, half.Y, float32(math.Abs(float64(v.LightSpread.Y))), 1e-5, "%s, as far round it", what)
+	}
+	_, ok := set.Value(1, "lit")
+	assert.False(t, ok)
 }
 
 func TestTheLitPropertyIsDeclaredFrontByDefault(t *testing.T) {
