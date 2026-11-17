@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,13 +14,6 @@ var stateNames = map[string]dom.State{
 	"hover": dom.Hover, "focus": dom.Focus, "focus-visible": dom.FocusVisible, "active": dom.Active,
 	"disabled": dom.Disabled, "checked": dom.Checked, "open": dom.Open, "modal": dom.Modal,
 }
-
-// pseudoElements are the subset's pseudo-elements and the one property
-// each takes.
-//
-//nolint:gochecknoglobals,goconst // lookup table
-var pseudoElements = map[string]string{"placeholder": "color", "selection": "background-color",
-	"backdrop": "background-color"}
 
 // Specificity is a selector's (ids, classes, types) weight, compared in
 // that order.
@@ -52,6 +46,10 @@ const (
 	pseudoRoot
 	pseudoNot
 	pseudoNthChild
+	// pseudoLink is :link and :any-link, an element with an href, and
+	// pseudoVisited :visited, which nothing is: ui keeps no history.
+	pseudoLink
+	pseudoVisited
 )
 
 type pseudo struct {
@@ -85,10 +83,12 @@ type Selector struct {
 	Compounds   []Compound
 	Combinators []Combinator
 	Specificity Specificity
-	// PseudoElement is "placeholder" or "selection" for a ::placeholder or
-	// ::selection selector, the subset's pseudo-elements; Matches then tests
-	// the element it belongs to.
+	// PseudoElement is the selector's pseudo-element, without its colons
+	// ("before" for ::before and :before, "part" for ::part(x)); Matches
+	// then tests the element it belongs to.
 	PseudoElement string
+	// pseudoArgs is what a functional pseudo-element was given, as written.
+	pseudoArgs string
 }
 
 func (s Selector) String() string {
@@ -105,6 +105,9 @@ func (s Selector) String() string {
 	}
 	if s.PseudoElement != "" {
 		b.WriteString("::" + s.PseudoElement)
+		if s.pseudoArgs != "" {
+			b.WriteString("(" + s.pseudoArgs + ")")
+		}
 	}
 	return b.String()
 }
@@ -171,6 +174,12 @@ func (c *Compound) matches(e *dom.Node) bool {
 			if e.Parent() != nil {
 				return false
 			}
+		case pseudoLink:
+			if _, ok := e.Attr("href"); !ok {
+				return false
+			}
+		case pseudoVisited:
+			return false
 		case pseudoNthChild:
 			if !nth(p.a, p.b, childIndex(e)) {
 				return false
@@ -336,12 +345,18 @@ func parseSelectors(cs []Component) ([]Selector, *SelectorError) {
 
 func parseComplex(cs []Component) (Selector, *SelectorError) {
 	var s Selector
-	if n := len(cs); n >= 3 && cs[n-3].Kind == Colon && cs[n-2].Kind == Colon && cs[n-1].Kind == Ident &&
-		pseudoElements[strings.ToLower(cs[n-1].Text)] != "" {
-		s.PseudoElement = strings.ToLower(cs[n-1].Text)
-		cs = cs[:n-3]
-		if len(cs) == 0 || cs[len(cs)-1].Kind == Whitespace {
-			cs = append(cs, Component{Token: Token{Kind: Delim, Text: "*", Pos: cs0Pos(cs)}})
+	name, n, err := pseudoElementAt(cs)
+	if err != nil {
+		return Selector{}, err
+	}
+	if n > 0 {
+		s.PseudoElement = name
+		if last := cs[len(cs)-1]; last.Kind == Function {
+			s.pseudoArgs = join(last.Args)
+		}
+		cs = cs[:len(cs)-n]
+		if len(cs) == 0 || cs[len(cs)-1].Kind == Whitespace || cs[len(cs)-1].Kind == Delim && cs[len(cs)-1].Text != "*" {
+			cs = append(slices.Clip(cs), Component{Token: Token{Kind: Delim, Text: "*", Pos: cs0Pos(cs)}})
 		}
 	}
 	i := 0
@@ -487,9 +502,19 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 	t := cs[1]
 	switch t.Kind {
 	case Colon:
-		return pseudo{}, 0, selErr(t, "pseudo-elements are not supported")
+		if len(cs) > 2 && (cs[2].Kind == Ident || cs[2].Kind == Function) {
+			name := strings.ToLower(cs[2].Text)
+			if _, ok := pseudoElements[name]; ok {
+				return pseudo{}, 0, selErr(t, "::%s must end its selector: nothing may follow a pseudo-element", name)
+			}
+			return pseudo{}, 0, selErr(t, "unknown pseudo-element ::%s", name)
+		}
+		return pseudo{}, 0, selErr(t, "expected a pseudo-element after '::'")
 	case Ident:
 		name := strings.ToLower(t.Text)
+		if pseudoElements[name].legacy {
+			return pseudo{}, 0, selErr(t, ":%s must end its selector: nothing may follow a pseudo-element", name)
+		}
 		if st, ok := stateNames[name]; ok {
 			return pseudo{kind: pseudoState, state: st}, 2, nil
 		}
@@ -500,6 +525,10 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 			return pseudo{kind: pseudoLastChild}, 2, nil
 		case "root":
 			return pseudo{kind: pseudoRoot}, 2, nil
+		case "link", "any-link":
+			return pseudo{kind: pseudoLink}, 2, nil
+		case "visited":
+			return pseudo{kind: pseudoVisited}, 2, nil
 		}
 		return pseudo{}, 0, selErr(t, "the :%s pseudo-class is not supported", name)
 	case Function:

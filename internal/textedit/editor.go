@@ -411,8 +411,8 @@ func (e *Editor) Word(i int) (int, int) {
 	return i, i
 }
 
-// Paragraph is the line i is on, between line breaks, for a triple
-// click.
+// Paragraph is the line i is on, from after the line break before it to
+// after its own, for a triple click.
 func (e *Editor) Paragraph(i int) (int, int) {
 	from, to := e.fit(i), e.fit(i)
 	for from > 0 && e.text[from-1] != '\n' {
@@ -421,7 +421,7 @@ func (e *Editor) Paragraph(i int) (int, int) {
 	for to < len(e.text) && e.text[to] != '\n' {
 		to++
 	}
-	return from, to
+	return from, min(to+1, len(e.text))
 }
 
 // stops are where r's grapheme clusters start, and its end.

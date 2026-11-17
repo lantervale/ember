@@ -876,7 +876,7 @@ textarea::placeholder { color: rebeccapurple; }
 		const s = getComputedStyle(e), p = getComputedStyle(e, "::placeholder");
 		const sel = getComputedStyle(e, "::selection");
 		return [s.backgroundRepeat, s.backgroundPositionX, s.backgroundPositionY, s.backgroundImage, p.color,
-			e.classList.contains("form") ? sel.backgroundColor : ""];
+			sel.backgroundColor];
 	});`)
 	if err != nil {
 		t.Fatal(err)
@@ -913,6 +913,10 @@ textarea::placeholder { color: rebeccapurple; }
 		w := want[i]
 		if !s.HasPlaceholder || n.Tag() != dom.Input && n.Tag() != dom.Textarea {
 			ours[4], w[4] = "", ""
+		}
+		if !s.HasSelection {
+			// Chrome's own colour, the system's
+			w[5] = ""
 		}
 		for k := range w {
 			if !same("", ours[k], w[k]) {

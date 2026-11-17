@@ -44,6 +44,7 @@ func Initial() Computed {
 			LineHeight: LineHeight{Normal: true},
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
+			Orphans:    2, Widows: 2,
 		},
 		Look: Look{
 			Opacity: 1, Visible: true, TransformOrigin: Size[Length]{Percent(50), Percent(50)},
@@ -70,6 +71,16 @@ const (
 	Contents
 )
 
+// UserSelect is whether a selection takes an element's text.
+type UserSelect uint8
+
+const (
+	SelectText UserSelect = iota
+	SelectNone
+	// SelectAll is taken whole or not at all.
+	SelectAll
+)
+
 type BoxSizing uint8
 
 const (
@@ -87,6 +98,26 @@ const (
 	Sticky
 )
 
+// Float is float: the side of its containing block a box is taken out of
+// the flow to, the content after it wrapping round it.
+type Float uint8
+
+const (
+	FloatNone Float = iota
+	FloatLeft
+	FloatRight
+)
+
+// Clear is clear: the sides whose earlier floats a box goes below.
+type Clear uint8
+
+const (
+	ClearNone Clear = iota
+	ClearLeft
+	ClearRight
+	ClearBoth
+)
+
 type Overflow uint8
 
 const (
@@ -102,9 +133,20 @@ type Box struct {
 	Display Display
 	// ListItem is display: list-item, laid out as Block, with a marker
 	// where the element has one (a summary's).
-	ListItem  bool
+	ListItem bool
+	// FlowRoot is display: flow-root, laid out as Block, holding its floats
+	// and standing beside those around it.
+	FlowRoot  bool
 	BoxSizing BoxSizing
 	Position  Position
+	// Float and Clear are float and clear; a float applies to a box in the
+	// flow of a block container, not to a flex or grid item or a box
+	// position takes out of the flow.
+	Float Float
+	Clear Clear
+	// VerticalAlign is vertical-align: where an inline box's baseline stands from its
+	// parent's.
+	VerticalAlign VerticalAlign
 	// Inset is top, right, bottom, left; Auto where unset.
 	Inset   Sides[Length]
 	Size    Size[Length]
@@ -123,10 +165,45 @@ type Box struct {
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
+	// ScrollbarOverlay is a Document's overlay scrollbars on a box that
+	// shows bars: they take no gutter and draw over its content.
+	ScrollbarOverlay bool
+	// Viewport is the style of the viewport, in a Document whose viewport
+	// scrolls: on the root always, and on body when the viewport takes
+	// body's overflow. OverflowPropagated is set on the one of them whose
+	// overflow the viewport took: its own Overflow is visible.
+	Viewport           *Computed
+	OverflowPropagated bool
 	// ZIndex applies when ZAuto is false.
 	ZIndex int
 	ZAuto  bool
+	// ColumnCount is column-count, 0 for auto, and ColumnWidth column-width,
+	// auto or points: either makes the box a multi-column container, whose
+	// column-gap is Gap.Width.
+	ColumnCount int
+	ColumnWidth Length
+	// ColumnFillAuto is column-fill: auto: columns fill in turn, not
+	// balanced.
+	ColumnFillAuto bool
+	// BreakInsideAvoid is break-inside: avoid; BreakBefore and BreakAfter
+	// are break-before and break-after between columns.
+	BreakInsideAvoid        bool
+	BreakBefore, BreakAfter Break
 }
+
+// Multicol reports a multi-column container.
+func (b *Box) Multicol() bool { return b.ColumnCount > 0 || b.ColumnWidth.Kind != Auto }
+
+// Break is a break-before or break-after between columns.
+type Break uint8
+
+const (
+	BreakAuto Break = iota
+	// BreakAvoid keeps the boxes on either side in one column where it can.
+	BreakAvoid
+	// BreakColumn starts a new column.
+	BreakColumn
+)
 
 type FlexDirection uint8
 
@@ -301,6 +378,10 @@ type Text struct {
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace
+	// TextIndent is text-indent: how far the first line of a block's text
+	// starts in from its edge, out when negative; a percentage is of the
+	// block's width.
+	TextIndent Length
 	// PlaceholderColor is the color of the element's ::placeholder, set
 	// when HasPlaceholder is (a ::placeholder rule matched).
 	PlaceholderColor color.Color
@@ -309,16 +390,36 @@ type Text struct {
 	// while it is modal; transparent draws none.
 	Backdrop color.Color
 	// SelectionColor is the ::selection background-color, set when
-	// HasSelection is (a ::selection rule matched).
-	SelectionColor color.Color
-	HasSelection   bool
+	// HasSelection is (a ::selection rule of the element or of an
+	// ancestor set it), and SelectionText its color, set when
+	// HasSelectionText is. With either set the other is CSS's own:
+	// no background, the text's colour.
+	SelectionColor   color.Color
+	HasSelection     bool
+	SelectionText    color.Color
+	HasSelectionText bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
+	// TextDecoration is the element's own text-decoration, and Decorations
+	// those drawn on its text, the outermost box's first: its ancestors',
+	// unless it is a float, out of flow or an atomic inline, then its own.
+	TextDecoration TextDecoration
+	Decorations    []Decoration
 	// AccentColor and CaretColor are accent-color and caret-color,
 	// resolved: their element's color when AccentAuto or CaretAuto (auto
 	// or currentColor, kept as such when inherited).
 	AccentColor, CaretColor color.Color
 	AccentAuto, CaretAuto   bool
+	// Content is the content property: what a ::before, ::after or
+	// ::marker box holds.
+	Content Content
+	// CounterReset, CounterIncrement and CounterSet are the counter
+	// properties, in the order written.
+	CounterReset, CounterIncrement, CounterSet []Counter
+	// Quotes are the quotes property's marks, an opening and a closing one
+	// per depth; none when QuotesNone, the language's own when empty.
+	Quotes     []string
+	QuotesNone bool
 	// ListStyle is list-style-type: a summary's disclosure triangle, or
 	// none.
 	ListStyle ListStyle
@@ -336,6 +437,9 @@ type Text struct {
 	// path keeps its last folders: class truncate-start, an ember
 	// extension.
 	EllipsisStart bool
+	// Orphans and Widows are the fewest lines of a block left at the end
+	// of a column and taken to the start of the next.
+	Orphans, Widows int
 	// BreakWord is overflow-wrap: anywhere or break-word.
 	BreakWord bool
 	// BreakAnywhere is overflow-wrap: anywhere, whose breaks also count
@@ -355,6 +459,10 @@ const (
 	// on bottom and right.
 	BorderInset
 	BorderOutset
+	// BorderGroove and BorderRidge draw a side in two halves: groove's
+	// outer one as inset and inner one as outset, ridge's the other way.
+	BorderGroove
+	BorderRidge
 )
 
 // Shadow is one box-shadow.
@@ -434,12 +542,13 @@ type Transition struct {
 type Look struct {
 	Background      color.Color
 	BackgroundImage Image
-	// BackgroundSize is background-size in points, across and down; 0 is
-	// auto: the image's own size, or its width's or height's share of it.
-	BackgroundSize [2]float32
+	BackgroundSize  BackgroundSize
 	// BackgroundNoRepeat is background-repeat: no-repeat; the image tiles
 	// otherwise.
 	BackgroundNoRepeat bool
+	// BackgroundRepeat is the axis a repeated image tiles along: both, or
+	// one for repeat-x and repeat-y.
+	BackgroundRepeat RepeatAxes
 	// BackgroundPosition is where the image's top-left sits in the padding
 	// box.
 	BackgroundPosition BackgroundPosition
@@ -464,14 +573,25 @@ type Look struct {
 	OutlineStyle  BorderStyle
 	OutlineColor  color.Color
 	OutlineOffset float32
-	Opacity       float32
+	// ColumnRule* are column-rule: the line drawn between the columns of a
+	// multi-column container.
+	ColumnRuleWidth float32
+	ColumnRuleStyle BorderStyle
+	ColumnRuleColor color.Color
+	Opacity         float32
 	// Visible is visibility: visible.
 	Visible bool
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool
+	// AppDrag is app-region: drag, its own or the one of the box it is
+	// in: a press there moves the system's window.
+	AppDrag bool
 	// Cursor is the cursor keyword, "" for auto.
 	Cursor string
+	// UserSelect is user-select as used: auto is its parent's, text on the
+	// root.
+	UserSelect UserSelect
 	// Transform is transform's functions in order, about
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
@@ -507,6 +627,8 @@ const (
 	BorderBottomCurrent
 	BorderLeftCurrent
 	OutlineCurrent
+	DecorationCurrent
+	ColumnRuleCurrent
 )
 
 // FollowColor sets every colour marked currentColor to c.
@@ -514,7 +636,8 @@ func (s *Computed) FollowColor(c color.Color) {
 	for f, p := range map[CurrentColorFields]*color.Color{
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
 		BorderBottomCurrent: &s.BorderColor.Bottom, BorderLeftCurrent: &s.BorderColor.Left,
-		OutlineCurrent: &s.OutlineColor,
+		OutlineCurrent: &s.OutlineColor, DecorationCurrent: &s.TextDecoration.Color,
+		ColumnRuleCurrent: &s.ColumnRuleColor,
 	} {
 		if s.CurrentColor&f != 0 {
 			*p = c
@@ -522,8 +645,20 @@ func (s *Computed) FollowColor(c color.Color) {
 	}
 }
 
-// ListStyle is a list-style-type: ui draws only details' disclosure
-// triangles. ListDisc is CSS's initial value, which draws nothing in ui.
+// VerticalAlign is a vertical-align: the baseline, or shifted from it as Chrome shifts
+// a sub (a fifth of the parent's font size and a pixel, down) and a sup (a third of it
+// and a pixel, up).
+type VerticalAlign uint8
+
+const (
+	AlignBaselineText VerticalAlign = iota
+	AlignSub
+	AlignSuper
+)
+
+// ListStyle is a list-style-type: a list item's bullet or number, drawn
+// outside its box, or a summary's disclosure triangle, first on its line.
+// ListDisc is CSS's initial value.
 type ListStyle uint8
 
 const (
@@ -531,6 +666,14 @@ const (
 	ListNone
 	ListDisclosureClosed
 	ListDisclosureOpen
+	ListCircle
+	ListSquare
+	ListDecimal
+	ListDecimalLeadingZero
+	ListLowerAlpha
+	ListUpperAlpha
+	ListLowerRoman
+	ListUpperRoman
 )
 
 // BackgroundPosition is background-position: X from the left edge, or from
@@ -541,6 +684,27 @@ type BackgroundPosition struct {
 	X, Y                  Length
 	FromRight, FromBottom bool
 }
+
+// BackgroundSize is background-size: cover or contain, else a width and a
+// height, each a length, a percentage of the padding box, or auto: the
+// image's own size, or what keeps its proportions beside the other.
+type BackgroundSize struct {
+	Scale         BackgroundScale
+	Width, Height Length
+}
+
+// BackgroundScale is a background-size that scales the image whole.
+type BackgroundScale uint8
+
+const (
+	// ScaleNone sizes the image by its Width and Height.
+	ScaleNone BackgroundScale = iota
+	// ScaleCover is the smallest size covering the padding box, the
+	// image's proportions kept.
+	ScaleCover
+	// ScaleContain is the largest size fitting in it.
+	ScaleContain
+)
 
 // ObjectFit is object-fit: how an img's picture fills its content box.
 type ObjectFit uint8
@@ -556,6 +720,15 @@ const (
 	FitNone
 	// FitScaleDown is FitNone or FitContain, whichever is smaller.
 	FitScaleDown
+)
+
+// RepeatAxes are the axes a background image tiles along.
+type RepeatAxes uint8
+
+const (
+	RepeatBoth RepeatAxes = iota
+	RepeatX
+	RepeatY
 )
 
 // ImageRepeat is border-image-repeat along one axis: how a border image's

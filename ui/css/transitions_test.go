@@ -267,7 +267,8 @@ func TestCurrentColorFollowsTheTransition(t *testing.T) {
 	srgbNear(t, "border top", s.BorderColor.Top, [4]float32{0.5, 0.5, 0.5, 1})
 	srgbNear(t, "outline", s.OutlineColor, [4]float32{0.5, 0.5, 0.5, 1})
 	srgbNear(t, "border left keeps its own colour", s.BorderColor.Left, [4]float32{1, 0, 0, 1})
-	marks := style.BorderTopCurrent | style.BorderRightCurrent | style.BorderBottomCurrent | style.OutlineCurrent
+	marks := style.BorderTopCurrent | style.BorderRightCurrent | style.BorderBottomCurrent | style.OutlineCurrent |
+		style.DecorationCurrent | style.ColumnRuleCurrent
 	if styleOf(b).CurrentColor != marks {
 		t.Errorf("marks: %b", styleOf(b).CurrentColor)
 	}

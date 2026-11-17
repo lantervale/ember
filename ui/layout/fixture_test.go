@@ -8,14 +8,14 @@ import (
 )
 
 //nolint:gochecknoglobals // a read-only test table
-var taffySuites = []string{"flex", "grid", "block", "leaf", "blockflex", "blockgrid", "gridflex"}
+var taffySuites = []string{"flex", "grid", "block", "leaf", "blockflex", "blockgrid", "gridflex", "float"}
 
 // taffyAttributes are the style attributes the fixtures use: each one needs a mapping
 // onto the computed style once the lead publishes it.
 var taffyAttributes = []string{ //nolint:gochecknoglobals // a read-only test table
 	"align-content", "align-items", "align-self", "aspect-ratio",
 	"border-bottom", "border-left", "border-right", "border-top", "bottom", "box-sizing",
-	"column-gap", "display", "flex-basis", "flex-direction", "flex-grow",
+	"clear", "column-gap", "display", "float", "flex-basis", "flex-direction", "flex-grow",
 	"flex-shrink", "flex-wrap", "grid-auto-columns", "grid-auto-flow",
 	"grid-auto-rows", "grid-column-end", "grid-column-start", "grid-row-end",
 	"grid-row-start", "grid-template-columns", "grid-template-rows", "height",

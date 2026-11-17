@@ -6,7 +6,7 @@ import "github.com/lantervale/ember/ui/internal/style"
 // compute_leaf_layout with text as its measure function.
 //
 //nolint:cyclop,funlen,gocyclo // Taffy's compute_leaf_layout, kept in its shape
-func (t *tree) leaf(n *node, in input) output {
+func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	padding := edges(st.Padding, in.parent.w)
 	border := borders(st)
@@ -30,7 +30,11 @@ func (t *tree) leaf(n *node, in input) output {
 		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
 		nodeSize = in.known.or(styleSize)
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
-			nodeSize = replacedSize(n.natural.add(pbSum), ratio, minSize, maxSize)
+			natural := n.natural
+			if n.fills() {
+				natural = n.filled(in.avail.w, pbSum.w)
+			}
+			nodeSize = replacedSize(natural.add(pbSum), ratio, minSize, maxSize)
 		}
 	}
 
@@ -65,6 +69,25 @@ func (t *tree) leaf(n *node, in input) output {
 	}
 	if n.replaced {
 		known = in.known.or(nodeSize).mSub(inset.sum())
+	}
+	if c := n.inline; c != nil && some(nodeSize.w) && n.control == noControl && c.fills() {
+		// A picture that fills is as wide as the lines' room, which is the box's, not
+		// what the content would take.
+		known.w = mClamp(nodeSize.w, minSize.w, maxSize.w) - inset.horizontal()
+	}
+	if c := n.inline; c != nil {
+		// Among floats the lines take the room they leave, at the width the block has.
+		flows := ctx != nil && n.control == noControl && some(in.known.w) && ctx.hasFloats()
+		if flows || c.flowed {
+			c.broken = nil
+		}
+		c.flowed = flows
+		if flows {
+			ctx.setContentInset(inset.l, inset.r)
+			c.flow, c.flowTop, c.flowLeft = ctx, inset.t, inset.l
+			defer func() { c.flow = nil }()
+			known.w = in.known.w - inset.horizontal()
+		}
 	}
 	measured, first, last := t.measureContent(n, known, avail)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
@@ -137,6 +160,7 @@ func (t *tree) leafChildren(n *node, out *output, pb, border rect, gutter point)
 			position: k.st.Position,
 			x:        staticFromStart(pb.l),
 			y:        staticFromStart(pb.t),
+			inline:   true,
 		}
 		if o := n.inline.oofOf(k); o != nil {
 			c.x, c.y = staticFromStart(o.static.x), staticFromStart(o.static.y)

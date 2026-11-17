@@ -41,7 +41,7 @@ func TestLayoutSetsEveryElementsBox(t *testing.T) {
 
 func TestAStyleAttributesWarningIsKeptOnce(t *testing.T) {
 	d := NewDocument()
-	n := Div(Style("float: left"))
+	n := Div(Style("zoom: 2"))
 	d.Body().Append(n)
 	d.Layout(geom.V2(400, 300))
 	for range 3 {

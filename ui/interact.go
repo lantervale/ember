@@ -69,6 +69,7 @@ type interaction struct {
 	pointerClick, lastClick *Node
 	lastClickAt             float32
 	clicks                  int
+	textClicks              textClicks
 	// pointerAt is where the pointer was this frame, in the Document's
 	// space.
 	pointerAt geom.Vec2
@@ -97,6 +98,12 @@ type interaction struct {
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
 	rightPressed *Node
+	// dragPressed, dragPressAt and dragPressFrom are the last press in a
+	// drag region (app-region), when and where, for the double click that
+	// follows it.
+	dragPressed   bool
+	dragPressAt   float32
+	dragPressFrom geom.Vec2
 	// caretSeen is the focused text field's caret and length the last
 	// time it was scrolled into view (followCaret).
 	caretSeen caretState
@@ -124,6 +131,8 @@ type interaction struct {
 	held    *windowDrag
 	raised  *Node
 	raisedZ int
+	// sel is the text selected outside the fields (decision 0090).
+	sel selecting
 }
 
 // navKeys and navPad are what focus navigation reads while it shows.
@@ -230,6 +239,9 @@ func focusable(n *Node) (int, bool) {
 	if n.Tag() == dom.Dialog {
 		return -1, true
 	}
+	if isLink(n) {
+		return 0, true
+	}
 	if !slices.Contains([]dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Summary}, n.Tag()) {
 		return 0, false
 	}
@@ -238,6 +250,14 @@ func focusable(n *Node) (int, bool) {
 	}
 	return 0, true
 }
+
+// isLink reports an a element with an href: one that takes the focus and
+// clicks.
+func isLink(n *Node) bool { return n.Tag() == dom.A && has(n, "href") }
+
+// pressable reports an element without a control that still clicks: one
+// with a tabindex, or a link.
+func pressable(n *Node) bool { return has(n, "tabindex") || isLink(n) }
 
 // candidate is an element that takes the focus, with its own tabindex.
 type candidate struct {
@@ -335,6 +355,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 		d.retarget()
 	}
 	d.revealPending()
+	d.keepSelection()
 	before := d.focused()
 	d.layText()
 	d.trap()
@@ -409,6 +430,8 @@ func emit(w *world.World, e any) {
 		world.Emit(w, e)
 	case DragEnded:
 		world.Emit(w, e)
+	case SelectionChanged:
+		world.Emit(w, e)
 	}
 }
 
@@ -461,6 +484,8 @@ func (d *Document) moveFocus(move func() bool) bool {
 		}
 		if t := textOf(d.machine(after)); t != nil {
 			t.Focus()
+			// a field taking the focus takes the selection with it, as in Chrome
+			d.ClearSelection()
 		}
 		if after != nil && d.focus.Active() {
 			d.reveal(after)
@@ -517,7 +542,7 @@ func (d *Document) click(n *Node) {
 	case *control.Canvas:
 		d.fire(n, control.Clicked)
 	case nil:
-		if _, ok := n.Attr("tabindex"); ok {
+		if pressable(n) {
 			d.fire(n, control.Clicked)
 		}
 	}
@@ -552,7 +577,7 @@ func (d *Document) activates(n *Node) bool {
 	switch {
 	case d.machine(n) != nil && n.Tag() != dom.Details && n.Tag() != dom.Dialog:
 		return true
-	case n.Tag() == dom.Summary || n.Tag() == dom.Label || has(n, "tabindex"):
+	case n.Tag() == dom.Summary || n.Tag() == dom.Label || pressable(n):
 		return true
 	}
 	return isMenuItem(n) || isGridRow(n) || isSortHeader(n) || isOption(n)
@@ -585,8 +610,12 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 	}
 	if !d.edgeCursor(c, at) {
 		d.cssCursor(c)
+		d.selectionCursor(c, hit, at)
 	}
 	d.rightClick(in)
+	if d.appRegionPress(c, in) {
+		return
+	}
 	if d.dragPointer(c, in, at) {
 		return
 	}
@@ -598,6 +627,13 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 	}
 	if d.scrollPointer(c, in, hit) {
 		return
+	}
+	if d.sel.held && !in.Pressed(input.MouseLeft) {
+		if in.Down(input.MouseLeft) {
+			d.dragSelection(at)
+		} else {
+			d.sel.held = false
+		}
 	}
 	pick := d.pickAt(at)
 	open, _ := d.machine(pick.Select).(*control.Select)
@@ -615,7 +651,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 	}
 	if in.Down(input.MouseLeft) && !in.Pressed(input.MouseLeft) && len(d.pressed) > 0 {
 		if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
-			d.caretAt(d.pressed[0], t, at, true)
+			d.dragText(d.pressed[0], t, at)
 		}
 		if held, r := d.dragged(); r != nil {
 			d.fire(held, r.Drag(d.along(held, at)))
@@ -627,7 +663,8 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 }
 
 // hitAt is the box under at and the innermost element holding it, the
-// replay's own while the frame replays quietly.
+// element of a generated box under it, the replay's own while the frame
+// replays quietly.
 func (d *Document) hitAt(at geom.Vec2) (*box.Box, *Node) {
 	hit := d.replay.hit
 	if !d.replay.quiet {
@@ -643,6 +680,8 @@ func (d *Document) hitAt(at geom.Vec2) (*box.Box, *Node) {
 		for b := hit; n == nil && b != nil; b = b.Parent {
 			n = b.Node
 		}
+		// a ::before or ::after box is its element's to the pointer
+		n = dom.Origin(n)
 	}
 	return hit, n
 }
@@ -696,11 +735,12 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		return d.focus.Set(takes, false)
 	})
 	if t := textOf(d.machine(takes)); t != nil {
-		d.caretAt(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
+		d.pressText(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	}
 	if r, ok := d.machine(takes).(*control.Range); ok {
 		d.fire(takes, r.Press(d.along(takes, at)))
 	}
+	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	return false
 }
 
@@ -828,6 +868,41 @@ func (d *Document) rightClick(in *input.State) {
 		}
 		d.rightPressed = nil
 	}
+}
+
+// appRegionPress hands a left press in a drag region (app-region: drag)
+// to the window: it moves the system's window, and a second press within
+// 400ms, where the first was, is a double click on its title bar. What clicks, and what is in
+// it, is no part of the region, so a header's buttons and tabs need no
+// no-drag. The press is the window's alone: it moves no focus and clicks
+// nothing.
+func (d *Document) appRegionPress(c *twod.Canvas, in *input.State) bool {
+	win := c.Window()
+	if win == nil || !in.Pressed(input.MouseLeft) || !d.inDragRegion() {
+		return false
+	}
+	if d.dragPressed && d.clock-d.dragPressAt <= 0.4 && d.pointerAt.Sub(d.dragPressFrom).Len() < dragStart {
+		d.dragPressed = false
+		win.DoubleClickTitleBar()
+		return true
+	}
+	d.dragPressed, d.dragPressAt, d.dragPressFrom = true, d.clock, d.pointerAt
+	win.StartDrag()
+	return true
+}
+
+// inDragRegion reports whether the pointer is over a drag region, off
+// what clicks in it.
+func (d *Document) inDragRegion() bool {
+	for i, n := range d.hovered {
+		if st := dom.Data(n).Style; st == nil || !st.AppDrag {
+			return i > 0
+		}
+		if d.activates(n) {
+			return false
+		}
+	}
+	return len(d.hovered) > 0
 }
 
 // pressOpen opens t on the press, as macOS menu bars and Chrome's select
@@ -972,6 +1047,9 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	}
 	var taken keySet
 	defer d.keysLeft(in, n, &taken)
+	if d.selectionKeys(c, in, &taken) {
+		return
+	}
 	if n != nil && d.focus.Active() {
 		f.CaptureKeys(navKeys...)
 		f.CaptureGamepadButtons(navPad...)
@@ -1165,7 +1243,7 @@ func (d *Document) intent(n *Node, m any, i control.Intent) bool {
 		}
 		return d.radioArrow(n, i)
 	}
-	if m == nil && i == control.Activate && has(n, "tabindex") {
+	if m == nil && i == control.Activate && pressable(n) {
 		d.fire(n, control.Clicked)
 		return true
 	}
@@ -1302,7 +1380,7 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 	}
 	at := d.mouse(c)
 	if n := d.dragging; n != nil {
-		b := d.tree.Of[n]
+		b := d.scroller(n)
 		s := d.scrolling(n)
 		if b != nil {
 			off, _ := s.Input(paint.BarsOf(b, origin(b)), paint.Pointer{At: at, Down: in.Down(input.MouseLeft)}, d.lineStep(b))
@@ -1476,7 +1554,7 @@ func nearest(a, al, v, vl float32) float32 {
 func scrollContainers(b *box.Box) []*box.Box {
 	var out []*box.Box
 	for ; b != nil; b = b.Parent {
-		if b.Kind != box.Element || b.Node == nil || b.Style == nil {
+		if b.Kind != box.Element && b.Kind != box.Viewport || b.Node == nil || b.Style == nil {
 			continue
 		}
 		o := b.Style.Overflow
@@ -1488,6 +1566,15 @@ func scrollContainers(b *box.Box) []*box.Box {
 }
 
 func scrolls(o style.Overflow) bool { return o == style.Scroll || o == style.OverflowAuto }
+
+// scroller is the box whose scroll offset n keeps: n's own, or for the
+// root element of a viewport that scrolls, the viewport's.
+func (d *Document) scroller(n *Node) *box.Box {
+	if root := d.tree.Root; root != nil && root.Kind == box.Viewport && root.Node == n {
+		return root
+	}
+	return d.tree.Of[n]
+}
 
 // canScroll reports whether a container with bars still has room to
 // scroll the way w turns.

@@ -37,11 +37,22 @@ type inlineContent struct {
 	unit float32
 	// inWord is set while the runs gathered so far end inside a word, for capitalize.
 	inWord bool
+	// shift is the baseline shift of the runs being gathered, their spans' vertical-align.
+	shift float32
 	// broken are the lines last broken at brokenAt, and unbroken the lines with
 	// no width to fit, kept while no piece's width changes, as a node is
 	// measured and laid out at its width and at none several times.
 	broken, unbroken []line
 	brokenAt         float32
+	// flow is the formatting context whose floats the lines go round, set while the
+	// owner is laid out among them, with where its content box starts in its border box;
+	// flowed marks broken as lines broken round floats.
+	flow              *blockContext
+	flowTop, flowLeft float32
+	flowed            bool
+	// unindented is set where the first line is not its block container's: an anonymous
+	// block after other content.
+	unindented bool
 }
 
 // inlineOOF is an absolutely positioned (or fixed) element inside inline content: its
@@ -77,6 +88,8 @@ type textRun struct {
 	st     *style.Computed
 	text   string
 	atomic *atomicInline
+	// shift is how far below the line's baseline the run's own stands, vertical-align's.
+	shift float32
 }
 
 // atomicInline is an inline-level box laid out on its own and placed in a line as one piece.
@@ -100,6 +113,8 @@ type inlineSpan struct {
 	open, close int
 	// margin, border and padding are resolved against the containing block's width.
 	margin, border, padding rect
+	// shift is how far below the line's baseline the span's own stands.
+	shift float32
 }
 
 type pieceKind uint8
@@ -131,6 +146,8 @@ type piece struct {
 	text  string
 	width float32
 	span  int
+	// at is where a word's or a gap's text starts in its run's, in characters.
+	at    int32
 	start bool
 }
 
@@ -197,12 +214,18 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			}
 			b := &box.Box{Kind: box.TextRun, Node: it.text, Style: st}
 			c.runs = append(c.runs,
-				&textRun{box: b, parent: parent, st: st,
+				&textRun{box: b, parent: parent, st: st, shift: c.shift,
 					text: shownText(Translated(it.text, t.translate), st, it.text.Parent(), &c.inWord)})
 			continue
 		}
 		st := styleOf(it.element)
 		if st.Display == style.DisplayNone {
+			continue
+		}
+		if st.Float != style.FloatNone {
+			// A float inside an inline element: its block container takes it from the
+			// owner's kids and places it before this content.
+			c.owner.kids = append(c.owner.kids, t.build(it.element, c.owner))
 			continue
 		}
 		if outOfFlow(st.Position) {
@@ -218,22 +241,62 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			c.anchors = append(c.anchors, anchorAt{node: n, run: len(c.runs)})
 			continue
 		}
+		if it.element.Tag() == dom.Br {
+			t.lineBreak(c, parent, it.element, st)
+			continue
+		}
 		if isAtomicDisplay(st.Display) {
 			n := t.build(it.element, c.owner)
 			n.atomic = true
-			c.runs = append(c.runs, &textRun{box: n.box, parent: parent, st: st, atomic: &atomicInline{node: n}})
+			c.runs = append(c.runs,
+				&textRun{box: n.box, parent: parent, st: st, shift: c.shift, atomic: &atomicInline{node: n}})
 			continue
 		}
 		b := &box.Box{Kind: box.Element, Node: it.element, Style: st}
 		t.place(it.element, b)
 		first := len(c.runs)
-		t.gather(c, b, t.flatten(c.owner, it.element.Children()))
-		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs)}
+		outer := c.shift
+		c.shift += baselineShift(st, parent.Style)
+		t.gather(c, b, t.flatten(c.owner, it.element.Flow()))
+		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs), shift: c.shift}
+		c.shift = outer
 		for i := first; i < len(c.runs); i++ {
 			s.runs = append(s.runs, i)
 		}
 		c.spans = append(c.spans, s)
 	}
+}
+
+// baselineShift is how far below its parent's baseline vertical-align puts a box's.
+func baselineShift(st, parent *style.Computed) float32 {
+	switch st.VerticalAlign {
+	case style.AlignSub:
+		return parent.Font.Size/5 + 1
+	case style.AlignSuper:
+		return -(parent.Font.Size/3 + 1)
+	case style.AlignBaselineText:
+	}
+	return 0
+}
+
+// lineBreak is a br: an inline box holding a line break that no white-space collapses.
+func (t *tree) lineBreak(c *inlineContent, parent *box.Box, e *dom.Node, st *style.Computed) {
+	kept, ok := t.breakStyles[st]
+	if !ok {
+		pre := *st
+		pre.WhiteSpace = style.Pre
+		kept = &pre
+		if t.breakStyles == nil {
+			t.breakStyles = map[*style.Computed]*style.Computed{}
+		}
+		t.breakStyles[st] = kept
+	}
+	b := &box.Box{Kind: box.Element, Node: e, Style: st}
+	t.place(e, b)
+	first := len(c.runs)
+	c.runs = append(c.runs,
+		&textRun{box: &box.Box{Kind: box.TextRun, Style: kept}, parent: b, st: kept, shift: c.shift, text: "\n"})
+	c.spans = append(c.spans, &inlineSpan{box: b, parent: parent, st: st, first: first, end: first + 1, runs: []int{first}})
 }
 
 // cut splits the runs into pieces: whitespace collapsed as each run's white-space says,
@@ -269,6 +332,8 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	text := collapsedBlanks(r.text, ws)
 	var b strings.Builder
 	splits := r.st.BreakWord && wraps(ws)
+	// n counts the characters read, and from is where the text in b starts.
+	var n, from int32
 	emit := func(kind pieceKind) {
 		if b.Len() == 0 && kind == word {
 			return
@@ -276,10 +341,10 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		s := b.String()
 		b.Reset()
 		if kind == word && splits {
-			c.graphemes(fonts, r.st, i, s)
+			c.graphemes(fonts, r.st, i, s, from)
 			return
 		}
-		p := piece{kind: kind, run: i, text: s}
+		p := piece{kind: kind, run: i, text: s, at: from}
 		if kind == word || kind == gap {
 			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) +
 				r.st.LetterSpacing*float32(len([]rune(s)))
@@ -287,9 +352,14 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		c.pieces = append(c.pieces, p)
 	}
 	for at, ch := range text {
+		if b.Len() == 0 {
+			from = n
+		}
+		n++
 		if soft[at] && ch != ' ' && ch != '\n' && string(ch) != zeroWidthSpace {
 			if b.Len() > 0 {
 				emit(word)
+				from = n - 1
 				c.pieces = append(c.pieces, piece{kind: breakHere, run: i})
 			} else if at == 0 && c.afterWord() {
 				c.pieces = append(c.pieces, piece{kind: breakHere, run: i})
@@ -305,6 +375,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			if collapses(ws) && afterSpace {
 				continue
 			}
+			from = n - 1
 			b.WriteRune(' ')
 			emit(gap)
 			afterSpace = true
@@ -342,7 +413,7 @@ func (c *inlineContent) anchorsAt(i int) {
 
 // graphemes adds word s of run i as one piece per grapheme, with emergency breaks between
 // them, each measured as the growth of the word's advance so that they add up to it.
-func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s string) {
+func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s string, from int32) {
 	rest, state := s, -1
 	var g string
 	prev := float32(0)
@@ -355,7 +426,8 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		if at > len(g) {
 			c.pieces = append(c.pieces, piece{kind: emergency, run: i})
 		}
-		c.pieces = append(c.pieces, piece{kind: word, run: i, text: g, width: w})
+		c.pieces = append(c.pieces, piece{kind: word, run: i, text: g, width: w, at: from})
+		from += int32(utf8.RuneCountInString(g)) //nolint:gosec // a text node's length
 	}
 }
 
@@ -367,7 +439,7 @@ func markerOf(st *style.Computed) string {
 		return "▸"
 	case style.ListDisclosureOpen:
 		return "▾"
-	case style.ListDisc, style.ListNone:
+	case style.ListDisc, style.ListNone, style.ListCircle, style.ListSquare, style.ListDecimal:
 	}
 	return ""
 }
@@ -465,6 +537,16 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 	return soft
 }
 
+// fills reports whether an atomic inline is a picture that takes the width it is given.
+func (c *inlineContent) fills() bool {
+	for i := range c.runs {
+		if a := c.runs[i].atomic; a != nil && a.node.fills() {
+			return true
+		}
+	}
+	return false
+}
+
 // sizeAtomics sizes the spans' edges against the containing block's width, and lays out
 // each atomic inline as a shrink-to-fit box in avail, setting its piece's width to its
 // margin box.
@@ -523,21 +605,28 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 	var minW, maxW float32
 	t.sizeAtomics(c, maxContentSpace, parent)
 	for _, l := range c.lines(unbounded) {
-		maxW = max(maxW, l.width)
+		maxW = max(maxW, l.x+l.width)
 	}
 	t.sizeAtomics(c, minContentSpace, parent)
 	if !c.anyWraps() {
 		for _, l := range c.lines(unbounded) {
-			minW = max(minW, l.width)
+			minW = max(minW, l.x+l.width)
 		}
 		return minW, maxW
 	}
-	cur := newPen(c.unit, 0)
-	for _, p := range c.pieces {
+	cur := newPen(c.unit, c.indent(unbounded))
+	hung := false
+	for i, p := range c.pieces {
 		switch p.kind {
-		case word, edge, marker:
+		case word, marker:
 			cur.step(p, 0)
 			minW = max(minW, cur.end())
+		case edge:
+			cur.step(p, 0)
+			minW = max(minW, cur.end())
+			if hung && !c.edgeAt(i+1, false) {
+				cur, hung = newPen(c.unit, 0), false
+			}
 		case emergency:
 			if c.runs[p.run].st.BreakAnywhere {
 				cur = newPen(c.unit, 0)
@@ -545,11 +634,26 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 		case atomic:
 			minW = max(minW, p.width)
 			cur = newPen(c.unit, 0)
-		case gap, breakHere, newline, anchor:
+		case gap:
+			switch {
+			case !collapses(c.runs[p.run].st.WhiteSpace):
+				cur = newPen(c.unit, 0)
+			case c.edgeAt(i+1, false):
+				// the span's end stays with the word before the space
+				hung = true
+			default:
+				cur = newPen(c.unit, 0)
+			}
+		case breakHere, newline, anchor:
 			cur = newPen(c.unit, 0)
 		}
 	}
 	return minW, maxW
+}
+
+// edgeAt reports whether piece i is a span's edge, its start or its end.
+func (c *inlineContent) edgeAt(i int, start bool) bool {
+	return i >= 0 && i < len(c.pieces) && c.pieces[i].kind == edge && c.pieces[i].start == start
 }
 
 func (c *inlineContent) anyWraps() bool {
@@ -562,11 +666,28 @@ func (c *inlineContent) anyWraps() bool {
 }
 
 // line is the pieces [from, to) on one line, without its trailing spaces; forced is set when
-// a newline ends it.
+// a newline ends it. x is where its room starts in the content box, past a float or the
+// first line's indent, avail how wide that room is, and push how far below the line
+// before it starts, to clear a float.
 type line struct {
 	from, to int
 	width    float32
 	forced   bool
+	x, avail float32
+	push     float32
+}
+
+// indent is text-indent for lines of that width: how far the first line starts in, a
+// percentage being of the width, none where none is known. Controls take none.
+func (c *inlineContent) indent(width float32) float32 {
+	l := c.owner.st.TextIndent
+	if c.unindented || c.owner.control != noControl || l.Kind != style.Fixed {
+		return 0
+	}
+	if width >= unbounded {
+		return l.Px
+	}
+	return l.Px + l.Percent*width/100
 }
 
 func (c *inlineContent) wrapsAt(i int) bool {
@@ -587,6 +708,97 @@ func (c *inlineContent) unitEnd(i int) int {
 		}
 	}
 	return end
+}
+
+// opensOnSpace reports whether piece i is a span's start edge with a collapsible space
+// next, or after the start edges that follow it: stuck to what is before it, with the
+// space a line may end at after it.
+func (c *inlineContent) opensOnSpace(i int) bool {
+	for ; c.edgeAt(i, true); i++ {
+	}
+	return i < len(c.pieces) && c.pieces[i].kind == gap && c.passes(c.pieces[i])
+}
+
+// passes reports whether p may stand between a line's edge and the collapsible spaces CSS
+// drops there: a span's edge, an anchor, a break, or such a space.
+func (c *inlineContent) passes(p piece) bool {
+	switch p.kind {
+	case edge, anchor, breakHere:
+		return true
+	case gap:
+		return collapses(c.runs[p.run].st.WhiteSpace)
+	case word, atomic, newline, emergency, marker:
+	}
+	return false
+}
+
+// fitEnd is where the unit [i, end), first on its line and too wide for it, ends for the
+// start edges that close it and open on a space to begin the next line, when that makes
+// it fit in width.
+func (c *inlineContent) fitEnd(i, end int, width float32) int {
+	cut := end
+	for cut > i+1 && c.edgeAt(cut-1, true) {
+		cut--
+	}
+	if cut == end || !c.opensOnSpace(cut) {
+		return end
+	}
+	at := newPen(c.unit, 0)
+	for k := i; k < cut; k++ {
+		at.step(c.pieces[k], 0)
+	}
+	if at.end() > width {
+		return end
+	}
+	return cut
+}
+
+// hangEnd is where the unit [i, end) after the spaces pending since pending ends when its
+// first edges stay with the content before those spaces, on its line whatever room it has:
+// past its last end edge, or all of it when it is edges and anchors alone. Were the line to
+// end there, the spaces would be dropped. hung is false for a unit that begins otherwise.
+func (c *inlineContent) hangEnd(pending, i, end int) (int, bool) {
+	for k := pending; k < i; k++ {
+		if !c.passes(c.pieces[k]) {
+			return end, false
+		}
+	}
+	last, k := -1, i
+	for ; k < end && (c.pieces[k].kind == edge || c.pieces[k].kind == anchor); k++ {
+		if c.edgeAt(k, false) {
+			last = k
+		}
+	}
+	switch {
+	case k == end:
+		return end, true
+	case last >= 0:
+		return last + 1, true
+	}
+	return end, false
+}
+
+// shown is line l's pieces as they are placed: the collapsible spaces before its first
+// content and after its last, whatever span edges stand between, are breaks of no width.
+func (c *inlineContent) shown(l line) []piece {
+	pieces := c.pieces[l.from:l.to]
+	out := pieces
+	drop := func(i int) {
+		if pieces[i].kind != gap {
+			return
+		}
+		if &out[0] == &pieces[0] {
+			out = slices.Clone(pieces)
+		}
+		out[i] = piece{kind: breakHere, run: pieces[i].run}
+	}
+	for i := 0; i < len(pieces) && c.passes(pieces[i]); i++ {
+		drop(i)
+	}
+	for i := len(pieces) - 1; i >= 0 && c.passes(pieces[i]); i-- {
+		drop(i)
+	}
+	return out
 }
 
 // measureUnit is the pen past pieces i to end from at, with the gaps pending since then,
@@ -610,38 +822,50 @@ func (c *inlineContent) measureUnit(at pen, pending, i, end int) (pen, pen) {
 
 // breaker is lines' state while it breaks: the lines so far, the open one and the pen
 // across it, the first gap pending before the next unit, and whether the line is empty.
+// kept is the pen were the line to end here, without the spaces dropped at its end, and
+// blank is set while the line holds only span edges and anchors.
 type breaker struct {
-	c       *inlineContent
-	out     []line
-	cur     line
-	at      pen
-	pending int
-	empty   bool
+	c        *inlineContent
+	out      []line
+	cur      line
+	at, kept pen
+	pending  int
+	empty    bool
+	blank    bool
 }
 
 func (b *breaker) finish(next int) {
-	b.cur.width = b.at.end()
+	b.cur.width = b.kept.end()
 	b.out = append(b.out, b.cur)
-	b.cur = line{from: next, to: next}
-	b.at = newPen(b.c.unit, 0)
-	b.pending = -1
-	b.empty = true
+	b.open(next, 0, b.cur.avail, 0)
 }
 
-func (b *breaker) breakAll(width float32) []line {
+// open starts the breaker's next line at piece i, in room avail wide starting at x.
+func (b *breaker) open(i int, x, avail, push float32) {
+	b.cur = line{from: i, to: i, x: x, avail: avail, push: push}
+	b.at = newPen(b.c.unit, 0)
+	b.kept = b.at
+	b.pending = -1
+	b.empty, b.blank = true, true
+}
+
+// one breaks the open line from piece i, no wider than width where it may wrap, and
+// returns where the next begins; ended is false when the pieces ran out first, the line
+// left open.
+func (b *breaker) one(i int, width float32) (int, bool) {
 	c := b.c
-	i := 0
 	for i < len(c.pieces) {
 		p := c.pieces[i]
 		switch p.kind {
 		case newline:
 			b.cur.forced = true
 			b.finish(i + 1)
-			i++
-			continue
+			return i + 1, true
 		case gap:
-			if b.empty && collapses(c.runs[p.run].st.WhiteSpace) {
-				b.cur.from, b.cur.to = i+1, i+1
+			if (b.empty || b.blank) && collapses(c.runs[p.run].st.WhiteSpace) {
+				if b.empty {
+					b.cur.from, b.cur.to = i+1, i+1
+				}
 				i++
 				continue
 			}
@@ -655,38 +879,119 @@ func (b *breaker) breakAll(width float32) []line {
 			continue
 		case word, atomic, edge, emergency, marker, anchor:
 		}
-		end := c.unitEnd(i)
+		end, hung := c.unitEnd(i), false
+		if b.pending >= 0 && (p.kind == edge || p.kind == anchor) {
+			end, hung = c.hangEnd(b.pending, i, end)
+		}
 		next, alone := c.measureUnit(b.at, b.pending, i, end)
-		if !b.empty && c.wrapsAt(i) && next.end() > width {
+		if b.empty && alone.end() > width && c.wrapsAt(i) {
+			if cut := c.fitEnd(i, end, width); cut < end {
+				end = cut
+				next, alone = c.measureUnit(b.at, b.pending, i, end)
+			}
+		}
+		kept := next
+		if hung {
+			kept = b.kept
+			for k := i; k < end; k++ {
+				kept.step(c.pieces[k], 0)
+			}
+		}
+		if !b.blank && !hung && c.wrapsAt(i) && next.end() > width {
 			b.finish(i)
-			continue
+			return i, true
 		}
 		if b.empty && alone.end() > width {
 			if take, ok := c.emergencyBreak(i, end, width); ok {
 				for k := i; k < take; k++ {
 					b.at.step(c.pieces[k], 0)
 				}
+				b.kept = b.at
 				b.cur.to = take
 				b.empty = false
 				b.finish(take + 1)
-				i = take + 1
-				continue
+				return take + 1, true
 			}
 		}
-		b.at = next
+		b.at, b.kept = next, kept
 		b.pending = -1
 		b.cur.to = end
 		b.empty = false
+		for k := i; b.blank && k < end; k++ {
+			b.blank = c.pieces[k].kind == edge || c.pieces[k].kind == anchor
+		}
 		i = end
 	}
+	return i, false
+}
+
+// close ends the breaking: the line left open joins the lines when it holds something.
+func (b *breaker) close() []line {
 	if !b.empty || len(b.out) == 0 && b.cur.to > b.cur.from {
-		b.cur.width = b.at.end()
+		b.cur.width = b.kept.end()
 		b.out = append(b.out, b.cur)
 	}
 	if b.out == nil {
 		b.out = []line{}
 	}
 	return b.out
+}
+
+func (b *breaker) breakAll(width float32) []line {
+	c := b.c
+	indent := c.indent(width)
+	b.open(0, indent, width-indent, 0)
+	for i := 0; i < len(c.pieces); {
+		ended := false
+		if i, ended = b.one(i, b.cur.avail); ended {
+			b.open(i, 0, width, 0)
+		}
+	}
+	return b.close()
+}
+
+// flowLines breaks the pieces into lines that go round the floats of c.flow: each line
+// takes the room the floats leave at its height, and goes below those that leave it less
+// than its first word.
+func (t *tree) flowLines(c *inlineContent, width float32) []line {
+	b := breaker{c: c}
+	strut, _ := t.lineHeight(c, c.owner.st)
+	indent := c.indent(width)
+	y, bottom := c.flowTop, c.flowTop
+	for i := 0; i < len(c.pieces); {
+		kept := len(b.out)
+		if kept > 0 {
+			indent = 0
+		}
+		h := strut
+		for tries := 0; ; tries++ {
+			x, room, next := c.flow.lineSlot(y, h)
+			room -= indent
+			b.out = b.out[:kept]
+			b.open(i, x-c.flowLeft+indent, room, y-bottom)
+			after, ended := b.one(i, room)
+			l := b.cur
+			l.width = b.kept.end()
+			if ended {
+				l = b.out[kept]
+			}
+			last := tries >= 16
+			if !last && some(next) && l.width > room+fitTolerance {
+				y, h = next, strut
+				continue
+			}
+			lh, _ := t.lineBox(c, l)
+			if _, taller, _ := c.flow.lineSlot(y, lh); !last && lh > h && taller-indent < room-fitTolerance {
+				h = lh
+				continue
+			}
+			i = after
+			y += lh
+			bottom = y
+			break
+		}
+	}
+	return b.close()
 }
 
 // lines breaks the pieces greedily into lines no wider than width where they may wrap.
@@ -699,8 +1004,11 @@ func (c *inlineContent) lines(width float32) []line {
 		return c.unbroken
 	case width < unbounded && c.broken != nil && c.brokenAt == width:
 		return c.broken
+	case width < unbounded && c.broken != nil && c.flowed && c.brokenAt-width < 0.01 && width-c.brokenAt < 0.01:
+		// lines broken round floats stand for their width, however it was reached
+		return c.broken
 	}
-	b := breaker{c: c, at: newPen(c.unit, 0), pending: -1, empty: true}
+	b := breaker{c: c}
 	out := b.breakAll(width)
 	if width >= unbounded {
 		c.unbroken = out
@@ -789,15 +1097,15 @@ func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
 		r := c.runs[c.pieces[i].run]
 		if a := r.atomic; a != nil {
 			top := a.margin.t + a.baseline
-			above = max(above, top)
-			below = max(below, a.height+a.margin.vertical()-top)
+			above = max(above, top-r.shift)
+			below = max(below, a.height+a.margin.vertical()-top+r.shift)
 			continue
 		}
 		rh, rb := t.lineHeight(c, r.st)
-		above, below = max(above, rb), max(below, rh-rb)
+		above, below = max(above, rb-r.shift), max(below, rh-rb+r.shift)
 		if m, ok := t.fallbackMetrics(c.pieces[i], r.st); ok {
 			fh, fb := lineHeightOf(m, r.st)
-			above, below = max(above, fb), max(below, fh-fb)
+			above, below = max(above, fb-r.shift), max(below, fh-fb+r.shift)
 		}
 	}
 	return above + below, above
@@ -842,10 +1150,14 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) 
 		w = max(lineW, minW)
 	}
 	t.sizeAtomics(c, def(lineW), parent)
+	if c.flow != nil {
+		c.broken, c.brokenAt = t.flowLines(c, lineW), lineW
+	}
 	var h float32
 	first, last := none, none
 	for i, l := range c.lines(lineW) {
 		lh, lb := t.lineBox(c, l)
+		h += l.push
 		if i == 0 {
 			first = h + lb
 		}
@@ -871,15 +1183,15 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	}
 	for li, l := range ls {
 		lh, lb := t.lineBox(c, l)
-		off, perGap := c.align(n.st.TextAlign, l, li == len(ls)-1, content-l.width)
-		start := inset.l + off
+		y += l.push
+		off, perGap := c.align(n.st.TextAlign, l, li == len(ls)-1, l.avail-l.width)
+		start := inset.l + l.x + off
 		if spanLines != nil {
-			t.spanRects(c, l, c.pieces[l.from:l.to], start, perGap, y, lb,
+			t.spanRects(c, l, c.shown(l), start, perGap, y, lb,
 				map[*box.Box]geom.Rect{}, make([]bool, len(c.spans)), spanLines)
 		}
 		at := newPen(c.unit, start)
-		for i := l.from; i < l.to; i++ {
-			p := c.pieces[i]
+		for _, p := range c.shown(l) {
 			x := at.step(p, perGap)
 			if p.kind == anchor {
 				c.oofs[c.anchors[p.span].node].static = point{x, y}
@@ -887,7 +1199,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			if p.kind == atomic {
 				a := c.runs[p.run].atomic
 				l := &a.node.unrounded
-				l.location = point{x + a.margin.l, y + lb - a.baseline}
+				l.location = point{x + a.margin.l, y + lb + c.runs[p.run].shift - a.baseline}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
 				st := a.node.st
@@ -965,6 +1277,9 @@ func (t *tree) writeText(n *node) {
 	f := n.final
 	inset := f.padding.add(f.border)
 	content := f.size.w - inset.horizontal() - f.scrollbar.w
+	if cs := n.columns; cs != nil {
+		content = cs.width
+	}
 	t.sizeAtomics(c, def(content), size{content, none})
 	runRects, spanRects, spanLines := t.writeLines(n, c, inset, content)
 	origin := func(b *box.Box) geom.Vec2 {
@@ -1059,13 +1374,20 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 	y := t.textTop(n, ls, inset.t, f.size.h-inset.vertical()-f.scrollbar.h)
 	for li, l := range ls {
 		lh, lb := t.lineBox(c, l)
-		off, perGap := c.align(n.st.TextAlign, l, li == len(ls)-1, content-l.width)
-		x := inset.l + off
-		pieces := c.pieces[l.from:l.to]
+		y += l.push
+		flowY := y
+		if n.frag != nil {
+			dx, dy := n.frag.lineShift(y)
+			l.x += dx
+			y += dy
+		}
+		off, perGap := c.align(n.st.TextAlign, l, li == len(ls)-1, l.avail-l.width)
+		x := inset.l + l.x + off
+		pieces := c.shown(l)
 		t.spanRects(c, l, pieces, x, perGap, y, lb, spanRects, spanSeen, spanLines)
 		cut, cutStart := false, false
-		if ellipsis && l.width > content {
-			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l, content)
+		if ellipsis && l.width > l.avail {
+			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
 		walk := newPen(c.unit, x)
 		for i := 0; i < len(pieces); {
@@ -1080,12 +1402,16 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 			}
 			var text strings.Builder
 			start := walk.at()
+			var from int32
 			for i < len(pieces) && pieces[i].run == run && isText(pieces[i].kind) && (pieces[i].kind != gap || perGap == 0) {
 				at := walk.step(pieces[i], perGap)
 				if text.Len() == 0 {
 					start = at
 				}
 				if pieces[i].kind == word || pieces[i].kind == gap {
+					if text.Len() == 0 {
+						from = pieces[i].at
+					}
 					text.WriteString(pieces[i].text)
 				}
 				i++
@@ -1095,13 +1421,15 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 				end = walk.at()
 			}
 			r := geom.Rect{X: start, Y: y, W: end - start, H: lh}
-			frag := t.fragment(c.runs[run].st, text.String(), r, y+lb, cutStart, cut && i == len(pieces))
+			frag := t.fragment(c.runs[run].st, text.String(), r, y+lb+c.runs[run].shift, cutStart,
+				cut && i == len(pieces))
+			frag.Start = from
 			cutStart = false
 			c.runs[run].box.Lines = append(c.runs[run].box.Lines, frag)
 			runRects[run] = unionRect(runRects[run], frag.Rect, seen[run])
 			seen[run] = true
 		}
-		y += lh
+		y = flowY + lh
 	}
 	return runRects, spanRects, spanLines
 }
@@ -1161,7 +1489,15 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, x, perGap, y,
 		if lo > hi {
 			continue
 		}
+		if seen[k] && sp.box.Node != nil && sp.box.Node.Tag() == dom.Br {
+			// a br's box is where its line ends, not the start of the next
+			continue
+		}
 		left, right := at[lo-l.from], at[hi-l.from+1]
+		if left == right && c.edgeAt(lo, true) && c.opensOnSpace(hi) {
+			// a start of no width, the space after it dropped at the line's end, is no box
+			continue
+		}
 		if lo == sp.open {
 			left += sp.margin.l
 		}
@@ -1169,8 +1505,8 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, x, perGap, y,
 			right -= sp.margin.r
 		}
 		m := t.metricsOf(c, sp.st)
-		top := y + lb - m.Ascent - sp.padding.t - sp.border.t
-		bottom := y + lb + m.Descent + sp.padding.b + sp.border.b
+		top := y + lb + sp.shift - m.Ascent - sp.padding.t - sp.border.t
+		bottom := y + lb + sp.shift + m.Descent + sp.padding.b + sp.border.b
 		r := geom.Rect{X: left, Y: top, W: right - left, H: bottom - top}
 		rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
 		seen[k] = true
@@ -1250,8 +1586,8 @@ func (c *inlineContent) align(a style.TextAlign, l line, last bool, free float32
 		return alignOffset(a, free), 0
 	}
 	gaps := 0
-	for i := l.from; i < l.to; i++ {
-		if c.pieces[i].kind == gap {
+	for _, p := range c.shown(l) {
+		if p.kind == gap {
 			gaps++
 		}
 	}

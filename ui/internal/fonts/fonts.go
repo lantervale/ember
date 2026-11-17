@@ -30,6 +30,9 @@ type Face struct {
 	TTF    []byte
 	font   *sfnt.Font
 	upem   float32
+	// file is the installed font the face is read from when it is first
+	// drawn with, nil for a face added with its bytes.
+	file *installedFace
 }
 
 // Of is a ui.Document's set, for export.
@@ -43,6 +46,7 @@ type Set struct {
 	buf   sfnt.Buffer
 	// scale is device pixels per point, 0 for 1.
 	scale float32
+	installing
 }
 
 // SetScale sets the device pixels per point the text is drawn at, which
@@ -88,8 +92,20 @@ func (s *Set) Add(family string, weight int, italic bool, ttf []byte) error {
 	return nil
 }
 
-// Faces is every face, in the order added.
-func (s *Set) Faces() []*Face { return s.faces }
+// Faces is every face, in the order added; of the installed ones, those
+// drawn with so far.
+func (s *Set) Faces() []*Face {
+	if s.installed == nil {
+		return s.faces
+	}
+	var read []*Face
+	for _, c := range s.faces {
+		if c.font != nil {
+			read = append(read, c)
+		}
+	}
+	return read
+}
 
 // generic are the generic families and the faces drawing them.
 //
@@ -110,8 +126,18 @@ func genericFace(name string) (string, bool) {
 }
 
 // Face is the face drawing f: the first family of its list the set has,
-// else Go, then the closest weight in the asked style.
+// or the machine has once SetInstalled says what it holds, else Go, then
+// the closest weight in the asked style.
 func (s *Set) Face(f style.Font) *Face {
+	for {
+		c := s.pick(f)
+		if c == nil || c.font != nil || s.read(c) {
+			return c
+		}
+	}
+}
+
+func (s *Set) pick(f style.Font) *Face {
 	family := "Go"
 	for _, name := range f.Family {
 		if g, ok := genericFace(name); ok {
@@ -120,6 +146,12 @@ func (s *Set) Face(f style.Font) *Face {
 		if s.has(name) {
 			family = name
 			break
+		}
+		if s.installed != nil {
+			if in := s.installedFamily(name); in != "" {
+				family = in
+				break
+			}
 		}
 	}
 	var best *Face

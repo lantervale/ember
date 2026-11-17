@@ -136,8 +136,17 @@ var (
 		}
 		return fmt.Errorf("expected an integer, found %q", c.String())
 	})
+	positiveInteger = term(func(c Component) error {
+		if c.Kind == Number && c.Int && c.Num >= 1 {
+			return nil
+		}
+		return fmt.Errorf("expected an integer of 1 or more, found %q", c.String())
+	})
+	// breakWords are break-before's and break-after's: only avoid, avoid-column and column
+	// act, between columns.
+	breakWords  = []string{"auto", "avoid", "avoid-column", "avoid-page", "column", "page", "left", "right", "always"}
 	borderWidth = either(dimTerm(nonNegative), words("thin", "medium", "thick"))
-	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset")
+	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge")
 	alignWords  = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
 		"self-start", "self-end"}
 )
@@ -166,6 +175,23 @@ func repeated(t term, most int) check {
 		}
 		return nil
 	}
+}
+
+// checkBackgroundSize takes cover or contain alone, or a width then a
+// height, each a length, a percentage or auto.
+func checkBackgroundSize(v []Component) error {
+	if len(v) == 1 && isWord(v[0], "cover", "contain") {
+		return nil
+	}
+	return repeated(either(sizeLP, words("auto")), 2)(v)
+}
+
+// checkColumnSpan takes none: an element spanning every column is not laid out.
+func checkColumnSpan(v []Component) error {
+	if len(v) == 1 && isWord(v[0], "all") {
+		return fmt.Errorf("column-span: all is not supported; put the element before the columns")
+	}
+	return single(words("none"))(v)
 }
 
 // commaList checks each comma-separated part of v with each.
@@ -198,7 +224,7 @@ func splitOn(v []Component, sep func(Component) bool) [][]Component {
 //nolint:gochecknoglobals,goconst // the properties' grammar
 var checks = map[string]check{
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
-		"contents", "list-item")),
+		"contents", "list-item", "flow-root")),
 	"box-sizing": single(words("content-box", "border-box")),
 	"width":      single(either(sizeLP, words("auto"), intrinsic)),
 	"height":     single(either(sizeLP, words("auto"), intrinsic)),
@@ -264,10 +290,25 @@ var checks = map[string]check{
 	"grid-auto-rows":        repeated(trackSize, 64),
 	"grid-auto-flow":        checkAutoFlow,
 	"order":                 single(integer),
+	"column-count":          single(either(positiveInteger, words("auto"))),
+	"column-width":          single(either(dimTerm(nonNegative), words("auto"))),
+	"column-fill":           single(words("balance", "auto")),
+	"column-span":           checkColumnSpan,
+	"column-rule-width":     single(borderWidth),
+	"column-rule-style":     single(borderStyle),
+	"column-rule-color":     single(colorTerm),
+	"break-inside":          single(words("auto", "avoid", "avoid-column", "avoid-page")),
+	"break-before":          single(words(breakWords...)),
+	"break-after":           single(words(breakWords...)),
+	"orphans":               single(positiveInteger),
+	"widows":                single(positiveInteger),
 	"aspect-ratio":          checkAspectRatio,
 	"overflow-x":            single(words("visible", "hidden", "clip", "auto", "scroll")),
 	"overflow-y":            single(words("visible", "hidden", "clip", "auto", "scroll")),
 	"position":              single(words("static", "relative", "absolute", "fixed", "sticky")),
+	"float":                 single(words("none", "left", "right", "inline-start", "inline-end")),
+	"vertical-align":        single(words("baseline", "sub", "super")),
+	"clear":                 single(words("none", "left", "right", "both", "inline-start", "inline-end")),
 	"top":                   single(either(lengthPercent, words("auto"))),
 	"right":                 single(either(lengthPercent, words("auto"))),
 	"bottom":                single(either(lengthPercent, words("auto"))),
@@ -275,6 +316,9 @@ var checks = map[string]check{
 	"z-index":               single(either(integer, words("auto"))),
 
 	"font-family": checkFontFamily,
+	// the widths the font shorthand may name, none of them drawn
+	"font-stretch-word": single(words("ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
+		"semi-expanded", "expanded", "extra-expanded", "ultra-expanded")),
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
 	"font-style":             single(words("normal", "italic", "oblique")),
@@ -285,6 +329,7 @@ var checks = map[string]check{
 	"caption-side":           single(words("top", "bottom")),
 	"table-layout":           single(words("auto", "fixed")),
 	"text-align":             single(words("start", "end", "left", "right", "center", "justify")),
+	"text-indent":            single(lengthPercent),
 	"text-transform":         single(words("none", "uppercase", "lowercase", "capitalize")),
 	"-webkit-font-smoothing": single(words("auto", "none", "antialiased", "subpixel-antialiased")),
 	"white-space":            single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
@@ -292,16 +337,23 @@ var checks = map[string]check{
 	"color":                  single(colorTerm),
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
-	"text-overflow":   single(words("clip", "ellipsis")),
-	"scrollbar-width": single(words("auto", "thin", "none")),
-	"list-style-type": single(words("none", "disc", "disclosure-open", "disclosure-closed")),
-	"visibility":      single(words("visible", "hidden", "collapse")),
-	"pointer-events":  single(words("auto", "none")),
+	"text-overflow":     single(words("clip", "ellipsis")),
+	"scrollbar-width":   single(words("auto", "thin", "none")),
+	"list-style-type":   checkListStyle,
+	"content":           checkContent,
+	"counter-reset":     checkCounters,
+	"counter-increment": checkCounters,
+	"counter-set":       checkCounters,
+	"quotes":            checkQuotes,
+	"visibility":        single(words("visible", "hidden", "collapse")),
+	"pointer-events":    single(words("auto", "none")),
+	"app-region":        single(words("none", "drag", "no-drag")),
+	"user-select":       single(words("auto", "text", "none", "all")),
 
 	"background-color":    single(colorTerm),
 	"background-image":    single(either(words("none"), imageTerm)),
-	"background-repeat":   single(words("repeat", "no-repeat")),
-	"background-size":     repeated(either(length, words("auto")), 2),
+	"background-repeat":   single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
+	"background-size":     checkBackgroundSize,
 	"background-position": checkPosition,
 	"text-shadow":         checkTextShadow,
 	"image-rendering":     single(words("auto", "pixelated")),
@@ -324,6 +376,11 @@ var checks = map[string]check{
 	"transition-duration":        commaList(single(timeTerm(true))),
 	"transition-delay":           commaList(single(timeTerm(false))),
 	"transition-timing-function": commaList(single(timingFunction)),
+
+	"text-decoration-line":      checkDecorationLine,
+	"text-decoration-style":     single(decorationStyle),
+	"text-decoration-color":     single(colorTerm),
+	"text-decoration-thickness": single(decorationThickness),
 }
 
 func fontWeightNumber(c Component) error {

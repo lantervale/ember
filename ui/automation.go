@@ -16,7 +16,8 @@ import (
 	"github.com/lantervale/ember/ui/layout"
 )
 
-// actSelectAll is the old ember/ui's act that selects a text field's text.
+// actSelectAll is the old ember/ui's act that selects a text field's
+// text, and the text inside a label that takes a selection.
 const actSelectAll = "select-all"
 
 // recorded is what automation sees of an element: nothing when role is "".
@@ -214,14 +215,23 @@ func (d *Document) recorded(n *Node) recorded {
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label,
 		dom.Button, dom.Input, dom.Select, dom.Option, dom.Textarea, dom.Details, dom.Summary, dom.Dialog, dom.Table,
 		dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption,
-		dom.Tfoot:
+		dom.Tfoot,
+		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
+		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
+		dom.Br,
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend:
 		// the others record by their role, tabindex or text below
 	}
-	if has(n, "tabindex") {
+	if pressable(n) {
 		return recorded{automation.RoleButton, visibleText(n, d.shown), nil, enabled, []string{automation.ActPress}}
 	}
 	if n.ID() != "" && n != d.html && n != d.body || textOnly(n) && scopeName(n) != "" {
-		return recorded{automation.RoleLabel, visibleText(n, d.shown), nil, true, nil}
+		var acts []string
+		if selects(dom.Data(n).Style) {
+			acts = []string{actSelectAll}
+		}
+		return recorded{automation.RoleLabel, visibleText(n, d.shown), nil, true, acts}
 	}
 	return recorded{}
 }
@@ -415,6 +425,8 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 	case actSelectAll:
 		if t != nil {
 			t.Editor.Do(textedit.SelectAll, false, nil, nil)
+		} else if selects(dom.Data(n).Style) {
+			d.SelectContents(n)
 		}
 	case automation.ActSubmit:
 		if t != nil {

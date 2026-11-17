@@ -54,20 +54,47 @@ func TestParseRules(t *testing.T) {
 
 func TestParseWarnings(t *testing.T) {
 	cases := []struct{ src, want string }{
-		{"p { float: left; color: #f00 }", `t.css:1:5: floats are not supported; use flex or grid`},
+		{"p { zoom: 2; color: #f00 }", `t.css:1:5: zoom is not supported; use transform: scale()`},
 		{"p {\n  colour: red;\n}", `t.css:2:3: unknown property "colour"`},
 		{"p { -webkit-transform: none }", `t.css:1:5: vendor-prefixed property "-webkit-transform" is not supported`},
 		{"p { word-wrap: break-word }", `t.css:1:5: word-wrap is the old name of overflow-wrap`},
-		{"@media (min-width: 4px) { p { color: #f00 } }", `t.css:1:1: @media is not supported`},
+		{"@import url(a.css);", `t.css:1:1: @import is not supported`},
+		{"@supports (display: grid) { p { color: #f00 } }", `t.css:1:1: @supports is not supported`},
+		{"@layer base { p { color: #f00 } }", `t.css:1:1: @layer is not supported`},
+		{"@-moz-document url-prefix() { p { color: #f00 } }", `t.css:1:1: @-moz-document is not supported`},
+		{"p { -moz-transform: none }", `t.css:1:5: vendor-prefixed property "-moz-transform" is not supported`},
+		{"p { display: -webkit-flex }", `t.css:1:14: display: expected block, inline, inline-block, flex, ` +
+			`inline-flex, grid, inline-grid, none, contents, list-item, flow-root, found "-webkit-flex"`},
+		{"p::-webkit-scrollbar { color: #f00 }",
+			`t.css:1:4: the vendor-prefixed pseudo-element ::-webkit-scrollbar is not supported; rule dropped`},
+		{"a:-webkit-any-link { color: #f00 }", `t.css:1:3: the :-webkit-any-link pseudo-class is not supported; rule dropped`},
 		{"p { color red }", `t.css:1:5: expected ':' after "color"`},
 		{"p { color: }", `t.css:1:5: color has no value`},
 		{"p { 12px: red }", `t.css:1:5: expected a property name, found "12px"`},
 		{"p[href^=x] { color: #f00 }", `t.css:1:7: only [attr] and [attr="value"] are supported, not ^=; rule dropped`},
 		{"p + span { color: #f00 }", `t.css:1:3: the "+" combinator is not supported; rule dropped`},
 		{"input:checked ~ label { color: #f00 }", `t.css:1:15: the "~" combinator is not supported; rule dropped`},
-		{"p::before { color: #f00 }", `t.css:1:3: pseudo-elements are not supported; rule dropped`},
+		{"p::nope { color: #f00 }", `t.css:1:4: unknown pseudo-element ::nope; rule dropped`},
+		{"p::before:hover { color: #f00 }",
+			`t.css:1:3: ::before must end its selector: nothing may follow a pseudo-element; rule dropped`},
+		{"p:after span { color: #f00 }",
+			`t.css:1:3: :after must end its selector: nothing may follow a pseudo-element; rule dropped`},
+		{"p::first-line { color: #f00 }",
+			`t.css:1:4: ::first-line is not supported: ui styles no line of a block apart; rule dropped`},
+		{"p:first-letter { color: #f00 }",
+			`t.css:1:3: ::first-letter is not supported: ui styles no letter of a block apart; rule dropped`},
+		{"input::file-selector-button { color: #f00 }",
+			`t.css:1:8: ::file-selector-button is not supported: ui has no file input; rule dropped`},
+		{"p::part { color: #f00 }", `t.css:1:4: ::part takes an argument in ( ); rule dropped`},
+		{"p::before(x) { color: #f00 }", `t.css:1:4: ::before takes no ( ); rule dropped`},
+		{"p::marker { margin: 0 }", `t.css:1:13: ::marker does not take margin`},
+		{"p::before { content: counter(c, lower-greek) }", `t.css:1:22: content: counter(): the counter style: expected none, disc, circle, square, decimal, decimal-leading-zero, lower-alpha, upper-alpha, lower-roman, upper-roman, disclosure-open or disclosure-closed, found "lower-greek"`},
+		{"p { counter-reset: reversed(c) }",
+			`t.css:1:20: counter-reset: reversed() is not supported; an ol counts down with its reversed attribute`},
+		{"p { quotes: \"a\" }", `t.css:1:13: quotes: quotes takes auto, none or pairs of strings`},
+		{"p::before { content: \"a\" / }", `t.css:1:22: content: content ends with /`},
 		{"p:nth-of-type(2) { color: #f00 }", `t.css:1:3: the :nth-of-type() pseudo-class is not supported; rule dropped`},
-		{"p:visited { color: #f00 }", `t.css:1:3: the :visited pseudo-class is not supported; rule dropped`},
+		{"p:target { color: #f00 }", `t.css:1:3: the :target pseudo-class is not supported; rule dropped`},
 		{"p, { color: #f00 }", `t.css:1:2: empty selector; rule dropped`},
 		{"p > { color: #f00 }", `t.css:1:3: selector ends with a combinator; rule dropped`},
 		{"p", `t.css:1:1: rule has no { block }`},
@@ -81,7 +108,7 @@ func TestParseWarnings(t *testing.T) {
 }
 
 func TestParseKeepsGoodDeclarations(t *testing.T) {
-	sheet, warns := Parse("t.css", "p { float: left; color: #f00; } span { margin: 0 }")
+	sheet, warns := Parse("t.css", "p { zoom: 2; color: #f00; } span { margin: 0 }")
 	if len(warns) != 1 {
 		t.Fatalf("warnings: %s", warnings(warns))
 	}
@@ -91,8 +118,8 @@ func TestParseKeepsGoodDeclarations(t *testing.T) {
 }
 
 func TestParseInline(t *testing.T) {
-	decls, warns := ParseInline("width: 50%; ; color: #f00 !important; float: left")
-	if got := warnings(warns); got != `style:1:39: floats are not supported; use flex or grid` {
+	decls, warns := ParseInline("width: 50%; ; color: #f00 !important; zoom: 2")
+	if got := warnings(warns); got != `style:1:39: zoom is not supported; use transform: scale()` {
 		t.Errorf("warnings: %s", got)
 	}
 	if len(decls) != 2 || decls[0].String() != "width: 50%" || !decls[1].Important {
@@ -101,12 +128,12 @@ func TestParseInline(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	fsys := fstest.MapFS{"ui/tool.css": {Data: []byte("p {\n  float: left;\n}")}}
+	fsys := fstest.MapFS{"ui/tool.css": {Data: []byte("p {\n  zoom: 2;\n}")}}
 	sheet, warns, err := Load(fsys, "ui/tool.css")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sheet.Name != "ui/tool.css" || warnings(warns) != "ui/tool.css:2:3: floats are not supported; use flex or grid" {
+	if sheet.Name != "ui/tool.css" || warnings(warns) != "ui/tool.css:2:3: zoom is not supported; use transform: scale()" {
 		t.Errorf("got %q, %s", sheet.Name, warnings(warns))
 	}
 	if _, _, err = Load(fsys, "missing.css"); err == nil {

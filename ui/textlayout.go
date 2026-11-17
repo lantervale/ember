@@ -137,14 +137,13 @@ func sameFont(a, b style.Font) bool {
 	return a.Size == b.Size && a.Weight == b.Weight && a.Italic == b.Italic && slices.Equal(a.Family, b.Family)
 }
 
-// caretAt places a text field's caret where at falls, in the document's
-// space: on a textarea's line under it; extend keeps the selection's
-// other end. A drag past the field's edge reaches the lines beyond, which
-// followCaret then scrolls in.
-func (d *Document) caretAt(n *Node, t *control.Text, at geom.Vec2, extend bool) {
+// positionAt is the position in a text field nearest at, in the document's
+// space: on a textarea's line under it. A point past the field's edge
+// reaches the lines beyond.
+func (d *Document) positionAt(n *Node, t *control.Text, at geom.Vec2) (int, bool) {
 	b := d.tree.Of[n]
 	if b == nil || t.Layout == nil {
-		return
+		return 0, false
 	}
 	c := b.ContentRect()
 	x := at.X - n.Box().X - c.X + b.Scroll.X
@@ -163,7 +162,82 @@ func (d *Document) caretAt(n *Node, t *control.Text, at geom.Vec2, extend bool) 
 		}
 		x = at.X - n.Box().X + b.Scroll.X - run.X - a.Row(line).X
 	}
-	t.Editor.Place(t.Layout.At(line, x), extend)
+	return t.Layout.At(line, x), true
+}
+
+// textClicks is the run of presses on a text field: a second one close in
+// time and place selects the word there, a third the line, and a drag
+// from them goes on by words or lines. from and to are what the last
+// press selected.
+type textClicks struct {
+	on       *Node
+	at       float32
+	where    geom.Vec2
+	count    int
+	from, to int
+}
+
+// clickSlop is how far apart, in points, two presses still count as one
+// run of clicks.
+const clickSlop = 4
+
+// pressText places a text field's caret where a press at falls, extend
+// keeping the selection's other end; the second press of a run selects
+// the word there instead and the third the line, as Chrome does.
+func (d *Document) pressText(n *Node, t *control.Text, at geom.Vec2, extend bool) {
+	i, ok := d.positionAt(n, t, at)
+	if !ok {
+		return
+	}
+	c := &d.textClicks
+	if c.on == n && d.clock-c.at <= doubleClick && at.Sub(c.where).Len() <= clickSlop {
+		c.count++
+	} else {
+		c.count = 1
+	}
+	c.on, c.at, c.where = n, d.clock, at
+	if c.count == 1 || extend {
+		t.Editor.Place(i, extend)
+		return
+	}
+	c.from, c.to = clickSpan(t, i, c.count)
+	t.Editor.Select(c.from, c.to)
+}
+
+// dragText takes a text field's selection to at while the press that
+// began it is held: by positions, or by words or lines after a double or
+// triple click, what that click selected staying selected. A drag past
+// the field's edge reaches the lines beyond, which followCaret then
+// scrolls in.
+func (d *Document) dragText(n *Node, t *control.Text, at geom.Vec2) {
+	i, ok := d.positionAt(n, t, at)
+	if !ok {
+		return
+	}
+	c := &d.textClicks
+	if c.on != n || c.count < 2 {
+		t.Editor.Place(i, true)
+		return
+	}
+	from, to := clickSpan(t, i, c.count)
+	if from < c.from {
+		t.Editor.Select(c.to, from)
+		return
+	}
+	t.Editor.Select(c.from, max(to, c.to))
+}
+
+// clickSpan is what the count-th click of a run at position i selects:
+// the word, space or mark there, then the line with its break, a one-line
+// field's whole text. A password has no words to find.
+func clickSpan(t *control.Text, i, count int) (int, int) {
+	switch {
+	case t.Multiline() && count > 2:
+		return t.Editor.Paragraph(i)
+	case count > 2 || t.Password():
+		return 0, len(t.Editor.Runes())
+	}
+	return t.Editor.Word(i)
 }
 
 // area is a textarea's text as layout cut it into lines: each line's

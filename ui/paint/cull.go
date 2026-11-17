@@ -79,7 +79,7 @@ func textInk(e entry, st *style.Computed) geom.Rect {
 			r = union(r, l)
 		}
 	}
-	return grow(r, st.Font.Size+shadowReach(st.TextShadows))
+	return grow(r, max(st.Font.Size, decorationReach(st))+shadowReach(st.TextShadows))
 }
 
 // shadowReach is how far outer shadows reach past their box.

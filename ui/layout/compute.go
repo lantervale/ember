@@ -145,6 +145,8 @@ type oofCandidate struct {
 	// area is its own containing block, a positioned span's, in the owner's border box;
 	// the owner lays it out whatever it claims.
 	area *oofArea
+	// inline is set when its place is among lines, not between blocks.
+	inline bool
 }
 
 func translateCandidates(cs []oofCandidate, offset point) []oofCandidate {
@@ -263,8 +265,13 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 	if t.lookups != nil {
 		*t.lookups++
 	}
-	if out, ok := n.cache.get(key); ok {
-		return out
+	// Among floats a layout is the context's as much as the node's: where the floats
+	// before it stand, and the floats it places for what follows.
+	floats := ctx != nil && (n.holdsFloats || ctx.hasFloats())
+	if !floats {
+		if out, ok := n.cache.get(key); ok {
+			return out
+		}
 	}
 	if in.run == performLayout {
 		n.performed = t.gen
@@ -281,11 +288,16 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 	if in.run == performLayout {
 		t.oofLayout(n, &out)
 	}
-	n.cache.store(key, out)
+	if !floats && (ctx == nil || !ctx.hasFloats()) {
+		n.cache.store(key, out)
+	}
 	return out
 }
 
 func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
+	if n.st.Multicol() && n.columnar() {
+		return t.columns(n, in)
+	}
 	switch n.context() {
 	case contextNone:
 		return t.hidden(n)
@@ -299,7 +311,7 @@ func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
 		return t.block(n, in, ctx)
 	case contextLeaf:
 	}
-	return t.leaf(n, in)
+	return t.leaf(n, in, ctx)
 }
 
 // ownGutter is the scrollbar room n's own layout leaves: overflow: scroll's, and overflow

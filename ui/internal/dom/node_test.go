@@ -74,7 +74,7 @@ func TestTagNames(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, tag, got)
 	}
-	_, ok := TagNamed("center")
+	_, ok := TagNamed("marquee")
 	assert.False(t, ok)
 	assert.True(t, Input.Void())
 }

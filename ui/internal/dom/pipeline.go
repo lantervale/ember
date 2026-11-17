@@ -58,6 +58,22 @@ type Pipeline struct {
 	// content, in place of its children, and export never writes it.
 	Shadow      *Node
 	Placeholder bool
+	// Before and After are the nodes of the element's ::before and ::after
+	// boxes (NewGenerated), nil while the pseudo-element generates none.
+	// css keeps them; export never writes them.
+	Before, After *Node
+	// Ordinal is a list item's number, the value of the list-item counter
+	// on it, and Counted that css worked it out.
+	Ordinal int
+	Counted bool
+	// Counts is set on the root once something in its tree counts: css
+	// then keeps the counters of the whole tree.
+	Counts bool
+	// Marker is the style of a list item's ::marker when a rule styles it,
+	// and MarkerText its content when that is not normal (HasMarkerText).
+	Marker        *style.Computed
+	MarkerText    string
+	HasMarkerText bool
 	// Canvas is a canvas element's machine, made with it since it holds
 	// the game's drawing, for the Document to take as the element's.
 	Canvas any

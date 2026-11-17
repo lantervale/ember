@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"math"
 	"slices"
 	"strings"
 
@@ -38,6 +39,10 @@ type Retained struct {
 	// replaced and gone are the sweep's lists, kept for their room.
 	replaced []keyed
 	gone     []*node
+	// viewport is the box of a viewport that scrolls, and viewportGutter
+	// the room its overflow: auto bars took in the last layout.
+	viewport       *box.Box
+	viewportGutter size
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -96,7 +101,16 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, op
 	if r == nil {
 		return t.out, nil
 	}
-	t.root(r, avail)
+	port := viewportOf(root)
+	if !avail.values().both() {
+		port = nil
+	}
+	var gutter, content size
+	if port != nil {
+		gutter, content = t.viewport(r, avail.values(), port)
+	} else {
+		t.root(r, avail)
+	}
 	if rounding {
 		roundLayout(r, point{})
 	} else {
@@ -104,6 +118,10 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, op
 	}
 	t.out.Root = r.box
 	t.write(r, nil)
+	r.box.Parent = nil
+	if port != nil {
+		t.out.Root = t.viewportBox(r.box, port, avail.values(), gutter, content)
+	}
 	t.out.Live, t.out.Applied = t.out.Live[:0], t.out.Applied[:0]
 	collectLive(t.out.Root, t.out)
 	t.markEscapes(r)
@@ -120,6 +138,12 @@ func clean(n *dom.Node) {
 		for _, c := range n.Children() {
 			clean(c)
 		}
+	}
+	if d.Before != nil {
+		clean(d.Before)
+	}
+	if d.After != nil {
+		clean(d.After)
 	}
 }
 
@@ -142,6 +166,11 @@ type tree struct {
 	lost     map[*dom.Node]*box.Box
 	// anonymousStyles is the style of the anonymous blocks of each parent style.
 	anonymousStyles map[*style.Computed]*style.Computed
+	// flowStyles are the styles multi-column containers lay their content out with, by
+	// their own.
+	flowStyles map[*style.Computed]*style.Computed
+	// breakStyles are the styles of the line breaks br elements hold, by their own.
+	breakStyles map[*style.Computed]*style.Computed
 	// regutter are the elements whose scrollbar gutter changed in this
 	// retained layout.
 	regutter []*dom.Node
@@ -191,6 +220,12 @@ type node struct {
 	// replaced is an img, natural its picture's size (zero without one).
 	replaced bool
 	natural  size
+	// shape is what a picture that doesn't ask for a size of pixels asks
+	// for, sized being whether the img has one: natural is then the size
+	// it takes with no other, but with proportions alone (fills), where
+	// it takes the width it is given.
+	shape box.Intrinsic
+	sized bool
 	// gutter is the scrollbar room layout chose beyond the style's, overflow auto's once the
 	// content overflows.
 	gutter size
@@ -208,6 +243,13 @@ type node struct {
 	// readsParent is set when the node's style resolves against its parent's size, which
 	// its cache then keys on.
 	readsParent bool
+	// holdsFloats is set when a float is among its kids or under one of them: laid out
+	// in its parent's formatting context, it places floats there each time.
+	holdsFloats bool
+	// columns is how a multi-column container's last layout cut its flow, and frag the
+	// node's place in the flow of the multi-column container it is in, nil outside one.
+	columns *columnSet
+	frag    *flowFrag
 }
 
 func (n *node) context() context {
@@ -270,7 +312,7 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		buildCanvas(n, e)
 		return n
 	}
-	t.buildChildren(n, e.Children())
+	t.buildChildren(n, e.Flow())
 	return n
 }
 
@@ -281,7 +323,7 @@ func (t *tree) kept(e *dom.Node) *node {
 		return nil
 	}
 	d := dom.Data(e)
-	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.st != d.Style || !slices.Equal(n.children, e.Children()) {
+	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.st != d.Style || !e.SameFlow(n.children) {
 		return nil
 	}
 	return n
@@ -294,7 +336,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 	st := styleOf(e)
 	old := t.prevNodes[e]
 	if n := old; n != nil && n.st == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
-		slices.Equal(n.children, e.Children()) {
+		e.SameFlow(n.children) {
 		t.retire(n, false)
 		b := n.box
 		*b = box.Box{Kind: box.Element, Node: e, Style: st, Children: b.Children[:0]}
@@ -313,7 +355,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 			n.gutter = old.gutter
 		}
 		t.nodes[e] = n
-		n.children = slices.Clone(e.Children())
+		n.children = slices.Clone(e.Flow())
 	}
 	return n
 }
@@ -340,9 +382,13 @@ func (t *tree) retire(old *node, kids bool) {
 	t.retireInline(old)
 	if old.anonymous {
 		for _, k := range old.kids {
-			if k.box.Kind == box.AnonymousBlock {
+			switch {
+			case k.box.Kind == box.AnonymousBlock:
 				t.retireInline(k)
 				t.gone = append(t.gone, k.kids...)
+			case k.st.Float != style.FloatNone:
+				// maybe a float from inside an inline element, no child of the element's
+				t.gone = append(t.gone, k)
 			}
 		}
 	}
@@ -466,16 +512,34 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 		return
 	}
 	var run []item
+	// inFlow is set once the container holds content in the flow: the anonymous blocks
+	// after it don't start with the container's first line.
+	inFlow := false
 	flush := func() {
 		if onlyCollapsibleSpace(run) {
 			run = nil
 			return
 		}
 		anon := t.anonymous(n)
-		if content := t.inlineOf(anon, run); content != nil {
+		content := t.inlineOf(anon, run)
+		// The floats inside the run's inline elements stand before its block.
+		kept := anon.kids[:0]
+		for _, k := range anon.kids {
+			if k.st.Float == style.FloatNone {
+				kept = append(kept, k)
+				continue
+			}
+			k.parent = n
+			n.kids = append(n.kids, k)
+			n.anonymous = true
+		}
+		anon.kids = kept
+		if content != nil {
+			content.unindented = inFlow
 			anon.inline = content
 			n.kids = append(n.kids, anon)
 			n.anonymous = true
+			inFlow = true
 		}
 		run = nil
 	}
@@ -484,14 +548,26 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			run = append(run, it)
 			continue
 		}
+		st := styleOf(it.element)
+		if !inFlexOrGrid && st.Float != style.FloatNone && st.Display != style.DisplayNone {
+			// A float among inline content stands before it, the text going on round it.
+			n.kids = append(n.kids, t.build(it.element, n))
+			continue
+		}
 		if !inFlexOrGrid && !elementBlockLevel(it.element) {
 			run = append(run, it)
 			continue
 		}
 		flush()
 		n.kids = append(n.kids, t.build(it.element, n))
+		inFlow = inFlow || st.Display != style.DisplayNone && !outOfFlow(st.Position)
 	}
 	flush()
+	for _, k := range n.kids {
+		if k.st.Float != style.FloatNone || k.holdsFloats {
+			n.holdsFloats = true
+		}
+	}
 }
 
 // onlyCollapsibleSpace reports a run of text nodes that white-space collapses away.
@@ -528,7 +604,7 @@ func (t *tree) flatten(owner *node, children []*dom.Node) []item {
 			b := &box.Box{Kind: box.Element, Node: c, Style: styleOf(c)}
 			t.place(c, b)
 			owner.contents = append(owner.contents, keyed{c, b})
-			items = append(items, t.flatten(owner, c.Children())...)
+			items = append(items, t.flatten(owner, c.Flow())...)
 			continue
 		}
 		items = append(items, item{element: c})
@@ -548,13 +624,37 @@ func isBlockLevel(st *style.Computed) bool {
 // elementBlockLevel is isBlockLevel for an element, which a table always is.
 func elementBlockLevel(e *dom.Node) bool { return isTable(e) || isBlockLevel(styleOf(e)) }
 
+// hasBlockChild reports a child that makes the container lay blocks out: one in the flow
+// that is block-level, as a float is, or an inline element with a float inside.
 func hasBlockChild(items []item) bool {
 	for _, it := range items {
 		if it.element != nil {
 			st := styleOf(it.element)
-			if st.Display != style.DisplayNone && elementBlockLevel(it.element) && !outOfFlow(st.Position) {
+			if st.Display == style.DisplayNone || outOfFlow(st.Position) {
+				continue
+			}
+			if elementBlockLevel(it.element) || !isAtomicDisplay(st.Display) && floatInside(it.element) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// floatInside reports a float under the inline element e, through the inline elements
+// it holds.
+func floatInside(e *dom.Node) bool {
+	for _, c := range e.Flow() {
+		if c.IsText() {
+			continue
+		}
+		st := styleOf(c)
+		switch {
+		case st.Display == style.DisplayNone || outOfFlow(st.Position):
+		case st.Float != style.FloatNone:
+			return true
+		case !isAtomicDisplay(st.Display) && floatInside(c):
+			return true
 		}
 	}
 	return false
@@ -607,6 +707,9 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Content = geom.Vec2{X: f.overflow.rect.r - f.overflow.rect.l, Y: f.overflow.rect.b - f.overflow.rect.t}
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w, Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
+	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
+		n.writeColumns()
+	}
 	if !rewrite {
 		for _, c := range n.kids {
 			t.writeIn(c, n, false)
@@ -624,6 +727,78 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		t.writeIn(c, n, true)
 	}
 	t.atomsIntoSpans(n)
+	t.listMarker(n)
+}
+
+// markerGap is how far a bullet stands from its item's content, past its own offset, as
+// Chrome's.
+const markerGap = 7
+
+// listMarker gives a list item its ::marker box, outside the item beside its first line:
+// a number, or its ::marker's content, ending where the item's content starts, a bullet
+// Chrome's distance before it. An item without a line has none. The box's style is the
+// ::marker's where a rule styles it, the item's otherwise.
+func (t *tree) listMarker(n *node) {
+	e := n.box.Node
+	if e == nil || n.box.Kind != box.Element || !n.st.ListItem || e.Tag() == dom.Summary ||
+		n.st.Display == style.DisplayNone {
+		return
+	}
+	line, at, ok := firstLine(n.box, geom.Vec2{})
+	if !ok {
+		return
+	}
+	data := dom.Data(e)
+	st := n.st
+	if data.Marker != nil {
+		st = data.Marker
+	}
+	m := &box.Box{Kind: box.Marker, Node: e, Style: st}
+	left := n.final.border.l + n.final.padding.l
+	ascent := float32(math.Round(float64(t.fonts.Metrics(st.Font).Ascent)))
+	baseline := at.Y + line.Baseline
+	text := ""
+	switch {
+	case data.HasMarkerText:
+		inWord := false
+		text = shownText(data.MarkerText, st, nil, &inWord)
+	case st.ListStyle.Numeric():
+		text = st.ListStyle.Format(data.Ordinal) + ". "
+	}
+	switch {
+	case text != "":
+		w := t.fonts.Advance(st.Font, text) + st.LetterSpacing*float32(len([]rune(text)))
+		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
+		m.Size = geom.Vec2{X: w, Y: line.Rect.H}
+		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}
+	case data.HasMarkerText:
+		return
+	case st.ListStyle == style.ListDisc || st.ListStyle == style.ListCircle || st.ListStyle == style.ListSquare:
+		offset := float32(math.Floor(float64(ascent * 2 / 3)))
+		side := float32(math.Floor(float64((offset + 1) / 2)))
+		top := float32(math.Floor(float64(3 * (ascent - offset) / 2)))
+		m.Pos = geom.Vec2{X: left - offset - markerGap, Y: baseline - ascent + top}
+		m.Size = geom.Vec2{X: side, Y: side}
+	default:
+		return
+	}
+	n.box.Append(m)
+}
+
+// firstLine is the first line fragment under b, with its box's place in b.
+func firstLine(b *box.Box, at geom.Vec2) (box.Fragment, geom.Vec2, bool) {
+	if b.Kind == box.TextRun && len(b.Lines) > 0 {
+		return b.Lines[0], at, true
+	}
+	for _, c := range b.Children {
+		if c.Kind == box.Marker {
+			continue
+		}
+		if f, p, ok := firstLine(c, at.Add(c.Pos)); ok {
+			return f, p, true
+		}
+	}
+	return box.Fragment{}, geom.Vec2{}, false
 }
 
 // keepLayout places every box without rounding, for fixtures that turn it off.
@@ -635,7 +810,14 @@ func keepIn(n *node, cumulative point, hidden bool) {
 	n.final = n.unrounded
 	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
 	n.absolute = point{cumulative.x + n.unrounded.location.x, cumulative.y + n.unrounded.location.y}
+	if n.frag != nil {
+		n.frag = nil
+	}
 	hidden = hidden || n.st.Display == style.DisplayNone
+	if n.columns != nil && !hidden {
+		keepColumns(n)
+		return
+	}
 	for _, c := range n.kids {
 		if hidden || !outOfFlow(c.st.Position) || c.st.Display == style.DisplayNone {
 			keepIn(c, n.absolute, hidden)

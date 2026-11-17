@@ -3,8 +3,14 @@ package layout
 import (
 	"strconv"
 
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 )
+
+// defaultWidth and defaultHeight are the size CSS gives a replaced
+// element whose picture asks for none.
+const defaultWidth, defaultHeight = 300, 150
 
 // brokenIcon is the side of the icon an img that didn't load shows, as Chrome's
 // (paint.BrokenIcon).
@@ -21,6 +27,16 @@ func (t *tree) buildImage(n *node, e *dom.Node) {
 	src, ok := e.Attr("src")
 	if !ok {
 		return
+	}
+	if shapes, has := t.images.(box.IntrinsicImages); has {
+		if in, found := shapes.ImageIntrinsic(src); found {
+			n.shape, n.sized = in, true
+			if !n.fills() {
+				s := in.Natural(geom.V2(defaultWidth, defaultHeight))
+				n.natural = size{s.X, s.Y}
+			}
+			return
+		}
 	}
 	if s, found := t.images.ImageSize(src); found {
 		n.natural = size{s.X, s.Y}
@@ -53,10 +69,33 @@ func attrSize(e *dom.Node, name string, or float32) float32 {
 
 // naturalRatio is a replaced box's width over height, none without a picture.
 func (n *node) naturalRatio() float32 {
+	if n.sized {
+		if n.shape.Ratio > 0 {
+			return n.shape.Ratio
+		}
+		return none
+	}
 	if !n.replaced || n.natural.w <= 0 || n.natural.h <= 0 {
 		return none
 	}
 	return n.natural.w / n.natural.h
+}
+
+// fills reports an img whose picture has proportions and asks for no
+// size: it is as wide as the room it is given, as Chrome lays it out,
+// and adds nothing to its block's own width.
+func (n *node) fills() bool {
+	return n.sized && n.shape.Ratio > 0 && n.shape.Width <= 0 && n.shape.Height <= 0
+}
+
+// filled is the natural size of an img that fills, in avail less its
+// padding and border.
+func (n *node) filled(avail space, pb float32) size {
+	if avail.kind != definite {
+		return size{}
+	}
+	w := max(avail.v-pb, 0)
+	return size{w, w / n.shape.Ratio}
 }
 
 // replacedSize is a replaced box's size with neither side set: its natural size, scaled

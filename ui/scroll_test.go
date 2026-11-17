@@ -24,7 +24,7 @@ type scroller struct {
 	items       []*ui.Node
 }
 
-func newScroller(t *testing.T) *scroller {
+func newScroller(t *testing.T, opts ...ui.DocumentOption) *scroller {
 	t.Helper()
 	s := &scroller{}
 	s.list = ui.Div(ui.ID("list"), ui.Style("overflow: auto; width: 200px; height: 100px"))
@@ -35,7 +35,7 @@ func newScroller(t *testing.T) *scroller {
 	}
 	s.outer = ui.Div(ui.ID("outer"), ui.Style("overflow: auto; width: 240px; height: 150px"),
 		s.list, ui.Div(ui.Style("height: 300px")))
-	s.doc = ui.NewDocument()
+	s.doc = ui.NewDocument(opts...)
 	s.doc.Body().Append(s.outer)
 	win := platform.NewWindow(platform.Size(400, 300))
 	win.Add(s.doc)
@@ -119,6 +119,37 @@ func TestDraggingTheThumbScrollsAndClicksNothing(t *testing.T) {
 	assert.InDelta(t, 30/travel*300, s.scrolled(), 1, "the thumb's travel is the overflow's")
 	var r world.Reader[ui.Clicked]
 	assert.Zero(t, r.Count(s.w), "the bar took the press")
+}
+
+func TestOverlayScrollbarsTakeNoRoomAndScrollAsClassicOnes(t *testing.T) {
+	classic, s := newScroller(t), newScroller(t, ui.OverlayScrollbars())
+	assert.True(t, s.doc.OverlayScrollbars())
+	fill := func(s *scroller) float32 {
+		row := ui.Div(ui.Style("height: 1px"))
+		s.list.Append(row)
+		s.w.RunFrames(2)
+		return row.Box().W
+	}
+	assert.InDelta(t, 185, fill(classic), 0.01, "a classic bar keeps 15 points of the list")
+	assert.InDelta(t, 200, fill(s), 0.01, "an overlay one none")
+
+	s.wheel(s.list.Box().Center(), geom.V2(0, 1))
+	assert.Positive(t, s.scrolled(), "the wheel scrolls it")
+	s.wheel(s.list.Box().Center(), geom.V2(0, -1))
+
+	l := s.list.Box()
+	grab := geom.V2(l.X+l.W-10+2+3, l.Y+4+5)
+	s.in.SetMouse(grab)
+	s.w.RunFrames(1)
+	s.in.SetMouseButton(input.MouseLeft, true)
+	s.w.RunFrames(1)
+	s.in.SetMouse(grab.Add(geom.V2(0, 30)))
+	s.w.RunFrames(1)
+	s.in.SetMouseButton(input.MouseLeft, false)
+	s.w.RunFrames(2)
+	assert.Greater(t, s.scrolled(), float32(100), "its thumb drags, over the content")
+	var r world.Reader[ui.Clicked]
+	assert.Zero(t, r.Count(s.w), "and takes the press from the button under it")
 }
 
 func TestAClickOnTheTrackPagesByTheView(t *testing.T) {

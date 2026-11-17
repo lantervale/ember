@@ -27,6 +27,8 @@ type Node struct {
 	parent   *Node
 	children []*Node
 	pipe     Pipeline
+	// gen is set on a generated node (NewGenerated).
+	gen Pseudo
 }
 
 // NewElement is an element of tag with no attributes or children.

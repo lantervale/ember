@@ -259,8 +259,11 @@ func TestUpAndDownKeepTheColumn(t *testing.T) {
 	if e.Caret() != 4 {
 		t.Fatalf("the visual line's end: %d", e.Caret())
 	}
-	from, to := textedit.NewArea("ab\ncd\nef").Paragraph(4)
-	if from != 3 || to != 5 {
-		t.Fatalf("the line between breaks: %d %d", from, to)
+	area := textedit.NewArea("ab\ncd\nef")
+	if from, to := area.Paragraph(4); from != 3 || to != 6 {
+		t.Fatalf("the line and its break: %d %d", from, to)
+	}
+	if from, to := area.Paragraph(8); from != 6 || to != 8 {
+		t.Fatalf("the last line has no break: %d %d", from, to)
 	}
 }

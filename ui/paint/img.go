@@ -14,6 +14,10 @@ import (
 func (p *painter) img(e entry, alpha float32) {
 	src, hasSrc := e.b.Node.Attr("src")
 	st := shown(e.b)
+	if v := p.shapes(src); v != nil {
+		p.shapesImg(e, v, st, alpha)
+		return
+	}
 	tex := p.find(style.Image{Source: src}, st)
 	if tex == nil {
 		if hasSrc && p.image != nil {
@@ -33,6 +37,29 @@ func (p *painter) img(e entry, alpha float32) {
 		defer p.s.PopClip()
 	}
 	p.s.Image(at, tex, texels(tex), fade(color.White, alpha))
+}
+
+// shapesImg draws an img whose picture is drawn from shapes: placed as
+// one of pixels, of the size it asks for, or its content box's where it
+// asks for none, and drawn at the size it lands at.
+func (p *painter) shapesImg(e entry, v Vector, st *style.Computed, alpha float32) {
+	area := p.snap(content(e))
+	if area.W <= 0 || area.H <= 0 {
+		return
+	}
+	at, overflows := objectFit(st.ObjectFit, area, v.Intrinsic().Natural(geom.V2(area.W, area.H)), st.ObjectPosition)
+	if at = p.snap(at); at.W <= 0 || at.H <= 0 {
+		return
+	}
+	tex := p.drawn(v, geom.V2(at.W, at.H))
+	if tex == nil {
+		return
+	}
+	if overflows {
+		p.s.PushClip(area)
+		defer p.s.PopClip()
+	}
+	p.s.Image(at, tex, whole, fade(color.White, alpha))
 }
 
 // objectFit is where a picture of natural size goes in box by fit, placed

@@ -1,15 +1,21 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
-
-// blockContext marks a block laid out inside its parent's block formatting context, so its
-// margins may collapse with its children's; nil is the root of a formatting context.
-type blockContext struct{}
+import (
+	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 type blockItem struct {
-	node                   *node
-	order                  uint32
-	inSameBFC              bool
+	node  *node
+	order uint32
+	// inSameBFC is a block laid out in its parent's formatting context: its margins
+	// collapse with its neighbours', its lines go round the floats and its own floats
+	// reach the blocks after it. The others stand beside the floats, whole.
+	inSameBFC bool
+	// legend is a fieldset's legend, set on its top border.
+	legend                 bool
+	float                  style.Float
+	clear                  style.Clear
 	sizeStyle              style.Size[style.Length]
 	size, minSize, maxSize size
 	overflow               style.Size[style.Overflow]
@@ -26,7 +32,13 @@ type blockItem struct {
 }
 
 func blockEstablishesBFC(st *style.Computed) bool {
-	return isScrollContainer(st) || st.AlignContent != style.AlignNormal
+	return isScrollContainer(st) || st.AlignContent != style.AlignNormal || st.FlowRoot || st.Multicol()
+}
+
+// standsBesideFloats reports a block-level box the floats never overlap though it is no
+// block container: a replaced element, a control, a table.
+func standsBesideFloats(n *node) bool {
+	return n.replaced || n.control != noControl || n.role == roleTable
 }
 
 // block lays out a block container whose children are blocks, Taffy's compute_block_layout.
@@ -45,7 +57,9 @@ func (t *tree) block(n *node, in input, ctx *blockContext) output {
 	}
 	minMax := size{definiteMinMax(minSize.w, maxSize.w), definiteMinMax(minSize.h, maxSize.h)}
 	styled := in.known.or(minMax).or(clamped).mMax(pbSize)
-	if in.run == computeSize {
+	// A block that places floats in its parent's context is laid out even when its size
+	// is known, for the content after it to find them.
+	if in.run == computeSize && (ctx == nil || !n.holdsFloats) {
 		if styled.both() {
 			return sizeOutput(styled)
 		}
@@ -55,8 +69,8 @@ func (t *tree) block(n *node, in input, ctx *blockContext) output {
 	}
 	sub := in
 	sub.known = styled
-	if blockEstablishesBFC(st) {
-		ctx = nil
+	if ctx == nil || blockEstablishesBFC(st) {
+		ctx = newRootContext()
 	}
 	return t.blockInner(n, sub, ctx)
 }
@@ -72,6 +86,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	pb := padding.add(border)
 	pbSize := pb.sum()
 	inset := pb.add(gutter)
+	ctx.setContentInset(inset.l, inset.r)
 	adj := boxSizingAdjustment(st, pbSize)
 	sz := resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
 	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -90,7 +105,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		in.collapsible[1] && !newBFC && !oof && padding.b == 0 && border.b == 0,
 	}
 	ownCollapse := [2]bool{adjoin[0], adjoin[1] && !some(sz.h)}
-	preventsCollapse := st.Display != style.Block || ctx == nil || newBFC || oof ||
+	preventsCollapse := st.Display != style.Block || ctx.root || newBFC || oof ||
 		padding.t > 0 || padding.b > 0 || border.t > 0 || border.b > 0
 
 	items := t.blockItems(n, contentBoxSize)
@@ -100,11 +115,13 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		intrinsic := t.blockContentWidth(items, availW) + inset.horizontal()
 		outerW = mMax(mClamp(intrinsic, minSize.w, maxSize.w), pbSize.w)
 	}
-	if in.run == computeSize && some(known.h) {
-		return sizeOutput(size{outerW, known.h})
-	}
-	if in.run == computeSize && in.axis == axisHorizontal {
-		return sizeOutput(size{outerW, 0})
+	if in.run == computeSize && (ctx.root || !n.holdsFloats) {
+		if some(known.h) {
+			return sizeOutput(size{outerW, known.h})
+		}
+		if in.axis == axisHorizontal {
+			return sizeOutput(size{outerW, 0})
+		}
 	}
 	percentH := percentBasis.h
 	if !some(percentH) && in.sizing == inherentSize {
@@ -114,9 +131,23 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	rPadding := edges(st.Padding, percentW)
 	rBorder := border
 	rInset := rPadding.add(rBorder).add(gutter)
+	legend := renderedLegend(n, items)
+	if legend != nil {
+		legend.legend = true
+		rInset.t = 0
+	}
 
-	res := t.blockChildren(in.run, items, outerW, percentH, rInset,
-		rBorder, rPadding, st, ownCollapse, isScrollContainer(st))
+	res := t.blockChildren(in.run, items, outerW, percentH, inset.l, rInset,
+		rBorder, rPadding, st, ownCollapse, isScrollContainer(st), ctx)
+	if ctx.root || newBFC {
+		res.height = fmax(res.height, ctx.floatHeight+rInset.b)
+	}
+	if n.box.Node != nil && n.box.Node.Tag() == dom.Fieldset {
+		n.captionRoom = [2]float32{}
+		if legend != nil && legend.final != nil {
+			n.captionRoom[0] = fmax(0, (legend.final.size.h-rBorder.t)/2)
+		}
+	}
 	outerH := mMax(or(known.h, mClamp(res.height, minSize.h, maxSize.h)), pbSize.h)
 	final := size{outerW, outerH}
 	constrainedByMin := some(minSize.h) && minSize.h > 0 && minSize.h >= outerH
@@ -164,7 +195,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	}
 	allCollapse := true
 	for _, it := range items {
-		if !outOfFlow(it.position) && !it.collapsesThrough {
+		if !outOfFlow(it.position) && it.float == style.FloatNone && !it.collapsesThrough {
 			allCollapse = false
 		}
 	}
@@ -233,6 +264,19 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	return out
 }
 
+// renderedLegend is the legend a fieldset sets on its top border: its first box, when
+// that is a legend in the flow.
+func renderedLegend(n *node, items []*blockItem) *blockItem {
+	if e := n.box.Node; e == nil || e.Tag() != dom.Fieldset || len(items) == 0 {
+		return nil
+	}
+	it := items[0]
+	if e := it.node.box.Node; e == nil || e.Tag() != dom.Legend || outOfFlow(it.position) || it.float != style.FloatNone {
+		return nil
+	}
+	return it
+}
+
 func negativeEdges(r rect) rect {
 	return rect{l: fmin(r.l, 0), r: fmin(r.r, 0), t: fmin(r.t, 0), b: fmin(r.b, 0)}
 }
@@ -271,12 +315,14 @@ func (t *tree) blockItems(n *node, inner size) []*blockItem {
 		border := borders(st)
 		pbSum := padding.add(border).sum()
 		adj := boxSizingAdjustment(st, pbSum)
-		same := st.Display == style.Block && !outOfFlow(st.Position) &&
-			!isScrollContainer(st) && st.AlignContent == style.AlignNormal
+		same := st.Display == style.Block && !outOfFlow(st.Position) && st.Float == style.FloatNone &&
+			!blockEstablishesBFC(st) && !standsBesideFloats(k)
 		items = append(items, &blockItem{
 			node:           k,
 			order:          order,
 			inSameBFC:      same,
+			float:          st.Float,
+			clear:          st.Clear,
 			sizeStyle:      st.Size,
 			size:           resolveSize(st.Size, inner).withAspectRatio(ratio).mAdd(adj),
 			minSize:        resolveSize(st.MinSize, inner).withAspectRatio(ratio).mAdd(adj),
@@ -309,6 +355,7 @@ func collapsibleIf(same bool) [2]bool { return [2]bool{same, same} }
 
 func (t *tree) blockContentWidth(items []*blockItem, availW space) float32 {
 	maxW := float32(0)
+	floats := floatWidths{avail: availW}
 	for _, it := range items {
 		if outOfFlow(it.position) {
 			continue
@@ -324,9 +371,14 @@ func (t *tree) blockContentWidth(items []*blockItem, availW space) float32 {
 			w = t.measureChildSize(it.node, known, noSize, spaces{itemAvail, minContentSpace},
 				inherentSize, horizontal, collapsibleIf(it.inSameBFC))
 		}
-		maxW = fmax(maxW, fmax(w, it.pbSum.w)+marginX)
+		w = fmax(w, it.pbSum.w) + marginX
+		if it.float != style.FloatNone {
+			floats.add(w, sideOf(it.float), it.clear)
+			continue
+		}
+		maxW = fmax(maxW, w)
 	}
-	return maxW
+	return fmax(maxW, floats.result())
 }
 
 type blockResult struct {
@@ -337,19 +389,32 @@ type blockResult struct {
 	firstBaseline float32
 }
 
-//nolint:cyclop,funlen,gocognit,gocyclo // Taffy's perform_final_layout_on_in_flow_children, kept in its shape
-func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH float32, rInset, rBorder, rPadding rect,
-	st *style.Computed, ownCollapse [2]bool, scroll bool) blockResult {
+//nolint:cyclop,funlen,gocognit,gocyclo,maintidx // Taffy's perform_final_layout_on_in_flow_children, kept in its shape
+func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, insetL float32,
+	rInset, rBorder, rPadding rect, st *style.Computed, ownCollapse [2]bool, scroll bool,
+	ctx *blockContext) blockResult {
 	innerW := fmax(outerW-rInset.horizontal(), 0)
 	container := overflowContainer{scroll: scroll, size: size{innerW + rPadding.horizontal(), 0}, padding: rPadding}
 	percentH = mSub(percentH, rInset.vertical())
 	parent := size{innerW, percentH}
+	if ctx.root {
+		ctx.bfc.floats.width = outerW
+		ctx.setContentInset(rInset.l, rInset.r)
+	}
+	if !ownCollapse[0] {
+		ctx.commitStrut()
+	}
 	var overflow rect
 	committed := rInset.t
 	yForAbsolute := rInset.t
 	var firstTop, active marginSet
 	collapsingWithFirst := true
 	firstBaseline := none
+	// activeHasClearance is set while the margins waiting to collapse are those of an
+	// empty element with clearance: they collapse with what follows, never out of the
+	// block's bottom.
+	activeHasClearance := false
+	hasActive := ctx.active(committed)
 	for _, it := range items {
 		if outOfFlow(it.position) {
 			it.staticPosition = point{rInset.l, yForAbsolute}
@@ -365,14 +430,98 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 		if it.overflow.Width == style.Scroll {
 			gutter.h = it.scrollbarWidth
 		}
+
+		if it.float != style.FloatNone {
+			hasActive = true
+			// A float with an auto width shrinks to fit: the room left, between its
+			// min-content and max-content widths.
+			availW := fmax(innerW-nonAuto.horizontal(), 0)
+			itemAvail := def(availW)
+			if k, s := resolveSizingKeyword(it.sizeStyle.Width, availW, innerW); k == keywordMeasure {
+				itemAvail = s
+			}
+			lo := t.computeChild(it.node, input{
+				run:             run,
+				sizing:          inherentSize,
+				axis:            axisBoth,
+				known:           noSize,
+				knownIsDefinite: bools{true, true},
+				parent:          parent,
+				avail:           spaces{itemAvail, maxContentSpace},
+			})
+			it.oof = lo.oof
+			// Between collapsing margins a float sits as an empty block would, below the
+			// margins before it, unless those leave through the block's top: then its
+			// place still moves with the margins after it.
+			adjoins := collapsingWithFirst && ownCollapse[0]
+			y := committed
+			if !adjoins {
+				y += active.resolve()
+			}
+			loc := ctx.place(lo.size.add(nonAuto.sum()), y, sideOf(it.float), it.clear, adjoins)
+			off := relativeOffset(it, parent)
+			loc = point{loc.x + nonAuto.l + off.x, loc.y + nonAuto.t + off.y}
+			it.final = &placed{
+				order:     it.order,
+				size:      lo.size,
+				overflow:  lo.overflow,
+				scrollbar: gutter,
+				location:  loc,
+				padding:   it.padding,
+				border:    it.border,
+				margin:    nonAuto,
+			}
+			contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
+			overflow = overflow.union(overflowContribution(contributionLoc, lo.size,
+				lo.overflow.rect, it.border, it.overflow, container, negativeEdges(nonAuto)))
+			continue
+		}
+
 		yMarginOffset := float32(0)
 		stretchW := fmax(innerW-nonAuto.horizontal(), 0)
-		avoid := point{}
+		avoid, avoidW := point{}, float32(0)
+		avoids, pushedBelow := false, false
 		if !it.inSameBFC {
 			if !collapsingWithFirst || !ownCollapse[0] {
 				yMarginOffset = active.collapseWithMargin(nonAuto.t).resolve()
 			}
-			avoid = point{rInset.l, committed + yMarginOffset}
+			minY := committed + yMarginOffset
+			avoid, avoidW = point{rInset.l, minY}, innerW
+			if hasActive || ctx.active(minY) {
+				// The first room at or below minY wide enough for the border box, which
+				// no float may overlap; an auto width is never less than the margins
+				// take back.
+				minAuto := -nonAuto.horizontal()
+				after := -1
+				var slot bfcSlot
+				for {
+					slot = ctx.findBFCSlot(minY, [2]float32{nonAuto.l, nonAuto.r}, it.clear, after)
+					if slot.segment < 0 {
+						break
+					}
+					stretch := fmax(fmax(slot.stretchWidth, minAuto), 0)
+					w := it.size.w
+					switch {
+					case some(w):
+					case standsBesideFloats(it.node):
+						w = t.measureChildSize(it.node, noSize, parent, spaces{def(stretch), maxContentSpace},
+							inherentSize, horizontal, collapsibleIf(false))
+					default:
+						w = stretch
+					}
+					if mClamp(w, it.minSize.w, it.maxSize.w) <= slot.borderWidth+fitTolerance {
+						break
+					}
+					after = slot.segment
+				}
+				// Moved down past a float, its top margin no longer collapses with the
+				// block's.
+				pushedBelow = slot.y > minY
+				hasActive = slot.segment >= 0
+				avoids = true
+				stretchW = fmax(fmax(slot.stretchWidth, minAuto), 0)
+				avoid, avoidW = point{slot.x, slot.y}, slot.borderWidth
+			}
 		}
 		justify := it.justifySelf
 		if justify == style.AlignAuto {
@@ -380,7 +529,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 		}
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
-		if (nonStretch || it.node.role == roleTable) && widthStyle.Kind == style.Auto {
+		if (nonStretch || it.node.role == roleTable || it.node.replaced) && widthStyle.Kind == style.Auto {
 			widthStyle = style.Length{Kind: style.FitContent}
 		}
 		keywordW := none
@@ -401,9 +550,31 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 			avail:           spaces{def(stretchW), maxContentSpace},
 			collapsible:     collapsibleIf(it.inSameBFC),
 		}
+		clearThreshold := ctx.clearedThreshold(it.clear)
+		clearPos := or(clearThreshold, negInf)
+		// childFloats is how far down the floats under a block of this context reach,
+		// from its border top.
+		childFloats := negInf
 		var lo output
 		if it.inSameBFC {
-			lo = t.computeChildIn(it.node, in, &blockContext{})
+			// Where the block's border box stands in the context, its auto margins
+			// sharing the room left; its top is estimated, the margins it collapses
+			// through not known yet.
+			width := fmax(known.w, it.pbSum.w)
+			left := nonAuto.l
+			if !some(margin.l) {
+				left = fmax(0, stretchW-width)
+				if !some(margin.r) {
+					left /= 2
+				}
+			}
+			left += insetL
+			estimated := committed + active.collapseWithMargin(nonAuto.t).resolve()
+			child := ctx.sub(fmax(estimated, clearPos), [2]float32{left, outerW - width - left})
+			lo = t.computeChildIn(it.node, in, child)
+			childFloats = child.floatHeight
+			top := child.topAdjoiningFloats()
+			ctx.adjoining = [2]bool{ctx.adjoining[0] || top[0], ctx.adjoining[1] || top[1]}
 		} else {
 			lo = t.computeChild(it.node, in)
 		}
@@ -428,9 +599,25 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 		if it.inSameBFC && (!collapsingWithFirst || !ownCollapse[0]) {
 			yMarginOffset = active.collapseWithSet(topSet).resolve()
 		}
-		it.collapsesThrough = lo.collapsesThrough
+		// Clearance comes in when the border top, placed by its margins alone, is not
+		// below the floats cleared: the border top then goes to their bottom, or stays
+		// where it was when lower. A float whose place still moves with these margins
+		// forces it.
+		hasClearance := false
+		if it.inSameBFC && some(clearThreshold) {
+			hypothetical := committed + active.collapseWithSet(topSet).resolve()
+			if ctx.hasAdjoining(it.clear) || hypothetical < clearThreshold {
+				hasClearance = true
+				escaped := float32(0)
+				if collapsingWithFirst && ownCollapse[0] {
+					escaped = active.resolve()
+				}
+				yMarginOffset = clearThreshold - committed - escaped
+			}
+		}
+		it.collapsesThrough = lo.collapsesThrough && !hasClearance
 		if it.inSameBFC {
-			it.staticPosition = point{rInset.l, committed + active.resolve()}
+			it.staticPosition = point{rInset.l, fmax(committed+active.resolve(), clearPos)}
 		} else {
 			it.staticPosition = avoid
 		}
@@ -438,12 +625,24 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 		if it.inSameBFC {
 			loc = point{rInset.l + insetOffset.x + resolved.l, committed + yMarginOffset + insetOffset.y}
 		} else {
-			loc = point{avoid.x + resolved.l + insetOffset.x, avoid.y + insetOffset.y}
+			// Beside floats the margins are in the room found already, but for what
+			// auto margins add.
+			extra := resolved.l
+			if avoids {
+				extra -= nonAuto.l
+			}
+			loc = point{avoid.x + extra + insetOffset.x, avoid.y + insetOffset.y}
+		}
+		if it.inSameBFC {
+			ctx.floatHeight = fmax(ctx.floatHeight, loc.y-insetOffset.y+childFloats)
 		}
 		hasAutoX := !some(margin.l) || !some(margin.r)
 		outerItemW := finalSize.w + resolved.horizontal()
 		if nonStretch && !hasAutoX {
-			free := innerW - outerItemW
+			start, free := rInset.l, innerW-outerItemW
+			if avoids {
+				start, free = avoid.x-resolved.l, avoidW-finalSize.w
+			}
 			off := float32(0)
 			switch justify {
 			case style.AlignCenter:
@@ -454,11 +653,19 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 			case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
 				style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround, style.AlignSpaceEvenly:
 			}
-			loc.x = rInset.l + resolved.l + insetOffset.x + off
+			loc.x = start + resolved.l + insetOffset.x + off
 		}
 		if !some(firstBaseline) {
 			if b := childFirstBaseline(lo.firstBaseline, finalSize.h, it.overflow.Height); some(b) {
 				firstBaseline = loc.y - insetOffset.y + b
+			}
+		}
+		if avoids {
+			if !some(margin.l) {
+				resolved.l += avoid.x - rInset.l
+			}
+			if !some(margin.r) {
+				resolved.r += outerW - rInset.r - avoid.x - avoidW
 			}
 		}
 		it.final = &placed{
@@ -474,7 +681,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, finalSize,
 			lo.overflow.rect, it.border, it.overflow, container, negativeEdges(resolved)))
-		if collapsingWithFirst {
+		if collapsingWithFirst && (pushedBelow || hasClearance) {
+			collapsingWithFirst = false
+		} else if collapsingWithFirst {
 			if it.collapsesThrough {
 				firstTop = firstTop.collapseWithSet(topSet).collapseWithSet(bottomSet)
 			} else {
@@ -485,15 +694,34 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH f
 		if it.collapsesThrough {
 			active = active.collapseWithSet(topSet).collapseWithSet(bottomSet)
 			yForAbsolute = committed + finalSize.h + yMarginOffset
-		} else {
-			committed = loc.y - insetOffset.y + finalSize.h
-			active = bottomSet
-			yForAbsolute = committed + active.resolve()
+			continue
 		}
+		committed = loc.y - insetOffset.y + finalSize.h
+		if hasClearance && lo.collapsesThrough {
+			// An empty element with clearance keeps its border top where it cleared,
+			// its collapsed margins reaching below it.
+			committed -= topSet.resolve()
+			active = topSet.collapseWithSet(bottomSet)
+			activeHasClearance = true
+		} else {
+			active = bottomSet
+			activeHasClearance = false
+		}
+		if it.legend {
+			// What follows a fieldset's legend starts below it, or below the border where
+			// that is thicker, then the padding: no margin collapses across them.
+			committed = fmax(committed+active.resolve(), rBorder.t) + rPadding.t
+			active = marginSet{}
+		}
+		yForAbsolute = committed + active.resolve()
+		ctx.commitStrut()
 	}
 	lastBottom := active
 	bottomOffset := lastBottom.resolve()
-	if ownCollapse[1] {
+	switch {
+	case activeHasClearance:
+		lastBottom = marginSet{}
+	case ownCollapse[1]:
 		bottomOffset = 0
 	}
 	committed += rInset.b + bottomOffset

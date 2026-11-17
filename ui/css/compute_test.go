@@ -250,6 +250,39 @@ func TestBlockification(t *testing.T) {
 	}
 }
 
+func TestFloatsAreBlocksWhereTheyApply(t *testing.T) {
+	left, item, abs, root := el(dom.Span, "left"), el(dom.Span, "item"), el(dom.Span, "abs"), el(dom.Div, "root")
+	Compute(page(left, with(el(dom.Div, "flex"), item), abs, root), []*Sheet{sheet(t, `
+#left { float: left; clear: both }
+#flex { display: flex } #item { float: right }
+#abs { float: inline-end; position: absolute; clear: inline-start }
+#root { display: flow-root }`)})
+	if s := styleOf(left); s.Float != style.FloatLeft || s.Clear != style.ClearBoth || s.Display != style.Block {
+		t.Errorf("a floated span: float %v clear %v display %v", s.Float, s.Clear, s.Display)
+	}
+	if s := styleOf(item); s.Float != style.FloatNone {
+		t.Errorf("a flex item floats %v", s.Float)
+	}
+	if s := styleOf(abs); s.Float != style.FloatNone || s.Clear != style.ClearLeft {
+		t.Errorf("an absolute span: float %v clear %v", s.Float, s.Clear)
+	}
+	if s := styleOf(root); s.Display != style.Block || !s.FlowRoot {
+		t.Errorf("flow-root: display %v, flow root %v", s.Display, s.FlowRoot)
+	}
+}
+
+func TestTextIndentInherits(t *testing.T) {
+	p, kid := el(dom.P, "p"), el(dom.Span, "kid")
+	Compute(page(with(p, kid)), []*Sheet{sheet(t, `#p { font-size: 20px; text-indent: calc(2em - 10%) }`)})
+	want := style.Length{Kind: style.Fixed, Px: 40, Percent: -10, IsPercent: true}
+	if got := styleOf(p).TextIndent; got != want {
+		t.Errorf("text-indent: %+v, want %+v", got, want)
+	}
+	if got := styleOf(kid).TextIndent; got != want {
+		t.Errorf("inherited text-indent: %+v, want %+v", got, want)
+	}
+}
+
 func TestComputedValues(t *testing.T) {
 	d := el(dom.Div, "d")
 	root := page(d)
@@ -322,9 +355,9 @@ func lookOf(t *testing.T, s *style.Computed) {
 
 func TestInlineStyleWarnings(t *testing.T) {
 	d := el(dom.Div, "d", "x")
-	d.SetStyle("float: left")
+	d.SetStyle("zoom: 2")
 	warns := Compute(page(d), nil)
-	if got := warnings(warns); got != "<div#d.x> style:1:1: floats are not supported; use flex or grid" {
+	if got := warnings(warns); got != "<div#d.x> style:1:1: zoom is not supported; use transform: scale()" {
 		t.Errorf("got %s", got)
 	}
 }
@@ -352,6 +385,106 @@ func TestScrollbarWidth(t *testing.T) {
 	Compute(page(a, b, c), []*Sheet{sheet(t, `#a { overflow: auto } #b { overflow-y: scroll } #c { overflow: hidden }`)})
 	if styleOf(a).ScrollbarWidth != 15 || styleOf(b).ScrollbarWidth != 15 || styleOf(c).ScrollbarWidth != 0 {
 		t.Errorf("%v %v %v", styleOf(a).ScrollbarWidth, styleOf(b).ScrollbarWidth, styleOf(c).ScrollbarWidth)
+	}
+}
+
+func TestOverlayScrollbarsLeaveNoGutter(t *testing.T) {
+	a, b, c, none := el(dom.Div, "a"), el(dom.Div, "b"), el(dom.Div, "c"), el(dom.Div, "none")
+	root := page(a, b, c, none)
+	tr := NewTransitions()
+	tr.OverlayScrollbars()
+	tr.Compute(root, []*Sheet{sheet(t, `#a { overflow: auto } #b { overflow-y: scroll } #c { overflow: hidden }
+		#none { overflow: auto; scrollbar-width: none }`)})
+	for _, n := range []*dom.Node{a, b} {
+		if c := styleOf(n); c.ScrollbarWidth != 0 || !c.ScrollbarOverlay {
+			t.Errorf("#%s: gutter %v, overlay %v", n.ID(), c.ScrollbarWidth, c.ScrollbarOverlay)
+		}
+	}
+	if styleOf(c).ScrollbarOverlay || styleOf(none).ScrollbarOverlay {
+		t.Errorf("a box with no bars has none to overlay: hidden %v, none %v",
+			styleOf(c).ScrollbarOverlay, styleOf(none).ScrollbarOverlay)
+	}
+}
+
+func TestAScrollingViewportTakesTheRootsOverflowOrBodys(t *testing.T) {
+	auto := style.Size[style.Overflow]{Width: style.OverflowAuto, Height: style.OverflowAuto}
+	hidden := style.Size[style.Overflow]{Width: style.Hidden, Height: style.Hidden}
+	for _, c := range []struct {
+		name, css  string
+		want       style.Size[style.Overflow]
+		from       string
+		gutter     float32
+		divScrolls bool
+	}{
+		{"nothing set", ``, auto, "", 15, false},
+		{"the root's", `html { overflow: hidden } body { overflow: scroll }`, hidden, "html", 0, false},
+		{"body's while the root's is visible", `body { overflow-y: scroll }`,
+			style.Size[style.Overflow]{Width: style.OverflowAuto, Height: style.Scroll}, "body", 15, false},
+		{"clip is hidden there", `html { overflow: clip }`, hidden, "html", 0, false},
+		{"no other element's", `div { overflow: auto }`, auto, "", 15, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := el(dom.Div, "d")
+			root := page(d)
+			body := root.Children()[0]
+			tr := NewTransitions()
+			tr.ScrollingViewport()
+			tr.Compute(root, []*Sheet{sheet(t, c.css)})
+			html, bd := styleOf(root), styleOf(body)
+			v := html.Viewport
+			if bd.OverflowPropagated {
+				v = bd.Viewport
+			}
+			if v == nil || v.Overflow != c.want || v.ScrollbarWidth != c.gutter {
+				t.Fatalf("the viewport is %+v, want %v with a gutter of %v", v, c.want, c.gutter)
+			}
+			if html.OverflowPropagated != (c.from == "html") || bd.OverflowPropagated != (c.from == "body") {
+				t.Errorf("html gave its overflow: %v, body: %v, want %q", html.OverflowPropagated, bd.OverflowPropagated, c.from)
+			}
+			visible := style.Size[style.Overflow]{}
+			if html.Overflow != visible || bd.Overflow != visible && c.from != "html" {
+				t.Errorf("html keeps %v and body %v", html.Overflow, bd.Overflow)
+			}
+			if got := styleOf(d).Overflow != visible; got != c.divScrolls || styleOf(d).Viewport != nil {
+				t.Errorf("the div scrolls: %v, its viewport %v", got, styleOf(d).Viewport)
+			}
+		})
+	}
+}
+
+func TestWithoutAScrollingViewportTheRootKeepsItsOverflow(t *testing.T) {
+	root := page()
+	Compute(root, []*Sheet{sheet(t, `html { overflow: auto }`)})
+	if c := styleOf(root); c.Viewport != nil || c.OverflowPropagated || c.Overflow.Height != style.OverflowAuto {
+		t.Errorf("the root has %+v, viewport %v", c.Overflow, c.Viewport)
+	}
+}
+
+func TestBodyTakesItsOverflowBackOnceTheRootGivesItsOwn(t *testing.T) {
+	root := page()
+	body := root.Children()[0]
+	tr := NewTransitions()
+	tr.ScrollingViewport()
+	sheets := []*Sheet{sheet(t, `body { overflow: hidden } .own { overflow: scroll }`)}
+	tr.Compute(root, sheets)
+	if !styleOf(body).OverflowPropagated {
+		t.Fatal("body's overflow stayed on body")
+	}
+	root.AddClass("own")
+	tr.Compute(root, sheets)
+	if b := styleOf(body); b.OverflowPropagated || b.Overflow.Height != style.Hidden || !styleOf(root).OverflowPropagated {
+		t.Errorf("body has %+v, given away: %v", b.Overflow, b.OverflowPropagated)
+	}
+}
+
+func TestAnOverlayViewportKeepsNoGutter(t *testing.T) {
+	root := page()
+	tr := NewTransitions()
+	tr.OverlayScrollbars()
+	tr.ScrollingViewport()
+	tr.Compute(root, nil)
+	if v := styleOf(root).Viewport; v.ScrollbarWidth != 0 || !v.ScrollbarOverlay {
+		t.Errorf("gutter %v, overlay %v", v.ScrollbarWidth, v.ScrollbarOverlay)
 	}
 }
 
@@ -470,15 +603,10 @@ textarea::placeholder { color: var(--ph); }
 	}
 }
 
-func TestPlaceholderRulesTakeOnlyColor(t *testing.T) {
-	_, warns := Parse("t.css",
-		"input::placeholder { color: #f00; opacity: 0.5 } p, input::placeholder { color: #f00 } p::before { color: #f00 }")
-	got := warnings(warns)
-	for _, want := range []string{"::placeholder takes only color, not opacity", "::placeholder can't share a rule",
-		"pseudo-elements are not supported"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q in:\n%s", want, got)
-		}
+func TestAPseudoElementsRuleSaysWhatItDoesNotTake(t *testing.T) {
+	_, warns := Parse("t.css", "input::placeholder { color: #f00; width: 5px } p, input::placeholder { color: #f00; width: 5px }")
+	if got, want := warnings(warns), "t.css:1:35: ::placeholder does not take width"; got != want {
+		t.Errorf("warnings:\n got %s\nwant %s", got, want)
 	}
 }
 
@@ -569,12 +697,83 @@ func TestTextShadowRenderingAccentCaretSelection(t *testing.T) {
 	if styleOf(a).HasSelection {
 		t.Error("no ::selection rule for #a")
 	}
-	_, warns := Parse("t.css", "p::selection { color: red } p::selection, p::placeholder { color: red }")
-	got := warnings(warns)
-	for _, want := range []string{"::selection takes only background-color, not color", "can't share a rule"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q in:\n%s", want, got)
+	_, warns := Parse("t.css", "p::selection { color: red } p::selection, p::placeholder { font-size: 2px }")
+	if got, want := warnings(warns), "t.css:1:60: ::selection does not take font-size"; got != want {
+		t.Errorf("warnings:\n got %s\nwant %s", got, want)
+	}
+}
+
+// A ::selection takes color and background-color, each inherited from the
+// parent's ::selection on its own, as Chrome's highlight pseudo-elements.
+func TestSelectionTakesColorAndInheritsFromTheParentsSelection(t *testing.T) {
+	kid, deep, own := el(dom.B, "kid"), el(dom.I, "deep"), el(dom.Span, "own")
+	p, q := with(el(dom.P, "p"), with(kid, deep), own), el(dom.P, "q")
+	Compute(page(p, q), []*Sheet{sheet(t, `
+#p::selection { background-color: #f00; color: #0f0; }
+#own::selection { color: #00f; }
+`)})
+	for _, n := range []*dom.Node{p, kid, deep} {
+		if s := styleOf(n); !s.HasSelection || s.SelectionColor != hex("#f00") || !s.HasSelectionText ||
+			s.SelectionText != hex("#0f0") {
+			t.Errorf("%s: %v %v %v %v", n.ID(), s.HasSelection, s.SelectionColor, s.HasSelectionText, s.SelectionText)
 		}
+	}
+	if s := styleOf(own); s.SelectionColor != hex("#f00") || s.SelectionText != hex("#00f") {
+		t.Errorf("own: %v %v", s.SelectionColor, s.SelectionText)
+	}
+	if s := styleOf(q); s.HasSelection || s.HasSelectionText {
+		t.Error("no ::selection rule for #q")
+	}
+}
+
+// user-select is used as Chrome resolves it: auto is the parent's, text on
+// the root; ember's own sheet starts the root at none, a browser's at auto.
+func TestUserSelectIsInheritedAndAutoIsText(t *testing.T) {
+	text, none, all := el(dom.Div, "text"), el(dom.Div, "none"), el(dom.Div, "all")
+	inText, inNone, inAll, back := el(dom.Span, "in-text"), el(dom.Span, "in-none"), el(dom.Span, "in-all"),
+		el(dom.Span, "back")
+	plain := el(dom.P, "plain")
+	root := page(plain, with(text, inText), with(none, inNone, back), with(all, inAll))
+	rules := sheet(t, `#text, #back { user-select: text } #none { user-select: none } #all { user-select: all }
+#in-all { user-select: auto }`)
+	want := map[*dom.Node]style.UserSelect{
+		text: style.SelectText, inText: style.SelectText, none: style.SelectNone, inNone: style.SelectNone,
+		back: style.SelectText, all: style.SelectAll, inAll: style.SelectText,
+	}
+	check := func(name string, rest style.UserSelect) {
+		t.Helper()
+		for n, w := range want {
+			if got := styleOf(n).UserSelect; got != w {
+				t.Errorf("%s: #%s is %v, want %v", name, n.ID(), got, w)
+			}
+		}
+		for _, n := range []*dom.Node{root, plain} {
+			if got := styleOf(n).UserSelect; got != rest {
+				t.Errorf("%s: %s is %v, want %v", name, describe(n), got, rest)
+			}
+		}
+	}
+	Compute(root, []*Sheet{rules})
+	check("ember's sheet", style.SelectNone)
+	browser := NewTransitions()
+	browser.BrowserSheets()
+	dom.Data(root).Dirty |= dom.DirtyStyle
+	browser.Compute(root, []*Sheet{rules})
+	check("a browser's sheet", style.SelectText)
+}
+
+func TestUserSelectReadsChromesValues(t *testing.T) {
+	_, warns := Parse("t.css", "p { user-select: text; user-select: none; user-select: all; user-select: auto }")
+	if len(warns) != 0 {
+		t.Errorf("warnings: %s", warnings(warns))
+	}
+	_, warns = Parse("t.css", "p { user-select: contain }")
+	if len(warns) != 1 {
+		t.Errorf("contain, which Chrome refuses, warns once: %s", warnings(warns))
+	}
+	s, warns := Parse("t.css", "p { -webkit-user-select: none }", Browser())
+	if len(warns) != 0 || len(s.Rules) != 1 || s.Rules[0].Decls[0].Name != "user-select" {
+		t.Errorf("-webkit-user-select: %s", warnings(warns))
 	}
 }
 
@@ -673,17 +872,52 @@ func TestTextTransform(t *testing.T) {
 }
 
 func TestBackgroundSize(t *testing.T) {
-	both, one, auto, plain := el(dom.Div, "", "both"), el(dom.Div, "", "one"), el(dom.Div, "", "auto"), el(dom.Div, "")
-	s, warns := Parse("t.css",
-		`.both { background-size: 8px 4px } .one { background-size: 1em } .auto { background-size: auto }`)
-	if len(warns) > 0 {
-		t.Fatalf("warnings:\n%s", warnings(warns))
+	auto := style.Length{}
+	cases := map[string]style.BackgroundSize{
+		"8px 4px":           {Width: style.Px(8), Height: style.Px(4)},
+		"1em":               {Width: style.Px(16), Height: auto},
+		"auto":              {},
+		"auto auto":         {},
+		"50%":               {Width: pct(50), Height: auto},
+		"auto 25%":          {Width: auto, Height: pct(25)},
+		"100% 12px":         {Width: pct(100), Height: style.Px(12)},
+		"calc(50% - 4px) 0": {Width: style.Length{Kind: style.Fixed, Px: -4, Percent: 50, IsPercent: true}, Height: style.Px(0)},
+		"cover":             {Scale: style.ScaleCover},
+		"contain":           {Scale: style.ScaleContain},
+		"COVER":             {Scale: style.ScaleCover},
 	}
-	Compute(page(both, one, auto, plain), []*Sheet{s})
-	for n, want := range map[*dom.Node][2]float32{both: {8, 4}, one: {16, 0}, auto: {0, 0}, plain: {0, 0}} {
-		if got := styleOf(n).BackgroundSize; got != want {
-			t.Errorf("%s: %v, want %v", describe(n), got, want)
+	for src, want := range cases {
+		d := el(dom.Div, "d")
+		Compute(page(d), []*Sheet{sheet(t, "#d { background-size: "+src+" }")})
+		if got := styleOf(d).BackgroundSize; got != want {
+			t.Errorf("%s: got %+v, want %+v", src, got, want)
 		}
+	}
+	plain, kid := el(dom.Div, "p"), el(dom.Div, "k")
+	plain.Append(kid)
+	Compute(page(plain), []*Sheet{sheet(t, "#p { background-size: cover } #k { background-size: inherit }")})
+	if got := styleOf(kid).BackgroundSize; got != (style.BackgroundSize{Scale: style.ScaleCover}) {
+		t.Errorf("inherit: got %+v", got)
+	}
+	for _, bad := range []string{"cover contain", "cover 10px", "10px cover", "-1px", "10px -5%", "1px 2px 3px", "fill",
+		"12", "auto auto auto", "1fr"} {
+		if err := validate("background-size", componentsOf(bad)); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func TestTheBackgroundShorthandSetsAndResetsTheSize(t *testing.T) {
+	cover, reset := el(dom.Div, "c"), el(dom.Div, "r")
+	Compute(page(cover, reset), []*Sheet{sheet(t, `#c { background: url(a.png) no-repeat center / cover }
+#r { background-size: 10px; background: url(a.png) }`)})
+	st := styleOf(cover)
+	if st.BackgroundSize != (style.BackgroundSize{Scale: style.ScaleCover}) || !st.BackgroundNoRepeat ||
+		st.BackgroundPosition != (style.BackgroundPosition{X: pct(50), Y: pct(50)}) {
+		t.Errorf("center / cover: %+v %v %+v", st.BackgroundSize, st.BackgroundNoRepeat, st.BackgroundPosition)
+	}
+	if got := styleOf(reset).BackgroundSize; got != (style.BackgroundSize{}) {
+		t.Errorf("the shorthand resets background-size: got %+v", got)
 	}
 }
 
@@ -763,5 +997,39 @@ func TestAStateChangeRestylesEveryDescendant(t *testing.T) {
 				t.Errorf("off: %v", got)
 			}
 		})
+	}
+}
+
+func TestAnImgsWidthAndHeightAttributesSizeItUnderEveryRule(t *testing.T) {
+	a, b, c, d := el(dom.Img, "a"), el(dom.Img, "b"), el(dom.Img, "c"), el(dom.Div, "d")
+	a.SetAttr("width", "100")
+	a.SetAttr("height", "30")
+	b.SetAttr("width", "50%")
+	b.SetAttr("height", "x")
+	c.SetAttr("width", "100")
+	c.SetAttr("height", " 12.5px")
+	d.SetAttr("width", "100")
+	Compute(page(a, b, c, d), []*Sheet{sheet(t, `#b, #c { height: 7px } * { min-width: 0 } #c { width: 40px }`)})
+	if s := styleOf(a).Size; s.Width != style.Px(100) || s.Height != style.Px(30) {
+		t.Errorf("a: %+v", s)
+	}
+	if s := styleOf(b).Size; s.Width != pct(50) || s.Height != style.Px(7) {
+		t.Errorf("b, a percentage, and a height that is no number left to the sheet: %+v", s)
+	}
+	if s := styleOf(c).Size; s.Width != style.Px(40) || s.Height != style.Px(7) {
+		t.Errorf("c, any rule wins over an attribute: %+v", s)
+	}
+	if s := styleOf(d).Size; s.Width.Kind != style.Auto {
+		t.Errorf("d, an img's attributes only: %+v", s)
+	}
+}
+
+func TestAnImgsWidthAndHeightAttributesSizeItWithoutAnySheet(t *testing.T) {
+	a := el(dom.Img, "a")
+	a.SetAttr("width", "100")
+	a.SetAttr("height", "30")
+	Compute(page(a), nil)
+	if s := styleOf(a).Size; s.Width != style.Px(100) || s.Height != style.Px(30) {
+		t.Errorf("a: %+v", s)
 	}
 }

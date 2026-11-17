@@ -106,6 +106,36 @@ func TestScrollbarWidthNoneDrawsNoBars(t *testing.T) {
 	assert.Equal(t, geom.V2(0, 60), off, "the wheel still scrolls it")
 }
 
+func TestAnOverlayBarIsDrawnOverTheContentInAThumbAnyPageShows(t *testing.T) {
+	b := list(0)
+	b.Style.ScrollbarOverlay = true
+	b.Append(el(0, 0, 100, 400, bg(red)))
+	l := BarsOf(b, geom.Vec2{})
+	classic := BarsOf(list(0), geom.Vec2{})
+	assert.Equal(t, classic.VTrack, l.VTrack, "where a classic bar lies")
+	assert.Equal(t, classic.VThumb, l.VThumb)
+	r := paintOne(b)
+	var clip geom.Rect
+	for _, o := range r.of("rect") {
+		if o.Color == red {
+			clip = o.Clip
+		}
+	}
+	assert.Equal(t, geom.Rect{W: 100, H: 100}, clip, "the content keeps the whole padding box")
+	thumbs := r.of("round")
+	assert.Len(t, thumbs, 2)
+	assert.Equal(t, overlayEdge, thumbs[0].Color, "a light edge, for a dark page")
+	assert.Equal(t, l.VThumb.Inset(-1), thumbs[0].Rect)
+	assert.Equal(t, overlayThumb, thumbs[1].Color, "a dark thumb, for a light one")
+	assert.Equal(t, l.VThumb, thumbs[1].Rect)
+
+	var s Scrolling
+	grab := l.VThumb.Center()
+	_, took := s.Input(l, Pointer{At: grab, Pressed: true, Down: true, Hover: true}, 10)
+	assert.True(t, took, "the thumb takes the press from the content under it")
+	assert.True(t, s.Dragging())
+}
+
 func TestAThumbIsSizedOnTheWholeBarAndInsetByItsEnds(t *testing.T) {
 	top, bottom := BarsOf(list(0), geom.Vec2{}), BarsOf(list(300), geom.Vec2{})
 	assert.Equal(t, float32(25-8), top.VThumb.H,

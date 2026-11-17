@@ -49,6 +49,49 @@ const (
 	Pre
 	Caption
 	Tfoot
+	Ul
+	Ol
+	Li
+	Dl
+	Dt
+	Dd
+	H5
+	H6
+	Blockquote
+	Figure
+	Figcaption
+	Form
+	Address
+	Hgroup
+	Menu
+	Search
+	A
+	B
+	I
+	U
+	S
+	Small
+	Abbr
+	Cite
+	Mark
+	Time
+	Var
+	Del
+	Ins
+	Dfn
+	Bdi
+	Bdo
+	// DataElement is the data element, Data being a node's pipeline data.
+	DataElement
+	Br
+	Center
+	Big
+	Font
+	Sub
+	Sup
+	Q
+	Fieldset
+	Legend
 	tagCount
 )
 
@@ -58,6 +101,10 @@ var tagNames = [tagCount]string{ //nolint:gochecknoglobals // a lookup table by 
 	"select", "option", "textarea", "details", "summary", "dialog", "table", "thead", "tbody",
 	"tr", "th", "td", "progress", "meter", "img", "hr", "canvas", "kbd", "samp", "pre",
 	"caption", "tfoot",
+	"ul", "ol", "li", "dl", "dt", "dd", "h5", "h6", "blockquote", "figure", "figcaption", "form", "address",
+	"hgroup", "menu", "search", "a", "b", "i", "u", "s", "small", "abbr", "cite", "mark", "time", "var", "del",
+	"ins", "dfn", "bdi", "bdo", "data", "br",
+	"center", "big", "font", "sub", "sup", "q", "fieldset", "legend",
 }
 
 // String is the tag's HTML name, "#text" for text nodes.
@@ -80,5 +127,5 @@ func TagNamed(name string) (Tag, bool) {
 
 // Void reports whether the element never has children in HTML.
 func (t Tag) Void() bool {
-	return t == Input || t == Img || t == Hr
+	return t == Input || t == Img || t == Hr || t == Br
 }

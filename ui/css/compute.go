@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"path"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -17,9 +17,11 @@ import (
 
 //nolint:gochecknoglobals // the user agent sheet and initial style, built once and shared
 var (
-	agentOnce  sync.Once
-	agentSheet *Sheet
-	initial    = initialStyle()
+	agentOnce    sync.Once
+	agentSheet   *Sheet
+	browserOnce  sync.Once
+	browserSheet *Sheet
+	initial      = initialStyle()
 )
 
 // initialStyle is style.Initial with the initial values it leaves out:
@@ -29,6 +31,7 @@ var (
 func initialStyle() style.Computed {
 	c := style.Initial()
 	c.OutlineWidth = 3
+	c.ColumnRuleWidth = 3
 	zero := style.Size[style.Length]{Width: style.Px(0), Height: style.Px(0)}
 	c.Radius = style.Corners[style.Size[style.Length]]{TopLeft: zero, TopRight: zero, BottomRight: zero,
 		BottomLeft: zero}
@@ -52,16 +55,33 @@ func userAgent() *Sheet {
 	return agentSheet
 }
 
+// browserAgent is the user-agent sheet of a Document whose sheets are
+// read as a browser's: Default, then BrowserDefault.
+func browserAgent() *Sheet {
+	browserOnce.Do(func() {
+		s, warns := Parse("user-agent.css", Default+BrowserDefault)
+		if len(warns) > 0 {
+			panic(fmt.Sprint("css: the browser's user-agent sheet: ", warns))
+		}
+		browserSheet = s
+	})
+	return browserSheet
+}
+
 // Compute restyles the elements under root that changed since the last
 // call: those flagged DirtyStyle, the subtrees under DirtyTree, and the
 // descendants of any element whose style changed. Each gets
 // dom.Data(n).Style, a text node its parent's, and loses both flags; an
 // element whose style changed is flagged DirtyLayout. sheets are the
-// author's, after Default. The warnings are the style attributes'.
+// author's, after Default. The warnings are the style attributes'. Their
+// @media rules are answered for a viewport of no size: a Document's are
+// answered for its own, through Transitions.
 func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
-	r := restyler{sheets: all, m: &matcher{}, pm: &matcher{}, treeStates: treeStates(all), computed: new(int)}
-	r.visit(root, nil, 0, false, false)
+	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all)}
+	pm := &matcher{off: m.off, ranks: m.ranks}
+	r := restyler{sheets: all, m: m, pm: pm, treeStates: treeStates(all), computed: new(int)}
+	r.run(root, false)
 	return r.warns
 }
 
@@ -81,6 +101,42 @@ type restyler struct {
 	// changed, when set, is told of every element whose style changed
 	// from an earlier one, and sets its Shown.
 	changed func(n *dom.Node, old, next *style.Computed)
+	// overlay has scrolling boxes keep no gutter for their bars
+	// (Transitions.OverlayScrollbars).
+	overlay bool
+	// viewport has the root's overflow, or body's, go to the viewport
+	// (Transitions.ScrollingViewport).
+	viewport bool
+	// browser reads style attributes as a browser does
+	// (Transitions.BrowserSheets).
+	browser bool
+	// before, after and marker are set when some sheet has a rule for the
+	// pseudo-element: only then is one looked for.
+	before, after, marker bool
+	// counts is set once an element counts: a numbered list item, a
+	// counter property, or generated content of counters or quotes; and
+	// recount when what the counters read may have changed.
+	counts, recount bool
+}
+
+// run restyles the tree under root, all of it when stale, then counts
+// its counters again where they may have moved.
+func (r *restyler) run(root *dom.Node, stale bool) {
+	for _, s := range r.sheets {
+		x := s.indexed()
+		r.before = r.before || x.pseudos["before"] != nil
+		r.after = r.after || x.pseudos["after"] != nil
+		r.marker = r.marker || x.pseudos["marker"] != nil
+	}
+	r.visit(root, nil, 0, stale, stale)
+	r.count(root)
+}
+
+// countsOn reports a change of an element, as dom.Pipeline.Changed names
+// it, that moves the counters: a child added or removed, or one of the
+// attributes a list counts from.
+func countsOn(key string) bool {
+	return key == dom.Children || key == "[start" || key == "[reversed" || key == "[value"
 }
 
 // visit restyles n where it needs it, and its subtree, and reports
@@ -111,6 +167,9 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 		rem = data.Style.Font.Size
 	}
 	tree := dirty&dom.DirtyTree != 0
+	if tree && slices.ContainsFunc(data.Changed, countsOn) {
+		r.recount = true
+	}
 	kidsDeep := deep || stateMoved || tree && r.readAbove(data.Changed)
 	kidsForce := inherits || kidsDeep || tree && slices.Contains(data.Changed, dom.Children)
 	data.Changed = data.Changed[:0]
@@ -138,6 +197,7 @@ func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Comput
 	*r.computed++
 	old := data.Style
 	if old != nil && reflect.DeepEqual(old, s) {
+		r.generate(n, data, rem)
 		return false
 	}
 	data.Style = s
@@ -146,10 +206,12 @@ func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Comput
 	} else {
 		data.Shown = s
 	}
-	inherits := old == nil || r.inheritedChanged(old, s)
+	inherits := old == nil || r.inheritedChanged(old, s) || old.OverflowPropagated != s.OverflowPropagated
 	if old == nil || r.layoutChanged(old, s) {
 		data.Dirty |= dom.DirtyLayout
+		r.recount = true
 	}
+	r.generate(n, data, rem)
 	return inherits
 }
 
@@ -168,7 +230,9 @@ func paintOnly(c *style.Computed) {
 	var zero color.Color
 	c.Color, c.PlaceholderColor, c.SelectionColor, c.AccentColor, c.CaretColor = zero, zero, zero, zero, zero
 	c.HasPlaceholder, c.HasSelection, c.AccentAuto, c.CaretAuto, c.ColorInherited = false, false, false, false, false
+	c.SelectionText, c.HasSelectionText, c.UserSelect = zero, false, 0
 	c.TextShadows, c.CurrentColor, c.Vars, c.Backdrop = nil, 0, nil, color.Color{}
+	c.TextDecoration, c.Decorations = style.TextDecoration{}, nil
 }
 
 // inheritedChanged reports whether a and b differ in what an element's
@@ -179,6 +243,7 @@ func (r *restyler) inheritedChanged(a, b *style.Computed) bool {
 		return true
 	}
 	r.la, r.lb = style.Computed{Vars: a.Vars}, style.Computed{Vars: b.Vars}
+	r.la.Decorations, r.lb.Decorations = a.Decorations, b.Decorations
 	for _, name := range inheritedNames {
 		p := props[name]
 		p.inherit(&r.la, a)
@@ -214,9 +279,16 @@ type ctx struct {
 	resolving map[string]bool
 	raw       map[string]*Declaration
 	trans     [4][]Component
-	// base is the directory of the sheet the declaration being applied came from.
-	base     string
+	// base is where the sheet the declaration being applied came from is.
+	base     *origin
 	expanded map[*Declaration]map[string][]Component
+	// overlay is the restyler's: scrollbars keep no gutter.
+	overlay bool
+	// toViewport is set for the root and for its body where the viewport
+	// scrolls: the two whose overflow it may take.
+	toViewport bool
+	// node is the element, which attr() reads.
+	node *dom.Node
 }
 
 // order puts font-size first (em needs it), then color (currentcolor
@@ -242,16 +314,50 @@ var order, orderIndex = func() ([]string, map[string]int) {
 //nolint:gochecknoglobals // a fixed value every element shares
 var currentColor = []Component{word(kwCurrentColor)}
 
+// hints are the declarations an img's width and height attributes stand
+// for, as HTML maps them: a number of pixels or a percentage, whatever
+// follows it.
+func hints(n *dom.Node) []Declaration {
+	if n.Tag() != dom.Img {
+		return nil
+	}
+	var out []Declaration
+	for _, name := range [...]string{"width", "height"} {
+		v, ok := n.Attr(name)
+		if !ok {
+			continue
+		}
+		v = strings.TrimLeft(v, " \t\r\n\f")
+		end := 0
+		for end < len(v) && (v[end] >= '0' && v[end] <= '9' || v[end] == '.') {
+			end++
+		}
+		f, err := strconv.ParseFloat(v[:end], 32)
+		if err != nil {
+			continue
+		}
+		unit := "px"
+		if strings.HasPrefix(v[end:], "%") {
+			unit = "%"
+		}
+		decls, _ := ParseInline(name + ": " + strconv.FormatFloat(f, 'f', -1, 32) + unit)
+		out = append(out, decls...)
+	}
+	return out
+}
+
 func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *style.Computed {
 	var inline []Declaration
 	if src := n.Style(); src != "" {
 		var warns []Warning
-		inline, warns = ParseInline(src)
+		p := parser{toks: Tokenize(src), browser: r.browser}
+		inline, warns = p.inline()
 		for _, w := range warns {
 			w.File = describe(n) + " style"
 			r.warns = append(r.warns, w)
 		}
 	}
+	r.m.hints = hints(n)
 	casc := r.m.cascade(r.m.matched(n, r.sheets, inline))
 	root := parent == nil
 	if root {
@@ -259,55 +365,99 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		rem = initial.Font.Size
 	}
 	c := initial
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem}
-	x.customs(casc.custom)
-	for i, name := range order {
-		x.apply(name, casc.longhands[i])
-		if name == "font-size" {
-			x.em = c.Font.Size
-			if root {
-				x.rem = c.Font.Size
-			}
-		}
-	}
-	x.finish(root)
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, overlay: r.overlay,
+		toViewport: r.viewport && (root || rootBody(n)), node: n}
+	x.cascaded(casc, root)
 	if closedSlot(n) {
 		c.Display = style.DisplayNone
 	}
 	c.EllipsisStart = slices.Contains(n.Classes(), "truncate-start")
-	if _, shows := n.Attr("placeholder"); shows {
+	if _, shows := n.Attr("placeholder"); shows && r.may(n, "placeholder") {
 		if ph, ok := x.pseudo(r.pm, n, r.sheets, "placeholder"); ok {
-			c.PlaceholderColor, c.HasPlaceholder = ph.Color, true
+			c.PlaceholderColor, c.HasPlaceholder = fadeColor(ph.Color, ph.Opacity), true
 		}
 	}
-	if sel, ok := x.pseudo(r.pm, n, r.sheets, "selection"); ok {
-		c.SelectionColor, c.HasSelection = sel.Background, true
+	// A ::selection inherits from the parent's ::selection, property by
+	// property, as Chrome's highlight pseudo-elements do.
+	c.SelectionColor, c.HasSelection = parent.SelectionColor, parent.HasSelection
+	c.SelectionText, c.HasSelectionText = parent.SelectionText, parent.HasSelectionText
+	if r.may(n, "selection") {
+		if sel, ok := x.pseudo(r.pm, n, r.sheets, "selection"); ok {
+			if r.pm.declared("background-color") {
+				c.SelectionColor, c.HasSelection = sel.Background, true
+			}
+			if r.pm.declared("color") {
+				c.SelectionText, c.HasSelectionText = sel.Color, true
+			}
+		}
 	}
-	if n.Tag() == dom.Dialog {
+	if n.Tag() == dom.Dialog && r.may(n, "backdrop") {
 		if bd, ok := x.pseudo(r.pm, n, r.sheets, "backdrop"); ok {
-			c.Backdrop = bd.Background
+			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
+	}
+	if c.ListItem && c.ListStyle.Numeric() || len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
+		r.counts = true
 	}
 	return &c
 }
 
-// pseudo computes the element's pseudo-element's one property: its own cascade,
-// inheriting from the element; false when no rule sets it.
-func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (style.Computed, bool) {
-	if !slices.ContainsFunc(sheets, func(s *Sheet) bool { return s.indexed().pseudos[name] }) {
-		return style.Computed{}, false
+// cascaded applies every longhand's winner, then what depends on several.
+func (x *ctx) cascaded(casc cascaded, root bool) {
+	x.customs(casc.custom)
+	for i, name := range order {
+		x.apply(name, casc.longhands[i])
+		if name == "font-size" {
+			x.em = x.c.Font.Size
+			if root {
+				x.rem = x.c.Font.Size
+			}
+		}
 	}
-	casc := m.cascade(m.matchedFor(n, sheets, nil, name))
-	prop := pseudoElements[name]
-	d := casc.longhands[orderIndex[prop]]
-	if d == nil {
-		return style.Computed{}, false
+	x.finish(root)
+}
+
+func fadeColor(c color.Color, opacity float32) color.Color {
+	c.A *= opacity
+	return c
+}
+
+// may reports whether some rule of the sheets may style n's pseudo-element
+// name: one names it, in a bucket n is in.
+func (r *restyler) may(n *dom.Node, name string) bool {
+	for _, s := range r.sheets {
+		if b := s.indexed().pseudos[name]; b != nil && b.may(n) {
+			return true
+		}
+	}
+	return false
+}
+
+// pseudo computes the style of the element's pseudo-element name, one
+// that draws with the element's box (::placeholder, ::selection,
+// ::backdrop, ::marker): the element's own with the properties the
+// pseudo-element takes set by its rules, inheriting from the element;
+// false when no rule sets any.
+func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*style.Computed, bool) {
+	casc := m.cascadeFor(m.matchedFor(n, sheets, nil, name), name)
+	if !slices.ContainsFunc(casc.longhands, func(d *Declaration) bool { return d != nil }) && len(casc.custom) == 0 {
+		return nil, false
 	}
 	ps := *x.c
-	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem}
+	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
+	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, node: n}
 	px.customs(casc.custom)
-	px.apply(prop, d)
-	return ps, true
+	for i, prop := range order {
+		if d := casc.longhands[i]; d != nil {
+			px.apply(prop, d)
+			if prop == "font-size" {
+				px.em = ps.Font.Size
+			}
+		}
+	}
+	ps.FollowColor(ps.Color)
+	ps.TextShadows = followColor(ps.TextShadows, ps.Color)
+	return &ps, true
 }
 
 func describe(n *dom.Node) string {
@@ -531,6 +681,60 @@ func (x *ctx) reset(name string, p prop) {
 	p.inherit(x.c, &initial)
 }
 
+// rootBody reports whether n is the root's first body element, whose
+// overflow the viewport takes when the root's is visible.
+func rootBody(n *dom.Node) bool {
+	p := n.Parent()
+	if n.Tag() != dom.Body || p == nil || p.Parent() != nil {
+		return false
+	}
+	for _, c := range p.Children() {
+		if !c.IsText() && c.Tag() == dom.Body {
+			return c == n
+		}
+	}
+	return false
+}
+
+// propagateOverflow hands the element's overflow to the viewport, as CSS
+// does the root's, or body's while the root's is visible: the viewport's
+// style is the element's Viewport, where visible is auto and clip hidden,
+// and the element's own overflow is visible. A root with a visible
+// overflow still holds the style of a viewport that scrolls when its
+// content overflows; a body's is the root's then.
+func (x *ctx) propagateOverflow(root bool) {
+	c := x.c
+	own := c.Overflow != style.Size[style.Overflow]{}
+	if !root && (!own || x.parent.OverflowPropagated) {
+		return
+	}
+	of := func(o style.Overflow) style.Overflow {
+		switch o {
+		case style.Visible:
+			return style.OverflowAuto
+		case style.Clip:
+			return style.Hidden
+		case style.Hidden, style.Scroll, style.OverflowAuto:
+		}
+		return o
+	}
+	v := initial
+	v.Display, v.Font = style.Block, c.Font
+	v.Overflow = style.Size[style.Overflow]{Width: of(c.Overflow.Width), Height: of(c.Overflow.Height)}
+	v.ScrollbarNone = c.ScrollbarNone
+	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
+		if v.ScrollbarOverlay = x.overlay; !x.overlay {
+			v.ScrollbarWidth = 15
+		}
+	}
+	c.Viewport = &v
+	if own {
+		c.OverflowPropagated = true
+		c.Overflow = style.Size[style.Overflow]{}
+		c.ScrollbarWidth, c.ScrollbarOverlay = 0, false
+	}
+}
+
 // finish applies what depends on several properties.
 func (x *ctx) finish(root bool) {
 	c := x.c
@@ -559,27 +763,38 @@ func (x *ctx) finish(root bool) {
 	}
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
 		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto) && !c.ScrollbarNone {
-		c.ScrollbarWidth = 15
+		if c.ScrollbarOverlay = x.overlay; !x.overlay {
+			c.ScrollbarWidth = 15
+		}
 	}
 	if scrolls(ox) && !scrolls(oy) {
 		c.Overflow.Height = fix(oy)
 	} else if scrolls(oy) && !scrolls(ox) {
 		c.Overflow.Width = fix(ox)
 	}
+	if x.toViewport {
+		x.propagateOverflow(root)
+	}
 	switch x.parent.Display {
 	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
 		if !root {
 			c.Display = blockified(c.Display)
+			c.Float = style.FloatNone
 		}
 	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
 		// not a flex or grid container
 	}
 	if root || c.Position == style.Absolute || c.Position == style.FixedPosition {
 		c.Display = blockified(c.Display)
+		c.Float = style.FloatNone
+	}
+	if c.Float != style.FloatNone {
+		c.Display = blockified(c.Display)
 	}
 	x.transitions()
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
+	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	if c.AccentAuto {
 		c.AccentColor = c.Color
@@ -748,7 +963,7 @@ var displays = map[string]style.Display{
 	"inline": style.Inline, "block": style.Block, "inline-block": style.InlineBlock,
 	"flex": style.FlexDisplay, "inline-flex": style.InlineFlex, "grid": style.GridDisplay,
 	"inline-grid": style.InlineGrid, "none": style.DisplayNone, "contents": style.Contents,
-	"list-item": style.Block,
+	"list-item": style.Block, "flow-root": style.Block,
 }
 
 //nolint:gochecknoglobals,goconst // lookup tables
@@ -765,12 +980,18 @@ var (
 		"none": style.BorderNone, "hidden": style.BorderNone, "solid": style.BorderSolid,
 		"dashed": style.BorderDashed, "dotted": style.BorderDotted,
 		"inset": style.BorderInset, "outset": style.BorderOutset,
+		"groove": style.BorderGroove, "ridge": style.BorderRidge,
 	}
 	overflows = map[string]style.Overflow{
 		"visible": style.Visible, "hidden": style.Hidden, "clip": style.Clip,
 		"scroll": style.Scroll, "auto": style.OverflowAuto,
 	}
 )
+
+//nolint:gochecknoglobals // a keyword table
+var breaks = map[string]style.Break{
+	"avoid": style.BreakAvoid, "avoid-column": style.BreakAvoid, "column": style.BreakColumn,
+}
 
 func borderWidthOf(x *ctx, v []Component) float32 {
 	switch {
@@ -806,9 +1027,23 @@ var props = func() map[string]prop {
 			set: func(x *ctx, v []Component) {
 				x.c.Display = displays[strings.ToLower(v[0].Text)]
 				x.c.ListItem = isWord(v[0], "list-item")
+				x.c.FlowRoot = isWord(v[0], "flow-root")
 			},
-			inherit: func(dst, src *style.Computed) { dst.Display, dst.ListItem = src.Display, src.ListItem },
+			inherit: func(dst, src *style.Computed) {
+				dst.Display, dst.ListItem, dst.FlowRoot = src.Display, src.ListItem, src.FlowRoot
+			},
 		},
+		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
+			"none": style.FloatNone, "left": style.FloatLeft, "right": style.FloatRight,
+			"inline-start": style.FloatLeft, "inline-end": style.FloatRight,
+		}),
+		"vertical-align": keyword(func(c *style.Computed) *style.VerticalAlign { return &c.VerticalAlign },
+			map[string]style.VerticalAlign{"baseline": style.AlignBaselineText, "sub": style.AlignSub,
+				"super": style.AlignSuper}),
+		"clear": keyword(func(c *style.Computed) *style.Clear { return &c.Clear }, map[string]style.Clear{
+			"none": style.ClearNone, "left": style.ClearLeft, "right": style.ClearRight, "both": style.ClearBoth,
+			"inline-start": style.ClearLeft, "inline-end": style.ClearRight,
+		}),
 		"box-sizing": keyword(func(c *style.Computed) *style.BoxSizing { return &c.BoxSizing },
 			map[string]style.BoxSizing{"border-box": style.BorderBox, "content-box": style.ContentBox}),
 		"position": keyword(func(c *style.Computed) *style.Position { return &c.Position }, map[string]style.Position{
@@ -866,6 +1101,25 @@ var props = func() map[string]prop {
 		"justify-items":   keyword(func(c *style.Computed) *style.Align { return &c.JustifyItems }, alignWords4),
 		"justify-self":    keyword(func(c *style.Computed) *style.Align { return &c.JustifySelf }, alignWords4),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+
+		"column-count": field(func(c *style.Computed) *int { return &c.ColumnCount },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+		"column-width": lengthField(func(c *style.Computed) *style.Length { return &c.ColumnWidth }),
+		"column-fill": field(func(c *style.Computed) *bool { return &c.ColumnFillAuto },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "auto") }),
+		"column-span":       {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}},
+		"column-rule-width": field(func(c *style.Computed) *float32 { return &c.ColumnRuleWidth }, borderWidthOf),
+		"column-rule-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.ColumnRuleStyle }, borderStyles),
+		"column-rule-color": currentField(style.ColumnRuleCurrent,
+			func(c *style.Computed) *color.Color { return &c.ColumnRuleColor }),
+		"break-inside": field(func(c *style.Computed) *bool { return &c.BreakInsideAvoid },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }),
+		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
+		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
+		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+		"widows": field(func(c *style.Computed) *int { return &c.Widows },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
 
 		"grid-template-columns": field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Columns }, (*ctx).tracks),
@@ -947,6 +1201,7 @@ var props = func() map[string]prop {
 		"text-align": keyword(func(c *style.Computed) *style.TextAlign { return &c.TextAlign },
 			map[string]style.TextAlign{"start": style.Start, "end": style.End, "left": style.Left, "right": style.Right,
 				"center": style.Center, "justify": style.Justify}),
+		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
@@ -977,14 +1232,27 @@ var props = func() map[string]prop {
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}),
-		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle },
-			map[string]style.ListStyle{"disc": style.ListDisc, "none": style.ListNone,
-				"disclosure-closed": style.ListDisclosureClosed, "disclosure-open": style.ListDisclosureOpen}),
+		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle }, listStyles),
 		"visibility": field(func(c *style.Computed) *bool { return &c.Visible }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "visible")
 		}),
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }),
+		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "drag") }),
+		"user-select": field(func(c *style.Computed) *style.UserSelect { return &c.UserSelect },
+			func(_ *ctx, v []Component) style.UserSelect {
+				switch strings.ToLower(v[0].Text) {
+				case "text":
+					return style.SelectText
+				case "none":
+					return style.SelectNone
+				case "all":
+					return style.SelectAll
+				}
+				// auto set on an element is text in Chrome, whatever its parent
+				return style.SelectText
+			}),
 		"cursor": field(func(c *style.Computed) *string { return &c.Cursor }, func(_ *ctx, v []Component) string {
 			if isWord(v[0], "auto") {
 				return ""
@@ -994,27 +1262,45 @@ var props = func() map[string]prop {
 
 		"background-color": colorField(func(c *style.Computed) *color.Color { return &c.Background }),
 		"background-image": field(func(c *style.Computed) *style.Image { return &c.BackgroundImage }, backgroundImage),
-		"background-size": {
-			set: func(x *ctx, v []Component) {
+		"background-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.BackgroundSize },
+			func(x *ctx, v []Component) style.BackgroundSize {
 				v = items(v)
-				px := func(c Component) float32 {
-					if isWord(c, "auto") {
-						return 0
-					}
-					return x.px(c)
+				switch {
+				case isWord(v[0], "cover"):
+					return style.BackgroundSize{Scale: style.ScaleCover}
+				case isWord(v[0], "contain"):
+					return style.BackgroundSize{Scale: style.ScaleContain}
 				}
-				x.c.BackgroundSize = [2]float32{px(v[0]), 0}
+				size := style.BackgroundSize{Width: x.length(v[0])}
 				if len(v) > 1 {
-					x.c.BackgroundSize[1] = px(v[1])
+					size.Height = x.length(v[1])
+				}
+				return size
+			}),
+		"background-repeat": {
+			set: func(x *ctx, v []Component) {
+				x.c.BackgroundNoRepeat, x.c.BackgroundRepeat = isWord(v[0], "no-repeat"), style.RepeatBoth
+				switch {
+				case isWord(v[0], "repeat-x"):
+					x.c.BackgroundRepeat = style.RepeatX
+				case isWord(v[0], "repeat-y"):
+					x.c.BackgroundRepeat = style.RepeatY
 				}
 			},
-			inherit: func(dst, src *style.Computed) { dst.BackgroundSize = src.BackgroundSize },
+			inherit: func(dst, src *style.Computed) {
+				dst.BackgroundNoRepeat, dst.BackgroundRepeat = src.BackgroundNoRepeat, src.BackgroundRepeat
+			},
 		},
-		"background-repeat": field(func(c *style.Computed) *bool { return &c.BackgroundNoRepeat },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "no-repeat") }),
 		"background-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.BackgroundPosition },
 			(*ctx).position),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows),
+		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
+			decorationLine),
+		"text-decoration-style": keyword(func(c *style.Computed) *style.DecorationStyle { return &c.TextDecoration.Style },
+			decorationStyles),
+		"text-decoration-color": currentField(style.DecorationCurrent,
+			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
+		"text-decoration-thickness": lengthField(func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
@@ -1126,6 +1412,7 @@ var props = func() map[string]prop {
 	}
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}}
 	m["border-image-outset"] = noop
+	maps.Copy(m, contentProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
@@ -1198,10 +1485,10 @@ func imageSource(x *ctx, v []Component) string {
 	} else if a := items(v[0].Args); v[0].Kind == Function && len(a) > 0 {
 		src = a[0].Text
 	}
-	if src == "" || strings.Contains(src, ":") || x == nil || x.base == "" {
+	if x == nil {
 		return src
 	}
-	return path.Join(x.base, src)
+	return x.base.resolve(src)
 }
 
 func gridLine(_ *ctx, v []Component) style.GridLine {

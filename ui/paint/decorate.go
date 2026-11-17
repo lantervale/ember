@@ -25,7 +25,9 @@ type piece struct {
 
 // pieces are b's parts in the root's space, b's border box at at: one per
 // line of an inline split over several, the left edge on the first and
-// the right edge on the last, else the box itself.
+// the right edge on the last; one per column of a block columns cut, the
+// top edge on the first and the bottom edge on the last, as Chrome slices
+// it; else the box itself.
 // They go in p's scratch, valid until the next call.
 func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
 	if len(b.Fragments) <= 1 {
@@ -37,15 +39,50 @@ func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
 	p.scratch = out
 	for i, f := range b.Fragments {
 		e := b.Border
-		if i > 0 {
-			e.Left = 0
-		}
-		if i < len(b.Fragments)-1 {
-			e.Right = 0
+		switch first, last := i == 0, i == len(b.Fragments)-1; {
+		case b.Broken:
+			if !first {
+				e.Top = 0
+			}
+			if !last {
+				e.Bottom = 0
+			}
+		default:
+			if !first {
+				e.Left = 0
+			}
+			if !last {
+				e.Right = 0
+			}
 		}
 		out[i] = piece{geom.Rect{X: at.X + f.X, Y: at.Y + f.Y, W: f.W, H: f.H}, e}
 	}
 	return out
+}
+
+// legendGap is where a fieldset's border stops for the legend set on it, in the root's
+// space.
+func legendGap(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
+	if b.Wrap.Top <= 0 || b.Node == nil || b.Node.Tag() != dom.Fieldset {
+		return geom.Rect{}, false
+	}
+	for _, c := range b.Children {
+		if c.Kind == box.Element && c.Node != nil && c.Node.Tag() == dom.Legend {
+			return geom.Rect{X: at.X + c.Pos.X, Y: at.Y + c.Pos.Y, W: c.Size.X, H: c.Size.Y}, true
+		}
+	}
+	return geom.Rect{}, false
+}
+
+// around is r without the columns of gap above gap's bottom: what is left of it, right
+// of it and below it.
+func around(r, gap geom.Rect) []geom.Rect {
+	right, bottom := gap.X+gap.W, gap.Y+gap.H
+	return []geom.Rect{
+		{X: r.X, Y: r.Y, W: gap.X - r.X, H: r.H},
+		{X: right, Y: r.Y, W: r.X + r.W - right, H: r.H},
+		{X: gap.X, Y: bottom, W: gap.W, H: r.Y + r.H - bottom},
+	}
 }
 
 // rowBackground paints a table row's background behind each of its own
@@ -63,7 +100,7 @@ func (p *painter) rowBackground(row *box.Box, at geom.Vec2, c color.Color) {
 }
 
 // background paints e's background colour, its row's for a table row,
-// then its gradient or image inside edges, over r rounded by radius.
+// then its image inside edges, over r rounded by radius.
 func (p *painter) background(e entry, r geom.Rect, edges box.Edges, radius radii, st *style.Computed, alpha float32) {
 	b := e.b
 	if st.Background.A > 0 && !tracked(b) {
@@ -73,17 +110,20 @@ func (p *painter) background(e entry, r geom.Rect, edges box.Edges, radius radii
 			p.fill(r, radius, fade(st.Background, alpha))
 		}
 	}
-	if g := st.BackgroundImage.Gradient; g != nil {
-		p.gradient(inside(r, edges), radius.inside(edges), g, alpha)
-	} else {
-		p.backgroundImage(inside(r, edges), st, alpha)
-	}
+	area := inside(r, edges)
+	p.backgroundImage(area, area, radius.inside(edges), st, alpha)
 }
 
 // decorate paints an element's shadows, background and border, on each
 // of its pieces; a split inline's are square.
 func (p *painter) decorate(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
+	if b.Kind == box.Viewport && p.probing {
+		// The whole viewport takes the pointer, as a browser's canvas does
+		// for the root element, so the wheel scrolls the page from anywhere.
+		p.probed(b, geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y})
+		return
+	}
 	if b.Kind != box.Element || !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
@@ -116,17 +156,58 @@ func (p *painter) decorate(e entry, alpha float32) {
 		if tex := p.find(st.BorderImage, st); tex != nil {
 			p.picture(r, tex, st.BorderImage.Slice, imageWidths(r, st.BorderImageWidth, st.Border, st.BorderImage.Slice),
 				st.BorderImageRepeat, alpha)
+		} else if gap, ok := legendGap(b, e.at); ok {
+			for _, clip := range around(r, p.snap(gap)) {
+				p.s.PushClip(clip)
+				p.border(r, pc.edges, radius, st, alpha)
+				p.s.PopClip()
+			}
 		} else {
 			p.border(r, pc.edges, radius, st, alpha)
 		}
 	}
+	p.columnRules(e, st, alpha)
 	p.selection(e, alpha)
+}
+
+// columnRules draws a multi-column container's column-rule in the middle
+// of each gap between two columns holding content, as high as the
+// columns, as a border of its style would be drawn.
+func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
+	c := e.b.Columns
+	w := st.ColumnRuleWidth
+	if c == nil || c.Count < 2 || st.ColumnRuleStyle == style.BorderNone || w <= 0 {
+		return
+	}
+	var rule style.Computed
+	rule.BorderStyle.Left, rule.BorderColor.Left = st.ColumnRuleStyle, st.ColumnRuleColor
+	switch st.ColumnRuleStyle {
+	case style.BorderInset:
+		rule.BorderStyle.Left = style.BorderRidge
+	case style.BorderOutset:
+		rule.BorderStyle.Left = style.BorderGroove
+	case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
+		style.BorderRidge:
+	}
+	b := e.b
+	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
+	for k := 1; k < c.Count; k++ {
+		x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
+		p.border(p.snap(geom.Rect{X: x, Y: top, W: w, H: c.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
+	}
 }
 
 // find is img's texture through Images, its pixelated copy when st's
 // image-rendering says so.
 func (p *painter) find(img style.Image, st *style.Computed) *twod.Texture {
-	if img.Source == "" || p.image == nil {
+	if img.Source == "" {
+		return nil
+	}
+	if v := p.shapes(img.Source); v != nil {
+		w, h := pixels(v.Intrinsic().Natural(geom.V2(defaultWidth, defaultHeight)), 1)
+		return v.Texture(w, h, 1)
+	}
+	if p.image == nil {
 		return nil
 	}
 	tex := p.image(img.Source)
@@ -134,6 +215,36 @@ func (p *painter) find(img style.Image, st *style.Computed) *twod.Texture {
 		return tex
 	}
 	return pixelated(tex)
+}
+
+// defaultWidth and defaultHeight are the size CSS gives a picture that
+// asks for none where no area sizes it.
+const defaultWidth, defaultHeight = 300, 150
+
+// shapes is the picture of shapes name names, nil for any other.
+func (p *painter) shapes(name string) Vector {
+	if name == "" || p.vector == nil {
+		return nil
+	}
+	return p.vector(name)
+}
+
+// drawn is v's texture for a box of size points: as many device pixels
+// as the box takes, so the picture is drawn once, at the size it shows.
+func (p *painter) drawn(v Vector, size geom.Vec2) *twod.Texture {
+	scale := p.scale
+	if scale <= 0 {
+		scale = 1
+	}
+	w, h := pixels(size, scale)
+	return v.Texture(w, h, scale)
+}
+
+// pixels is size points in whole pixels at scale pixels a point, never
+// under one.
+func pixels(size geom.Vec2, scale float32) (int, int) {
+	side := func(v float32) int { return max(int(math.Round(float64(v*scale))), 1) }
+	return side(size.X), side(size.Y)
 }
 
 // inside is r less edges: a border box's padding box.
@@ -145,46 +256,175 @@ func inside(r geom.Rect, e box.Edges) geom.Rect {
 // drawn, so a tiny image over a big box can't flood the draw list.
 const maxTiles = 4096
 
-// backgroundImage draws st's background image at its background-size,
-// else its own size, in area, the padding box: placed by
-// background-position, tiled from there both ways unless no-repeat,
-// clipped to area.
-func (p *painter) backgroundImage(area geom.Rect, st *style.Computed, alpha float32) {
-	tex := p.find(st.BackgroundImage, st)
-	if tex == nil {
+// backgroundImage draws st's background image, a picture or a gradient,
+// at its background-size in area, the padding box rounded by radius:
+// placed by background-position, tiled from there along the axes
+// background-repeat names, clipped to view. view is area but for the
+// canvas of a viewport that scrolls, whose image is placed in the root
+// element's box and tiles over the canvas.
+func (p *painter) backgroundImage(view, area geom.Rect, radius radii, st *style.Computed, alpha float32) {
+	g := st.BackgroundImage.Gradient
+	var tex *twod.Texture
+	var natural box.Intrinsic
+	vec := p.shapes(st.BackgroundImage.Source)
+	switch {
+	case g != nil:
+	case vec != nil:
+		natural = vec.Intrinsic()
+	default:
+		if tex = p.find(st.BackgroundImage, st); tex == nil {
+			return
+		}
+		if natural = box.Sized(tex.Size()); natural.Ratio <= 0 {
+			return
+		}
+	}
+	if area.W <= 0 || area.H <= 0 || view.W <= 0 || view.H <= 0 {
 		return
 	}
-	size := tex.Size()
-	if size.X <= 0 || size.Y <= 0 || area.W <= 0 || area.H <= 0 {
+	size := tileSize(st.BackgroundSize, natural, geom.V2(area.W, area.H), p.snapScale())
+	if size.X <= 0 || size.Y <= 0 {
 		return
-	}
-	switch w, h := st.BackgroundSize[0], st.BackgroundSize[1]; {
-	case w > 0 && h > 0:
-		size = geom.V2(w, h)
-	case w > 0:
-		size = geom.V2(w, size.Y*w/size.X)
-	case h > 0:
-		size = geom.V2(size.X*h/size.Y, h)
 	}
 	pos := st.BackgroundPosition
-	x := place(pos.X, pos.FromRight, area.X, area.W, size.X)
-	y := place(pos.Y, pos.FromBottom, area.Y, area.H, size.Y)
-	tint := fade(color.White, alpha)
-	p.s.PushClip(area)
-	defer p.s.PopClip()
-	if st.BackgroundNoRepeat {
-		p.s.Image(geom.Rect{X: x, Y: y, W: size.X, H: size.Y}, tex, texels(tex), tint)
+	first := geom.Rect{
+		X: place(pos.X, pos.FromRight, area.X, area.W, size.X),
+		Y: place(pos.Y, pos.FromBottom, area.Y, area.H, size.Y),
+		W: size.X, H: size.Y,
+	}
+	if g != nil && first == area && view == area {
+		p.gradient(area, radius, g, alpha)
 		return
 	}
-	x0 := x - float32(math.Ceil(float64((x-area.X)/size.X)))*size.X
-	y0 := y - float32(math.Ceil(float64((y-area.Y)/size.Y)))*size.Y
+	// Along an axis it doesn't repeat on, Chrome starts an image placed at
+	// or after the area's start on a device pixel; one that doesn't repeat
+	// at all also ends on the pixel nearest its length from there. One
+	// starting before the area, or repeating, keeps its place.
+	at := p.snap(first)
+	if st.BackgroundNoRepeat {
+		at = p.snap(geom.Rect{X: at.X, Y: at.Y, W: first.W, H: first.H})
+	} else {
+		at.W, at.H = first.W, first.H
+	}
+	if (st.BackgroundNoRepeat || st.BackgroundRepeat == style.RepeatY) && first.X >= area.X {
+		first.X, first.W = at.X, at.W
+	}
+	if (st.BackgroundNoRepeat || st.BackgroundRepeat == style.RepeatX) && first.Y >= area.Y {
+		first.Y, first.H = at.Y, at.H
+	}
+	if vec != nil {
+		if tex = p.drawn(vec, geom.V2(first.W, first.H)); tex == nil {
+			return
+		}
+	}
+	if radius.zero() || st.BackgroundNoRepeat && insideAll(corners(first), view, radius) {
+		p.s.PushClip(view)
+	} else {
+		p.s.PushClipRounded(view, radius)
+	}
+	defer p.s.PopClip()
+	tint := fade(color.White, alpha)
+	backgroundTiles(view, first, st, func(tile geom.Rect) {
+		if g != nil {
+			p.gradient(tile, radii{}, g, alpha)
+			return
+		}
+		p.s.Image(tile, tex, texels(tex), tint)
+	})
+}
+
+// tileSize is the size a background image is drawn at in a padding box
+// of size area, as background-size gives it. natural is what the picture
+// asks to be sized by: its size and proportions for one of pixels,
+// nothing for a gradient, any of a width, a height and proportions for
+// one drawn from shapes. A side it doesn't ask for comes from the other
+// through its proportions, else is the area's; with proportions alone
+// auto is contain, and with nothing cover and contain are the area.
+// Chrome rounds the side contain scales to a whole device pixel, px to a
+// point, and so does this when px is known.
+func tileSize(bs style.BackgroundSize, natural box.Intrinsic, area geom.Vec2, px float32) geom.Vec2 {
+	whole := func(v float32) float32 {
+		if px <= 0 {
+			return v
+		}
+		return max(float32(math.Round(float64(v*px))), 1) / px
+	}
+	shape := natural.Proportions()
+	contain := func(scale style.BackgroundScale) geom.Vec2 {
+		kx, ky := area.X/shape.X, area.Y/shape.Y
+		if (kx < ky) == (scale == style.ScaleContain) {
+			h := shape.Y * kx
+			if scale == style.ScaleContain {
+				h = whole(h)
+			}
+			return geom.V2(area.X, h)
+		}
+		w := shape.X * ky
+		if scale == style.ScaleContain {
+			w = whole(w)
+		}
+		return geom.V2(w, area.Y)
+	}
+	shaped := shape.X > 0 && shape.Y > 0
+	switch bs.Scale {
+	case style.ScaleCover, style.ScaleContain:
+		if !shaped {
+			return area
+		}
+		return contain(bs.Scale)
+	case style.ScaleNone:
+	}
+	w, fixedW := bs.Width.Resolve(area.X)
+	h, fixedH := bs.Height.Resolve(area.Y)
+	w, h = max(w, 0), max(h, 0)
+	switch {
+	case fixedW && fixedH:
+	case fixedW && shaped:
+		h = shape.Y * w / shape.X
+	case fixedW:
+		h = natural.Natural(area).Y
+	case fixedH && shaped:
+		w = shape.X * h / shape.Y
+	case fixedH:
+		w = natural.Natural(area).X
+	case shaped && natural.Width <= 0 && natural.Height <= 0:
+		return contain(style.ScaleContain)
+	default:
+		return natural.Natural(area)
+	}
+	return geom.V2(w, h)
+}
+
+// corners are r's four corners.
+func corners(r geom.Rect) []geom.Vec2 {
+	return []geom.Vec2{{X: r.X, Y: r.Y}, {X: r.X + r.W, Y: r.Y}, {X: r.X + r.W, Y: r.Y + r.H}, {X: r.X, Y: r.Y + r.H}}
+}
+
+// backgroundTiles calls draw with each copy of a background image over view: first
+// alone when st doesn't repeat, else it and its copies before and after,
+// along the axes st repeats, up to maxTiles.
+func backgroundTiles(view, first geom.Rect, st *style.Computed, draw func(tile geom.Rect)) {
+	if st.BackgroundNoRepeat {
+		draw(first)
+		return
+	}
+	x0 := first.X - float32(math.Ceil(float64((first.X-view.X)/first.W)))*first.W
+	y0 := first.Y - float32(math.Ceil(float64((first.Y-view.Y)/first.H)))*first.H
+	x1, y1 := view.X+view.W, view.Y+view.H
+	switch st.BackgroundRepeat {
+	case style.RepeatX:
+		y0, y1 = first.Y, first.Y+first.H
+	case style.RepeatY:
+		x0, x1 = first.X, first.X+first.W
+	case style.RepeatBoth:
+	}
 	n := 0
-	for ty := y0; ty < area.Y+area.H; ty += size.Y {
-		for tx := x0; tx < area.X+area.W; tx += size.X {
+	for ty := y0; ty < y1; ty += first.H {
+		for tx := x0; tx < x1; tx += first.W {
 			if n++; n > maxTiles {
 				return
 			}
-			p.s.Image(geom.Rect{X: tx, Y: ty, W: size.X, H: size.Y}, tex, texels(tex), tint)
+			draw(geom.Rect{X: tx, Y: ty, W: first.W, H: first.H})
 		}
 	}
 }
@@ -799,7 +1039,24 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 	bw, bc := side(w.Bottom, st.BorderStyle.Bottom, st.BorderColor.Bottom)
 	lw, lc := side(w.Left, st.BorderStyle.Left, st.BorderColor.Left)
 	if beveled(st.BorderStyle) {
-		p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
+		// A groove or a ridge is two bevels, each half the width: the outer one, then
+		// the inner one the other way.
+		outer, inner, split := halves(st.BorderStyle)
+		if !split {
+			p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
+			return
+		}
+		styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
+		half, rest := [4]float32{tw, rw, bw, lw}, [4]float32{}
+		for i, s := range styles {
+			if s == style.BorderGroove || s == style.BorderRidge {
+				half[i] /= 2
+				rest[i] = half[i]
+			}
+		}
+		p.bevel(r, half, [4]color.Color{tc, rc, bc, lc}, outer)
+		in := geom.Rect{X: r.X + half[3], Y: r.Y + half[0], W: r.W - half[1] - half[3], H: r.H - half[0] - half[2]}
+		p.bevel(in, rest, [4]color.Color{tc, rc, bc, lc}, inner)
 		return
 	}
 	if tw == rw && rw == bw && bw == lw && tc == rc && rc == bc && bc == lc && !radius.zero() {
@@ -835,14 +1092,37 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 	}
 }
 
-// beveled reports whether a side is inset or outset.
+// beveled reports whether a side is inset, outset, groove or ridge.
 func beveled(s style.Sides[style.BorderStyle]) bool {
 	for _, x := range [4]style.BorderStyle{s.Top, s.Right, s.Bottom, s.Left} {
-		if x == style.BorderInset || x == style.BorderOutset {
+		if x == style.BorderInset || x == style.BorderOutset || x == style.BorderGroove || x == style.BorderRidge {
 			return true
 		}
 	}
 	return false
+}
+
+// halves are the styles of a border's outer and inner halves, split when a side is a
+// groove or a ridge: a groove is inset outside and outset inside, a ridge the other way.
+func halves(s style.Sides[style.BorderStyle]) (outer, inner style.Sides[style.BorderStyle], split bool) {
+	half := func(x style.BorderStyle) (style.BorderStyle, style.BorderStyle) {
+		switch x {
+		case style.BorderGroove:
+			split = true
+			return style.BorderInset, style.BorderOutset
+		case style.BorderRidge:
+			split = true
+			return style.BorderOutset, style.BorderInset
+		case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
+			style.BorderOutset:
+		}
+		return x, x
+	}
+	outer.Top, inner.Top = half(s.Top)
+	outer.Right, inner.Right = half(s.Right)
+	outer.Bottom, inner.Bottom = half(s.Bottom)
+	outer.Left, inner.Left = half(s.Left)
+	return outer, inner, split
 }
 
 // trapezoid is a side's two triangles.
@@ -1030,7 +1310,16 @@ func (p *painter) text(e entry, alpha float32) {
 			c = fade(st.PlaceholderColor, alpha)
 		}
 	}
-	if c.A <= 0 {
+	var parts []Selected
+	ink := c
+	if p.sel != nil {
+		if parts = p.sel.Parts(b); len(parts) > 0 {
+			ink = p.highlight(e, st, parts, c, alpha)
+		}
+	}
+	p.decorations(e, st, style.Underline|style.Overline, alpha)
+	if c.A <= 0 && ink == c {
+		p.decorations(e, st, style.LineThrough, alpha)
 		return
 	}
 	face := p.faceOf(st.Font)
@@ -1052,8 +1341,88 @@ func (p *painter) text(e entry, alpha float32) {
 		}
 	}
 	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, st.PixelText)
+	if ink != c {
+		p.recoloured(e, st, face, parts, c, ink)
+		p.decorations(e, st, style.LineThrough, alpha)
+		return
+	}
 	for _, f := range b.Lines {
 		p.s.Text(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, opts...)
+	}
+	p.decorations(e, st, style.LineThrough, alpha)
+}
+
+// selectionColors are the ::selection of the element st styles: its
+// background-color and its color. A rule that sets either leaves the
+// other as CSS has it, no background and the text's own colour; with no
+// rule the background is Chrome's on macOS and the text keeps its colour.
+func selectionColors(st *style.Computed, text color.Color, alpha float32) (color.Color, color.Color) {
+	if !st.HasSelection && !st.HasSelectionText {
+		return fade(pageSelection, alpha), text
+	}
+	var back color.Color
+	if st.HasSelection {
+		back = fade(st.SelectionColor, alpha)
+	}
+	if st.HasSelectionText {
+		text = fade(st.SelectionText, alpha)
+	}
+	return back, text
+}
+
+// highlight draws the selection behind a text run's selected parts and
+// returns the colour their text takes.
+func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text color.Color, alpha float32) color.Color {
+	back, ink := selectionColors(st, text, alpha)
+	if back.A > 0 {
+		for _, s := range parts {
+			p.s.Rect(p.snap(geom.Rect{X: e.at.X + s.Rect.X, Y: e.at.Y + s.Rect.Y, W: s.Rect.W, H: s.Rect.H}), back)
+		}
+	}
+	return ink
+}
+
+// recoloured draws a text run whose selected parts take the colour ink:
+// each line's text in c outside its part and in ink inside it.
+func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts []Selected, c, ink color.Color) {
+	plain := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, st.PixelText)
+	for i, f := range e.b.Lines {
+		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
+		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		if k < 0 {
+			p.s.Text(at, f.Text, plain...)
+			continue
+		}
+		// room above and below a line for what its glyphs draw outside it
+		reach := st.Font.Size
+		line := geom.Rect{X: e.at.X + f.Rect.X - reach, Y: e.at.Y + f.Rect.Y - reach, W: f.Rect.W + 2*reach,
+			H: f.Rect.H + 2*reach}
+		in := line
+		// a part from the fragment's start or to its end takes what its
+		// glyphs draw past it too
+		const near = 0.01
+		if left := e.at.X + parts[k].Rect.X; left > e.at.X+f.Rect.X+near {
+			in.W -= left - in.X
+			in.X = left
+		}
+		if right := e.at.X + parts[k].Rect.X + parts[k].Rect.W; right < e.at.X+f.Rect.X+f.Rect.W-near {
+			in.W = right - in.X
+		}
+		for _, part := range []struct {
+			clip geom.Rect
+			ink  color.Color
+		}{
+			{geom.Rect{X: line.X, Y: line.Y, W: in.X - line.X, H: line.H}, c},
+			{in, ink},
+			{geom.Rect{X: in.X + in.W, Y: line.Y, W: line.X + line.W - in.X - in.W, H: line.H}, c},
+		} {
+			if part.clip.W <= 0 || part.ink.A <= 0 {
+				continue
+			}
+			p.s.PushClip(part.clip)
+			p.s.Text(at, f.Text, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, st.PixelText)...)
+			p.s.PopClip()
+		}
 	}
 }
 

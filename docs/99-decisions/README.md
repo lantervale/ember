@@ -83,7 +83,17 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0077 | [What is lit around takes light past its corners](0077-what-is-lit-around-takes-light-past-its-corners.md) | rendering |
 | 0078 | [A tile lit around is lit round its bodies too](0078-a-tile-lit-around-is-lit-round-its-bodies-too.md) | rendering |
 | 0079 | [A soft crowd presses body against body](0079-a-soft-crowd-presses-body-against-body.md) | core |
+| 0080 | [Floats are laid out, text going round them](0080-floats-are-laid-out-text-going-round-them.md) | api |
+| 0081 | [System fonts are an option of a Document](0081-system-fonts-are-an-option-of-a-document.md) | api |
+| 0082 | [ui has the text elements pages are written with](0082-ui-has-the-text-elements-pages-are-written-with.md) | api |
+| 0083 | [Overlay scrollbars are an option of a Document](0083-overlay-scrollbars-are-an-option-of-a-document.md) | api |
+| 0084 | [A scrolling viewport is an option of a Document](0084-a-scrolling-viewport-is-an-option-of-a-document.md) | api |
+| 0085 | [Browser sheets are an option of a Document](0085-browser-sheets-are-an-option-of-a-document.md) | api |
+| 0086 | [Media queries are answered for the Document's viewport](0086-media-queries-are-answered-for-the-documents-viewport.md) | api |
 | 0087 | [SVG is read by ember's own reader, imported where it is wanted](0087-svg-is-read-by-embers-own-reader-imported-where-it-is-wanted.md) | assets |
+| 0088 | [Columns cut one flow, and a cut box stays one box](0088-columns-cut-one-flow-and-a-cut-box-stays-one-box.md) | api |
+| 0089 | [A generated box is a node of its element](0089-a-generated-box-is-a-node-of-its-element.md) | api |
+| 0090 | [A screen's text takes no selection until its sheet says so](0090-a-screens-text-takes-no-selection-until-its-sheet-says-so.md) | api |
 | 0091 | [A window keeps the system's frame under its own title bar](0091-a-window-keeps-the-systems-frame-under-its-own-title-bar.md) | api |
 
 ## Writing one

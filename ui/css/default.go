@@ -11,38 +11,85 @@ func DefaultImages() map[string][]byte {
 	return map[string][]byte{"ember:select-arrow": selectArrow}
 }
 
+// BrowserDefault follows Default in the user-agent sheet of a Document
+// whose sheets are read as a browser's: a width is the content's, as in
+// a browser's own sheet, but for the controls Chrome sizes by their
+// border box (TestChromeSizesTheSameBoxesByTheirBorder), and the page's
+// text is selected as a browser's is, where a game's screen takes no
+// selection but where it asks for one (decision 0090).
+const BrowserDefault = `* { box-sizing: content-box; }
+button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
+input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
+html { user-select: auto; }
+`
+
 // Default is the user-agent sheet: what every element looks like before
 // the game's sheets. Export writes the same text into every page, so
 // Chrome starts from it too.
 const Default = `* { box-sizing: border-box; }
 html { font-family: "Go", sans-serif; font-size: 16px; line-height: normal; color: #000; }
 html, body, div, section, header, footer, nav, main, aside, article, p, h1, h2, h3, h4,
-details, summary, dialog, hr, pre { display: block; }
+details, summary, dialog, hr, pre, ul, ol, menu, dl, dt, dd, h5, h6, blockquote, figure, figcaption, form, address,
+hgroup, search, center, fieldset, legend { display: block; }
+li { display: list-item; }
 [hidden] { display: none; }
 table { border-spacing: 2px; }
 caption { text-align: center; }
-html { margin: 0; }
+html { margin: 0; user-select: none; }
 body { margin: 8px; }
 p { margin: 1em 0; }
 h1 { margin: 0.67em 0; }
 h2 { margin: 0.83em 0; }
 h3 { margin: 1em 0; }
 h4 { margin: 1.33em 0; }
+h5 { margin: 1.67em 0; }
+h6 { margin: 2.33em 0; }
+ul, ol, menu { margin: 1em 0; padding-left: 40px; }
+ul, menu { list-style-type: disc; }
+ol { list-style-type: decimal; }
+ul ul, ul menu, ol ul, ol menu, menu ul, menu menu { list-style-type: circle; }
+ul ul ul, ul ul menu, ul ol ul, ul ol menu, ul menu ul, ul menu menu, ol ul ul, ol ul menu, ol ol ul, ol ol menu, ol
+menu ul, ol menu menu, menu ul ul, menu ul menu, menu ol ul, menu ol menu, menu menu ul, menu menu menu {
+list-style-type: square; }
+ul ul, ul ol, ul menu, ol ul, ol ol, ol menu, menu ul, menu ol, menu menu { margin-top: 0; margin-bottom: 0; }
+dl { margin: 1em 0; }
+dd { margin-left: 40px; }
+blockquote, figure { margin: 1em 40px; }
 hr { margin: 0.5em auto; border: 1px inset gray; color: gray; overflow: hidden; }
 h1 { font-size: 2em; }
 h2 { font-size: 1.5em; }
 h3 { font-size: 1.17em; }
 h4 { font-size: 1em; }
-h1, h2, h3, h4, th, strong { font-weight: bold; }
+h5 { font-size: 0.83em; }
+h6 { font-size: 0.67em; }
+h1, h2, h3, h4, h5, h6, th, strong, b { font-weight: bold; }
 td, th { padding: 1px; }
 th { text-align: center; }
-em { font-style: italic; }
+em, i, cite, var, dfn, address { font-style: italic; }
+small, sub, sup { font-size: smaller; }
+sub { vertical-align: sub; }
+sup { vertical-align: super; }
+q::before { content: open-quote; }
+q::after { content: close-quote; }
+big { font-size: larger; }
+center { text-align: center; }
+fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove #efefef; min-width: min-content; }
+fieldset { display: flow-root; }
+fieldset > legend { width: fit-content; }
+legend { padding: 0 2px; }
+mark { background-color: #ff0; color: #000; }
+a:link { color: #0000ee; cursor: pointer; text-decoration: underline; }
+u, ins { text-decoration: underline; }
+s, del { text-decoration: line-through; }
+abbr[title] { text-decoration: underline dotted; }
+a:link:active { color: #ff0000; }
 code, kbd, samp, pre { font-family: "Go Mono", monospace; font-size: 0.8125em; }
 pre { margin: 1em 0; white-space: pre; }
 button, input, select, textarea {
   appearance: none; margin: 0; padding: 0; border: 0; background: none;
   font-family: inherit; font-size: inherit; font-weight: inherit; font-style: inherit;
   color: inherit; line-height: inherit; letter-spacing: inherit; text-align: inherit;
+  text-indent: 0;
 }
 button, input, select, textarea, progress, meter, img, canvas { display: inline-block; }
 button, select, input[type="checkbox"], input[type="range"] { cursor: default; }

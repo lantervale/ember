@@ -127,7 +127,8 @@ func TestMatches(t *testing.T) {
 
 func TestParseSelectorsErrors(t *testing.T) {
 	for _, src := range []string{"", "p,", ".", "p span > ", "p ~ span", "[x^=y]", "[x=y i]", "[=y]", "[x=]", "p|span",
-		":hover()", ":not()", "p::after", "p.b#1x", "blink"} {
+		":hover()", ":not()", "p::nope", "p::before:hover", "p::before span", "p::after::before", "p:: before", "p.b#1x",
+		"blink"} {
 		if _, err := ParseSelectors(src); err == nil {
 			t.Errorf("%q: no error", src)
 		}
@@ -164,5 +165,23 @@ func TestNthChild(t *testing.T) {
 	}
 	if _, err := ParseSelectors("tr:nth-child(x)"); err == nil {
 		t.Error("tr:nth-child(x) parsed")
+	}
+}
+
+func TestLinkMatchesWhatHasAnHrefAndVisitedNothing(t *testing.T) {
+	link, plain := el(dom.A, "a"), el(dom.A, "b")
+	link.SetAttr("href", "/next")
+	if !mustSelector(t, "a:link").Matches(link) || !mustSelector(t, ":any-link").Matches(link) {
+		t.Error("an element with an href is a link")
+	}
+	if mustSelector(t, ":link").Matches(plain) {
+		t.Error("an element without an href is no link")
+	}
+	if mustSelector(t, "a:visited").Matches(link) {
+		t.Error("nothing is visited: ui keeps no history")
+	}
+	sels, err := ParseSelectors("footer a:link, footer a:visited")
+	if err != nil || len(sels) != 2 {
+		t.Fatalf("a rule naming :visited is kept: %v", err)
 	}
 }

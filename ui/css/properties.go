@@ -49,10 +49,19 @@ var properties = map[string]property{
 	"grid-auto-columns": {initial: "auto"}, "grid-auto-rows": {initial: "auto"},
 	"grid-auto-flow": {initial: "row"},
 	"order":          {initial: "0"},
-	"aspect-ratio":   {initial: "auto"},
-	"overflow-x":     {initial: "visible"}, "overflow-y": {initial: "visible"},
+	"column-count":   {initial: "auto"}, "column-width": {initial: "auto"},
+	"column-fill": {initial: "balance"}, "column-span": {initial: "none"},
+	"column-rule-width": {initial: "medium"}, "column-rule-style": {initial: "none"},
+	"column-rule-color": {initial: "currentcolor"},
+	"break-inside":      {initial: "auto"},
+	"break-before":      {initial: "auto"}, "break-after": {initial: "auto"},
+	"orphans": {inherited: true, initial: "2"}, "widows": {inherited: true, initial: "2"},
+	"aspect-ratio": {initial: "auto"},
+	"overflow-x":   {initial: "visible"}, "overflow-y": {initial: "visible"},
 	"position": {initial: "static"},
-	"top":      {initial: "auto"}, "right": {initial: "auto"},
+	"float":    {initial: "none"}, "clear": {initial: "none"},
+	"vertical-align": {initial: "baseline"},
+	"top":            {initial: "auto"}, "right": {initial: "auto"},
 	"bottom": {initial: "auto"}, "left": {initial: "auto"},
 	"z-index": {initial: "auto"},
 
@@ -66,6 +75,7 @@ var properties = map[string]property{
 	"caption-side":           {inherited: true, initial: "top"},
 	"table-layout":           {initial: "auto"},
 	"text-align":             {inherited: true, initial: "start"},
+	"text-indent":            {inherited: true, initial: "0"},
 	"text-transform":         {inherited: true, initial: "none"},
 	"-webkit-font-smoothing": {inherited: true, initial: "auto"},
 	"white-space":            {inherited: true, initial: "normal"},
@@ -73,14 +83,23 @@ var properties = map[string]property{
 	"color":                  {inherited: true, initial: "canvastext"},
 	"cursor":                 {inherited: true, initial: "auto"},
 	"list-style-type":        {inherited: true, initial: "disc"},
-	"text-shadow":            {inherited: true, initial: "none"},
-	"image-rendering":        {inherited: true, initial: "auto"},
-	"accent-color":           {inherited: true, initial: "auto"},
-	"caret-color":            {inherited: true, initial: "auto"},
-	"visibility":             {inherited: true, initial: "visible"},
-	"pointer-events":         {inherited: true, initial: "auto"},
-	"text-overflow":          {initial: "clip"},
-	"scrollbar-width":        {initial: "auto"},
+	"quotes":                 {inherited: true, initial: "auto"},
+	"content":                {initial: "normal"},
+	"counter-reset":          {initial: "none"}, "counter-increment": {initial: "none"},
+	"counter-set":     {initial: "none"},
+	"text-shadow":     {inherited: true, initial: "none"},
+	"image-rendering": {inherited: true, initial: "auto"},
+	"accent-color":    {inherited: true, initial: "auto"},
+	"caret-color":     {inherited: true, initial: "auto"},
+	"visibility":      {inherited: true, initial: "visible"},
+	"pointer-events":  {inherited: true, initial: "auto"},
+	// inherited, where Chrome cuts a no-drag box out of the drag boxes
+	// around it: the same regions, read off the element under the pointer
+	"app-region": {inherited: true, initial: "none"},
+	// inherited, as Chrome has it: an element with no rule takes its parent's
+	"user-select":     {inherited: true, initial: "auto"},
+	"text-overflow":   {initial: "clip"},
+	"scrollbar-width": {initial: "auto"},
 
 	"background-color":    {initial: "transparent"},
 	"background-image":    {initial: "none"}, // one layer: url() or linear-gradient(), no repeating or radial ones
@@ -100,6 +119,11 @@ var properties = map[string]property{
 
 	"transition-property": {initial: "all"}, "transition-duration": {initial: "0s"},
 	"transition-timing-function": {initial: "ease"}, "transition-delay": {initial: "0s"},
+
+	"text-decoration-line":      {initial: "none"},
+	"text-decoration-style":     {initial: "solid"},
+	"text-decoration-color":     {initial: "currentcolor"},
+	"text-decoration-thickness": {initial: "auto"},
 }
 
 // shorthands lists each shorthand's longhands, in the order CSS gives them.
@@ -134,9 +158,16 @@ var shorthands = map[string][]string{
 	"grid-row":      {"grid-row-start", "grid-row-end"},
 	"overflow":      {"overflow-x", "overflow-y"},
 	"outline":       {"outline-color", "outline-style", "outline-width"},
-	"background":    {"background-color", "background-image", "background-repeat", "background-position"},
-	"list-style":    {"list-style-type"},
-	"transition":    {"transition-property", "transition-duration", "transition-timing-function", "transition-delay"},
+	"columns":       {"column-width", "column-count"},
+	"column-rule":   {"column-rule-width", "column-rule-style", "column-rule-color"},
+	"background": {"background-color", "background-image", "background-repeat", "background-position",
+		"background-size"},
+	"list-style": {"list-style-type"},
+	"font":       {"font-style", "font-weight", "font-size", "line-height", "font-family"},
+	"transition": {"transition-property", "transition-duration", "transition-timing-function", "transition-delay"},
+
+	"text-decoration": {"text-decoration-line", "text-decoration-style", "text-decoration-color",
+		"text-decoration-thickness"},
 }
 
 // outside names properties a browser knows that the subset leaves out,
@@ -144,15 +175,7 @@ var shorthands = map[string][]string{
 //
 //nolint:gochecknoglobals,goconst // unsupported properties' advice
 var outside = map[string]string{
-	"float":            "floats are not supported; use flex or grid",
-	"clear":            "floats are not supported; use flex or grid",
-	"vertical-align":   "vertical-align is not supported; use align-items or align-self",
-	"columns":          "multi-column layout is not supported; use grid",
-	"column-count":     "multi-column layout is not supported; use grid",
-	"column-width":     "multi-column layout is not supported; use grid",
 	"border-collapse":  "tables as layout are not supported; use grid",
-	"font":             "the font shorthand is not supported; use font-family, font-size, font-weight and line-height",
-	"text-decoration":  "text-decoration is not in the subset",
 	"word-wrap":        "word-wrap is the old name of overflow-wrap",
 	"grid-gap":         "grid-gap is the old name of gap",
 	"grid-row-gap":     "grid-row-gap is the old name of row-gap",

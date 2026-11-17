@@ -51,6 +51,64 @@ func Kbd(args ...Arg) *Node     { return element(dom.Kbd, args) }
 func Samp(args ...Arg) *Node    { return element(dom.Samp, args) }
 func Pre(args ...Arg) *Node     { return element(dom.Pre, args) }
 
+func Ul(args ...Arg) *Node { return element(dom.Ul, args) }
+func Ol(args ...Arg) *Node { return element(dom.Ol, args) }
+
+// Li is a list item: a bullet in a Ul or a Menu, its number in an Ol (from the list's start
+// attribute, 1 unless set).
+func Li(args ...Arg) *Node         { return element(dom.Li, args) }
+func Dl(args ...Arg) *Node         { return element(dom.Dl, args) }
+func Dt(args ...Arg) *Node         { return element(dom.Dt, args) }
+func Dd(args ...Arg) *Node         { return element(dom.Dd, args) }
+func H5(args ...Arg) *Node         { return element(dom.H5, args) }
+func H6(args ...Arg) *Node         { return element(dom.H6, args) }
+func Blockquote(args ...Arg) *Node { return element(dom.Blockquote, args) }
+func Figure(args ...Arg) *Node     { return element(dom.Figure, args) }
+func Figcaption(args ...Arg) *Node { return element(dom.Figcaption, args) }
+func Form(args ...Arg) *Node       { return element(dom.Form, args) }
+func Address(args ...Arg) *Node    { return element(dom.Address, args) }
+func Hgroup(args ...Arg) *Node     { return element(dom.Hgroup, args) }
+func Menu(args ...Arg) *Node       { return element(dom.Menu, args) }
+func Search(args ...Arg) *Node     { return element(dom.Search, args) }
+
+// A is a link: with an href it takes the focus and clicks, by the pointer, Enter or a pad, as a
+// button does. ui opens nothing itself: what a click does is its OnClick.
+func A(args ...Arg) *Node     { return element(dom.A, args) }
+func B(args ...Arg) *Node     { return element(dom.B, args) }
+func I(args ...Arg) *Node     { return element(dom.I, args) }
+func U(args ...Arg) *Node     { return element(dom.U, args) }
+func S(args ...Arg) *Node     { return element(dom.S, args) }
+func Small(args ...Arg) *Node { return element(dom.Small, args) }
+func Abbr(args ...Arg) *Node  { return element(dom.Abbr, args) }
+func Cite(args ...Arg) *Node  { return element(dom.Cite, args) }
+func Mark(args ...Arg) *Node  { return element(dom.Mark, args) }
+func Time(args ...Arg) *Node  { return element(dom.Time, args) }
+func Var(args ...Arg) *Node   { return element(dom.Var, args) }
+func Del(args ...Arg) *Node   { return element(dom.Del, args) }
+func Ins(args ...Arg) *Node   { return element(dom.Ins, args) }
+func Dfn(args ...Arg) *Node   { return element(dom.Dfn, args) }
+func Bdi(args ...Arg) *Node   { return element(dom.Bdi, args) }
+func Bdo(args ...Arg) *Node   { return element(dom.Bdo, args) }
+func Data(args ...Arg) *Node  { return element(dom.DataElement, args) }
+
+// Br breaks the line it is in.
+func Br(args ...Arg) *Node     { return element(dom.Br, args) }
+func Center(args ...Arg) *Node { return element(dom.Center, args) }
+func Big(args ...Arg) *Node    { return element(dom.Big, args) }
+
+// Font is the old font element, a span: its color, size and face attributes style nothing.
+func Font(args ...Arg) *Node { return element(dom.Font, args) }
+func Sub(args ...Arg) *Node  { return element(dom.Sub, args) }
+func Sup(args ...Arg) *Node  { return element(dom.Sup, args) }
+
+// Q is a short quotation: its text stands between “ and ”.
+func Q(args ...Arg) *Node { return element(dom.Q, args) }
+
+// Fieldset is a bordered group of a form's controls; a Legend that is its first child stands on
+// its top border, which leaves a gap for it.
+func Fieldset(args ...Arg) *Node { return element(dom.Fieldset, args) }
+func Legend(args ...Arg) *Node   { return element(dom.Legend, args) }
+
 // Label is a label element. As in HTML, a click on it focuses and clicks
 // the control it names (For's id, else the first control inside it), and
 // its text names that control for automation.

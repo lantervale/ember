@@ -15,7 +15,13 @@ const (
 )
 
 //nolint:gochecknoglobals // fixed values every paint reads; Go has no constant colours, tables or shapes
-var thumbColor = color.RGBA(1, 1, 1, 0.25)
+var (
+	thumbColor = color.RGBA(1, 1, 1, 0.25)
+	// An overlay thumb lies on content of any colour: dark, with a light
+	// edge a point out, as macOS draws its own.
+	overlayThumb = color.RGBA(0, 0, 0, 0.5)
+	overlayEdge  = color.RGBA(1, 1, 1, 0.35)
+)
 
 // Bars are where a scroll container's bars lie, in the root's space: the
 // view they scroll, the tracks and thumbs of those showing, and the
@@ -27,6 +33,8 @@ type Bars struct {
 	Content                        geom.Vec2
 	// Scroll is the offset the thumbs show.
 	Scroll geom.Vec2
+	// Overlay bars lie over the content, not in a gutter beside it.
+	Overlay bool
 }
 
 // A thumb is sized and placed on the whole bar, as Chrome sizes the box of
@@ -41,11 +49,12 @@ const (
 // padding box's right and bottom edges, in the gutter layout keeps beside
 // the scrollport, overflow: scroll always and auto when the content
 // overflows that way; none for scrollbar-width: none, which still scrolls
-// by the wheel.
+// by the wheel. Overlay bars lie in the same place with no gutter under
+// them, over the content's edge.
 func BarsOf(b *box.Box, at geom.Vec2) Bars {
 	view := padding(b, at)
-	l := Bars{View: view, Content: b.Content, Scroll: b.Scroll}
 	st := shown(b)
+	l := Bars{View: view, Content: b.Content, Scroll: b.Scroll, Overlay: st.ScrollbarOverlay}
 	o := st.Overflow
 	l.V = !st.ScrollbarNone && (o.Height == style.Scroll || o.Height == style.OverflowAuto && b.Content.Y > view.H)
 	l.H = !st.ScrollbarNone && (o.Width == style.Scroll || o.Width == style.OverflowAuto && b.Content.X > view.W)
@@ -77,12 +86,19 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 }
 
 func (l Bars) paint(s Surface, alpha float32) {
-	c := fade(thumbColor, alpha)
+	thumb := func(r geom.Rect) {
+		if !l.Overlay {
+			s.RoundRect(r, 3, fade(thumbColor, alpha))
+			return
+		}
+		s.RoundRect(r.Inset(-1), 4, fade(overlayEdge, alpha))
+		s.RoundRect(r, 3, fade(overlayThumb, alpha))
+	}
 	if l.VThumb.H > 0 {
-		s.RoundRect(l.VThumb, 3, c)
+		thumb(l.VThumb)
 	}
 	if l.HThumb.W > 0 {
-		s.RoundRect(l.HThumb, 3, c)
+		thumb(l.HThumb)
 	}
 }
 

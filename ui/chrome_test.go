@@ -60,6 +60,16 @@ func TestAScrollingBoxReservesChromesGutter(t *testing.T) {
 	chrome.Match(t, d, geom.V2(640, 400))
 }
 
+func TestOverlayScrollbarsTakeNoRoomAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.OverlayScrollbars(), ui.CSS("html { height: 100%; overflow-y: auto; }"))
+	d.Body().Append(
+		ui.Div(ui.Style("width: 100px; height: 50px; overflow-y: scroll"), ui.Div(ui.Style("height: 10px"))),
+		ui.Div(ui.Style("width: 100px; height: 50px; overflow: auto"), ui.Div(ui.Style("height: 90px"))),
+		ui.Textarea(ui.Style("width: 100px; height: 40px"), ui.Text("one two three four five six seven eight nine ten")),
+		ui.Div(ui.Style("height: 900px")))
+	chrome.Match(t, d, geom.V2(640, 400))
+}
+
 func TestLinesMatchChromeOnARetinaDisplay(t *testing.T) {
 	for _, size := range []string{"13px", "15px", "17px"} {
 		d := ui.NewDocument()
