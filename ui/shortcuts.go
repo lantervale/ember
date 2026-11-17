@@ -19,10 +19,10 @@ import (
 // Alt name a key each. A shortcut matches whenever its Document is drawn
 // and not under another Document's modal, even with nothing focused, as
 // an app's menus do: the one exception to the keys being the game's. A
-// focused text field keeps the keys it edits with, also one of another
-// layer holding the keyboard (KeyboardCaptured), an open menu the keys
-// it moves by, a modal dialog the shortcuts outside it; a matched key is
-// captured. Of two Documents in one window matching a press, the one
+// focused text field keeps the keys it edits with (no function key),
+// also one of another layer holding the keyboard (KeyboardCaptured), an
+// open menu the keys it moves by, a modal dialog the shortcuts outside
+// it; a matched key is captured. Of two Documents in one window matching a press, the one
 // drawn last chooses, the frame after.
 
 type mods uint8
@@ -169,10 +169,11 @@ func (d *Document) shortcuts(c *twod.Canvas, in *input.State) {
 }
 
 // edits reports whether a focused text field takes s itself: a plain or
-// shifted key, or the clipboard, undo and select-all shortcuts.
+// shifted key but a function key, or the clipboard, undo and select-all
+// shortcuts.
 func (d *Document) edits(s shortcut) bool {
 	if s.mods&^modShift == 0 {
-		return true
+		return s.key < input.KeyF1 || s.key > input.KeyF25
 	}
 	cmd := modControl
 	if d.platform == textedit.Mac {

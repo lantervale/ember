@@ -200,3 +200,16 @@ func TestAFieldOfAnotherDocumentKeepsItsEditingKeys(t *testing.T) {
 	assert.Zero(t, clicked, "Backspace edits the other document's field, not the menu")
 	assert.Equal(t, "6", inspector.Value(field))
 }
+
+func TestAFocusedFieldLeavesFunctionKeysToTheirShortcuts(t *testing.T) {
+	tools := item("Developer tools", keys("F12"))
+	field := ui.Input(ui.Value("walls"))
+	l := liveDoc(t,
+		ui.Div(ui.Attr("role", "menubar"), ui.Span(ui.Attr("role", "menuitem"), ui.Text("View"), menu(tools))), field)
+
+	l.doc.Focus(field)
+	l.frames(1)
+	l.key(input.KeyF12)
+	assert.Equal(t, []*ui.Node{tools}, l.clicks, "a field edits with no function key")
+	assert.Equal(t, "walls", l.doc.Value(field))
+}
