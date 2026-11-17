@@ -14,6 +14,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | the default selection colour on Windows and Linux | macOS's blue everywhere |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
 | monospace text at a fractional size (a `code` in 13px text is 10.5625px) | drawn a little wider than it is measured, so a selection after it covers the edge of its last letter |
+| a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
 | `text-decoration-skip-ink`, a decoration's shadow | a line is drawn through descenders, and `text-shadow` leaves it out |
