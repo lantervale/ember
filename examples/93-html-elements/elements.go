@@ -38,7 +38,7 @@ func bottom(n *ui.Node) float32 {
 // elements are ui's elements by tag, each built in the file of its group.
 func elements() map[string]element {
 	all := map[string]element{}
-	for _, group := range []map[string]element{blocks(), texts(), controls(), structure()} {
+	for _, group := range []map[string]element{blocks(), texts(), lists(), controls(), structure()} {
 		maps.Copy(all, group)
 	}
 	return all

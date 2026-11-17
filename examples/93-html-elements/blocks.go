@@ -12,6 +12,17 @@ func blocks() map[string]element {
 		"main":    {mainElement, 280},
 		"aside":   {aside, 322},
 		"article": {article, 300},
+
+		"blockquote": {blockquote, 340},
+		"figure":     {figure, 240},
+		"figcaption": {figure, 240},
+		"form":       {formElement, 316},
+		"address":    {address, 296},
+		"hgroup":     {hgroup, 260},
+		"search":     {search, 290},
+		"center":     {center, 280},
+		"fieldset":   {fieldset, 240},
+		"legend":     {fieldset, 240},
 	}
 }
 
@@ -112,5 +123,75 @@ func article(*ui.Document) *ui.Node {
 			ui.H3(ui.Text("The three beacons")),
 			ui.P(ui.Text("Two are lit; one is left.")),
 		),
+	)
+}
+
+// blockquote is what the innkeeper said, set in from the line before it.
+func blockquote(*ui.Document) *ui.Node {
+	return ui.Div(
+		ui.P(ui.Text("The innkeeper lowers her voice:")),
+		ui.Blockquote(ui.Text("Nobody who went down to the crypt after dark came back the same.")),
+	)
+}
+
+// figure is the panel picture with its caption under it.
+func figure(*ui.Document) *ui.Node {
+	return ui.Figure(
+		ui.Img(ui.Attr("src", "panel.png"), ui.Attr("alt", "A panel"), ui.Style("width: 72px; image-rendering: pixelated")),
+		ui.Figcaption(ui.Text("The crypt's seal")),
+	)
+}
+
+// formElement is a new hero's name and the button that makes it.
+func formElement(*ui.Document) *ui.Node {
+	return ui.Form(ui.ID("new-hero"),
+		ui.Label(ui.For("hero"), ui.Text("Hero")),
+		ui.Text(" "),
+		ui.Input(ui.ID("hero"), ui.Value("Aldric")),
+		ui.Text(" "),
+		ui.Button(ui.Text("Create")),
+	)
+}
+
+// address is who made the game, one line each.
+func address(*ui.Document) *ui.Node {
+	return ui.Address(
+		ui.Text("Lantervale studio"),
+		ui.Br(),
+		ui.Text("Made by two leads and their agents"),
+	)
+}
+
+// hgroup is a screen's title with the line that goes with it.
+func hgroup(*ui.Document) *ui.Node {
+	return ui.Hgroup(ui.Style("border: 1px dashed #999; padding: 0 8px"),
+		ui.H2(ui.Text("The Crypt")),
+		ui.P(ui.Text("Floor 3, the flooded halls")),
+	)
+}
+
+// search is the field and button that look through the bestiary.
+func search(*ui.Document) *ui.Node {
+	return ui.Search(ui.Style("border: 1px dashed #999; padding: 8px"),
+		ui.Input(ui.Type("search"), ui.Placeholder("Search the bestiary")),
+		ui.Text(" "),
+		ui.Button(ui.Text("Find")),
+	)
+}
+
+// center is a game over screen's two lines, centred.
+func center(*ui.Document) *ui.Node {
+	return ui.Center(ui.Style("border: 1px dashed #999; padding: 8px"),
+		ui.Div(ui.Text("Game over")),
+		ui.Div(ui.Text("Press Enter to try again")),
+	)
+}
+
+// fieldset is the sound settings in a frame, its legend on the frame's top line.
+func fieldset(*ui.Document) *ui.Node {
+	return ui.Fieldset(
+		ui.Legend(ui.Text("Sound")),
+		ui.Div(ui.Label(ui.Input(ui.Type("checkbox"), ui.Checked(true)), ui.Text(" Music"))),
+		ui.Div(ui.Label(ui.Input(ui.Type("checkbox")), ui.Text(" Effects"))),
 	)
 }
