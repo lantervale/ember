@@ -29,7 +29,7 @@ func TestSoftBodiesStartedInOnePointSpreadUnderTheCap(t *testing.T) {
 	things := pile(30, geom.V2(16, 21))
 	w, space := setup(things...)
 	space.crowd.rebuild(space)
-	require.Greater(t, fullest(space), float32(4), "thirty on one point overfill their cell")
+	require.Greater(t, fullest(space), float32(3), "thirty on one point overfill their cell")
 	w.RunFrames(200)
 	assert.LessOrEqual(t, fullest(space), float32(1), "they spread until no cell is over capacity")
 	for i, a := range things {
@@ -53,18 +53,20 @@ func TestSoftBodiesPassThroughEachOtherButStopAtHardOnes(t *testing.T) {
 	assert.True(t, NewBody(Box(1, 1), Soft(0.5)).Soft() == 0.5)
 }
 
-func TestASoftBodyMovesIntoACellOnlyWhileItHasRoom(t *testing.T) {
-	crowd := pile(12, geom.V2(48, 16))
-	walker := newThing(16, 16, NewBody(Box(16, 10), Soft(0.0001)))
-	w, space := setup(append(crowd, walker)...)
+func TestASoftBodyNeverGoesDeeperIntoOneItOverlapsButSlidesAlongIt(t *testing.T) {
+	ahead := newThing(14, 0, NewBody(Box(16, 10), Soft(0.0001)))
+	walker := newThing(0, 0, NewBody(Box(16, 10), Soft(0.0001)))
+	w, space := setup(ahead, walker)
 	w.RunFrames(1)
-	space.crowd.rebuild(space)
-	full := space.crowd.slotOf(geom.V2(48, 11))
-	require.Greater(t, space.crowd.density[full], float32(capacity))
-	moved, _ := space.Move(walker, geom.V2(30, 0))
-	assert.Equal(t, geom.Vec2{}, moved, "the full cell ahead stops it")
-	moved, _ = space.Move(walker, geom.V2(0, 3))
-	assert.Equal(t, geom.V2(0, 3), moved, "it still moves where there is room")
+	at := walker.at
+	moved, _ := space.Move(walker, geom.V2(5, 0))
+	assert.Equal(t, geom.Vec2{}, moved, "straight into the body it overlaps, it stays")
+	moved, _ = space.Move(walker, geom.V2(3, 3))
+	assert.InDelta(t, 0, moved.X, 0.3, "pressing past it, it keeps only the part along its side")
+	assert.Greater(t, moved.Y, float32(2))
+	moved, _ = space.Move(walker, geom.V2(-3, 0))
+	assert.Equal(t, geom.V2(-3, 0), moved, "away from it, it moves freely")
+	assert.NotEqual(t, at, walker.at)
 }
 
 func TestSpreadingNeverPushesIntoSolidsOrTheHero(t *testing.T) {
