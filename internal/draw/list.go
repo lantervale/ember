@@ -220,11 +220,11 @@ const (
 	Unlit LightMode = iota
 	LitPerPixel
 	LitAtAnchor
-	// LitAround takes the light of the brightest of four points round a
-	// box: past the middle of each of its sides.
+	// LitAround takes the light of the brightest of eight points round a
+	// box: past the middle of each of its sides, and past each corner.
 	LitAround
-	// LitFacing is LitAround without the point above the box: a wall's
-	// face, which looks down the screen, never lit from behind it.
+	// LitFacing takes it past the box's left, right and bottom sides only:
+	// a wall's face, which looks down the screen, never lit from behind it.
 	LitFacing
 )
 
@@ -239,7 +239,8 @@ func (c *List) SetLight(m LightMode, toLight geom.Transform2D, anchor geom.Vec2)
 }
 
 // SetLightAround lights what is drawn next by the brightest of the points
-// just past the middles of box's sides, box in this list's points: a tall
+// just past the middles of box's sides and past its corners, box in this
+// list's points: a tall
 // tile round what it blocks light with, lit from whichever side the light
 // comes.
 func (c *List) SetLightAround(toLight geom.Transform2D, box geom.Rect) {
@@ -252,7 +253,7 @@ func (c *List) SetLightAround(toLight geom.Transform2D, box geom.Rect) {
 // SetLightBox lights what is drawn next round box, in the space of what
 // is drawn, as m says: LitFacing by the brightest of the points just past
 // its left, right and bottom sides, a solid tile's face; LitAround past
-// any of its four, a wall seen from above. It applies only while the list
+// any of its sides or corners, a wall seen from above. It applies only while the list
 // draws lit per pixel, and holds until RestoreLight.
 func (c *List) SetLightBox(box geom.Rect, m LightMode) {
 	if c.light != LitPerPixel || m != LitFacing && m != LitAround {

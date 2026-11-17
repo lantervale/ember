@@ -59,7 +59,8 @@ func TileShadow(on bool, ids ...int) twod.TilesetOption {
 }
 
 // TileLitAround lights tiles that block light from every side, the
-// brightest light just past any side of what they block with: a wall seen
+// brightest light just past any side or corner of what they block with,
+// so a rim tile meeting its floor only at a corner is lit too: a wall seen
 // from above, such as the rim of rock round a cave, whose floor may lie on
 // any side of it. By default such a tile is lit as a wall's face, from its
 // sides and below, never from behind it. For a tileset made in code.
