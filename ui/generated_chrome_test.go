@@ -24,10 +24,13 @@ func TestGeneratedBoxesOfEveryDisplayMatchChrome(t *testing.T) {
 
 // The elements Chrome gives no ::before box, and those ui draws whole or
 // lays out as table parts, take none here; an hr, a button, a details and
-// its summary, a table's cell and caption do.
+// its summary, a table's cell and caption do. The fields are blocks of a
+// size the sheet gives: left to themselves they are as wide as Chrome's
+// system font makes them, which changes with the machine.
 func TestGeneratedBoxesStandOnTheElementsChromeGivesThem(t *testing.T) {
 	d := ui.NewDocument(ui.CSS(`
 body { margin: 0; }
+input, textarea, select { display: block; width: 120px; height: 24px; }
 img::before, br::before, input::before, textarea::before, select::before, canvas::before { content: "x"; }
 hr::before, button::before, details::after, td::before, caption::after, li::before,
 legend::before, fieldset::after, a::before, dialog::before, label::after {
@@ -36,7 +39,8 @@ legend::before, fieldset::after, a::before, dialog::before, label::after {
 	d.Body().Append(
 		ui.Img(ui.Style("width: 20px; height: 20px")), ui.Div(ui.Text("a"), ui.Br(), ui.Text("b")),
 		ui.Input(), ui.Textarea(), ui.Select(ui.Option(ui.Text("one"))), ui.Canvas(func(*twod.Canvas) {}),
-		ui.Hr(), ui.Button(ui.Text("go")), ui.Details(ui.Attr("open", ""), ui.Summary(ui.Text("more")), ui.P(ui.Text("less"))),
+		ui.Hr(), ui.Button(ui.Text("go")),
+		ui.Details(ui.Attr("open", ""), ui.Summary(ui.Text("more")), ui.P(ui.Text("less"))),
 		ui.Table(ui.Caption(ui.Text("cap")), ui.Tr(ui.Td(ui.Text("cell")))),
 		ui.Ul(ui.Li(ui.Text("item"))), ui.Fieldset(ui.Legend(ui.Text("legend")), ui.Label(ui.Text("label"))),
 		ui.P(ui.A(ui.Attr("href", "#"), ui.Text("link"))),
@@ -72,7 +76,9 @@ h3::after { content: " [" attr(data-tag) "]"; }
 .toc .toc { padding-left: 20px; }
 .set { counter-reset: n 4; }
 .set span { counter-increment: n 3; }
-.set span::after { content: counter(n) counter(n, lower-alpha) counter(n, upper-alpha) counter(n, lower-roman) counter(none-such) ","; }
+.set span::after {
+	content: counter(n) counter(n, lower-alpha) counter(n, upper-alpha) counter(n, lower-roman) counter(none-such) ",";
+}
 .set .jump { counter-set: n 40; }
 ol, ul { margin: 4px 0; }
 .alpha { list-style-type: lower-alpha; }
@@ -88,7 +94,8 @@ blockquote::after { content: no-close-quote; }
 	d.Body().Append(
 		ui.H2(ui.Text("One")), ui.H3(ui.Attr("data-tag", "new"), ui.Text("First")), ui.H3(ui.Text("Second")),
 		ui.H2(ui.Text("Two")), ui.H3(ui.Attr("data-tag", "x"), ui.Text("Third")),
-		toc(ui.Li(ui.Text("a")), ui.Li(ui.Text("b"), toc(ui.Li(ui.Text("b1")), ui.Li(ui.Text("b2"), toc(ui.Li(ui.Text("deep")))))),
+		toc(ui.Li(ui.Text("a")),
+			ui.Li(ui.Text("b"), toc(ui.Li(ui.Text("b1")), ui.Li(ui.Text("b2"), toc(ui.Li(ui.Text("deep")))))),
 			ui.Li(ui.Text("c"))),
 		ui.P(ui.Class("set"), ui.Span(ui.Text("x")), ui.Span(ui.Class("jump"), ui.Text("y")), ui.Span(ui.Text("z"))),
 		ui.P(ui.Text("He said "), ui.Q(ui.Text("one "), ui.Q(ui.Text("two "), ui.Q(ui.Text("three")))), ui.Text(" and "),

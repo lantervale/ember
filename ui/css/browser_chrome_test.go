@@ -253,6 +253,25 @@ func TestChromeAnswersMediaQueriesTheSame(t *testing.T) {
 	t.Logf("%d queries answered as Chrome answers them at %g by %g", len(cases), m.Width, m.Height)
 }
 
+// TestChromeReadsTheQueriesItAsksTheMachine asks Chrome whether it reads
+// the queries ui gives a fixed answer: Chrome's own answer is the
+// machine's, its pointing devices and its user's preferences, so only
+// the reading is compared (decision 0086). A query Chrome reads holds
+// or its negation does; one it doesn't read is false both ways.
+func TestChromeReadsTheQueriesItAsksTheMachine(t *testing.T) {
+	const unknown = "(unknown-thing)"
+	queries := append(css.MachineMediaQueries(), unknown)
+	list, _ := json.Marshal(queries)
+	var read []bool
+	ask(t, geom.V2(800, 513),
+		`return `+string(list)+`.map(q => matchMedia(q).matches !== matchMedia("not " + q).matches);`, &read)
+	for i, q := range queries {
+		if read[i] == (q == unknown) {
+			t.Errorf("@media %s: Chrome reads it %v", q, read[i])
+		}
+	}
+}
+
 // TestChromeSupportsWhatUISupportsWhereBothKnowIt asks Chrome's
 // CSS.supports conditions on what both read, or both don't.
 func TestChromeSupportsWhatUISupportsWhereBothKnowIt(t *testing.T) {
@@ -294,8 +313,9 @@ for (const tag of `+string(tagList)+`) sizing(doc.createElement(tag), tag);
 for (const type of `+string(typeList)+`) { const e = doc.createElement("input"); e.type = type;
 	sizing(e, 'input[type="' + type + '"]'); }
 return out;`, &chromes)
-	rule := css.BrowserDefault[strings.Index(css.BrowserDefault, "}")+1:]
-	list := strings.Join(strings.Fields(rule[:strings.Index(rule, "{")]), " ")
+	_, rule, _ := strings.Cut(css.BrowserDefault, "}")
+	selectors, _, _ := strings.Cut(rule, "{")
+	list := strings.Join(strings.Fields(selectors), " ")
 	if want := strings.Join(chromes, ", "); list != want {
 		t.Errorf("css.BrowserDefault sizes by their border\n     %s\nChrome %s", list, want)
 	}

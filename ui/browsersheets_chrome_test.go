@@ -80,7 +80,10 @@ func TestABrowsersSheetLaysOutAsChromeReadsIt(t *testing.T) {
 }
 
 // mediaSite changes with the viewport's width, height and shape; one of
-// its queries asks for a feature neither Chrome nor ui knows.
+// its queries asks for a feature neither Chrome nor ui knows. None asks
+// what Chrome answers for the machine it runs on, its pointer or its
+// user's preferences, where ui's answer is fixed
+// (TestRulesUnderWhatChromeAsksTheMachineFollowFixedAnswers).
 const mediaSite = `
 .side { width: 240px; height: 30px; }
 .main { height: 40px; }
@@ -92,7 +95,7 @@ const mediaSite = `
 @media print, (orientation: portrait) { .note { width: 50%; } }
 @media (min-height: 500px) and (min-aspect-ratio: 3/2) { .note { padding: 7px; } }
 @media (min-width: 40em) { .em { width: 40em; } }
-@media (hover: hover) and (pointer: fine) { .em { height: 12px; } }
+@media (color) and (min-resolution: 1dppx) { .em { height: 12px; } }
 @media (unknown-thing), (min-width: 1000px) { .em { margin-top: 9px; } }
 @media (min-width: 600px) { @media (max-height: 650px) { .nested { height: 22px; } } }
 @media (400px <= height <= 600px) { .nested { width: 300px; } }

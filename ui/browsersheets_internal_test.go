@@ -117,6 +117,24 @@ func TestMediaRulesFollowTheDocumentsViewport(t *testing.T) {
 	assert.Equal(t, geom.V2(200, 10), geom.V2(side.Box().W, side.Box().H), "and back")
 }
 
+func TestRulesUnderWhatChromeAsksTheMachineFollowFixedAnswers(t *testing.T) {
+	d := NewDocument(CSS(`
+div { height: 5px; }
+@media (hover: hover) and (pointer: fine) { .mouse { height: 12px; } }
+@media (hover: none), (pointer: coarse) { .touch { height: 12px; } }
+@media (prefers-color-scheme: dark) { .dark { height: 12px; } }
+@media (prefers-reduced-motion: reduce) { .still { height: 12px; } }
+`))
+	mouse, touch, dark, still := Div(Class("mouse")), Div(Class("touch")), Div(Class("dark")), Div(Class("still"))
+	d.Body().Append(mouse, touch, dark, still)
+	d.Layout(geom.V2(800, 400))
+	assert.Empty(t, d.Warnings())
+	assert.InDelta(t, 12, mouse.Box().H, 0.01, "a mouse, whatever the machine has")
+	assert.InDelta(t, 5, touch.Box().H, 0.01, "never a touch screen")
+	assert.InDelta(t, 5, dark.Box().H, 0.01, "a light scheme")
+	assert.InDelta(t, 5, still.Box().H, 0.01, "no preference")
+}
+
 func TestMediaWidthsAreTheDocumentsOwnPixels(t *testing.T) {
 	d := NewDocument(Zoom(2), CSS(`.side { width: 200px; } @media (max-width: 600px) { .side { width: 50px; } }`))
 	side := Div(Class("side"))

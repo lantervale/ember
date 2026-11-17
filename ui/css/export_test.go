@@ -4,8 +4,8 @@ package css
 
 // WebkitTable is -webkit-'s property tables: the plain property each
 // name is read as, and why each of Chrome's own stays as written.
-func WebkitTable() (plain, own map[string]string) {
-	plain = map[string]string{}
+func WebkitTable() (map[string]string, map[string]string) {
+	plain := map[string]string{}
 	for _, name := range webkit.same {
 		plain[name] = name
 	}
@@ -38,6 +38,16 @@ func MediaCases() []MediaCase {
 	var out []MediaCase
 	for _, c := range mediaCases {
 		out = append(out, MediaCase{c.query, c.want})
+	}
+	return out
+}
+
+// MachineMediaQueries are the queries of
+// TestWhatChromeAsksTheMachineHasAFixedAnswer.
+func MachineMediaQueries() []string {
+	var out []string
+	for _, c := range machineMediaCases {
+		out = append(out, c.query)
 	}
 	return out
 }

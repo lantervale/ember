@@ -32,6 +32,35 @@ func TestMediaQueriesAreAnsweredAsChromeAnswers(t *testing.T) {
 	}
 }
 
+// TestWhatChromeAsksTheMachineHasAFixedAnswer holds ui's answers where
+// Chrome's change with the machine it runs on, its pointing devices and
+// its user's preferences: a mouse, a light scheme, no preference
+// (decision 0086). The chrome suite only checks Chrome reads each query.
+func TestWhatChromeAsksTheMachineHasAFixedAnswer(t *testing.T) {
+	for _, c := range machineMediaCases {
+		got, warns := holds(c.query, chromeViewport)
+		if got != c.want || warns != "" {
+			t.Errorf("@media %s: %v, want %v %s", c.query, got, c.want, warns)
+		}
+	}
+}
+
+//nolint:gochecknoglobals // a test's table
+var machineMediaCases = []struct {
+	query string
+	want  bool
+}{
+	{"(hover: hover)", true}, {"(hover: none)", false}, {"(hover)", true}, {"(any-hover: hover)", true},
+	{"(any-hover: none)", false},
+	{"(pointer: fine)", true}, {"(pointer: coarse)", false}, {"(pointer: none)", false}, {"(pointer)", true},
+	{"(any-pointer: fine)", true}, {"(any-pointer: coarse)", false},
+	{"(prefers-reduced-motion: reduce)", false}, {"(prefers-reduced-motion: no-preference)", true},
+	{"(prefers-reduced-motion)", false},
+	{"(prefers-contrast: no-preference)", true}, {"(prefers-contrast: more)", false}, {"(prefers-contrast)", false},
+	{"(forced-colors: none)", true}, {"(forced-colors: active)", false}, {"(forced-colors)", false},
+	{"(prefers-color-scheme: light)", true}, {"(prefers-color-scheme: dark)", false}, {"(prefers-color-scheme)", true},
+}
+
 //nolint:gochecknoglobals // a test's table
 var mediaCases = []struct {
 	query string
@@ -40,11 +69,6 @@ var mediaCases = []struct {
 	{"screen", true}, {"print", false}, {"all", true}, {"tv", false}, {"handheld", false}, {"speech", false},
 	{"only screen", true}, {"not screen", false}, {"not print", true}, {"", true}, {"screen, print", true},
 	{"print, (unknown-thing), screen", true}, {"not all", false}, {"SCREEN AND (COLOR)", true},
-	{"(hover: hover)", true}, {"(hover: none)", false}, {"(hover)", true}, {"(any-hover: hover)", true},
-	{"(pointer: fine)", true}, {"(pointer: coarse)", false}, {"(pointer)", true}, {"(any-pointer: fine)", true},
-	{"(prefers-reduced-motion: reduce)", false}, {"(prefers-reduced-motion: no-preference)", true},
-	{"(prefers-reduced-motion)", false}, {"(prefers-contrast: no-preference)", true}, {"(prefers-contrast)", false},
-	{"(forced-colors: none)", true}, {"(forced-colors)", false}, {"(prefers-color-scheme)", true},
 	{"(color)", true}, {"(min-color: 8)", true}, {"(color: 8)", true}, {"(monochrome)", false},
 	{"(monochrome: 0)", true}, {"(grid)", false}, {"(grid: 0)", true}, {"(orientation)", true}, {"(width)", true},
 	{"(unknown-thing)", false}, {"not (unknown-thing)", false}, {"(unknown-thing) or (color)", true},
@@ -168,8 +192,9 @@ p { opacity: 0.5; }
 	p.SetAttr("placeholder", "name")
 	root := page(p)
 	tr := NewTransitions()
-	at := func(w, h float32) (colour, placeholder string, changed bool) {
-		changed = tr.SetMedia(Media{Width: w, Height: h})
+	at := func(w, h float32) (string, string, bool) {
+		var colour, placeholder string
+		changed := tr.SetMedia(Media{Width: w, Height: h})
 		if changed {
 			dom.Data(root).Dirty |= dom.DirtyStyle
 		}
