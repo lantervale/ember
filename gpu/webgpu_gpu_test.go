@@ -4,6 +4,7 @@ package gpu //nolint:testpackage // white-box: drives the renderer's unexported 
 
 import (
 	"errors"
+	"image"
 	"strings"
 	"testing"
 
@@ -66,5 +67,20 @@ fn effect(vUV: vec2f) -> vec4f {
 	empty := render.NewEffect("")
 	if r.effect(empty) != nil || !errors.Is(empty.Err(), errNoSource) {
 		t.Fatalf("an effect without a source says so: %v", empty.Err())
+	}
+}
+
+func TestAPictureWiderThanADeviceTakesStillDraws(t *testing.T) {
+	d := device(t)
+	r := &webgpu2D{}
+	if err := r.init(d); err != nil {
+		t.Fatal(err)
+	}
+	g := r.image(&render.Texture{Image: image.NewRGBA(image.Rect(0, 0, maxTextureSide+808, 4))})
+	if g.Width != maxTextureSide || g.Height != 4 {
+		t.Fatalf("uploaded at %d×%d", g.Width, g.Height)
+	}
+	if g := r.image(&render.Texture{Image: image.NewRGBA(image.Rect(0, 0, 0, 4))}); g != r.blank {
+		t.Fatal("an empty picture draws as none")
 	}
 }

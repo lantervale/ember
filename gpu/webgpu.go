@@ -17,6 +17,7 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/world"
+	xdraw "golang.org/x/image/draw"
 )
 
 // webgpu2D draws the 2D lists through WebGPU, into the texture the desktop
@@ -298,6 +299,9 @@ func (r *webgpu2D) image(t *render.Texture) *wgpu.Texture {
 		rgba = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 		imagedraw.Draw(rgba, rgba.Bounds(), t.Image, b.Min, imagedraw.Src)
 	}
+	if rgba = uploadable(rgba); rgba == nil {
+		return r.blank
+	}
 	format := wgpu.RGBA8UnormSrgb
 	if t.Encoded {
 		format = wgpu.RGBA8Unorm
@@ -311,6 +315,28 @@ func (r *webgpu2D) image(t *render.Texture) *wgpu.Texture {
 	r.images[t] = gpuTexture{gpu: g, version: t.Version()}
 	t.Uploaded()
 	return g
+}
+
+// maxTextureSide is the longest side of a texture every WebGPU device
+// takes; the device is asked for no more.
+const maxTextureSide = 8192
+
+// uploadable is img as a device takes it: itself when it fits, scaled down
+// on each side over maxTextureSide (a draw's texture coordinates are
+// fractions of the picture, so it draws at the same size, softer), nil
+// when it is empty. A texture of another size fails on the device, and
+// every draw of the frame with it.
+func uploadable(img *image.RGBA) *image.RGBA {
+	w, h := img.Rect.Dx(), img.Rect.Dy()
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	if w <= maxTextureSide && h <= maxTextureSide {
+		return img
+	}
+	fit := image.NewRGBA(image.Rect(0, 0, min(w, maxTextureSide), min(h, maxTextureSide)))
+	xdraw.ApproxBiLinear.Scale(fit, fit.Rect, img, img.Rect, xdraw.Src, nil)
+	return fit
 }
 
 // patch uploads the rectangles of t touched since its last upload into
