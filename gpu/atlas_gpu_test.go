@@ -69,3 +69,17 @@ func TestGlyphsDrawnBeforeTheAtlasGrowsInTheSameFrameStayRight(t *testing.T) {
 		t.Fatalf("the A drawn before its atlas grew differs in %d pixels from the A alone", differ)
 	}
 }
+
+func TestAHugeFontsAtlasIsATextureTheDeviceTakes(t *testing.T) {
+	d := device(t)
+	r := &webgpu2D{}
+	if err := r.init(d); err != nil {
+		t.Fatal(err)
+	}
+	f := draw.Regular.Size(400)
+	f.Measure("Garments")
+	g := r.atlas(f)
+	if g.Width > maxTextureSide || g.Height > maxTextureSide {
+		t.Fatalf("uploaded at %d×%d", g.Width, g.Height)
+	}
+}

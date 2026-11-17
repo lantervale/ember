@@ -318,8 +318,8 @@ func (r *webgpu2D) image(t *render.Texture) *wgpu.Texture {
 }
 
 // maxTextureSide is the longest side of a texture every WebGPU device
-// takes; the device is asked for no more.
-const maxTextureSide = 8192
+// takes; the device is asked for no more, and no glyph atlas grows past it.
+const maxTextureSide = draw.MaxAtlasSide
 
 // uploadable is img as a device takes it: itself when it fits, scaled down
 // on each side over maxTextureSide (a draw's texture coordinates are

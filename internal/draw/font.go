@@ -120,6 +120,13 @@ func (f *Face) Draws(text string) bool {
 // crisp on high-density displays.
 const oversample = 2
 
+// MaxAtlasSide is the longest side of a glyph atlas: of a texture every
+// WebGPU device takes. A font so large that sixteen of its glyphs don't
+// fit in a row starts with an empty atlas of that width and rasterizes
+// each glyph when it is first drawn; one whose atlas is full draws no new
+// glyph, keeping its advance.
+const MaxAtlasSide = 8192
+
 // Size returns the font rasterized at px logical pixels.
 func (f *Face) Size(px float32) *Font {
 	px = float32(math.Round(float64(px)))
@@ -223,6 +230,10 @@ func newFont(f *Face, px float32, pixel bool) (*Font, error) {
 	out.ascent = float32(m.Ascent.Ceil()) / oversample
 	out.lineHeight = float32(m.Height.Ceil()) / oversample
 	out.cell = (m.Ascent + m.Descent).Ceil() + 4
+	if w := nextPow2(16 * (out.cell + 2)); w > MaxAtlasSide {
+		out.Atlas = image.NewAlpha(image.Rect(0, 0, MaxAtlasSide, min(nextPow2(out.cell+2), MaxAtlasSide)))
+		return out, nil
+	}
 	out.Atlas = image.NewAlpha(image.Rect(0, 0, nextPow2(16*(out.cell+2)), nextPow2(8*(out.cell+2))))
 	for r := rune(32); r < 127; r++ {
 		out.glyph(r)
@@ -418,7 +429,10 @@ func (f *Font) raster(r rune, phase int) glyph {
 	x := fixed.Int26_6(phase * 64 / phases) //nolint:gosec // phase < phases, so at most 64
 	dr, mask, mp, _, ok := f.faces[face].Glyph(fixed.Point26_6{X: x}, r)
 	if ok && !dr.Empty() {
-		dst := f.place(dr.Dx()+2, dr.Dy()+2)
+		dst, room := f.place(dr.Dx()+2, dr.Dy()+2)
+		if !room {
+			return g
+		}
 		draw.Draw(f.Atlas, dst.Inset(1), mask, mp, draw.Src)
 		if f.pixel {
 			threshold(f.Atlas, dst)
@@ -474,20 +488,26 @@ func threshold(a *image.Alpha, r image.Rectangle) {
 }
 
 // place finds room for a w×h glyph in the atlas, row by row, doubling the
-// atlas's height when it is full.
-func (f *Font) place(w, h int) image.Rectangle {
+// atlas's height when it is full; there is none once the atlas would
+// pass MaxAtlasSide.
+func (f *Font) place(w, h int) (image.Rectangle, bool) {
 	row := max(f.cell, h) + 2
-	if f.penX+w+2 > f.Atlas.Rect.Dx() {
-		f.penX, f.penY = 0, f.penY+row
+	penX, penY := f.penX, f.penY
+	if penX+w+2 > f.Atlas.Rect.Dx() {
+		penX, penY = 0, penY+row
 	}
+	if w+2 > f.Atlas.Rect.Dx() || penY+row > MaxAtlasSide {
+		return image.Rectangle{}, false
+	}
+	f.penX, f.penY = penX, penY
 	for f.penY+row > f.Atlas.Rect.Dy() {
-		grown := image.NewAlpha(image.Rect(0, 0, f.Atlas.Rect.Dx(), f.Atlas.Rect.Dy()*2))
+		grown := image.NewAlpha(image.Rect(0, 0, f.Atlas.Rect.Dx(), min(f.Atlas.Rect.Dy()*2, MaxAtlasSide)))
 		draw.Draw(grown, f.Atlas.Rect, f.Atlas, image.Point{}, draw.Src)
 		f.Atlas = grown
 	}
 	at := image.Rect(f.penX+1, f.penY+1, f.penX+1+w, f.penY+1+h)
 	f.penX += w + 2
-	return at
+	return at, true
 }
 
 // uv is g's rectangle in the atlas, in texels: the atlas only grows,
