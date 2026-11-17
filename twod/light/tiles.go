@@ -62,8 +62,11 @@ func TileShadow(on bool, ids ...int) twod.TilesetOption {
 // brightest light just past any side or corner of what they block with,
 // so a rim tile meeting its floor only at a corner is lit too: a wall seen
 // from above, such as the rim of rock round a cave, whose floor may lie on
-// any side of it. By default such a tile is lit as a wall's face, from its
-// sides and below, never from behind it. For a tileset made in code.
+// any side of it. Such a tile is lit round its body shapes too, so a rim
+// casting only from a strip on its far side, the side of the dark behind
+// it, is still lit as the whole wall. By default a tile is lit as a wall's
+// face, from its sides and below, never from behind it, round what it
+// blocks light with alone. For a tileset made in code.
 func TileLitAround(ids ...int) twod.TilesetOption { return eachTile(propLit, litAround, ids) }
 
 // TileOccluderGroup puts tiles' shadows in occluder group n (0, 1 or 2),
@@ -245,7 +248,7 @@ func place(dst []shadow, ts *twod.Tileset, tb *table, id int, origin, cell geom.
 	return dst
 }
 
-//nolint:gochecknoinits // gives twod the shapes its lit tiles take their light round, and from which sides
+//nolint:gochecknoinits // gives twod what its lit tiles take their light round, and from which sides
 func init() {
 	lit.TileBlocks = func(tileset any, id int, origin, cell geom.Vec2, flip uint8, dst []geom.Rect) []geom.Rect {
 		ts, ok := tileset.(*twod.Tileset)
@@ -253,8 +256,12 @@ func init() {
 			return dst
 		}
 		var scratch [8]shadow
-		for _, s := range place(scratch[:0], ts, tableOf(ts), id, origin, cell, twod.TileFlip(flip)) {
+		placed := place(scratch[:0], ts, tableOf(ts), id, origin, cell, twod.TileFlip(flip))
+		for _, s := range placed {
 			dst = append(dst, s.rect)
+		}
+		if len(placed) > 0 && tableOf(ts).at(id).around {
+			dst = ts.Place(dst, id, shapesOf(ts, id, shapeBody), origin, cell, twod.TileFlip(flip))
 		}
 		return dst
 	}
