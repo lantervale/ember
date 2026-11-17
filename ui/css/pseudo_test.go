@@ -128,8 +128,8 @@ img::before { content: "never"; }
 	if dom.Data(p).Before != nil || after == nil {
 		t.Fatalf("after the class changed: ::before %v, ::after %v", dom.Data(p).Before, after)
 	}
-	if st := styleOf(after); st.Display != style.Block || !st.Size.Width.IsPercent {
-		t.Errorf("::after takes any property: %+v", st.Size.Width)
+	if got := styleOf(after); got.Display != style.Block || !got.Size.Width.IsPercent {
+		t.Errorf("::after takes any property: %+v", got.Size.Width)
 	}
 	if dom.Data(p).Dirty&dom.DirtyLayout == 0 {
 		t.Error("the element is laid out again")

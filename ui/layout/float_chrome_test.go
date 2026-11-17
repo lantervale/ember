@@ -71,7 +71,8 @@ func TestFloatsMatchChrome(t *testing.T) {
 			ui.Div(ui.Class("wide", "frame"), ui.Div(ui.Class("l", "box")), ui.Text("Not held.")),
 			ui.Div(ui.Class("wide", "frame", "held"), ui.Div(ui.Class("l", "box")), ui.Text("Held by overflow.")),
 			ui.Div(ui.Class("wide", "frame", "root"), ui.Div(ui.Class("r", "box")), ui.Text("Held by flow-root.")),
-			ui.Div(ui.Class("wide", "frame"), ui.Div(ui.Class("l", "box")), ui.Text("Cleared."), ui.Div(ui.Style("clear: both"))),
+			ui.Div(ui.Class("wide", "frame"), ui.Div(ui.Class("l", "box")), ui.Text("Cleared."),
+				ui.Div(ui.Style("clear: both"))),
 		),
 		"three floated columns and a footer": styled(`.col { float: left; width: 33.33%; }
 .col p { margin: 6px; } .foot { clear: both; border-top: 1px solid #000; }`,
@@ -82,7 +83,8 @@ func TestFloatsMatchChrome(t *testing.T) {
 				ui.Div(ui.Class("foot"), ui.Text("The footer.")),
 			),
 		),
-		"floats shrink to their text and wrap to new rows": styled(`.tab { float: left; padding: 4px 10px; margin: 0 6px 6px 0; border: 1px solid #000; }
+		"floats shrink to their text and wrap to new rows": styled(`
+.tab { float: left; padding: 4px 10px; margin: 0 6px 6px 0; border: 1px solid #000; }
 .bar { width: 200px; overflow: hidden; }`,
 			ui.Div(ui.Class("bar"),
 				ui.Div(ui.Class("tab"), ui.Text("Home")), ui.Div(ui.Class("tab"), ui.Text("Inventory")),
@@ -105,14 +107,16 @@ func TestFloatsMatchChrome(t *testing.T) {
 		),
 		"floats in nested blocks reach the blocks after": styled(boxes,
 			ui.Div(ui.Class("wide"),
-				ui.Div(ui.Style("padding-left: 10px"), ui.Div(ui.Class("l", "box"), ui.Style("height: 70px")), ui.Text("First block.")),
+				ui.Div(ui.Style("padding-left: 10px"), ui.Div(ui.Class("l", "box"), ui.Style("height: 70px")),
+					ui.Text("First block.")),
 				ui.Div(ui.Style("margin: 0 0 0 20px"), ui.Text(sentence)),
 				ui.Div(ui.Text(sentence)),
 			),
 		),
 		"every word round two floats": styled(boxes,
 			ui.Div(ui.Class("wide"),
-				ui.Div(ui.Class("l", "box"), ui.Style("height: 40px")), ui.Div(ui.Class("r", "box"), ui.Style("width: 90px; height: 64px")),
+				ui.Div(ui.Class("l", "box"), ui.Style("height: 40px")),
+				ui.Div(ui.Class("r", "box"), ui.Style("width: 90px; height: 64px")),
 				words("margin: 0", sentence+" "+sentence),
 				words("margin: 0; text-align: right", sentence)),
 		),
@@ -121,7 +125,8 @@ func TestFloatsMatchChrome(t *testing.T) {
 				ui.Div(ui.Class("l", "box"), ui.Style("margin: 0 8px 4px 0")),
 				words("margin: 0; text-align: justify; font-size: 20px", sentence+" "+sentence)),
 		),
-		"a centred column of floats": styled(boxes+` .page { width: 300px; margin: 0 auto; } .side { float: right; width: 80px; }`,
+		"a centred column of floats": styled(
+			boxes+` .page { width: 300px; margin: 0 auto; } .side { float: right; width: 80px; }`,
 			ui.Div(ui.Style("width: 500px"),
 				ui.Div(ui.Class("page"),
 					ui.Div(ui.Class("side"), ui.Text("A side note that wraps.")),

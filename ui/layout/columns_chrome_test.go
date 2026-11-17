@@ -55,7 +55,8 @@ p { margin: 0 0 10px; background: #cdf; } .tall { height: 130px; background: #fc
 		"empty room is cut anywhere": styled(base,
 			m("", ui.Div(ui.Class("tall"))),
 			m("", rows("", 3), ui.Div(ui.Class("tall"), ui.Style("height: 50px")), rows("", 2)),
-			m("column-count: 3", ui.Div(ui.Class("tall"), ui.Style("height: 100px; padding: 6px; border: 2px solid")), rows("margin: 0", 2)),
+			m("column-count: 3", ui.Div(ui.Class("tall"), ui.Style("height: 100px; padding: 6px; border: 2px solid")),
+				rows("margin: 0", 2)),
 		),
 		"orphans and widows": styled(base+` p { margin: 0; }`,
 			m("", rows("", 5)), m("", rows("", 3)), m("", rows("", 2), rows("", 3)),
@@ -70,7 +71,8 @@ p { margin: 0 0 10px; background: #cdf; } .tall { height: 130px; background: #fc
 			m("", rows("", 2), ui.Div(ui.Style("overflow: hidden; height: 70px")), rows("", 1)),
 			m("", rows("", 2), rows("break-inside: avoid", 4), rows("", 2)),
 			m("", rows("", 2), rows("page-break-inside: avoid", 4), rows("", 2)),
-			m("", rows("", 3), ui.Div(ui.Style("display: inline-block; width: 30px; height: 45px; background: #888")), rows("", 2)),
+			m("", rows("", 3), ui.Div(ui.Style("display: inline-block; width: 30px; height: 45px; background: #888")),
+				rows("", 2)),
 		),
 		"forced and avoided breaks": styled(base+` p { margin: 0; }`,
 			m("", rows("", 1), rows("break-before: column; margin-top: 10px", 3), rows("", 1)),
@@ -102,7 +104,8 @@ p { margin: 0 0 10px; background: #cdf; } .tall { height: 130px; background: #fc
 				m("float: left; columns: 100px", ui.P(ui.Text("hello world")), ui.P(ui.Text("hello"))),
 				m("float: left; clear: left; columns: 2 100px", ui.P(ui.Text("hello world")), ui.P(ui.Text("hello")))),
 			ui.Div(ui.Style("position: relative; height: 40px"),
-				m("position: absolute; column-count: 3", ui.P(ui.Text("hello world")), ui.P(ui.Text("hello")), ui.P(ui.Text("you")))),
+				m("position: absolute; column-count: 3", ui.P(ui.Text("hello world")), ui.P(ui.Text("hello")),
+					ui.P(ui.Text("you")))),
 		),
 		"positioned boxes": styled(base+` p { margin: 0; } .m { position: relative; }
 .abs { position: absolute; width: 10px; height: 10px; background: #f00; }`,
@@ -124,7 +127,8 @@ p { margin: 0 0 10px; background: #cdf; } .tall { height: 130px; background: #fc
 		"lists and headings": styled(base+` p { margin: 0; }`,
 			m("", ui.Ul(ui.Li(ui.Text("one")), ui.Li(ui.Text("two")), ui.Li(ui.Text(sentence)), ui.Li(ui.Text("four")),
 				ui.Li(ui.Text("five")))),
-			m("column-count: 3", ui.H3(ui.Text("Title")), ui.P(ui.Text(prose(2))), ui.H3(ui.Text("Another")), ui.P(ui.Text(prose(2)))),
+			m("column-count: 3", ui.H3(ui.Text("Title")), ui.P(ui.Text(prose(2))), ui.H3(ui.Text("Another")),
+				ui.P(ui.Text(prose(2)))),
 		),
 	}
 	for name, d := range cases {
@@ -163,7 +167,8 @@ func TestTheRequirementsSectionMatchesChrome(t *testing.T) {
 }
 
 func TestColumnsMatchChromeAtSeveralWidths(t *testing.T) {
-	const sheet = `.m { columns: 3 160px; column-gap: 24px; column-rule: 2px solid #888; padding: 8px; border: 1px solid #000; }
+	const sheet = `
+.m { columns: 3 160px; column-gap: 24px; column-rule: 2px solid #888; padding: 8px; border: 1px solid #000; }
 p { margin: 0 0 8px; } h3 { margin: 0 0 6px; } .note { padding: 6px; border: 2px solid #c00; background: #fee; }
 .pic { float: right; width: 60px; height: 44px; margin: 0 0 4px 6px; background: #888; }`
 	page := func() *ui.Document {

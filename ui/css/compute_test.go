@@ -604,7 +604,8 @@ textarea::placeholder { color: var(--ph); }
 }
 
 func TestAPseudoElementsRuleSaysWhatItDoesNotTake(t *testing.T) {
-	_, warns := Parse("t.css", "input::placeholder { color: #f00; width: 5px } p, input::placeholder { color: #f00; width: 5px }")
+	_, warns := Parse("t.css",
+		"input::placeholder { color: #f00; width: 5px } p, input::placeholder { color: #f00; width: 5px }")
 	if got, want := warnings(warns), "t.css:1:35: ::placeholder does not take width"; got != want {
 		t.Errorf("warnings:\n got %s\nwant %s", got, want)
 	}
@@ -874,17 +875,20 @@ func TestTextTransform(t *testing.T) {
 func TestBackgroundSize(t *testing.T) {
 	auto := style.Length{}
 	cases := map[string]style.BackgroundSize{
-		"8px 4px":           {Width: style.Px(8), Height: style.Px(4)},
-		"1em":               {Width: style.Px(16), Height: auto},
-		"auto":              {},
-		"auto auto":         {},
-		"50%":               {Width: pct(50), Height: auto},
-		"auto 25%":          {Width: auto, Height: pct(25)},
-		"100% 12px":         {Width: pct(100), Height: style.Px(12)},
-		"calc(50% - 4px) 0": {Width: style.Length{Kind: style.Fixed, Px: -4, Percent: 50, IsPercent: true}, Height: style.Px(0)},
-		"cover":             {Scale: style.ScaleCover},
-		"contain":           {Scale: style.ScaleContain},
-		"COVER":             {Scale: style.ScaleCover},
+		"8px 4px":   {Width: style.Px(8), Height: style.Px(4)},
+		"1em":       {Width: style.Px(16), Height: auto},
+		"auto":      {},
+		"auto auto": {},
+		"50%":       {Width: pct(50), Height: auto},
+		"auto 25%":  {Width: auto, Height: pct(25)},
+		"100% 12px": {Width: pct(100), Height: style.Px(12)},
+		"calc(50% - 4px) 0": {
+			Width:  style.Length{Kind: style.Fixed, Px: -4, Percent: 50, IsPercent: true},
+			Height: style.Px(0),
+		},
+		"cover":   {Scale: style.ScaleCover},
+		"contain": {Scale: style.ScaleContain},
+		"COVER":   {Scale: style.ScaleCover},
 	}
 	for src, want := range cases {
 		d := el(dom.Div, "d")

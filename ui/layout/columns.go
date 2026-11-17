@@ -184,23 +184,13 @@ func (t *tree) columns(n *node, in input) output {
 	flowH := max(0, inner.size.h-inset.vertical())
 	units := t.flowUnits(n, size{width + inset.horizontal(), inner.size.h}, inset)
 
-	limit := mSub(styled.h, inset.vertical())
-	if !some(limit) {
-		limit = mSub(maxSize.h, inset.vertical())
-	}
-	limit = mMax(limit, 0)
+	limit := columnsLimit(styled.h, maxSize.h, inset.vertical())
 	cs := &columnSet{left: inset.l, top: inset.t, width: width, gap: gap}
 	switch {
 	case !st.ColumnFillAuto:
-		cs.height = balancedHeight(units, inset.t, flowH, count)
-		if some(limit) && limit < cs.height {
-			cs.height = limit
-		}
+		cs.height = mMin(balancedHeight(units, inset.t, flowH, count), limit)
 	case some(limit):
-		cs.height = fmin(limit, flowH)
-		if some(styled.h) {
-			cs.height = limit
-		}
+		cs.height = filledHeight(limit, flowH, some(styled.h))
 	default:
 		cs.height = flowH
 	}
@@ -208,11 +198,7 @@ func (t *tree) columns(n *node, in input) output {
 
 	final := size{outerW, mMax(or(styled.h, mClamp(cs.height+inset.vertical(), minSize.h, maxSize.h)), pbSize.h)}
 	scroll := isScrollContainer(st)
-	reach := rect{r: padding.l + float32(len(cs.starts))*cs.pitch() - gap, b: padding.t + cs.height}
-	if scroll {
-		reach.r += padding.r
-		reach.b += padding.b
-	}
+	reach := cs.reach(padding, scroll)
 	areaInset := border.add(gutter)
 	out := output{
 		size:          final,
@@ -228,20 +214,56 @@ func (t *tree) columns(n *node, in input) output {
 	}
 	n.columns = cs
 	t.touchFlow(n)
-	// A positioned box with no inset of its own starts where the flow shows its place:
-	// its line's column, or between blocks the column of what comes before it.
-	out.oof = make([]oofCandidate, len(inner.oof))
-	for i, c := range inner.oof {
-		k := cs.at(c.y.area.start)
-		if !c.inline {
-			k = cs.last(0, c.y.area.start)
+	out.oof = cs.positioned(inner.oof)
+	return out
+}
+
+// columnsLimit is the height a container's own height, else its max-height, leaves its
+// columns: none without either.
+func columnsLimit(height, maxHeight, inset float32) float32 {
+	limit := mSub(height, inset)
+	if !some(limit) {
+		limit = mSub(maxHeight, inset)
+	}
+	return mMax(limit, 0)
+}
+
+// filledHeight is the height of columns filled one after the other under limit: the
+// flow's when it is shorter, unless the container's own height is fixed.
+func filledHeight(limit, flowH float32, fixed bool) float32 {
+	if fixed {
+		return limit
+	}
+	return fmin(limit, flowH)
+}
+
+// reach is how far the columns go right and down from the padding box's corner, the
+// padding after them counted where the container scrolls.
+func (c *columnSet) reach(padding rect, scroll bool) rect {
+	reach := rect{r: padding.l + float32(len(c.starts))*c.pitch() - c.gap, b: padding.t + c.height}
+	if scroll {
+		reach.r += padding.r
+		reach.b += padding.b
+	}
+	return reach
+}
+
+// positioned are the flow's positioned boxes where the columns put them: one with no
+// inset of its own starts where the flow shows its place, its line's column, or between
+// blocks the column of what comes before it.
+func (c *columnSet) positioned(flow []oofCandidate) []oofCandidate {
+	out := make([]oofCandidate, len(flow))
+	for i, o := range flow {
+		k := c.at(o.y.area.start)
+		if !o.inline {
+			k = c.last(0, o.y.area.start)
 		}
-		by := cs.shift(k)
-		c.x.area.start += by.x
-		c.x.area.end += by.x
-		c.y.area.start += by.y
-		c.y.area.end += by.y
-		out.oof[i] = c
+		by := c.shift(k)
+		o.x.area.start += by.x
+		o.x.area.end += by.x
+		o.y.area.start += by.y
+		o.y.area.end += by.y
+		out[i] = o
 	}
 	return out
 }
@@ -592,14 +614,15 @@ func keepFlow(n, m *node, flow, moved point) {
 	*f = flowFrag{cols: cs, y: at.y, col: first, pieces: f.pieces[:0]}
 	if last > first {
 		for k := first; k <= last; k++ {
-			by := cs.shift(k)
-			top := fmax(at.y, cs.starts[k]) + by.y
-			bottom := at.y + h + by.y
+			shift := cs.shift(k)
+			top := fmax(at.y, cs.starts[k]) + shift.y
+			bottom := at.y + h + shift.y
 			if k < last {
 				// A box that goes on in the next column fills this one to its end.
 				bottom = cs.top + cs.height
 			}
-			f.pieces = append(f.pieces, geom.Rect{X: at.x + by.x, Y: top, W: n.unrounded.size.w, H: fmax(bottom-top, 0)})
+			f.pieces = append(f.pieces,
+				geom.Rect{X: at.x + shift.x, Y: top, W: n.unrounded.size.w, H: fmax(bottom-top, 0)})
 		}
 		for _, p := range f.pieces {
 			origin.y = fmin(origin.y, p.Y)

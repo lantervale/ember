@@ -93,7 +93,7 @@ const (
 // property but reads other values for
 // (TestChromeReadsWebkitPropertiesAsTheTable).
 //
-//nolint:gochecknoglobals // a vendor's table
+//nolint:gochecknoglobals,goconst // a vendor's table
 var webkit = vendor{
 	prefix: "-webkit-",
 
@@ -352,7 +352,7 @@ func (v *vendor) atRule(rest string) (string, treatment) {
 
 // feature is the plain media feature the vendor reads rest as; without
 // one, known reports whether Chrome answers it, so its warning stays.
-func (v *vendor) feature(rest string) (as string, known bool) {
+func (v *vendor) feature(rest string) (string, bool) {
 	if as, ok := v.features[rest]; ok {
 		return as, true
 	}

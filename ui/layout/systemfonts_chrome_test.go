@@ -23,7 +23,10 @@ p { width: 300px; margin: 0 0 12px; }
 .bold { font-weight: bold; } .italic { font-style: italic; }`
 	cases := map[string][]*ui.Node{
 		"a paragraph": {words("", sentence+" "+sentence)},
-		"sizes":       {words("", sentence), ui.Div(ui.Class("small"), words("", sentence)), ui.Div(ui.Class("big"), words("", sentence))},
+		"sizes": {
+			words("", sentence), ui.Div(ui.Class("small"), words("", sentence)),
+			ui.Div(ui.Class("big"), words("", sentence)),
+		},
 		"bold, italic and both": {
 			ui.Div(ui.Class("bold"), words("", sentence)),
 			ui.Div(ui.Class("italic"), words("", sentence)),

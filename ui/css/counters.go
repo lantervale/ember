@@ -193,7 +193,7 @@ func isList(tag dom.Tag) bool { return tag == dom.Ol || tag == dom.Ul || tag == 
 // one under its start attribute, counting up, or one over it counting
 // down for a reversed ol, which starts from the number of its items
 // when it has no start.
-func listStart(list *dom.Node) (value, step int) {
+func listStart(list *dom.Node) (int, int) {
 	start, given := intAttr(list, "start")
 	if _, reversed := list.Attr("reversed"); reversed && list.Tag() == dom.Ol {
 		if !given {

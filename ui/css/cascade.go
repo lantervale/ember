@@ -32,7 +32,7 @@ func (b *buckets) add(sel Selector, e entry) {
 		b.byClass[last.Classes[0]] = append(b.byClass[last.Classes[0]], e)
 	case last.Tag != dom.TextTag:
 		if b.byTag == nil {
-			b.byTag = map[dom.Tag][]entry{}
+			b.byTag = make(map[dom.Tag][]entry)
 		}
 		b.byTag[last.Tag] = append(b.byTag[last.Tag], e)
 	default:
@@ -349,7 +349,7 @@ func layerRanks(sheets []*Sheet) [][]int32 {
 	if tree == nil {
 		return nil
 	}
-	rank := int32(len(tree))
+	rank := int32(min(len(tree), math.MaxInt32))
 	var walk func(full string)
 	walk = func(full string) {
 		for _, kid := range tree[full].kids {

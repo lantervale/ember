@@ -320,7 +320,7 @@ func clamp01f(v float32) float32 { return min(max(v, 0), 1) }
 func transitionFor(list []style.Transition, name string) (style.Transition, bool) {
 	for i := len(list) - 1; i >= 0; i-- {
 		p := list[i].Property
-		if p == name || p == "all" || p == propBorderColor && strings.HasPrefix(name, "border-") {
+		if p == name || p == kwAll || p == propBorderColor && strings.HasPrefix(name, "border-") {
 			return list[i], list[i].Duration+list[i].Delay > 0
 		}
 	}

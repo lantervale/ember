@@ -66,7 +66,8 @@ func TestTheTextElementsStartAsChromes(t *testing.T) {
 	link, plain, abbr, bare := el(dom.A, "link"), el(dom.A, "plain"), el(dom.Abbr, "abbr"), el(dom.Abbr, "bare")
 	link.SetAttr("href", "/vaults")
 	abbr.SetAttr("title", "Hit points")
-	u, del, mark, small, big := el(dom.U, "u"), el(dom.Del, "del"), el(dom.Mark, "mark"), el(dom.Small, "small"), el(dom.Big, "big")
+	u, del, mark := el(dom.U, "u"), el(dom.Del, "del"), el(dom.Mark, "mark")
+	small, big := el(dom.Small, "small"), el(dom.Big, "big")
 	li, nested, numbered := el(dom.Li, "li"), el(dom.Li, "nested"), el(dom.Li, "numbered")
 	inner := el(dom.Ul, "inner")
 	inner.Append(nested)
@@ -97,7 +98,9 @@ func TestTheTextElementsStartAsChromes(t *testing.T) {
 	if s, b := styleOf(small).Font.Size, styleOf(big).Font.Size; s >= 16 || b <= 16 {
 		t.Errorf("small is %v and big %v beside 16", s, b)
 	}
-	for n, want := range map[*dom.Node]style.ListStyle{li: style.ListDisc, nested: style.ListCircle, numbered: style.ListDecimal} {
+	for n, want := range map[*dom.Node]style.ListStyle{
+		li: style.ListDisc, nested: style.ListCircle, numbered: style.ListDecimal,
+	} {
 		if st := styleOf(n); !st.ListItem || st.ListStyle != want {
 			t.Errorf("#%s: list item %v, marker %v, want %v", n.ID(), st.ListItem, st.ListStyle, want)
 		}

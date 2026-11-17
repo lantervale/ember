@@ -188,7 +188,7 @@ func checkBackgroundSize(v []Component) error {
 
 // checkColumnSpan takes none: an element spanning every column is not laid out.
 func checkColumnSpan(v []Component) error {
-	if len(v) == 1 && isWord(v[0], "all") {
+	if len(v) == 1 && isWord(v[0], kwAll) {
 		return fmt.Errorf("column-span: all is not supported; put the element before the columns")
 	}
 	return single(words("none"))(v)
@@ -532,7 +532,7 @@ func trackSize(c Component) error {
 				return err
 			}
 			return trackBreadth(args[1][0])
-		case "fit-content":
+		case kwFitContent:
 			if len(args) != 1 || len(args[0]) != 1 {
 				return fmt.Errorf("fit-content() takes one length")
 			}

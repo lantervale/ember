@@ -128,12 +128,12 @@ func shapesDoc(css string, files map[string][]byte, opts ...DocumentOption) *Doc
 
 // shown runs d in a window of 400×300 points and returns how to run more
 // frames.
-func shown(d *Document) (*platform.Window, func(int)) {
+func shown(d *Document) func(int) {
 	win := platform.NewWindow(platform.Size(400, 300))
 	win.Add(d)
 	w := ember.New().AddEntities(win)
 	w.RunFrames(3)
-	return win, w.RunFrames
+	return w.RunFrames
 }
 
 func TestARegisteredFormatIsRecognisedByNameAndByItsBytes(t *testing.T) {
@@ -213,7 +213,7 @@ func TestAVectorPictureIsDrawnAgainWhenItsSizeChangesAndOnceItSettles(t *testing
 	d := shapesDoc("", map[string][]byte{"icon.shapes": icon})
 	img := Img(Attr("src", "icon.shapes"), Style("width: 80px"))
 	d.Body().Append(img)
-	_, frames := shown(d)
+	frames := shown(d)
 	pic := readShapes(icon)
 	assert.Equal(t, [][2]int{{80, 40}}, pic.sizes())
 
@@ -300,7 +300,7 @@ func TestAVectorPictureThatCannotBeReadOrDrawnIsABrokenImageWithAWarning(t *test
 	d := shapesDoc("", map[string][]byte{"bad.shapes": shapesFile("nonsense"), "blank.shapes": shapesFile("blank")})
 	bad, blank := Img(Attr("src", "bad.shapes")), Img(Attr("src", "blank.shapes"), Style("width: 20px; height: 20px"))
 	d.Body().Append(bad, blank)
-	_, frames := shown(d)
+	frames := shown(d)
 	assert.Nil(t, d.vector("bad.shapes"))
 	assert.Equal(t, geom.V2(16, 16), geom.V2(bad.Box().W, bad.Box().H), "a broken image's icon")
 	frames(5)
@@ -315,7 +315,7 @@ func TestWhatAVectorPictureDoesNotDrawIsAWarningOncePerPicture(t *testing.T) {
 	d := shapesDoc(`body { background: url(label.shapes); }`,
 		map[string][]byte{"label.shapes": shapesFile("w=20 h=20 r=1 no=filter,text")})
 	d.Body().Append(Img(Attr("src", "label.shapes")), Img(Attr("src", "label.shapes")))
-	_, frames := shown(d)
+	frames := shown(d)
 	frames(3)
 	require.Len(t, d.Warnings(), 1)
 	assert.EqualError(t, d.Warnings()[0], "ui: image label.shapes: image/x-shapes is not drawn: filter, text")
@@ -327,7 +327,7 @@ func TestAFetchedVectorPictureIsReadAndDrawnOffTheFrame(t *testing.T) {
 	d := NewDocument(FetchImages(a.fetch))
 	img := Img(Attr("src", "https://art.test/icon"))
 	d.Body().Append(img)
-	_, frames := shown(d)
+	frames := shown(d)
 	drawing := func() bool {
 		v := d.vectors["https://art.test/icon"]
 		return v != nil && len(v.drawing) > 0

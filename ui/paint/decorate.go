@@ -1086,7 +1086,8 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		switch s.style {
 		case style.BorderDashed, style.BorderDotted:
 			p.dashes(s.rect, s.across, s.style == style.BorderDotted, s.c)
-		case style.BorderNone, style.BorderSolid, style.BorderInset, style.BorderOutset:
+		case style.BorderNone, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
+			style.BorderRidge:
 			p.s.Rect(s.rect, s.c)
 		}
 	}
@@ -1104,7 +1105,9 @@ func beveled(s style.Sides[style.BorderStyle]) bool {
 
 // halves are the styles of a border's outer and inner halves, split when a side is a
 // groove or a ridge: a groove is inset outside and outset inside, a ridge the other way.
-func halves(s style.Sides[style.BorderStyle]) (outer, inner style.Sides[style.BorderStyle], split bool) {
+func halves(s style.Sides[style.BorderStyle]) (style.Sides[style.BorderStyle], style.Sides[style.BorderStyle], bool) {
+	var outer, inner style.Sides[style.BorderStyle]
+	split := false
 	half := func(x style.BorderStyle) (style.BorderStyle, style.BorderStyle) {
 		switch x {
 		case style.BorderGroove:
@@ -1372,7 +1375,8 @@ func selectionColors(st *style.Computed, text color.Color, alpha float32) (color
 
 // highlight draws the selection behind a text run's selected parts and
 // returns the colour their text takes.
-func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text color.Color, alpha float32) color.Color {
+func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text color.Color,
+	alpha float32) color.Color {
 	back, ink := selectionColors(st, text, alpha)
 	if back.A > 0 {
 		for _, s := range parts {

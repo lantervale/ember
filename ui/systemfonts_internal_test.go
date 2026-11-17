@@ -70,7 +70,8 @@ func TestAnInstalledFamilyDrawsOnceTheScanLands(t *testing.T) {
 	assert.Equal(t, "Go Medium", medium.Family)
 	assert.Equal(t, gomedium.TTF, medium.TTF)
 	assert.Equal(t, gomediumitalic.TTF, d.fonts.Face(dom.Data(words[2]).Style.Font).TTF)
-	assert.NotSame(t, d.face(dom.Data(words[1]).Style.Font), d.face(dom.Data(words[0]).Style.Font), "paint draws with the face layout measured")
+	assert.NotSame(t, d.face(dom.Data(words[1]).Style.Font), d.face(dom.Data(words[0]).Style.Font),
+		"paint draws with the face layout measured")
 }
 
 func TestAnInstalledFontThatIsNoFontIsAWarning(t *testing.T) {
@@ -101,7 +102,8 @@ func TestSystemFontsDrawWithAFontTheMachineHas(t *testing.T) {
 	if _, err := os.Stat("/System/Library/Fonts/Supplemental/Georgia.ttf"); err != nil {
 		t.Skip("Georgia is not installed")
 	}
-	d, words := named([]DocumentOption{SystemFonts()}, "georgia, sans-serif", "Go", "GEORGIA; font-weight: bold", "Georgia; font-style: italic")
+	d, words := named([]DocumentOption{SystemFonts()}, "georgia, sans-serif", "Go", "GEORGIA; font-weight: bold",
+		"Georgia; font-style: italic")
 	assert.True(t, d.SystemFonts())
 	d.fonts.Await()
 	d.Layout(geom.V2(600, 300))

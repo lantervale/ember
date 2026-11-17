@@ -86,10 +86,10 @@ func floatFits(width float32, side floatSide, bfcWidth float32, floatInsets, cbI
 	return fitsOpposite && fitsBlock
 }
 
-// clearedThreshold is the bottom of the lowest float clear goes below, none without one.
-func (c *floatContext) clearedThreshold(clear style.Clear) float32 {
+// clearedThreshold is the bottom of the lowest float clearing goes below, none without one.
+func (c *floatContext) clearedThreshold(clearing style.Clear) float32 {
 	l, r := c.clearBottoms[0], c.clearBottoms[1]
-	switch clear {
+	switch clearing {
 	case style.ClearLeft:
 		return l
 	case style.ClearRight:
@@ -104,15 +104,15 @@ func (c *floatContext) clearedThreshold(clear style.Clear) float32 {
 	return none
 }
 
-// clearedSegment is the segment the last float clear goes below ended at, -1 without one.
-func (c *floatContext) clearedSegment(clear style.Clear) int {
+// clearedSegment is the segment the last float clearing goes below ended at, -1 without one.
+func (c *floatContext) clearedSegment(clearing style.Clear) int {
 	l, r := c.lastPlaced[0][1], c.lastPlaced[1][1]
 	switch {
-	case clear == style.ClearLeft && l > 0:
+	case clearing == style.ClearLeft && l > 0:
 		return l
-	case clear == style.ClearRight && r > 0:
+	case clearing == style.ClearRight && r > 0:
 		return r
-	case clear == style.ClearBoth && (l > 0 || r > 0):
+	case clearing == style.ClearBoth && (l > 0 || r > 0):
 		return max(l, r)
 	}
 	return -1
@@ -131,9 +131,9 @@ func (c *floatContext) segmentFrom(from int, minY float32) int {
 
 // place puts a float's margin box in the context, at or below minY, and returns its
 // top-left corner.
-func (c *floatContext) place(box size, minY float32, cbInsets [2]float32, side floatSide, clear style.Clear) point {
+func (c *floatContext) place(box size, minY float32, cbInsets [2]float32, side floatSide, clearing style.Clear) point {
 	c.has = true
-	p := c.placeInner(box, minY, cbInsets, side, clear)
+	p := c.placeInner(box, minY, cbInsets, side, clearing)
 	bottom := p.y + p.height
 	c.clearBottoms[side] = fmax(or(c.clearBottoms[side], bottom), bottom)
 	c.ceiling = fmax(or(c.ceiling, p.y), p.y)
@@ -144,15 +144,15 @@ func (c *floatContext) place(box size, minY float32, cbInsets [2]float32, side f
 	return point{p.inset, p.y}
 }
 
-//nolint:cyclop,funlen,gocognit,gocyclo // Taffy's place_floated_box_inner, kept in its shape
+//nolint:funlen,gocognit // Taffy's place_floated_box_inner, kept in its shape
 func (c *floatContext) placeInner(box size, minY float32, cbInsets [2]float32, side floatSide,
-	clear style.Clear) placedFloat {
+	clearing style.Clear) placedFloat {
 	slot := int(side)
-	minY = fmax(minY, fmax(or(c.ceiling, negInf), or(c.clearedThreshold(clear), negInf)))
+	minY = fmax(minY, fmax(or(c.ceiling, negInf), or(c.clearedThreshold(clearing), negInf)))
 
 	floatStart := max(c.lastPlaced[0][0], c.lastPlaced[1][0])
 	hwm := floatStart
-	switch clear {
+	switch clearing {
 	case style.ClearLeft:
 		hwm = max(floatStart, c.lastPlaced[0][1]+1)
 	case style.ClearRight:
@@ -276,15 +276,16 @@ type bfcSlot struct {
 // findBFCSlot is the first band at or below minY, after the band after, for such a box
 // with those left and right margins; the caller checks its width and asks again past a
 // band too narrow.
-func (c *floatContext) findBFCSlot(minY float32, cbInsets, margins [2]float32, clear style.Clear, after int) bfcSlot {
+func (c *floatContext) findBFCSlot(minY float32, cbInsets, margins [2]float32, clearing style.Clear,
+	after int) bfcSlot {
 	marginInsets := [2]float32{cbInsets[0] + margins[0], cbInsets[1] + margins[1]}
 	free := c.width - marginInsets[0] - marginInsets[1]
 	open := bfcSlot{segment: -1, x: marginInsets[0], y: minY, borderWidth: free, stretchWidth: free}
 	if !c.active(minY) {
 		return open
 	}
-	minY = fmax(minY, or(c.clearedThreshold(clear), negInf))
-	i := c.segmentFrom(max(after+1, c.clearedSegment(clear)+1), minY)
+	minY = fmax(minY, or(c.clearedThreshold(clearing), negInf))
+	i := c.segmentFrom(max(after+1, c.clearedSegment(clearing)+1), minY)
 	if i >= len(c.segments) {
 		open.y = fmax(c.segments[len(c.segments)-1].bottom, minY)
 		return open
@@ -352,14 +353,14 @@ type floatWidths struct {
 	widest       float32
 }
 
-func (f *floatWidths) add(width float32, side floatSide, clear style.Clear) {
+func (f *floatWidths) add(width float32, side floatSide, clearing style.Clear) {
 	if f.avail.kind == minContent {
 		f.contribution = fmax(f.contribution, width)
 	} else {
-		if clear == style.ClearLeft || clear == style.ClearBoth {
+		if clearing == style.ClearLeft || clearing == style.ClearBoth {
 			f.sides[0] = 0
 		}
-		if clear == style.ClearRight || clear == style.ClearBoth {
+		if clearing == style.ClearRight || clearing == style.ClearBoth {
 			f.sides[1] = 0
 		}
 		f.sides[side] += width
@@ -418,22 +419,19 @@ func (c *blockContext) hasFloats() bool { return c.bfc.floats.has }
 
 func (c *blockContext) active(minY float32) bool { return c.bfc.floats.active(minY + c.y) }
 
-// placed counts the context's floats, to tell whether a layout added any.
-func (c *blockContext) placed() int { return len(c.bfc.floats.floats[0]) + len(c.bfc.floats.floats[1]) }
-
-func (c *blockContext) place(box size, minY float32, side floatSide, clear style.Clear, adjoins bool) point {
+func (c *blockContext) place(box size, minY float32, side floatSide, clearing style.Clear, adjoins bool) point {
 	if adjoins {
 		c.adjoining[side] = true
 	}
-	p := c.bfc.floats.place(box, minY+c.y, c.contentInsets, side, clear)
+	p := c.bfc.floats.place(box, minY+c.y, c.contentInsets, side, clearing)
 	p.y -= c.y
 	p.x -= c.insets[0]
 	c.floatHeight = fmax(c.floatHeight, p.y+box.h)
 	return p
 }
 
-func (c *blockContext) findBFCSlot(minY float32, margins [2]float32, clear style.Clear, after int) bfcSlot {
-	s := c.bfc.floats.findBFCSlot(minY+c.y, c.contentInsets, margins, clear, after)
+func (c *blockContext) findBFCSlot(minY float32, margins [2]float32, clearing style.Clear, after int) bfcSlot {
+	s := c.bfc.floats.findBFCSlot(minY+c.y, c.contentInsets, margins, clearing, after)
 	s.y -= c.y
 	s.x -= c.insets[0]
 	return s
@@ -445,12 +443,12 @@ func (c *blockContext) lineSlot(y, height float32) (float32, float32, float32) {
 	return x - c.insets[0], w, next - c.y
 }
 
-func (c *blockContext) clearedThreshold(clear style.Clear) float32 {
-	return c.bfc.floats.clearedThreshold(clear) - c.y
+func (c *blockContext) clearedThreshold(clearing style.Clear) float32 {
+	return c.bfc.floats.clearedThreshold(clearing) - c.y
 }
 
-func (c *blockContext) hasAdjoining(clear style.Clear) bool {
-	switch clear {
+func (c *blockContext) hasAdjoining(clearing style.Clear) bool {
+	switch clearing {
 	case style.ClearLeft:
 		return c.adjoining[0]
 	case style.ClearRight:

@@ -34,9 +34,9 @@ func viewportOf(root *dom.Node) *style.Computed {
 // an overflow: auto bar taking its room once the page overflows that way
 // and the root laid out again, as fitGutter does a box's. It returns the
 // bars' room and the size of what scrolls.
-func (t *tree) viewport(n *node, whole size, st *style.Computed) (gutter, content size) {
+func (t *tree) viewport(n *node, whole size, st *style.Computed) (size, size) {
 	always := scrollbarGutter(st)
-	var auto size
+	var auto, content size
 	if t.keep != nil {
 		auto = t.keep.viewportGutter
 	}

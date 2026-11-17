@@ -86,12 +86,14 @@ func TestBreakProperties(t *testing.T) {
 		t.Errorf("got %d %d %v %v %v", s.Orphans, s.Widows, s.BreakInsideAvoid, s.BreakBefore, s.BreakAfter)
 	}
 	if k := styleOf(c); k.Orphans != 3 || k.Widows != 4 || k.BreakInsideAvoid || k.BreakBefore != style.BreakAuto {
-		t.Errorf("orphans and widows inherit, breaks don't: %d %d %v %v", k.Orphans, k.Widows, k.BreakInsideAvoid, k.BreakBefore)
+		t.Errorf("orphans and widows inherit, breaks don't: %d %d %v %v",
+			k.Orphans, k.Widows, k.BreakInsideAvoid, k.BreakBefore)
 	}
 	d := el(dom.Div, "d")
 	Compute(page(d), []*Sheet{sheet(t, "#d { page-break-inside: avoid; column-span: none; }")})
 	if s = styleOf(d); !s.BreakInsideAvoid || s.Orphans != 2 || s.Widows != 2 {
-		t.Errorf("page-break-inside is break-inside; orphans and widows are 2: %v %d %d", s.BreakInsideAvoid, s.Orphans, s.Widows)
+		t.Errorf("page-break-inside is break-inside; orphans and widows are 2: %v %d %d",
+			s.BreakInsideAvoid, s.Orphans, s.Widows)
 	}
 }
 

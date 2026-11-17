@@ -90,6 +90,8 @@ static void emberDoubleClickTitleBar(void *nswindow) {
 	}
 	[w performZoom:nil];
 }
+
+// The C side ends here.
 */
 import "C"
 

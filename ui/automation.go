@@ -383,34 +383,10 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 		d.click(n)
 	case automation.ActSelect:
 		if s, ok := m.(*control.Select); ok {
-			if i, found := optionIndex(s, a.Value); found {
-				if !s.Open {
-					s.Click()
-				}
-				d.fire(n, s.ClickOption(i))
-				s.ClickOutside()
-			}
+			d.actSelect(n, s, a.Value)
 		}
 	case automation.ActSet:
-		switch m := m.(type) {
-		case *control.Checkbox:
-			if on, ok := a.Value.(bool); ok && on != m.Checked {
-				d.fire(n, m.Click())
-			}
-		case *control.Range:
-			if v, ok := toFloat(a.Value); ok {
-				d.fire(n, m.SetValue(v)|control.Changed)
-			}
-		}
-		if s, ok := a.Value.(string); ok && t != nil {
-			t.Focus()
-			t.Editor.Do(textedit.SelectAll, false, nil, nil)
-			e := t.Type(s)
-			if s == "" {
-				e |= t.Key(textedit.Backspace, false, nil)
-			}
-			d.fire(n, e|t.Blur())
-		}
+		d.actSet(n, m, a.Value)
 	case automation.ActContext:
 		d.events = append(d.events, ContextClicked{Node: n})
 	case automation.ActDrag:
@@ -433,6 +409,47 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 			d.fire(n, t.Key(textedit.Submit, false, nil))
 		}
 	}
+}
+
+// actSelect chooses the option of a select that v names, as a click in
+// its list does.
+func (d *Document) actSelect(n *Node, s *control.Select, v any) {
+	i, found := optionIndex(s, v)
+	if !found {
+		return
+	}
+	if !s.Open {
+		s.Click()
+	}
+	d.fire(n, s.ClickOption(i))
+	s.ClickOutside()
+}
+
+// actSet gives the control m of n the value v: a checkbox its state, a
+// range its number, a text field its text, typed over what it held.
+func (d *Document) actSet(n *Node, m any, v any) {
+	switch m := m.(type) {
+	case *control.Checkbox:
+		if on, ok := v.(bool); ok && on != m.Checked {
+			d.fire(n, m.Click())
+		}
+	case *control.Range:
+		if f, ok := toFloat(v); ok {
+			d.fire(n, m.SetValue(f)|control.Changed)
+		}
+	}
+	t := textOf(m)
+	s, ok := v.(string)
+	if !ok || t == nil {
+		return
+	}
+	t.Focus()
+	t.Editor.Do(textedit.SelectAll, false, nil, nil)
+	e := t.Type(s)
+	if s == "" {
+		e |= t.Key(textedit.Backspace, false, nil)
+	}
+	d.fire(n, e|t.Blur())
 }
 
 func optionIndex(s *control.Select, v any) (int, bool) {

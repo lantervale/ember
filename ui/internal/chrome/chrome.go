@@ -65,8 +65,8 @@ addEventListener("load", () => document.fonts.ready.then(() => {
 		e.setAttribute("data-ember-pe", i);
 		rules += '[data-ember-pe="' + i + '"]::' + pe + " { anchor-name: --ember-" + pe + "-" + i + "; }\n";
 		const p = document.createElement("ember-probe");
-		p.style.cssText = "all: initial; position: fixed; visibility: hidden; pointer-events: none; position-anchor: --ember-" +
-			pe + "-" + i + "; left: anchor(left, -99999px); top: anchor(top, -99999px); " +
+		p.style.cssText = "all: initial; position: fixed; visibility: hidden; pointer-events: none; " +
+			"position-anchor: --ember-" + pe + "-" + i + "; left: anchor(left, -99999px); top: anchor(top, -99999px); " +
 			"width: anchor-size(width, 0px); height: anchor-size(height, 0px);";
 		probes.push([i, k, p]);
 	}));

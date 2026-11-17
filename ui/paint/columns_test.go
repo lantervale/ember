@@ -24,9 +24,10 @@ func cutBlock() *box.Box {
 	return b
 }
 
-func coloured(r *recorder, kind string, c any) []geom.Rect {
+// coloured are the rectangles r filled with c.
+func coloured(r *recorder, c any) []geom.Rect {
 	var out []geom.Rect
-	for _, o := range r.of(kind) {
+	for _, o := range r.of("rect") {
 		if o.Color == c {
 			out = append(out, o.Rect)
 		}
@@ -36,14 +37,14 @@ func coloured(r *recorder, kind string, c any) []geom.Rect {
 
 func TestABlockCutByColumnsFillsEachPart(t *testing.T) {
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 30, W: 100, H: 30}, {X: 120, Y: 10, W: 100, H: 20}},
-		coloured(paintOne(cutBlock()), "rect", red), "never the union box")
+		coloured(paintOne(cutBlock()), red), "never the union box")
 }
 
 func TestABlockCutByColumnsIsSlicedAtTheBreak(t *testing.T) {
 	assert.ElementsMatch(t, []geom.Rect{
 		{X: 10, Y: 30, W: 100, H: 2}, {X: 10, Y: 30, W: 2, H: 30}, {X: 108, Y: 30, W: 2, H: 30},
 		{X: 120, Y: 10, W: 2, H: 20}, {X: 218, Y: 10, W: 2, H: 20}, {X: 120, Y: 28, W: 100, H: 2},
-	}, coloured(paintOne(cutBlock()), "rect", blue), "sides on every part, the top on the first, the bottom on the last")
+	}, coloured(paintOne(cutBlock()), blue), "sides on every part, the top on the first, the bottom on the last")
 }
 
 func TestHitTestingACutBlockUsesItsParts(t *testing.T) {
@@ -74,21 +75,21 @@ func ruled(count int, edit func(*style.Computed)) *box.Box {
 
 func TestColumnRulesStandInTheMiddleOfTheGaps(t *testing.T) {
 	assert.Equal(t, []geom.Rect{{X: 103, Y: 15, W: 4, H: 60}, {X: 203, Y: 15, W: 4, H: 60}},
-		coloured(paintOne(ruled(3, nil)), "rect", green), "as high as the columns, from the content box's top")
+		coloured(paintOne(ruled(3, nil)), green), "as high as the columns, from the content box's top")
 }
 
 func TestARuleIsDrawnOnlyBetweenColumnsWithContent(t *testing.T) {
-	assert.Equal(t, []geom.Rect{{X: 103, Y: 15, W: 4, H: 60}}, coloured(paintOne(ruled(2, nil)), "rect", green))
-	assert.Empty(t, coloured(paintOne(ruled(1, nil)), "rect", green))
+	assert.Equal(t, []geom.Rect{{X: 103, Y: 15, W: 4, H: 60}}, coloured(paintOne(ruled(2, nil)), green))
+	assert.Empty(t, coloured(paintOne(ruled(1, nil)), green))
 }
 
 func TestARuleOfStyleNoneOrNoWidthDrawsNothing(t *testing.T) {
 	none := ruled(3, func(s *style.Computed) { s.ColumnRuleStyle = style.BorderNone })
-	assert.Empty(t, coloured(paintOne(none), "rect", green))
+	assert.Empty(t, coloured(paintOne(none), green))
 	thin := ruled(3, func(s *style.Computed) { s.ColumnRuleWidth = 0 })
-	assert.Empty(t, coloured(paintOne(thin), "rect", green))
+	assert.Empty(t, coloured(paintOne(thin), green))
 }
 
 func TestRulesGoOnBetweenTheColumnsThatOverflow(t *testing.T) {
-	assert.Len(t, coloured(paintOne(ruled(5, nil)), "rect", green), 4)
+	assert.Len(t, coloured(paintOne(ruled(5, nil)), green), 4)
 }

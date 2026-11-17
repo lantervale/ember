@@ -613,28 +613,10 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.selectionCursor(c, hit, at)
 	}
 	d.rightClick(in)
-	if d.appRegionPress(c, in) {
+	if d.pointerTaken(c, in, at, hit) {
 		return
 	}
-	if d.dragPointer(c, in, at) {
-		return
-	}
-	if d.windowPointer(in, at) {
-		return
-	}
-	if d.wheelNumber(in) {
-		return
-	}
-	if d.scrollPointer(c, in, hit) {
-		return
-	}
-	if d.sel.held && !in.Pressed(input.MouseLeft) {
-		if in.Down(input.MouseLeft) {
-			d.dragSelection(at)
-		} else {
-			d.sel.held = false
-		}
-	}
+	d.heldSelection(in, at)
 	pick := d.pickAt(at)
 	open, _ := d.machine(pick.Select).(*control.Select)
 	if open != nil && pick.Index >= 0 && pick.Index < len(open.Options) && !open.Options[pick.Index].Disabled {
@@ -650,15 +632,43 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		return
 	}
 	if in.Down(input.MouseLeft) && !in.Pressed(input.MouseLeft) && len(d.pressed) > 0 {
-		if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
-			d.dragText(d.pressed[0], t, at)
-		}
-		if held, r := d.dragged(); r != nil {
-			d.fire(held, r.Drag(d.along(held, at)))
-		}
+		d.leftHeld(at)
 	}
 	if in.Released(input.MouseLeft) {
 		d.leftRelease(open, pick)
+	}
+}
+
+// pointerTaken reports the pointer taken before the elements get it: by
+// a press that moves the system's window, a drag of an element, a
+// window of the Document's own, the wheel over a number field, or the
+// scrollbars.
+func (d *Document) pointerTaken(c *twod.Canvas, in *input.State, at geom.Vec2, hit *box.Box) bool {
+	return d.appRegionPress(c, in) || d.dragPointer(c, in, at) || d.windowPointer(in, at) || d.wheelNumber(in) ||
+		d.scrollPointer(c, in, hit)
+}
+
+// heldSelection extends the selection a press began while the button is
+// held, and lets go of it once it is up.
+func (d *Document) heldSelection(in *input.State, at geom.Vec2) {
+	if !d.sel.held || in.Pressed(input.MouseLeft) {
+		return
+	}
+	if in.Down(input.MouseLeft) {
+		d.dragSelection(at)
+		return
+	}
+	d.sel.held = false
+}
+
+// leftHeld moves what the held left button drags: the selection of the
+// text field pressed, a slider's thumb.
+func (d *Document) leftHeld(at geom.Vec2) {
+	if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
+		d.dragText(d.pressed[0], t, at)
+	}
+	if held, r := d.dragged(); r != nil {
+		d.fire(held, r.Drag(d.along(held, at)))
 	}
 }
 

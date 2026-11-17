@@ -14,10 +14,14 @@ import (
 	"github.com/lantervale/ember/ui/internal/chrome"
 )
 
+// textTags are the text elements of pages, as a JavaScript alternation.
+const textTags = "ul|ol|li|menu|dl|dt|dd|h5|h6|blockquote|figure|figcaption|form|address|hgroup|search|center|" +
+	"fieldset|legend|a|b|i|u|s|small|sub|sup|big|abbr|cite|mark|var|dfn|del|ins|q|br"
+
 // ownDefaults drops from the page every rule of ember's user-agent sheet that names one of
 // these elements, so Chrome lays them out by its own, and returns each element's box.
 const ownDefaults = `
-const tags = /(^|[\s,>+~(])(ul|ol|li|menu|dl|dt|dd|h5|h6|blockquote|figure|figcaption|form|address|hgroup|search|center|fieldset|legend|a|b|i|u|s|small|sub|sup|big|abbr|cite|mark|var|dfn|del|ins|q|br)(?![\w-])/;
+const tags = /(^|[\s,>+~(])(` + textTags + `)(?![\w-])/;
 for (const sheet of document.styleSheets) {
 	for (const layer of sheet.cssRules) {
 		if (!(layer instanceof CSSLayerBlockRule)) continue;

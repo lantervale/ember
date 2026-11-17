@@ -84,18 +84,31 @@ func (d *Document) fetchImage(url string) {
 		defer f.Done()
 		f.slots <- struct{}{}
 		defer func() { <-f.slots }()
-		got := fetchedImage{url: url}
-		var data []byte
-		if data, got.err = fetch(url); got.err == nil {
-			var shapes bool
-			if got.vec, got.warning, shapes, got.err = vectorOf(url, data); !shapes {
-				got.img, _, got.err = image.Decode(bytes.NewReader(data))
-			}
-		}
+		got := fetched(url, fetch)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.landed = append(f.landed, got)
 	}()
+}
+
+// fetched is the picture fetch gets for url, read as a registered format
+// of shapes when one recognises it.
+func fetched(url string, fetch ImageFetcher) fetchedImage {
+	got := fetchedImage{url: url}
+	data, err := fetch(url)
+	if err != nil {
+		got.err = err
+		return got
+	}
+	format, shapes := vectorFormatOf(url, data)
+	if !shapes {
+		got.img, _, got.err = image.Decode(bytes.NewReader(data))
+		return got
+	}
+	if got.vec, got.err = format.parse(data); got.err == nil {
+		got.warning = format.undrawn(url, got.vec)
+	}
+	return got
 }
 
 // landImages takes the pictures fetched since the last layout: each
@@ -133,21 +146,13 @@ func (d *Document) image(url string) *twod.Texture {
 		return t
 	}
 	var tex *twod.Texture
-	if b, ok := d.imageBytes(url); ok {
-		if pic, warning, shapes, err := vectorOf(url, b); shapes {
-			if err != nil {
-				d.warn(fmt.Errorf("ui: image %s: %w", url, err))
-			} else {
-				d.keepVector(url, pic, warning, false)
-			}
-		} else if img, _, err := image.Decode(bytes.NewReader(b)); err == nil {
-			tex = twod.NewTexture(img, twod.Encoded())
-		} else {
-			d.warn(err)
-		}
-	} else if d.fetch != nil {
+	b, ok := d.imageBytes(url)
+	switch {
+	case ok:
+		tex = d.decoded(url, b)
+	case d.fetch != nil:
 		d.fetchImage(url)
-	} else {
+	default:
 		d.warn(&missingImageError{url})
 	}
 	if d.images == nil {
@@ -155,6 +160,27 @@ func (d *Document) image(url string) *twod.Texture {
 	}
 	d.images[url] = tex
 	return tex
+}
+
+// decoded is the texture of the picture file b that url names: nil with
+// a warning when it can't be read, and for a picture of shapes, kept as
+// url's vector.
+func (d *Document) decoded(url string, b []byte) *twod.Texture {
+	if format, shapes := vectorFormatOf(url, b); shapes {
+		pic, err := format.parse(b)
+		if err != nil {
+			d.warn(fmt.Errorf("ui: image %s: %w", url, err))
+			return nil
+		}
+		d.keepVector(url, pic, format.undrawn(url, pic), false)
+		return nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		d.warn(err)
+		return nil
+	}
+	return twod.NewTexture(img, twod.Encoded())
 }
 
 type missingImageError struct{ url string }

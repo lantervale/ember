@@ -57,7 +57,7 @@ func TestWhatAnUnsupportedBlockHoldsSaysNothing(t *testing.T) {
 }
 
 // coloured computes p under the browser sheets srcs and says which of
-// the colours #100, #200… it got, as 1, 2…
+// the colours #100, #200 and so on it got, as its hundreds.
 func coloured(t *testing.T, srcs ...string) int {
 	t.Helper()
 	var sheets []*Sheet

@@ -389,6 +389,34 @@ type blockResult struct {
 	firstBaseline float32
 }
 
+// slotBesideFloats is the first room at or below minY wide enough for the border box of
+// it, which no float may overlap; an auto width is never less than the margins take
+// back.
+func (t *tree) slotBesideFloats(ctx *blockContext, it *blockItem, parent size, minY float32, margin rect) bfcSlot {
+	minAuto := -margin.horizontal()
+	after := -1
+	for {
+		slot := ctx.findBFCSlot(minY, [2]float32{margin.l, margin.r}, it.clear, after)
+		if slot.segment < 0 {
+			return slot
+		}
+		stretch := fmax(fmax(slot.stretchWidth, minAuto), 0)
+		w := it.size.w
+		switch {
+		case some(w):
+		case standsBesideFloats(it.node):
+			w = t.measureChildSize(it.node, noSize, parent, spaces{def(stretch), maxContentSpace},
+				inherentSize, horizontal, collapsibleIf(false))
+		default:
+			w = stretch
+		}
+		if mClamp(w, it.minSize.w, it.maxSize.w) <= slot.borderWidth+fitTolerance {
+			return slot
+		}
+		after = slot.segment
+	}
+}
+
 //nolint:cyclop,funlen,gocognit,gocyclo,maintidx // Taffy's perform_final_layout_on_in_flow_children, kept in its shape
 func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, insetL float32,
 	rInset, rBorder, rPadding rect, st *style.Computed, ownCollapse [2]bool, scroll bool,
@@ -488,32 +516,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			minY := committed + yMarginOffset
 			avoid, avoidW = point{rInset.l, minY}, innerW
 			if hasActive || ctx.active(minY) {
-				// The first room at or below minY wide enough for the border box, which
-				// no float may overlap; an auto width is never less than the margins
-				// take back.
 				minAuto := -nonAuto.horizontal()
-				after := -1
-				var slot bfcSlot
-				for {
-					slot = ctx.findBFCSlot(minY, [2]float32{nonAuto.l, nonAuto.r}, it.clear, after)
-					if slot.segment < 0 {
-						break
-					}
-					stretch := fmax(fmax(slot.stretchWidth, minAuto), 0)
-					w := it.size.w
-					switch {
-					case some(w):
-					case standsBesideFloats(it.node):
-						w = t.measureChildSize(it.node, noSize, parent, spaces{def(stretch), maxContentSpace},
-							inherentSize, horizontal, collapsibleIf(false))
-					default:
-						w = stretch
-					}
-					if mClamp(w, it.minSize.w, it.maxSize.w) <= slot.borderWidth+fitTolerance {
-						break
-					}
-					after = slot.segment
-				}
+				slot := t.slotBesideFloats(ctx, it, parent, minY, nonAuto)
 				// Moved down past a float, its top margin no longer collapses with the
 				// block's.
 				pushedBelow = slot.y > minY

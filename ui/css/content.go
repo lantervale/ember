@@ -13,7 +13,7 @@ import (
 //
 //nolint:gochecknoglobals // lookup table
 var listStyles = map[string]style.ListStyle{
-	"disc": style.ListDisc, "none": style.ListNone, "circle": style.ListCircle, "square": style.ListSquare,
+	"disc": style.ListDisc, kwNone: style.ListNone, "circle": style.ListCircle, "square": style.ListSquare,
 	"decimal": style.ListDecimal, "decimal-leading-zero": style.ListDecimalLeadingZero,
 	"lower-alpha": style.ListLowerAlpha, "lower-latin": style.ListLowerAlpha,
 	"upper-alpha": style.ListUpperAlpha, "upper-latin": style.ListUpperAlpha,
@@ -224,6 +224,7 @@ func contentProps() map[string]prop {
 	list := func(get func(*style.Computed) *[]style.Counter, missing int) prop {
 		return field(get, func(_ *ctx, v []Component) []style.Counter { return counters(v, missing) })
 	}
+	//nolint:goconst // the content properties' table
 	return map[string]prop{
 		"content":           field(func(c *style.Computed) *style.Content { return &c.Content }, (*ctx).content),
 		"counter-reset":     list(func(c *style.Computed) *[]style.Counter { return &c.CounterReset }, 0),

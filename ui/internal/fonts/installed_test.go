@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/lantervale/ember/ui/internal/style"
@@ -23,24 +24,25 @@ import (
 
 // collection packs fonts into one .ttc file.
 func collection(fonts ...[]byte) []byte {
-	out := make([]byte, 12+4*len(fonts))
-	binary.BigEndian.PutUint32(out, tagTTCF)
-	binary.BigEndian.PutUint32(out[4:], 0x00010000)
-	binary.BigEndian.PutUint32(out[8:], uint32(len(fonts)))
+	head := make([]byte, 12+4*len(fonts))
+	binary.BigEndian.PutUint32(head, tagTTCF)
+	binary.BigEndian.PutUint32(head[4:], 0x00010000)
+	binary.BigEndian.PutUint32(head[8:], uint32(len(fonts)))
+	var body []byte
 	for i, f := range fonts {
-		base := uint32(len(out))
-		binary.BigEndian.PutUint32(out[12+4*i:], base)
-		out = append(out, f...)
-		font := out[base:]
+		base := uint32(len(head) + len(body))
+		binary.BigEndian.PutUint32(head[12+4*i:], base)
+		font := slices.Clone(f)
 		for t := range int(binary.BigEndian.Uint16(font[4:])) {
 			rec := font[12+16*t:]
 			binary.BigEndian.PutUint32(rec[8:], binary.BigEndian.Uint32(rec[8:])+base)
 		}
-		for len(out)%4 != 0 {
-			out = append(out, 0)
+		body = append(body, font...)
+		for (len(head)+len(body))%4 != 0 {
+			body = append(body, 0)
 		}
 	}
-	return out
+	return slices.Concat(head, body)
 }
 
 // withoutCmap is font with its cmap table zeroed: named as before, but
@@ -263,7 +265,7 @@ func TestNameTablesPreferTheTypographicFamilyInEnglish(t *testing.T) {
 			}
 			strs = append(strs, raw...)
 		}
-		return append(head, strs...)
+		return slices.Concat(head, strs)
 	}
 	family, legacy := familyNames(table(
 		rec{3, 1, 0x407, 1, "Schrift Halbfett"},

@@ -63,7 +63,8 @@ func TestBeforeAndAfterMakeABoxOfEveryDisplay(t *testing.T) {
 	assert.Equal(t, geom.V2(30, 12), geom.V2(atom.W, atom.H), "an inline-block of its own size")
 	assert.InDelta(t, by["atom"].Children()[0].Box().W, atom.X, 0.01, "after the content")
 
-	assert.Equal(t, geom.Rect{X: -120, Y: 5, W: 120, H: 40}, in("abs", false), "placed by its element, its containing block")
+	assert.Equal(t, geom.Rect{X: -120, Y: 5, W: 120, H: 40}, in("abs", false),
+		"placed by its element, its containing block")
 	assert.Equal(t, float32(20), by["abs"].Box().H, "out of the flow")
 	assert.Equal(t, geom.Rect{X: 160, W: 40, H: 20}, in("float", false), "a float")
 
@@ -152,7 +153,9 @@ body { margin: 0; font-size: 10px; line-height: 20px; }
 func TestAGeneratedBoxTransitions(t *testing.T) {
 	item := ui.Div(ui.ID("item"), ui.Text("x"))
 	l := liveDocWith(t, []ui.DocumentOption{ui.CSS(`
-#item::before { content: ""; display: block; height: 10px; background-color: #000; transition: background-color 1s linear; }
+#item::before {
+	content: ""; display: block; height: 10px; background-color: #000; transition: background-color 1s linear;
+}
 #item.lit::before { background-color: #fff; }
 `)}, item)
 	l.w.Time().Scale = 0
@@ -184,7 +187,8 @@ func TestListsNumberThroughTheListItemCounter(t *testing.T) {
 		require.True(t, ok)
 		return s
 	}
-	assert.Equal(t, []string{"3. ", "9. ", "10. ", "XI. ", "→ "}, []string{text(a), text(b), text(c), text(roman), text(own)})
+	assert.Equal(t, []string{"3. ", "9. ", "10. ", "XI. ", "→ "},
+		[]string{text(a), text(b), text(c), text(roman), text(own)})
 	_, small, _ := ui.MarkerText(d, b)
 	_, big, _ := ui.MarkerText(d, c)
 	assert.Less(t, big, small*2, "a ::marker's font sizes its box: three glyphs at 30px are wider than two lines of 16px")
@@ -240,7 +244,8 @@ div::before { content: ""; display: block; width: 28px; height: 20px; padding: 2
 
 func TestGeneratedTextFollowsItsAttributeAndIsNotTranslated(t *testing.T) {
 	tr := newFrench(saveWords())
-	d := ui.NewDocument(ui.WithTranslator(tr), ui.CSS(`p::before { content: "Save"; } p::after { content: attr(data-n); }`))
+	d := ui.NewDocument(ui.WithTranslator(tr),
+		ui.CSS(`p::before { content: "Save"; } p::after { content: attr(data-n); }`))
 	p := ui.P(ui.Attr("data-n", "1"), ui.Text("Save"))
 	d.Body().Append(p)
 	d.Layout(geom.V2(300, 200))

@@ -67,7 +67,8 @@ func TestParseWarnings(t *testing.T) {
 			`inline-flex, grid, inline-grid, none, contents, list-item, flow-root, found "-webkit-flex"`},
 		{"p::-webkit-scrollbar { color: #f00 }",
 			`t.css:1:4: the vendor-prefixed pseudo-element ::-webkit-scrollbar is not supported; rule dropped`},
-		{"a:-webkit-any-link { color: #f00 }", `t.css:1:3: the :-webkit-any-link pseudo-class is not supported; rule dropped`},
+		{"a:-webkit-any-link { color: #f00 }",
+			`t.css:1:3: the :-webkit-any-link pseudo-class is not supported; rule dropped`},
 		{"p { color red }", `t.css:1:5: expected ':' after "color"`},
 		{"p { color: }", `t.css:1:5: color has no value`},
 		{"p { 12px: red }", `t.css:1:5: expected a property name, found "12px"`},
@@ -88,7 +89,10 @@ func TestParseWarnings(t *testing.T) {
 		{"p::part { color: #f00 }", `t.css:1:4: ::part takes an argument in ( ); rule dropped`},
 		{"p::before(x) { color: #f00 }", `t.css:1:4: ::before takes no ( ); rule dropped`},
 		{"p::marker { margin: 0 }", `t.css:1:13: ::marker does not take margin`},
-		{"p::before { content: counter(c, lower-greek) }", `t.css:1:22: content: counter(): the counter style: expected none, disc, circle, square, decimal, decimal-leading-zero, lower-alpha, upper-alpha, lower-roman, upper-roman, disclosure-open or disclosure-closed, found "lower-greek"`},
+		{"p::before { content: counter(c, lower-greek) }",
+			`t.css:1:22: content: counter(): the counter style: expected none, disc, circle, square, decimal, ` +
+				`decimal-leading-zero, lower-alpha, upper-alpha, lower-roman, upper-roman, disclosure-open or ` +
+				`disclosure-closed, found "lower-greek"`},
 		{"p { counter-reset: reversed(c) }",
 			`t.css:1:20: counter-reset: reversed() is not supported; an ol counts down with its reversed attribute`},
 		{"p { quotes: \"a\" }", `t.css:1:13: quotes: quotes takes auto, none or pairs of strings`},

@@ -189,18 +189,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 			write("data-ember-focus", place(d, sel.Focus))
 		}
 	}
-	style, _ := n.Attr("style")
-	if thumb := switchThumb(d, n); thumb != "" {
-		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+thumb), "; ")
-	}
-	if bar := barLook(d, n); bar != "" {
-		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
-	}
-	if c, ok := placeholderColor(d, n); ok {
-		style = strings.TrimSpace(style + "; color: " + c)
-		style = strings.TrimPrefix(style, "; ")
-	}
-	if style != "" {
+	if style := liveStyle(d, n); style != "" {
 		write("style", inline(d, style, nil))
 	}
 	typ, _ := n.Attr("type")
@@ -232,20 +221,43 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		}
 		write(a.Name, a.Value)
 	}
+	if name, value, ok := controlState(d, n, typ); ok {
+		write(name, value)
+	}
+}
+
+// liveStyle is n's style attribute with what its control shows now: a
+// switch's thumb, a bar's fill, a placeholder's colour.
+func liveStyle(d *ui.Document, n *dom.Node) string {
+	style, _ := n.Attr("style")
+	if thumb := switchThumb(d, n); thumb != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+thumb), "; ")
+	}
+	if bar := barLook(d, n); bar != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
+	}
+	if c, ok := placeholderColor(d, n); ok {
+		style = strings.TrimSpace(style + "; color: " + c)
+		style = strings.TrimPrefix(style, "; ")
+	}
+	return style
+}
+
+// controlState is the attribute that says a control's state now: a
+// checkbox or radio checked, an input's value, the chosen option
+// selected.
+func controlState(d *ui.Document, n *dom.Node, typ string) (string, string, bool) {
 	switch {
 	case n.Tag() == dom.Input && (typ == "checkbox" || typ == "radio"):
-		if d.Checked(n) {
-			write("checked", "")
-		}
+		return "checked", "", d.Checked(n)
 	case n.Tag() == dom.Input:
-		if v := d.Value(n); v != "" {
-			write("value", v)
-		}
+		v := d.Value(n)
+		return "value", v, v != ""
 	case n.Tag() == dom.Option:
-		if p := n.Parent(); p != nil && p.Tag() == dom.Select && optionIndex(p, n) == d.Selected(p) {
-			write("selected", "")
-		}
+		p := n.Parent()
+		return "selected", "", p != nil && p.Tag() == dom.Select && optionIndex(p, n) == d.Selected(p)
 	}
+	return "", "", false
 }
 
 func optionIndex(sel, opt *dom.Node) int {

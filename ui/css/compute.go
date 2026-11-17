@@ -322,7 +322,7 @@ func hints(n *dom.Node) []Declaration {
 		return nil
 	}
 	var out []Declaration
-	for _, name := range [...]string{"width", "height"} {
+	for _, name := range [...]string{propWidth, propHeight} {
 		v, ok := n.Attr(name)
 		if !ok {
 			continue
@@ -382,14 +382,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	c.SelectionColor, c.HasSelection = parent.SelectionColor, parent.HasSelection
 	c.SelectionText, c.HasSelectionText = parent.SelectionText, parent.HasSelectionText
 	if r.may(n, "selection") {
-		if sel, ok := x.pseudo(r.pm, n, r.sheets, "selection"); ok {
-			if r.pm.declared("background-color") {
-				c.SelectionColor, c.HasSelection = sel.Background, true
-			}
-			if r.pm.declared("color") {
-				c.SelectionText, c.HasSelectionText = sel.Color, true
-			}
-		}
+		r.selection(x, n)
 	}
 	if n.Tag() == dom.Dialog && r.may(n, "backdrop") {
 		if bd, ok := x.pseudo(r.pm, n, r.sheets, "backdrop"); ok {
@@ -400,6 +393,20 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		r.counts = true
 	}
 	return &c
+}
+
+// selection gives x's style what n's own ::selection declares.
+func (r *restyler) selection(x *ctx, n *dom.Node) {
+	sel, ok := x.pseudo(r.pm, n, r.sheets, "selection")
+	if !ok {
+		return
+	}
+	if r.pm.declared("background-color") {
+		x.c.SelectionColor, x.c.HasSelection = sel.Background, true
+	}
+	if r.pm.declared("color") {
+		x.c.SelectionText, x.c.HasSelectionText = sel.Color, true
+	}
 }
 
 // cascaded applies every longhand's winner, then what depends on several.
@@ -908,18 +915,18 @@ func currentField(f style.CurrentColorFields, get func(*style.Computed) *color.C
 func (x *ctx) length(c Component) style.Length {
 	if c.Kind == Ident {
 		switch strings.ToLower(c.Text) {
-		case "min-content":
+		case kwMinContent:
 			return style.Length{Kind: style.MinContent}
-		case "max-content", "content":
+		case kwMaxContent, kwContent:
 			return style.Length{Kind: style.MaxContent}
-		case "fit-content":
+		case kwFitContent:
 			return style.Length{Kind: style.FitContent}
 		case kwNone:
 			return style.Length{Kind: style.None}
 		}
 		return style.Length{}
 	}
-	if c.Kind == Function && strings.EqualFold(c.Text, "fit-content") {
+	if c.Kind == Function && strings.EqualFold(c.Text, kwFitContent) {
 		l := x.length(items(c.Args)[0])
 		l.Kind = style.FitContent
 		return l
@@ -988,7 +995,7 @@ var (
 	}
 )
 
-//nolint:gochecknoglobals // a keyword table
+//nolint:gochecknoglobals,goconst // a keyword table
 var breaks = map[string]style.Break{
 	"avoid": style.BreakAvoid, "avoid-column": style.BreakAvoid, "column": style.BreakColumn,
 }
@@ -1247,7 +1254,7 @@ var props = func() map[string]prop {
 					return style.SelectText
 				case "none":
 					return style.SelectNone
-				case "all":
+				case kwAll:
 					return style.SelectAll
 				}
 				// auto set on an element is text in Chrome, whatever its parent
@@ -1300,7 +1307,8 @@ var props = func() map[string]prop {
 			decorationStyles),
 		"text-decoration-color": currentField(style.DecorationCurrent,
 			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
-		"text-decoration-thickness": lengthField(func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }),
+		"text-decoration-thickness": lengthField(
+			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),

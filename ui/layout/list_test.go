@@ -60,7 +60,8 @@ func TestABrBreaksTheLine(t *testing.T) {
 	tr := lay(el(dom.Div, width(100), p), 200)
 	assert.Equal(t, []fragmentAt{{"HH", 0, 0}, {"HHH HH", 0, 10}}, fragments(tr.Of[p]))
 	assert.Equal(t, float32(20), tr.Of[p].Size.Y)
-	assert.Equal(t, geom.Rect{X: 20, W: 0, H: 10}, tr.Of[br].Rect(), "the br is at the end of its line, no wider than nothing")
+	assert.Equal(t, geom.Rect{X: 20, W: 0, H: 10}, tr.Of[br].Rect(),
+		"the br is at the end of its line, no wider than nothing")
 
 	two := el(dom.P, block, text("HH"), el(dom.Br, nil), el(dom.Br, nil), text("HH"))
 	tr = lay(el(dom.Div, width(100), two), 200)
@@ -80,8 +81,10 @@ func TestAFieldsetsLegendStandsOnItsTopBorder(t *testing.T) {
 	}, legend, p)
 	tr := lay(el(dom.Div, width(100), set), 200)
 
-	assert.Equal(t, geom.Rect{X: 10, Y: 0, W: 30, H: 10}, tr.Of[legend].Rect(), "from the fieldset's top, as wide as its text")
-	assert.Equal(t, geom.Rect{X: 10, Y: 20, W: 80, H: 10}, tr.Of[p].Rect(), "below the legend, the padding and its own margin")
+	assert.Equal(t, geom.Rect{X: 10, Y: 0, W: 30, H: 10}, tr.Of[legend].Rect(),
+		"from the fieldset's top, as wide as its text")
+	assert.Equal(t, geom.Rect{X: 10, Y: 20, W: 80, H: 10}, tr.Of[p].Rect(),
+		"below the legend, the padding and its own margin")
 	assert.Equal(t, float32(37), tr.Of[set].Size.Y)
 	assert.Equal(t, float32(4), tr.Of[set].Wrap.Top, "the border is drawn through the legend's middle")
 

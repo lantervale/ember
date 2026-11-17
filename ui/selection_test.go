@@ -198,7 +198,8 @@ func TestTheSelectionCopiesAsChromeWritesIt(t *testing.T) {
 		ui.Div(ui.Text("a "), ui.Span(ui.Class("up"), ui.Text("shout")), ui.Span(ui.Class("gone"), ui.Text("gone")),
 			ui.Span(ui.Class("ghost"), ui.Text("ghost")), ui.Text(" b")),
 		ui.Ul(ui.Li(ui.Text("first")), ui.Li(ui.Text("second"))),
-		ui.Table(ui.Tbody(ui.Tr(ui.Td(ui.Text("a1")), ui.Td(ui.Text("b1"))), ui.Tr(ui.Td(ui.Text("a2")), ui.Td(ui.Text("b2"))))),
+		ui.Table(ui.Tbody(
+			ui.Tr(ui.Td(ui.Text("a1")), ui.Td(ui.Text("b1"))), ui.Tr(ui.Td(ui.Text("a2")), ui.Td(ui.Text("b2"))))),
 		ui.Div(ui.Text("x "), ui.Input(ui.Attr("value", "typed")), ui.Text(" y "), ui.Button(ui.Text("btn")), ui.Text(" z")),
 		ui.Pre(ui.Text("pre  two\n  lines")),
 	)

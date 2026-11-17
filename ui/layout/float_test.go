@@ -113,7 +113,8 @@ func TestTextIndentMovesTheFirstLineOnly(t *testing.T) {
 }
 
 func TestTextIndentCountsInShrinkToFitWidths(t *testing.T) {
-	s := el(dom.Span, func(st *style.Computed) { st.Display, st.TextIndent = style.InlineBlock, style.Px(15) }, text("HHH"))
+	s := el(dom.Span,
+		func(st *style.Computed) { st.Display, st.TextIndent = style.InlineBlock, style.Px(15) }, text("HHH"))
 	tr := lay(el(dom.Div, width(100), s), 200)
 	assert.Equal(t, float32(45), tr.Of[s].Size.X)
 }
@@ -121,7 +122,9 @@ func TestTextIndentCountsInShrinkToFitWidths(t *testing.T) {
 func TestTextAfterABlockIsNotIndentedAgain(t *testing.T) {
 	d := el(dom.Div, func(st *style.Computed) {
 		st.Display, st.TextIndent, st.Size.Width = style.Block, style.Px(10), style.Px(100)
-	}, text("HH"), el(dom.P, func(st *style.Computed) { st.Display, st.TextIndent = style.Block, style.Px(10) }, text("HH")), text("HH"))
+	}, text("HH"),
+		el(dom.P, func(st *style.Computed) { st.Display, st.TextIndent = style.Block, style.Px(10) }, text("HH")),
+		text("HH"))
 	tr := lay(el(dom.Div, block, d), 200)
 	var xs []float32
 	for _, f := range fragments(tr.Of[d]) {

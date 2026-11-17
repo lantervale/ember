@@ -296,7 +296,8 @@ func (t *tree) lineBreak(c *inlineContent, parent *box.Box, e *dom.Node, st *sty
 	first := len(c.runs)
 	c.runs = append(c.runs,
 		&textRun{box: &box.Box{Kind: box.TextRun, Style: kept}, parent: b, st: kept, shift: c.shift, text: "\n"})
-	c.spans = append(c.spans, &inlineSpan{box: b, parent: parent, st: st, first: first, end: first + 1, runs: []int{first}})
+	c.spans = append(c.spans,
+		&inlineSpan{box: b, parent: parent, st: st, first: first, end: first + 1, runs: []int{first}})
 }
 
 // cut splits the runs into pieces: whitespace collapsed as each run's white-space says,
@@ -439,7 +440,9 @@ func markerOf(st *style.Computed) string {
 		return "▸"
 	case style.ListDisclosureOpen:
 		return "▾"
-	case style.ListDisc, style.ListNone, style.ListCircle, style.ListSquare, style.ListDecimal:
+	case style.ListDisc, style.ListNone, style.ListCircle, style.ListSquare, style.ListDecimal,
+		style.ListDecimalLeadingZero, style.ListLowerAlpha, style.ListUpperAlpha, style.ListLowerRoman,
+		style.ListUpperRoman:
 	}
 	return ""
 }
@@ -714,7 +717,8 @@ func (c *inlineContent) unitEnd(i int) int {
 // next, or after the start edges that follow it: stuck to what is before it, with the
 // space a line may end at after it.
 func (c *inlineContent) opensOnSpace(i int) bool {
-	for ; c.edgeAt(i, true); i++ {
+	for c.edgeAt(i, true) {
+		i++
 	}
 	return i < len(c.pieces) && c.pieces[i].kind == gap && c.passes(c.pieces[i])
 }
@@ -856,28 +860,14 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 	c := b.c
 	for i < len(c.pieces) {
 		p := c.pieces[i]
-		switch p.kind {
-		case newline:
+		if p.kind == newline {
 			b.cur.forced = true
 			b.finish(i + 1)
 			return i + 1, true
-		case gap:
-			if (b.empty || b.blank) && collapses(c.runs[p.run].st.WhiteSpace) {
-				if b.empty {
-					b.cur.from, b.cur.to = i+1, i+1
-				}
-				i++
-				continue
-			}
-			if b.pending < 0 {
-				b.pending = i
-			}
+		}
+		if b.between(i) {
 			i++
 			continue
-		case breakHere:
-			i++
-			continue
-		case word, atomic, edge, emergency, marker, anchor:
 		}
 		end, hung := c.unitEnd(i), false
 		if b.pending >= 0 && (p.kind == edge || p.kind == anchor) {
@@ -902,15 +892,8 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 			return i, true
 		}
 		if b.empty && alone.end() > width {
-			if take, ok := c.emergencyBreak(i, end, width); ok {
-				for k := i; k < take; k++ {
-					b.at.step(c.pieces[k], 0)
-				}
-				b.kept = b.at
-				b.cur.to = take
-				b.empty = false
-				b.finish(take + 1)
-				return take + 1, true
+			if after, ok := b.breakInside(i, end, width); ok {
+				return after, true
 			}
 		}
 		b.at, b.kept = next, kept
@@ -923,6 +906,47 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 		i = end
 	}
 	return i, false
+}
+
+// between takes piece i when it stands between the units of a line: a space, dropped
+// where it collapses at the line's start and pending otherwise, or a place the line may
+// break at.
+func (b *breaker) between(i int) bool {
+	p := b.c.pieces[i]
+	switch p.kind {
+	case gap:
+		if (b.empty || b.blank) && collapses(b.c.runs[p.run].st.WhiteSpace) {
+			if b.empty {
+				b.cur.from, b.cur.to = i+1, i+1
+			}
+			return true
+		}
+		if b.pending < 0 {
+			b.pending = i
+		}
+		return true
+	case breakHere:
+		return true
+	case newline, word, atomic, edge, emergency, marker, anchor:
+	}
+	return false
+}
+
+// breakInside ends the line inside the unit from i to end, too wide for width alone,
+// where it may break in an emergency, and returns where the next line begins.
+func (b *breaker) breakInside(i, end int, width float32) (int, bool) {
+	take, ok := b.c.emergencyBreak(i, end, width)
+	if !ok {
+		return 0, false
+	}
+	for k := i; k < take; k++ {
+		b.at.step(b.c.pieces[k], 0)
+	}
+	b.kept = b.at
+	b.cur.to = take
+	b.empty = false
+	b.finish(take + 1)
+	return take + 1, true
 }
 
 // close ends the breaking: the line left open joins the lines when it holds something.
@@ -942,7 +966,7 @@ func (b *breaker) breakAll(width float32) []line {
 	indent := c.indent(width)
 	b.open(0, indent, width-indent, 0)
 	for i := 0; i < len(c.pieces); {
-		ended := false
+		var ended bool
 		if i, ended = b.one(i, b.cur.avail); ended {
 			b.open(i, 0, width, 0)
 		}
@@ -1400,28 +1424,16 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 				i++
 				continue
 			}
-			var text strings.Builder
-			start := walk.at()
+			var text string
+			var start float32
 			var from int32
-			for i < len(pieces) && pieces[i].run == run && isText(pieces[i].kind) && (pieces[i].kind != gap || perGap == 0) {
-				at := walk.step(pieces[i], perGap)
-				if text.Len() == 0 {
-					start = at
-				}
-				if pieces[i].kind == word || pieces[i].kind == gap {
-					if text.Len() == 0 {
-						from = pieces[i].at
-					}
-					text.WriteString(pieces[i].text)
-				}
-				i++
-			}
+			text, start, from, i = runText(&walk, pieces, i, perGap)
 			end := walk.end()
 			if i < len(pieces) && isText(pieces[i].kind) && pieces[i].run == run {
 				end = walk.at()
 			}
 			r := geom.Rect{X: start, Y: y, W: end - start, H: lh}
-			frag := t.fragment(c.runs[run].st, text.String(), r, y+lb+c.runs[run].shift, cutStart,
+			frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart,
 				cut && i == len(pieces))
 			frag.Start = from
 			cutStart = false
@@ -1432,6 +1444,29 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		y = flowY + lh
 	}
 	return runRects, spanRects, spanLines
+}
+
+// runText steps walk over the text one run has on a line from piece i: its words and the
+// spaces no justification widens. It returns the text, where it starts, the character of
+// the run it starts at and the piece after it.
+func runText(walk *pen, pieces []piece, i int, perGap float32) (string, float32, int32, int) {
+	var text strings.Builder
+	run, start := pieces[i].run, walk.at()
+	var from int32
+	for i < len(pieces) && pieces[i].run == run && isText(pieces[i].kind) && (pieces[i].kind != gap || perGap == 0) {
+		at := walk.step(pieces[i], perGap)
+		if text.Len() == 0 {
+			start = at
+		}
+		if pieces[i].kind == word || pieces[i].kind == gap {
+			if text.Len() == 0 {
+				from = pieces[i].at
+			}
+			text.WriteString(pieces[i].text)
+		}
+		i++
+	}
+	return text.String(), start, from, i
 }
 
 // fragment is a line's piece of a run's text at r, with the ellipsis where the line was

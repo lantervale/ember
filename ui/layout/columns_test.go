@@ -40,9 +40,7 @@ func para(n int, edit func(*style.Computed)) *dom.Node {
 	}, text(strings.Join(ls, "\n")))
 }
 
-func marginBottom(v float32) func(*style.Computed) {
-	return func(st *style.Computed) { st.Margin.Bottom = style.Px(v) }
-}
+func marginBottom5(st *style.Computed) { st.Margin.Bottom = style.Px(5) }
 
 func highBox(h float32) func(*style.Computed) {
 	return func(st *style.Computed) { st.Display, st.Size.Height = style.Block, style.Px(h) }
@@ -94,10 +92,11 @@ func TestAColumnGapIsOneEmByDefault(t *testing.T) {
 }
 
 func TestColumnsBalanceBetweenBlocks(t *testing.T) {
-	a, b, c := para(3, marginBottom(5)), para(3, marginBottom(5)), para(5, marginBottom(5))
+	a, b, c := para(3, marginBottom5), para(3, marginBottom5), para(5, marginBottom5)
 	m := multicol(2, nil, a, b, c)
 	tr := lay(m, 600)
-	assert.Equal(t, geom.Rect{W: 400, H: 65}, tr.Of[m].Rect(), "125 shared by two, grown by the 5 the second paragraph lacks")
+	assert.Equal(t, geom.Rect{W: 400, H: 65}, tr.Of[m].Rect(),
+		"125 shared by two, grown by the 5 the second paragraph lacks")
 	assert.Equal(t, geom.Rect{W: 190, H: 30}, tr.Of[a].Rect())
 	assert.Equal(t, geom.Rect{Y: 35, W: 190, H: 30}, tr.Of[b].Rect())
 	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 50}, tr.Of[c].Rect())
@@ -115,13 +114,15 @@ func TestAMarginAtAColumnBreakIsDropped(t *testing.T) {
 }
 
 func TestAParagraphBreaksBetweenLines(t *testing.T) {
-	p := para(7, marginBottom(5))
+	p := para(7, marginBottom5)
 	m := multicol(2, nil, p)
 	tr := lay(m, 600)
 	b := tr.Of[p]
 	assert.Equal(t, geom.Rect{W: 400, H: 40}, b.Rect(), "the box is its parts' union")
 	assert.Equal(t, []geom.Rect{{W: 190, H: 40}, {X: 210, W: 190, H: 30}}, parts(b))
-	want := []fragmentAt{{"H", 0, 0}, {"H", 0, 10}, {"H", 0, 20}, {"H", 0, 30}, {"H", 210, 0}, {"H", 210, 10}, {"H", 210, 20}}
+	want := []fragmentAt{
+		{"H", 0, 0}, {"H", 0, 10}, {"H", 0, 20}, {"H", 0, 30}, {"H", 210, 0}, {"H", 210, 10}, {"H", 210, 20},
+	}
 	assert.Equal(t, want, fragments(b), "four lines, then three at the top of the second column")
 }
 
@@ -150,7 +151,7 @@ func TestEmptyRoomIsCutAnywhere(t *testing.T) {
 	m := multicol(2, nil, d)
 	tr := lay(m, 600)
 	assert.Equal(t, []geom.Rect{{W: 190, H: 65}, {X: 210, W: 190, H: 65}}, parts(tr.Of[d]))
-	a, e, c := para(3, marginBottom(5)), el(dom.Div, highBox(25)), para(2, marginBottom(5))
+	a, e, c := para(3, marginBottom5), el(dom.Div, highBox(25)), para(2, marginBottom5)
 	m = multicol(2, nil, a, e, c)
 	tr = lay(m, 600)
 	assert.Equal(t, float32(42.5), tr.Of[m].Size.Y)
@@ -232,7 +233,8 @@ func TestForcedAndAvoidedBreaks(t *testing.T) {
 	a, c = para(4, nil), para(5, nil)
 	m = multicol(2, nil, a, h, c)
 	tr = lay(m, 600)
-	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 10}, tr.Of[h].Rect(), "break-after: avoid takes the heading with what follows")
+	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 10}, tr.Of[h].Rect(),
+		"break-after: avoid takes the heading with what follows")
 }
 
 func TestADefiniteHeightAndColumnFill(t *testing.T) {
@@ -275,7 +277,8 @@ func TestColumnsPastTheCountOverflowAtTheEnd(t *testing.T) {
 		m := multicol(2, edit, p)
 		tr := lay(m, 600)
 		assert.Equal(t, geom.Rect{W: 400, H: 25}, tr.Of[m].Rect(), name)
-		assert.Equal(t, []geom.Rect{{W: 190, H: 25}, {X: 210, W: 190, H: 25}, {X: 420, W: 190, H: 25}, {X: 630, W: 190, H: 10}},
+		assert.Equal(t,
+			[]geom.Rect{{W: 190, H: 25}, {X: 210, W: 190, H: 25}, {X: 420, W: 190, H: 25}, {X: 630, W: 190, H: 10}},
 			parts(tr.Of[p]), name)
 		assert.Equal(t, float32(820), tr.Of[m].Content.X, name+": the columns are the scrollable overflow")
 	}
@@ -295,10 +298,12 @@ func TestAPositionedBoxInColumns(t *testing.T) {
 	})
 	m := multicol(2, func(st *style.Computed) { st.Position = style.Relative }, badge, para(3, nil), static, moved)
 	tr := lay(m, 600)
-	assert.Equal(t, geom.Rect{X: 386, Y: 3, W: 10, H: 10}, tr.Of[badge].Rect(), "the container is its containing block, whole")
+	assert.Equal(t, geom.Rect{X: 386, Y: 3, W: 10, H: 10}, tr.Of[badge].Rect(),
+		"the container is its containing block, whole")
 	assert.Equal(t, geom.Rect{Y: 30, W: 10, H: 10}, tr.Of[static].Rect(),
 		"a box with no inset between blocks stays under the block before it, as Chrome's")
-	assert.Equal(t, geom.Rect{X: 215, Y: -5, W: 190, H: 30}, tr.Of[moved].Rect(), "position: relative moves it from its column")
+	assert.Equal(t, geom.Rect{X: 215, Y: -5, W: 190, H: 30}, tr.Of[moved].Rect(),
+		"position: relative moves it from its column")
 }
 
 func TestAFloatStaysWithTheLinesBesideIt(t *testing.T) {

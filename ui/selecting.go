@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/internal/inputfeed"
@@ -10,7 +12,6 @@ import (
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/paint"
-	"strings"
 )
 
 // The units a drag extends a selection by.

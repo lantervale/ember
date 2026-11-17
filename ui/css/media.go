@@ -146,7 +146,7 @@ const (
 
 // mediaSpecs are the features ui answers.
 //
-//nolint:gochecknoglobals // the media features' table
+//nolint:gochecknoglobals,goconst // the media features' table
 var mediaSpecs = map[string]*mediaSpec{
 	"width":               {kind: mediaLength, of: func(m Media) float64 { return float64(m.Width) }},
 	"height":              {kind: mediaLength, of: func(m Media) float64 { return float64(m.Height) }},
@@ -192,7 +192,7 @@ func (q mediaQuery) matches(m Media) bool {
 	if q.bad {
 		return false
 	}
-	result := triOf(q.kind == "" || q.kind == "all" || q.kind == "screen")
+	result := triOf(q.kind == "" || q.kind == kwAll || q.kind == "screen")
 	if q.cond != nil {
 		result = min(result, q.cond.eval(m))
 	}
@@ -442,7 +442,7 @@ func (p *mediaParser) feature(at Component, toks []Component) mediaCond {
 // bare number of dppx. It is not known when a sheet read as a browser's
 // names a vendor's feature Chrome doesn't answer, which is false without
 // a word.
-func (p *mediaParser) vendorFeature(name string) (plain string, bare, known bool) {
+func (p *mediaParser) vendorFeature(name string) (string, bool, bool) {
 	v, rest := vendorOf(name)
 	if v == nil || !p.browser {
 		return name, false, true
@@ -495,9 +495,8 @@ func (p *mediaParser) rangeFeature(at Component, toks []Component, isCmp func(Co
 	c := mediaCond{spec: spec}
 	for i, op := range ops {
 		side := operands[i+1]
-		if i >= named {
-			// The feature stands on the left: as written.
-		} else {
+		if i < named {
+			// The feature stands on the right: its comparison turns round.
 			side = operands[i]
 			switch op.cmp {
 			case '<':
@@ -598,5 +597,5 @@ func mediaOff(sheets []*Sheet, m Media) [][]bool {
 }
 
 func sameOff(a, b [][]bool) bool {
-	return slices.EqualFunc(a, b, func(x, y []bool) bool { return slices.Equal(x, y) })
+	return slices.EqualFunc(a, b, slices.Equal[[]bool])
 }

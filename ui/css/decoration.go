@@ -9,7 +9,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
-//nolint:gochecknoglobals // lookup tables and grammar terms, built once
+//nolint:gochecknoglobals,goconst // lookup tables and grammar terms, built once
 var (
 	decorationLines = map[string]style.DecorationLine{
 		"underline": style.Underline, "overline": style.Overline, "line-through": style.LineThrough,
@@ -79,11 +79,11 @@ func expandTextDecoration(v []Component, out map[string][]Component) error {
 		case isWord(c, "wavy"):
 			return decorationStyle(c)
 		case decorationStyle(c) == nil:
-			name = "text-decoration-style"
+			name = propTextDecorationStyle
 		case decorationThickness(c) == nil:
-			name = "text-decoration-thickness"
+			name = propTextDecorationThickness
 		case colorTerm(c) == nil:
-			name = "text-decoration-color"
+			name = propTextDecorationColor
 		default:
 			return fmt.Errorf("%q is no line, style, colour or thickness of a text-decoration", c.String())
 		}

@@ -307,22 +307,14 @@ func (v *vector) nearest(at drawnAt) *twod.Texture {
 	return best.tex
 }
 
-// vectorOf reads data, the file url names, as a picture of shapes when a
-// registered format recognises it; ok is false for any other file. A
-// file that can't be read is an error, and what it uses that isn't
-// drawn a warning naming it.
-func vectorOf(url string, data []byte) (pic VectorImage, warning error, ok bool, err error) {
-	f, ok := vectorFormatOf(url, data)
-	if !ok {
-		return nil, nil, false, nil
+// undrawn is the warning naming what pic, the file url names, uses that
+// the format doesn't draw; nil when it draws all of it.
+func (f vectorFormat) undrawn(url string, pic VectorImage) error {
+	not := pic.Unsupported()
+	if len(not) == 0 {
+		return nil
 	}
-	if pic, err = f.parse(data); err != nil {
-		return nil, nil, true, err
-	}
-	if not := pic.Unsupported(); len(not) > 0 {
-		warning = fmt.Errorf("ui: image %s: %s is not drawn: %s", url, f.mime, strings.Join(not, ", "))
-	}
-	return pic, warning, true, nil
+	return fmt.Errorf("ui: image %s: %s is not drawn: %s", url, f.mime, strings.Join(not, ", "))
 }
 
 // keepVector makes pic the picture url names.

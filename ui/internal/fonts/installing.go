@@ -127,17 +127,17 @@ func (c *Face) parse() error {
 	var buf sfnt.Buffer
 	ppem := fixed.I(int(f.UnitsPerEm()))
 	for _, r := range "Aag0" {
-		g, err := f.GlyphIndex(&buf, r)
-		if err != nil {
+		var g sfnt.GlyphIndex
+		if g, err = f.GlyphIndex(&buf, r); err != nil {
 			return err
 		}
 		if g == 0 {
 			continue
 		}
-		if _, err := f.LoadGlyph(&buf, g, ppem, nil); err != nil {
+		if _, err = f.LoadGlyph(&buf, g, ppem, nil); err != nil {
 			return err
 		}
-		if _, err := f.GlyphAdvance(&buf, g, ppem, font.HintingNone); err != nil {
+		if _, err = f.GlyphAdvance(&buf, g, ppem, font.HintingNone); err != nil {
 			return err
 		}
 	}

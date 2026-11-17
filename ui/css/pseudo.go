@@ -9,8 +9,8 @@ import (
 type pseudoStatus uint8
 
 const (
-	// pseudoSupported styles something ui has.
-	pseudoSupported pseudoStatus = iota
+	// The zero status styles something ui has.
+	_ pseudoStatus = iota
 	// pseudoUnmatched is read and matches nothing: Chrome styles a part
 	// with it that no ui element has.
 	pseudoUnmatched
@@ -42,7 +42,7 @@ type pseudoElement struct {
 	why string
 }
 
-//nolint:gochecknoglobals // the properties each pseudo-element takes
+//nolint:gochecknoglobals,goconst // the properties each pseudo-element takes
 var (
 	fontProps   = []string{"font", "font-family", "font-size", "font-style", "font-weight", "line-height"}
 	markerProps = append([]string{"color", "content", "cursor", "letter-spacing", "overflow-wrap", "quotes",
@@ -57,7 +57,7 @@ var (
 // (TestChromeReadsThePseudoElementsOfTheTable), each with what ui does
 // with it.
 //
-//nolint:gochecknoglobals // lookup table
+//nolint:gochecknoglobals,goconst // lookup table
 var pseudoElements = map[string]pseudoElement{
 	"before": {legacy: true},
 	"after":  {legacy: true},

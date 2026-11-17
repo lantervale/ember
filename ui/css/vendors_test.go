@@ -382,7 +382,7 @@ func TestTheGuideHasEveryVendorsTable(t *testing.T) {
 	for _, v := range vendors {
 		section := vendorGuide(v)
 		if os.Getenv("EMBER_VENDOR_GUIDE") != "" {
-			fmt.Println(section)
+			fmt.Fprintln(os.Stdout, section)
 		}
 		if !strings.Contains(string(guide), section) {
 			t.Errorf("docs/05-ui/03-css.md doesn't hold the table of %s as vendors.go has it:\n%s", v.prefix, section)

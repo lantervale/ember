@@ -251,7 +251,8 @@ func (d *Document) mapOf(n *Node) *runMap {
 			offs = append(offs, int32(min(i, len(m.src)))) //nolint:gosec // a text node's length
 			i++
 		}
-		m.frags[k].offs = append(offs, int32(min(i, len(m.src)))) //nolint:gosec // a text node's length
+		offs = append(offs, int32(min(i, len(m.src)))) //nolint:gosec // a text node's length
+		m.frags[k].offs = offs
 	}
 	if d.sel.maps == nil {
 		d.sel.maps = map[*Node]*runMap{}
@@ -817,7 +818,7 @@ func (c *copier) node(n *Node) {
 // a block in the flow, a table row, never the page's html and body nor a
 // table's cell.
 func (c *copier) breaks(n *Node) bool {
-	switch n.Tag() {
+	switch n.Tag() { //nolint:exhaustive // the page's roots and a table's parts; the others by their style
 	case dom.HTML, dom.Body, dom.Td, dom.Th, dom.Thead, dom.Tbody, dom.Tfoot:
 		return false
 	case dom.Tr:
@@ -885,24 +886,4 @@ func (c *copier) dropped(src []rune, from, to int, ws style.WhiteSpace, wrap boo
 			c.space = c.last != 0 && c.last != '\n'
 		}
 	}
-}
-
-// selectionIn is the selected text inside e, for automation.
-func (d *Document) selectionIn(e *Node) string {
-	s := &d.sel
-	if s.anchor == s.focus {
-		return ""
-	}
-	start, end := d.ordered(s.anchor, s.focus)
-	first, last, ok := d.textIn(e)
-	if !ok || before(end, first) || before(last, start) {
-		return ""
-	}
-	if before(start, first) {
-		start = first
-	}
-	if before(last, end) {
-		end = last
-	}
-	return d.textBetween(start, end)
 }

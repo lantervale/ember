@@ -62,7 +62,8 @@ func TestAPictureOverTheLargestTextureIsUploadedSmaller(t *testing.T) {
 		wide.SetRGBA(x, 0, color.RGBA{R: 255, A: 255})
 	}
 	got := uploadable(wide)
-	assert.Equal(t, image.Rect(0, 0, maxTextureSide, 4), got.Rect, "its long side is the largest a device takes, the other kept")
+	assert.Equal(t, image.Rect(0, 0, maxTextureSide, 4), got.Rect,
+		"its long side is the largest a device takes, the other kept")
 	assert.Equal(t, color.RGBA{R: 255, A: 255}, got.RGBAAt(maxTextureSide-1, 0), "and it is the whole picture, scaled")
 
 	tall := uploadable(image.NewRGBA(image.Rect(0, 0, 3, 2*maxTextureSide)))

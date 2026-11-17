@@ -80,7 +80,7 @@ func TestAPictureWiderThanADeviceTakesStillDraws(t *testing.T) {
 	if g.Width != maxTextureSide || g.Height != 4 {
 		t.Fatalf("uploaded at %d×%d", g.Width, g.Height)
 	}
-	if g := r.image(&render.Texture{Image: image.NewRGBA(image.Rect(0, 0, 0, 4))}); g != r.blank {
+	if empty := r.image(&render.Texture{Image: image.NewRGBA(image.Rect(0, 0, 0, 4))}); empty != r.blank {
 		t.Fatal("an empty picture draws as none")
 	}
 }

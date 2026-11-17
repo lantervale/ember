@@ -52,9 +52,9 @@ func newTallPage(t *testing.T, sheet string, opts ...ui.DocumentOption) *tallPag
 	return p
 }
 
-func newScrollingPage(t *testing.T, sheet string, opts ...ui.DocumentOption) *tallPage {
+func newScrollingPage(t *testing.T, sheet string) *tallPage {
 	t.Helper()
-	return newTallPage(t, sheet, append([]ui.DocumentOption{ui.ScrollingViewport(), ui.OverlayScrollbars()}, opts...)...)
+	return newTallPage(t, sheet, ui.ScrollingViewport(), ui.OverlayScrollbars())
 }
 
 // scrolled is how far the page has moved up in the viewport.

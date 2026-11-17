@@ -72,31 +72,17 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandAnyOrder(long, v, out)
 	case "columns":
 		err = expandColumns(v, out)
-	case "background":
+	case shortBackground:
 		err = expandBackground(v, out)
 	case "border":
-		side := shorthands["border-top"]
-		one := map[string][]Component{}
-		if err = expandAnyOrder(side, v, one); err == nil {
-			for _, l := range side {
-				if one[l] == nil {
-					one[l] = initialValue(l)
-				}
-			}
-			for i, l := range long[:12] {
-				out[l] = one[side[i/4]]
-			}
-			for _, l := range long[12:] {
-				out[l] = initialValue(l)
-			}
-		}
-	case "border-image":
+		err = expandBorder(long, v, out)
+	case shortBorderImage:
 		err = expandBorderImage(v, out)
-	case "transition":
+	case shortTransition:
 		err = expandTransition(v, out)
 	case "text-decoration":
 		err = expandTextDecoration(v, out)
-	case "font":
+	case shortFont:
 		err = expandFont(v, out)
 	case "list-style":
 		if len(v) != 1 || checks["list-style-type"](v) != nil {
@@ -116,6 +102,28 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		}
 	}
 	return out, nil
+}
+
+// expandBorder gives the four sides one side's width, style and colour,
+// and the border image its initial values.
+func expandBorder(long []string, v []Component, out map[string][]Component) error {
+	side := shorthands["border-top"]
+	one := map[string][]Component{}
+	if err := expandAnyOrder(side, v, one); err != nil {
+		return err
+	}
+	for _, l := range side {
+		if one[l] == nil {
+			one[l] = initialValue(l)
+		}
+	}
+	for i, l := range long[:12] {
+		out[l] = one[side[i/4]]
+	}
+	for _, l := range long[12:] {
+		out[l] = initialValue(l)
+	}
+	return nil
 }
 
 // expandBox fills four sides (or corners) from one to four values.
@@ -353,7 +361,7 @@ func expandTransition(v []Component, out map[string][]Component) error {
 					return fmt.Errorf("a transition has at most two times")
 				}
 			case c.Kind == Ident && one["transition-property"].Kind == EOF:
-				if !isWord(c, "all", kwNone) {
+				if !isWord(c, kwAll, kwNone) {
 					if err := transitionTarget(c); err != nil {
 						return err
 					}

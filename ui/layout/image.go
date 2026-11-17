@@ -88,6 +88,15 @@ func (n *node) fills() bool {
 	return n.sized && n.shape.Ratio > 0 && n.shape.Width <= 0 && n.shape.Height <= 0
 }
 
+// naturalIn is the natural size of a replaced node in the room avail: a picture that
+// fills takes it.
+func (n *node) naturalIn(avail space, pb float32) size {
+	if n.fills() {
+		return n.filled(avail, pb)
+	}
+	return n.natural
+}
+
 // filled is the natural size of an img that fills, in avail less its
 // padding and border.
 func (n *node) filled(avail space, pb float32) size {

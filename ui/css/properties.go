@@ -128,7 +128,7 @@ var properties = map[string]property{
 
 // shorthands lists each shorthand's longhands, in the order CSS gives them.
 //
-//nolint:gochecknoglobals // the shorthands' table
+//nolint:gochecknoglobals,goconst // the shorthands' table
 var shorthands = map[string][]string{
 	"margin":        {"margin-top", "margin-right", "margin-bottom", "margin-left"},
 	"padding":       {"padding-top", "padding-right", "padding-bottom", "padding-left"},
@@ -173,7 +173,7 @@ var shorthands = map[string][]string{
 // outside names properties a browser knows that the subset leaves out,
 // with why.
 //
-//nolint:gochecknoglobals,goconst // unsupported properties' advice
+//nolint:gochecknoglobals // unsupported properties' advice
 var outside = map[string]string{
 	"border-collapse":  "tables as layout are not supported; use grid",
 	"word-wrap":        "word-wrap is the old name of overflow-wrap",

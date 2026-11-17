@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -175,8 +176,8 @@ func scanFile(path string) []scanned {
 	}
 	var out []scanned
 	for _, off := range offsets {
-		s, err := scanFont(f, off)
-		if err != nil {
+		s, bad := scanFont(f, off)
+		if bad != nil {
 			continue
 		}
 		s.path, s.offset, s.collection = path, off, collection
@@ -187,7 +188,7 @@ func scanFile(path string) []scanned {
 
 // fontOffsets is where each font's table directory starts in r: 0 for a
 // font file, the collection's own list for a .ttc.
-func fontOffsets(r io.ReaderAt) (offsets []uint32, collection bool, err error) {
+func fontOffsets(r io.ReaderAt) ([]uint32, bool, error) {
 	var head [12]byte
 	if _, err := r.ReadAt(head[:], 0); err != nil {
 		return nil, false, err
@@ -207,6 +208,7 @@ func fontOffsets(r io.ReaderAt) (offsets []uint32, collection bool, err error) {
 	if _, err := r.ReadAt(buf, 12); err != nil {
 		return nil, false, err
 	}
+	offsets := make([]uint32, 0, n)
 	for i := range n {
 		offsets = append(offsets, binary.BigEndian.Uint32(buf[4*i:]))
 	}
@@ -215,13 +217,14 @@ func fontOffsets(r io.ReaderAt) (offsets []uint32, collection bool, err error) {
 
 type tableRecord struct{ tag, offset, length uint32 }
 
-// tableDirectory is the tables of the font whose directory is at off.
-func tableDirectory(r io.ReaderAt, off uint32) (version uint32, tables []tableRecord, err error) {
+// tableDirectory is the version and the tables of the font whose
+// directory is at off.
+func tableDirectory(r io.ReaderAt, off uint32) (uint32, []tableRecord, error) {
 	var head [12]byte
 	if _, err := r.ReadAt(head[:], int64(off)); err != nil {
 		return 0, nil, err
 	}
-	version = binary.BigEndian.Uint32(head[:])
+	version := binary.BigEndian.Uint32(head[:])
 	if version != 0x00010000 && version != tagOTTO && version != tagTrue {
 		return 0, nil, errNotAFont
 	}
@@ -230,6 +233,7 @@ func tableDirectory(r io.ReaderAt, off uint32) (version uint32, tables []tableRe
 	if _, err := r.ReadAt(buf, int64(off)+12); err != nil {
 		return 0, nil, err
 	}
+	tables := make([]tableRecord, 0, n)
 	for i := range n {
 		rec := buf[16*i:]
 		tables = append(tables, tableRecord{
@@ -262,7 +266,7 @@ func scanFont(r io.ReaderAt, off uint32) (scanned, error) {
 				return scanned{}, errNotAFont
 			}
 			buf := make([]byte, t.length)
-			if _, err := r.ReadAt(buf, int64(t.offset)); err != nil {
+			if _, err = r.ReadAt(buf, int64(t.offset)); err != nil {
 				return scanned{}, err
 			}
 			s.family, s.legacy = familyNames(buf)
@@ -271,7 +275,7 @@ func scanFont(r io.ReaderAt, off uint32) (scanned, error) {
 			if t.length < 64 {
 				continue
 			}
-			if _, err := r.ReadAt(buf[:], int64(t.offset)); err != nil {
+			if _, short := r.ReadAt(buf[:], int64(t.offset)); short != nil {
 				continue
 			}
 			hasOS2 = true
@@ -281,7 +285,7 @@ func scanFont(r io.ReaderAt, off uint32) (scanned, error) {
 			s.italic = s.italic || binary.BigEndian.Uint16(buf[62:])&(italic|oblique) != 0
 		case tagHead:
 			var buf [2]byte
-			if _, err := r.ReadAt(buf[:], int64(t.offset)+44); err != nil {
+			if _, short := r.ReadAt(buf[:], int64(t.offset)+44); short != nil {
 				continue
 			}
 			style := binary.BigEndian.Uint16(buf[:])
@@ -308,7 +312,7 @@ func scanFont(r io.ReaderAt, off uint32) (scanned, error) {
 
 // familyNames are a name table's typographic family (name 16, else the
 // family) and its family (name 1), in English where it says so.
-func familyNames(table []byte) (family, legacy string) {
+func familyNames(table []byte) (string, string) {
 	if len(table) < 6 {
 		return "", ""
 	}
@@ -349,11 +353,11 @@ func familyNames(table []byte) (family, legacy string) {
 			names[id].s, names[id].rank = s, rank
 		}
 	}
-	legacy = names[nameFamily].s
-	if family = names[nameTypographic].s; family == "" {
-		family = legacy
+	legacy := names[nameFamily].s
+	if family := names[nameTypographic].s; family != "" {
+		return family, legacy
 	}
-	return family, legacy
+	return legacy, legacy
 }
 
 func utf16BE(b []byte) string {
@@ -398,13 +402,15 @@ func (f *installedFace) read(without ...uint32) ([]byte, error) {
 			size += (t.length + 3) &^ 3
 		}
 	}
-	head := uint32(12 + 16*len(tables))
+	// A directory counts its tables in 16 bits.
+	count := uint16(min(len(tables), math.MaxUint16))
+	head := 12 + 16*uint32(count)
 	out := make([]byte, head+size)
 	binary.BigEndian.PutUint32(out, version)
-	binary.BigEndian.PutUint16(out[4:], uint16(len(tables)))
+	binary.BigEndian.PutUint16(out[4:], count)
 	at := head
 	for i, t := range tables {
-		if _, err := file.ReadAt(out[at:at+t.length], int64(t.offset)); err != nil {
+		if _, err = file.ReadAt(out[at:at+t.length], int64(t.offset)); err != nil {
 			return nil, fmt.Errorf("%s: %w", f.path, err)
 		}
 		rec := out[12+16*i:]

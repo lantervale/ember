@@ -41,8 +41,8 @@ func TestEverySampleOfTheReaderIsKnownByItsBytes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, files)
 	for _, f := range files {
-		data, err := os.ReadFile(f)
-		require.NoError(t, err)
+		data, bad := os.ReadFile(f)
+		require.NoError(t, bad)
 		assert.True(t, sniff(data), f)
 	}
 }

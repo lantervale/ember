@@ -2,6 +2,21 @@ package layout
 
 import "github.com/lantervale/ember/ui/internal/style"
 
+// flowAmong has the lines of n take the room the floats of ctx leave them, at the width
+// the block has, and reports whether there are such floats.
+func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, inset rect) bool {
+	flows := ctx != nil && n.control == noControl && some(width) && ctx.hasFloats()
+	if flows || c.flowed {
+		c.broken = nil
+	}
+	c.flowed = flows
+	if flows {
+		ctx.setContentInset(inset.l, inset.r)
+		c.flow, c.flowTop, c.flowLeft = ctx, inset.t, inset.l
+	}
+	return flows
+}
+
 // leaf lays out a node without child boxes: empty, or holding inline content, Taffy's
 // compute_leaf_layout with text as its measure function.
 //
@@ -30,11 +45,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
 		nodeSize = in.known.or(styleSize)
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
-			natural := n.natural
-			if n.fills() {
-				natural = n.filled(in.avail.w, pbSum.w)
-			}
-			nodeSize = replacedSize(natural.add(pbSum), ratio, minSize, maxSize)
+			nodeSize = replacedSize(n.naturalIn(in.avail.w, pbSum.w).add(pbSum), ratio, minSize, maxSize)
 		}
 	}
 
@@ -75,19 +86,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		// what the content would take.
 		known.w = mClamp(nodeSize.w, minSize.w, maxSize.w) - inset.horizontal()
 	}
-	if c := n.inline; c != nil {
-		// Among floats the lines take the room they leave, at the width the block has.
-		flows := ctx != nil && n.control == noControl && some(in.known.w) && ctx.hasFloats()
-		if flows || c.flowed {
-			c.broken = nil
-		}
-		c.flowed = flows
-		if flows {
-			ctx.setContentInset(inset.l, inset.r)
-			c.flow, c.flowTop, c.flowLeft = ctx, inset.t, inset.l
-			defer func() { c.flow = nil }()
-			known.w = in.known.w - inset.horizontal()
-		}
+	if c := n.inline; c != nil && c.flowAmong(ctx, n, in.known.w, inset) {
+		defer func() { c.flow = nil }()
+		known.w = in.known.w - inset.horizontal()
 	}
 	measured, first, last := t.measureContent(n, known, avail)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)

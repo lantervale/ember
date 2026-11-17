@@ -342,7 +342,8 @@ func (p *parser) atRule(t Token, in scope) {
 
 // prelude reads an at-rule up to its block, which it enters, or to its
 // end without one.
-func (p *parser) prelude() (cs []Component, block bool) {
+func (p *parser) prelude() ([]Component, bool) {
+	var cs []Component
 	for {
 		switch k := p.peek().Kind; {
 		case k == EOF || k == RBrace && p.depth > 0:
@@ -705,7 +706,7 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 	}
 	if d.Name == "page-break-inside" {
 		// the old name, its auto and avoid break-inside's too
-		d.Name = "break-inside"
+		d.Name = propBreakInside
 	}
 	if p.browser && !custom {
 		foreign = vendorValues(d.Value)
@@ -724,13 +725,19 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 			}
 			return Declaration{}, false
 		}
-		if _, ok := shorthands[d.Name]; ok {
-			d.longhands, _ = expand(d.Name, items(d.Value))
-		} else {
-			d.vals = items(d.Value)
-		}
+		d.resolve()
 	}
 	return d, true
+}
+
+// resolve keeps a checked value as the cascade reads it: a shorthand's
+// by longhand.
+func (d *Declaration) resolve() {
+	if _, ok := shorthands[d.Name]; ok {
+		d.longhands, _ = expand(d.Name, items(d.Value))
+		return
+	}
+	d.vals = items(d.Value)
 }
 
 // pseudoCount counts the pseudo-element selectors in sels.

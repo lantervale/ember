@@ -1,13 +1,14 @@
 package main
 
 import (
+	"log"
+
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/kit"
 	"github.com/lantervale/ember/world"
-	"log"
 )
 
 // settings is a small settings screen: a heading, a form and two buttons.

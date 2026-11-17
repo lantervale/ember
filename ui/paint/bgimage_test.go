@@ -175,7 +175,8 @@ func TestAPicturePlacedInItsBoxStartsOnADevicePixel(t *testing.T) {
 		s.BackgroundSize = sized(style.Px(120), style.Px(24.5))
 		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(0), Y: style.Percent(50)}
 	})
-	assert.Equal(t, geom.Rect{X: 10, Y: 9.75, W: 120, H: 24.5}, cover[0].Rect, "one starting before the box keeps its place")
+	assert.Equal(t, geom.Rect{X: 10, Y: 9.75, W: 120, H: 24.5}, cover[0].Rect,
+		"one starting before the box keeps its place")
 
 	across := paint(120, 70, func(s *style.Computed) {
 		s.BackgroundSize = sized(style.Px(36.25), style.Px(24.75))
@@ -204,7 +205,8 @@ func TestAContainPictureIsPlacedFromTheRightAndTiles(t *testing.T) {
 	}
 	imgs := pictures(withImage(120, 24, contain)).of("image")
 	require.Len(t, imgs, 1)
-	assert.Equal(t, geom.Rect{X: 10 + 120 - 40, Y: 10, W: 40, H: 24}, imgs[0].Rect, "100% puts its right edge on the box's")
+	assert.Equal(t, geom.Rect{X: 10 + 120 - 40, Y: 10, W: 40, H: 24}, imgs[0].Rect,
+		"100% puts its right edge on the box's")
 
 	imgs = pictures(withImage(120, 24, func(s *style.Computed) {
 		contain(s)
@@ -291,8 +293,9 @@ func TestAPictureReachingARoundedCornerIsCutByIt(t *testing.T) {
 	assert.Len(t, arrowed.of("image"), 1)
 }
 
-func withGradient(w, h float32, edit func(s *style.Computed)) *box.Box {
-	return el(10, 10, w, h, func(s *style.Computed) {
+// withGradient is a box of 120×24 with a gradient behind it.
+func withGradient(edit func(s *style.Computed)) *box.Box {
+	return el(10, 10, 120, 24, func(s *style.Computed) {
 		s.BackgroundImage = style.Image{Gradient: &style.Gradient{Angle: 90, Stops: stops(red, blue)}}
 		if edit != nil {
 			edit(s)
@@ -301,17 +304,17 @@ func withGradient(w, h float32, edit func(s *style.Computed)) *box.Box {
 }
 
 func TestAGradientTakesItsBackgroundSizePositionAndRepeat(t *testing.T) {
-	whole := pictures(withGradient(120, 24, nil)).of("gradient")
+	whole := pictures(withGradient(nil)).of("gradient")
 	require.Len(t, whole, 1)
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 24}, whole[0].Rect, "auto is the padding box")
 
 	for _, scale := range []style.BackgroundScale{style.ScaleCover, style.ScaleContain} {
-		m := pictures(withGradient(120, 24, func(s *style.Computed) { s.BackgroundSize.Scale = scale })).of("gradient")
+		m := pictures(withGradient(func(s *style.Computed) { s.BackgroundSize.Scale = scale })).of("gradient")
 		require.Len(t, m, 1)
 		assert.Equal(t, whole[0].Rect, m[0].Rect, "cover and contain too")
 	}
 
-	one := pictures(withGradient(120, 24, func(s *style.Computed) {
+	one := pictures(withGradient(func(s *style.Computed) {
 		s.BackgroundSize = sized(style.Percent(25), style.Percent(50))
 		s.BackgroundNoRepeat = true
 		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(100)}
@@ -320,13 +323,13 @@ func TestAGradientTakesItsBackgroundSizePositionAndRepeat(t *testing.T) {
 	assert.Equal(t, geom.Rect{X: 10 + 90, Y: 10 + 12, W: 30, H: 12}, one[0].Rect, "its box is sized, then placed")
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 24}, one[0].Clip)
 
-	tiled := pictures(withGradient(120, 24, func(s *style.Computed) {
+	tiled := pictures(withGradient(func(s *style.Computed) {
 		s.BackgroundSize = sized(style.Percent(25), style.Length{})
 	})).of("gradient")
 	require.Len(t, tiled, 4, "a quarter wide and the box high: four across")
 	assert.Equal(t, geom.Rect{X: 100, Y: 10, W: 30, H: 24}, tiled[3].Rect)
 
-	round := pictures(withGradient(120, 24, func(s *style.Computed) {
+	round := pictures(withGradient(func(s *style.Computed) {
 		rounded(8)(s)
 		s.BackgroundSize = sized(style.Percent(25), style.Length{})
 	}))

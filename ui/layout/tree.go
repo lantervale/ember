@@ -500,15 +500,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
 		container == style.GridDisplay || container == style.InlineGrid
 	if !inFlexOrGrid && !hasBlockChild(items) {
-		for _, it := range items {
-			if it.element == nil {
-				continue
-			}
-			if st := styleOf(it.element); outOfFlow(st.Position) || st.Display == style.DisplayNone {
-				n.kids = append(n.kids, t.build(it.element, n))
-			}
-		}
-		n.inline = t.inlineOf(n, items)
+		t.buildInline(n, items)
 		return
 	}
 	var run []item
@@ -522,18 +514,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 		}
 		anon := t.anonymous(n)
 		content := t.inlineOf(anon, run)
-		// The floats inside the run's inline elements stand before its block.
-		kept := anon.kids[:0]
-		for _, k := range anon.kids {
-			if k.st.Float == style.FloatNone {
-				kept = append(kept, k)
-				continue
-			}
-			k.parent = n
-			n.kids = append(n.kids, k)
-			n.anonymous = true
-		}
-		anon.kids = kept
+		n.liftFloats(anon)
 		if content != nil {
 			content.unindented = inFlow
 			anon.inline = content
@@ -568,6 +549,36 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.holdsFloats = true
 		}
 	}
+}
+
+// buildInline gives n inline content alone: its items as its own lines, and nodes for
+// those out of the flow or not shown.
+func (t *tree) buildInline(n *node, items []item) {
+	for _, it := range items {
+		if it.element == nil {
+			continue
+		}
+		if st := styleOf(it.element); outOfFlow(st.Position) || st.Display == style.DisplayNone {
+			n.kids = append(n.kids, t.build(it.element, n))
+		}
+	}
+	n.inline = t.inlineOf(n, items)
+}
+
+// liftFloats moves the floats inside an anonymous block's inline elements to n, where
+// they stand before the block.
+func (n *node) liftFloats(anon *node) {
+	kept := anon.kids[:0]
+	for _, k := range anon.kids {
+		if k.st.Float == style.FloatNone {
+			kept = append(kept, k)
+			continue
+		}
+		k.parent = n
+		n.kids = append(n.kids, k)
+		n.anonymous = true
+	}
+	anon.kids = kept
 }
 
 // onlyCollapsibleSpace reports a run of text nodes that white-space collapses away.

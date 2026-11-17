@@ -249,7 +249,7 @@ func (d *Document) SetValue(n *Node, v string) {
 // characters of its value, as the DOM's selectionStart and selectionEnd:
 // both the caret's place when nothing is selected, and 0 for what is no
 // text field.
-func (d *Document) SelectionRange(n *Node) (from, to int) {
+func (d *Document) SelectionRange(n *Node) (int, int) {
 	if t := textOf(d.machine(n)); t != nil {
 		return t.Editor.Selection()
 	}

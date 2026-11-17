@@ -71,9 +71,10 @@ func Undecorated() Option { return func(o *options) { o.undecorated = true } }
 // OwnTitleBar has the window's content fill its title bar, the title
 // hidden, for a program that draws its own header there, as a browser its
 // tabs. The window stays the system's: its buttons, edges, shadow and
-// corners, the bar as high as a toolbar's with the buttons centred in it. TitleBarArea says what of it to keep clear, and StartDrag moves
-// the window by that header. macOS only: Windows and Linux keep their
-// title bar above the content, and a page has none (decision 0091).
+// corners, the bar as high as a toolbar's with the buttons centred in it.
+// TitleBarArea says what of it to keep clear, and StartDrag moves the
+// window by that header. macOS only: Windows and Linux keep their title
+// bar above the content, and a page has none (decision 0091).
 func OwnTitleBar() Option { return func(o *options) { o.ownTitleBar = true } }
 
 // Background clears windows that show no camera, such as tool windows.

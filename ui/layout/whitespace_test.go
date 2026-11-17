@@ -15,9 +15,7 @@ func padRight(px float32) func(*style.Computed) {
 	return func(st *style.Computed) { st.Padding.Right = style.Px(px) }
 }
 
-func padLeft(px float32) func(*style.Computed) {
-	return func(st *style.Computed) { st.Padding.Left = style.Px(px) }
-}
+func padLeft5(st *style.Computed) { st.Padding.Left = style.Px(5) }
 
 func TestASpanAloneInItsBlockIsAsWideAsItsWords(t *testing.T) {
 	a := el(dom.Span, nil, text("\n\t\t\tHH HH\t\t\t"))
@@ -90,21 +88,21 @@ func TestASpanStartingWithASpaceAtAWrap(t *testing.T) {
 	require.Len(t, tr.Of[s].Fragments, 1, "nothing of it on the first line")
 	assert.Equal(t, geom.Rect{Y: 10, W: 30, H: 10}, tr.Of[s].Rect())
 
-	fits := el(dom.Span, padLeft(5), text(" HHH"))
+	fits := el(dom.Span, padLeft5, text(" HHH"))
 	p = el(dom.P, width(50), text("HHH"), fits)
 	tr = lay(el(dom.Div, block, p), 200)
 	require.Len(t, tr.Of[fits].Fragments, 2)
 	assert.Equal(t, geom.Rect{X: 30, W: 5, H: 10}, tr.Of[fits].Fragments[0], "its padding fits after HHH and stays")
 	assert.Equal(t, geom.Rect{Y: 10, W: 30, H: 10}, tr.Of[fits].Fragments[1])
 
-	s = el(dom.Span, padLeft(5), text(" HHH"))
+	s = el(dom.Span, padLeft5, text(" HHH"))
 	p = el(dom.P, width(32), text("HHH"), s)
 	tr = lay(el(dom.Div, block, p), 200)
 	require.Len(t, tr.Of[s].Fragments, 1, "its padding has no room after HHH")
 	assert.Equal(t, geom.Rect{Y: 10, W: 35, H: 10}, tr.Of[s].Rect())
 	assert.Equal(t, float32(5), tr.Of[s].Children[0].Rect().X, "no space between its padding and its word")
 
-	same := el(dom.Span, padLeft(5), text(" H"))
+	same := el(dom.Span, padLeft5, text(" H"))
 	p = el(dom.P, width(60), text("HHH"), same)
 	tr = lay(el(dom.Div, block, p), 200)
 	assert.Equal(t, geom.Rect{X: 30, W: 25, H: 10}, tr.Of[same].Rect(), "on the same line the space stays")
@@ -128,7 +126,7 @@ func TestContentWidthsLeaveOutSpacesAtASpansEdges(t *testing.T) {
 	}
 	fit := sized(style.Length{}, el(dom.Span, nil, text(" HH HHH ")))
 	minC := sized(style.Length{Kind: style.MinContent}, text("H "), el(dom.Span, padRight(5), text("HH HHH ")))
-	lead := sized(style.Length{Kind: style.MinContent}, text("HHH"), el(dom.Span, padLeft(5), text(" H")))
+	lead := sized(style.Length{Kind: style.MinContent}, text("HHH"), el(dom.Span, padLeft5, text(" H")))
 	tr := lay(el(dom.Div, block, el(dom.Div, block, fit), el(dom.Div, block, minC), el(dom.Div, block, lead)), 200)
 	assert.Equal(t, float32(60), tr.Of[fit].Size.X, "shrunk to its words")
 	assert.Equal(t, float32(35), tr.Of[minC].Size.X, "HHH and the padding at the span's end")

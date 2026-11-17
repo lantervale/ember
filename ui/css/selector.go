@@ -9,7 +9,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/dom"
 )
 
-//nolint:gochecknoglobals // lookup table
+//nolint:gochecknoglobals,goconst // lookup table
 var stateNames = map[string]dom.State{
 	"hover": dom.Hover, "focus": dom.Focus, "focus-visible": dom.FocusVisible, "active": dom.Active,
 	"disabled": dom.Disabled, "checked": dom.Checked, "open": dom.Open, "modal": dom.Modal,
@@ -156,39 +156,35 @@ func (c *Compound) matches(e *dom.Node) bool {
 			return false
 		}
 	}
-	for _, p := range c.pseudos {
-		switch p.kind {
-		case pseudoState:
-			if !e.State().Has(p.state) {
-				return false
-			}
-		case pseudoFirstChild:
-			if !edgeChild(e, 1) {
-				return false
-			}
-		case pseudoLastChild:
-			if !edgeChild(e, -1) {
-				return false
-			}
-		case pseudoRoot:
-			if e.Parent() != nil {
-				return false
-			}
-		case pseudoLink:
-			if _, ok := e.Attr("href"); !ok {
-				return false
-			}
-		case pseudoVisited:
+	for i := range c.pseudos {
+		if !c.pseudos[i].matches(e) {
 			return false
-		case pseudoNthChild:
-			if !nth(p.a, p.b, childIndex(e)) {
+		}
+	}
+	return true
+}
+
+func (p *pseudo) matches(e *dom.Node) bool {
+	switch p.kind {
+	case pseudoState:
+		return e.State().Has(p.state)
+	case pseudoFirstChild:
+		return edgeChild(e, 1)
+	case pseudoLastChild:
+		return edgeChild(e, -1)
+	case pseudoRoot:
+		return e.Parent() == nil
+	case pseudoLink:
+		_, ok := e.Attr("href")
+		return ok
+	case pseudoVisited:
+		return false
+	case pseudoNthChild:
+		return nth(p.a, p.b, childIndex(e))
+	case pseudoNot:
+		for _, s := range p.not {
+			if s.Matches(e) {
 				return false
-			}
-		case pseudoNot:
-			for _, s := range p.not {
-				if s.Matches(e) {
-					return false
-				}
 			}
 		}
 	}
@@ -361,12 +357,12 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 	}
 	i := 0
 	for {
-		c, n, err := parseCompound(cs[i:])
-		if err != nil {
-			return Selector{}, err
+		c, read, bad := parseCompound(cs[i:])
+		if bad != nil {
+			return Selector{}, bad
 		}
 		s.Compounds = append(s.Compounds, c)
-		i += n
+		i += read
 		sawSpace := false
 		for i < len(cs) && cs[i].Kind == Whitespace {
 			sawSpace = true
@@ -525,7 +521,7 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 			return pseudo{kind: pseudoLastChild}, 2, nil
 		case "root":
 			return pseudo{kind: pseudoRoot}, 2, nil
-		case "link", "any-link":
+		case "link", classAnyLink:
 			return pseudo{kind: pseudoLink}, 2, nil
 		case "visited":
 			return pseudo{kind: pseudoVisited}, 2, nil

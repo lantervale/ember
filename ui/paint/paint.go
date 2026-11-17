@@ -406,7 +406,7 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		case box.Marker:
 			p.use(c.clip)
 			p.marker(c, alpha)
-		case box.Element, box.AnonymousBlock:
+		case box.Element, box.AnonymousBlock, box.Viewport:
 		}
 	}
 	if marked(e.b) {
