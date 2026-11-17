@@ -83,6 +83,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0077 | [What is lit around takes light past its corners](0077-what-is-lit-around-takes-light-past-its-corners.md) | rendering |
 | 0078 | [A tile lit around is lit round its bodies too](0078-a-tile-lit-around-is-lit-round-its-bodies-too.md) | rendering |
 | 0079 | [A soft crowd presses body against body](0079-a-soft-crowd-presses-body-against-body.md) | core |
+| 0087 | [SVG is read by ember's own reader, imported where it is wanted](0087-svg-is-read-by-embers-own-reader-imported-where-it-is-wanted.md) | assets |
 | 0091 | [A window keeps the system's frame under its own title bar](0091-a-window-keeps-the-systems-frame-under-its-own-title-bar.md) | api |
 
 ## Writing one
