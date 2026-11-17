@@ -82,6 +82,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0076 | [A tile object casts as its tile](0076-a-tile-object-casts-as-its-tile.md) | rendering |
 | 0077 | [What is lit around takes light past its corners](0077-what-is-lit-around-takes-light-past-its-corners.md) | rendering |
 | 0078 | [A tile lit around is lit round its bodies too](0078-a-tile-lit-around-is-lit-round-its-bodies-too.md) | rendering |
+| 0079 | [A soft crowd presses body against body](0079-a-soft-crowd-presses-body-against-body.md) | core |
 
 ## Writing one
 

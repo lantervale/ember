@@ -1,6 +1,6 @@
 # 0074. A soft crowd never stacks on one point
 
-- Status: Accepted
+- Status: Superseded by [0079](0079-a-soft-crowd-presses-body-against-body.md)
 - Date: 2026-11-16
 - Area: core
 - Owner: engine
