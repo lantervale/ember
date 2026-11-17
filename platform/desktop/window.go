@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/platform"
 )
 
@@ -15,7 +16,10 @@ func flag(on bool) int {
 	return glfw.False
 }
 
-func (n *native) SetResizable(on bool)   { n.h.SetAttrib(glfw.Resizable, flag(on)) }
+func (n *native) SetResizable(on bool) {
+	n.h.SetAttrib(glfw.Resizable, flag(on))
+	n.syncTitleBar()
+}
 func (n *native) SetAlwaysOnTop(on bool) { n.h.SetAttrib(glfw.Floating, flag(on)) }
 
 func (n *native) SetSizeLimits(lo, hi geom.Vec2) {
@@ -60,6 +64,11 @@ func (n *native) SetFullscreen(on bool) {
 		n.h.SetMonitor(m, 0, 0, mode.Width, mode.Height, mode.RefreshRate)
 	case !on && n.h.GetMonitor() != nil:
 		n.h.SetMonitor(nil, n.windowedX, n.windowedY, n.windowedW, n.windowedH, 0)
+		if n.owns() {
+			// GLFW sized the window around a title bar of its own again.
+			ownTitleBar(n.h)
+			n.h.SetSize(n.windowedW, n.windowedH)
+		}
 		if n.windowedMaximized {
 			n.h.Maximize()
 		}
@@ -79,6 +88,32 @@ func (n *native) monitor() *glfw.Monitor {
 		}
 	}
 	return glfw.GetPrimaryMonitor()
+}
+
+// owns reports whether n's content fills its title bar: a window that
+// asked for it, shown, on a system that does it.
+func (n *native) owns() bool { return ownsTitleBar && n.window.OwnTitleBar() && n.askedW == 0 }
+
+// syncTitleBar tells the window what the system draws over its content.
+func (n *native) syncTitleBar() {
+	if n.owns() {
+		n.window.SyncTitleBar(titleBarArea(n.h))
+	}
+}
+
+// StartDrag hands the press to the system, which keeps its release.
+func (n *native) StartDrag() {
+	if n.scripted || !ownsTitleBar {
+		return
+	}
+	startDrag(n.h)
+	n.window.Input().SetMouseButton(input.MouseLeft, false)
+}
+
+func (n *native) DoubleClickTitleBar() {
+	if !n.scripted {
+		doubleClickTitleBar(n.h)
+	}
 }
 
 // hints sets the creation hints for what a window asks for.

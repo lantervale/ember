@@ -36,6 +36,7 @@ type options struct {
 	minSize, maxSize           geom.Vec2
 	aspectW, aspectH           int
 	icon                       []image.Image
+	ownTitleBar                bool
 }
 
 func Title(title string) Option { return func(o *options) { o.title = title } }
@@ -66,6 +67,14 @@ func Hidden() Option { return func(o *options) { o.hidden = true } }
 // Undecorated removes the system frame and title bar, for windows that
 // draw their own.
 func Undecorated() Option { return func(o *options) { o.undecorated = true } }
+
+// OwnTitleBar has the window's content fill its title bar, the title
+// hidden, for a program that draws its own header there, as a browser its
+// tabs. The window stays the system's: its buttons, edges, shadow and
+// corners, the bar as high as a toolbar's with the buttons centred in it. TitleBarArea says what of it to keep clear, and StartDrag moves
+// the window by that header. macOS only: Windows and Linux keep their
+// title bar above the content, and a page has none (decision 0091).
+func OwnTitleBar() Option { return func(o *options) { o.ownTitleBar = true } }
 
 // Background clears windows that show no camera, such as tool windows.
 func Background(c color.Color) Option { return func(o *options) { o.background = c } }
@@ -125,6 +134,12 @@ type Backend interface {
 	Restore()
 	SetFullscreen(on bool)
 	SetIcon(images []image.Image)
+	// StartDrag has the system move the window with the pointer, from
+	// the left press being handled, until its release.
+	StartDrag()
+	// DoubleClickTitleBar does what the system does for a double click
+	// on a title bar.
+	DoubleClickTitleBar()
 	// ScreenCursor queries the pointer in screen points right now,
 	// independent of queued events and in-flight window moves.
 	ScreenCursor() (x, y float64)
@@ -148,6 +163,17 @@ type Window struct {
 	focused     bool
 	minimized   bool
 	capture     string
+	titleBar    TitleBarArea
+}
+
+// TitleBarArea is what the system keeps of a window's title bar once the
+// content fills it (OwnTitleBar), in points: the bar's Height from the
+// window's top, and the widths its buttons take at the Left and the Right
+// of it. All zero when the system draws no title bar over the content: a
+// window without OwnTitleBar, one fullscreen, or a system that keeps its
+// title bar above the content.
+type TitleBarArea struct {
+	Left, Right, Height float32
 }
 
 // Windowed is any entity that is a window.
@@ -196,6 +222,36 @@ func (w *Window) Minimized() bool             { return w.minimized }
 func (w *Window) MinSize() geom.Vec2          { return w.opts.minSize }
 func (w *Window) MaxSize() geom.Vec2          { return w.opts.maxSize }
 func (w *Window) Icon() []image.Image         { return w.opts.icon }
+func (w *Window) OwnTitleBar() bool           { return w.opts.ownTitleBar }
+
+// TitleBarArea is the part of the window's top the system's title bar
+// lies over, for a header to pad itself by. It changes as the window goes
+// fullscreen and back, so read it each frame.
+func (w *Window) TitleBarArea() TitleBarArea { return w.titleBar }
+
+// SyncTitleBar records the title bar the system draws over the content.
+// Called by platform implementations, and by tests in their place.
+func (w *Window) SyncTitleBar(area TitleBarArea) { w.titleBar = area }
+
+// StartDrag has the system move the window with the pointer until the
+// left button, down now, is released: call it for a press on the
+// program's own header (ui does for an element with app-region: drag).
+// The release goes to the system, so the window's input reads the button
+// as up from then. macOS only; elsewhere the system's title bar drags.
+func (w *Window) StartDrag() {
+	if w.backend != nil {
+		w.backend.StartDrag()
+	}
+}
+
+// DoubleClickTitleBar does what the system does for a double click on a
+// title bar, for one on the program's own header: on macOS it zooms or
+// minimises the window, or does nothing, as the user's settings say.
+func (w *Window) DoubleClickTitleBar() {
+	if w.backend != nil {
+		w.backend.DoubleClickTitleBar()
+	}
+}
 
 // AspectRatio is the width:height kept while resizing, 0:0 when free.
 func (w *Window) AspectRatio() (int, int) { return w.opts.aspectW, w.opts.aspectH }

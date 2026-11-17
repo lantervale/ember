@@ -305,6 +305,7 @@ func (n *native) sync() {
 		ww, wh, fw, fh = asked(ww, wh, fw, fh, n.askedW, n.askedH)
 	}
 	fw, fh = framebuffer(ww, wh, fw, fh, n.pixels)
+	n.syncTitleBar()
 	n.window.Sync(geom.V2(float32(ww), float32(wh)), geom.V2(float32(fw), float32(fh)), n.focused)
 }
 
@@ -606,6 +607,9 @@ func (d *driver) run() error {
 			break
 		}
 		d.closeRequested()
+		for _, n := range d.natives {
+			n.syncTitleBar()
+		}
 		pollGamepads(in, devices(d.scripted, joysticks))
 		played.apply(in, d.primary.window, frame-1)
 		dt := frameTime(&last, set.capturePath != "")
@@ -812,6 +816,11 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	if d.hidden {
 		n.askedW, n.askedH = int(size.X), int(size.Y)
 	}
+	if n.owns() {
+		// The content takes the title bar's room: back to the size asked.
+		ownTitleBar(h)
+		h.SetSize(int(size.X), int(size.Y))
+	}
 	if err = d.attach(n); err != nil {
 		h.Destroy()
 		return nil, err
@@ -828,6 +837,7 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	h.SetRefreshCallback(func(*glfw.Window) { d.refresh() })
 	h.SetFocusCallback(func(_ *glfw.Window, f bool) { n.focused = f; n.sync() })
 	if !d.scripted {
+		watchPresses()
 		d.listen(h, win)
 	}
 	return n, nil

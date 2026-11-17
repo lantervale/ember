@@ -28,6 +28,27 @@ Every option has a setter for while the game runs. `ToggleFullscreen` reads the 
 
 [fullscreen.go](../../examples/09-window/fullscreen.go)
 
+## Its own title bar
+
+A program that draws its own header, as a browser draws its tabs, gives its window `platform.OwnTitleBar()`: the content fills the title bar and the title is hidden, while the window keeps the system's buttons, edges, shadow and corners ([decision 0091](../99-decisions/0091-a-window-keeps-the-systems-frame-under-its-own-title-bar.md)).
+
+```go
+win := platform.NewWindow(platform.Title("explorer"), platform.OwnTitleBar())
+
+area := win.TitleBarArea() // read each frame: zero in fullscreen
+header.SetStyle(fmt.Sprintf("height: %gpx; padding-left: %gpx", area.Height, area.Left)) // 40 and 84 on macOS 26
+```
+
+| | |
+|---|---|
+| `win.TitleBarArea()` | what the system still draws over the content, in points: the bar's `Height`, and the widths its buttons take at the `Left` and the `Right`. Zero when nothing lies over the content |
+| `win.StartDrag()` | the system moves the window with the pointer, from the left press being handled to its release; the window's input reads the button as up from then |
+| `win.DoubleClickTitleBar()` | what the system does for a double click on a title bar: on macOS zoom, minimise or nothing, as the user set it |
+
+A ui screen calls neither: it marks its header `app-region: drag` in its sheet ([CSS](../05-ui/03-css.md)), and a press on the header's empty part drags the window, a double click zooms it, while its buttons and tabs still click.
+
+macOS does this. Windows and Linux keep their title bar above the content, and a page in a browser has none: there the area is zero and the two calls do nothing, so the same header works everywhere without a branch. A hidden run reports zero too; a test sets an area with `win.SyncTitleBar(area)`. The web explorer, `examples/95-web-explorer`, is built this way.
+
 ## When it fails
 
 If the window can't open, or a panic escapes a frame, ember writes a `crash.log`: the reason and the panic's stack, the Go, GLFW and wgpu-native versions, and a "Graphics:" line with the backend (Metal, Direct3D 12, Vulkan or OpenGL) and the graphics card. It lands in the player's config folder, under the primary window's title made into a name, here for a window titled "Ember Quest": `~/Library/Application Support/ember-quest/crash.log` on macOS, `%AppData%\ember-quest\crash.log` on Windows, where a message box also gives the reason and the log's path, so a game built without a console never fails in silence. `ember.CrashLog(path)` writes it elsewhere. A machine with no graphics adapter WebGPU can draw with gets "Ember found no graphics adapter to draw with", naming what it tried, with advice on drivers, Remote Desktop and virtual machines; a game missing its WebGPU library gets "Ember couldn't load its graphics library, which ships beside the game. Reinstalling the game puts it back." A second file, `errors.log`, may sit beside `crash.log`: the error lines the engine printed during that run, such as a shader the graphics card refused. A player who reports a crash or a wrong picture sends both.
