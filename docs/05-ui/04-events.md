@@ -39,6 +39,7 @@ func (s *Settings) Update(f world.Frame) {
 | `ui.OnContextMenu` | `ui.ContextClicked{Node}` | the right button pressed and released on it; bubbles like Back |
 | `ui.OnDrop` | `ui.Dropped{Target, Dragged}` | a draggable element let go over it, a drop target |
 | `ui.OnDragEnd` | `ui.DragEnded{Source, Dropped}` | its drag ended, taken by a target or cancelled |
+| `ui.OnSelectionChange` | `ui.SelectionChanged{Node}` | the Document's selected text set, moved or cleared; `Node` is `body`, so the callback goes on `body` or `html` |
 
 | A callback is | |
 |---|---|
@@ -50,7 +51,41 @@ func (s *Settings) Update(f world.Frame) {
 remove := ui.On(slot, ui.EventClick, equip) // added to a live element; remove() takes it off
 ```
 
-Every event is emitted as a World event whether or not it has callbacks. Callbacks run right after their event, in the Document's Update, in the order they were added, and only while their element is in the Document. Most stay on their element; `OnBack`, `OnKey` and `OnContextMenu` bubble: the focused element's handlers run, then each ancestor's up to `html`, innermost first, `e.Node` still the focused element, until one calls `e.StopPropagation()`. So one `OnBack` on a screen's root hears its Escape and pad East; on `body` or `html` it also hears a Back with nothing focused, which emits no World event ([decision 0060](../99-decisions/0060-back-and-key-callbacks-bubble.md)). World events are emitted late in a frame and read the next. A point on a box's right or bottom edge is outside it, as Chrome's `elementFromPoint` has it. `doc.Value(e.Node)` reads what a control now holds.
+Every event is emitted as a World event whether or not it has callbacks. Callbacks run right after their event, in the Document's Update, in the order they were added, and only while their element is in the Document. Most stay on their element; `OnBack`, `OnKey`, `OnContextMenu` and `OnSelectionChange` bubble: the focused element's handlers run, then each ancestor's up to `html`, innermost first, `e.Node` still the focused element, until one calls `e.StopPropagation()`. So one `OnBack` on a screen's root hears its Escape and pad East; on `body` or `html` it also hears a Back with nothing focused, which emits no World event ([decision 0060](../99-decisions/0060-back-and-key-callbacks-bubble.md)). World events are emitted late in a frame and read the next. A point on a box's right or bottom edge is outside it, as Chrome's `elementFromPoint` has it. `doc.Value(e.Node)` reads what a control now holds.
+
+## Selected text
+
+```go
+doc := ui.NewDocument(kit.Theme(), ui.CSS(`#letter { user-select: text; }`))
+ui.OnSelectionChange(func() { copyButton.SetAttr("data-count", strconv.Itoa(len(doc.Selection().Text))) }).Apply(doc.Body())
+```
+
+Text whose `user-select` allows it ([CSS](03-css.md#selecting-text)) is selected with the pointer as in Chrome on macOS. A Document has one selection, apart from its fields' own.
+
+| Input | Does |
+|---|---|
+| a press and a drag | selects from the place nearest the press to the place nearest the pointer, over elements, lines, blocks, columns and scrollers; held past the edge of a box that scrolls the text, it scrolls it |
+| a double click, a triple click | the word, the block; a drag then goes on by words or blocks |
+| Shift and a click | moves the selection's end there |
+| a click in text or beside it | clears the selection |
+| a press on a button, a link, a control, a `summary`, a `label`, an element with a `tabindex`, or on `user-select: none` text | selects nothing and keeps the selection, as Chrome; the click does what it does |
+| Cmd+C, Ctrl+C elsewhere | copies it, while no field has the focus |
+| Cmd+A, Ctrl+A elsewhere | selects all the Document's text that can be, while no field has the focus |
+| Shift and an arrow, Home or End (with the platform's word and line keys) | moves the end of a selection that exists, by a character, a word, a line, to the line's or the text's end |
+| Escape | leaves it, as Chrome |
+
+Over text a press would select, the pointer is `platform.CursorText` while the element's `cursor` is `auto`; an author's `cursor` wins.
+
+| | |
+|---|---|
+| `doc.Selection()` | `ui.Selection{Anchor, Focus, Text}`: where it began, where it ends (before `Anchor` when made backwards), and what a copy writes; `Empty()` when nothing is selected |
+| `doc.Select(anchor, focus)` | selects between two `ui.Position{Node, Offset}`: a text node and a character offset in its text as shown, before white space collapses |
+| `doc.SelectAll()`, `doc.SelectContents(n)` | all the selectable text of the Document, or of an element; false when there is none |
+| `doc.ClearSelection()` | selects nothing |
+| `doc.SelectionRects()` | the rectangles it is drawn in, in the Document's space |
+| automation's `select-all` | on a recorded label whose text takes a selection, selects it; on a text field, its text, as before |
+
+The selection is kept by node and offset, so it outlives a restyle, a relayout and a scroll; it goes when one of its ends leaves the Document. A field that takes the focus takes the selection: the page's is cleared, and the field's own works as ever. Keys reach the selection only while no field of any Document in the window has the keyboard, so a page drawn inside another Document's canvas and that Document's fields each keep their own copy and select all.
 
 ## Right clicks and drag and drop
 

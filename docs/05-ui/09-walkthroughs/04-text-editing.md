@@ -32,6 +32,8 @@ The keys follow the platform the game runs on:
 | Undo, redo | Cmd+Z, Shift+Cmd+Z | Ctrl+Z, Ctrl+Y or Shift+Ctrl+Z |
 | Send (area): `ui.Submitted` | Cmd+Enter | Ctrl+Enter |
 
+The mouse selects as a browser's does: a click places the caret and a drag selects from it, Shift+click extends the selection, a double click selects the word under it (or the spaces, or the mark) and a triple click the line with its break, the whole text in an input. Held after a double or triple click, the drag goes on word by word or line by line. A double click selects a password whole.
+
 Typing replaces the selection. Undo takes back a whole typed run at once, and each other edit on its own. Paste keeps emoji whole; it keeps line breaks in an area, and turns them into spaces in an input.
 
 ## The mouse

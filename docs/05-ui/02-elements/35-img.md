@@ -14,7 +14,7 @@ ui.Img(ui.Attr("src", "panel.png"), ui.Style("width: 72px; image-rendering: pixe
 | `src` | a PNG in the Document's `ui.Images` and stylesheets' file systems, the last added first; one missing is in `doc.Warnings()` |
 | `alt` | its name for automation (an `aria-label` wins); a picture that isn't found draws Chrome's broken-image icon and the alt text, wrapped and clipped to the box, a silver frame round the icon without `alt`, nothing with `alt=""`; unsized, it's as wide as the icon and its text |
 
-Its natural size is one point per pixel; with one side set, the other keeps the ratio. `object-fit`, `object-position` and `image-rendering: pixelated` apply; a pixelated picture snaps to device pixels, as in Chrome, so each texel covers whole pixels wherever the image stands, unless a fractional zoom makes a texel other than a whole number of pixels wide ([CSS](../03-css.md) says which texel a pixel then takes).
+Its natural size is one point per pixel; with one side set, the other keeps the ratio. `width` and `height` attributes size it as `width` and `height` in a sheet do, in pixels or percent, under every rule of the sheets. An SVG (with `ui/svg` imported) takes the size its file asks for, and is drawn at the size it shows at ([SVG pictures](../01-document.md#svg-pictures)). A block-level `img` keeps its picture's size, as in Chrome. `object-fit`, `object-position` and `image-rendering: pixelated` apply; a pixelated picture snaps to device pixels, as in Chrome, so each texel covers whole pixels wherever the image stands, unless a fractional zoom makes a texel other than a whole number of pixels wide ([CSS](../03-css.md) says which texel a pixel then takes).
 
 | Default CSS | |
 |---|---|

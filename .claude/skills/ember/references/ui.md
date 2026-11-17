@@ -8,9 +8,14 @@ A screen is a `*ui.Document`: HTML elements built from Go, styled by a CSS subse
 |---|---|
 | a Document | `ui.NewDocument(opts ...ui.DocumentOption) *ui.Document` |
 | ember's look (kit components need it) | `kit.Theme() ui.DocumentOption` |
-| a sheet written in the code | `ui.CSS(text string) ui.DocumentOption`: an `@font-face` in it is a warning |
+| a sheet written in the code | `ui.CSS(text string, opts ...ui.SheetOption) ui.DocumentOption`: an `@font-face` in it is a warning; `ui.From(address string) ui.SheetOption` for a sheet fetched from elsewhere, its `url()` fetched from that address |
 | a CSS file, with its fonts | `ui.Stylesheet(fsys fs.FS, name string) ui.DocumentOption`: `@font-face` `src` files read from `fsys` |
 | pictures for `url()` and `img` | `ui.Images(fsys fs.FS) ui.DocumentOption` |
+| pictures no file system holds | `ui.FetchImages(fetch ui.ImageFetcher) ui.DocumentOption`: `func(url string) ([]byte, error)`, called off the frame; `web.Images(base string)` (package `ui/web`) fetches over HTTP and adds JPEG and GIF |
+| SVG pictures in `img` and `url()` | `import _ "github.com/lantervale/ember/ui/svg"`: sized as Chrome sizes them (width and height, a view box alone, neither), rasterised at the size shown times the pixel ratio; text, clip-path, masks, filters and patterns are not drawn and go to `doc.Warnings()` naming the file |
+| scrollbars over the content, taking no room | `ui.OverlayScrollbars() ui.DocumentOption`, `doc.OverlayScrollbars()`: every scroller of the Document; classic bars (a 15-point gutter) are the default |
+| a page taller than its window that scrolls | `ui.ScrollingViewport() ui.DocumentOption`, `doc.ScrollingViewport()`: the viewport scrolls as a browser's (`html` as high as the page, `position: fixed` stays put, `html { overflow: hidden }` stops it); off by default, a game's screen never scrolls as a whole; `doc.ScrollIntoView(n)` shows an element |
+| a page written for browsers | `ui.BrowserSheets() ui.DocumentOption`, `doc.BrowserSheets()`: sheets and style attributes read as Chrome reads them (`-webkit-` aliases, other engines' names dropped in silence, `@supports` answered, `@layer`, `box-sizing: content-box`); off by default, never for a game's own sheet, whose warnings it hides |
 | everything bigger, as browser zoom | `ui.Zoom(f float32) ui.DocumentOption`, `doc.SetZoom(f)`, `doc.Zoom()` |
 | show it | `doc.Body().Append(nodes...)`, then `win.Add(doc)`: it lays out at the window's size |
 
@@ -20,7 +25,7 @@ A screen is a `*ui.Document`: HTML elements built from Go, styled by a CSS subse
 
 ## Elements and arguments
 
-Every element is `func(args ...ui.Arg) *ui.Node`: `ui.Div`, `Section`, `Header`, `Footer`, `Nav`, `Main`, `Aside`, `Article`, `P`, `H1`–`H4`, `Span`, `Strong`, `Em`, `Code`, `Kbd`, `Samp`, `Pre`, `Label`, `Button`, `Input`, `Select`, `Option`, `Textarea`, `Details`, `Summary`, `Dialog`, `Table`, `Thead`, `Tbody`, `Tfoot`, `Caption`, `Tr`, `Th`, `Td`, `Progress`, `Meter`, `Img`, `Hr`. A `*ui.Node` is itself an Arg: as an argument, it becomes a child.
+Every element is `func(args ...ui.Arg) *ui.Node`: `ui.Div`, `Section`, `Header`, `Footer`, `Nav`, `Main`, `Aside`, `Article`, `P`, `H1`–`H4`, `Span`, `Strong`, `Em`, `Code`, `Kbd`, `Samp`, `Pre`, `Label`, `Button`, `Input`, `Select`, `Option`, `Textarea`, `Details`, `Summary`, `Dialog`, `Table`, `Thead`, `Tbody`, `Tfoot`, `Caption`, `Tr`, `Th`, `Td`, `Progress`, `Meter`, `Img`, `Hr`, and the text elements in Chrome's default look: `Ul`, `Ol`, `Li`, `Menu`, `Dl`, `Dt`, `Dd`, `H5`, `H6`, `Blockquote`, `Figure`, `Figcaption`, `Form`, `Fieldset`, `Legend`, `Address`, `Hgroup`, `Search`, `Center`, `Br`, `A` (with an `href` it takes the focus and its `OnClick`), `B`, `I`, `U`, `S`, `Small`, `Big`, `Sub`, `Sup`, `Abbr`, `Cite`, `Q`, `Mark`, `Time`, `Var`, `Del`, `Ins`, `Dfn`, `Bdi`, `Bdo`, `Data`, `Font`. A `*ui.Node` is itself an Arg: as an argument, it becomes a child.
 
 | Arg | For |
 |---|---|
@@ -76,14 +81,18 @@ Each returns `*ui.Node` unless said; `args ...ui.Arg` go on the element.
 Full table: `docs/05-ui/03-css.md`. Lay screens out with flex or grid.
 
 - **Works:** selectors `div .c #id [a="v"] a b a>b`, `:hover :focus :focus-visible :active :disabled :checked :open :first-child :last-child :nth-child() :not() :root`; `px % em rem fr`, `calc() var() minmax() repeat()`.
-- **Layout:** `display` block, inline, inline-block, flex, inline-flex, grid, none, contents; `position` up to sticky; `overflow`; `z-index`; flex and grid in full.
-- **Look:** backgrounds and linear, radial and conic gradients, `border-radius`, `border-image`, `box-shadow`, `opacity`, `transform`, `transition`, `cursor`, `pointer-events`, `image-rendering: pixelated`, `-webkit-font-smoothing: none` for pixel fonts.
-- **Refused** (a warning): `float`, `vertical-align`, `columns`, the `font` shorthand, `text-decoration`, `animation`, `@media`, `@import`, several background layers.
-- `px` is a point, not a device pixel; `box-sizing` is border-box by default.
+- **Layout:** `display` block, inline, inline-block, flex, inline-flex, grid, flow-root, none, contents; `position` up to sticky; `float` and `clear` for text round a picture (a container holds its floats with `display: flow-root`), `text-indent`; `column-count`, `column-width`, `columns`, `column-gap`, `column-rule`, `column-fill` for text in balanced columns, cut between lines (`break-inside: avoid` keeps a box whole, `break-before: column` starts a column, `orphans`, `widows`; a cut element's `Box()` is the box round its parts); `overflow`; `z-index`; flex and grid in full.
+- **Look:** backgrounds (`background-size` in lengths, percentages, `auto`, `cover`, `contain`; `background: url(x.png) no-repeat center / cover`) and linear, radial and conic gradients, `border-radius`, `border-image`, `box-shadow`, `opacity`, `transform`, `transition`, `cursor`, `pointer-events`, `app-region: drag` (a header that drags a `platform.OwnTitleBar()` window; its buttons still click), `image-rendering: pixelated`, `-webkit-font-smoothing: none` for pixel fonts.
+- **Text extras:** the `font` shorthand; `text-decoration` (underline, overline, line-through; solid, double, dotted, dashed); `vertical-align: sub | super`; `list-style-type` disc, circle, square, decimal, decimal-leading-zero, lower/upper-alpha, lower/upper-roman on list items; `:link` matches an element with an `href`; installed fonts by name only with `ui.SystemFonts()` on the Document.
+- **Pseudo-elements:** `::before` and `::after` make a box inside their element once `content` is set (`content: ""` for a shape): any display, position, background or transition, `li:nth-child(2)::before`, `a:hover::after`. `content` takes strings, `attr(name)`, `url(pic.png)`, `counter(name[, style])`, `counters(name, ".")`, `open-quote`/`close-quote`; `counter-reset`, `counter-increment`, `counter-set` count, and a list's numbers are the `list-item` counter (`ol` `start`, `reversed`, `li` `value`). `li::marker` takes colour, font and `content`; `q`'s marks follow `quotes`. Also `::placeholder` (color, opacity), `::selection` (background-color, color), `::backdrop`. A generated box is no element: no selector, automation or `Children()` sees it, and a click on it clicks its element. `::first-line`, `::first-letter` are refused.
+- **Selecting text:** nothing of a screen is selectable by default (`html { user-select: none }`, kit included). `user-select: text` on an element lets the player select its text with the pointer (drag, double click a word, triple click a block, Shift+click) and copy it (Cmd/Ctrl+C; Cmd/Ctrl+A selects all that can be) while no field has the focus; `user-select: all` takes an element whole, `none` leaves it out. `::selection { background-color; color }` styles it, inherited by what the element holds. From code: `doc.Selection()` (`Anchor`, `Focus`, `Text`, `Empty()`), `doc.Select(ui.Position{Node: textNode, Offset: n}, …)`, `doc.SelectAll()`, `doc.SelectContents(n)`, `doc.ClearSelection()`, `doc.SelectionRects()`; `ui.OnSelectionChange(fn).Apply(doc.Body())` or the World event `ui.SelectionChanged`. Under `ui.BrowserSheets()` a page's text is selectable as in a browser.
+- **Refused** (a warning): `vertical-align` but baseline, sub and super, `column-span: all`, `text-decoration: wavy`, `animation`, `@import`, several background layers.
+- **`@media`:** answered for the Document's viewport in its own pixels (window points divided by `Zoom`) and followed on resize: `@media (max-width: 600px) { .side { width: auto } }`; `width`, `height`, `aspect-ratio`, `orientation`, `resolution`, ranges (`width >= 600px`), `and`, `,`, `not`; the scheme is always `light`, the pointer a mouse; an unknown feature is false with a warning.
+- `px` is a point, not a device pixel; `box-sizing` is border-box by default (content-box with `ui.BrowserSheets()`).
 
 ## React to the player
 
-Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`, `OnToggle`, `OnClose`, `OnSort`, `OnKey`, `OnBack`, `OnContextMenu`, `OnDrop`, `OnDragEnd`, `OnPointerEnter`, `OnPointerLeave`. `fn` is any of `func()`, `func(ui.Event)` and `func(*world.World, ui.Event)`.
+Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`, `OnToggle`, `OnClose`, `OnSort`, `OnKey`, `OnBack`, `OnContextMenu`, `OnDrop`, `OnDragEnd`, `OnPointerEnter`, `OnPointerLeave`, `OnSelectionChange` (on `body`). `fn` is any of `func()`, `func(ui.Event)` and `func(*world.World, ui.Event)`.
 
 | Need | API |
 |---|---|
