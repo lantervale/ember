@@ -62,3 +62,6 @@ func BenchmarkSoftPile20k(b *testing.B)  { benchHorde(b, 2000, Soft(1)) }
 // piled on their goal.
 func BenchmarkSoftHorde300Wide(b *testing.B) { benchHordeOf(b, 300, 1300, 60, Soft(1)) }
 func BenchmarkSoftPile300Wide(b *testing.B)  { benchHordeOf(b, 300, 1300, 1500, Soft(1)) }
+
+// BenchmarkSoftPile2000 is two thousand bodies piled on their goal.
+func BenchmarkSoftPile2000(b *testing.B) { benchHordeOf(b, 2000, 541, 1500, Soft(1)) }

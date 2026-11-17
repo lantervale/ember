@@ -231,7 +231,7 @@ func (s *Space) Move(owner Owner, delta geom.Vec2) (geom.Vec2, []Hit) {
 	}
 	b.owner = owner
 	if b.indexed {
-		delta = s.crowd.room(b, delta, capacity)
+		delta = s.crowd.contact(b, delta)
 	}
 	at, hits := s.slide(b, start, delta, true)
 	owner.SetPosition(at)

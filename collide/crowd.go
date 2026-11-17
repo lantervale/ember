@@ -6,9 +6,10 @@ import (
 	"github.com/lantervale/ember/geom"
 )
 
-// capacity is how much of a crowd cell soft bodies may cover: a soft body
-// moves into a cell only while it has room, and an over-full cell spreads.
-const capacity = 1
+// capacity is how much of a crowd cell soft bodies cover before it
+// spills: a little over the most that bodies touching without overlap
+// fill, so only a crowd pressed into itself spreads by density.
+const capacity = 1.25
 
 // maxNudge is the most a spread pushes a body in one step, as a share of
 // its smaller side, so a dense pile opens over a few steps instead of
@@ -19,17 +20,17 @@ const maxNudge = 0.25
 // the moves until the next rebuild.
 const margin = 4
 
-// stacked is how near two soft bodies' centres may come, as a share of
-// the smaller side of the two, before the crowd pushes them apart
-// whatever their cell's density, until they are apart of it apart.
+// contacts is how many of the bodies near it, the nearest, a filed body
+// keeps from walking into, and near how far it looks for them, as a share
+// of the distance at which the ellipses two bodies' boxes hold touch.
 const (
-	stacked = 0.2
-	apart   = 0.5
+	contacts = 8
+	near     = 1.25
 )
 
-// neighbours is how many of the bodies filed after it in its cell each
-// body is kept apart from, so a crowded cell costs a bounded number of
-// pairs.
+// neighbours is how many of the bodies filed after it in its cell, and
+// at the start of each cell past it, each body is kept apart from, so a
+// crowded cell costs a bounded number of pairs.
 const neighbours = 8
 
 // maxCells is the most cells the crowd's grid holds. Its cells stay at its
@@ -64,6 +65,9 @@ type crowd struct {
 	touched    []int32
 	loose      []*Body
 	slack      float32
+	outs       []geom.Vec2
+	rooms      []float32
+	nears      []uint8
 }
 
 // touch lists cell slot among those to clear at the next rebuild.
@@ -143,6 +147,7 @@ func (c *crowd) rebuild(s *Space) {
 	c.centres, c.stamps = grown(c.centres, cells), grown(c.stamps, cells)
 	c.entries = resized(c.entries, n)
 	c.pushes = resized(c.pushes, n)
+	c.outs, c.rooms, c.nears = grown(c.outs, n*contacts), grown(c.rooms, n*contacts), resized(c.nears, n)
 	c.boxes = resized(c.boxes, n)
 	c.file(s)
 	for _, b := range c.loose {
@@ -176,6 +181,7 @@ func (c *crowd) file(s *Space) {
 		if b.indexed {
 			i := c.starts[b.slot]
 			c.entries[i], c.boxes[i] = b, b.box
+			b.entry = i
 			c.starts[b.slot]++
 		}
 	}
@@ -208,9 +214,49 @@ func (c *crowd) leave(b *Body) {
 	b.slot = -1
 }
 
-// room is the part of delta that keeps b, filed, out of cells that would
-// then cover more than limit: a move along an axis into such a cell is
-// dropped.
+// contact is the part of delta that keeps b, filed, from walking into the
+// bodies that were near it when the crowd was filed further than the room
+// it had to each, or deeper if it already overlapped one: the part along
+// each one's way out past that is dropped, the rest kept, so b slides
+// along and round them.
+func (c *crowd) contact(b *Body, delta geom.Vec2) geom.Vec2 {
+	if !b.indexed || delta == (geom.Vec2{}) {
+		return delta
+	}
+	first := int(b.entry) * contacts
+	for k := first; k < first+int(c.nears[b.entry]); k++ {
+		if in := -delta.Dot(c.outs[k]); in > c.rooms[k] {
+			delta = delta.Add(c.outs[k].Scale(in - c.rooms[k]))
+		}
+	}
+	return delta
+}
+
+// noteNear notes for filed body i the way out of a body near it and the
+// room it has towards it, keeping the nearest contacts of them.
+func (c *crowd) noteNear(i int32, out geom.Vec2, room float32) {
+	first := int(i) * contacts
+	k := first + int(c.nears[i])
+	if c.nears[i] < contacts {
+		c.nears[i]++
+	} else {
+		k = first
+		for m := first + 1; m < first+contacts; m++ {
+			if c.rooms[m] > c.rooms[k] {
+				k = m
+			}
+		}
+		if c.rooms[k] <= room {
+			return
+		}
+	}
+	c.outs[k], c.rooms[k] = out, room
+}
+
+// room is the part of a spreading push delta that keeps b, filed, out of
+// cells that would then cover more than limit: a push along an axis into
+// such a cell is dropped, so overflow drains to the crowd's edge and not
+// into cells as full.
 func (c *crowd) room(b *Body, delta geom.Vec2, limit float32) geom.Vec2 {
 	at := b.Bounds().Center()
 	full := func(d geom.Vec2) bool {
@@ -268,15 +314,13 @@ func (c *crowd) collect(out []*Body, area geom.Rect) []*Body {
 	return out
 }
 
-// spread files the crowd again and pushes each soft body down the slope
-// of its cells' overflow, where they cover more than capacity, out from
-// the middle of an over-full cell, and away from any body whose centre is
-// nearer than apart of the smaller side, sliding each push against solids
-// and bodies that aren't soft. A push enters a cell with room, or one less
-// full than the cell it leaves, so overflow trapped among full cells
-// still drains to the crowd's edge. Pushes are worked out from where the
-// step found the bodies and applied in the order they are filed, so the
-// same steps always give the same positions.
+// spread files the crowd again and pushes each soft body out of the
+// bodies it overlaps and, where cells cover more than capacity, down the
+// slope of their overflow and out from the middle of an over-full cell
+// into cells with room, sliding each push against solids and bodies that
+// aren't soft. Pushes are worked out from where the step found the bodies
+// and applied in the order they are filed, so the same steps always give
+// the same positions.
 func (s *Space) spread() {
 	c := &s.crowd
 	c.rebuild(s)
@@ -293,7 +337,11 @@ func (s *Space) spread() {
 		}
 		push := c.pushes[i]
 		if spilling {
-			push = push.Add(c.drain(b))
+			limit := float32(capacity)
+			if b.slot >= 0 {
+				limit = max(limit, c.density[b.slot]-b.share)
+			}
+			push = push.Add(c.room(b, c.drain(b), limit))
 		}
 		if push == (geom.Vec2{}) {
 			continue
@@ -301,11 +349,6 @@ func (s *Space) spread() {
 		if most := maxNudge * min(b.shape.size.X, b.shape.size.Y); push.LenSq() > most*most {
 			push = push.Normalize().Scale(most)
 		}
-		limit := float32(capacity)
-		if b.slot >= 0 {
-			limit = max(limit, c.density[b.slot]-b.share)
-		}
-		push = c.room(b, push, limit)
 		to, _ := s.slide(b, b.owner.Position(), push, false)
 		b.owner.SetPosition(to)
 		s.file(b)
@@ -328,26 +371,27 @@ func (c *crowd) drain(b *Body) geom.Vec2 {
 	return dir.Scale(c.cell * b.push)
 }
 
-// separate adds to pushes what moves apart two filed bodies whose centres
-// are nearer than apart of the smaller side, each half the way: a cell
-// under capacity may hold several bodies, but none stand on the same
-// point, such as bodies pressed on one side of a hard body, which slide
-// to the same spot. Each body is weighed against the next ones filed in
-// its cell and, when it is that near an edge, the first ones of the cells
-// past it, right and below, so each pair once.
+// separate adds to pushes what moves apart two filed bodies that
+// overlap, each half the way out, read as the ellipses their boxes hold
+// so that a crowd settles in no rows, and notes for each body the bodies
+// near it that its moves keep clear of. Each body is weighed against the
+// next ones filed in its cell and the first ones of the cells right and
+// below it that it reaches, so each pair once.
 func (c *crowd) separate() {
-	reach := stacked * 2 * c.half
-	edge := reach / c.cell
 	for _, slot := range c.touched {
 		x, y := slot%c.cols, slot/c.cols
 		from, to := c.starts[slot], c.starts[slot]+c.counts[slot]
 		for i := from; i < to; i++ {
+			box := &c.boxes[i]
 			for j := i + 1; j < min(to, i+1+neighbours); j++ {
-				c.keepApart(i, j)
+				if !far(box, &c.boxes[j]) {
+					c.keepApart(i, j)
+				}
 			}
-			at := c.boxes[i].Center()
-			u, v := at.X/c.cell-float32(c.x0+x), at.Y/c.cell-float32(c.y0+y)
-			right, left, below := u > 1-edge, u < edge, v > 1-edge
+			at, rx, ry := box.Center(), near*(box.W/2+c.half), near*(box.H/2+c.half)
+			u0, u1 := (at.X-rx)/c.cell-float32(c.x0+x), (at.X+rx)/c.cell-float32(c.x0+x)
+			v1 := (at.Y+ry)/c.cell - float32(c.y0+y)
+			right, left, below := u1 > 1, u0 < 0, v1 > 1
 			for _, d := range [...]struct {
 				dx, dy int32
 				near   bool
@@ -358,31 +402,50 @@ func (c *crowd) separate() {
 				}
 				n := ny*c.cols + nx
 				for j := c.starts[n]; j < c.starts[n]+min(c.counts[n], neighbours); j++ {
-					c.keepApart(i, j)
+					if !far(box, &c.boxes[j]) {
+						c.keepApart(i, j)
+					}
 				}
 			}
 		}
 	}
 }
 
-// keepApart adds to pushes what moves filed bodies i and j apart when
-// their centres are nearer than apart of the smaller side.
+// far reports whether boxes p and q are too far apart, along x or y, to
+// be near each other.
+func far(p, q *geom.Rect) bool {
+	rx, dx := near*(p.W+q.W)/2, q.X+q.W/2-p.X-p.W/2
+	ry, dy := near*(p.H+q.H)/2, q.Y+q.H/2-p.Y-p.H/2
+	return dx >= rx || dx <= -rx || dy >= ry || dy <= -ry
+}
+
+// keepApart notes filed bodies i and j as near each other when they are,
+// and adds to pushes what moves them apart, each half the way, when they
+// overlap.
 func (c *crowd) keepApart(i, j int32) {
-	a, b := c.entries[i], c.entries[j]
-	small := min(a.shape.size.X, a.shape.size.Y, b.shape.size.X, b.shape.size.Y)
-	near := stacked * small
-	gap := c.boxes[j].Center().Sub(c.boxes[i].Center())
-	if geom.Abs(gap.X) >= near || geom.Abs(gap.Y) >= near || gap.LenSq() >= near*near {
+	p, q := c.boxes[i], c.boxes[j]
+	reach := geom.V2((p.W+q.W)/2, (p.H+q.H)/2)
+	gap := geom.V2(q.X+q.W/2-p.X-p.W/2, q.Y+q.H/2-p.Y-p.H/2)
+	u := geom.V2(gap.X/reach.X, gap.Y/reach.Y)
+	l := u.Len()
+	if l >= near {
 		return
 	}
-	near = apart * small
-	dir := gap.Normalize()
-	if gap.LenSq() < 1e-6 {
+	dir := u.Scale(1 / l)
+	if l < 1e-4 {
 		dir = geom.FromAngle(float32(i+j) * 2.39996)
 	}
-	step := (near - gap.Len()) / 2
-	c.pushes[i] = c.pushes[i].Sub(dir.Scale(step * a.push))
-	c.pushes[j] = c.pushes[j].Add(dir.Scale(step * b.push))
+	out := geom.V2(dir.X/reach.X, dir.Y/reach.Y).Normalize()
+	room := max(l-1, 0) * geom.V2(dir.X*reach.X, dir.Y*reach.Y).Len() / 2
+	c.noteNear(i, out.Scale(-1), room)
+	c.noteNear(j, out, room)
+	if l >= 1 {
+		return
+	}
+	a, b := c.entries[i], c.entries[j]
+	step := geom.V2(dir.X*reach.X, dir.Y*reach.Y).Scale((1 - l) / 2)
+	c.pushes[i] = c.pushes[i].Sub(step.Scale(a.push))
+	c.pushes[j] = c.pushes[j].Add(step.Scale(b.push))
 }
 
 // slope is how the overflow rises at p, per cell, interpolated between the

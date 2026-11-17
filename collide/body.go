@@ -53,13 +53,14 @@ type Body struct {
 	filed cellRange
 	box   geom.Rect
 	// listed is set while the space lists the body. A soft body is
-	// indexed once the crowd has filed it, with bounds box, in cell slot
-	// (-1 off the crowd's grid), covering share of it; it is waiting while
-	// it is in the crowd's loose list.
+	// indexed once the crowd has filed it, with bounds box, as its entry,
+	// in cell slot (-1 off the crowd's grid), covering share of it; it is
+	// waiting while it is in the crowd's loose list.
 	listed  bool
 	indexed bool
 	waiting bool
 	slot    int32
+	entry   int32
 	share   float32
 	// stepped is the space's step its move last filed it in.
 	stepped uint64
@@ -86,12 +87,13 @@ func Offset(x, y float32) BodyOption { return func(b *Body) { b.offset = geom.V2
 // and leaves it.
 func Trigger() BodyOption { return func(b *Body) { b.trigger = true } }
 
-// Soft makes a body of a crowd: soft bodies pass through each other as
-// they move and spread out of crowded spots instead, so a horde neither
-// piles on one point nor jams. push, from 0 to 1, is how fast an
-// over-full spot spreads (0 is not soft). They move into a spot only while
-// it has room, and still stop exactly at solids and at bodies that aren't
-// soft, such as the hero, which they never push.
+// Soft makes a body of a crowd: soft bodies never stop at each other, but
+// never step deeper into one they overlap, sliding along it instead, and
+// are pushed apart where they overlap, so a horde presses round its target
+// without jamming, piling or standing in rows. push, from 0 to 1, is how
+// fast they are pushed apart (0 is not soft). They still stop exactly at
+// solids and at bodies that aren't soft, such as the hero, which they
+// never push.
 func Soft(push float32) BodyOption { return func(b *Body) { b.SetSoft(push) } }
 
 // Group puts the body in group n, from 0 to 31: the player, enemies,
