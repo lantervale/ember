@@ -28,6 +28,8 @@ win.Add(doc)
 | `doc.Warnings()` | what the stylesheets and style attributes got wrong |
 | `node.Box()` | an element's place on screen, after layout |
 | `doc.BoxOf(n)` | its content box in window points, false until laid out or while hidden; where the game draws over an element that only holds room (give it `pointer-events: none` so the game's own widget gets the pointer); a resize reaches it the frame after |
+| `doc.ElementAt(at)` | the innermost element under a point in window points, as `elementFromPoint`: what a click there finds, through `pointer-events: none`; nil where no box takes the pointer. For a Document drawn in another's canvas, `host.PointerOn(canvas)` is the point to ask it |
+| `doc.SelectionRange(field)`, `doc.SetSelectionRange(field, from, to)` | a text field's own selection in characters of its value, as `selectionStart`, `selectionEnd` and `setSelectionRange`; with `doc.Value` and `doc.SetValue`, a menu's Cut, Copy, Paste and Select all |
 | `doc.Selection()`, `doc.Select(anchor, focus)`, `doc.SelectAll()`, `doc.ClearSelection()` | the text selected outside the fields, read and set ([Events](04-events.md#selected-text)) |
 | `doc.Layout(size)` | lays it out now, as each frame does; for tests |
 

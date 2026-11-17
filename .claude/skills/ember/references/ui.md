@@ -103,6 +103,8 @@ Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`
 
 - A click reaches the innermost element with behaviour: a control, a canvas, a `label`, a `summary` or an element with a `tabindex`. A plain `div` needs `ui.TabIndex(0)` for its OnClick.
 - What a callback changes shows the next frame.
+- A menu of the screen's own on a right click: `ui.OnContextMenu` on the root (it bubbles), `win.Input().Mouse()` for where, `doc.ElementAt(at) *ui.Node` for what is under a point (window points, as `BoxOf`; nil where no box takes the pointer).
+- A text field's selection: `doc.SelectionRange(n) (from, to int)`, `doc.SetSelectionRange(n, from, to)`, in characters of `doc.Value(n)`.
 - Values: `doc.Value(n)`, `doc.SetValue(n, v)`, `doc.Checked(n)`, `doc.SetChecked(n, on)`, `doc.Selected(n)`, `doc.SetSelected(n, i)`. The setters emit no event.
 
 ## Change a screen at run time

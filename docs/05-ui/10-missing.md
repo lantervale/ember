@@ -78,6 +78,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `app-region` as Chrome computes it | inherited here, where Chrome's is not: a child of a drag box computes `drag`, not `none`; the regions are the same |
 | a header merged with the title bar on Windows and Linux | `platform.OwnTitleBar()` keeps the system's title bar there, and `app-region: drag` does nothing |
 | leaving a text field from code | no `doc.Blur()`: the web explorer's address field keeps the focus after Enter |
+| a context click by Control and the main button on macOS | only the secondary button raises `OnContextMenu` |
+| the place of a context click | the event carries none: read `win.Input().Mouse()` in the callback |
+| a `role="menu"` shown without an opener closing on a choice | stays open: its item's callback removes `open` |
+| a Document drawn in another's canvas, under an element of the outer one | still takes the pointer there: the outer stops drawing it (`doc.Invalidate`) while its own menu is open over it |
 
 ## SVG pictures
 

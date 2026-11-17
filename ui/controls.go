@@ -245,6 +245,26 @@ func (d *Document) SetValue(n *Node, v string) {
 	d.sync(n, d.machine(n))
 }
 
+// SelectionRange is where a text field's selection begins and ends, in
+// characters of its value, as the DOM's selectionStart and selectionEnd:
+// both the caret's place when nothing is selected, and 0 for what is no
+// text field.
+func (d *Document) SelectionRange(n *Node) (from, to int) {
+	if t := textOf(d.machine(n)); t != nil {
+		return t.Editor.Selection()
+	}
+	return 0, 0
+}
+
+// SetSelectionRange selects a text field's characters from from up to to,
+// kept inside its value, as the DOM's setSelectionRange; the caret stands
+// at to. It moves no focus and emits no event.
+func (d *Document) SetSelectionRange(n *Node, from, to int) {
+	if t := textOf(d.machine(n)); t != nil {
+		t.Editor.Select(from, to)
+	}
+}
+
 // Checked reports whether a checkbox or a radio is checked.
 func (d *Document) Checked(n *Node) bool {
 	if isMenuItem(n) {
