@@ -960,6 +960,9 @@ type Style struct {
 	Baseline bool
 	// Pixelated draws the glyphs unsmoothed (Face.PixelSize).
 	Pixelated bool
+	// Exact draws them at their exact coverage, without stem darkening
+	// (Face.ExactSize); Pixelated comes first.
+	Exact bool
 }
 
 type Align int
@@ -981,6 +984,9 @@ func (s Style) Font() *Font {
 	}
 	if s.Pixelated {
 		return face.PixelSize(size)
+	}
+	if s.Exact {
+		return face.ExactSize(size)
 	}
 	return face.Size(size)
 }

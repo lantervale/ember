@@ -34,7 +34,9 @@ type Text struct {
 	baseline bool `node:"prop"`
 	// pixelated draws the glyphs unsmoothed (Pixelated).
 	pixelated bool `node:"prop"`
-	face      *Face
+	// exactCoverage draws them without stem darkening (ExactCoverage).
+	exactCoverage bool `node:"prop"`
+	face          *Face
 	// expanded is text with its shortcodes replaced, for expandedFrom.
 	expanded, expandedFrom string
 }
@@ -122,11 +124,22 @@ func (t *Text) style() draw.Style {
 		Tracking:  t.tracking,
 		Baseline:  t.baseline,
 		Pixelated: t.pixelated,
+		Exact:     t.exactCoverage,
 	}
 }
 
 // Pixelated reports whether t's glyphs are drawn unsmoothed.
 func (t *Text) Pixelated() bool { return t.pixelated }
+
+// ExactCoverage draws a text's glyphs at their exact coverage, without
+// the stem darkening that gives text the weight of Chrome's on macOS: a
+// square glyph on whole pixels is those pixels and nothing beside them,
+// as Chrome draws -webkit-font-smoothing: antialiased.
+func ExactCoverage() TextOption { return textOption(func(t *Text) { t.exactCoverage = true }) }
+
+// ExactCoverage reports whether t's glyphs are drawn without stem
+// darkening.
+func (t *Text) ExactCoverage() bool { return t.exactCoverage }
 
 // Lines are the text's lines once wrapped.
 func (t *Text) Lines() []string {

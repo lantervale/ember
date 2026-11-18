@@ -55,6 +55,9 @@ type Face struct {
 	// pixelSizes are the face's pixelated fonts (PixelSize), apart, so
 	// smoothed text never shares their atlas.
 	pixelSizes map[float32]*Font
+	// exactSizes are its fonts without stem darkening (ExactSize), apart
+	// as well.
+	exactSizes map[float32]*Font
 }
 
 // The engine's faces.
@@ -179,11 +182,31 @@ func (f *Face) Size(px float32) *Font {
 	if fnt, ok := f.sizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, false)
+	fnt, err := newFont(f, px, darkened)
 	if err != nil {
 		panic(err)
 	}
 	f.sizes[px] = fnt
+	return fnt
+}
+
+// ExactSize returns the font at px logical pixels rasterized at each
+// glyph's exact coverage, without stem darkening: a square is its pixels
+// and nothing beside them, as Chrome draws
+// -webkit-font-smoothing: antialiased.
+func (f *Face) ExactSize(px float32) *Font {
+	px = float32(math.Round(float64(px)))
+	if fnt, ok := f.exactSizes[px]; ok {
+		return fnt
+	}
+	fnt, err := newFont(f, px, exact)
+	if err != nil {
+		panic(err)
+	}
+	if f.exactSizes == nil {
+		f.exactSizes = map[float32]*Font{}
+	}
+	f.exactSizes[px] = fnt
 	return fnt
 }
 
@@ -195,7 +218,7 @@ func (f *Face) PixelSize(px float32) *Font {
 	if fnt, ok := f.pixelSizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, true)
+	fnt, err := newFont(f, px, unsmoothed)
 	if err != nil {
 		panic(err)
 	}
@@ -257,14 +280,25 @@ type Font struct {
 	ascent     float32
 	lineHeight float32
 	size       float32
-	// pixel rasterizes glyphs without smoothing (PixelSize).
-	pixel bool
+	// smoothing is how glyphs are rasterized.
+	smoothing smoothing
 }
+
+// smoothing is what a font makes of a glyph's coverage: darkened, its
+// stems heavier as Chrome's text on macOS (Size); exact, as covered
+// (ExactSize); unsmoothed, each pixel covered or not (PixelSize).
+type smoothing uint8
+
+const (
+	darkened smoothing = iota
+	exact
+	unsmoothed
+)
 
 const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûüœ·•×÷°±…—–’“”«»€£¥©®™←↑→↓★♥"
 
-func newFont(f *Face, px float32, pixel bool) (*Font, error) {
-	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, pixel: pixel,
+func newFont(f *Face, px float32, how smoothing) (*Font, error) {
+	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, smoothing: how,
 		blank: f.blank}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
@@ -500,10 +534,12 @@ func (f *Font) raster(r rune, phase int) glyph {
 			return g
 		}
 		draw.Draw(f.Atlas, dst.Inset(1), mask, mp, draw.Src)
-		if f.pixel {
+		switch f.smoothing {
+		case unsmoothed:
 			threshold(f.Atlas, dst)
-		} else {
+		case darkened:
 			embolden(f.Atlas, dst, darkening(f.size*oversample))
+		case exact:
 		}
 		f.version++
 		g.offset = geom.V2(float32(dr.Min.X-1), float32(dr.Min.Y-1)).Scale(1.0 / oversample)

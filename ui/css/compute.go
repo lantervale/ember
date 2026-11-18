@@ -23,11 +23,13 @@ var (
 )
 
 // initialStyle is style.Initial with the initial values it leaves out:
+// border widths are medium, used only under a border-style (finish),
 // outline-width is medium whatever outline-style says, as in Chrome,
 // corners are 0, and the transform origin and background position are
 // percentages.
 func initialStyle() style.Computed {
 	c := style.Initial()
+	c.Border = style.Sides[float32]{Top: 3, Right: 3, Bottom: 3, Left: 3}
 	c.OutlineWidth = 3
 	c.ColumnRuleWidth = 3
 	zero := style.Size[style.Length]{Width: style.Px(0), Height: style.Px(0)}
@@ -1260,8 +1262,13 @@ var props = func() map[string]prop {
 				return linear(v[0])
 			},
 		),
-		"-webkit-font-smoothing": keyword(func(c *style.Computed) *bool { return &c.PixelText },
-			map[string]bool{"none": true}),
+		"-webkit-font-smoothing": {
+			set: func(x *ctx, v []Component) {
+				kw := strings.ToLower(v[0].Text)
+				x.c.PixelText, x.c.ExactText = kw == kwNone, kw == "antialiased"
+			},
+			inherit: func(dst, src *style.Computed) { dst.PixelText, dst.ExactText = src.PixelText, src.ExactText },
+		},
 		"text-transform": keyword(func(c *style.Computed) *style.TextTransform { return &c.TextTransform },
 			map[string]style.TextTransform{"none": style.NoTransform, "uppercase": style.Uppercase,
 				"lowercase": style.Lowercase, "capitalize": style.Capitalize}),

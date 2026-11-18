@@ -514,6 +514,9 @@ type Text struct {
 	// PixelText draws the text's glyphs unsmoothed, as
 	// -webkit-font-smoothing: none does in Chrome: for pixel fonts.
 	PixelText bool
+	// ExactText draws them at their exact coverage, without stem
+	// darkening, as -webkit-font-smoothing: antialiased does in Chrome.
+	ExactText bool
 	// Ellipsis is text-overflow: ellipsis.
 	Ellipsis bool
 	// EllipsisStart cuts the start of the text rather than its end, as a

@@ -12,22 +12,22 @@ import (
 
 func TestATextsOptionsAreMadeOnceAndGoWithTheirFace(t *testing.T) {
 	held := twod.Regular().With(twod.Fallback())
-	first := textOptions(held, 16, 0, color.White, false)
-	again := textOptions(held, 16, 0, color.White, false)
+	first := textOptions(held, 16, 0, color.White, smoothDarkened)
+	again := textOptions(held, 16, 0, color.White, smoothDarkened)
 	if &first[0] != &again[0] {
 		t.Fatal("the same face, size and colour share one slice of options")
 	}
-	if other := textOptions(held, 18, 0, color.White, false); &other[0] == &first[0] {
+	if other := textOptions(held, 18, 0, color.White, smoothDarkened); &other[0] == &first[0] {
 		t.Fatal("another size has its own")
 	}
-	if none := textOptions(nil, 16, 0, color.White, false); len(none) == 0 || &none[0] == &first[0] {
+	if none := textOptions(nil, 16, 0, color.White, smoothDarkened); len(none) == 0 || &none[0] == &first[0] {
 		t.Fatal("a text without a face has options of its own")
 	}
 	var gone []weak.Pointer[twod.Face]
 	func() {
 		for range 20 {
 			face := twod.Regular().With(twod.Fallback())
-			textOptions(face, 16, 0, color.White, false)
+			textOptions(face, 16, 0, color.White, smoothDarkened)
 			gone = append(gone, weak.Make(face))
 		}
 	}()

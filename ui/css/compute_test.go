@@ -1065,3 +1065,18 @@ func TestEveryLonghandIsAppliedFromItsOwnTables(t *testing.T) {
 		}
 	}
 }
+
+func TestABorderStyleAloneIsAMediumBorder(t *testing.T) {
+	styled, plain, side := el(dom.Div, "styled"), el(dom.Div, "plain"), el(dom.Div, "side")
+	Compute(page(styled, plain, side),
+		[]*Sheet{sheet(t, "#styled { border-style: solid } #side { border-left-style: dashed }")})
+	if got, want := styleOf(styled).Border, (style.Sides[float32]{Top: 3, Right: 3, Bottom: 3, Left: 3}); got != want {
+		t.Errorf("a style and no width: %v, want %v", got, want)
+	}
+	if got := styleOf(plain).Border; got != (style.Sides[float32]{}) {
+		t.Errorf("no style: %v, want none", got)
+	}
+	if got, want := styleOf(side).Border, (style.Sides[float32]{Left: 3}); got != want {
+		t.Errorf("one side's style: %v, want %v", got, want)
+	}
+}

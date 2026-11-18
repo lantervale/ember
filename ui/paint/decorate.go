@@ -1389,13 +1389,13 @@ func (p *painter) text(e entry, alpha float32) {
 			if tc.A <= 0 {
 				continue
 			}
-			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, st.PixelText)
+			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, smoothingOf(st))
 			for _, f := range b.Lines {
 				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Text, st, o)
 			}
 		}
 	}
-	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, st.PixelText)
+	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
 	if ink != c {
 		p.recoloured(e, st, face, parts, c, ink)
 		p.decorations(e, st, style.LineThrough, alpha)
@@ -1475,7 +1475,7 @@ func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text 
 // recoloured draws a text run whose selected parts take the colour ink:
 // each line's text in c outside its part and in ink inside it.
 func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts []Selected, c, ink color.Color) {
-	plain := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, st.PixelText)
+	plain := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
 	for i, f := range e.b.Lines {
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
@@ -1510,7 +1510,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(part.clip)
-			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, st.PixelText))
+			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}
@@ -1521,7 +1521,27 @@ type textKey struct {
 	face           *twod.Face
 	size, tracking float32
 	color          color.Color
-	pixel          bool
+	smoothing      smoothing
+}
+
+// smoothing is a text's -webkit-font-smoothing: its stems darkened as
+// Chrome's by default, at their exact coverage, or unsmoothed.
+type smoothing uint8
+
+const (
+	smoothDarkened smoothing = iota
+	smoothExact
+	smoothNone
+)
+
+func smoothingOf(st *style.Computed) smoothing {
+	switch {
+	case st.PixelText:
+		return smoothNone
+	case st.ExactText:
+		return smoothExact
+	}
+	return smoothDarkened
 }
 
 // textOpts are the options of the texts drawn without a face. A face's
@@ -1540,18 +1560,18 @@ const maxTextOpts = 4096
 
 // textOptions are textOptions', the last ones kept on p, as runs in a
 // row mostly share their look.
-func (p *painter) textOptions(face *twod.Face, size, tracking float32, c color.Color, pixel bool) []twod.TextOption {
-	k := textKey{face, size, tracking, c, pixel}
+func (p *painter) textOptions(face *twod.Face, size, tracking float32, c color.Color, how smoothing) []twod.TextOption {
+	k := textKey{face, size, tracking, c, how}
 	if p.lastText.opts == nil || p.lastText.key != k {
-		p.lastText.key, p.lastText.opts = k, textOptions(face, size, tracking, c, pixel)
+		p.lastText.key, p.lastText.opts = k, textOptions(face, size, tracking, c, how)
 	}
 	return p.lastText.opts
 }
 
 // textOptions are the options that draw text in face at size, tracked,
-// in c, from its baseline, unsmoothed when pixel.
-func textOptions(face *twod.Face, size, tracking float32, c color.Color, pixel bool) []twod.TextOption {
-	k := textKey{face, size, tracking, c, pixel}
+// in c, from its baseline, smoothed as how says.
+func textOptions(face *twod.Face, size, tracking float32, c color.Color, how smoothing) []twod.TextOption {
+	k := textKey{face, size, tracking, c, how}
 	textOptsMu.Lock()
 	defer textOptsMu.Unlock()
 	kept := &textOpts
@@ -1569,8 +1589,12 @@ func textOptions(face *twod.Face, size, tracking float32, c color.Color, pixel b
 	o := []twod.TextOption{
 		twod.Typeface(face), twod.FontSize(size), twod.Tracking(tracking), twod.Baseline(), twod.Color(c),
 	}
-	if pixel {
+	switch how {
+	case smoothNone:
 		o = append(o, twod.Pixelated())
+	case smoothExact:
+		o = append(o, twod.ExactCoverage())
+	case smoothDarkened:
 	}
 	made[k] = o
 	return o

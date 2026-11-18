@@ -124,6 +124,7 @@ func (t *Text) equal(o *Text) bool {
 		t.TableLayout == o.TableLayout &&
 		t.TextTransform == o.TextTransform &&
 		t.PixelText == o.PixelText &&
+		t.ExactText == o.ExactText &&
 		t.Ellipsis == o.Ellipsis &&
 		t.EllipsisStart == o.EllipsisStart &&
 		t.Orphans == o.Orphans &&

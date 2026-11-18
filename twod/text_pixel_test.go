@@ -15,3 +15,12 @@ func TestPixelatedDrawsATextsGlyphsUnsmoothedAndStillFiltersTextures(t *testing.
 	assert.Same(t, Regular().draw().PixelSize(8), pixel.style().Font())
 	assert.Equal(t, render.FilterNearest, NewTexture(nil, Pixelated()).Filter, "a texture's nearest filter as before")
 }
+
+func TestExactCoverageDrawsATextsGlyphsWithoutStemDarkening(t *testing.T) {
+	exact, plain := NewText("HP", ExactCoverage(), FontSize(8)), NewText("HP", FontSize(8))
+	assert.True(t, exact.ExactCoverage())
+	assert.False(t, plain.ExactCoverage())
+	assert.NotSame(t, plain.style().Font(), exact.style().Font())
+	assert.Same(t, Regular().draw().ExactSize(8), exact.style().Font())
+	assert.Equal(t, plain.Measure(), exact.Measure(), "as wide and as tall as the text darkened")
+}

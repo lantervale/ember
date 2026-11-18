@@ -49,3 +49,20 @@ func TestAGlyphRasterHasRoomToDarkenOutward(t *testing.T) {
 	}
 	assert.Greater(t, ink(f.Atlas, g.rect), 0.0)
 }
+
+func TestAnExactFontDrawsItsGlyphsWithoutDarkening(t *testing.T) {
+	dark, exact := Regular.Size(24), Regular.ExactSize(24)
+	require.NotSame(t, dark, exact, "its own font and atlas")
+	assert.Same(t, exact, Regular.ExactSize(24), "kept by size as the others")
+	assert.Same(t, exact, Style{Face: Regular, Size: 24, Exact: true}.Font())
+	assert.Same(t, dark, Style{Face: Regular, Size: 24}.Font())
+	d, e := dark.glyphAt('l', 0), exact.glyphAt('l', 0)
+	require.False(t, e.rect.Empty())
+	assert.Equal(t, d.rect.Size(), e.rect.Size())
+	assert.InDelta(t, d.advance, e.advance, 1e-6, "the same metrics")
+	assert.Less(t, ink(exact.Atlas, e.rect), ink(dark.Atlas, d.rect), "lighter: no edge moved out")
+	for y := e.rect.Min.Y; y < e.rect.Max.Y; y++ {
+		assert.Zero(t, exact.Atlas.AlphaAt(e.rect.Min.X, y).A, "nothing in the room left around the glyph")
+		assert.Zero(t, exact.Atlas.AlphaAt(e.rect.Max.X-1, y).A)
+	}
+}

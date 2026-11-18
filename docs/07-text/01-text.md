@@ -12,7 +12,7 @@ Text is a 2D entity: words drawn with a typeface, at a size and a colour. Here a
 
 ## A font of your own
 
-`twod.LoadFace` reads a TrueType font, a `.ttf`, from a file system, here the example's embedded `fonts` folder; `twod.NewFace` takes the same bytes from anywhere else. Other formats, such as OpenType with CFF outlines or WOFF, are refused with an error saying so. `twod.Pixelated()` on a text draws its glyphs unsmoothed on the pixel grid, for a pixel font such as Silkscreen at its own sizes; `Pixelated()` reads it back. Silkscreen comes under the SIL Open Font Licence, which travels with the font, so its licence file sits next to it.
+`twod.LoadFace` reads a TrueType font, a `.ttf`, from a file system, here the example's embedded `fonts` folder; `twod.NewFace` takes the same bytes from anywhere else. Other formats, such as OpenType with CFF outlines or WOFF, are refused with an error saying so. `twod.Pixelated()` on a text draws its glyphs unsmoothed on the pixel grid, for a pixel font such as Silkscreen at its own sizes; `Pixelated()` reads it back. `twod.ExactCoverage()` draws a text's glyphs as covered, without the stem darkening that gives text the weight of a browser's on macOS; `ExactCoverage()` reads it back. Silkscreen comes under the SIL Open Font Licence, which travels with the font, so its licence file sits next to it.
 
 [font.go](../../examples/44-text/font.go)
 
