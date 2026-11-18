@@ -55,9 +55,8 @@ func hints(n *dom.Node) []Declaration {
 	case dom.Thead, dom.Tbody, dom.Tfoot, dom.Tr:
 		add("background-color", hintedColor(attr("bgcolor")))
 		add("text-align", hintedAlign(attr("align")))
-		if n.Tag() == dom.Tr {
-			add(propHeight, hintedSize(attr("height"), false))
-		}
+		add("vertical-align", hintedCellAlign(attr("valign")))
+		add(propHeight, hintedRowHeight(n))
 	case dom.Td, dom.Th:
 		add(propWidth, hintedSize(attr("width"), false))
 		add(propHeight, hintedSize(attr("height"), false))
@@ -66,7 +65,7 @@ func hints(n *dom.Node) []Declaration {
 		if _, ok := n.Attr("nowrap"); ok {
 			add("white-space", "nowrap")
 		}
-		add("align-content", hintedCellAlign(n))
+		add("vertical-align", hintedCellAlign(attr("valign")))
 		add("padding", hintedCellPadding(n))
 	case dom.Div, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.H5, dom.H6:
 		add("text-align", hintedAlign(attr("align")))
@@ -165,7 +164,7 @@ func hintedColor(v string) string {
 // center place blocks too, as Chrome's -webkit- values.
 func hintedAlign(v string) string {
 	switch v = strings.ToLower(strings.TrimSpace(v)); v {
-	case kwCenter, "middle":
+	case kwCenter, kwMiddle:
 		return "-webkit-center"
 	case kwLeft, kwRight:
 		return "-webkit-" + v
@@ -175,21 +174,23 @@ func hintedAlign(v string) string {
 	return ""
 }
 
-// hintedCellAlign is where valign puts a cell's content: the cell's own,
-// else its row's, else its row group's.
-func hintedCellAlign(cell *dom.Node) string {
-	for n, depth := cell, 0; n != nil && depth < 3 && n.Tag() != dom.Table; n, depth = n.Parent(), depth+1 {
-		v, _ := n.Attr("valign")
-		switch strings.ToLower(strings.TrimSpace(v)) {
-		case kwTop, kwBaseline:
-			return kwStart
-		case "middle":
-			return kwCenter
-		case kwBottom:
-			return kwEnd
-		}
+// hintedCellAlign is the vertical-align a valign says, a cell's own or the one its row
+// or row group hands down.
+func hintedCellAlign(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case kwTop, kwBaseline, kwMiddle, kwBottom:
+		return v
 	}
 	return ""
+}
+
+// hintedRowHeight is the height a row's height says; a row group's says nothing.
+func hintedRowHeight(n *dom.Node) string {
+	if n.Tag() != dom.Tr {
+		return ""
+	}
+	v, _ := n.Attr("height")
+	return hintedSize(v, false)
 }
 
 // hintedCellPadding is the cellpadding of a cell's table.

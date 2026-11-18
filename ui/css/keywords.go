@@ -21,6 +21,7 @@ const (
 	kwFitContent   = "fit-content"
 	kwContent      = "content"
 	kwAuto         = "auto"
+	kwMiddle       = "middle"
 	kwInherit      = "inherit"
 	kwBaseline     = "baseline"
 

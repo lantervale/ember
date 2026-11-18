@@ -152,10 +152,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	final := size{outerW, outerH}
 	constrainedByMin := some(minSize.h) && minSize.h > 0 && minSize.h >= outerH
 	ownBottomCollapse := ownCollapse[1] && !constrainedByMin
-	alignContent := st.AlignContent
-	if alignContent == style.AlignNormal && centresContent(n) {
-		alignContent = style.AlignCenter
-	}
+	alignContent := contentAlign(n)
 	if alignContent != style.AlignNormal {
 		innerH := outerH - rInset.vertical()
 		contentH := res.height - rInset.vertical()

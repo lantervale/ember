@@ -107,6 +107,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0101 | [Paint and hit testing skip the boxes out of view](0101-paint-and-hit-testing-skip-the-boxes-out-of-view.md) | rendering |
 | 0102 | [A window's close is a request its rule answers](0102-a-windows-close-is-a-request-its-rule-answers.md) | api |
 | 0103 | [An iframe shows a Document the program gives it](0103-an-iframe-shows-a-document-the-program-gives-it.md) | api |
+| 0104 | [vertical-align places boxes on their line as Chrome does](0104-vertical-align-places-boxes-on-their-line-as-chrome-does.md) | api |
 
 ## Writing one
 

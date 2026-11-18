@@ -78,6 +78,8 @@ td, th { padding: 1px; }
 th { text-align: center; }
 em, i, cite, var, dfn, address { font-style: italic; }
 small, sub, sup { font-size: smaller; }
+thead, tbody, tfoot, table > tr { vertical-align: middle; }
+tr, td, th { vertical-align: inherit; }
 sub { vertical-align: sub; }
 sup { vertical-align: super; }
 q::before { content: open-quote; }

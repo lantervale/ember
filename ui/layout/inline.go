@@ -37,8 +37,13 @@ type inlineContent struct {
 	unit float32
 	// inWord is set while the runs gathered so far end inside a word, for capitalize.
 	inWord bool
-	// shift is the baseline shift of the runs being gathered, their spans' vertical-align.
-	shift float32
+	// stamp counts the lines whose boxes were aligned, and pending holds the boxes of the
+	// one being aligned that wait for their parent's size or the line's.
+	stamp   int
+	pending []pendingAlign
+	// moved is set once a vertical-align has shifted a box of the content: until then
+	// every run and span stands on its line's baseline.
+	moved bool
 	// broken are the lines last broken at brokenAt, and unbroken the lines with
 	// no width to fit, kept while no piece's width changes, as a node is
 	// measured and laid out at its width and at none several times.
@@ -88,7 +93,10 @@ type textRun struct {
 	st     *style.Computed
 	text   string
 	atomic *atomicInline
-	// shift is how far below the line's baseline the run's own stands, vertical-align's.
+	// span is the innermost span holding the run, -1 for none.
+	span int
+	// shift is how far below the baseline of the line last given to lineBox the run's
+	// own stands, vertical-align's.
 	shift float32
 }
 
@@ -113,8 +121,14 @@ type inlineSpan struct {
 	open, close int
 	// margin, border and padding are resolved against the containing block's width.
 	margin, border, padding rect
-	// shift is how far below the line's baseline the span's own stands.
-	shift float32
+	// up is the span holding this one, -1 for none.
+	up int
+	// shift is how far below the baseline of the line last given to lineBox the span's
+	// own stands; line is that line's stamp, and extent what the span and all it holds
+	// there take around its baseline.
+	shift  float32
+	line   int
+	extent extent
 	// noStart and noEnd are set on a part of an element blocks cut that is not its
 	// first or not its last: it has no edge there.
 	noStart, noEnd bool
@@ -217,7 +231,7 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			}
 			b := &box.Box{Kind: box.TextRun, Node: it.text, Style: st}
 			c.runs = append(c.runs,
-				&textRun{box: b, parent: parent, st: st, shift: c.shift,
+				&textRun{box: b, parent: parent, st: st, span: -1,
 					text: shownText(Translated(it.text, t.translate), st, it.text.Parent(), &c.inWord)})
 			continue
 		}
@@ -252,7 +266,7 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			n := t.build(it.element, c.owner)
 			n.atomic = true
 			c.runs = append(c.runs,
-				&textRun{box: n.box, parent: parent, st: st, shift: c.shift, atomic: &atomicInline{node: n}})
+				&textRun{box: n.box, parent: parent, st: st, span: -1, atomic: &atomicInline{node: n}})
 			continue
 		}
 		b := &box.Box{Kind: box.Element, Node: it.element, Style: st}
@@ -263,30 +277,33 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			t.place(it.element, b)
 			inside = t.flatten(c.owner, it.element.Flow())
 		}
-		first := len(c.runs)
-		outer := c.shift
-		c.shift += baselineShift(st, parent.Style)
+		first, inner := len(c.runs), len(c.spans)
 		t.gather(c, b, inside)
-		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs), shift: c.shift,
+		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs),
 			noStart: it.cut != nil && !it.first, noEnd: it.cut != nil && !it.last}
-		c.shift = outer
 		for i := first; i < len(c.runs); i++ {
 			s.runs = append(s.runs, i)
 		}
-		c.spans = append(c.spans, s)
+		c.hold(s, inner)
 	}
 }
 
-// baselineShift is how far below its parent's baseline vertical-align puts a box's.
-func baselineShift(st, parent *style.Computed) float32 {
-	switch st.VerticalAlign {
-	case style.AlignSub:
-		return parent.Font.Size/5 + 1
-	case style.AlignSuper:
-		return -(parent.Font.Size/3 + 1)
-	case style.AlignBaselineText:
+// hold adds span s, the spans gathered since inner and the runs in it that no span holds
+// yet being its own.
+func (c *inlineContent) hold(s *inlineSpan, inner int) {
+	k := len(c.spans)
+	s.up = -1
+	for _, in := range c.spans[inner:] {
+		if in.up < 0 {
+			in.up = k
+		}
 	}
-	return 0
+	for _, r := range c.runs[s.first:s.end] {
+		if r.span < 0 {
+			r.span = k
+		}
+	}
+	c.spans = append(c.spans, s)
 }
 
 // lineBreak is a br: an inline box holding a line break that no white-space collapses.
@@ -305,9 +322,8 @@ func (t *tree) lineBreak(c *inlineContent, parent *box.Box, e *dom.Node, st *sty
 	t.place(e, b)
 	first := len(c.runs)
 	c.runs = append(c.runs,
-		&textRun{box: &box.Box{Kind: box.TextRun, Style: kept}, parent: b, st: kept, shift: c.shift, text: "\n"})
-	c.spans = append(c.spans,
-		&inlineSpan{box: b, parent: parent, st: st, first: first, end: first + 1, runs: []int{first}})
+		&textRun{box: &box.Box{Kind: box.TextRun, Style: kept}, parent: b, st: kept, span: -1, text: "\n"})
+	c.hold(&inlineSpan{box: b, parent: parent, st: st, first: first, end: first + 1, runs: []int{first}}, len(c.spans))
 }
 
 // cut splits the runs into pieces: whitespace collapsed as each run's white-space says,
@@ -602,7 +618,7 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		out := t.performChildLayout(a.node, size{a.width, none}, parent,
 			spaces{def(a.width), maxContentSpace}, inherentSize)
 		a.height = out.size.h
-		a.baseline = out.size.h
+		a.baseline = out.size.h + a.margin.b
 		a.overflow = out.overflow
 		a.node.pendingOOF = out.oof
 		switch {
@@ -1195,30 +1211,232 @@ func lineHeightOf(m box.Metrics, st *style.Computed) (float32, float32) {
 	return h, m.Ascent + float32(math.Floor(float64(h-m.Ascent-m.Descent)/2))
 }
 
-// lineBox is the height of a line and its baseline: the strut of the owner, then each run
-// on it, atomic inlines by their margin boxes on their baselines.
+// extent is what a box takes above and below a baseline.
+type extent struct{ above, below float32 }
+
+// with is e grown to hold o, whose baseline stands shift below e's.
+func (e extent) with(o extent, shift float32) extent {
+	return extent{max(e.above, o.above-shift), max(e.below, o.below+shift)}
+}
+
+// pendingAlign is a box whose vertical-align waits for another's size: text-top and
+// text-bottom for its parent's content area, top and bottom for the line, or for the
+// nearest box above it that is itself top or bottom aligned, as Chrome has it. The box is
+// span, or the atomic inline of run when span is -1; by is the span it waits for, -1 for
+// the line.
+type pendingAlign struct {
+	span, run, by int
+	at            style.VerticalAlign
+	extent        extent
+}
+
+// lineBox is the height of line l and its baseline (CSS 2 section 10.8): the strut of
+// the owner, then every inline box open on the line by its line height and every atomic
+// inline by its margin box, each where its vertical-align puts it from its parent's
+// baseline, and at last the boxes aligned to the line's top and bottom. It leaves the
+// shift of each run and span of the line in them: from its parent's baseline as the
+// boxes are sized, inner ones first, then from the line's.
 func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
 	h, base := t.lineHeight(c, c.owner.st)
-	above, below := base, h-base
-	for i := l.from; i < l.to; i++ {
-		if k := c.pieces[i].kind; k == edge || k == marker || k == anchor {
+	root := extent{base, h - base}
+	c.stamp++
+	c.pending = c.pending[:0]
+	lo, hi := t.openBoxes(c, l, &root)
+	for k := lo; k <= hi; k++ {
+		sp := c.spans[k]
+		if sp.line != c.stamp {
 			continue
 		}
-		r := c.runs[c.pieces[i].run]
-		if a := r.atomic; a != nil {
-			top := a.margin.t + a.baseline
-			above = max(above, top-r.shift)
-			below = max(below, a.height+a.margin.vertical()-top+r.shift)
+		t.alignPending(c, k, &sp.extent)
+		shift, ok := t.shiftOf(c, sp.st, c.styleAt(sp.up), sp.extent)
+		if !ok {
+			c.pending = append(c.pending,
+				pendingAlign{span: k, by: c.aligner(sp.st, sp.up), at: sp.st.VerticalAlign, extent: sp.extent})
 			continue
 		}
-		rh, rb := t.lineHeight(c, r.st)
-		above, below = max(above, rb-r.shift), max(below, rh-rb+r.shift)
-		if m, ok := t.fallbackMetrics(c.pieces[i], r.st); ok {
-			fh, fb := lineHeightOf(m, r.st)
-			above, below = max(above, fb-r.shift), max(below, fh-fb+r.shift)
+		sp.shift = shift
+		c.moved = c.moved || shift != 0
+		into := &root
+		if sp.up >= 0 {
+			into = &c.spans[sp.up].extent
+		}
+		*into = into.with(sp.extent, shift)
+	}
+	t.alignPending(c, -1, &root)
+	if !c.moved {
+		return root.above + root.below, root.above
+	}
+	for k := hi; k >= lo; k-- {
+		if sp := c.spans[k]; sp.line == c.stamp && sp.up >= 0 {
+			sp.shift += c.spans[sp.up].shift
 		}
 	}
-	return above + below, above
+	for i := l.from; i < l.to; i++ {
+		p := c.pieces[i]
+		if p.kind == marker || p.kind == anchor || p.kind == edge {
+			continue
+		}
+		r := c.runs[p.run]
+		switch {
+		case r.span < 0 && r.atomic == nil:
+			r.shift = 0
+		case r.span < 0:
+		case r.atomic == nil:
+			r.shift = c.spans[r.span].shift
+		default:
+			r.shift += c.spans[r.span].shift
+		}
+	}
+	return root.above + root.below, root.above
+}
+
+// openBoxes starts line l's alignment: each span open on it takes its line height, stamped
+// with the line (the first and last of them returned), and each atomic inline and fallback
+// face is counted in the box holding it, root for the line's own, or left pending.
+func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
+	lo, hi := len(c.spans), -1
+	for i := l.from; i < l.to; i++ {
+		p := c.pieces[i]
+		if p.kind == marker || p.kind == anchor {
+			continue
+		}
+		k := p.span
+		if p.kind != edge {
+			k = c.runs[p.run].span
+		}
+		for j := k; j >= 0 && c.spans[j].line != c.stamp; j = c.spans[j].up {
+			sp := c.spans[j]
+			sh, sb := t.lineHeight(c, sp.st)
+			sp.line, sp.extent, sp.shift = c.stamp, extent{sb, sh - sb}, 0
+			lo, hi = min(lo, j), max(hi, j)
+		}
+		if p.kind == edge {
+			continue
+		}
+		into := root
+		if k >= 0 {
+			into = &c.spans[k].extent
+		}
+		r := c.runs[p.run]
+		if a := r.atomic; a != nil {
+			top := a.margin.t + a.baseline
+			e := extent{top, a.height + a.margin.vertical() - top}
+			if shift, ok := t.shiftOf(c, r.st, c.styleAt(k), e); ok {
+				r.shift = shift
+				c.moved = c.moved || shift != 0
+				*into = into.with(e, shift)
+			} else {
+				c.pending = append(c.pending,
+					pendingAlign{span: -1, run: p.run, by: c.aligner(r.st, k), at: r.st.VerticalAlign, extent: e})
+			}
+		} else if m, ok := t.fallbackMetrics(p, r.st); ok {
+			fh, fb := lineHeightOf(m, r.st)
+			*into = into.with(extent{fb, fh - fb}, 0)
+		}
+	}
+	return lo, hi
+}
+
+// styleAt is the style of span k, the owner's for -1.
+func (c *inlineContent) styleAt(k int) *style.Computed {
+	if k < 0 {
+		return c.owner.st
+	}
+	return c.spans[k].st
+}
+
+// shiftOf is how far below its parent's baseline vertical-align puts the baseline of a
+// box of style st taking e around it, false for the values that wait for the parent's
+// size or the line's.
+func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (float32, bool) {
+	switch st.VerticalAlign {
+	case style.AlignBaselineText:
+	case style.AlignSub:
+		return parent.Font.Size/5 + 1, true
+	case style.AlignSuper:
+		return -(parent.Font.Size/3 + 1), true
+	case style.AlignLength:
+		h, _ := t.lineHeight(c, st)
+		return -(st.VerticalShift.Px + st.VerticalShift.Percent*h/100), true
+	case style.AlignMiddle:
+		return (e.above-e.below)/2 - t.metricsOf(c, parent).XHeight/2, true
+	case style.AlignTextTop, style.AlignTextBottom, style.AlignTop, style.AlignBottom:
+		return 0, false
+	}
+	return 0, true
+}
+
+// aligner is the box that places a box of style st inside span up once sized: its parent
+// for text-top and text-bottom, else the nearest span above that is top or bottom aligned.
+func (c *inlineContent) aligner(st *style.Computed, up int) int {
+	if st.VerticalAlign == style.AlignTextTop || st.VerticalAlign == style.AlignTextBottom {
+		return up
+	}
+	for ; up >= 0; up = c.spans[up].up {
+		if at := c.spans[up].st.VerticalAlign; at == style.AlignTop || at == style.AlignBottom {
+			break
+		}
+	}
+	return up
+}
+
+// alignPending places the boxes waiting for span by (the line for -1), which takes e so
+// far: text-top and text-bottom ones on its content area, then top and bottom ones on e
+// grown to hold the tallest of them, above for a bottom one and below otherwise.
+func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
+	m := t.metricsOf(c, c.styleAt(by))
+	var top, bottom float32
+	for i := range c.pending {
+		p := &c.pending[i]
+		if p.by != by {
+			continue
+		}
+		switch p.at {
+		case style.AlignTextTop:
+			c.settle(p, e, p.extent.above-m.Ascent)
+		case style.AlignTextBottom:
+			c.settle(p, e, m.Descent-p.extent.below)
+		case style.AlignTop:
+			top = max(top, p.extent.above+p.extent.below)
+		case style.AlignBottom:
+			bottom = max(bottom, p.extent.above+p.extent.below)
+		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength:
+		}
+	}
+	grown := *e
+	switch {
+	case max(top, bottom) <= grown.above+grown.below:
+	case bottom > top:
+		grown.above = bottom - grown.below
+	default:
+		grown.below = top - grown.above
+	}
+	for i := range c.pending {
+		p := &c.pending[i]
+		if p.by != by {
+			continue
+		}
+		switch p.at {
+		case style.AlignTop:
+			c.settle(p, e, p.extent.above-grown.above)
+		case style.AlignBottom:
+			c.settle(p, e, grown.below-p.extent.below)
+		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
+			style.AlignTextTop, style.AlignTextBottom:
+		}
+	}
+}
+
+// settle puts p's baseline shift below that of the box it waited for, which takes e. A
+// shifted box between the two moves p again, out of the room e made for it, as in Chrome.
+func (c *inlineContent) settle(p *pendingAlign, e *extent, shift float32) {
+	*e = e.with(p.extent, shift)
+	c.moved = true
+	if p.span >= 0 {
+		c.spans[p.span].shift = shift
+		return
+	}
+	c.runs[p.run].shift = shift
 }
 
 // fallbackMetrics is the metrics of the fallback faces a word draws with, when the fonts
@@ -1335,7 +1553,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 // as CSS defines it for an inline element.
 func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect) {
 	o.positioned = false
-	for k := o.span; k >= 0; k = c.enclosing(k) {
+	for k := o.span; k >= 0; k = c.spans[k].up {
 		sp := c.spans[k]
 		if sp.st.Position == style.Static {
 			continue
@@ -1354,21 +1572,6 @@ func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.R
 		o.positioned = true
 		return
 	}
-}
-
-// enclosing is the innermost span holding span k, -1 for none.
-func (c *inlineContent) enclosing(k int) int {
-	in := c.spans[k]
-	best := -1
-	for i, sp := range c.spans {
-		if i == k || sp.first > in.first || sp.end < in.end || sp.first == in.first && sp.end == in.end && i < k {
-			continue
-		}
-		if best < 0 || c.spans[best].first <= sp.first && sp.end <= c.spans[best].end {
-			best = i
-		}
-	}
-	return best
 }
 
 // writeText writes the fragments of the laid-out text into the box tree.

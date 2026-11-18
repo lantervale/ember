@@ -222,7 +222,8 @@ func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 	if px <= 0 {
 		px = 1
 	}
-	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0)}
+	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
+		XHeight: float32(m.XHeight) / 64 * scale}
 }
 
 func round(v float32) float32 { return float32(int(v + 0.5)) }

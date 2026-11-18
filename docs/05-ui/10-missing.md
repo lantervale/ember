@@ -18,7 +18,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
 | `text-decoration-skip-ink`, a decoration's shadow | a line is drawn through descenders, and `text-shadow` leaves it out |
-| `vertical-align` but `baseline`, `sub`, `super` | refused |
+| a `top` or `bottom` aligned inline box holding a shifted one (`sub`, a length…) | the line is sized from the boxes as the outer one aligns them; Chrome also counts the inner box where it stood before, a few points more |
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
 | some installed fonts | `ui.SystemFonts()` skips a file it cannot read; nothing waits for the scan in the public API |
 | a span ending a centred line | up to 3 points narrower than Chrome's |
@@ -67,8 +67,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
 | `disabled` on a `form` or a `fieldset`, `bdo`, a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `col` and `colgroup` | read, and they do nothing |
-| `vertical-align` on a table cell from a sheet | refused as elsewhere: the cell's content is in the middle unless `valign` or `align-content` says where |
-| `valign="baseline"` | as `top` |
+| `vertical-align: baseline` on a table cell, `valign="baseline"` | as `top`: the first lines of a row's cells are not put on one baseline |
 | a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |
 
 ## Backgrounds and borders

@@ -64,9 +64,11 @@ type index struct {
 	buckets
 	// pseudos are the selectors of each pseudo-element its rules name.
 	pseudos map[string]*buckets
-	// inherits is set when a declaration sets a property that isn't
-	// inherited to inherit.
-	inherits bool
+	// inherited are the longhands that aren't inherited and that some
+	// declaration sets to inherit; inherits is set when a shorthand or a
+	// custom property is.
+	inherited []string
+	inherits  bool
 	// above are the classes, ids and attributes some selector reads in a
 	// compound above its subject, keyed as dom.Pipeline.Changed.
 	above map[string]bool
@@ -116,9 +118,15 @@ func (s *Sheet) indexed() *index {
 				into.add(sel, e)
 			}
 			for _, d := range r.Decls {
-				if p, ok := properties[d.Name]; (!ok || !p.inherited) &&
-					slices.ContainsFunc(items(d.Value), func(c Component) bool { return isWord(c, "inherit") }) {
+				p, ok := properties[d.Name]
+				if ok && p.inherited ||
+					!slices.ContainsFunc(items(d.Value), func(c Component) bool { return isWord(c, "inherit") }) {
+					continue
+				}
+				if _, long := props[d.Name]; !long {
 					x.inherits = true
+				} else if !slices.Contains(x.inherited, d.Name) {
+					x.inherited = append(x.inherited, d.Name)
 				}
 			}
 		}

@@ -91,7 +91,7 @@ The `font` shorthand is `[style] [weight] size[/line-height] family, …`, as CS
 
 `text-align` also takes Chrome's `-webkit-left`, `-webkit-right` and `-webkit-center`, which HTML's `align` attribute and the `center` element stand for: lines as the plain word, and a block narrower than its container, a table or a sized box with no `auto` margin, placed the same way.
 
-`vertical-align` moves an inline box's baseline: `sub` a fifth of its parent's font size and a pixel down, `super` a third and a pixel up, the line growing to hold it, as in Chrome. The other values (`middle`, `top`, lengths…) are refused: align boxes with `align-items` or `align-self`.
+`vertical-align` places an inline box, an inline-block or a picture on its line (decision 0104): `baseline`, `sub` (a fifth of its parent's font size and a pixel down), `super` (a third and a pixel up), a length or a percentage of its own line height (up), `middle` (its middle half an x-height above the baseline), `text-top` and `text-bottom` (on its parent's text), `top` and `bottom` (on the line, sized by the rest first), the line growing to hold each, as in Chrome. An inline-block stands on the baseline of its last line, or on its bottom margin edge when it has none or scrolls. On a table cell it places the content: `top`, `middle` (the default) or `bottom`, the other values as `top`.
 
 A list item (`display: list-item`, an `li`) has its marker outside its box, beside its first line: `disc`, `circle`, `square`, or its number in its list as `decimal`, `decimal-leading-zero`, `lower-alpha` (`lower-latin`), `upper-alpha` (`upper-latin`), `lower-roman` or `upper-roman` writes it. The number is the `list-item` counter ([counters](#counters)), which `ol`'s `start` and `reversed` and `li`'s `value` set; `::marker` styles the marker. `list-style-position` and `list-style-image` are not in the subset.
 
@@ -117,7 +117,6 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 
 | Refused | Use |
 |---|---|
-| `vertical-align` other than baseline, sub and super | `align-items` or `align-self` |
 | `column-span: all` | the element before the columns |
 | `border-collapse` | `border-spacing` |
 | `text-decoration: wavy`, `blink` | solid, double, dotted or dashed |

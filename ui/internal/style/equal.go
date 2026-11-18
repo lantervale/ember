@@ -39,6 +39,7 @@ func (b *Box) equal(o *Box) bool {
 		b.Float == o.Float &&
 		b.Clear == o.Clear &&
 		b.VerticalAlign == o.VerticalAlign &&
+		b.VerticalShift == o.VerticalShift &&
 		b.Inset == o.Inset &&
 		b.Size == o.Size &&
 		b.MinSize == o.MinSize &&

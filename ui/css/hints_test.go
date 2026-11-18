@@ -41,12 +41,12 @@ func TestATablesAttributesStyleItAndItsCells(t *testing.T) {
 	if ws.TextAlign != style.BlockCenter || ws.Background != hex("#f00") || ws.Padding.Left != style.Px(6) {
 		t.Errorf("wide: %v %v %+v", ws.TextAlign, ws.Background, ws.Padding)
 	}
-	if ws.AlignContent != style.AlignStart {
-		t.Errorf("a cell takes its row's valign: %v", ws.AlignContent)
+	if ws.VerticalAlign != style.AlignTop {
+		t.Errorf("a cell takes its row's valign: %v", ws.VerticalAlign)
 	}
 	ps := styleOf(plain)
-	if ps.Size.Width.Kind != style.Auto || ps.TextAlign != style.BlockRight || ps.AlignContent != style.AlignEnd {
-		t.Errorf("plain, a width of 0 saying nothing and its own valign: %+v %v %v", ps.Size, ps.TextAlign, ps.AlignContent)
+	if ps.Size.Width.Kind != style.Auto || ps.TextAlign != style.BlockRight || ps.VerticalAlign != style.AlignBottom {
+		t.Errorf("plain, a width of 0 saying nothing and its own valign: %+v %v %v", ps.Size, ps.TextAlign, ps.VerticalAlign)
 	}
 	if ps.Background != hex("#fff") {
 		t.Errorf("hexadecimal digits without their #: %v", ps.Background)
@@ -74,14 +74,14 @@ func TestACellFollowsItsTablesCellpaddingAndItsRowsValignWhenTheyChange(t *testi
 	table := with(el(dom.Table, "t"), with(dom.NewElement(dom.Tbody), row))
 	root := page(table)
 	Compute(root, nil)
-	if s := styleOf(cell); s.Padding.Top != style.Px(1) || s.AlignContent != style.AlignNormal {
-		t.Fatalf("before: %+v %v", s.Padding, s.AlignContent)
+	if s := styleOf(cell); s.Padding.Top != style.Px(1) || s.VerticalAlign != style.AlignMiddle {
+		t.Fatalf("before: %+v %v", s.Padding, s.VerticalAlign)
 	}
 	table.SetAttr("cellpadding", "8")
 	row.SetAttr("valign", "top")
 	Compute(root, nil)
-	if s := styleOf(cell); s.Padding.Top != style.Px(8) || s.AlignContent != style.AlignStart {
-		t.Errorf("after: %+v %v", s.Padding, s.AlignContent)
+	if s := styleOf(cell); s.Padding.Top != style.Px(8) || s.VerticalAlign != style.AlignTop {
+		t.Errorf("after: %+v %v", s.Padding, s.VerticalAlign)
 	}
 }
 

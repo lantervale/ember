@@ -68,7 +68,7 @@ func (t *tree) buildControl(n *node, kind controlKind) {
 		text += emptyLine
 	}
 	b := &box.Box{Kind: box.TextRun, Node: shadow, Style: styleOf(shadow)}
-	c := &inlineContent{owner: n, runs: []*textRun{{box: b, parent: n.box, st: &st, text: text}},
+	c := &inlineContent{owner: n, runs: []*textRun{{box: b, parent: n.box, st: &st, span: -1, text: text}},
 		unit: unitsPerPoint(t.fonts)}
 	c.cut(t.fonts)
 	n.inline = c
@@ -89,8 +89,8 @@ func (t *tree) inputText(n *node) float32 {
 	return t.fonts.Advance(styleOf(d.Shadow).Font, Translated(d.Shadow, t.translate)) + caretWidth
 }
 
-// centresContent reports a button, input or select, whose content Chrome centres
-// vertically in its content box.
+// centresContent reports a button, input, select or cell, which place their content in
+// the height of their content box.
 func centresContent(n *node) bool {
 	if n.box.Node == nil {
 		return false
@@ -99,9 +99,30 @@ func centresContent(n *node) bool {
 	return tag == dom.Button || tag == dom.Input || tag == dom.Select || tag == dom.Td || tag == dom.Th
 }
 
+// contentAlign is where n's content stands in its height: where its align-content says,
+// else in the middle of a button, input or select, and where its vertical-align says in
+// a cell (top, middle or bottom; baseline and the rest as top).
+func contentAlign(n *node) style.Align {
+	if n.st.AlignContent != style.AlignNormal || !centresContent(n) {
+		return n.st.AlignContent
+	}
+	if tag := n.box.Node.Tag(); tag != dom.Td && tag != dom.Th {
+		return style.AlignCenter
+	}
+	switch n.st.VerticalAlign {
+	case style.AlignMiddle:
+		return style.AlignCenter
+	case style.AlignBottom:
+		return style.AlignEnd
+	case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignTextTop, style.AlignTextBottom,
+		style.AlignTop, style.AlignLength:
+	}
+	return style.AlignStart
+}
+
 // textTop is where the owner's first line box starts: the top of its content box, or the
-// lines centred in it for a button, input, select or cell, unless its align-content
-// says where.
+// lines centred in it for a button, input or select, or where a cell's vertical-align
+// puts them, unless its align-content says where.
 func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
 	share := contentShare(n)
 	if share == 0 {
@@ -116,12 +137,12 @@ func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
 }
 
 // contentShare is the share of the free height a box that centres its content leaves
-// above it: half, or what its align-content says, a cell's valign.
+// above it: half, or what its align-content says, or a cell's vertical-align.
 func contentShare(n *node) float32 {
 	if !centresContent(n) {
 		return 0
 	}
-	switch n.st.AlignContent {
+	switch contentAlign(n) {
 	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline:
 		return 0
 	case style.AlignEnd, style.AlignFlexEnd:

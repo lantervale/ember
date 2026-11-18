@@ -151,9 +151,11 @@ type Box struct {
 	// position takes out of the flow.
 	Float Float
 	Clear Clear
-	// VerticalAlign is vertical-align: where an inline box's baseline stands from its
-	// parent's.
+	// VerticalAlign is vertical-align: where an inline-level box stands on its line, or
+	// a table cell's content in the cell. VerticalShift is how far up an AlignLength
+	// raises it, its percentage of the box's own line height.
 	VerticalAlign VerticalAlign
+	VerticalShift Length
 	// Inset is top, right, bottom, left; Auto where unset.
 	Inset   Sides[Length]
 	Size    Size[Length]
@@ -735,15 +737,23 @@ func (s *Computed) FollowColor(c color.Color) {
 	}
 }
 
-// VerticalAlign is a vertical-align: the baseline, or shifted from it as Chrome shifts
-// a sub (a fifth of the parent's font size and a pixel, down) and a sup (a third of it
-// and a pixel, up).
+// VerticalAlign is a vertical-align: where an inline-level box stands on its line
+// (CSS 2 section 10.8), from its parent's baseline, or from the line's top or bottom.
 type VerticalAlign uint8
 
 const (
 	AlignBaselineText VerticalAlign = iota
+	// AlignSub and AlignSuper shift as Chrome does: a fifth of the parent's font size
+	// and a pixel down, a third of it and a pixel up.
 	AlignSub
 	AlignSuper
+	AlignTextTop
+	AlignTextBottom
+	AlignMiddle
+	AlignTop
+	AlignBottom
+	// AlignLength raises the box by the style's VerticalShift.
+	AlignLength
 )
 
 // ListStyle is a list-style-type: a list item's bullet or number, drawn

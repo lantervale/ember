@@ -274,7 +274,8 @@ func paintOnly(c *style.Computed) {
 
 // inheritedChanged reports whether a and b differ in what an element's
 // children take from it: its inherited properties and custom properties,
-// or anything at all where some declaration inherits explicitly.
+// the longhands some declaration inherits explicitly, or anything at all
+// where a shorthand does.
 func (r *restyler) inheritedChanged(a, b *style.Computed) bool {
 	if explicitInherit(r.sheets) {
 		return true
@@ -285,6 +286,13 @@ func (r *restyler) inheritedChanged(a, b *style.Computed) bool {
 		p := props[name]
 		p.inherit(&r.la, a)
 		p.inherit(&r.lb, b)
+	}
+	for _, s := range r.sheets {
+		for _, name := range s.indexed().inherited {
+			p := props[name]
+			p.inherit(&r.la, a)
+			p.inherit(&r.lb, b)
+		}
 	}
 	return !r.la.Equal(&r.lb)
 }
@@ -303,7 +311,7 @@ var inheritedNames = func() []string {
 }()
 
 // explicitInherit reports whether some declaration in sheets (the user
-// agent's first) sets a property that isn't inherited to inherit.
+// agent's first) sets a shorthand or a custom property to inherit.
 func explicitInherit(sheets []*Sheet) bool {
 	return slices.ContainsFunc(sheets, func(s *Sheet) bool { return s.indexed().inherits })
 }
@@ -993,6 +1001,13 @@ func num(c Component) float32 {
 	return float32(d.Num)
 }
 
+//nolint:gochecknoglobals // lookup table
+var verticalAligns = map[string]style.VerticalAlign{
+	kwBaseline: style.AlignBaselineText, "sub": style.AlignSub, "super": style.AlignSuper,
+	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
+	kwTop: style.AlignTop, kwBottom: style.AlignBottom,
+}
+
 //nolint:gochecknoglobals,goconst // lookup table
 var displays = map[string]style.Display{
 	"inline": style.Inline, "block": style.Block, "inline-block": style.InlineBlock,
@@ -1073,9 +1088,19 @@ var props = func() map[string]prop {
 			"none": style.FloatNone, "left": style.FloatLeft, "right": style.FloatRight,
 			"inline-start": style.FloatLeft, "inline-end": style.FloatRight,
 		}),
-		"vertical-align": keyword(func(c *style.Computed) *style.VerticalAlign { return &c.VerticalAlign },
-			map[string]style.VerticalAlign{"baseline": style.AlignBaselineText, "sub": style.AlignSub,
-				"super": style.AlignSuper}),
+		"vertical-align": {
+			set: func(x *ctx, v []Component) {
+				x.c.VerticalShift = style.Length{}
+				if v[0].Kind == Ident {
+					x.c.VerticalAlign = verticalAligns[strings.ToLower(v[0].Text)]
+					return
+				}
+				x.c.VerticalAlign, x.c.VerticalShift = style.AlignLength, x.length(v[0])
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.VerticalAlign, dst.VerticalShift = src.VerticalAlign, src.VerticalShift
+			},
+		},
 		"clear": keyword(func(c *style.Computed) *style.Clear { return &c.Clear }, map[string]style.Clear{
 			"none": style.ClearNone, "left": style.ClearLeft, "right": style.ClearRight, "both": style.ClearBoth,
 			"inline-start": style.ClearLeft, "inline-end": style.ClearRight,

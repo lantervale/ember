@@ -18,7 +18,7 @@ import (
 type ahemFonts struct{}
 
 func (ahemFonts) Metrics(f style.Font) box.Metrics {
-	return box.Metrics{Ascent: 0.8 * f.Size, Descent: 0.2 * f.Size}
+	return box.Metrics{Ascent: 0.8 * f.Size, Descent: 0.2 * f.Size, XHeight: 0.8 * f.Size}
 }
 
 func (ahemFonts) Advance(f style.Font, text string) float32 {
