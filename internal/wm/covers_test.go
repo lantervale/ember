@@ -59,3 +59,20 @@ func TestAClosedWindowsCoverIsDropped(t *testing.T) {
 		t.Fatal("a closed window keeps no cover")
 	}
 }
+
+func TestACoverThatLapsedIsDropped(t *testing.T) {
+	w := world.New().AddPlugins(Plugin{})
+	main := platform.NewWindow()
+	menu := world.NewBasic()
+	w.AddEntities(main, menu)
+	w.RunFrames(1)
+	Cover(w, main, menu)
+	w.RunFrames(1)
+	if Covering(w, main) == nil {
+		t.Fatal("the cover does not hold the frame after it was set")
+	}
+	w.RunFrames(2)
+	if _, ok := of(w).covers[main]; ok {
+		t.Fatal("a cover nothing set again is kept, and what covered with it")
+	}
+}

@@ -26,7 +26,7 @@ func answer(rule platform.CloseRule, primary, last bool) (bool, bool) {
 }
 
 // Closing answers every window asked to close since it last ran, oldest
-// first: it emits WindowCloseRequested, then follows the window's OnClose
+// first: it emits WindowCloseRequested, then follows the window's Closing
 // rule, removing the window with a WindowClosed, quitting the World, both
 // or neither. The World runs it as each frame begins; a runner that must
 // know before the frame whether the World quits runs it itself.
@@ -40,7 +40,7 @@ func Closing(w *world.World) {
 			continue
 		}
 		world.Emit(w, platform.WindowCloseRequested{Window: win})
-		closes, quits := answer(win.OnClose(), left[0] == e, len(left) == 1)
+		closes, quits := answer(win.Closing(), left[0] == e, len(left) == 1)
 		if closes {
 			left = slices.DeleteFunc(left, func(x platform.Windowed) bool { return x == e })
 			world.Emit(w, platform.WindowClosed{Window: win})

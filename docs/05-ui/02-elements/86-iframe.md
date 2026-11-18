@@ -17,6 +17,8 @@ A Document shown in another: the element holds a `*ui.Document` the program buil
 | `ui.Iframe(child, args…)` | the element showing `child`; nil shows nothing in the box |
 | `doc.SetFrame(n, child)` | shows another Document from the next frame, nil for none; the one it showed loses its focus and selection. A Document shows in one frame at a time |
 | `doc.Frame(n)` | the Document it shows |
+| `ui.Guarded()` | on the iframe: a panic of the Document it shows, while it is laid out, handles its input, runs its callbacks or paints, stops there. The frame then shows nothing, the page round it goes on, and the panic and its stack are a line of `errors.log`. Without it the panic is the program's, as any other |
+| `doc.FrameBroken(n)` | the panic that emptied a guarded frame, a `*ui.FrameError` (its `Value` and `Stack`), nil for none, until `SetFrame`. The Document that panicked is let go of and is not to be shown again |
 | `doc.FrameShown(n)` | whether that Document was drawn in the last frame: false out of view, under `display: none`, or taken out. A program stops what feeds a frame nobody sees |
 | `doc.FramePoint(n, at)` | a point of the page, as `BoxOf` gives them, in the framed Document's own, for its `ElementAt`; false off the frame |
 
@@ -38,6 +40,8 @@ A Document shown in another: the element holds a `*ui.Document` the program buil
 | not yet | see [What is missing](../10-missing.md#frames) |
 
 Frames nest: a framed Document holds iframes of its own.
+
+An iframe taken out of its Document, itself or with an element round it, lets go of the Document it showed at the page's next frame, as `SetFrame(n, nil)` does: its focus and selection go, and nothing holds it any more. Put back in the same Document within the frame, as an element moved does, it keeps it; put back later, or in another Document, it shows nothing until `SetFrame`.
 
 | Default CSS | |
 |---|---|

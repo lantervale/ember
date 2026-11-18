@@ -9,7 +9,7 @@
 //	w.AddEntity(win)
 //
 // Removing the entity closes the window. What the user's close does is the
-// window's OnClose rule: by default the primary window's ends the program
+// window's Closing rule: by default the primary window's ends the program
 // and another's removes the entity and emits WindowClosed.
 package platform
 
@@ -38,7 +38,7 @@ type options struct {
 	aspectW, aspectH           int
 	icon                       []image.Image
 	ownTitleBar                bool
-	onClose                    CloseRule
+	closeRule                  CloseRule
 }
 
 func Title(title string) Option { return func(o *options) { o.title = title } }
@@ -100,9 +100,9 @@ const (
 	CloseAsks
 )
 
-// OnClose is what the window does when the user asks to close it,
+// Closing is what the window does when the user asks to close it,
 // CloseQuitsIfPrimary by default.
-func OnClose(rule CloseRule) Option { return func(o *options) { o.onClose = rule } }
+func Closing(rule CloseRule) Option { return func(o *options) { o.closeRule = rule } }
 
 // Background clears windows that show no camera, such as tool windows.
 func Background(c color.Color) Option { return func(o *options) { o.background = c } }
@@ -218,13 +218,13 @@ type Windowed interface {
 }
 
 // WindowCloseRequested is emitted when the user asks to close a window,
-// whatever its OnClose rule then does: a CloseAsks window waits for the
+// whatever its Closing rule then does: a CloseAsks window waits for the
 // program to answer it.
 type WindowCloseRequested struct {
 	Window *Window
 }
 
-// WindowClosed is emitted when a window's OnClose rule closes it. A window
+// WindowClosed is emitted when a window's Closing rule closes it. A window
 // the program removes itself, or whose close ends the program without
 // closing it, emits none.
 type WindowClosed struct {
@@ -267,15 +267,15 @@ func (w *Window) MinSize() geom.Vec2          { return w.opts.minSize }
 func (w *Window) MaxSize() geom.Vec2          { return w.opts.maxSize }
 func (w *Window) Icon() []image.Image         { return w.opts.icon }
 func (w *Window) OwnTitleBar() bool           { return w.opts.ownTitleBar }
-func (w *Window) OnClose() CloseRule          { return w.opts.onClose }
+func (w *Window) Closing() CloseRule          { return w.opts.closeRule }
 
-// SetOnClose changes what the user's close does, such as CloseAsks while
+// SetClosing changes what the user's close does, such as CloseAsks while
 // the window holds unsaved work.
-func (w *Window) SetOnClose(rule CloseRule) { w.opts.onClose = rule }
+func (w *Window) SetClosing(rule CloseRule) { w.opts.closeRule = rule }
 
 // RequestClose asks to close the window as its close button does: at the
 // start of the next frame the World emits WindowCloseRequested and
-// follows the window's OnClose rule. A menu's "Close window" calls it, and
+// follows the window's Closing rule. A menu's "Close window" calls it, and
 // a test, in the user's place.
 func (w *Window) RequestClose() { w.closing = true }
 

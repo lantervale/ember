@@ -86,12 +86,12 @@ func capture(win *platform.Window) {
 	f.CaptureKeyboard()
 }
 
-// owned drops the windows closed, their owners and covers, and the owners
-// gone from the World or hidden, and captures every window still owned,
-// as each frame begins.
+// owned drops the windows closed, their owners and covers, the covers
+// that lapsed, and the owners gone from the World or hidden, and captures
+// every window still owned, as each frame begins.
 func (r *registry) owned(w *world.World) {
-	for win := range r.covers {
-		if !r.has(win) {
+	for win, c := range r.covers {
+		if !r.has(win) || c.frame+1 < w.Time().Frame {
 			delete(r.covers, win)
 		}
 	}

@@ -12,7 +12,7 @@ The desktop loop ended when the first window closed, whatever else was open, and
 ## Decision
 
 - A close is a request. The close button, the system's shortcut for it and `win.RequestClose()` all ask; as the next frame begins the World emits `platform.WindowCloseRequested` and follows the window's rule. A test asks the same way, with no desktop.
-- The rule is the window's `platform.OnClose(rule)`, read by `win.OnClose()` and changed by `win.SetOnClose(rule)`:
+- The rule is the window's `platform.Closing(rule)`, read by `win.Closing()` and changed by `win.SetClosing(rule)`:
   - `CloseQuitsIfPrimary`, the default: the primary window's close ends the program, another's closes it. Programs written before this decision behave as they did.
   - `CloseQuits`: ends the program.
   - `CloseQuitsIfLast`: closes the window, and ends the program when none is left.

@@ -24,8 +24,8 @@ func TestALoopWithoutAWindowWaitsOutTheFixedStep(t *testing.T) {
 
 func TestTheDriverFollowsThePrimaryAsWindowsClose(t *testing.T) {
 	w := world.New().AddPlugins(wm.Plugin{})
-	main := platform.NewWindow(platform.Title("Main"), platform.OnClose(platform.CloseOnly))
-	tool := platform.NewWindow(platform.Title("Tool"), platform.OnClose(platform.CloseOnly))
+	main := platform.NewWindow(platform.Title("Main"), platform.Closing(platform.CloseOnly))
+	tool := platform.NewWindow(platform.Title("Tool"), platform.Closing(platform.CloseOnly))
 	w.AddEntities(main, tool)
 	d := &driver{world: w, natives: map[*platform.Window]*native{}}
 	w.AddView(&d.windows)

@@ -1,6 +1,8 @@
 package ui_test
 
 import (
+	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -10,7 +12,9 @@ import (
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/internal/errlog"
 	"github.com/lantervale/ember/platform"
+	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/align"
 	"github.com/lantervale/ember/world"
@@ -592,4 +596,216 @@ func TestADocumentAnIframeLetGoOfIsCollected(t *testing.T) {
 	if held.Value() != nil {
 		t.Fatal("a Document its iframe shows no more is still held")
 	}
+}
+
+// collected reports whether what held points at went, frames run between
+// the collections.
+func (p *framePage) collected(held ...weak.Pointer[ui.Document]) bool {
+	for range 10 {
+		runtime.GC()
+		left := 0
+		for _, h := range held {
+			if h.Value() != nil {
+				left++
+			}
+		}
+		if left == 0 {
+			return true
+		}
+		p.frames(1)
+	}
+	return false
+}
+
+func TestAnIframeTakenOutOfItsDocumentLetsGoOfTheOneItShowed(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		remove func(p *framePage, around *ui.Node)
+	}{
+		{"the element", func(p *framePage, _ *ui.Node) { p.slot.Parent().Remove(p.slot) }},
+		{"an element around it", func(p *framePage, around *ui.Node) { p.host.Body().Remove(around) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := newFramePage(t)
+			around := ui.Div(ui.ID("around"))
+			p.host.Body().Remove(p.host.ByID("long"))
+			p.host.Body().Remove(p.slot)
+			around.Append(p.slot)
+			p.host.Body().Append(around)
+			p.frames(2)
+			if !p.host.FrameShown(p.slot) {
+				t.Fatal("the Document is not shown")
+			}
+			p.click(p.inFrame(10, 70))
+			child, field := p.child, p.field
+			if !child.Focused(field) {
+				t.Fatal("the field of the frame did not take the focus")
+			}
+			held := weak.Make(p.child)
+			c.remove(p, around)
+			p.frames(2)
+			if p.host.Frame(p.slot) != nil {
+				t.Error("an iframe out of its Document still holds the one it showed")
+			}
+			if child.Focused(field) {
+				t.Error("the Document let go of kept its focus")
+			}
+			p.child, p.first, p.wide, p.field, p.last, p.childText = nil, nil, nil, nil, nil, nil
+			if !p.collected(held) {
+				t.Fatal("the Document of an iframe taken out of its Document is still held")
+			}
+		})
+	}
+}
+
+func TestAnIframePutBackKeepsItsDocumentOnlyWithinTheFrame(t *testing.T) {
+	p := newFramePage(t)
+	p.host.Body().Remove(p.host.ByID("long"))
+	p.host.Body().Remove(p.slot)
+	p.host.Body().Append(p.slot)
+	p.frames(2)
+	if p.host.Frame(p.slot) != p.child || !p.host.FrameShown(p.slot) {
+		t.Fatal("an iframe moved within a frame lost its Document")
+	}
+	p.host.Body().Remove(p.slot)
+	p.frames(1)
+	p.host.Body().Append(p.slot)
+	p.frames(2)
+	if p.host.Frame(p.slot) != nil {
+		t.Fatal("an iframe put back a frame later still shows the Document it had")
+	}
+	p.host.SetFrame(p.slot, p.child)
+	p.frames(2)
+	if !p.host.FrameShown(p.slot) {
+		t.Fatal("an iframe put back does not show the Document it is given")
+	}
+}
+
+func TestAnIframeMovedToAnotherDocumentShowsNothing(t *testing.T) {
+	for _, first := range []string{"the one it leaves", "the one it joins"} {
+		t.Run(first+" drawn first", func(t *testing.T) {
+			p := newFramePage(t)
+			other := ui.NewDocument()
+			if first == "the one it joins" {
+				p.w.RemoveEntity(p.host)
+				p.win.Add(other, p.host)
+			} else {
+				p.win.Add(other)
+			}
+			p.frames(2)
+			p.host.Body().Remove(p.slot)
+			other.Body().Append(p.slot)
+			p.frames(3)
+			if other.Frame(p.slot) != nil || other.FrameShown(p.slot) {
+				t.Fatal("an iframe moved to another Document still shows the one it had")
+			}
+			other.SetFrame(p.slot, p.child)
+			p.frames(2)
+			if !other.FrameShown(p.slot) {
+				t.Fatal("an iframe moved to another Document does not show the one it is given")
+			}
+		})
+	}
+}
+
+func TestADocumentThatGoesTakesWhatItsIframesShowWithIt(t *testing.T) {
+	p := newFramePage(t)
+	host, child := weak.Make(p.host), weak.Make(p.child)
+	p.w.RemoveEntity(p.host)
+	p.frames(2)
+	p.host, p.slot, p.cover, p.before, p.after, p.hostField, p.hostText = nil, nil, nil, nil, nil, nil, nil
+	p.child, p.first, p.wide, p.field, p.last, p.childText = nil, nil, nil, nil, nil, nil
+	if !p.collected(host, child) {
+		t.Fatalf("held after the Document left its window: the Document %v, the one its iframe showed %v",
+			host.Value() != nil, child.Value() != nil)
+	}
+}
+
+func TestAGuardedIframeOutlivesAPanicOfItsDocument(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		build func(p *framePage, armed *bool) *ui.Document
+		arm   func(p *framePage)
+	}{
+		{"as it draws", func(_ *framePage, armed *bool) *ui.Document {
+			doc := ui.NewDocument(ui.CSS(`body { margin: 0 } canvas { display: block; width: 50px; height: 50px }`))
+			canvas := ui.Canvas(func(c *twod.Canvas) {
+				c.PushClip(geom.Rect{W: 10, H: 10})
+				c.Push("inside")
+				if *armed {
+					panic("drawn wrong")
+				}
+				c.Pop()
+				c.PopClip()
+			})
+			doc.Body().Append(canvas, ui.Button(ui.ID("lower"), ui.Text("lower")))
+			return doc
+		}, func(p *framePage) { p.host.Frame(p.slot).Invalidate(p.host.Frame(p.slot).Body().Children()[0]) }},
+		{"as it is clicked", func(_ *framePage, armed *bool) *ui.Document {
+			doc := ui.NewDocument(ui.CSS(`body { margin: 0 } button { display: block; width: 100px; height: 30px }`))
+			doc.Body().Append(ui.Button(ui.ID("trap"), ui.Text("trap"), ui.OnClick(func() {
+				if *armed {
+					panic("clicked wrong")
+				}
+			})))
+			return doc
+		}, func(p *framePage) { p.click(p.inFrame(10, 10)) }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := newFramePage(t)
+			armed := false
+			ui.Guarded().Apply(p.slot)
+			p.host.Body().Remove(p.cover)
+			p.host.SetFrame(p.slot, c.build(p, &armed))
+			p.frames(3)
+			if !p.host.FrameShown(p.slot) || p.host.FrameBroken(p.slot) != nil {
+				t.Fatalf("the guarded frame is not shown, or broken before anything: %v", p.host.FrameBroken(p.slot))
+			}
+			armed = true
+			c.arm(p)
+			p.frames(3)
+			broken := p.host.FrameBroken(p.slot)
+			var raised *ui.FrameError
+			if !errors.As(broken, &raised) || !strings.Contains(fmt.Sprint(raised.Value), "wrong") ||
+				!strings.Contains(string(raised.Stack), "frame_test.go") {
+				t.Fatalf("the Document around a frame that panicked is told %v", broken)
+			}
+			if p.host.Frame(p.slot) != nil || p.host.FrameShown(p.slot) {
+				t.Error("the iframe still shows the Document that panicked")
+			}
+			if got := strings.Join(errlog.Lines(), "\n"); !strings.Contains(got, "wrong") ||
+				!strings.Contains(got, "frame_test.go") {
+				t.Errorf("the error log does not hold the panic and where it came from: %s", got)
+			}
+			after, _ := p.host.BoxOf(p.after)
+			p.click(after.Center())
+			if p.clicks["after"] != 1 {
+				t.Errorf("after the panic a button of the Document around heard %d clicks", p.clicks["after"])
+			}
+			if errs := align.Check(p.host); len(errs) > 0 {
+				t.Errorf("the Document around is out of line: %v", errs)
+			}
+			next := ui.NewDocument(ui.CSS(`body { margin: 0 }`))
+			next.Body().Append(ui.Button(ui.ID("next"), ui.Text("next")))
+			p.host.SetFrame(p.slot, next)
+			p.frames(2)
+			if p.host.FrameBroken(p.slot) != nil || !p.host.FrameShown(p.slot) {
+				t.Error("an iframe given another Document after a panic does not show it")
+			}
+		})
+	}
+}
+
+func TestAPanicOfAFramedDocumentGoesOnWithoutAGuard(t *testing.T) {
+	p := newFramePage(t)
+	child := ui.NewDocument()
+	child.Body().Append(ui.Canvas(func(*twod.Canvas) { panic("unguarded") }))
+	p.host.SetFrame(p.slot, child)
+	defer func() {
+		if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "unguarded") {
+			t.Fatalf("the panic of a Document in an iframe with no guard came out as %v", r)
+		}
+	}()
+	p.frames(3)
+	t.Fatal("the panic was swallowed")
 }

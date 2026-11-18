@@ -83,8 +83,12 @@ type Pipeline struct {
 	// Canvas is a canvas element's machine, made with it since it holds
 	// the game's drawing, for the Document to take as the element's.
 	Canvas any
-	// Frame is the Document an iframe shows, kept by ui.
-	Frame any
+	// Frame is the Document an iframe shows, kept by ui; Guarded is
+	// whether a panic of that Document stops at the iframe, and Broken
+	// the one that did.
+	Frame   any
+	Guarded bool
+	Broken  error
 	// Handlers are the node's callbacks (decision 0057), kept by ui.
 	Handlers any
 	// Follow is the entity the node follows on screen, kept by ui.

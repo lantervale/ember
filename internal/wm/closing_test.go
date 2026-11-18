@@ -80,12 +80,12 @@ func TestAProgramQuitsWithItsLastWindow(t *testing.T) {
 }
 
 func lastQuits() *platform.Window {
-	return platform.NewWindow(platform.OnClose(platform.CloseQuitsIfLast))
+	return platform.NewWindow(platform.Closing(platform.CloseQuitsIfLast))
 }
 
 func TestAProgramRunsOnWithoutAWindowAndOpensOneLater(t *testing.T) {
 	w := world.New().AddPlugins(Plugin{})
-	only := platform.NewWindow(platform.OnClose(platform.CloseOnly))
+	only := platform.NewWindow(platform.Closing(platform.CloseOnly))
 	w.AddEntities(only)
 	only.RequestClose()
 	w.RunFrames(3)
@@ -105,7 +105,7 @@ func TestAProgramRunsOnWithoutAWindowAndOpensOneLater(t *testing.T) {
 
 func TestAWindowThatAsksLeavesTheCloseToTheProgram(t *testing.T) {
 	w := world.New().AddPlugins(Plugin{})
-	doc := platform.NewWindow(platform.OnClose(platform.CloseAsks))
+	doc := platform.NewWindow(platform.Closing(platform.CloseAsks))
 	w.AddEntities(doc)
 	unsaved := true
 	var asked world.Reader[platform.WindowCloseRequested]
@@ -134,11 +134,11 @@ func TestARuleChangesWhileTheWindowIsOpen(t *testing.T) {
 	w := world.New().AddPlugins(Plugin{})
 	main, tool := platform.NewWindow(), platform.NewWindow()
 	w.AddEntities(main, tool)
-	if main.OnClose() != platform.CloseQuitsIfPrimary {
+	if main.Closing() != platform.CloseQuitsIfPrimary {
 		t.Fatal("a window given no rule has the default")
 	}
-	main.SetOnClose(platform.CloseOnly)
-	tool.SetOnClose(platform.CloseQuits)
+	main.SetClosing(platform.CloseOnly)
+	tool.SetClosing(platform.CloseQuits)
 	main.RequestClose()
 	w.RunFrames(1)
 	if w.Has(main) || w.ShouldQuit() {

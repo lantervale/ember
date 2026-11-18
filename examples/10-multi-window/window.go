@@ -20,7 +20,7 @@ func newSceneWindow() *platform.Window {
 		platform.Title("ember · scene"),
 		platform.Size(900, 600),
 		platform.Position(60, 80),
-		platform.OnClose(platform.CloseQuitsIfLast),
+		platform.Closing(platform.CloseQuitsIfLast),
 	)
 	w.Add(
 		camera.NewOrbit(camera.Distance(11), camera.Angles(0.64, 0.46)),
@@ -37,7 +37,7 @@ func newMapWindow() *platform.Window {
 		platform.Title("ember · map"),
 		platform.Size(400, 400),
 		platform.Position(980, 80),
-		platform.OnClose(platform.CloseQuitsIfLast),
+		platform.Closing(platform.CloseQuitsIfLast),
 	)
 	w.Add(
 		&Eye{world.NewBasic(), scene.At(0, 20, 0.01).LookingAt(geom.Zero3), render.Camera{OrthoHeight: 12}},

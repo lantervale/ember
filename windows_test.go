@@ -59,7 +59,7 @@ type eye struct {
 }
 
 func TestWhatBelongsToNoWindowMovesToTheNextPrimary(t *testing.T) {
-	main, tool := labelled("main", platform.OnClose(platform.CloseOnly)), labelled("tool")
+	main, tool := labelled("main", platform.Closing(platform.CloseOnly)), labelled("tool")
 	loose := ui.NewDocument(kit.Theme())
 	loose.Body().Append(kit.Label("loose"))
 	cam := &eye{BasicEntity: world.NewBasic()}
@@ -90,7 +90,7 @@ func TestWhatBelongsToNoWindowMovesToTheNextPrimary(t *testing.T) {
 }
 
 func TestAWorldRunsOnWithNoWindowAndTakesOneLater(t *testing.T) {
-	only := labelled("only", platform.OnClose(platform.CloseOnly))
+	only := labelled("only", platform.Closing(platform.CloseOnly))
 	loose := ui.NewDocument(kit.Theme())
 	loose.Body().Append(kit.Label("loose"))
 	w := ember.New().AddEntities(only, loose)

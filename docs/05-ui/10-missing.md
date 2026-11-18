@@ -123,6 +123,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a percentage `height` on an inline `iframe`, `canvas` or `img` | read as `auto`; made a block, it is the share of its container |
 | `scrolling="no"`, `allowtransparency`, `loading`, `sandbox`, `allow`, `name` | not read: what a frame may do is the program's |
 | a black `border: 2px inset` on an `iframe` | drawn as on any box, where Chrome keeps the greys of its default border |
+| an `iframe` moved to another Document | lets go of what it showed, as one taken out: `SetFrame` there shows it again |
+| a panic of a framed Document outside its own frame: a call the program makes on it, a fetch it started | the program's own, with or without `ui.Guarded()` |
+| a control taken out of its Document (a field, a canvas, an `iframe`) | its node and state stay held by the Document until the Document goes; an `iframe` lets go of what it showed |
 
 ## Pictures
 

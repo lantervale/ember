@@ -141,6 +141,8 @@ Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`
 - `doc.SetFrame(n, child)` swaps what it shows (nil for nothing), `doc.Frame(n)` reads it, `doc.FrameShown(n)` says whether it was drawn last frame.
 - The pointer reaches the child only where nothing of the page lies over the frame; the wheel scrolls the child first, then the page; keys go to the child while the frame has the page's focus; Tab walks in and out.
 - `doc.FramePoint(n, at) (geom.Vec2, bool)` turns a page point into the child's, for `child.ElementAt`.
+- Taken out of its Document, the iframe lets go of the child at the next frame; put back later it shows nothing until `SetFrame`.
+- A child the program does not trust (a page it loaded): `ui.Iframe(child, ui.Guarded())` stops a panic of its layout, input, callbacks or paint at the frame, which empties; `doc.FrameBroken(n) error` (a `*ui.FrameError`: `Value`, `Stack`) says so until `SetFrame`, and the stack is in `errors.log`. Without it a panic is the program's.
 - In tests, drive it through the window's input as any screen; automation ids of the child are under the frame's id.
 
 ## Focus and keys

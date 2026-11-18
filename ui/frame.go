@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/internal/errlog"
 	"github.com/lantervale/ember/internal/inputfeed"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
@@ -34,15 +36,50 @@ func Iframe(child *Document, args ...Arg) *Node {
 	return n
 }
 
+// Guarded has a panic of the Document an iframe shows stop at the
+// iframe: while it is laid out, handles its input, runs its callbacks
+// or paints. The iframe then shows nothing, FrameBroken says why, and
+// the panic and its stack are a line of the error log; the Document
+// that panicked is let go of, and is not to be shown again. Without it
+// the panic goes on, as any other of the program's.
+func Guarded() Arg { return option(func(n *Node) { dom.Data(n).Guarded = true }) }
+
+// FrameError is the panic of a Document in a guarded iframe, and the
+// stack where it was raised.
+type FrameError struct {
+	Value any
+	Stack []byte
+}
+
+func (p *FrameError) Error() string {
+	return fmt.Sprintf("the Document of an iframe panicked: %v", p.Value)
+}
+
+// FrameBroken is the panic that emptied the guarded iframe n, a
+// *FrameError, nil for none; SetFrame forgets it.
+func (d *Document) FrameBroken(n *Node) error {
+	if n == nil || n.IsText() || n.Tag() != dom.Iframe {
+		return nil
+	}
+	return dom.Data(n).Broken
+}
+
 // Frame is the Document the iframe n shows, nil for none and for what
 // is no iframe.
 func (d *Document) Frame(n *Node) *Document { return frameOf(n) }
 
 // SetFrame has the iframe n show child from the next frame, nil for
 // nothing: the Document it showed is let go of. A Document shows in one
-// iframe at a time.
+// iframe at a time. An iframe taken out of its Document lets go of the
+// one it showed too, at the Document's next frame: put back in it within
+// the frame it keeps it; later, or put in another Document, it shows
+// nothing until SetFrame.
 func (d *Document) SetFrame(n *Node, child *Document) {
-	if n == nil || n.Tag() != dom.Iframe || frameOf(n) == child {
+	if n == nil || n.IsText() || n.Tag() != dom.Iframe {
+		return
+	}
+	dom.Data(n).Broken = nil
+	if frameOf(n) == child {
 		return
 	}
 	if was := frameOf(n); was != nil {
@@ -110,9 +147,33 @@ func frameDraw(n *Node) func(c *twod.Canvas) {
 		}
 		prev := c.SetScope(nil)
 		c.SetScope(append(slices.Clone(prev), path...))
-		child.Draw(c)
+		if dom.Data(n).Guarded {
+			guarded(c, n, child)
+		} else {
+			child.Draw(c)
+		}
 		c.RestoreScope(prev)
 	}
+}
+
+// guarded draws child, the Document the guarded iframe n shows. A panic
+// of it empties n, which keeps it as why, and is a line of the error
+// log.
+func guarded(c *twod.Canvas, n *Node, child *Document) {
+	panicked, stack := c.Try(func() { child.Draw(c) })
+	if panicked == nil {
+		return
+	}
+	broken := &FrameError{Value: panicked, Stack: stack}
+	errlog.Print(fmt.Sprintf("ui: %v\n%s", broken, stack))
+	// What the Document holds may be half done: letting go of it is
+	// tried, and whatever that panics with adds nothing to the first.
+	func() {
+		defer func() { _ = recover() }()
+		child.unframe(n)
+	}()
+	child.framed = nil
+	dom.Data(n).Frame, dom.Data(n).Broken = nil, broken
 }
 
 // unframe lets go of the Document as the one n shows.
@@ -153,10 +214,15 @@ func (d *Document) syncFrames() {
 		}
 	}
 	for i, n := range d.frames {
-		if child := d.framedAt[i]; !slices.Contains(shown, n) || frameOf(n) != child {
+		child, placed := d.framedAt[i], slices.Contains(shown, n)
+		if !placed || frameOf(n) != child {
 			child.unframe(n)
 		}
+		if !placed && frameOf(n) == child {
+			dom.Data(n).Frame = nil
+		}
 	}
+	clear(d.framedAt)
 	d.frames, d.framedAt = shown, d.framedAt[:0]
 	for _, n := range shown {
 		child := frameOf(n)

@@ -4,7 +4,7 @@
 // and a default window when the game added none. Every window draws with
 // one WebGPU device; removing the entity closes it, and the oldest window
 // left is the primary from then. A close button asks its window to close
-// (Window.RequestClose), which the window's OnClose rule answers; the loop
+// (Window.RequestClose), which the window's Closing rule answers; the loop
 // ends when the World quits, and runs on without a window, at the fixed
 // step's pace, when the program closed its last one and didn't quit. A
 // window presents at
@@ -882,7 +882,7 @@ func (d *driver) left() []*native {
 }
 
 // closeRequested turns the close buttons pressed into requests to close
-// their windows, which the World answers at once by each window's OnClose
+// their windows, which the World answers at once by each window's Closing
 // rule, so the loop knows before the frame whether the program ends. The
 // system asking the program itself to quit, macOS's Quit, ends it
 // whatever the windows' rules.
