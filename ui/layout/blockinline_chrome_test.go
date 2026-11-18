@@ -34,10 +34,12 @@ func TestBlocksInsideInlinesMatchChrome(t *testing.T) {
 				ui.Span(ui.Div(ui.Class("b"), ui.Text("First.")), ui.Text("Between."),
 					ui.Div(ui.Class("b"), ui.Text("Second.")))),
 		),
-		"a list in an inline nav": styled(`nav { display: inline; } ul { margin: 0; padding: 0; list-style: none; overflow: hidden; }
+		"a list in an inline nav": styled(`nav { display: inline; }
+ul { margin: 0; padding: 0; list-style: none; overflow: hidden; }
 li { margin: 0 30% 0 15%; padding: 1em 0; border-top: 1px solid #999; } li a { display: block; margin-bottom: 4px; }`,
 			ui.Div(ui.Class("wide"), ui.Nav(ui.Text("\n"), ui.Ul(
-				ui.Li(ui.A(ui.Attr("href", "#"), ui.Text("Mid Century Modern")), ui.Text(" by "), ui.A(ui.Attr("href", "#"), ui.Text("Andrew"))),
+				ui.Li(ui.A(ui.Attr("href", "#"), ui.Text("Mid Century Modern")), ui.Text(" by "),
+					ui.A(ui.Attr("href", "#"), ui.Text("Andrew"))),
 				ui.Li(ui.A(ui.Attr("href", "#"), ui.Text("Garments")), ui.Text(" by "), ui.A(ui.Attr("href", "#"), ui.Text("Dan"))),
 			), ui.Text("\n"))),
 		),
