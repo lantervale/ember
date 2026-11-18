@@ -985,8 +985,22 @@ func (s Style) Font() *Font {
 	return face.Size(size)
 }
 
+// over is how many times the size text is drawn at in s the font f is: a
+// font is rasterized at a whole size, and a text of a size between two is
+// drawn from the nearest, its glyphs and advances scaled to its own.
+func (s Style) over(f *Font) float32 {
+	if s.Size <= 0 || f.size <= 0 {
+		return 1
+	}
+	return f.size / s.Size
+}
+
 // Measure is the size text takes in s.
-func (s Style) Measure(text string) geom.Vec2 { return s.Font().measure(text, s.Tracking) }
+func (s Style) Measure(text string) geom.Vec2 {
+	f := s.Font()
+	k := s.over(f)
+	return f.measure(text, s.Tracking*k).Scale(1 / k)
+}
 
 // Measure returns the size the text would occupy.
 func (c *List) Measure(text string, s Style) geom.Vec2 { return s.Measure(text) }
@@ -994,7 +1008,7 @@ func (c *List) Measure(text string, s Style) geom.Vec2 { return s.Measure(text) 
 // Text draws text with its top-left (or top-center/right per Align) at p.
 func (c *List) Text(p geom.Vec2, text string, s Style) geom.Vec2 {
 	f := s.Font()
-	size := f.measure(text, s.Tracking)
+	size := s.Measure(text)
 	switch s.Align {
 	case AlignCenter:
 		p.X -= size.X / 2
@@ -1006,17 +1020,23 @@ func (c *List) Text(p geom.Vec2, text string, s Style) geom.Vec2 {
 	if col == (color.Color{}) {
 		col = color.White
 	}
-	drawn, k := f, float32(1)
-	if scale := c.textScale(); scale > 1.01 {
+	drawn, scale := f, c.textScale()
+	if scale > 1.01 {
 		big := s
-		big.Size = f.size * scale
+		big.Size = f.size / s.over(f) * scale
 		drawn = big.Font()
-		k = drawn.size / f.size
+	} else {
+		scale = 1
+	}
+	k := s.over(drawn)
+	grid := k
+	if s.over(f) != 1 {
+		grid = scale
 	}
 	if s.Shadow {
-		c.glyphs(drawn, k, p.Add(geom.V2(1, 1.5)), text, color.RGBA(0, 0, 0, col.A*0.8), false, s)
+		c.glyphs(drawn, k, grid, p.Add(geom.V2(1, 1.5)), text, color.RGBA(0, 0, 0, col.A*0.8), false, s)
 	}
-	c.glyphs(drawn, k, p, text, col, true, s)
+	c.glyphs(drawn, k, grid, p, text, col, true, s)
 	return size
 }
 
@@ -1029,11 +1049,14 @@ func (c *List) textScale() float32 {
 
 // glyphs lays text out from p with f, a font k times the size the text is
 // drawn at: its metrics are divided by k; s's tracking follows each
-// cluster. The baseline lies on a whole atlas pixel and each glyph's quad
-// too, the glyph rasterized at the phase of its exact position, so text
-// keeps the font's advances and is drawn 1:1, never blurred.
-func (c *List) glyphs(f *Font, k float32, p geom.Vec2, text string, col color.Color, pictures bool, s Style) {
-	px := oversample * k
+// cluster. The baseline lies on a whole pixel of a grid of oversample*grid
+// to the point and each glyph's quad too, the glyph rasterized at the
+// phase of its exact position, so text keeps the font's advances. grid is
+// k for a text of a whole size, whose grid is the atlas's pixels: it is
+// drawn 1:1, never blurred. A size between two keeps the grid of the whole
+// sizes, its glyphs scaled onto it.
+func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col color.Color, pictures bool, s Style) {
+	px := oversample * grid
 	top := p.Y
 	if s.Baseline {
 		top -= f.ascent / k
