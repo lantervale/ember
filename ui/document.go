@@ -41,9 +41,14 @@ type Document struct {
 	tree       *box.Tree
 	fonts      *fonts.Set
 	faces      map[*fonts.Face]*twod.Face
-	sheets     []*css.Sheet
-	warns      []error
-	warned     map[string]bool
+	// authored are the stylesheets in cascade order, sheets what the
+	// cascade reads of those not disabled, and resheet is set once one
+	// changed: the next frame takes them again (take).
+	authored []*Sheet
+	sheets   []*css.Sheet
+	resheet  bool
+	warns    []error
+	warned   map[string]bool
 	// files are the stylesheets' file systems, where their images are;
 	// images the textures decoded from them.
 	files  []fs.FS
@@ -59,8 +64,11 @@ type Document struct {
 	// are those on their way.
 	fetch    ImageFetcher
 	fetching fetches
-	trans    *css.Transitions
-	emoji    *twod.EmojiSet
+	// pageFonts are the fonts of its @font-face rules that are fetched
+	// (FetchFonts).
+	pageFonts pageFonts
+	trans     *css.Transitions
+	emoji     *twod.EmojiSet
 	// clock is the World's real time at the last Draw, -1 before it.
 	clock float32
 	// systemFonts is whether font-family names the machine's fonts
@@ -214,16 +222,10 @@ func Stylesheet(fsys fs.FS, name string) DocumentOption {
 		for _, w := range warns {
 			d.warns = append(d.warns, w)
 		}
-		for _, f := range s.FontFaces() {
-			ttf, readErr := fs.ReadFile(fsys, f.Src)
-			if readErr == nil {
-				readErr = d.fonts.Add(f.Family, f.Weight, f.Italic, ttf)
-			}
-			if readErr != nil {
-				d.warns = append(d.warns, readErr)
-			}
-		}
-		d.sheets = append(d.sheets, s)
+		d.addFontFaces(s.FontFaces(), fsys)
+		text, _ := fs.ReadFile(fsys, name)
+		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: string(text), name: name})
+		d.resheet = true
 		d.files = append(d.files, fsys)
 	})
 }
@@ -238,7 +240,7 @@ func later(load func(d *Document)) DocumentOption {
 // SheetOption says more of a stylesheet given to CSS.
 type SheetOption func(*sheetSource)
 
-type sheetSource struct{ from string }
+type sheetSource struct{ from, media string }
 
 // From gives a sheet the address it was fetched from, as a browser
 // knows a linked sheet's: a url() in it is then resolved from that
@@ -254,9 +256,9 @@ func Images(fsys fs.FS) DocumentOption {
 }
 
 // CSS adds a stylesheet written in the code, as a <style> element does,
-// after the sheets before it. Its @font-face rules have no files to read,
-// so they are warnings: fonts come with Stylesheet. A sheet fetched
-// from elsewhere says where with From.
+// after the sheets before it. Its @font-face rules have no files to read:
+// they are fetched with FetchFonts, and warnings without it. A sheet
+// fetched from elsewhere says where with From.
 func CSS(text string, opts ...SheetOption) DocumentOption {
 	var src sheetSource
 	for _, o := range opts {
@@ -271,11 +273,10 @@ func CSS(text string, opts ...SheetOption) DocumentOption {
 		for _, w := range warns {
 			d.warns = append(d.warns, w)
 		}
-		for _, f := range s.FontFaces() {
-			d.warns = append(d.warns,
-				fmt.Errorf("css: @font-face %q in CSS has no file to read; load it with Stylesheet", f.Family))
-		}
-		d.sheets = append(d.sheets, s)
+		d.addFontFaces(s.FontFaces(), nil)
+		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: text, name: "style", from: src.from,
+			media: src.media})
+		d.resheet = true
 	})
 }
 
@@ -292,8 +293,13 @@ func (d *Document) ByID(id string) *Node {
 	return found
 }
 
-// Sheets are the document's stylesheets in order, after css.Default.
-func (d *Document) Sheets() []*css.Sheet { return d.sheets }
+// Sheets are the document's stylesheets as the cascade reads them, in
+// order, after css.Default: those not disabled, one changed since the
+// Document was made as it now stands.
+func (d *Document) Sheets() []*css.Sheet {
+	d.take()
+	return d.sheets
+}
 
 // Warnings is what the stylesheets and style attributes got wrong, and
 // files that could not be read.
@@ -387,6 +393,7 @@ func dropNode(s []*Node, n *Node) []*Node {
 // style shows the controls' state, then computes the styles of what
 // changed, a Shadow text's from its element's.
 func (d *Document) style() {
+	d.take()
 	d.pin()
 	if dom.Data(d.html).Dirty == 0 {
 		// Nothing was added or changed: only the controls' own state can
@@ -557,6 +564,9 @@ func (d *Document) drawSize(c *twod.Canvas) geom.Vec2 {
 }
 
 func (d *Document) face(f style.Font) *twod.Face {
+	if ch := d.fonts.Chained(f); ch != nil {
+		return d.chainFace(ch)
+	}
 	ff := d.fonts.Face(f)
 	if tf, ok := d.faces[ff]; ok {
 		return tf

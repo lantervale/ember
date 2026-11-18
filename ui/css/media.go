@@ -367,8 +367,9 @@ func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 		return mediaCond{}, false
 	}
 	inner := items(c.Args)
-	if len(inner) > 0 && (inner[0].Kind == LParen || inner[0].Kind == Function ||
-		isWord(inner[0], "not") && len(inner) > 1) {
+	nested := len(inner) > 0 && (inner[0].Kind == LParen ||
+		inner[0].Kind == Function && !strings.EqualFold(inner[0].Text, "calc"))
+	if nested || len(inner) > 1 && isWord(inner[0], "not") {
 		cond, ok := p.condition(inner, true)
 		if !ok {
 			return mediaCond{}, false
@@ -534,16 +535,7 @@ func mediaValueOf(kind mediaValueKind, v []Component, bare bool) (mediaValue, bo
 	unit := strings.ToLower(v[0].Unit)
 	switch kind {
 	case mediaLength:
-		switch {
-		case len(v) != 1:
-		case v[0].Kind == Number && v[0].Num == 0:
-			return mediaValue{}, true
-		case v[0].Kind != Dimension:
-		case slices.Contains([]string{"vw", "vh", "vmin", "vmax"}, unit):
-			return mediaValue{num: v[0].Num, unit: unit}, true
-		case lengthUnits[unit] != 0:
-			return mediaValue{num: v[0].Num * lengthUnits[unit]}, true
-		}
+		return mediaLengthOf(v, unit)
 	case mediaRatio:
 		switch {
 		case len(v) == 1 && v[0].Kind == Number && v[0].Num >= 0:
@@ -565,6 +557,26 @@ func mediaValueOf(kind mediaValueKind, v []Component, bare bool) (mediaValue, bo
 		}
 	case mediaWord:
 		// a word is no number
+	}
+	return mediaValue{}, false
+}
+
+// mediaLengthOf reads a length feature's value, v[0] in unit: a zero, a
+// calc(), a length of the viewport or one in CSS pixels.
+func mediaLengthOf(v []Component, unit string) (mediaValue, bool) {
+	switch {
+	case len(v) != 1:
+	case v[0].Kind == Number && v[0].Num == 0:
+		return mediaValue{}, true
+	case v[0].Kind == Function && strings.EqualFold(v[0].Text, "calc"):
+		if d, err := parseCalc(v[0].Args); err == nil && d.kind == dimLength {
+			return mediaValue{num: d.Px + 16*(d.Em+d.Rem)}, true
+		}
+	case v[0].Kind != Dimension:
+	case slices.Contains([]string{"vw", "vh", "vmin", "vmax"}, unit):
+		return mediaValue{num: v[0].Num, unit: unit}, true
+	case lengthUnits[unit] != 0:
+		return mediaValue{num: v[0].Num * lengthUnits[unit]}, true
 	}
 	return mediaValue{}, false
 }

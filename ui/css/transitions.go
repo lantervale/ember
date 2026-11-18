@@ -99,6 +99,25 @@ func (t *Transitions) SetMedia(m Media) bool {
 	return true
 }
 
+// SetSheets has the cascade read sheets, the author's, from now on:
+// what Matched and Computed answer from at once, and what the next
+// Compute styles the whole tree again from when they are not those it
+// had. Compute calls it with its own.
+func (t *Transitions) SetSheets(sheets []*Sheet) {
+	if slices.Equal(t.given, sheets) && t.all != nil {
+		return
+	}
+	t.stale = t.stale || t.all != nil
+	t.given = slices.Clone(sheets)
+	agent := userAgent()
+	if t.browser {
+		agent = browserAgent()
+	}
+	t.all = append([]*Sheet{agent}, sheets...)
+	t.treeStates = treeStates(t.all)
+	t.off, t.ranks = mediaOff(t.all, t.media), layerRanks(t.all)
+}
+
 // Compute restyles root as css.Compute does, starting a transition for
 // each changed property its new style's transitions cover.
 // Nothing is done while root and its tree are clean.
@@ -108,16 +127,7 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	if d := dom.Data(root); d.Style != nil && d.Dirty&dirty == 0 && !t.stale {
 		return nil
 	}
-	if !slices.Equal(t.given, sheets) || t.all == nil {
-		t.given = slices.Clone(sheets)
-		agent := userAgent()
-		if t.browser {
-			agent = browserAgent()
-		}
-		t.all = append([]*Sheet{agent}, sheets...)
-		t.treeStates = treeStates(t.all)
-		t.off, t.ranks = mediaOff(t.all, t.media), layerRanks(t.all)
-	}
+	t.SetSheets(sheets)
 	t.m.off, t.pm.off, t.m.ranks, t.pm.ranks = t.off, t.off, t.ranks, t.ranks
 	if t.changed == nil {
 		t.changed = t.restyled
@@ -129,6 +139,10 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	t.refresh()
 	return r.warns
 }
+
+// Restyled is how many elements Compute has worked the style of out so
+// far: what a change cost, for tests and tools.
+func (t *Transitions) Restyled() int { return t.computed }
 
 // Step advances every transition by dt seconds and writes their values
 // into Shown. It reports whether any still runs.

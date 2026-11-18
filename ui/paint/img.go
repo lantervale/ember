@@ -3,6 +3,7 @@ package paint
 import (
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -12,7 +13,7 @@ import (
 // and the picture snap to device pixels as Chrome's do, so a pixelated
 // picture's texels fall on whole pixels as a background's do.
 func (p *painter) img(e entry, alpha float32) {
-	src, hasSrc := e.b.Node.Attr("src")
+	src, hasSrc := dom.Picture(e.b.Node)
 	st := shown(e.b)
 	if v := p.shapes(src); v != nil {
 		p.shapesImg(e, v, st, alpha)

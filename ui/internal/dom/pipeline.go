@@ -1,6 +1,7 @@
 package dom
 
 import (
+	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -74,6 +75,11 @@ type Pipeline struct {
 	Marker        *style.Computed
 	MarkerText    string
 	HasMarkerText bool
+	// Markup is what an svg element holds, as SVG, and picture the
+	// address of the picture it makes in the colour pictured.
+	Markup   string
+	picture  string
+	pictured color.Color
 	// Canvas is a canvas element's machine, made with it since it holds
 	// the game's drawing, for the Document to take as the element's.
 	Canvas any

@@ -122,6 +122,7 @@ func TestWebkitValues(t *testing.T) {
 		"cursor: -webkit-grabbing":         "cursor: grabbing | ",
 		"transition: -webkit-transform 1s": "transition: transform 1s | ",
 		"--x: -webkit-flex":                "--x: -webkit-flex | ",
+		"text-align: -webkit-center":       "text-align: -webkit-center | ",
 	} {
 		if got := read(decl, Browser()); got != want {
 			t.Errorf("%s\n got %s\nwant %s", decl, got, want)
@@ -134,7 +135,7 @@ func TestWebkitValues(t *testing.T) {
 	}
 	// Chrome's own values keep their warning.
 	for _, decl := range []string{"display: -webkit-box", "width: -webkit-fill-available",
-		"text-align: -webkit-center", "background-image: -webkit-linear-gradient(top, #fff, #000)"} {
+		"background-image: -webkit-linear-gradient(top, #fff, #000)"} {
 		got, strict := read(decl, Browser()), read(decl)
 		if got != strict || !strings.Contains(got, "t.css:1:") {
 			t.Errorf("%s\n got %s\nwant %s, as without the option", decl, got, strict)
@@ -158,7 +159,7 @@ func TestWebkitSelectors(t *testing.T) {
 			t.Errorf("%s\n got %q %s\nwant %q and no warning", src, got, warns, want)
 		}
 	}
-	// :-webkit-any() is Chrome's, and ui has no :is() to read it as.
+	// :-webkit-any() is Chrome's: :is() with another weight, so not read as it.
 	if _, warns := asBrowser("p:-webkit-any(a, b) { color: #f00 }"); !strings.Contains(warns, ":-webkit-any()") {
 		t.Errorf(":-webkit-any(): %q", warns)
 	}

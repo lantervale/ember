@@ -179,19 +179,30 @@ func (n *Node) SetAttr(name, value string) {
 		n.SetStyle(value)
 		return
 	}
+	n.setAttr(name, value, DirtyStyle|DirtyTree|DirtyLayout)
+}
+
+// SetSelectorAttr sets on n an attribute that only selectors read, as the
+// Document's own data-input-device: n is styled again, and what reads it
+// below, and laid out only where a style then changed.
+func SetSelectorAttr(n *Node, name, value string) {
+	n.setAttr(name, value, DirtyStyle|DirtyTree)
+}
+
+func (n *Node) setAttr(name, value string, dirty Dirty) {
 	for i, a := range n.attrs {
 		if a.Name == name {
 			if a.Value != value {
 				n.attrs[i].Value = value
 				n.changed("[" + name)
-				n.mark(DirtyStyle | DirtyTree | DirtyLayout)
+				n.mark(dirty)
 			}
 			return
 		}
 	}
 	n.attrs = append(n.attrs, Attr{name, value})
 	n.changed("[" + name)
-	n.mark(DirtyStyle | DirtyTree | DirtyLayout)
+	n.mark(dirty)
 }
 
 func (n *Node) RemoveAttr(name string) {
@@ -293,6 +304,7 @@ func (n *Node) changed(keys ...string) {
 // mark flags the node and tells its ancestors a descendant changed.
 func (n *Node) mark(d Dirty) {
 	n.pipe.Dirty |= d
+	n.pipe.picture = ""
 	for p := n.parent; p != nil; p = p.parent {
 		p.pipe.Dirty |= DirtyDescendant
 	}

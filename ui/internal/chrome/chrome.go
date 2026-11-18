@@ -39,7 +39,7 @@ const Tolerance = 0.5
 const script = `<script>
 addEventListener("load", () => document.fonts.ready.then(() => {
 	const els = [document.documentElement, document.body,
-		...document.body.querySelectorAll("*:not([data-ember-implied])")];
+		...document.body.querySelectorAll("*:not([data-ember-implied]):not(svg *)")];
 	const out = document.createElement("script");
 	out.type = "application/json";
 	out.id = "ember-boxes";
@@ -592,7 +592,7 @@ func StylesAfter(d *ui.Document, size geom.Vec2, props []string, script string) 
 	head := `<script>
 addEventListener("load", () => document.fonts.ready.then(() => {
 	const els = [document.documentElement, document.body,
-		...document.body.querySelectorAll("*:not([data-ember-implied])")];
+		...document.body.querySelectorAll("*:not([data-ember-implied]):not(svg *)")];
 	` + script + `
 	const out = document.createElement("script");
 	out.type = "application/json";

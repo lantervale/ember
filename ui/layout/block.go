@@ -32,7 +32,7 @@ type blockItem struct {
 }
 
 func blockEstablishesBFC(st *style.Computed) bool {
-	return isScrollContainer(st) || st.AlignContent != style.AlignNormal || st.FlowRoot || st.Multicol()
+	return isScrollContainer(st) || st.AlignContent != style.AlignNormal || st.FlowRoot || st.Table || st.Multicol()
 }
 
 // standsBesideFloats reports a block-level box the floats never overlap though it is no
@@ -404,7 +404,7 @@ func (t *tree) slotBesideFloats(ctx *blockContext, it *blockItem, parent size, m
 		w := it.size.w
 		switch {
 		case some(w):
-		case standsBesideFloats(it.node):
+		case standsBesideFloats(it.node) || it.node.st.Table:
 			w = t.measureChildSize(it.node, noSize, parent, spaces{def(stretch), maxContentSpace},
 				inherentSize, horizontal, collapsibleIf(false))
 		default:
@@ -533,7 +533,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
-		if (nonStretch || it.node.role == roleTable || it.node.replaced) && widthStyle.Kind == style.Auto {
+		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table
+		if shrinks && widthStyle.Kind == style.Auto {
 			widthStyle = style.Length{Kind: style.FitContent}
 		}
 		keywordW := none
@@ -599,6 +600,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			autoSize = freeX / float32(autoCount)
 		}
 		resolved := rect{l: or(margin.l, autoSize), r: or(margin.r, autoSize), t: or(margin.t, 0), b: or(margin.b, 0)}
+		if autoCount == 0 {
+			resolved.l += blockAlignOffset(st.TextAlign, freeX)
+		}
 		insetOffset := relativeOffset(it, parent)
 		if it.inSameBFC && (!collapsingWithFirst || !ownCollapse[0]) {
 			yMarginOffset = active.collapseWithSet(topSet).resolve()
@@ -736,4 +740,18 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		lastBottom:    lastBottom,
 		firstBaseline: firstBaseline,
 	}
+}
+
+// blockAlignOffset is how far right of its place a block with free room beside it and
+// no auto margin stands in a container whose text-align places blocks (-webkit-center,
+// -webkit-right).
+func blockAlignOffset(a style.TextAlign, free float32) float32 {
+	switch a {
+	case style.BlockCenter:
+		return free / 2
+	case style.BlockRight:
+		return free
+	case style.Start, style.End, style.Left, style.Right, style.Center, style.Justify, style.BlockLeft:
+	}
+	return 0
 }

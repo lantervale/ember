@@ -70,7 +70,8 @@ var compared = map[string]func(s *style.Computed) string{
 	"margin-right": func(s *style.Computed) string { return length(s.Margin.Right) },
 	"opacity":      func(s *style.Computed) string { return num(s.Opacity) },
 	"text-align": func(s *style.Computed) string {
-		return []string{"start", "end", "left", "right", "center", "justify"}[s.TextAlign]
+		return []string{"start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",
+			"-webkit-center"}[s.TextAlign]
 	},
 	"text-transform": func(s *style.Computed) string {
 		return []string{"none", "uppercase", "lowercase", "capitalize"}[s.TextTransform]

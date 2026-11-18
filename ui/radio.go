@@ -49,6 +49,7 @@ func (d *Document) radioGroup(n *Node) []*Node {
 		return []*Node{n}
 	}
 	var out []*Node
+	d.grouped++
 	d.html.Walk(func(c *Node) bool {
 		if c.IsText() {
 			return false
@@ -61,6 +62,33 @@ func (d *Document) radioGroup(n *Node) []*Node {
 		return true
 	})
 	return out
+}
+
+// namedRadio reports whether n is a radio input grouped by its name.
+func (d *Document) namedRadio(n *Node) bool {
+	if n.Tag() != dom.Input || isAriaRadio(n) || !has(n, "name") {
+		return false
+	}
+	_, ok := d.machine(n).(*control.Radio)
+	return ok
+}
+
+// walkedGroup is radioGroup(n) for retarget, which places every radio
+// each time: a named input's group is read from the radios its last walk
+// of the tree found, not by a walk of its own. The list lives until the
+// next call.
+func (d *Document) walkedGroup(n *Node) []*Node {
+	name, _ := n.Attr("name")
+	if isAriaRadio(n) || name == "" {
+		return d.radioGroup(n)
+	}
+	d.group = d.group[:0]
+	for _, c := range d.radios {
+		if cn, _ := c.Attr("name"); cn == name {
+			d.group = append(d.group, c)
+		}
+	}
+	return d.group
 }
 
 // radioChecked reports whether the radio n is checked.
@@ -138,8 +166,7 @@ func (d *Document) radioArrow(n *Node, i control.Intent) bool {
 // radioTabIndex is the tabindex a radio takes in the Tab order: -1 (click
 // and arrows only) unless it is its group's checked one, or its first
 // when none is.
-func (d *Document) radioTabIndex(n *Node, i int) int {
-	group := d.radioGroup(n)
+func (d *Document) radioTabIndex(n *Node, group []*Node, i int) int {
 	for _, o := range group {
 		if d.radioChecked(o) {
 			if o == n {

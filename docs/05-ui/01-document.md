@@ -11,10 +11,11 @@ win.Add(doc)
 | Option | Default | |
 |---|---|---|
 | `kit.Theme()` | none | ember's look: the kit's stylesheet and pictures |
-| `ui.Stylesheet(fsys, name)` | none | a CSS file, after those before it; its `@font-face` files read from `fsys` |
+| `ui.Stylesheet(fsys, name)` | none | a CSS file, after those before it; its `@font-face` files read from `fsys`, TrueType, OpenType, WOFF or WOFF2 |
 | `ui.Images(fsys)` | none | where `url()` and an `img`'s `src` find pictures, by name, the last added first; no rules: `ui.Images(crypt.Art)` when a game's art lives apart from its sheets |
-| `ui.CSS(text)` | none | a sheet written in the code, as a `<style>` element, after those before it; an `@font-face` in it is a warning, fonts come with `Stylesheet`. `ui.CSS(text, ui.From(address))` for a sheet fetched from elsewhere: its `url()` are fetched from its address ([CSS](03-css.md#where-a-sheet-came-from)) |
+| `ui.CSS(text)` | none | a sheet written in the code, as a `<style>` element, after those before it; an `@font-face` in it is a warning without `ui.FetchFonts`, which fetches its file. `ui.CSS(text, ui.From(address))` for a sheet fetched from elsewhere: its `url()` are fetched from its address ([CSS](03-css.md#where-a-sheet-came-from)); `ui.Media(query)` has its rules apply only while the query holds, as a `style` element's `media` |
 | `ui.FetchImages(fetch)` | none | gets the pictures no file system of the Document holds, off the frame: `ui.FetchImages(web.Images(base))` for pictures on the web |
+| `ui.FetchFonts(fetch)` | none | gets the fonts of the `@font-face` rules no file system of the Document holds, off the frame, when text first needs them: `ui.FetchFonts(web.Fonts(base))` for a page's fonts ([below](#fonts-that-arent-files)) |
 | `ui.SystemFonts()` | off | `font-family` also finds the fonts installed on the machine, by family name in any case (`font-family: Georgia, serif`), after the Document's own; read off the frame, text showing in the next family of the list until they land. Not in the browser. For pages a game does not write itself ([decision 0081](../99-decisions/0081-system-fonts-are-an-option-of-a-document.md)) |
 | `ui.OverlayScrollbars()` | off | scrollbars drawn over the content, in no room of their own, as macOS and phones draw theirs: a box that scrolls keeps its whole width, where a classic bar takes 15 points. They scroll as classic ones and show whenever the content overflows, covering its last 8 points. For pages laid out for such bars ([decision 0083](../99-decisions/0083-overlay-scrollbars-are-an-option-of-a-document.md)) |
 | `ui.ScrollingViewport()` | off | the viewport scrolls, as a browser's: `html` is as high as the page, and what overflows the window scrolls by the wheel, the page keys and a scrollbar. The viewport takes `html`'s `overflow`, or `body`'s while `html`'s is visible, so `html { overflow: hidden }` stops it. A `position: fixed` box stays put, a sticky one sticks to the window, the canvas background's picture is placed in `html`'s box and scrolls with the page, and the whole window takes the pointer. For pages, not game screens ([decision 0084](../99-decisions/0084-a-scrolling-viewport-is-an-option-of-a-document.md)) |
@@ -29,6 +30,10 @@ win.Add(doc)
 | `node.Box()` | an element's place on screen, after layout |
 | `doc.BoxOf(n)` | its content box in window points, false until laid out or while hidden; where the game draws over an element that only holds room (give it `pointer-events: none` so the game's own widget gets the pointer); a resize reaches it the frame after |
 | `doc.ElementAt(at)` | the innermost element under a point in window points, as `elementFromPoint`: what a click there finds, through `pointer-events: none`; nil where no box takes the pointer. For a Document drawn in another's canvas, `host.PointerOn(canvas)` is the point to ask it |
+| `doc.BoxesOf(n)` | an element's four boxes, margin, border, padding and content (`ui.Boxes`), in the points of `BoxOf`; false as `BoxOf` |
+| `doc.MatchedRules(n)` | the rules that match an element, the strongest first, as a tool shows them: each a `css.Match` with its origin (`css.Author`, `Agent`, `Inline` for the style attribute, `Hint` for presentational attributes), its sheet, selector, place in the sheet, `@media` and `@layer`, and its declarations as written, `Overridden` on those another one wins over. Read-only, and made when asked: for tools, not for a frame's work |
+| `doc.ComputedStyle(n)`, `doc.ComputedValue(n, name)` | every longhand of an element after the cascade, by name, then its custom properties (`css.Property`): the winning declaration's value with `var()` replaced and lengths in `px`, an inherited or initial value otherwise, `Declared` telling a declared one; `ComputedValue` is one of them. Colours and keywords stay as written |
+| `doc.AddSheet(text, opts…)`, `doc.InsertSheet(before, text, opts…)`, `doc.StyleSheets()` | a stylesheet added while the Document shows, after the others or before one of them, and all of them in cascade order, each a `*ui.Sheet` to change ([CSS](03-css.md#sheets-changed-while-a-document-shows)) |
 | `doc.SelectionRange(field)`, `doc.SetSelectionRange(field, from, to)` | a text field's own selection in characters of its value, as `selectionStart`, `selectionEnd` and `setSelectionRange`; with `doc.Value` and `doc.SetValue`, a menu's Cut, Copy, Paste and Select all |
 | `doc.Selection()`, `doc.Select(anchor, focus)`, `doc.SelectAll()`, `doc.ClearSelection()` | the text selected outside the fields, read and set ([Events](04-events.md#selected-text)) |
 | `doc.Layout(size)` | lays it out now, as each frame does; for tests |
@@ -59,8 +64,42 @@ doc.Body().Append(ui.Div(ui.ID("banner")), ui.Img(ui.Attr("src", "today.png")))
 - Until a picture lands its element shows as one without a picture; then the Document lays out and paints again. Nothing is shown while it loads: a placeholder is the game's, a background colour under the picture.
 - A fetch that fails, or bytes that are no picture, are in `doc.Warnings()`, once.
 - `web.Images` resolves a sheet's `url()` from `base` too, not from the sheet's own address: a sheet that lives elsewhere names its pictures in full.
-- ui reads PNG; importing `ui/web` adds JPEG and GIF, and importing `ui/svg` adds SVG ([below](#svg-pictures)). A picture over `web.MaxBytes` (8 MB) or slower than `web.Timeout` (15 s) is an error.
+- ui reads PNG; importing `ui/web` adds JPEG, GIF and WebP (lossy and lossless, with alpha; decision 0096), and importing `ui/svg` adds SVG ([below](#svg-pictures)). A picture is known by its first bytes, not its name. A picture over `web.MaxBytes` (8 MB) or slower than `web.Timeout` (15 s) is an error.
 - A fetched picture stays for the Document's life; nothing is cached between Documents or runs.
+
+## Fonts that aren't files
+
+An `@font-face` of a `Stylesheet` reads its file from the sheet's file system. With `ui.FetchFonts`, a face whose file no file system holds, and every face of a sheet given as text, is fetched instead of being a warning:
+
+```go
+doc := ui.NewDocument(
+	ui.CSS(sheet, ui.From("https://site.example/css/site.css")),
+	ui.FetchFonts(web.Fonts("https://site.example/")),
+)
+```
+
+| | |
+|---|---|
+| `ui.FontFetcher` | `func(url, sheet string) ([]byte, error)`: the font's bytes for the address its `src` names, in full when the sheet says where it came from (`ui.From`); `sheet` is that address, what a request gives as its referrer |
+| `web.Fonts(base)` (package `ui/web`) | a fetcher over HTTP, as `web.Images`: a font over `web.MaxFontBytes` (16 MB) or slower than `web.Timeout` is an error |
+| `doc.FontsLoading()` | how many fonts are on their way |
+| `doc.FontsReady(families, weight, italic, text)`, `doc.LoadFonts(…)` | whether that text waits for no font, and the same after asking for those it needs: what a browser's `document.fonts.check` and `load` answer |
+
+- The first entry of `src` ui reads is taken: by its `format()` (`truetype`, `opentype`, `woff`, `woff2`, and their `-variations`), else by its extension; an `.eot`, an SVG font and a `tech(color-…)` are passed over. When it fails the next is tried. `local()` is looked for only with `ui.SystemFonts()`; a `data:` address needs no fetcher.
+- A font is asked for once per Document, by all the faces that name it, and only when text needs a character its face draws: a face no text uses, or whose `unicode-range` holds none of the text, is never fetched. So a Google Fonts sheet of thirty subsets fetches the one or two the page is written in.
+- Until it lands the text shows in the next family of its list; then the Document lays out and paints again, once a frame however many landed. That is `font-display: swap` for every value of `font-display`. A character no family there draws while a face that would is on its way (an icon of an icon font) shows as nothing, and takes no room.
+- `font-weight` takes one weight or two (a variable font's range); the face nearest the text's weight and style is used, the last declared of two alike. No bold or italic is made up from a regular face.
+- A fetch that fails, or bytes that are no font, are in `doc.Warnings()` once, with the address, and the text stays as it is.
+
+What is read of a font file:
+
+| | |
+|---|---|
+| TrueType (`glyf`) and OpenType (`CFF `) | read as they are |
+| WOFF, WOFF2 | unpacked to the same (zlib; Brotli, with WOFF2's packed `glyf`, `loca` and `hmtx`): a file whose sizes or offsets do not hold, or over 32 MB unpacked, is an error ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)) |
+| variable fonts | drawn as their default instance: the axes (`wght`, `wdth`, `opsz`) are not moved, so every weight of the range looks the same |
+| colour fonts (`COLR`, `CBDT`, `sbix`, `SVG `) | their plain outlines when the file has some, in the text's colour; a file of bitmaps or SVG alone is not read |
+| collections (`.ttc`, a WOFF2 collection), `CFF2`, `.eot`, SVG fonts | not read: a warning |
 
 The fetcher is any function, so a game can read from its own cache or a save folder the same way. The page below has one that holds its two pictures back, a second and two, so they land while you watch:
 
@@ -105,6 +144,8 @@ ui: image badge.svg: image/svg+xml is not drawn: clip-path, text
 ```
 
 A file that is no SVG, or over the reader's limits (16 MB, 100,000 elements or shapes), is a broken image with a warning, as any picture that can't be read. An SVG is never scripted or animated, and what it refers to outside itself is not fetched.
+
+An SVG written in the page itself is an [`svg` element](02-elements/85-svg.md), `ui.Svg(markup, args…)`: the same reader, with `currentColor` the colour of the element's text.
 
 Limits: an `img` with a `viewBox` alone is not given a width as a flex item with no size or as an absolutely positioned box, where Chrome gives it the room there; give it a width. A `border-image` from an SVG is drawn at the size the file asks for, one pixel a point. To use an SVG outside ui, read it with the `svg` package itself and make a texture of the picture: `p, err := svg.LoadPicture(fsys, "star.svg")`, `img, err := p.Rasterise(64, 64)`, `twod.NewTexture(img)`.
 

@@ -306,7 +306,7 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		t.buildTable(n, e)
 		return n
 	}
-	if e.Tag() == dom.Img {
+	if e.Tag() == dom.Img || e.Tag() == dom.Svg {
 		t.buildImage(n, e)
 		return n
 	}

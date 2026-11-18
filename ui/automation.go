@@ -160,7 +160,11 @@ func (d *Document) recorded(n *Node) recorded {
 	}
 	switch m := d.machine(n).(type) {
 	case *control.Button:
-		return recorded{automation.RoleButton, ariaLabelOr(n, visibleText(n, d.shown)), nil, enabled, pressOnly()}
+		label := visibleText(n, d.shown)
+		if sh := dom.Data(n).Shadow; sh != nil {
+			label = d.shown(sh)
+		}
+		return recorded{automation.RoleButton, ariaLabelOr(n, label), nil, enabled, pressOnly()}
 	case *control.Checkbox:
 		return recorded{automation.RoleToggle, d.labelOf(n, d.shown), m.Checked, enabled, pressOrSet()}
 	case *control.Select:
@@ -215,7 +219,7 @@ func (d *Document) recorded(n *Node) recorded {
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label,
 		dom.Button, dom.Input, dom.Select, dom.Option, dom.Textarea, dom.Details, dom.Summary, dom.Dialog, dom.Table,
 		dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption,
-		dom.Tfoot,
+		dom.Tfoot, dom.Svg,
 		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,

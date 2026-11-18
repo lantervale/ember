@@ -14,6 +14,9 @@ import (
 	"github.com/lantervale/ember/ui/internal/dom"
 )
 
+// Restyled is how many elements d has worked the style of out so far.
+func Restyled(d *Document) int { return d.trans.Restyled() }
+
 // ShownBackground is what paint draws as n's background now.
 func ShownBackground(n *Node) color.Color { return dom.Data(n).Shown.Background }
 

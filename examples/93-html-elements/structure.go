@@ -25,6 +25,7 @@ func structure() map[string]element {
 		"caption": {scores, 224},
 		"tfoot":   {scores, 224},
 		"img":     {img, 136},
+		"svg":     {svg, 96},
 		"hr":      {hr, 152},
 		"canvas":  {canvas, 232},
 	}
@@ -108,6 +109,18 @@ func img(*ui.Document) *ui.Node {
 		ui.Img(ui.Attr("src", "panel.png"), ui.Attr("alt", "A panel")),
 		ui.Text(" "),
 		ui.Img(ui.Attr("src", "panel.png"), ui.Style("width: 72px; image-rendering: pixelated")),
+	)
+}
+
+// svg is a compass drawn in the page, in the colour of its text, small
+// and large.
+func svg(*ui.Document) *ui.Node {
+	const compass = `<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>` +
+		`<path d="M12 4l3 8-3 8-3-8z" fill="currentColor"/>`
+	return ui.Div(ui.Style("color: #e0a040"),
+		ui.Svg(compass, ui.Attr("viewBox", "0 0 24 24"), ui.Attr("width", "24")),
+		ui.Text(" "),
+		ui.Svg(compass, ui.Attr("viewBox", "0 0 24 24"), ui.Style("width: 72px; color: #7fb0d8")),
 	)
 }
 

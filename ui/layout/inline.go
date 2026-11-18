@@ -617,16 +617,35 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 	}
 }
 
+// compress takes the pictures whose width or max-width is a percentage down to their
+// margins: such a picture asks its container for no width at its narrowest, as in CSS
+// Sizing 3 (compressible replaced elements).
+func (c *inlineContent) compress() {
+	for i := range c.pieces {
+		p := &c.pieces[i]
+		if p.kind != atomic {
+			continue
+		}
+		a := c.runs[p.run].atomic
+		if st := a.node.st; a.node.replaced && (st.Size.Width.IsPercent || st.MaxSize.Width.IsPercent) {
+			c.resize(p, a.margin.horizontal())
+		}
+	}
+}
+
 // contentWidths is the min-content width (the widest unbreakable segment, or the widest
 // line where nothing wraps) and the max-content width (the widest line between forced
 // breaks).
 func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 	var minW, maxW float32
+	// A percentage of the width being found is no width yet.
+	parent.w = none
 	t.sizeAtomics(c, maxContentSpace, parent)
 	for _, l := range c.lines(unbounded) {
 		maxW = max(maxW, l.x+l.width)
 	}
 	t.sizeAtomics(c, minContentSpace, parent)
+	c.compress()
 	if !c.anyWraps() {
 		for _, l := range c.lines(unbounded) {
 			minW = max(minW, l.x+l.width)
@@ -821,6 +840,34 @@ func (c *inlineContent) shown(l line) []piece {
 	return out
 }
 
+// joined is the pen from at past the pieces from end no line may end among: the units
+// joined by the spaces of text that does not wrap.
+func (c *inlineContent) joined(at pen, end int) pen {
+	for end < len(c.pieces) && c.pieces[end].kind == gap && !c.wrapsAt(end) {
+		from := end
+		for end < len(c.pieces) && c.pieces[end].kind == gap {
+			end++
+		}
+		if end == len(c.pieces) || !c.joins(end) {
+			break
+		}
+		for end = c.unitEnd(end); from < end; from++ {
+			at.step(c.pieces[from], 0)
+		}
+	}
+	return at
+}
+
+// joins reports whether piece i is of a unit a line holds: not a break.
+func (c *inlineContent) joins(i int) bool {
+	switch c.pieces[i].kind {
+	case word, atomic, edge, marker, anchor:
+		return true
+	case gap, breakHere, newline, emergency:
+	}
+	return false
+}
+
 // measureUnit is the pen past pieces i to end from at, with the gaps pending since then,
 // and the pen past them alone.
 func (c *inlineContent) measureUnit(at pen, pending, i, end int) (pen, pen) {
@@ -903,7 +950,7 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 				kept.step(c.pieces[k], 0)
 			}
 		}
-		if !b.blank && !hung && c.wrapsAt(i) && next.end() > width {
+		if !b.blank && !hung && b.wrapsBefore(i) && (next.end() > width || c.joined(next, end).end() > width) {
 			b.finish(i)
 			return i, true
 		}
@@ -922,6 +969,15 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 		i = end
 	}
 	return i, false
+}
+
+// wrapsBefore reports whether the line may end before piece i: by the white-space of the
+// space pending before it, whose text the break is in, and by the piece's own after none.
+func (b *breaker) wrapsBefore(i int) bool {
+	if b.pending >= 0 {
+		return b.c.wrapsAt(b.pending)
+	}
+	return b.c.wrapsAt(i)
 }
 
 // between takes piece i when it stands between the units of a line: a space, dropped
@@ -965,9 +1021,10 @@ func (b *breaker) breakInside(i, end int, width float32) (int, bool) {
 	return take + 1, true
 }
 
-// close ends the breaking: the line left open joins the lines when it holds something.
+// close ends the breaking: the line left open joins the lines when it holds something,
+// more than the ends of the spans a forced break ended the line before in.
 func (b *breaker) close() []line {
-	if !b.empty || len(b.out) == 0 && b.cur.to > b.cur.from {
+	if !b.empty && !b.trails() || len(b.out) == 0 && b.cur.to > b.cur.from {
 		b.cur.width = b.kept.end()
 		b.out = append(b.out, b.cur)
 	}
@@ -975,6 +1032,20 @@ func (b *breaker) close() []line {
 		b.out = []line{}
 	}
 	return b.out
+}
+
+// trails reports an open line after a forced break that holds only span edges of no
+// width: no line of its own, as after a br that ends its block.
+func (b *breaker) trails() bool {
+	if !b.blank || len(b.out) == 0 || !b.out[len(b.out)-1].forced {
+		return false
+	}
+	for _, p := range b.c.pieces[b.cur.from:b.cur.to] {
+		if p.kind != edge || p.width != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (b *breaker) breakAll(width float32) []line {
@@ -1188,6 +1259,9 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) 
 			lineW = min(avail.w.v, maxW)
 		}
 		w = max(lineW, minW)
+	}
+	if !some(parent.w) {
+		parent.w = w
 	}
 	t.sizeAtomics(c, def(lineW), parent)
 	if c.flow != nil {
@@ -1709,11 +1783,11 @@ func alignOffset(a style.TextAlign, free float32) float32 {
 		return 0
 	}
 	switch a {
-	case style.Right, style.End:
+	case style.Right, style.End, style.BlockRight:
 		return free
-	case style.Center:
+	case style.Center, style.BlockCenter:
 		return free / 2
-	case style.Start, style.Left, style.Justify:
+	case style.Start, style.Left, style.Justify, style.BlockLeft:
 	}
 	return 0
 }

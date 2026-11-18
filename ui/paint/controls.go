@@ -64,7 +64,7 @@ func marked(b *box.Box) bool {
 	}
 	t := b.Node.Tag()
 	return t == dom.Input || t == dom.Textarea || t == dom.Progress || t == dom.Meter ||
-		t == dom.Select || t == dom.Img || t == dom.Canvas
+		t == dom.Select || t == dom.Img || t == dom.Svg || t == dom.Canvas
 }
 
 // modal reports whether b is a dialog shown modal, with a backdrop.
@@ -123,7 +123,7 @@ func (p *painter) marks(e entry, alpha float32) {
 	case dom.Meter:
 		m := meterOf(p.machine(n), n)
 		p.bar(c, float32(m.Fraction()), trackInk(st, alpha), fade(meterColors[m.Region()], alpha))
-	case dom.Img:
+	case dom.Img, dom.Svg:
 		p.img(e, alpha)
 		if p.sel != nil && p.sel.Holds(e.b.Node) {
 			// a picture inside a selection is tinted with it, as Chrome's
@@ -255,7 +255,7 @@ func tracked(b *box.Box) bool {
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
 		dom.Select, dom.Option, dom.Textarea, dom.Details, dom.Summary, dom.Dialog, dom.Table, dom.Thead, dom.Tbody, dom.Tr,
-		dom.Th, dom.Td, dom.Img, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
+		dom.Th, dom.Td, dom.Img, dom.Svg, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
 		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,

@@ -106,13 +106,13 @@ func (n *native) StartDrag() {
 	if n.scripted || !ownsTitleBar {
 		return
 	}
-	startDrag(n.h)
 	n.window.Input().SetMouseButton(input.MouseLeft, false)
+	n.between(func() { startDrag(n.h) })
 }
 
 func (n *native) DoubleClickTitleBar() {
 	if !n.scripted {
-		doubleClickTitleBar(n.h)
+		n.between(func() { doubleClickTitleBar(n.h) })
 	}
 }
 

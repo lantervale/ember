@@ -65,9 +65,9 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		if f.Italic {
 			style = "italic"
 		}
-		fmt.Fprintf(&b, "@font-face { font-family: %q; font-weight: %d; font-style: %s; "+
+		fmt.Fprintf(&b, "@font-face { font-family: %q; %s font-style: %s; "+
 			"src: url(data:font/ttf;base64,%s); }\n",
-			f.Family, f.Weight, style, base64.StdEncoding.EncodeToString(f.TTF))
+			f.Family, f.Descriptors(), style, base64.StdEncoding.EncodeToString(f.TTF))
 	}
 	set := fonts.Of(d)
 	for _, f := range set.Faces() {
@@ -140,6 +140,10 @@ func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 	}
 	b.WriteByte('>')
 	if n.Tag().Void() {
+		return
+	}
+	if n.Tag() == dom.Svg {
+		b.WriteString(n.Markup() + "</svg>")
 		return
 	}
 	if ph, ok := n.Attr("placeholder"); ok && n.Tag() == dom.Select && d.Selected(n) < 0 {

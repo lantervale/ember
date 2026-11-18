@@ -67,6 +67,12 @@ func (d Dim) Resolve(basis float64) float64 {
 	return d.Px + d.Pct*basis/100
 }
 
+// absoluteUnits are the absolute lengths in CSS pixels.
+//
+//nolint:gochecknoglobals // lookup table
+var absoluteUnits = map[string]float64{"px": 1, "in": 96, "cm": 96 / 2.54, "mm": 96 / 25.4, "q": 96 / 101.6,
+	"pt": 96.0 / 72, "pc": 16}
+
 // parseDim reads one component as a length, percentage, number or flex
 // value, calc() included.
 func parseDim(c Component) (Dim, error) {
@@ -76,17 +82,19 @@ func parseDim(c Component) (Dim, error) {
 	case Percentage:
 		return Dim{Pct: c.Num, kind: dimPercent}, nil
 	case Dimension:
-		switch strings.ToLower(c.Unit) {
-		case "px":
-			return Dim{Px: c.Num, kind: dimLength}, nil
+		unit := strings.ToLower(c.Unit)
+		if px, ok := absoluteUnits[unit]; ok {
+			return Dim{Px: c.Num * px, kind: dimLength}, nil
+		}
+		switch unit {
 		case "em":
 			return Dim{Em: c.Num, kind: dimLength}, nil
-		case "rem":
+		case unitRem:
 			return Dim{Rem: c.Num, kind: dimLength}, nil
 		case "fr":
 			return Dim{Fr: c.Num, kind: dimFlex}, nil
 		}
-		return Dim{}, fmt.Errorf("unit %q is not supported; use px, %%, em, rem or fr", c.Unit)
+		return Dim{}, fmt.Errorf("unit %q is not supported; use px, %%, em, rem, fr or an absolute unit", c.Unit)
 	case Function:
 		if strings.EqualFold(c.Text, "calc") {
 			return parseCalc(c.Args)

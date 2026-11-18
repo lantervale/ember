@@ -19,7 +19,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
 | `text-decoration-skip-ink`, a decoration's shadow | a line is drawn through descenders, and `text-shadow` leaves it out |
 | `vertical-align` but `baseline`, `sub`, `super` | refused |
-| fonts a script loads (Typekit…) | ui runs no script: the next family of the list is used, so lines wrap elsewhere |
+| fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
 | some installed fonts | `ui.SystemFonts()` skips a file it cannot read; nothing waits for the scan in the public API |
 | a span ending a centred line | up to 3 points narrower than Chrome's |
 
@@ -42,15 +42,27 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
 | columns right to left | left to right only |
-| `display: table` for layout, `border-collapse` | refused: grid, `border-spacing` |
+| `display: table-row`, `table-cell` and the other parts of a table on an element that is none, `border-collapse` | refused: grid, `border-spacing`; `display: table` itself is a block that shrinks to its content |
+| a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
+| `border-inline`, `border-block` and their `-width`, `-style`, `-color`, `overflow-inline`, `overflow-block` | refused; the logical names of one side are [read](03-css.md#logical-properties) |
+| a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
+| the diagonal where two solid border sides of other colours meet | not smoothed, where Chrome blends the two colours along it |
 | a picture with a ratio and no size (an SVG with only a `viewBox`) as an unsized flex item or absolutely positioned | no width, where Chrome gives it one: give it a width |
 | a replaced grid item | stretched to its cell |
+| a picture made a block (`display: block`) with a percentage `width` or `max-width`, in a box as wide as its content (a float, a flex item, a grid track) | counts for its own width at the box's narrowest, where Chrome counts it for none, so the box is wider, and a float round one is 3 points taller; one left inline counts for none |
+| a grid line named by no area (`grid-column-end: b` with no area `b`), or `grid-area: nowhere` | auto, where Chrome makes a line of that name after the grid |
+| names of lines in a track list (`[full-start] 1fr [full-end]`) | refused |
 | a `position: fixed` box in an element that scrolls on its own | moves with that element |
 | an absolutely positioned box placed by a block above an element that scrolls | not cut by that element, as in Chrome, but moves with its scroll |
 | a part with no text of an inline element cut by a block inside it, when it has a border or a padding | no line and no box, where Chrome keeps a line for it |
 | `position: relative`, `opacity` on an inline element holding blocks | its lines move and fade, the blocks inside it do not |
+| an empty inline element after a `br` that ends its block | its box of no size stands on the `br`'s line, where Chrome puts it a line lower |
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
 | `disabled` on a `form` or a `fieldset`, `bdo`, a `font` element's attributes | read, and they do nothing |
+| the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `col` and `colgroup` | read, and they do nothing |
+| `vertical-align` on a table cell from a sheet | refused as elsewhere: the cell's content is in the middle unless `valign` or `align-content` says where |
+| `valign="baseline"` | as `top` |
+| a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |
 
 ## Backgrounds and borders
 
@@ -68,11 +80,16 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 |---|---|
 | `@import` | not followed |
 | `@keyframes`, `animation` | refused: `transition` |
-| `@font-face` in a `ui.CSS` sheet | warns: fonts are read from a `Stylesheet`'s files; a page's icon font is not fetched, so its icons show as the letters they are written with, in the next family, as Chrome shows them when the file fails to load |
+| `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
 | `prefers-color-scheme`, `hover`, `pointer`, `prefers-reduced-motion` | fixed answers: light, a mouse, no preference |
 | viewport units in a media query's length | refused |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
-| `filter`, `clip-path`, `mask` | refused |
+| `filter`, `clip-path` | refused |
+| a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
+| the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
+| `:has()`, `:focus-within`, `:lang()`, `:empty`, `:target`, `:read-only`, `:read-write`, the `s` flag of an attribute selector | refused: the rule is dropped |
+| `min()`, `max()`, `clamp()` in a length, `vh` and `vw` | refused |
+| `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `@counter-style`, `revert` | refused |
 
 ## Windows
 
@@ -82,10 +99,25 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `app-region` as Chrome computes it | inherited here, where Chrome's is not: a child of a drag box computes `drag`, not `none`; the regions are the same |
 | a header merged with the title bar on Windows and Linux | `platform.OwnTitleBar()` keeps the system's title bar there, and `app-region: drag` does nothing |
 | leaving a text field from code | no `doc.Blur()`: the web explorer's address field keeps the focus after Enter |
+| a key pressed in a focused text field, told to a callback | `OnKey` hears none, where a page's `keydown` hears every key and may prevent what it does: light's console walks its history by Alt+Up and Alt+Down (menu shortcuts), not the arrows alone, and has no Shift+Enter for a new line |
+| setting a focused text field's value while it is typed in | `doc.SetValue` waits for a change or a submit: light's console moves the focus away and back to show a line of its history |
 | a context click by Control and the main button on macOS | only the secondary button raises `OnContextMenu` |
 | the place of a context click | the event carries none: read `win.Input().Mouse()` in the callback |
+| a press on an element and the pointer's moves while it is held (`pointerdown`, `pointermove`, pointer capture) | no callback hears them: light's developer tools read `win.Input().Mouse()` and `Down` each frame to drag their edge, and find what was pressed with `doc.ElementAt` |
+| the tooltip of a `title` attribute | not shown: light's Network rows name their address in its status bubble instead |
 | a `role="menu"` shown without an opener closing on a choice | stays open: its item's callback removes `open` |
 | a Document drawn in another's canvas, under an element of the outer one | still takes the pointer there: the outer stops drawing it (`doc.Invalidate`) while its own menu is open over it |
+
+## Pictures
+
+| Missing | Today |
+|---|---|
+| an animated WebP | no picture, and a warning (`webp: invalid format`); an animated GIF shows its first frame |
+| AVIF, BMP, ICO | no picture, and a warning; `web.Images` asks for none of them |
+| `srcset` and `sizes` on an `img`, `picture` with its `source`s | not read: the `img`'s `src` is the picture |
+| the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
+| an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |
+| an `svg` element whose markup changes every frame | each state is one more picture the Document keeps |
 
 ## SVG pictures
 
@@ -94,7 +126,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `text`, `clip-path`, `mask`, `filter`, `pattern`, `image`, `marker`, `symbol`, a nested `svg`, animation | not drawn, and named in a warning; `clip-path` is the commonest in real logos |
 | a `transform` on the root, `!important` in a style, a UTF-16 file | ignored, ignored, rejected |
 | hairline strokes, dashes along curves | differ a little from Chrome's |
-| `currentColor` from the page, `image-rendering: pixelated` | black, ignored |
+| `currentColor` in an `img` or a `url()`, `image-rendering: pixelated` | black, as in Chrome, where only an `svg` element takes the page's colour; ignored |
 | an SVG as a twod texture | by hand: `svg.LoadPicture`, `Rasterise`, `twod.NewTexture` |
 
 ## Not checked

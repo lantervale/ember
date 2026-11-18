@@ -45,7 +45,7 @@ func controlOf(e *dom.Node) controlKind {
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
 		dom.Option, dom.Details, dom.Summary, dom.Dialog, dom.Table, dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td,
-		dom.Progress, dom.Meter, dom.Img, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
+		dom.Progress, dom.Meter, dom.Img, dom.Svg, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
 		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
@@ -100,9 +100,11 @@ func centresContent(n *node) bool {
 }
 
 // textTop is where the owner's first line box starts: the top of its content box, or the
-// lines centred in it for a button, input or select.
+// lines centred in it for a button, input, select or cell, unless its align-content
+// says where.
 func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
-	if !centresContent(n) {
+	share := contentShare(n)
+	if share == 0 {
 		return top
 	}
 	h := float32(0)
@@ -110,7 +112,30 @@ func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
 		lh, _ := t.lineBox(n.inline, l)
 		h += l.push + lh
 	}
-	return top + max(contentHeight-h, 0)/2
+	return top + max(contentHeight-h, 0)*share
+}
+
+// contentShare is the share of the free height a box that centres its content leaves
+// above it: half, or what its align-content says, a cell's valign.
+func contentShare(n *node) float32 {
+	if !centresContent(n) {
+		return 0
+	}
+	switch n.st.AlignContent {
+	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline:
+		return 0
+	case style.AlignEnd, style.AlignFlexEnd:
+		return 1
+	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignCenter, style.AlignSpaceBetween,
+		style.AlignSpaceAround, style.AlignSpaceEvenly:
+	}
+	return 0.5
+}
+
+// isButtonInput reports an input that is a button, as wide as what it says.
+func isButtonInput(e *dom.Node) bool {
+	typ, _ := e.Attr("type")
+	return typ == "button" || typ == "submit" || typ == "reset"
 }
 
 func intAttr(e *dom.Node, name string, fallback int) int {
@@ -135,6 +160,10 @@ func (t *tree) measureControl(n *node, known size) (size, float32, float32) {
 	var w float32
 	switch n.control {
 	case inputControl:
+		if isButtonInput(e) {
+			w = t.fonts.Advance(st.Font, n.inline.runs[0].text)
+			break
+		}
 		w = float32(math.Ceil(float64(avg*float32(intAttr(e, "size", 20))))) + (maxCharFactor-1)*avg
 	case textareaControl:
 		w = avg * float32(intAttr(e, "cols", 20))

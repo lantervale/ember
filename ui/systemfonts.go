@@ -25,8 +25,8 @@ func SystemFonts() DocumentOption {
 func (d *Document) SystemFonts() bool { return d.systemFonts }
 
 // landFonts takes the scan of the machine's fonts once it is done, which
-// lays the Document out again with them, and the fonts that could not be
-// read since the last layout.
+// lays the Document out again with them, the fonts that could not be
+// read since the last layout, and the page's fonts fetched since.
 func (d *Document) landFonts() {
 	if d.fonts.Land() {
 		d.relayout = true
@@ -34,4 +34,5 @@ func (d *Document) landFonts() {
 	for _, err := range d.fonts.Warnings() {
 		d.warn(err)
 	}
+	d.landPageFonts()
 }

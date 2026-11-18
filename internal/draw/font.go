@@ -2,15 +2,16 @@ package draw
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"math"
+	"runtime"
 	"strings"
 	"sync"
 	"unicode/utf8"
+	"weak"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/render"
@@ -46,7 +47,11 @@ type Face struct {
 	font      *opentype.Font
 	fallbacks []*Face
 	emoji     Emoji
-	sizes     map[float32]*Font
+	// only are the characters the face draws of those it has (Only), all
+	// without any; blank those drawn as nothing when no face has them
+	// (Blank).
+	only, blank []Range
+	sizes       map[float32]*Font
 	// pixelSizes are the face's pixelated fonts (PixelSize), apart, so
 	// smoothed text never shares their atlas.
 	pixelSizes map[float32]*Font
@@ -84,8 +89,42 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, fallbacks: fallbacks, emoji: emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, fallbacks: fallbacks, emoji: emoji,
+		sizes: map[float32]*Font{}}
 }
+
+// Range is the characters from Lo to Hi.
+type Range struct{ Lo, Hi rune }
+
+// Covers reports whether r is in ranges, or ranges is empty: a face
+// with none draws every character it has.
+func Covers(ranges []Range, r rune) bool {
+	for _, u := range ranges {
+		if r >= u.Lo && r <= u.Hi {
+			return true
+		}
+	}
+	return len(ranges) == 0
+}
+
+// Only is f drawing only the characters in ranges, as an @font-face's
+// unicode-range has it: another is left to the faces after it.
+func (f *Face) Only(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, fallbacks: f.fallbacks, emoji: f.emoji,
+		sizes: map[float32]*Font{}}
+}
+
+// Blank is f drawing nothing, in no room, for a character in ranges
+// that neither it nor its fallbacks have, where another shows as '?':
+// what a face still on its way may draw.
+func (f *Face) Blank(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, fallbacks: f.fallbacks, emoji: f.emoji,
+		sizes: map[float32]*Font{}}
+}
+
+// Wrap makes the twod.Face of f, for the engine packages that build
+// faces twod's NewFace refuses; twod sets it.
+var Wrap func(f *Face) any //nolint:gochecknoglobals // a hook twod sets
 
 // Draws reports whether the face draws text as written: a picture for
 // each cluster of several characters (a flag, a ZWJ family, a keycap),
@@ -107,6 +146,9 @@ func (f *Face) Draws(text string) bool {
 			return
 		}
 		for _, src := range append([]*Face{f}, f.fallbacks...) {
+			if !Covers(src.only, first) {
+				continue
+			}
 			if idx, err := src.font.GlyphIndex(&buf, first); err == nil && idx != 0 {
 				return
 			}
@@ -200,6 +242,10 @@ type Font struct {
 	asciiKerns []*[128 * 128]fixed.Int26_6
 	faces      []font.Face
 	sources    []*opentype.Font
+	// only are the characters each source draws, and blank those drawn
+	// as nothing when no source has them (Face.Only, Face.Blank).
+	only       [][]Range
+	blank      []Range
 	emoji      Emoji
 	buf        sfnt.Buffer
 	cell       int
@@ -214,7 +260,8 @@ type Font struct {
 const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûüœ·•×÷°±…—–’“”«»€£¥©®™←↑→↓★♥"
 
 func newFont(f *Face, px float32, pixel bool) (*Font, error) {
-	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, pixel: pixel}
+	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, pixel: pixel,
+		blank: f.blank}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
@@ -224,6 +271,7 @@ func newFont(f *Face, px float32, pixel bool) (*Font, error) {
 			return nil, err
 		}
 		out.faces, out.sources = append(out.faces, face), append(out.sources, src.font)
+		out.only = append(out.only, src.only)
 		out.asciiKerns = append(out.asciiKerns, asciiKerning(src.font))
 	}
 	m := out.faces[0].Metrics()
@@ -338,18 +386,32 @@ func (f *Font) kern(p, g glyph) float32 {
 	return v
 }
 
+// kerning holds each font's ASCII table while the font lives: keyed
+// weakly, so a page's font goes when its page does.
+//
 //nolint:gochecknoglobals // a cache every font shares, under its mutex
 var (
-	kerning   = map[*opentype.Font]*[128 * 128]fixed.Int26_6{}
+	kerning   = map[weak.Pointer[opentype.Font]]*[128 * 128]fixed.Int26_6{}
 	kerningMu sync.Mutex
 )
+
+// keepKerning caches src's table until src is collected.
+func keepKerning(src *opentype.Font, t *[128 * 128]fixed.Int26_6) {
+	key := weak.Make(src)
+	kerning[key] = t
+	runtime.AddCleanup(src, func(key weak.Pointer[opentype.Font]) {
+		kerningMu.Lock()
+		defer kerningMu.Unlock()
+		delete(kerning, key)
+	}, key)
+}
 
 // asciiKerning is src's kerning between ASCII characters, in font units
 // as 26.6, read once for every size; nil when it kerns none of them.
 func asciiKerning(src *opentype.Font) *[128 * 128]fixed.Int26_6 {
 	kerningMu.Lock()
 	defer kerningMu.Unlock()
-	if t, ok := kerning[src]; ok {
+	if t, ok := kerning[weak.Make(src)]; ok {
 		return t
 	}
 	var buf sfnt.Buffer
@@ -367,16 +429,13 @@ func asciiKerning(src *opentype.Font) *[128 * 128]fixed.Int26_6 {
 			}
 			if k, err := src.Kern(&buf, idx[a], idx[b], upem, font.HintingNone); err == nil && k != 0 {
 				t[a*128+b], kerns = k, true
-			} else if errors.Is(err, sfnt.ErrNotFound) {
-				kerning[src] = nil
-				return nil
 			}
 		}
 	}
 	if !kerns {
 		t = nil
 	}
-	kerning[src] = t
+	keepKerning(src, t)
 	return t
 }
 
@@ -414,13 +473,16 @@ func (f *Font) glyphAt(r rune, phase int) glyph {
 func (f *Font) raster(r rune, phase int) glyph {
 	face, idx := -1, sfnt.GlyphIndex(0)
 	for i, src := range f.sources {
+		if !Covers(f.only[i], r) {
+			continue
+		}
 		if x, err := src.GlyphIndex(&f.buf, r); err == nil && x != 0 {
 			face, idx = i, x
 			break
 		}
 	}
 	if face < 0 {
-		if r == '?' {
+		if r == '?' || (len(f.blank) > 0 && Covers(f.blank, r)) {
 			return glyph{}
 		}
 		return f.glyphAt('?', phase)

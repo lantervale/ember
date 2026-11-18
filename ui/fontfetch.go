@@ -1,0 +1,395 @@
+package ui
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"strings"
+	"sync"
+
+	"github.com/lantervale/ember/internal/draw"
+	"github.com/lantervale/ember/twod"
+	"github.com/lantervale/ember/ui/css"
+	"github.com/lantervale/ember/ui/internal/fonts"
+	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/internal/woff"
+	"golang.org/x/image/font/sfnt"
+)
+
+// FontFetcher gets the font file an @font-face's src names, as it is
+// written there or, for a sheet that says where it came from (From),
+// in full, when no file system of the Document holds it. It is called
+// off the frame, a few fonts at a time, so it may take as long as it
+// needs and must be safe to call from several goroutines. sheet is the
+// address of the sheet whose rule names the font, "" when it says
+// none: what a request for it gives as its referrer.
+type FontFetcher func(url, sheet string) ([]byte, error)
+
+// FetchFonts has fetch get the fonts of the @font-face rules whose
+// files the Document's file systems don't hold: those of a sheet given
+// as text (CSS), and of a Stylesheet whose file system lacks them. A
+// font is TrueType, OpenType, WOFF or WOFF2. It is asked for once, when
+// text first needs a character its face draws: a face no text uses, or
+// one whose unicode-range has none of the text's characters, is never
+// fetched. Until it lands the text shows in the next family of its
+// list, as font-display: swap has it whatever the rule says, a
+// character no family draws as nothing; then the Document lays out and
+// paints again, once however many fonts landed since the last frame.
+// The entries of src are tried in order, past those ui does not read
+// (an .eot, an SVG font, colour glyphs): a local() only with
+// SystemFonts. A fetch that fails, or bytes that are no font, are a
+// warning naming the address, and the text stays as it is. ui/web has
+// a fetcher over HTTP.
+func FetchFonts(fetch FontFetcher) DocumentOption {
+	return func(d *Document) { d.pageFonts.fetch = fetch }
+}
+
+// fontFetchesAtOnce is how many fonts a Document fetches at a time.
+const fontFetchesAtOnce = 6
+
+// pageFonts are a Document's fonts that come after it is made: the
+// files of its @font-face rules on their way, and the faces twod draws
+// the landed ones with.
+type pageFonts struct {
+	fetch FontFetcher
+	// files are the fonts by their src list, so the faces that share
+	// one share its file; sources are the entries to try for each.
+	files   map[string]*fonts.File
+	sources map[*fonts.File][]css.FontSource
+	// asked are the weight and style each file's first face is of, for
+	// its local() entries.
+	asked map[*fonts.File]css.FontFace
+
+	sync.WaitGroup
+	mu     sync.Mutex
+	landed []landedFont
+	slots  chan struct{}
+
+	// drawn are the landed faces as twod draws them, chained each
+	// font's faces in order, made for the set's generation gen.
+	drawn   map[*fonts.Face]*draw.Face
+	chained map[*fonts.Chain]*twod.Face
+	gen     uint64
+}
+
+// landedFont is a font back from its fetch, read off the frame, or why
+// there is none.
+type landedFont struct {
+	file  *fonts.File
+	ttf   []byte
+	font  *sfnt.Font
+	warns []error
+}
+
+// addFontFaces gives the Document the @font-face rules of a sheet:
+// each face's file is read from fsys, the sheet's file system, when it
+// holds it; otherwise, and for a sheet with none (fsys nil), it is
+// fetched when text needs it. A sheet added while the Document shows
+// gives its rules the same way.
+func (d *Document) addFontFaces(faces []css.FontFace, fsys fs.FS) {
+	for _, f := range faces {
+		if fsys != nil && d.readFontFace(f, fsys) {
+			continue
+		}
+		sources := f.Readable()
+		if !d.fetchable(sources) {
+			if fsys != nil {
+				d.warn(fmt.Errorf("css: @font-face %q: no file %s", f.Family, f.Src))
+			} else {
+				d.warn(fmt.Errorf(
+					"css: @font-face %q in CSS has no file to read; load it with Stylesheet or fetch it with FetchFonts",
+					f.Family))
+			}
+			continue
+		}
+		d.fonts.AddWeb(f.Family, f.Weight, f.WeightMax, f.Italic, fontRanges(f.Ranges), d.pageFonts.file(f, sources))
+	}
+}
+
+// readFontFace adds f from the first of its files fsys holds, and
+// reports whether it held one; a file that is no font is a warning.
+func (d *Document) readFontFace(f css.FontFace, fsys fs.FS) bool {
+	for _, s := range f.Readable() {
+		if s.URL == "" {
+			continue
+		}
+		data, err := fs.ReadFile(fsys, s.URL)
+		if err != nil {
+			continue
+		}
+		ttf, err := woff.Sfnt(data)
+		if err == nil && len(f.Ranges) == 0 && f.WeightMax == f.Weight {
+			err = d.fonts.Add(f.Family, f.Weight, f.Italic, ttf)
+		} else if err == nil {
+			var parsed *sfnt.Font
+			if parsed, err = fonts.Parse(ttf); err == nil {
+				file := &fonts.File{}
+				d.fonts.AddWeb(f.Family, f.Weight, f.WeightMax, f.Italic, fontRanges(f.Ranges), file)
+				d.fonts.Loaded(file, ttf, parsed)
+			}
+		}
+		if err != nil {
+			d.warn(fmt.Errorf("ui: font %s: %w", s.URL, err))
+		}
+		return true
+	}
+	return false
+}
+
+// fetchable reports whether one of sources may give a font: a data
+// URL, an address with a fetcher, an installed font with SystemFonts.
+func (d *Document) fetchable(sources []css.FontSource) bool {
+	for _, s := range sources {
+		_, inline := dataURL(s.URL)
+		if inline || (s.URL != "" && d.pageFonts.fetch != nil) || (s.Local != "" && d.systemFonts) {
+			return true
+		}
+	}
+	return false
+}
+
+func fontRanges(ranges []css.UnicodeRange) []fonts.Range {
+	if len(ranges) == 0 {
+		return nil
+	}
+	out := make([]fonts.Range, len(ranges))
+	for i, r := range ranges {
+		out[i] = fonts.Range{Lo: r.Lo, Hi: r.Hi}
+	}
+	return out
+}
+
+// file is the file of the faces whose src is sources, f the first of
+// them.
+func (p *pageFonts) file(f css.FontFace, sources []css.FontSource) *fonts.File {
+	var key strings.Builder
+	for _, s := range sources {
+		key.WriteString(s.URL + "\x00" + s.Local + "\x00")
+	}
+	if file, ok := p.files[key.String()]; ok {
+		return file
+	}
+	if p.files == nil {
+		p.files = map[string]*fonts.File{}
+		p.sources, p.asked = map[*fonts.File][]css.FontSource{}, map[*fonts.File]css.FontFace{}
+	}
+	file := &fonts.File{}
+	p.files[key.String()], p.sources[file], p.asked[file] = file, sources, f
+	return file
+}
+
+// fontSource is one entry of a src list as its fetch reads it: get
+// gives its bytes.
+type fontSource struct {
+	name string
+	get  func() ([]byte, error)
+}
+
+// fetchFonts starts the fetch of each file text has needed since it
+// was last called.
+func (d *Document) fetchFonts() {
+	p := &d.pageFonts
+	for _, file := range d.fonts.Wanted() {
+		if p.slots == nil {
+			p.slots = make(chan struct{}, fontFetchesAtOnce)
+		}
+		sources := d.fontSources(file)
+		p.Add(1)
+		go func() {
+			defer p.Done()
+			p.slots <- struct{}{}
+			defer func() { <-p.slots }()
+			got := fetchedFont(file, sources)
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.landed = append(p.landed, got)
+		}()
+	}
+}
+
+// fontSources are file's entries as its fetch tries them: a local()
+// the machine has not, or that is not looked for, is left out.
+func (d *Document) fontSources(file *fonts.File) []fontSource {
+	p := &d.pageFonts
+	var out []fontSource
+	for _, s := range p.sources[file] {
+		switch data, inline := dataURL(s.URL); {
+		case s.Local != "":
+			f := p.asked[file]
+			if read := d.fonts.Local(s.Local, f.Weight, f.Italic); read != nil && d.systemFonts {
+				out = append(out, fontSource{"local(" + s.Local + ")", read})
+			}
+		case inline:
+			out = append(out, fontSource{"data:…", func() ([]byte, error) { return data, nil }})
+		case p.fetch != nil:
+			fetch, url, sheet := p.fetch, s.URL, p.asked[file].From
+			out = append(out, fontSource{url, func() ([]byte, error) { return fetch(url, sheet) }})
+		}
+	}
+	return out
+}
+
+var errNoFontSource = errors.New("none of its sources can be read")
+
+// fetchedFont is file's font from the first of sources that gives one,
+// read and checked off the frame; each that fails is a warning.
+func fetchedFont(file *fonts.File, sources []fontSource) landedFont {
+	got := landedFont{file: file}
+	for _, s := range sources {
+		ttf, parsed, err := readFont(s)
+		if err == nil {
+			got.ttf, got.font = ttf, parsed
+			return got
+		}
+		got.warns = append(got.warns, fmt.Errorf("ui: font %s: %w", s.name, err))
+	}
+	if len(sources) == 0 {
+		got.warns = append(got.warns, fmt.Errorf("ui: font: %w", errNoFontSource))
+	}
+	return got
+}
+
+// readFont is the font s gives: the sfnt file its bytes are or pack,
+// parsed. The bytes are a stranger's, so a panic of a reader is an
+// error too.
+//
+//nolint:nonamedreturns // the deferred recover sets them
+func readFont(s fontSource) (ttf []byte, parsed *sfnt.Font, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			ttf, parsed, err = nil, nil, fmt.Errorf("the font can't be read: %v", r)
+		}
+	}()
+	data, err := s.get()
+	if err != nil {
+		return nil, nil, err
+	}
+	if ttf, err = woff.Sfnt(data); err != nil {
+		return nil, nil, err
+	}
+	if parsed, err = fonts.Parse(ttf); err != nil {
+		return nil, nil, err
+	}
+	return ttf, parsed, nil
+}
+
+// landPageFonts takes the fonts fetched since the last layout, which
+// lays the Document out again with them, once for them all, and starts
+// the fetches of those the last layout needed.
+func (d *Document) landPageFonts() {
+	p := &d.pageFonts
+	p.mu.Lock()
+	landed := p.landed
+	p.landed = nil
+	p.mu.Unlock()
+	for _, got := range landed {
+		for _, w := range got.warns {
+			d.warn(w)
+		}
+		if got.font == nil {
+			d.fonts.Failed(got.file)
+		} else {
+			d.fonts.Loaded(got.file, got.ttf, got.font)
+		}
+	}
+	if len(landed) > 0 {
+		d.relayout = true
+		d.remeasureFields()
+	}
+	d.fetchFonts()
+}
+
+// remeasureFields drops what the text fields measured of their text:
+// it was measured with other faces.
+func (d *Document) remeasureFields() {
+	for _, m := range d.machines {
+		if t := textOf(m); t != nil {
+			t.Layout = nil
+		}
+	}
+}
+
+// FontsLoading is how many of the Document's fonts are on their way:
+// asked for by its text and neither landed nor failed.
+func (d *Document) FontsLoading() int { return d.fonts.Loading() }
+
+// chainFace is the face twod draws ch with: its landed faces in order,
+// each drawing its own characters, a character whose face is still on
+// its way as nothing.
+func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
+	p := &d.pageFonts
+	if p.gen != d.fonts.Gen() {
+		p.chained, p.gen = nil, d.fonts.Gen()
+	}
+	if tf, ok := p.chained[ch]; ok {
+		return tf
+	}
+	var faces []*twod.Face
+	for i, c := range ch.Faces() {
+		df := p.drawFace(c)
+		if df == nil {
+			continue
+		}
+		if i == 0 {
+			df = df.Blank(ch.Loading())
+		}
+		if tf, ok := draw.Wrap(df).(*twod.Face); ok {
+			faces = append(faces, tf)
+		}
+	}
+	tf := twod.Regular()
+	if len(faces) > 0 {
+		var opts []twod.FaceOption
+		if len(faces) > 1 {
+			opts = append(opts, twod.Fallback(faces[1:]...))
+		}
+		if d.emoji != nil {
+			opts = append(opts, twod.Emoji(d.emoji))
+		}
+		tf = faces[0]
+		if len(opts) > 0 {
+			tf = tf.With(opts...)
+		}
+	}
+	if p.chained == nil {
+		p.chained = map[*fonts.Chain]*twod.Face{}
+	}
+	p.chained[ch] = tf
+	return tf
+}
+
+// drawFace is c as twod draws it, parsed once: TrueType or CFF
+// outlines, only the characters of its unicode-range.
+func (p *pageFonts) drawFace(c *fonts.Face) *draw.Face {
+	if df, ok := p.drawn[c]; ok {
+		return df
+	}
+	df, err := draw.ParseFace(c.Family, c.TTF)
+	if err != nil {
+		df = nil
+	} else if len(c.Ranges) > 0 {
+		df = df.Only(c.Ranges)
+	}
+	if p.drawn == nil {
+		p.drawn = map[*fonts.Face]*draw.Face{}
+	}
+	p.drawn[c] = df
+	return df
+}
+
+// FontsReady reports whether text set in the first of families the
+// Document draws, at weight and in italic or not, waits for no font:
+// the faces that draw its characters have landed or failed, or are
+// the Document's own. It fetches nothing.
+func (d *Document) FontsReady(families []string, weight int, italic bool, text string) bool {
+	return d.fonts.Ready(style.Font{Family: families, Size: 16, Weight: weight, Italic: italic}, text, false)
+}
+
+// LoadFonts asks for the fonts text set in families needs, as laying
+// it out would, and reports whether none is on its way: FontsLoading
+// counts those that are, and the Document lays out again as they land.
+func (d *Document) LoadFonts(families []string, weight int, italic bool, text string) bool {
+	ready := d.fonts.Ready(style.Font{Family: families, Size: 16, Weight: weight, Italic: italic}, text, true)
+	d.fetchFonts()
+	return ready
+}

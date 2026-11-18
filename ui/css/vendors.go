@@ -152,9 +152,10 @@ var webkit = vendor{
 	properties: dropped,
 
 	// Chrome lays these out as the plain word. Its other -webkit- values
-	// are its own (-webkit-box, -webkit-fill-available, -webkit-center,
+	// are its own (-webkit-box, -webkit-fill-available,
 	// -webkit-linear-gradient() with its angles turned the other way…),
-	// and ui can't tell those from the ones Chrome refuses.
+	// and ui can't tell those from the ones Chrome refuses; text-align's
+	// (-webkit-center…) are in its grammar.
 	values: map[string]string{
 		"calc": "calc", "min-content": "min-content", "max-content": "max-content",
 		"fit-content": "fit-content", "flex": "flex", "inline-flex": "inline-flex", "grab": "grab",
@@ -168,7 +169,7 @@ var webkit = vendor{
 	otherElements: unmatched,
 	classes:       map[string]string{"any-link": "any-link"},
 	never:         []string{"autofill", "drag", "full-page-media", "full-screen", "full-screen-ancestor"},
-	// :-webkit-any() is :is() with another weight, and ui has no :is().
+	// :-webkit-any() is :is() with another weight, so it is not read as it.
 	ownClasses:   []string{"any"},
 	otherClasses: dropped,
 

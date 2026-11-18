@@ -187,6 +187,7 @@ func (d *driver) fail(reason string, stack []byte) {
 }
 
 type native struct {
+	driver  *driver
 	h       *glfw.Window
 	entity  platform.Windowed
 	window  *platform.Window
@@ -378,6 +379,9 @@ type driver struct {
 	// OS holds the loop in a live resize; framing guards against nesting.
 	live    bool
 	framing bool
+	// waiting is what windows asked of the system inside a frame that the
+	// system animates, started once the frame is over.
+	waiting []waiting
 	gifFPS  int
 	gifs    map[*native]*capture.GIF
 }
@@ -601,6 +605,7 @@ func (d *driver) run() error {
 	last := time.Now()
 	for frame := 1; !d.world.ShouldQuit(); frame++ {
 		begun := time.Now()
+		d.runBetween()
 		glfw.PollEvents()
 		d.framing = true
 		if d.primary.h.ShouldClose() {
@@ -635,13 +640,61 @@ func (d *driver) run() error {
 			break
 		}
 	}
+	d.closeOthers()
+	return nil
+}
+
+// closeOthers destroys every window but the primary once the loop ends.
+func (d *driver) closeOthers() {
 	d.swapPending()
 	for _, n := range d.natives {
 		if n != d.primary {
 			d.destroy(n)
 		}
 	}
-	return nil
+}
+
+// resized follows n's new size, and draws a frame at it at once when the
+// loop isn't there to: a window drawing through a layer of its own gets
+// no refresh from the system while it is resized, only its sizes.
+func (d *driver) resized(n *native) {
+	n.sync()
+	if d.lags(n) {
+		d.refresh()
+	}
+}
+
+// lags reports whether n shows a frame of another size than its
+// framebuffer's, which the system stretches to fill it, outside a frame
+// of the loop: the OS holds the loop in a live resize, a zoom or a move
+// to fullscreen.
+func (d *driver) lags(n *native) bool {
+	fb := n.window.FramebufferSize()
+	return d.live && !d.framing && n.configured != [2]int{int(fb.X), int(fb.Y)}
+}
+
+// waiting is something a window asked of the system inside a frame.
+type waiting struct {
+	n  *native
+	do func()
+}
+
+// between has do run between two frames of the loop: what the system
+// animates or holds the loop for, a zoom or a drag of the window, is
+// drawn frame by frame only from there.
+func (n *native) between(do func()) {
+	n.driver.waiting = append(n.driver.waiting, waiting{n, do})
+}
+
+// runBetween runs what the windows still open asked for with between.
+func (d *driver) runBetween() {
+	asked := d.waiting
+	d.waiting = nil
+	for _, w := range asked {
+		if d.natives[w.n.window] == w.n {
+			w.do()
+		}
+	}
 }
 
 // refresh draws a frame while the OS holds the loop, in a live resize or
@@ -805,6 +858,7 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	}
 	d.opened++
 	n := &native{
+		driver:   d,
 		h:        h,
 		entity:   e,
 		window:   win,
@@ -832,8 +886,8 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	px, py := h.GetPos()
 	win.SyncPosition(geom.V2(float32(px), float32(py)))
 	h.SetPosCallback(func(_ *glfw.Window, x, y int) { win.SyncPosition(geom.V2(float32(x), float32(y))) })
-	h.SetSizeCallback(func(*glfw.Window, int, int) { n.sync() })
-	h.SetFramebufferSizeCallback(func(*glfw.Window, int, int) { n.sync() })
+	h.SetSizeCallback(func(*glfw.Window, int, int) { d.resized(n) })
+	h.SetFramebufferSizeCallback(func(*glfw.Window, int, int) { d.resized(n) })
 	h.SetRefreshCallback(func(*glfw.Window) { d.refresh() })
 	h.SetFocusCallback(func(_ *glfw.Window, f bool) { n.focused = f; n.sync() })
 	if !d.scripted {

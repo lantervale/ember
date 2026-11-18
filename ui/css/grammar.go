@@ -149,6 +149,9 @@ var (
 	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge")
 	alignWords  = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
 		"self-start", "self-end"}
+	// textAlign has Chrome's -webkit- values, which place blocks as well as lines.
+	textAlign = words("start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",
+		"-webkit-center")
 )
 
 // check validates a whole longhand value, given without whitespace.
@@ -184,6 +187,24 @@ func checkBackgroundSize(v []Component) error {
 		return nil
 	}
 	return repeated(either(sizeLP, words("auto")), 2)(v)
+}
+
+// checkMaskImage takes none or one picture: a mask is the alpha of a
+// picture, and a gradient's is not drawn.
+func checkMaskImage(v []Component) error {
+	if len(v) == 1 && (isWord(v[0], kwNone) || urlTerm(v[0]) == nil) {
+		return nil
+	}
+	return fmt.Errorf("mask-image takes none or one url(): a gradient or several layers are not supported")
+}
+
+// checkMaskPosition takes a position of one, two or four values: the
+// three of a background's ("right 6px center") are not a mask's.
+func checkMaskPosition(v []Component) error {
+	if len(v) == 3 {
+		return fmt.Errorf("mask-position takes one, two or four values")
+	}
+	return checkPosition(v)
 }
 
 // checkColumnSpan takes none: an element spanning every column is not laid out.
@@ -224,7 +245,7 @@ func splitOn(v []Component, sep func(Component) bool) [][]Component {
 //nolint:gochecknoglobals,goconst // the properties' grammar
 var checks = map[string]check{
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
-		"contents", "list-item", "flow-root")),
+		"contents", "list-item", "flow-root", "table", "inline-table")),
 	"box-sizing": single(words("content-box", "border-box")),
 	"width":      single(either(sizeLP, words("auto"), intrinsic)),
 	"height":     single(either(sizeLP, words("auto"), intrinsic)),
@@ -282,6 +303,7 @@ var checks = map[string]check{
 
 	"grid-template-columns": checkTracks,
 	"grid-template-rows":    checkTracks,
+	"grid-template-areas":   checkTemplateAreas,
 	"grid-column-start":     checkGridLine,
 	"grid-column-end":       checkGridLine,
 	"grid-row-start":        checkGridLine,
@@ -328,7 +350,7 @@ var checks = map[string]check{
 	"border-spacing":         repeated(length, 2),
 	"caption-side":           single(words("top", "bottom")),
 	"table-layout":           single(words("auto", "fixed")),
-	"text-align":             single(words("start", "end", "left", "right", "center", "justify")),
+	"text-align":             single(textAlign),
 	"text-indent":            single(lengthPercent),
 	"text-transform":         single(words("none", "uppercase", "lowercase", "capitalize")),
 	"-webkit-font-smoothing": single(words("auto", "none", "antialiased", "subpixel-antialiased")),
@@ -355,6 +377,10 @@ var checks = map[string]check{
 	"background-repeat":   single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
 	"background-size":     checkBackgroundSize,
 	"background-position": checkPosition,
+	"mask-image":          checkMaskImage,
+	"mask-repeat":         single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
+	"mask-size":           checkBackgroundSize,
+	"mask-position":       checkMaskPosition,
 	"text-shadow":         checkTextShadow,
 	"image-rendering":     single(words("auto", "pixelated")),
 	"accent-color":        single(either(words("auto"), colorTerm)),
@@ -470,7 +496,7 @@ func checkImageSlice(v []Component) error {
 
 func checkGridLine(v []Component) error {
 	switch {
-	case len(v) == 1 && isWord(v[0], "auto"):
+	case len(v) == 1 && isWord(v[0], "auto"), lineName(v):
 		return nil
 	case len(v) == 1 && integer(v[0]) == nil && v[0].Num != 0:
 		return nil
@@ -478,7 +504,7 @@ func checkGridLine(v []Component) error {
 		len(v) == 2 && isWord(v[1], "span") && integer(v[0]) == nil && v[0].Num > 0:
 		return nil
 	}
-	return fmt.Errorf("expected auto, a line number or span n")
+	return fmt.Errorf("expected auto, a line number, an area's name or span n")
 }
 
 func checkAspectRatio(v []Component) error {

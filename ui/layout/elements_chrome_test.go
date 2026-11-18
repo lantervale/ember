@@ -19,9 +19,10 @@ const textTags = "ul|ol|li|menu|dl|dt|dd|h5|h6|blockquote|figure|figcaption|form
 	"fieldset|legend|a|b|i|u|s|small|sub|sup|big|abbr|cite|mark|var|dfn|del|ins|q|br"
 
 // ownDefaults drops from the page every rule of ember's user-agent sheet that names one of
-// these elements, so Chrome lays them out by its own, and returns each element's box.
-const ownDefaults = `
-const tags = /(^|[\s,>+~(])(` + textTags + `)(?![\w-])/;
+// tags, so Chrome lays them out by its own, and returns each element's box.
+func ownDefaults(tags string) string {
+	return `
+const tags = /(^|[\s,>+~(])(` + tags + `)(?![\w-])/;
 for (const sheet of document.styleSheets) {
 	for (const layer of sheet.cssRules) {
 		if (!(layer instanceof CSSLayerBlockRule)) continue;
@@ -32,12 +33,20 @@ for (const sheet of document.styleSheets) {
 }
 return [document.documentElement, document.body, ...document.body.querySelectorAll("*:not([data-ember-implied])")]
 	.map(e => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; });`
+}
 
 // matchesChromesDefaults compares d's boxes with Chrome's where Chrome styles the text
 // elements by its own user-agent sheet instead of ember's.
 func matchesChromesDefaults(t *testing.T, d *ui.Document, size geom.Vec2) {
 	t.Helper()
-	out, err := chrome.Eval(d, size, ownDefaults)
+	matchesChromesOwn(t, d, size, textTags)
+}
+
+// matchesChromesOwn compares d's boxes with Chrome's where Chrome styles tags, a
+// JavaScript alternation, by its own user-agent sheet instead of ember's.
+func matchesChromesOwn(t *testing.T, d *ui.Document, size geom.Vec2, tags string) {
+	t.Helper()
+	out, err := chrome.Eval(d, size, ownDefaults(tags))
 	require.NoError(t, err)
 	var want [][4]float32
 	require.NoError(t, json.Unmarshal(out, &want))
@@ -90,6 +99,12 @@ func TestTheTextElementsDefaultsMatchChromes(t *testing.T) {
 				ui.Text(" "), ui.Time(ui.Text("noon")), ui.Text(" "), ui.Data(ui.Text("12")), ui.Text(" "),
 				ui.Bdi(ui.Text("bdi")), ui.Text(" "), ui.Font(ui.Text("font"))),
 			ui.P(ui.Text("One line"), ui.Br(), ui.Text("and the next"), ui.Br(), ui.Br(), ui.Text("after a gap")),
+		),
+		"a line break ending its block": styled("",
+			ui.Div(ui.Br()), ui.Div(ui.Text("One line"), ui.Br()), ui.Div(ui.Text("One line"), ui.Br(), ui.Br()),
+			ui.Div(ui.Br(), ui.Div(ui.Text("a block after the break"))),
+			ui.Div(ui.B(ui.Text("in bold"), ui.Br())), ui.Div(ui.Text("before "), ui.I(ui.Br())),
+			ui.Div(ui.Text("One line"), ui.Br(), ui.Span(ui.Style("padding: 0 4px"))),
 		),
 		"sub and sup": styled("", ui.P(ui.Text("H"), ui.Sub(ui.Text("2")), ui.Text("O and x"), ui.Sup(ui.Text("2")))),
 		"a quotation": styled("", ui.P(ui.Text("They said "), ui.Q(ui.Text("mind the gap")), ui.Text("."))),

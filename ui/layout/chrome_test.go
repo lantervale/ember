@@ -198,6 +198,13 @@ func TestLayoutMatchesChrome(t *testing.T) {
 			ui.Div(ui.Input(ui.Placeholder("Search tiles"))),
 			ui.Div(ui.Input(ui.Style("font-size: 24px; width: 120px"), ui.Placeholder("Big"))),
 		),
+		"inputs that are buttons": page(
+			ui.Div(ui.Input(ui.Type("submit"), ui.Attr("value", "Search the crypt")), ui.Input(ui.Type("submit")),
+				ui.Input(ui.Type("reset")), ui.Input(ui.Type("button"), ui.Attr("value", "x")), ui.Input(ui.Type("button"))),
+			ui.Div(ui.Style("text-align: center"),
+				ui.Input(ui.Type("submit"), ui.Style("height: 30px; font-size: 15px"), ui.Attr("value", "Search")),
+				ui.Input(ui.Type("button"), ui.Style("width: 120px"), ui.Attr("value", "wide"))),
+		),
 		"a select with three options": page(
 			ui.Div(ui.Select(
 				ui.Option(ui.Text("grass")),
@@ -363,7 +370,7 @@ func TestLayoutMatchesChrome(t *testing.T) {
 	// Controls' default sizes are Chrome on macOS's, which ui follows;
 	// Chrome on Linux and Windows sizes them by its own rules.
 	controlSizes := map[string]bool{
-		"an input with a value": true, "an empty input with a placeholder": true,
+		"an input with a value": true, "an empty input with a placeholder": true, "inputs that are buttons": true,
 		"a select with three options": true, "a select's placeholder counts in its width": true,
 		"a textarea of three lines": true, "controls centre their text": true,
 		"tall controls align by their centred text's baseline": true,

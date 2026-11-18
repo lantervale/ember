@@ -14,6 +14,7 @@ import (
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/chrome"
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // ask evaluates expr in a bare Chrome page and reads its value into v.
@@ -154,7 +155,7 @@ func TestChromeReadsWebkitValuesSelectorsAndAtRulesAsTheTable(t *testing.T) {
 		}
 		decls = append(decls, on[name])
 	}
-	// Chrome's own values, which keep their warning, and one it refuses.
+	// Chrome's own values, which keep their warning but text-align's, and one it refuses.
 	decls = append(decls, "display: -webkit-box", "width: -webkit-fill-available", "text-align: -webkit-center",
 		"background-image: -webkit-linear-gradient(top, red, blue)", "position: -webkit-sticky")
 	selectors := []string{"input::-webkit-input-placeholder", "a:-webkit-any-link", "::-webkit-scrollbar",
@@ -318,5 +319,39 @@ return out;`, &chromes)
 	list := strings.Join(strings.Fields(selectors), " ")
 	if want := strings.Join(chromes, ", "); list != want {
 		t.Errorf("css.BrowserDefault sizes by their border\n     %s\nChrome %s", list, want)
+	}
+}
+
+// TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes asks a page with
+// Chrome's own sheet alone how each control in a center aligns its text.
+func TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes(t *testing.T) {
+	types := []string{"text", "search", "password", "number", "email", "button", "submit", "reset"}
+	var chromes []string
+	typeList, _ := json.Marshal(types)
+	ask(t, geom.V2(800, 600), `
+const frame = document.createElement("iframe");
+document.body.appendChild(frame);
+const doc = frame.contentDocument, out = [];
+doc.open(); doc.write("<!DOCTYPE html><body><center id=c>"); doc.close();
+const align = e => { doc.getElementById("c").appendChild(e);
+	out.push(frame.contentWindow.getComputedStyle(e).textAlign); };
+for (const type of `+string(typeList)+`) { const e = doc.createElement("input"); e.type = type; align(e); }
+for (const tag of ["textarea", "select", "button"]) align(doc.createElement(tag));
+return out;`, &chromes)
+	d := ui.NewDocument(ui.BrowserSheets())
+	center := ui.Center()
+	for _, typ := range types {
+		center.Append(ui.Input(ui.Type(typ)))
+	}
+	center.Append(ui.Textarea(), ui.Select(), ui.Button())
+	d.Body().Append(center)
+	d.Layout(geom.V2(800, 600))
+	names := []string{"start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",
+		"-webkit-center"}
+	for i, n := range center.Children() {
+		if got := names[dom.Data(n).Style.TextAlign]; got != chromes[i] {
+			typ, _ := n.Attr("type")
+			t.Errorf("%s %s: ember %s, Chrome %s", n.Tag(), typ, got, chromes[i])
+		}
 	}
 }

@@ -55,7 +55,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	inset.b += gutter.y
 
 	block := isBlockDisplay(st.Display)
-	preventsCollapse := !block || isScrollContainer(st) || outOfFlow(st.Position) ||
+	preventsCollapse := !block || blockEstablishesBFC(st) || outOfFlow(st.Position) ||
 		padding.t > 0 || padding.b > 0 || border.t > 0 || border.b > 0 ||
 		(some(nodeSize.h) && nodeSize.h > 0) || (some(minSize.h) && minSize.h > 0)
 
@@ -90,7 +90,12 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		defer func() { c.flow = nil }()
 		known.w = in.known.w - inset.horizontal()
 	}
-	measured, first, last := t.measureContent(n, known, avail)
+	// A box that takes its content's width gives its content's percentages that width.
+	basis := avail.w.value()
+	if !some(in.known.w) && !some(nodeSize.w) {
+		basis = none
+	}
+	measured, first, last := t.measureContent(n, known, avail, basis)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
 	s := clamped
 	if r := aspectRatio(st); in.sizing == inherentSize && some(r) {
@@ -124,10 +129,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		collapsesThrough: !preventsCollapse && s.h == 0 && measured.h == 0,
 	}
 	if some(first) {
-		shift := float32(0)
-		if centresContent(n) {
-			shift = fmax(s.h-inset.vertical()-measured.h, 0) / 2
-		}
+		shift := fmax(s.h-inset.vertical()-measured.h, 0) * contentShare(n)
 		out.firstBaseline = pb.t + shift + first
 		out.lastBaseline = pb.t + shift + last
 	}
@@ -182,8 +184,9 @@ func ratioHeight(w, ratio float32) float32 {
 	return 0
 }
 
-// measureContent is the size of a leaf's content: its text, or nothing.
-func (t *tree) measureContent(n *node, known size, avail spaces) (size, float32, float32) {
+// measureContent is the size of a leaf's content: its text, or nothing. basis is the
+// width its percentages are of, none for the width found here.
+func (t *tree) measureContent(n *node, known size, avail spaces, basis float32) (size, float32, float32) {
 	if n.replaced {
 		return measureReplaced(n, known), none, none
 	}
@@ -193,6 +196,6 @@ func (t *tree) measureContent(n *node, known size, avail spaces) (size, float32,
 	if n.control != noControl {
 		return t.measureControl(n, known)
 	}
-	s, first, last := t.measure(n.inline, known, avail, size{avail.w.value(), none})
+	s, first, last := t.measure(n.inline, known, avail, size{basis, none})
 	return size{or(known.w, s.w), or(known.h, s.h)}, first, last
 }

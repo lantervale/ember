@@ -60,7 +60,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	switch name {
 	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius":
 		err = expandBox(long, v, out)
-	case "gap", "overflow", "place-items", "place-content", "place-self":
+	case "gap", "overflow", "place-items", "place-content", "place-self", "margin-inline", "margin-block",
+		"padding-inline", "padding-block", "inset-inline", "inset-block":
 		err = expandPair(long, v, out)
 	case kwFlex:
 		err = expandFlex(v, out)
@@ -68,6 +69,10 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandAnyOrder(long, v, out)
 	case "grid-column", "grid-row":
 		err = expandGridLines(long, v, out)
+	case "grid-area":
+		err = expandGridArea(long, v, out)
+	case "grid-template":
+		err = expandGridTemplate(v, out)
 	case "border-top", "border-right", "border-bottom", "border-left", "outline", "column-rule":
 		err = expandAnyOrder(long, v, out)
 	case "columns":

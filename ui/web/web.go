@@ -1,8 +1,10 @@
-// Package web gets a Document's pictures over HTTP: a fetcher for
-// ui.FetchImages, so a url() background or an img's src can name a
-// picture on the web. Importing it lets ui read JPEG and GIF pictures
-// beside PNG; an SVG is asked for too and handed over as it is, for a
-// Document to draw once ui/svg is imported.
+// Package web gets a Document's pictures and fonts over HTTP: a fetcher
+// for ui.FetchImages, so a url() background or an img's src can name a
+// picture on the web, and one for ui.FetchFonts, so an @font-face can
+// name a font there. Importing it lets ui read JPEG, GIF and WebP
+// pictures beside PNG (a WebP that is an animation is none); an SVG is
+// asked for too and handed over as it is, for a Document to draw once
+// ui/svg is imported.
 package web
 
 import (
@@ -15,6 +17,8 @@ import (
 	"net/url"
 	"time"
 
+	_ "golang.org/x/image/webp" // and WebP
+
 	"github.com/lantervale/ember/ui"
 )
 
@@ -22,7 +26,7 @@ const (
 	// MaxBytes is the largest picture Images reads; a larger one is an
 	// error.
 	MaxBytes = 8 << 20
-	// Timeout is how long one picture may take.
+	// Timeout is how long one picture, or one font, may take.
 	Timeout = 15 * time.Second
 )
 
@@ -35,12 +39,7 @@ const (
 // a success, or a picture over MaxBytes, is an error, and so is every
 // fetch when base is no http or https address.
 func Images(base string) ui.ImageFetcher {
-	f := &fetcher{client: &http.Client{Timeout: Timeout}}
-	f.base, f.err = url.Parse(base)
-	if f.err == nil && !overHTTP(f.base) {
-		f.err = fmt.Errorf("web: %q is no http or https address", base)
-	}
-	return f.get
+	return newFetcher(base).get
 }
 
 // fetcher gets the pictures named from base; err is why it gets none.
@@ -50,9 +49,42 @@ type fetcher struct {
 	client *http.Client
 }
 
+// MaxFontBytes is the largest font file Fonts reads; a larger one is
+// an error.
+const MaxFontBytes = 16 << 20
+
+// Fonts is a fetcher for ui.FetchFonts that gets the fonts of a page's
+// @font-face rules with an HTTP GET, as Images gets its pictures: an
+// http or https address as it is, anything else as a reference from
+// base. The src of a sheet that says where it came from (ui.From)
+// arrives here in full. An answer that isn't a success, or a font over
+// MaxFontBytes, is an error, and so is every fetch when base is no
+// http or https address.
+func Fonts(base string) ui.FontFetcher {
+	f := newFetcher(base)
+	return func(ref, _ string) ([]byte, error) {
+		return f.fetch(ref, "font/woff2, font/woff, font/ttf, font/otf, */*;q=0.1", MaxFontBytes, "font")
+	}
+}
+
+func newFetcher(base string) *fetcher {
+	f := &fetcher{client: &http.Client{Timeout: Timeout}}
+	f.base, f.err = url.Parse(base)
+	if f.err == nil && !overHTTP(f.base) {
+		f.err = fmt.Errorf("web: %q is no http or https address", base)
+	}
+	return f
+}
+
 func overHTTP(at *url.URL) bool { return at.Scheme == "http" || at.Scheme == "https" }
 
 func (f *fetcher) get(ref string) ([]byte, error) {
+	return f.fetch(ref, "image/png, image/jpeg, image/gif, image/webp, image/svg+xml", MaxBytes, "picture")
+}
+
+// fetch gets what ref names from base, asking for accept: the body of
+// a successful answer, no larger than limit.
+func (f *fetcher) fetch(ref, accept string, limit int64, what string) ([]byte, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -67,27 +99,21 @@ func (f *fetcher) get(ref string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "image/png, image/jpeg, image/gif, image/svg+xml")
+	req.Header.Set("Accept", accept)
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return picture(resp)
-}
-
-// picture is the picture a successful answer holds, no larger than
-// MaxBytes.
-func picture(resp *http.Response) ([]byte, error) {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("web: %s", resp.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxBytes+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > MaxBytes {
-		return nil, fmt.Errorf("web: the picture is over %d bytes", MaxBytes)
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("web: the %s is over %d bytes", what, limit)
 	}
 	return data, nil
 }

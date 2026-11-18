@@ -125,6 +125,12 @@ type Sheet struct {
 	src     string
 	from    string
 	origin  *origin
+	// text is the text of a sheet ParseRules read, joined the sheets a
+	// sheet Join made stands for, and within the media query list Join
+	// put them all in.
+	text   string
+	joined []*Sheet
+	within string
 }
 
 // anonymous begins the name a layer without one goes by.
@@ -146,7 +152,21 @@ func (s *Sheet) URL(ref string) string { return s.origin.resolve(ref) }
 // sheet read as a browser's is its own text, as it was written: what ui
 // dropped of it is a browser's to read.
 func (s *Sheet) String() string {
+	if s.browser && s.joined != nil {
+		var b strings.Builder
+		for _, part := range s.joined {
+			b.WriteString(part.String())
+			b.WriteString("\n")
+		}
+		if s.within != "" {
+			return "@media " + s.within + " {\n" + b.String() + "}\n"
+		}
+		return b.String()
+	}
 	if s.browser {
+		if s.text != "" {
+			return s.text
+		}
 		return s.src
 	}
 	var b strings.Builder
@@ -281,27 +301,34 @@ type scope struct {
 // rules reads rules up to the end of the sheet, or of the block they
 // stand in.
 func (p *parser) rules(in scope) {
-	for {
-		t := p.peek()
-		switch t.Kind {
-		case EOF:
-			return
-		case Whitespace, CDO, CDC:
-			p.next()
-		case AtKeyword:
-			p.next()
-			p.atRule(t, in)
-		case RBrace:
-			if p.depth > 0 {
-				p.next()
-				return
-			}
-			p.styleRule(in)
-		case Ident, Function, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Colon, Semicolon,
-			Comma, LBracket, RBracket, LParen, RParen, LBrace:
-			p.styleRule(in)
-		}
+	for p.item(in) {
 	}
+}
+
+// item reads the next rule, or the white space before it, and reports
+// whether there may be more: false at the end of the sheet, or of the
+// block the rules stand in.
+func (p *parser) item(in scope) bool {
+	t := p.peek()
+	switch t.Kind {
+	case EOF:
+		return false
+	case Whitespace, CDO, CDC:
+		p.next()
+	case AtKeyword:
+		p.next()
+		p.atRule(t, in)
+	case RBrace:
+		if p.depth > 0 {
+			p.next()
+			return false
+		}
+		p.styleRule(in)
+	case Ident, Function, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Colon, Semicolon,
+		Comma, LBracket, RBracket, LParen, RParen, LBrace:
+		p.styleRule(in)
+	}
+	return true
 }
 
 func (p *parser) styleRule(in scope) {
@@ -574,6 +601,9 @@ func (p *parser) rule() (Rule, bool) {
 				if prelude, kept = vendorSelectors(prelude); !kept {
 					return Rule{}, false
 				}
+				if prelude = matched(prelude); prelude == nil {
+					return Rule{}, false
+				}
 			}
 			sels, err := parseSelectors(prelude)
 			if err != nil {
@@ -703,6 +733,9 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		if as != "" {
 			d.Name = as
 		}
+	}
+	if as, ok := logical[d.Name]; ok {
+		d.Name = as
 	}
 	if d.Name == "page-break-inside" {
 		// the old name, its auto and avoid break-inside's too

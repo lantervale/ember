@@ -1,23 +1,15 @@
 package paint
 
 import (
-	"sync"
-
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/twod"
 )
 
-// sharp keeps each texture's pixelated copy, up to maxSharp, then starts
-// over.
+// sharp keeps each texture's pixelated copy while the texture lives.
 //
 //nolint:gochecknoglobals // a cache every paint shares, under its mutex
-var (
-	sharp   = map[*twod.Texture]*twod.Texture{}
-	sharpMu sync.Mutex
-)
-
-const maxSharp = 256
+var sharp derived[*twod.Texture]
 
 // pixelated is tex sampled by its nearest pixels: a copy sharing its
 // picture, made once, given tex's new picture and touched whenever tex
@@ -27,20 +19,17 @@ func pixelated(tex *twod.Texture) *twod.Texture {
 	if tex.Image == nil {
 		return tex
 	}
-	sharpMu.Lock()
-	defer sharpMu.Unlock()
-	c, ok := sharp[tex]
+	sharp.mu.Lock()
+	defer sharp.mu.Unlock()
+	c, ok := sharp.get(tex)
 	if !ok {
-		if len(sharp) >= maxSharp {
-			clear(sharp)
-		}
 		opts := []twod.TextureOption{twod.Pixelated()}
 		if tex.Encoded() {
 			opts = append(opts, twod.Encoded())
 		}
 		c = twod.NewTexture(tex.Image, opts...)
 		c.Repeat = tex.Repeat
-		sharp[tex] = c
+		sharp.put(tex, c)
 	}
 	if c.Image != tex.Image {
 		c.Image = tex.Image

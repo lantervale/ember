@@ -12,18 +12,22 @@ ui.Div(ui.Style("display: grid; grid-template-columns: 48px 1fr; gap: 4px 12px; 
 
 Stylesheets come from `ui.Stylesheet(fsys, name)`, after the user-agent sheet; `ui.Style(css)` is an element's style attribute, adding to what earlier arguments, such as `kit.Padding`, set. What a sheet gets wrong is in `doc.Warnings()`, never a crash.
 
+The presentational attributes of old pages style their element as Chrome reads them, under every rule of the sheets (decision 0092): `width` and `height` on an `img`, a `table`, a `td` or a `th` (pixels or a percentage), `bgcolor` on `body` and a table's parts, `text` on `body`, `align` on a `div`, a `p`, a heading and a table's parts, `valign` on a cell, its row or its row group, `nowrap` on a cell, `cellspacing` and `cellpadding` on a `table`. The others are in [What is missing](10-missing.md).
+
 | Selectors | |
 |---|---|
 | `div`, `.class`, `#id`, `[attr]`, `[attr="value"]` | simple |
-| `a b`, `a > b` | descendant and child |
-| `:hover`, `:focus`, `:focus-visible`, `:active`, `:disabled`, `:checked`, `:open` | states |
-| `:first-child`, `:last-child`, `:nth-child()`, `:not()`, `:root` | structure |
+| `[attr~="word"]`, `[attr\|="en"]`, `[attr^="start"]`, `[attr$="end"]`, `[attr*="part"]`, each with the `i` flag | an attribute's value by a word, a prefix before a hyphen, its start, its end, a part; `i` compares whatever the case |
+| `a b`, `a > b`, `a + b`, `a ~ b` | descendant, child, the next sibling, a later sibling |
+| `:hover`, `:focus`, `:focus-visible`, `:active`, `:disabled`, `:enabled`, `:checked`, `:open` | states; `:enabled` and `:disabled` match controls only |
+| `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:root` | structure |
+| `:not()`, `:is()`, `:where()` | a list of selectors: `:is()` and `:not()` weigh as their most specific one, `:where()` nothing; a selector `:is()` or `:where()` cannot read is left out of its list, as in Chrome |
 | `:link`, `:any-link`, `:visited` | an element with an `href`; nothing is visited, ui keeping no history, so a `:visited` rule is kept and matches nothing |
 | `::before`, `::after`, `::marker`, `::placeholder`, `::selection`, `::backdrop` | pseudo-elements, last in their selector: `li:nth-child(2)::before`, `a:hover::after` ([below](#pseudo-elements)) |
 
 | Values | |
 |---|---|
-| `px` (a point), `%`, `em`, `rem`, `fr` | units |
+| `px` (a point), `%`, `em`, `rem`, `fr`, and the absolute `pt`, `pc`, `in`, `cm`, `mm`, `Q` at 96 `px` an inch | units |
 | `auto`, `min-content`, `max-content`, `fit-content`, `minmax()`, `repeat()`, `calc()`, `var()` | sizes and functions |
 | hex, `rgb()`, `oklch()`, named colours, `transparent`, `currentColor` | colours |
 | `linear-gradient(<angle> or to <side or corner>, <colour> [<length or %> [<length or %>]], …)` | in `background-image` or `background`: two stops or more, two positions on one stop a hard edge; `deg`, `rad`, `grad` or `turn`; `to` a corner follows the box's shape; colours blend in encoded sRGB, as Chrome's |
@@ -33,9 +37,9 @@ Stylesheets come from `ui.Stylesheet(fsys, name)`, after the user-agent sheet; `
 
 | Properties | |
 |---|---|
-| layout | `display` (block, inline, inline-block, flex, inline-flex, grid, flow-root, none, contents), `position` (static, relative, absolute, fixed, sticky), `float` (left, right, none), `clear` (left, right, both, none), `top` `right` `bottom` `left` `inset`, `z-index`, `box-sizing` (border-box by default; content-box under [browser sheets](#browser-sheets)), `width` `height` and their `min-` `max-`, `aspect-ratio`, `margin`, `padding`, `overflow` (visible, hidden, clip, auto, scroll) and its axes (clipping on both with a `border-radius` clips to the rounded inner border, the padding box's curve, and a pointer in a cut corner reaches what's under it; nested rounded clips round only the innermost; under rotation or skew the clip is its bounding rectangle, [decision 0058](../99-decisions/0058-rounded-clips-through-a-per-batch-rounded-rect.md)), `visibility`, `order` |
+| layout | `display` (block, inline, inline-block, flex, inline-flex, grid, flow-root, table, inline-table, none, contents), `position` (static, relative, absolute, fixed, sticky), `float` (left, right, none), `clear` (left, right, both, none), `top` `right` `bottom` `left` `inset`, the logical names of the sides and sizes ([below](#logical-properties)), `z-index`, `box-sizing` (border-box by default; content-box under [browser sheets](#browser-sheets)), `width` `height` and their `min-` `max-`, `aspect-ratio`, `margin`, `padding`, `overflow` (visible, hidden, clip, auto, scroll) and its axes (clipping on both with a `border-radius` clips to the rounded inner border, the padding box's curve, and a pointer in a cut corner reaches what's under it; nested rounded clips round only the innermost; under rotation or skew the clip is its bounding rectangle, [decision 0058](../99-decisions/0058-rounded-clips-through-a-per-batch-rounded-rect.md)), `visibility`, `order` |
 | columns | `column-count`, `column-width`, `columns`, `column-gap` (normal is 1em), `column-rule` and its `-width` `-style` `-color`, `column-fill` (balance, auto), `break-inside` (auto, avoid; `page-break-inside` is read as it), `break-before` `break-after` (auto, avoid, column), `orphans`, `widows` |
-| flex and grid | `flex` and its parts, `gap` `row-gap` `column-gap`, `align-*`, `justify-*`, `place-*`, `grid-template-columns` `-rows`, `grid-column` `grid-row`, `grid-auto-*` |
+| flex and grid | `flex` and its parts, `gap` `row-gap` `column-gap`, `align-*`, `justify-*`, `place-*`, `grid-template-columns` `-rows` `-areas` and the `grid-template` shorthand, `grid-column` `grid-row` and their `-start` `-end`, `grid-area` (an area's name, or its four lines), `grid-auto-*` |
 | text | `font-family` `font-size` `font-weight` `font-style` and the `font` shorthand, `line-height`, `letter-spacing`, `text-align`, `text-indent`, `text-transform` (in text fields too: drawn cased, the value kept as typed, the caret and selection following what's drawn), `white-space`, `text-overflow`, `overflow-wrap`, `text-shadow`, `text-decoration` and its `-line` `-style` `-color` `-thickness`, `vertical-align` (baseline, sub, super), `color`, `list-style-type` (disc, circle, square, decimal, none), `-webkit-font-smoothing: none` (glyphs unsmoothed on the pixel grid, for pixel fonts) |
 | look | `background-color` `-image` `-repeat` (repeat, no-repeat, repeat-x, repeat-y) `-size` (lengths, percentages, auto, cover, contain) `-position`, `border` and its parts (solid, dashed, dotted, inset, outset, groove, ridge), `border-radius`, `border-image` (nine-patches), `border-image-repeat` and `border-image-width`, `box-shadow`, `outline`, `opacity`, `transform` `transform-origin`, `transition` (colours, opacity, transforms), `cursor`, `pointer-events` (auto, none: the pointer passes through, inherited), `app-region` (drag, no-drag, none; inherited: a left press in a drag region moves the system's window and a double press is a double click on its title bar, for a header in a window with `platform.OwnTitleBar()`; what clicks is never part of the region), `image-rendering` (pixelated), `object-fit` `object-position`, `accent-color`, `caret-color`, `scrollbar-width`, `appearance`, `resize` |
 | tables | `border-spacing`, `caption-side` (top, bottom; inherited), `table-layout` (auto, fixed) |
@@ -56,7 +60,7 @@ Lay a screen out with flex or grid; tables are for tabular data, floats for text
 go run ./examples/92-ui-kit -element floated
 ```
 
-A float leaves the flow for the left or right edge of its container, and the lines after it take the room beside it; a line whose first word is wider than that room goes below the float. `clear` puts a block below the floats of a side. A container is only as tall as its flow: give it `display: flow-root` (or an `overflow` other than visible) to hold its floats; such a block, like a picture, a control or a table, also stands beside the floats before it and never under them. Floats paint over the backgrounds of the blocks after them and under their text. A float is a block whatever its `display`, and one in a flex or grid container is an item like the others. Two limits: a float written inside a paragraph's text stands at the top of that paragraph (in Chrome, at the line it was written in when that line has room), and there is no `shape-outside`.
+A float leaves the flow for the left or right edge of its container, and the lines after it take the room beside it; a line whose first word is wider than that room goes below the float. `clear` puts a block below the floats of a side. A container is only as tall as its flow: give it `display: flow-root` (or an `overflow` other than visible) to hold its floats; such a block, like a picture, a control or a table, also stands beside the floats before it and never under them. `display: table` on an element that is no `table` makes such a block too, as narrow as its content unless it has a width ([decision 0094](../99-decisions/0094-display-table-off-a-table-is-a-block-that-shrinks-and-holds-its-floats.md)): the empty `::after { content: ""; display: table; clear: both }` that old sheets end a container of floats with holds them, and `display: table; margin: 0 auto` centres a block of unknown width; `inline-table` is an `inline-block`. Its rows and cells are not read: `display: table-row`, `table-cell` and the others are refused. Floats paint over the backgrounds of the blocks after them and under their text. A float is a block whatever its `display`, and one in a flex or grid container is an item like the others. Two limits: a float written inside a paragraph's text stands at the top of that paragraph (in Chrome, at the line it was written in when that line has room), and there is no `shape-outside`.
 
 ![A journal of three entries in two columns with a thin rule between them: Tuesday's entry starts at the foot of the first column and goes on at the top of the second](columns.png "ember · columns")
 
@@ -81,13 +85,17 @@ The window itself does not scroll: `html` is the outermost box, and a screen tal
 
 `text-indent` starts a block's first line in by a length or a percentage of the block's width, negative to hang it out (`-9999px` still hides a replaced heading's text). It is inherited, counts in shrink-to-fit widths, and form controls reset it to 0, as in Chrome. `each-line` and `hanging` are refused.
 
-The `font` shorthand is `[style] [weight] size[/line-height] family, …`, as CSS writes it: `font: italic bold 12px/1.5 Georgia, serif`. `small-caps`, the stretch words and the system fonts (`caption`, `menu`…) are refused. A family is one of the Document's own (`@font-face`, ember's faces) unless the Document has [`ui.SystemFonts()`](01-document.md), which adds the machine's.
+The `font` shorthand is `[style] [weight] size[/line-height] family, …`, as CSS writes it: `font: italic bold 12px/1.5 Georgia, serif`. `small-caps`, the stretch words and the system fonts (`caption`, `menu`…) are refused. A family is one of the Document's own (`@font-face`, from a file or [fetched](01-document.md#fonts-that-arent-files), ember's faces) unless the Document has [`ui.SystemFonts()`](01-document.md), which adds the machine's.
 
 `text-decoration` draws `underline`, `overline` and `line-through`, `solid`, `double`, `dotted` or `dashed`, in the text's colour or `text-decoration-color`, a tenth of the font size thick or `text-decoration-thickness`. A box's lines go on all the text inside it, in its own thickness and colour, whatever its descendants set; floats, positioned boxes and inline blocks leave them behind. Places and thicknesses are Chrome's, measured. Three limits: lines cross descenders where Chrome leaves gaps (`text-decoration-skip-ink`), they cast no `text-shadow`, and `wavy` is refused.
+
+`text-align` also takes Chrome's `-webkit-left`, `-webkit-right` and `-webkit-center`, which HTML's `align` attribute and the `center` element stand for: lines as the plain word, and a block narrower than its container, a table or a sized box with no `auto` margin, placed the same way.
 
 `vertical-align` moves an inline box's baseline: `sub` a fifth of its parent's font size and a pixel down, `super` a third and a pixel up, the line growing to hold it, as in Chrome. The other values (`middle`, `top`, lengths…) are refused: align boxes with `align-items` or `align-self`.
 
 A list item (`display: list-item`, an `li`) has its marker outside its box, beside its first line: `disc`, `circle`, `square`, or its number in its list as `decimal`, `decimal-leading-zero`, `lower-alpha` (`lower-latin`), `upper-alpha` (`upper-latin`), `lower-roman` or `upper-roman` writes it. The number is the `list-item` counter ([counters](#counters)), which `ol`'s `start` and `reversed` and `li`'s `value` set; `::marker` styles the marker. `list-style-position` and `list-style-image` are not in the subset.
+
+Solid sides of more than one colour, or seen through, meet on the diagonal of their corner, as Chrome draws them: a box of no size with one coloured side and its neighbours transparent is a triangle, the arrow of a menu or a tooltip. Dashed and dotted sides run corner to corner.
 
 A `border-image` draws its corners and sides `border-image-width` thick and lays its edges and centre along their length, as `border-image-repeat` says, one value for both axes or two (across, then down): `stretch` (the default) stretches the piece, `repeat` lays copies at their size, centred, the ends cut, `round` fits a whole number of copies, scaled, and `space` fits a whole number at their size with the leftover shared out as equal gaps. A patterned frame (ivy, cloth, iron) keeps its pattern with `round`: `border-image: url(frame.png) 8 fill round`.
 
@@ -96,6 +104,14 @@ A `border-image` draws its corners and sides `border-image-width` thick and lays
 `background-size` takes `cover` or `contain`, or a width then a height, each a length, a percentage of the padding box or `auto`; one value is the width. `auto` keeps the picture's proportions beside the other side, and its own size when both are auto. `background-position` places the picture at that size and `background-repeat` tiles it at that size. The `background` shorthand takes the size after the position and a slash: `background: url(beach.png) no-repeat center / cover`. An SVG picture may have no size of its own either ([SVG pictures](01-document.md#svg-pictures)): with a `viewBox` alone `auto` is `contain`, with nothing it is the whole padding box, and it is drawn at the tile's size whatever that is. A gradient has no size of its own: `auto`, `cover` and `contain` are the whole padding box, and a length or a percentage sizes the box the gradient is drawn in, which then repeats, so `background-size: 20px 20px` over a radial gradient makes dots. Limits: a background is placed in the padding box and cut to it, its rounded corners included, where Chrome also paints it under the border; there is no `background-origin`, `background-clip` or `background-attachment`. Where two tiles of a scaled picture meet, each keeps its own edge, where Chrome blends the two over a pixel.
 
 `image-rendering: pixelated` draws an `<img>` or a background from its nearest texels. A pixel whose centre falls exactly on the line between two texels takes the upper left one, as Chrome does; that happens when a texel is a whole number and a half of device pixels wide, such as 16 texels over 24 points under a `Zoom` of 1.5 on a 2× screen. Smooth images are not concerned.
+
+`mask-image` paints an element's background colour through a picture's alpha, which is how a page draws an icon in one colour (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)): `mask-image` takes `none` or one `url()`, and `mask-size`, `mask-repeat` and `mask-position` size, tile and place it in the border box as their `background-` twins do a background. Nothing else of the element is masked: its background image, border and content draw whole.
+
+A `url()` whose address is a `data:` one, base64 or percent-encoded, is read from the address itself, in a sheet as in an `img`'s `src`.
+
+### Logical properties
+
+ui writes text left to right in horizontal lines only, so a logical property is the physical one of that writing, and takes its place in the cascade: the last declared wins, logical or not. `margin-`, `padding-` and `border-` with `block-start`, `block-end`, `inline-start`, `inline-end` (a border's also with `-width`, `-style`, `-color`) are top, bottom, left and right; `inset-block-start` and the three others are `top`, `bottom`, `left`, `right`; `inline-size` and `block-size`, with their `min-` and `max-`, are `width` and `height`; `border-start-start-radius` and the three others are the corners from the top left. `margin-inline`, `margin-block`, `padding-inline`, `padding-block`, `inset-inline` and `inset-block` take one value for both sides or two, start then end.
 
 What ui refuses on purpose is below; what it does not do yet is in [What is missing](10-missing.md).
 
@@ -109,6 +125,7 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | `zoom` | `transform: scale()` |
 | `clip` | `overflow: clip` |
 | `animation` | `transition` |
+| the `mask` shorthand, a gradient as a `mask-image`, several mask layers | `mask-image: url()` and its longhands |
 | repeating gradients, colour hints, several background layers | one gradient |
 | `@import` and other at-rules but `@font-face` and `@media` | not supported |
 
@@ -232,7 +249,7 @@ An `@media` rule applies while its query holds for the Document's viewport: the 
 | Media queries | |
 |---|---|
 | `all`, `screen` | hold; `print` and any other type never do |
-| `width`, `height`, `aspect-ratio`, `resolution`, each with `min-` and `max-` | the viewport and the window's pixel ratio; lengths in `px`, `em` and `rem` (16px), the other absolute units too; ranges as `(width >= 600px)` and `(400px <= width < 900px)` |
+| `width`, `height`, `aspect-ratio`, `resolution`, each with `min-` and `max-` | the viewport and the window's pixel ratio; lengths in `px`, `em` and `rem` (16px), the other absolute units too, and a `calc()` of them, as `(max-width: calc(1120px - 1px))`; ranges as `(width >= 600px)` and `(400px <= width < 900px)` |
 | `orientation` | `portrait` when the viewport is as high as wide or higher |
 | `device-width`, `device-height`, `device-aspect-ratio` | the viewport's: ui knows no screen |
 | `hover`, `any-hover`, `pointer`, `any-pointer` | `hover` and `fine`: a mouse |
@@ -253,7 +270,36 @@ ui.NewDocument(
 )
 ```
 
-`sheet.From()` reads it back. A `url()` in a style attribute is the page's, resolved by the fetcher. `@font-face` files are read only from a `Stylesheet`'s files.
+`sheet.From()` reads it back. A `url()` in a style attribute is the page's, resolved by the fetcher. `@font-face` files are read from a `Stylesheet`'s files, and fetched from the sheet's address with [`ui.FetchFonts`](01-document.md#fonts-that-arent-files).
+
+## Sheets changed while a Document shows
+
+A Document's stylesheets are `*ui.Sheet`s, in the order the cascade takes them: those its options gave, and those added since. A tool that edits a screen's look, or a page whose scripts write its styles, changes them there ([decision 0097](../99-decisions/0097-a-documents-sheets-are-changed-through-handles-once-a-frame.md)):
+
+```go
+theme := doc.AddSheet(`.card { width: 260px; }`)                  // after the others: wins at equal specificity
+reset := doc.InsertSheet(theme, `* { margin: 0; }`)                // before theme: loses to it
+theme.InsertRule(len(theme.Rules()), `.card:hover { color: #e0a040; }`)
+theme.SetMedia("(min-width: 600px)")
+reset.Remove()
+```
+
+| | |
+|---|---|
+| `doc.AddSheet(text, opts…)` | a sheet after the Document's others, read as `ui.CSS` reads one: `ui.From(address)`, `ui.Media(query)` |
+| `doc.InsertSheet(before, text, opts…)` | the same before the sheet `before`, which then wins where both say the same; after them all for nil |
+| `doc.StyleSheets()` | the Document's sheets in cascade order, those of `ui.Stylesheet`, `ui.CSS` and `kit.Theme()` first |
+| `sheet.Replace(text)`, `sheet.Text()` | another text for the sheet, read as the first was; its text |
+| `sheet.Remove()` | out of the Document, which looks as it did without it |
+| `sheet.Media()`, `sheet.SetMedia(query)` | the media query list its rules apply under, as a `style` element's `media`; `""` for always |
+| `sheet.Disabled()`, `sheet.SetDisabled(off)` | its rules left out of the cascade, its place kept |
+| `sheet.Rules()` | its top-level rules as CSS: each style rule, each at-rule with what it holds |
+| `sheet.InsertRule(i, text)`, `sheet.DeleteRule(i)` | one rule put before rule `i`, or taken out. Only the new rule is read. A rule ui reads part of is taken, what it drops a warning; the error is for a text that is no one rule, `ui.ErrNoRule` for an `i` out of range |
+
+- However many sheets change between two frames, and however often, the Document works its cascade out once, at the next frame, and lays out only what the new styles move. A thousand rules inserted one by one cost about 5 ms to read.
+- A run-time sheet is read as the Document's others: under `ui.BrowserSheets()` as a browser's, its `@media` answered for the viewport as it is resized, its `@layer` names shared with the other sheets, its warnings in `doc.Warnings()`. An `@font-face` in it is read as in `ui.CSS` when the sheet is added or replaced whole (not one inserted as a rule, and a face stays when its sheet goes), and `@import` is not read.
+- `doc.MatchedRules` and `doc.ComputedStyle` read the sheets as they stand, without waiting for the frame. A rule of a run-time sheet is named by its sheet (`style`, with its `From`), and one inserted alone stands at line 1 of its own text.
+- Each step of `TestSheetsChangedWhileADocumentShowsLayOutAsChromes` lays out as Chrome given the same sheets: a rule added later wins or loses by order, specificity and importance, and a removed sheet leaves the look before it.
 
 ## Browser sheets
 
@@ -267,11 +313,13 @@ A sheet written for browsers holds what a game's sheet never does: prefixes of f
 | `@layer` | real cascade layers: statements, blocks, nested and dotted names, anonymous layers; a later layer wins, unlayered rules win over every layer, and `!important` turns the order round. Layers are the Document's, shared by its sheets in order |
 | `user-select` | `auto` on the root, so the page's text is selected and copied as in a browser ([Selecting text](#selecting-text)) |
 | `box-sizing` | `content-box` unless the sheet says otherwise, as in a browser's own sheet. Sized by their border as in Chrome: `button`, `select`, `table`, `progress`, `meter`, and `input` of type checkbox, radio, button, submit, reset, search and color (`TestChromeSizesTheSameBoxesByTheirBorder`) |
+| `text-align` of a control | `start` on `input`, `select` and `textarea`, `center` on an `input` of type button, submit and reset, whatever their parent's, as in Chrome (`TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes`); without the option a control takes its parent's |
+| an element ui has none of in a selector (`applet`, `iframe`, `svg`, a custom element) | the selector matches nothing and goes without a word, its rule keeping the others: a reset that lists every element of HTML still applies. Inside `:not()` it keeps its warning and drops the rule |
 | vendor prefixes | read as the plain name where Chrome does, dropped without a word where Chrome drops them: the tables below |
 
 A prefixed name read as a plain one keeps its place in the cascade, so `-webkit-transform: rotate(3deg); transform: none` ends as `none` and the other order as the rotation. A warning about one names it as it was written.
 
-What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `animation`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@import`, `@font-face` in a sheet given as text. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
+What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `animation`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@import`, `@font-face` in a sheet given as text without `ui.FetchFonts`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
 
 ### Vendor prefixes
 

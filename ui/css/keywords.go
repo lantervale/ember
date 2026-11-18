@@ -20,6 +20,11 @@ const (
 	kwMaxContent   = "max-content"
 	kwFitContent   = "fit-content"
 	kwContent      = "content"
+	kwAuto         = "auto"
+	kwInherit      = "inherit"
+	kwBaseline     = "baseline"
+
+	unitRem = "rem"
 
 	fnTranslate  = "translate"
 	fnTranslateX = "translatex"
@@ -42,6 +47,7 @@ const (
 	propBreakInside       = "break-inside"
 	propWidth             = "width"
 	propHeight            = "height"
+	propFontSize          = "font-size"
 
 	propTextDecorationStyle     = "text-decoration-style"
 	propTextDecorationColor     = "text-decoration-color"

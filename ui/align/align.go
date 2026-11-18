@@ -297,7 +297,8 @@ func (c *checker) centred(n *dom.Node, b *box.Box) {
 		c.faultf("centre", n, dy, 0, "label %.2fpt below the middle of its %.2fpt box (%.2fpt off)", dy, pad.H, abs(dy))
 		return
 	}
-	if a := b.Style.TextAlign; n.Tag() == dom.Button && a != style.Left && a != style.Right && a != style.End {
+	if a := b.Style.TextAlign; n.Tag() == dom.Button && a != style.Left && a != style.Right && a != style.End &&
+		a != style.BlockLeft && a != style.BlockRight {
 		content := inFlowRect(b, text)
 		if dx := (content.X + content.W/2) - (pad.X + pad.W/2); abs(dx) > Tolerance {
 			c.faultf("centre", n, dx, 0, "label %.2fpt right of the middle of its %.2fpt box (%.2fpt off)", dx, pad.W, abs(dx))

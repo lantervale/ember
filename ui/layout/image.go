@@ -24,7 +24,7 @@ func (t *tree) buildImage(n *node, e *dom.Node) {
 	if t.images == nil {
 		return
 	}
-	src, ok := e.Attr("src")
+	src, ok := dom.Picture(e)
 	if !ok {
 		return
 	}

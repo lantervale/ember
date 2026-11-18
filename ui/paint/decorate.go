@@ -104,9 +104,12 @@ func (p *painter) rowBackground(row *box.Box, at geom.Vec2, c color.Color) {
 func (p *painter) background(e entry, r geom.Rect, edges box.Edges, radius radii, st *style.Computed, alpha float32) {
 	b := e.b
 	if st.Background.A > 0 && !tracked(b) {
-		if b.Node != nil && b.Node.Tag() == dom.Tr {
+		switch {
+		case b.Node != nil && b.Node.Tag() == dom.Tr:
 			p.rowBackground(b, e.at, fade(st.Background, alpha))
-		} else {
+		case st.MaskImage.Source != "":
+			p.maskedFill(r, radius, st, alpha)
+		default:
 			p.fill(r, radius, fade(st.Background, alpha))
 		}
 	}
@@ -263,6 +266,24 @@ const maxTiles = 4096
 // canvas of a viewport that scrolls, whose image is placed in the root
 // element's box and tiles over the canvas.
 func (p *painter) backgroundImage(view, area geom.Rect, radius radii, st *style.Computed, alpha float32) {
+	p.tiled(view, area, radius, st, alpha, fade(color.White, alpha), false)
+}
+
+// maskedFill paints st's background colour through its mask-image over
+// r, the border box: the picture's alpha, sized, placed and tiled as a
+// background image is, in the colour (decision 0093). Nothing is painted
+// until the picture is there.
+func (p *painter) maskedFill(r geom.Rect, radius radii, st *style.Computed, alpha float32) {
+	mask := *st
+	mask.BackgroundImage, mask.BackgroundSize, mask.BackgroundPosition = st.MaskImage, st.MaskSize, st.MaskPosition
+	mask.BackgroundNoRepeat, mask.BackgroundRepeat = st.MaskNoRepeat, st.MaskRepeat
+	p.tiled(r, r, radius, &mask, alpha, fade(st.Background, alpha), true)
+}
+
+// tiled draws st's background image tinted by tint, as its shape alone
+// when shape is set: its alpha, whatever its colours.
+func (p *painter) tiled(view, area geom.Rect, radius radii, st *style.Computed, alpha float32, tint color.Color,
+	shape bool) {
 	g := st.BackgroundImage.Gradient
 	var tex *twod.Texture
 	var natural box.Intrinsic
@@ -323,7 +344,9 @@ func (p *painter) backgroundImage(view, area geom.Rect, radius radii, st *style.
 		p.s.PushClipRounded(view, radius)
 	}
 	defer p.s.PopClip()
-	tint := fade(color.White, alpha)
+	if shape {
+		tex = silhouette(tex)
+	}
 	backgroundTiles(view, first, st, func(tile geom.Rect) {
 		if g != nil {
 			p.gradient(tile, radii{}, g, alpha)
@@ -1025,8 +1048,9 @@ func grow(r geom.Rect, d float32) geom.Rect {
 }
 
 // border paints the border: one stroke when every side is alike and the
-// box is rounded, else each side square, solid or dashed or dotted; a
-// rounded dashed border is drawn solid for now.
+// box is rounded, else each side square, solid or dashed or dotted, solid
+// sides of more than one colour mitered into each other; a rounded dashed
+// border is drawn solid for now.
 func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Computed, alpha float32) {
 	side := func(width float32, s style.BorderStyle, c color.Color) (float32, color.Color) {
 		if s == style.BorderNone || width <= 0 {
@@ -1069,6 +1093,10 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		}
 		return
 	}
+	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
+		p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
+		return
+	}
 	for _, s := range []struct {
 		rect   geom.Rect
 		c      color.Color
@@ -1091,6 +1119,27 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 			p.s.Rect(s.rect, s.c)
 		}
 	}
+}
+
+// mitered reports solid sides that must not lie over each other's
+// corners: of more than one colour, or seen through.
+func mitered(w [4]float32, c [4]color.Color, s style.Sides[style.BorderStyle]) bool {
+	var first color.Color
+	differ, sides := false, 0
+	for i, x := range [4]style.BorderStyle{s.Top, s.Right, s.Bottom, s.Left} {
+		if w[i] <= 0 {
+			continue
+		}
+		if x == style.BorderDashed || x == style.BorderDotted {
+			return false
+		}
+		if sides == 0 {
+			first = c[i]
+		}
+		differ = differ || c[i] != first || c[i].A < 1
+		sides++
+	}
+	return differ && sides > 1
 }
 
 // beveled reports whether a side is inset, outset, groove or ridge.

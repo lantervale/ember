@@ -146,7 +146,10 @@ func (d *Document) image(url string) *twod.Texture {
 		return t
 	}
 	var tex *twod.Texture
-	b, ok := d.imageBytes(url)
+	b, ok := dataURL(url)
+	if !ok {
+		b, ok = d.imageBytes(url)
+	}
 	switch {
 	case ok:
 		tex = d.decoded(url, b)

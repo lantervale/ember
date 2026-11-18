@@ -16,11 +16,16 @@ func DefaultImages() map[string][]byte {
 // a browser's own sheet, but for the controls Chrome sizes by their
 // border box (TestChromeSizesTheSameBoxesByTheirBorder), and the page's
 // text is selected as a browser's is, where a game's screen takes no
-// selection but where it asks for one (decision 0090).
+// selection but where it asks for one (decision 0090). A field's text
+// starts at its start whatever its parent's text-align, as Chrome's
+// (TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes), where a
+// game's takes its parent's.
 const BrowserDefault = `* { box-sizing: content-box; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
 html { user-select: auto; }
+input, select, textarea { text-align: start; }
+input[type="button"], input[type="submit"], input[type="reset"] { text-align: center; }
 `
 
 // Default is the user-agent sheet: what every element looks like before
@@ -32,7 +37,7 @@ html, body, div, section, header, footer, nav, main, aside, article, p, h1, h2, 
 details, summary, dialog, hr, pre, ul, ol, menu, dl, dt, dd, h5, h6, blockquote, figure, figcaption, form, address,
 hgroup, search, center, fieldset, legend { display: block; }
 li { display: list-item; }
-[hidden] { display: none; }
+[hidden], input[type="hidden"] { display: none; }
 table { border-spacing: 2px; }
 caption { text-align: center; }
 html { margin: 0; user-select: none; }
@@ -72,7 +77,7 @@ sup { vertical-align: super; }
 q::before { content: open-quote; }
 q::after { content: close-quote; }
 big { font-size: larger; }
-center { text-align: center; }
+center { text-align: -webkit-center; }
 fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove #efefef; min-width: min-content; }
 fieldset { display: flow-root; }
 fieldset > legend { width: fit-content; }
@@ -91,7 +96,7 @@ button, input, select, textarea {
   color: inherit; line-height: inherit; letter-spacing: inherit; text-align: inherit;
   text-indent: 0;
 }
-button, input, select, textarea, progress, meter, img, canvas { display: inline-block; }
+button, input, select, textarea, progress, meter, img, canvas, svg { display: inline-block; }
 button, select, input[type="checkbox"], input[type="range"] { cursor: default; }
 input, textarea { cursor: text; }
 button {
@@ -100,8 +105,13 @@ button {
 button:hover { background-color: #e5e5e5; }
 button:active { background-color: #f5f5f5; }
 input, select, textarea { padding: 1px 2px; border: 1px solid #767676; border-radius: 2px; background-color: #fff; }
+input[type="button"], input[type="submit"], input[type="reset"] {
+  padding: 1px 6px; border-radius: 3px; background-color: #efefef; text-align: center; cursor: default;
+}
+input[type="button"]:hover, input[type="submit"]:hover, input[type="reset"]:hover { background-color: #e5e5e5; }
+input[type="button"]:active, input[type="submit"]:active, input[type="reset"]:active { background-color: #f5f5f5; }
 ::placeholder { color: #757575; }
-button:disabled {
+button:disabled, input[type="button"]:disabled, input[type="submit"]:disabled, input[type="reset"]:disabled {
   color: rgba(16, 16, 16, 0.3); background-color: rgba(239, 239, 239, 0.3); border-color: rgba(118, 118, 118, 0.3);
 }
 input:disabled, textarea:disabled {

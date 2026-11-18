@@ -92,6 +92,7 @@ const (
 	Q
 	Fieldset
 	Legend
+	Svg
 	tagCount
 )
 
@@ -104,7 +105,7 @@ var tagNames = [tagCount]string{ //nolint:gochecknoglobals // a lookup table by 
 	"ul", "ol", "li", "dl", "dt", "dd", "h5", "h6", "blockquote", "figure", "figcaption", "form", "address",
 	"hgroup", "menu", "search", "a", "b", "i", "u", "s", "small", "abbr", "cite", "mark", "time", "var", "del",
 	"ins", "dfn", "bdi", "bdo", "data", "br",
-	"center", "big", "font", "sub", "sup", "q", "fieldset", "legend",
+	"center", "big", "font", "sub", "sup", "q", "fieldset", "legend", "svg",
 }
 
 // String is the tag's HTML name, "#text" for text nodes.

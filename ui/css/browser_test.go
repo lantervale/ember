@@ -29,7 +29,7 @@ func TestSupportsAppliesWhereUISupportsWhatItAsks(t *testing.T) {
 		"not ((foo: bar) or (display: flex))":              false,
 		"(display: grid) and (not (display: inline-grid))": false,
 		"selector(a > b)":                                  true,
-		"selector(a + b)":                                  false,
+		"selector(a:has(b))":                               false,
 		"selector(::-moz-x)":                               false,
 		"selector(::-webkit-foo)":                          false,
 		"font-tech(color-COLRv1)":                          false,

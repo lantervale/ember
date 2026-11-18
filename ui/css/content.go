@@ -249,7 +249,7 @@ func contentProps() map[string]prop {
 // canvas), nor those ui draws whole or lays out as table parts.
 func generates(tag dom.Tag) bool {
 	switch tag {
-	case dom.Img, dom.Br, dom.Input, dom.Textarea, dom.Select, dom.Canvas, dom.Progress, dom.Meter,
+	case dom.Img, dom.Svg, dom.Br, dom.Input, dom.Textarea, dom.Select, dom.Canvas, dom.Progress, dom.Meter,
 		dom.Table, dom.Thead, dom.Tbody, dom.Tfoot, dom.Tr, dom.TextTag:
 		return false
 	case dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,

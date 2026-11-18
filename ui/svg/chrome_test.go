@@ -3,6 +3,7 @@
 package svg_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -57,6 +58,48 @@ func TestSVGImagesInShrunkBlocksAndFlexRowsAreSizedAsChromeSizesThem(t *testing.
 				ui.Div(ui.Style("display: flex"), img(ui.Style("height: 30px")), img(ui.Style("width: 50px"))),
 				ui.Div(ui.Style("display: flow-root"), ui.Div(ui.Style("float: left"), img())),
 				ui.Div(ui.Style("display: inline-block"), img()),
+			)
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}
+
+// An svg element is sized as Chrome sizes one in a page: by its width
+// and height attributes, in any unit, by its view box, and by the rules
+// that name it.
+func TestSvgElementsAreSizedAsChromeSizesThem(t *testing.T) {
+	const shape = `<rect width="48" height="24" fill="#2a7"/>`
+	ways := [][]ui.Arg{
+		nil,
+		{ui.Attr("width", "100")},
+		{ui.Attr("height", "30")},
+		{ui.Attr("width", "100"), ui.Attr("height", "30")},
+		{ui.Attr("width", "3em"), ui.Attr("height", "3em")},
+		{ui.Attr("width", "50%")},
+		{ui.Style("width: 120px")},
+		{ui.Style("height: 40px")},
+		{ui.Style("width: 90px; height: 70px")},
+		{ui.Style("max-width: 50px")},
+		{ui.Style("display: block")},
+		{ui.Style("margin: 0 10px; padding: 5px; border: 2px solid")},
+		{ui.Attr("width", "100"), ui.Style("width: 60px")},
+		{ui.Class("icon")},
+	}
+	for name, box := range map[string][]ui.Arg{"view box": {ui.Attr("viewBox", "0 0 48 24")}, "bare": nil} {
+		t.Run(name, func(t *testing.T) {
+			d := ui.NewDocument(ui.BrowserSheets(), ui.CSS(`body { margin: 0; width: 500px; }
+				.row svg { height: 20px; } svg.icon { width: 24px; height: 24px; }`))
+			for _, way := range ways {
+				d.Body().Append(ui.Div(ui.Svg(shape, append(slices.Clone(box), way...)...)))
+			}
+			d.Body().Append(
+				ui.P(ui.Text("beside text "), ui.Svg(shape, append(slices.Clone(box), ui.Style("height: 20px"))...),
+					ui.Text(" on a line")),
+				ui.Div(ui.Class("row"), ui.Style("display: flex"), ui.Svg(shape, box...),
+					ui.Svg(shape, append(slices.Clone(box), ui.Attr("width", "60"))...)),
+				ui.Div(ui.Class("row"), ui.Style("display: flex; width: 700px"), ui.Svg(shape, box...), ui.Svg(shape, box...)),
+				ui.Div(ui.Style("display: inline-block"), ui.Svg(shape, append(slices.Clone(box), ui.Attr("width", "40"))...)),
 			)
 			r := chrome.Match(t, d, geom.V2(800, 600))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)

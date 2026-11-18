@@ -136,6 +136,9 @@ func parseFace(name string, ttf []byte) (*Face, error) {
 	return &Face{face: f}, nil
 }
 
+//nolint:gochecknoinits // the hook ui builds its pages' faces through, set once
+func init() { draw.Wrap = func(f *draw.Face) any { return &Face{face: f} } }
+
 func (f *Face) draw() *draw.Face {
 	if f == nil {
 		return draw.Regular

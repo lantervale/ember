@@ -47,6 +47,11 @@ type interaction struct {
 	// two in turn, so the focus reads the last while the next is made.
 	candidates []candidate
 	shows      []*Node
+	// radios are the named radio inputs of that walk, in tree order, group
+	// the buffer their groups are read in, and grouped counts the walks of
+	// the tree a radio's group was read by, for tests.
+	radios, group []*Node
+	grouped       int
 	// shortcutItems are the menu items with aria-keyshortcuts, parsed their
 	// keys as last read.
 	shortcutItems []*Node
@@ -275,21 +280,8 @@ type candidate struct {
 func (d *Document) retarget() {
 	if d.restructure || !d.targeted {
 		d.candidates, d.shows, d.shortcutItems = d.candidates[:0], d.shows[:0], d.shortcutItems[:0]
-		d.html.Walk(func(n *Node) bool {
-			if n.IsText() {
-				return false
-			}
-			if isMenuItem(n) && has(n, "aria-keyshortcuts") {
-				d.shortcutItems = append(d.shortcutItems, n)
-			}
-			if isTab(n) || d.resetField(n) != nil {
-				d.shows = append(d.shows, n)
-			}
-			if i, ok := focusable(n); ok {
-				d.candidates = append(d.candidates, candidate{n, i})
-			}
-			return true
-		})
+		d.radios = d.radios[:0]
+		d.html.Walk(d.found)
 		d.restructure = false
 	}
 	for _, n := range d.shows {
@@ -310,7 +302,7 @@ func (d *Document) retarget() {
 			i = d.tabTabIndex(n, i)
 		}
 		if d.isRadio(n) {
-			i = d.radioTabIndex(n, i)
+			i = d.radioTabIndex(n, d.walkedGroup(n), i)
 		}
 		if isMenuItem(n) {
 			i = d.menuTabIndex(n)
@@ -322,6 +314,27 @@ func (d *Document) retarget() {
 	d.autofocus(targets)
 	d.focusPending()
 	d.targeted = true
+}
+
+// found keeps n, met on retarget's walk of the tree, in the lists it is
+// one of, and reports whether the walk goes on below it.
+func (d *Document) found(n *Node) bool {
+	if n.IsText() {
+		return false
+	}
+	if d.namedRadio(n) {
+		d.radios = append(d.radios, n)
+	}
+	if isMenuItem(n) && has(n, "aria-keyshortcuts") {
+		d.shortcutItems = append(d.shortcutItems, n)
+	}
+	if isTab(n) || d.resetField(n) != nil {
+		d.shows = append(d.shows, n)
+	}
+	if i, ok := focusable(n); ok {
+		d.candidates = append(d.candidates, candidate{n, i})
+	}
+	return true
 }
 
 // autofocus gives the focus to the first target with autofocus, in tree
@@ -371,7 +384,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 	}
 	d.acts(c)
 	if in := c.Input(); in != nil {
-		d.html.SetAttr("data-input-device", in.LastDevice().String())
+		dom.SetSelectorAttr(d.html, "data-input-device", in.LastDevice().String())
 		d.pointer(c, in)
 		if !d.fresh {
 			d.keys(c, in)

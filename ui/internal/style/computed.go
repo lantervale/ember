@@ -136,7 +136,12 @@ type Box struct {
 	ListItem bool
 	// FlowRoot is display: flow-root, laid out as Block, holding its floats
 	// and standing beside those around it.
-	FlowRoot  bool
+	FlowRoot bool
+	// Table is display: table or inline-table on any element, laid out as
+	// a flow root that shrinks to its content: the one cell CSS wraps round
+	// children that are no rows or cells. A table element is laid out as a
+	// table whatever this says.
+	Table     bool
 	BoxSizing BoxSizing
 	Position  Position
 	// Float and Clear are float and clear; a float applies to a box in the
@@ -277,14 +282,45 @@ type TrackRepeat struct {
 }
 
 // GridLine is one end of a placement: auto, a line number (negative from
-// the end), or a span.
+// the end), a span, or the name of an area of the container's, whose
+// edge on that side it is.
 type GridLine struct {
 	Line int
 	Span int
+	Name string
 }
 
-// IsAuto reports a line that is neither a number nor a span.
-func (g GridLine) IsAuto() bool { return g.Line == 0 && g.Span == 0 }
+// IsAuto reports a line that is neither a number, a span nor a name.
+func (g GridLine) IsAuto() bool { return g.Line == 0 && g.Span == 0 && g.Name == "" }
+
+// GridArea is a named area of grid-template-areas: the lines round it,
+// from 1.
+type GridArea struct {
+	Name        string
+	Row, Column [2]int
+}
+
+// AreaLines is lines with each named one as a line number: the edge of
+// the area of that name among areas, auto when there is none.
+func AreaLines(areas []GridArea, lines [2]GridLine, column bool) [2]GridLine {
+	for i, l := range lines {
+		if l.Name == "" {
+			continue
+		}
+		lines[i] = GridLine{}
+		for _, a := range areas {
+			if a.Name != l.Name {
+				continue
+			}
+			if column {
+				lines[i].Line = a.Column[i]
+			} else {
+				lines[i].Line = a.Row[i]
+			}
+		}
+	}
+	return lines
+}
 
 type GridFlow uint8
 
@@ -296,8 +332,10 @@ const (
 )
 
 type Grid struct {
-	Columns     []TrackRepeat
-	Rows        []TrackRepeat
+	Columns []TrackRepeat
+	Rows    []TrackRepeat
+	// Areas are grid-template-areas' named areas.
+	Areas       []GridArea
 	AutoColumns []Track
 	AutoRows    []Track
 	Flow        GridFlow
@@ -350,6 +388,10 @@ const (
 	Capitalize
 )
 
+// TextAlign is a text-align. The Block ones are Chrome's -webkit-left,
+// -webkit-right and -webkit-center, which HTML's align attribute and
+// center element stand for: lines as the plain word, and the blocks
+// narrower than their container placed the same way.
 type TextAlign uint8
 
 const (
@@ -359,6 +401,9 @@ const (
 	Right
 	Center
 	Justify
+	BlockLeft
+	BlockRight
+	BlockCenter
 )
 
 type WhiteSpace uint8
@@ -552,6 +597,15 @@ type Look struct {
 	// BackgroundPosition is where the image's top-left sits in the padding
 	// box.
 	BackgroundPosition BackgroundPosition
+	// MaskImage is mask-image: the picture whose alpha is the shape the
+	// background colour is painted through (decision 0093), sized, tiled
+	// and placed in the border box by MaskSize, MaskNoRepeat, MaskRepeat
+	// and MaskPosition as a background image is by its own.
+	MaskImage    Image
+	MaskSize     BackgroundSize
+	MaskNoRepeat bool
+	MaskRepeat   RepeatAxes
+	MaskPosition BackgroundPosition
 	// ObjectFit and ObjectPosition place a replaced element's picture
 	// (an img's) in its content box.
 	// ImageRendering is image-rendering: how pictures scale.

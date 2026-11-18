@@ -6,7 +6,6 @@ import (
 	"math"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -40,6 +39,7 @@ func initialStyle() style.Computed {
 	c.AccentAuto, c.CaretAuto = true, true
 	none := style.Length{Kind: style.Fixed, IsPercent: true}
 	c.BackgroundPosition = style.BackgroundPosition{X: none, Y: none}
+	c.MaskPosition = c.BackgroundPosition
 	c.ObjectPosition = style.BackgroundPosition{X: half, Y: half}
 	return c
 }
@@ -92,6 +92,12 @@ type restyler struct {
 	// treeStates are the states some selector reads above its subject:
 	// only a change of those restyles an element's descendants.
 	treeStates dom.State
+	// siblings is set when some selector has a sibling combinator, and
+	// besideStates are the states read before one: a change of those on
+	// an element, of what it reads there (readBeside) or of its parent's
+	// children restyles the elements after it and their subtrees.
+	siblings     bool
+	besideStates dom.State
 	// computed counts the elements whose style was worked out.
 	computed *int
 	// la and lb are scratch styles for comparing what layout or
@@ -127,6 +133,8 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.before = r.before || x.pseudos["before"] != nil
 		r.after = r.after || x.pseudos["after"] != nil
 		r.marker = r.marker || x.pseudos["marker"] != nil
+		r.siblings = r.siblings || x.siblings
+		r.besideStates |= x.besideStates
 	}
 	r.visit(root, nil, 0, stale, stale)
 	r.count(root)
@@ -170,16 +178,21 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	if tree && slices.ContainsFunc(data.Changed, countsOn) {
 		r.recount = true
 	}
-	kidsDeep := deep || stateMoved || tree && r.readAbove(data.Changed)
-	kidsForce := inherits || kidsDeep || tree && slices.Contains(data.Changed, dom.Children)
+	kidsChanged := tree && slices.Contains(data.Changed, dom.Children)
+	kidsDeep := deep || stateMoved || tree && r.readAbove(data.Changed) || kidsChanged && r.siblings
+	kidsForce := inherits || kidsDeep || kidsChanged
 	data.Changed = data.Changed[:0]
 	if !kidsForce && dirty&dom.DirtyDescendant == 0 && !force {
 		return data.Dirty&dom.DirtyLayout != 0
 	}
 	below := false
 	for _, c := range n.Children() {
+		after := r.siblings && r.movesSiblings(c)
 		if r.visit(c, data.Style, rem, kidsForce, kidsDeep) {
 			below = true
+		}
+		if after {
+			kidsForce, kidsDeep = true, true
 		}
 	}
 	if below {
@@ -311,40 +324,29 @@ var order, orderIndex = func() ([]string, map[string]int) {
 	return names, index
 }()
 
-//nolint:gochecknoglobals // a fixed value every element shares
-var currentColor = []Component{word(kwCurrentColor)}
+// longhand is one of order's longhands with what every element's
+// computation reads of it, looked up once: how it is set and inherited,
+// whether it is inherited, and whether its initial value is currentcolor.
+type longhand struct {
+	name               string
+	prop               prop
+	inherited, current bool
+}
 
-// hints are the declarations an img's width and height attributes stand
-// for, as HTML maps them: a number of pixels or a percentage, whatever
-// follows it.
-func hints(n *dom.Node) []Declaration {
-	if n.Tag() != dom.Img {
-		return nil
-	}
-	var out []Declaration
-	for _, name := range [...]string{propWidth, propHeight} {
-		v, ok := n.Attr(name)
-		if !ok {
-			continue
-		}
-		v = strings.TrimLeft(v, " \t\r\n\f")
-		end := 0
-		for end < len(v) && (v[end] >= '0' && v[end] <= '9' || v[end] == '.') {
-			end++
-		}
-		f, err := strconv.ParseFloat(v[:end], 32)
-		if err != nil {
-			continue
-		}
-		unit := "px"
-		if strings.HasPrefix(v[end:], "%") {
-			unit = "%"
-		}
-		decls, _ := ParseInline(name + ": " + strconv.FormatFloat(f, 'f', -1, 32) + unit)
-		out = append(out, decls...)
+// longhands are order's, in its order.
+//
+//nolint:gochecknoglobals // derived from the properties
+var longhands = func() []longhand {
+	out := make([]longhand, len(order))
+	for i, name := range order {
+		p := properties[name]
+		out[i] = longhand{name: name, prop: props[name], inherited: p.inherited, current: p.initial == kwCurrentColor}
 	}
 	return out
-}
+}()
+
+//nolint:gochecknoglobals // a fixed value every element shares
+var currentColor = []Component{word(kwCurrentColor)}
 
 func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *style.Computed {
 	var inline []Declaration
@@ -412,9 +414,10 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 // cascaded applies every longhand's winner, then what depends on several.
 func (x *ctx) cascaded(casc cascaded, root bool) {
 	x.customs(casc.custom)
-	for i, name := range order {
-		x.apply(name, casc.longhands[i])
-		if name == "font-size" {
+	for i := range longhands {
+		l := &longhands[i]
+		x.apply(l, casc.longhands[i])
+		if l.name == "font-size" {
 			x.em = x.c.Font.Size
 			if root {
 				x.rem = x.c.Font.Size
@@ -454,10 +457,11 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, node: n}
 	px.customs(casc.custom)
-	for i, prop := range order {
+	for i := range longhands {
 		if d := casc.longhands[i]; d != nil {
-			px.apply(prop, d)
-			if prop == "font-size" {
+			l := &longhands[i]
+			px.apply(l, d)
+			if l.name == "font-size" {
 				px.em = ps.Font.Size
 			}
 		}
@@ -610,14 +614,14 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 
 // apply computes one longhand from its winning declaration, or from
 // inheritance or its initial value when it has none.
-func (x *ctx) apply(name string, d *Declaration) {
-	p := props[name]
+func (x *ctx) apply(l *longhand, d *Declaration) {
+	name, p := l.name, l.prop
 	if d == nil {
-		if properties[name].inherited {
+		if l.inherited {
 			p.inherit(x.c, x.parent)
 			x.c.ColorInherited = x.c.ColorInherited || name == "color"
 		} else {
-			x.reset(name, p)
+			x.reset(l)
 		}
 		return
 	}
@@ -660,18 +664,18 @@ func (x *ctx) apply(name string, d *Declaration) {
 		kw = kwUnset
 	}
 	if name == "color" {
-		x.c.ColorInherited = kw == "inherit" || kw == kwUnset || kw == "" && isWord(v[0], kwCurrentColor)
+		x.c.ColorInherited = kw == kwInherit || kw == kwUnset || kw == "" && isWord(v[0], kwCurrentColor)
 	}
 	switch kw {
-	case "inherit":
+	case kwInherit:
 		p.inherit(x.c, x.parent)
 	case "initial":
-		x.reset(name, p)
+		x.reset(l)
 	case kwUnset:
-		if properties[name].inherited {
+		if l.inherited {
 			p.inherit(x.c, x.parent)
 		} else {
-			x.reset(name, p)
+			x.reset(l)
 		}
 	default:
 		p.set(x, v)
@@ -680,12 +684,12 @@ func (x *ctx) apply(name string, d *Declaration) {
 
 // reset gives a longhand its initial value; currentcolor is the
 // element's colour.
-func (x *ctx) reset(name string, p prop) {
-	if properties[name].initial == kwCurrentColor {
-		p.set(x, currentColor)
+func (x *ctx) reset(l *longhand) {
+	if l.current {
+		l.prop.set(x, currentColor)
 		return
 	}
-	p.inherit(x.c, &initial)
+	l.prop.inherit(x.c, &initial)
 }
 
 // rootBody reports whether n is the root's first body element, whose
@@ -970,7 +974,7 @@ var displays = map[string]style.Display{
 	"inline": style.Inline, "block": style.Block, "inline-block": style.InlineBlock,
 	"flex": style.FlexDisplay, "inline-flex": style.InlineFlex, "grid": style.GridDisplay,
 	"inline-grid": style.InlineGrid, "none": style.DisplayNone, "contents": style.Contents,
-	"list-item": style.Block, "flow-root": style.Block,
+	"list-item": style.Block, "flow-root": style.Block, "table": style.Block, "inline-table": style.InlineBlock,
 }
 
 //nolint:gochecknoglobals,goconst // lookup tables
@@ -1035,9 +1039,10 @@ var props = func() map[string]prop {
 				x.c.Display = displays[strings.ToLower(v[0].Text)]
 				x.c.ListItem = isWord(v[0], "list-item")
 				x.c.FlowRoot = isWord(v[0], "flow-root")
+				x.c.Table = isWord(v[0], "table") || isWord(v[0], "inline-table")
 			},
 			inherit: func(dst, src *style.Computed) {
-				dst.Display, dst.ListItem, dst.FlowRoot = src.Display, src.ListItem, src.FlowRoot
+				dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
 			},
 		},
 		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
@@ -1131,6 +1136,7 @@ var props = func() map[string]prop {
 
 		"grid-template-columns": field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Columns }, (*ctx).tracks),
 		"grid-template-rows":    field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Rows }, (*ctx).tracks),
+		"grid-template-areas":   field(func(c *style.Computed) *[]style.GridArea { return &c.Areas }, templateAreas),
 		"grid-auto-columns":     field(func(c *style.Computed) *[]style.Track { return &c.AutoColumns }, (*ctx).autoTracks),
 		"grid-auto-rows":        field(func(c *style.Computed) *[]style.Track { return &c.AutoRows }, (*ctx).autoTracks),
 		"grid-auto-flow": field(
@@ -1207,7 +1213,8 @@ var props = func() map[string]prop {
 				"lowercase": style.Lowercase, "capitalize": style.Capitalize}),
 		"text-align": keyword(func(c *style.Computed) *style.TextAlign { return &c.TextAlign },
 			map[string]style.TextAlign{"start": style.Start, "end": style.End, "left": style.Left, "right": style.Right,
-				"center": style.Center, "justify": style.Justify}),
+				"center": style.Center, "justify": style.Justify, "-webkit-left": style.BlockLeft,
+				"-webkit-right": style.BlockRight, "-webkit-center": style.BlockCenter}),
 		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
@@ -1270,35 +1277,19 @@ var props = func() map[string]prop {
 		"background-color": colorField(func(c *style.Computed) *color.Color { return &c.Background }),
 		"background-image": field(func(c *style.Computed) *style.Image { return &c.BackgroundImage }, backgroundImage),
 		"background-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.BackgroundSize },
-			func(x *ctx, v []Component) style.BackgroundSize {
-				v = items(v)
-				switch {
-				case isWord(v[0], "cover"):
-					return style.BackgroundSize{Scale: style.ScaleCover}
-				case isWord(v[0], "contain"):
-					return style.BackgroundSize{Scale: style.ScaleContain}
-				}
-				size := style.BackgroundSize{Width: x.length(v[0])}
-				if len(v) > 1 {
-					size.Height = x.length(v[1])
-				}
-				return size
-			}),
-		"background-repeat": {
-			set: func(x *ctx, v []Component) {
-				x.c.BackgroundNoRepeat, x.c.BackgroundRepeat = isWord(v[0], "no-repeat"), style.RepeatBoth
-				switch {
-				case isWord(v[0], "repeat-x"):
-					x.c.BackgroundRepeat = style.RepeatX
-				case isWord(v[0], "repeat-y"):
-					x.c.BackgroundRepeat = style.RepeatY
-				}
-			},
-			inherit: func(dst, src *style.Computed) {
-				dst.BackgroundNoRepeat, dst.BackgroundRepeat = src.BackgroundNoRepeat, src.BackgroundRepeat
-			},
-		},
+			(*ctx).backgroundSize),
+		"background-repeat": tiling(func(c *style.Computed) (*bool, *style.RepeatAxes) {
+			return &c.BackgroundNoRepeat, &c.BackgroundRepeat
+		}),
 		"background-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.BackgroundPosition },
+			(*ctx).position),
+		"mask-image": field(func(c *style.Computed) *style.Image { return &c.MaskImage },
+			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }),
+		"mask-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize }, (*ctx).backgroundSize),
+		"mask-repeat": tiling(func(c *style.Computed) (*bool, *style.RepeatAxes) {
+			return &c.MaskNoRepeat, &c.MaskRepeat
+		}),
+		"mask-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.MaskPosition },
 			(*ctx).position),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows),
 		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
@@ -1499,6 +1490,43 @@ func imageSource(x *ctx, v []Component) string {
 	return x.base.resolve(src)
 }
 
+func (x *ctx) backgroundSize(v []Component) style.BackgroundSize {
+	v = items(v)
+	switch {
+	case isWord(v[0], "cover"):
+		return style.BackgroundSize{Scale: style.ScaleCover}
+	case isWord(v[0], "contain"):
+		return style.BackgroundSize{Scale: style.ScaleContain}
+	}
+	size := style.BackgroundSize{Width: x.length(v[0])}
+	if len(v) > 1 {
+		size.Height = x.length(v[1])
+	}
+	return size
+}
+
+// tiling is background-repeat, and mask-repeat: whether the picture
+// tiles, and along which axes.
+func tiling(get func(*style.Computed) (*bool, *style.RepeatAxes)) prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			no, axes := get(x.c)
+			*no, *axes = isWord(v[0], "no-repeat"), style.RepeatBoth
+			switch {
+			case isWord(v[0], "repeat-x"):
+				*axes = style.RepeatX
+			case isWord(v[0], "repeat-y"):
+				*axes = style.RepeatY
+			}
+		},
+		inherit: func(dst, src *style.Computed) {
+			no, axes := get(dst)
+			sno, saxes := get(src)
+			*no, *axes = *sno, *saxes
+		},
+	}
+}
+
 func gridLine(_ *ctx, v []Component) style.GridLine {
 	for i, c := range v {
 		if isWord(c, "span") {
@@ -1507,6 +1535,9 @@ func gridLine(_ *ctx, v []Component) style.GridLine {
 	}
 	if isWord(v[0], "auto") {
 		return style.GridLine{}
+	}
+	if lineName(v) {
+		return style.GridLine{Name: v[0].Text}
 	}
 	return style.GridLine{Line: int(v[0].Num)}
 }
@@ -1732,13 +1763,40 @@ func (x *ctx) origin(v []Component) style.Size[style.Length] {
 }
 
 // readAbove reports whether some sheet reads one of changed in a compound
-// above a selector's subject.
+// above a selector's subject, or it is an attribute an element's
+// descendants are hinted by.
+// movesSiblings reports whether what changed on c, not restyled yet, is
+// read before a sibling combinator.
+func (r *restyler) movesSiblings(c *dom.Node) bool {
+	if c.IsText() {
+		return false
+	}
+	data := dom.Data(c)
+	if data.Dirty&dom.DirtyState != 0 && (c.State()^data.StyledState)&r.besideStates != 0 {
+		return true
+	}
+	if data.Dirty&dom.DirtyTree == 0 {
+		return false
+	}
+	for _, k := range data.Changed {
+		for _, sh := range r.sheets {
+			if sh.indexed().beside[k] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (r *restyler) readAbove(changed []string) bool {
 	for _, k := range changed {
 		for _, sh := range r.sheets {
 			if sh.indexed().above[k] {
 				return true
 			}
+		}
+		if hintedBelow[k] {
+			return true
 		}
 	}
 	return false

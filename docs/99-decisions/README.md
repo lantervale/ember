@@ -95,6 +95,15 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0089 | [A generated box is a node of its element](0089-a-generated-box-is-a-node-of-its-element.md) | api |
 | 0090 | [A screen's text takes no selection until its sheet says so](0090-a-screens-text-takes-no-selection-until-its-sheet-says-so.md) | api |
 | 0091 | [A window keeps the system's frame under its own title bar](0091-a-window-keeps-the-systems-frame-under-its-own-title-bar.md) | api |
+| 0092 | [Presentational attributes are hints under every rule](0092-presentational-attributes-are-hints-under-every-rule.md) | api |
+| 0093 | [A mask image is the shape of the background colour](0093-a-mask-image-is-the-shape-of-the-background-colour.md) | rendering |
+| 0094 | [Display table off a table is a block that shrinks and holds its floats](0094-display-table-off-a-table-is-a-block-that-shrinks-and-holds-its-floats.md) | rendering |
+| 0095 | [A Document answers what a tool asks about an element](0095-a-document-answers-what-a-tool-asks-about-an-element.md) | api |
+| 0096 | [WebP pictures are read with the pictures of the web](0096-webp-pictures-are-read-with-the-pictures-of-the-web.md) | assets |
+| 0097 | [A Document's sheets are changed through handles, once a frame](0097-a-documents-sheets-are-changed-through-handles-once-a-frame.md) | api |
+| 0098 | [An svg element is one picture holding its markup](0098-an-svg-element-is-one-picture-holding-its-markup.md) | api |
+| 0099 | [A page's fonts are fetched, and WOFF2 is read in pure Go](0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md) | assets |
+| 0100 | [The GPU holds a picture while the picture lives](0100-the-gpu-holds-a-picture-while-the-picture-lives.md) | rendering |
 
 ## Writing one
 

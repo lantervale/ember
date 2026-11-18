@@ -80,7 +80,7 @@ func TestAPercentRadiusIsOfTheBoxAndNeverPastHalfItsSide(t *testing.T) {
 	assert.Equal(t, float32(10), r.of("round")[0].Radius)
 }
 
-func TestSquareBordersAreOneRectPerSideInTheirOwnColour(t *testing.T) {
+func TestSquareBordersAreOneMiteredSidePerColour(t *testing.T) {
 	b := el(0, 0, 100, 40, func(s *style.Computed) {
 		s.Border = style.Sides[float32]{Top: 1, Right: 2, Bottom: 3, Left: 4}
 		s.BorderStyle = style.All(style.BorderSolid)
@@ -88,8 +88,11 @@ func TestSquareBordersAreOneRectPerSideInTheirOwnColour(t *testing.T) {
 	})
 	r := newRecorder()
 	Paint(r, tree(b))
-	assert.Equal(t, "red green blue black", r.order(names))
-	sides := r.of("rect")
+	sides := r.of("triangles")
+	require.Len(t, sides, 4)
+	for i, want := range []color.Color{red, green, blue, black} {
+		assert.Equal(t, want, sides[i].Color)
+	}
 	assert.Equal(t, geom.Rect{W: 100, H: 1}, sides[0].Rect)
 	assert.Equal(t, geom.Rect{X: 98, W: 2, H: 40}, sides[1].Rect)
 	assert.Equal(t, geom.Rect{Y: 37, W: 100, H: 3}, sides[2].Rect)

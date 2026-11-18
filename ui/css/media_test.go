@@ -67,6 +67,10 @@ var mediaCases = []struct {
 	want  bool
 }{
 	{"screen", true}, {"print", false}, {"all", true}, {"tv", false}, {"handheld", false}, {"speech", false},
+	{"(max-width: calc(801px - 1px))", true}, {"(max-width: calc(800px - 1px))", false},
+	{"(min-width: calc(40em + 160px))", true}, {"(min-width: calc(2 * 25rem + 1px))", false},
+	{"(width >= calc(1in * 8))", true}, {"(calc(900px - 100px) = width)", true},
+	{"(min-width: calc(1px + 1%))", false}, {"(min-width: calc(2))", false},
 	{"only screen", true}, {"not screen", false}, {"not print", true}, {"", true}, {"screen, print", true},
 	{"print, (unknown-thing), screen", true}, {"not all", false}, {"SCREEN AND (COLOR)", true},
 	{"(color)", true}, {"(min-color: 8)", true}, {"(color: 8)", true}, {"(monochrome)", false},
@@ -129,7 +133,7 @@ func TestWhatAMediaQueryCannotAnswerIsAWarning(t *testing.T) {
 	for query, want := range map[string]string{
 		"(unknown-thing)":   "t.css:1:8: @media: the unknown-thing feature is not supported; its query never holds",
 		"(min-width: 40ch)": "t.css:1:20: @media: min-width can't take 40ch; its query never holds",
-		"(min-width: calc(1px + 2px))": "t.css:1:20: @media: min-width can't take calc(1px + 2px); its query never " +
+		"(min-width: calc(1px + 2%))": "t.css:1:20: @media: min-width can't take calc(1px + 2%); its query never " +
 			"holds",
 		"(hover: sometimes)": "t.css:1:16: @media: hover takes none, hover; its query never holds",
 		"(min-hover: hover)": "t.css:1:8: @media: the min-hover feature is not supported; its query never holds",

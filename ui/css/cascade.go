@@ -70,6 +70,13 @@ type index struct {
 	// above are the classes, ids and attributes some selector reads in a
 	// compound above its subject, keyed as dom.Pipeline.Changed.
 	above map[string]bool
+	// beside are those some selector reads before a sibling combinator,
+	// and besideStates the states: a change of one on an element can
+	// restyle the elements after it. siblings is set once a selector has
+	// such a combinator.
+	beside       map[string]bool
+	besideStates dom.State
+	siblings     bool
 }
 
 type entry struct {
@@ -78,11 +85,16 @@ type entry struct {
 
 func (s *Sheet) indexed() *index {
 	s.once.Do(func() {
-		x := &index{pseudos: map[string]*buckets{}, above: map[string]bool{}}
+		x := &index{pseudos: map[string]*buckets{}, above: map[string]bool{}, beside: map[string]bool{}}
 		for ri, r := range s.Rules {
 			for si, sel := range r.Selectors {
 				e := entry{ri, si}
 				sel.aboveKeys(func(k string) { x.above[k] = true })
+				if sel.siblings() {
+					x.siblings = true
+					x.besideStates |= sel.besideStates()
+					sel.besideKeys(func(k string) { x.beside[k] = true })
+				}
 				into := &x.buckets
 				if sel.PseudoElement != "" {
 					into = x.pseudos[sel.PseudoElement]

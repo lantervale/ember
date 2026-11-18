@@ -132,6 +132,21 @@ func Meter(args ...Arg) *Node    { return element(dom.Meter, args) }
 func Img(args ...Arg) *Node      { return element(dom.Img, args) }
 func Hr(args ...Arg) *Node       { return element(dom.Hr, args) }
 
+// Svg is an svg element showing markup, the SVG inside it: a picture
+// drawn at the size the element takes, by its width and height
+// attributes, its viewBox and the rules that name it, with currentColor
+// the colour of its text. n.SetMarkup changes what it shows. It needs
+// ui/svg imported.
+func Svg(markup string, args ...Arg) *Node {
+	n := element(dom.Svg, args)
+	n.SetMarkup(markup)
+	return n
+}
+
+// PictureOf is the address of the picture n shows: an img's src, an svg
+// element's markup as a data URL. ok is false for an element with none.
+func PictureOf(n *Node) (string, bool) { return dom.Picture(n) }
+
 // Option is an option element of a select.
 func Option(args ...Arg) *Node { return element(dom.Option, args) }
 

@@ -1,6 +1,7 @@
 package css //nolint:testpackage // holds the unexported test helpers (sheet, page) and reads computed styles off dom
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -371,10 +372,16 @@ func TestFontFaces(t *testing.T) {
 	if got := warnings(warns); got != "ui/tool.css:4:1: @font-face needs font-family and src; dropped" {
 		t.Errorf("warnings: %s", got)
 	}
-	want := []FontFace{{"Silk Screen", "ui/fonts/Silk.ttf", 700, true}, {"Pixel", "ui/Pixel.ttf", 400, false}}
 	got := s.FontFaces()
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("faces: %+v", got)
+	if len(got) != 2 {
+		t.Fatalf("faces: %+v", got)
+	}
+	silk, pixel := got[0], got[1]
+	if silk.Family != "Silk Screen" || silk.Src != "ui/fonts/Silk.ttf" || silk.Weight != 700 || !silk.Italic {
+		t.Errorf("faces: %+v", silk)
+	}
+	if pixel.Family != "Pixel" || pixel.Src != "ui/Pixel.ttf" || pixel.Weight != 400 || pixel.Italic {
+		t.Errorf("faces: %+v", pixel)
 	}
 }
 
@@ -1035,5 +1042,26 @@ func TestAnImgsWidthAndHeightAttributesSizeItWithoutAnySheet(t *testing.T) {
 	Compute(page(a), nil)
 	if s := styleOf(a).Size; s.Width != style.Px(100) || s.Height != style.Px(30) {
 		t.Errorf("a: %+v", s)
+	}
+}
+
+func TestEveryLonghandIsAppliedFromItsOwnTables(t *testing.T) {
+	if len(longhands) != len(order) {
+		t.Fatalf("%d longhands for %d in order", len(longhands), len(order))
+	}
+	same := func(a, b any) bool { return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer() }
+	for i, l := range longhands {
+		name := order[i]
+		p, known := props[name]
+		switch {
+		case l.name != name:
+			t.Fatalf("longhand %d is %s, not %s", i, l.name, name)
+		case !known || !same(p.set, l.prop.set) || !same(p.inherit, l.prop.inherit):
+			t.Errorf("%s is not set and inherited as its property", name)
+		case l.inherited != properties[name].inherited:
+			t.Errorf("%s inherited: %v", name, l.inherited)
+		case l.current != (properties[name].initial == kwCurrentColor):
+			t.Errorf("%s starts as currentcolor: %v", name, l.current)
+		}
 	}
 }
