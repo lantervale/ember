@@ -233,13 +233,14 @@ func (p *painter) newClip(c clip) *clip {
 // transform of the stacking context it was met in. round and radii, when
 // radii aren't all zero, are the curve it also cuts to (decision 0058):
 // the padding box rounded by its inner radii, while rect stops at the
-// scrollbars' gutter.
+// scrollbars' gutter. by is the box whose overflow it is.
 type clip struct {
 	rect   geom.Rect
 	round  geom.Rect
 	radii  radii
 	xf     geom.Transform2D
 	parent *clip
+	by     *box.Box
 }
 
 // Paint draws t onto s.
@@ -489,7 +490,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	inner := e.clip
 	if r, ok := clipRect(b, e.at); ok {
 		round, rr := clipRound(b, e.at)
-		inner = p.newClip(clip{rect: r, round: round, radii: rr, xf: p.s.Transform(), parent: e.clip})
+		inner = p.newClip(clip{rect: r, round: round, radii: rr, xf: p.s.Transform(), parent: e.clip, by: b})
 		if scrolls(shown(b)) {
 			own.scrollers = append(own.scrollers, e)
 		}
@@ -500,8 +501,8 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		run = append(run[:len(run):len(run)], extra)
 	}
 	for _, c := range run {
-		ce := entry{b: c, at: origin.Add(c.Pos), clip: inner}
 		st := shown(c)
+		ce := entry{b: c, at: origin.Add(c.Pos), clip: placedClip(c, st, inner)}
 		switch {
 		case p.modal(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
@@ -529,6 +530,24 @@ func (p *painter) collect(e entry, own, outer *layers) {
 			p.collect(ce, own, outer)
 		}
 	}
+}
+
+// placedClip is the clip of c, a child of the box inner is the clip in: inner, less,
+// for an absolutely or fixed positioned box, the clips of the boxes under its
+// containing block, whose overflow it lies outside.
+func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
+	if c.Kind != box.Element || st.Position != style.Absolute && st.Position != style.FixedPosition {
+		return inner
+	}
+	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
+		if st.Position == style.Absolute && shown(a).Position != style.Static {
+			break
+		}
+		if inner.by == a {
+			inner = inner.parent
+		}
+	}
+	return inner
 }
 
 // reachable is what of b's children, placed from origin, can show inside
