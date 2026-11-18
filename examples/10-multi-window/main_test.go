@@ -45,3 +45,20 @@ func TestEachWindowHasItsCameraAndUI(t *testing.T) {
 		t.Fatal("closing the map window takes its camera and label with it")
 	}
 }
+
+func TestTheProgramEndsWithItsLastWindow(t *testing.T) {
+	sceneWindow, mapWindow := newSceneWindow(), newMapWindow()
+	w := ember.New().AddEntities(sceneWindow, mapWindow)
+	w.RunFrames(2)
+
+	sceneWindow.RequestClose()
+	w.RunFrames(2)
+	if w.Has(sceneWindow) || !w.Has(mapWindow) || w.ShouldQuit() {
+		t.Fatal("closing the scene window leaves the map open and the program running")
+	}
+	mapWindow.RequestClose()
+	w.RunFrames(1)
+	if !w.ShouldQuit() {
+		t.Fatal("closing the last window ends the program")
+	}
+}

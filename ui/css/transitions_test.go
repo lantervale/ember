@@ -299,7 +299,7 @@ func TestAStateChangeRestylesDescendantsOnlyWhenASelectorReadsIt(t *testing.T) {
 		restyled int
 	}{
 		{".item:hover { background-color: #111; } .label { color: #fff; }", 1},
-		{".item:hover > .label { color: #f00; }", 3},
+		{".item:hover > .label { color: #f00; }", 2},
 		{".item:focus > .label { color: #f00; } .item:hover { color: #222; }", 3},
 		{".item:focus > .label { color: #f00; } .item:hover { background-color: #222; }", 1},
 	} {

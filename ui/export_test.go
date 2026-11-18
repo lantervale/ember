@@ -53,7 +53,7 @@ func OptionTexts(d *Document, n *Node) []string {
 // HitAt is the element a click at p, in the Document's space, lands on
 // after its last layout.
 func HitAt(d *Document, p geom.Vec2) *Node {
-	h := paint.HitTest(d.tree, p, paint.Controls(d.machine), paint.Viewport(d.viewport), paint.Scale(d.fonts.Scale()))
+	h := paint.HitTest(d.inked(), p, paint.Controls(d.machine), paint.Viewport(d.viewport), paint.Scale(d.fonts.Scale()))
 	for b := h; b != nil; b = b.Parent {
 		if b.Node != nil {
 			return b.Node
@@ -106,3 +106,17 @@ func HoveredElement(d *Document) *Node {
 	}
 	return d.hovered[0]
 }
+
+// ScrollTo scrolls n, the root for the viewport of a Document whose
+// viewport scrolls, to off, as a wheel or a dragged thumb does.
+func ScrollTo(d *Document, n *Node, off geom.Vec2) { d.setScroll(d.scroller(n), off) }
+
+// Placed counts the nodes d's layouts pointed at their boxes so far: it
+// moves with each layout.
+func Placed(d *Document) int { return d.placed }
+
+// Painted is how many times d was painted, a replayed frame not being one.
+func Painted(d *Document) uint64 { return d.painted }
+
+// Framed reports whether d is tied to an iframe that shows it.
+func Framed(d *Document) bool { return d.framed != nil }

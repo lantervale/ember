@@ -6,14 +6,20 @@ package desktop
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+// Go calls in from outside AppKit's loop, where no autorelease pool
+// stands: without one of its own, what a call autoreleases is never
+// released, and a closed window stayed in memory with its layer and its
+// drawables.
 static void *ember_metal_layer(void *window, double scale) {
-	NSWindow *w = (__bridge NSWindow *)window;
-	NSView *v = [w contentView];
-	CAMetalLayer *l = [CAMetalLayer layer];
-	l.contentsScale = scale;
-	[v setWantsLayer:YES];
-	[v setLayer:l];
-	return (__bridge void *)l;
+	@autoreleasepool {
+		NSWindow *w = (__bridge NSWindow *)window;
+		NSView *v = [w contentView];
+		CAMetalLayer *l = [CAMetalLayer layer];
+		l.contentsScale = scale;
+		[v setWantsLayer:YES];
+		[v setLayer:l];
+		return (__bridge void *)l;
+	}
 }
 
 // The C side ends here.

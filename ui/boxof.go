@@ -40,7 +40,7 @@ func (d *Document) ElementAt(at geom.Vec2) *Node {
 	if d.tree == nil {
 		return nil
 	}
-	hit := paint.HitTest(d.tree, at.Scale(1/d.Zoom()), paint.Controls(d.machine), paint.Viewport(d.viewport),
+	hit := paint.HitTest(d.inked(), at.Scale(1/d.Zoom()), paint.Controls(d.machine), paint.Viewport(d.viewport),
 		paint.Scale(d.fonts.Scale()))
 	for b := hit; b != nil; b = b.Parent {
 		if n := dom.Origin(b.Node); n != nil && !n.IsText() {

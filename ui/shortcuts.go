@@ -8,6 +8,7 @@ import (
 	"github.com/lantervale/ember/internal/inputfeed"
 	"github.com/lantervale/ember/internal/slot"
 	"github.com/lantervale/ember/internal/textedit"
+	"github.com/lantervale/ember/internal/wm"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
@@ -142,7 +143,7 @@ func (d *Document) shortcuts(c *twod.Canvas, in *input.State) {
 		return
 	}
 	now := held(f)
-	editing := textOf(d.machine(d.focused())) != nil || in.KeyboardCaptured()
+	editing := d.editing(d.focused()) || in.KeyboardCaptured()
 	menuOpen := len(d.openMenus()) > 0
 	d.armed = d.armed[:0]
 	var chosen *Node
@@ -205,6 +206,7 @@ func (d *Document) claim(c *twod.Canvas, n *Node) {
 	if cl == nil {
 		cl = &claims{byWin: map[*platform.Window]claim{}}
 		slot.Set(w, cl)
+		wm.OnGone(w, func(gone *platform.Window) { delete(cl.byWin, gone) })
 	}
 	cl.byWin[win] = claim{d, n, w.Time().Frame}
 }

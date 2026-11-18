@@ -24,19 +24,21 @@ static void emberWatchPresses(void) {
 }
 
 static void emberOwnTitleBar(void *nswindow) {
-	NSWindow *w = (NSWindow *)nswindow;
-	w.titlebarAppearsTransparent = YES;
-	w.titleVisibility = NSWindowTitleHidden;
-	w.styleMask |= NSWindowStyleMaskFullSizeContentView;
-	// An empty toolbar makes the title bar a header's height, the
-	// window's buttons centred in it, as in the system's own apps.
-	if (!w.toolbar) {
-		NSToolbar *bar = [[NSToolbar alloc] initWithIdentifier:@"ember"];
-		w.toolbar = bar;
-		[bar release];
-		if (@available(macOS 11.0, *)) {
-			w.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
-			w.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+	@autoreleasepool {
+		NSWindow *w = (NSWindow *)nswindow;
+		w.titlebarAppearsTransparent = YES;
+		w.titleVisibility = NSWindowTitleHidden;
+		w.styleMask |= NSWindowStyleMaskFullSizeContentView;
+		// An empty toolbar makes the title bar a header's height, the
+		// window's buttons centred in it, as in the system's own apps.
+		if (!w.toolbar) {
+			NSToolbar *bar = [[NSToolbar alloc] initWithIdentifier:@"ember"];
+			w.toolbar = bar;
+			[bar release];
+			if (@available(macOS 11.0, *)) {
+				w.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
+				w.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+			}
 		}
 	}
 }
@@ -46,49 +48,55 @@ static void emberOwnTitleBar(void *nswindow) {
 // when the window leaves its fullscreen or changes whether it resizes,
 // so a mask that lost the full-size content is given it back.
 static void emberTitleBarArea(void *nswindow, double *left, double *right, double *height) {
-	NSWindow *w = (NSWindow *)nswindow;
-	*left = *right = *height = 0;
-	NSWindowStyleMask mask = w.styleMask;
-	if (!(mask & NSWindowStyleMaskTitled) || (mask & NSWindowStyleMaskFullScreen)) {
-		return;
-	}
-	if (!(mask & NSWindowStyleMaskFullSizeContentView)) {
-		emberOwnTitleBar(nswindow);
-	}
-	*height = NSHeight(w.frame) - NSHeight(w.contentLayoutRect);
-	NSButton *close = [w standardWindowButton:NSWindowCloseButton];
-	NSButton *zoom = [w standardWindowButton:NSWindowZoomButton];
-	if (!close || !zoom) {
-		return;
-	}
-	NSRect c = [close convertRect:close.bounds toView:nil];
-	NSRect z = [zoom convertRect:zoom.bounds toView:nil];
-	double width = NSWidth(w.frame);
-	if (NSMinX(c) < NSMinX(z)) {
-		*left = NSMaxX(z) + NSMinX(c);
-	} else {
-		*right = 2 * width - NSMinX(z) - NSMaxX(c);
+	@autoreleasepool {
+		NSWindow *w = (NSWindow *)nswindow;
+		*left = *right = *height = 0;
+		NSWindowStyleMask mask = w.styleMask;
+		if (!(mask & NSWindowStyleMaskTitled) || (mask & NSWindowStyleMaskFullScreen)) {
+			return;
+		}
+		if (!(mask & NSWindowStyleMaskFullSizeContentView)) {
+			emberOwnTitleBar(nswindow);
+		}
+		*height = NSHeight(w.frame) - NSHeight(w.contentLayoutRect);
+		NSButton *close = [w standardWindowButton:NSWindowCloseButton];
+		NSButton *zoom = [w standardWindowButton:NSWindowZoomButton];
+		if (!close || !zoom) {
+			return;
+		}
+		NSRect c = [close convertRect:close.bounds toView:nil];
+		NSRect z = [zoom convertRect:zoom.bounds toView:nil];
+		double width = NSWidth(w.frame);
+		if (NSMinX(c) < NSMinX(z)) {
+			*left = NSMaxX(z) + NSMinX(c);
+		} else {
+			*right = 2 * width - NSMinX(z) - NSMaxX(c);
+		}
 	}
 }
 
 static void emberStartDrag(void *nswindow) {
-	NSWindow *w = (NSWindow *)nswindow;
-	if (emberPress && emberPress.window == w && ([NSEvent pressedMouseButtons] & 1)) {
-		[w performWindowDragWithEvent:emberPress];
+	@autoreleasepool {
+		NSWindow *w = (NSWindow *)nswindow;
+		if (emberPress && emberPress.window == w && ([NSEvent pressedMouseButtons] & 1)) {
+			[w performWindowDragWithEvent:emberPress];
+		}
 	}
 }
 
 static void emberDoubleClickTitleBar(void *nswindow) {
-	NSWindow *w = (NSWindow *)nswindow;
-	NSString *action = [[NSUserDefaults standardUserDefaults] stringForKey:@"AppleActionOnDoubleClick"];
-	if ([action isEqualToString:@"None"]) {
-		return;
+	@autoreleasepool {
+		NSWindow *w = (NSWindow *)nswindow;
+		NSString *action = [[NSUserDefaults standardUserDefaults] stringForKey:@"AppleActionOnDoubleClick"];
+		if ([action isEqualToString:@"None"]) {
+			return;
+		}
+		if ([action isEqualToString:@"Minimize"]) {
+			[w performMiniaturize:nil];
+			return;
+		}
+		[w performZoom:nil];
 	}
-	if ([action isEqualToString:@"Minimize"]) {
-		[w performMiniaturize:nil];
-		return;
-	}
-	[w performZoom:nil];
 }
 
 // The C side ends here.

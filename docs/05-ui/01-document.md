@@ -61,7 +61,7 @@ doc.Body().Append(ui.Div(ui.ID("banner")), ui.Img(ui.Attr("src", "today.png")))
 
 - A picture is asked for once, when its element is first laid out (an `img`) or painted (a background), never for an element that doesn't show.
 - The fetcher runs off the frame, six pictures at a time, so it may take as long as it needs; it is called from several goroutines.
-- Until a picture lands its element shows as one without a picture; then the Document lays out and paints again. Nothing is shown while it loads: a placeholder is the game's, a background colour under the picture.
+- Until a picture lands its element shows as one without a picture; then the Document paints again, and lays out again only what the picture's size moves: an `img` with a width and a height of its own, a background, a mask or a border picture move nothing. Nothing is shown while it loads: a placeholder is the game's, a background colour under the picture.
 - A fetch that fails, or bytes that are no picture, are in `doc.Warnings()`, once.
 - `web.Images` resolves a sheet's `url()` from `base` too, not from the sheet's own address: a sheet that lives elsewhere names its pictures in full.
 - ui reads PNG; importing `ui/web` adds JPEG, GIF and WebP (lossy and lossless, with alpha; decision 0096), and importing `ui/svg` adds SVG ([below](#svg-pictures)). A picture is known by its first bytes, not its name. A picture over `web.MaxBytes` (8 MB) or slower than `web.Timeout` (15 s) is an error.

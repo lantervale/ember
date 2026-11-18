@@ -1,10 +1,13 @@
 package paint
 
 import (
+	"fmt"
+
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/cull"
 )
 
 // HitTest is the element box at p, in the root's space, that paints on
@@ -14,9 +17,22 @@ import (
 // Controls, if given, finds modal dialogs, whose backdrop takes the page's
 // pointer.
 func HitTest(t *box.Tree, p geom.Vec2, opts ...Option) *box.Box {
-	pt := scan(t, opts, p, true)
+	mode := cull.Now()
+	hit, _ := hitTest(t, p, opts, mode == cull.Off)
+	if mode == cull.Check {
+		if whole, _ := hitTest(t, p, opts, true); whole != hit {
+			cull.Differ(fmt.Sprintf("the box hit at %v: %s, %s walking every box", p, named(hit), named(whole)))
+		}
+	}
+	return hit
+}
+
+// hitTest is HitTest walking every box when whole, else only those whose
+// ink holds p, and how many boxes under the root the walk reached.
+func hitTest(t *box.Tree, p geom.Vec2, opts []Option, whole bool) (*box.Box, int) {
+	pt := scan(t, opts, p, true, whole)
 	if pt == nil {
-		return nil
+		return nil, 0
 	}
 	defer scanners.Put(pt)
 	hit := pt.found
@@ -25,7 +41,7 @@ func HitTest(t *box.Tree, p geom.Vec2, opts ...Option) *box.Box {
 			hit = pp.b
 		}
 	}
-	return hit
+	return hit, pt.reached
 }
 
 // probed is told, on a hit test's walk, of each element box painted at r

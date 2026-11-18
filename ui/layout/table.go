@@ -98,7 +98,7 @@ func (t *tree) buildTable(n *node, e *dom.Node) {
 			dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption, dom.Form, dom.Address,
 			dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small, dom.Abbr, dom.Cite, dom.Mark,
 			dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement, dom.Br, dom.Center, dom.Big,
-			dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend: // not placed by the table
+			dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe: // not placed by the table
 		}
 	}
 	if head != nil {

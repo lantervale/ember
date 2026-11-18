@@ -91,12 +91,12 @@ func capture(win *platform.Window) {
 // as each frame begins.
 func (r *registry) owned(w *world.World) {
 	for win := range r.covers {
-		if !r.open(win) {
+		if !r.has(win) {
 			delete(r.covers, win)
 		}
 	}
 	for win, s := range r.owners {
-		if !r.open(win) {
+		if !r.has(win) {
 			delete(r.owners, win)
 			continue
 		}
@@ -110,7 +110,7 @@ func (r *registry) owned(w *world.World) {
 	}
 }
 
-func (r *registry) open(win *platform.Window) bool {
+func (r *registry) has(win *platform.Window) bool {
 	for e := range r.All() {
 		if e.GetWindow() == win {
 			return true

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -1487,12 +1488,15 @@ type textKey struct {
 	pixel          bool
 }
 
-// textOpts keeps each textKey's options, made once so a frame boxes none,
-// up to maxTextOpts, then starts over.
+// textOpts are the options of the texts drawn without a face. A face's
+// are kept with the face (draw.Kept), each made once so a frame boxes
+// none, up to maxTextOpts a face, then starting over: a Document's faces
+// and their atlases go when it does, where one cache for every face held
+// them.
 //
 //nolint:gochecknoglobals // a cache every paint shares, under its mutex
 var (
-	textOpts   = map[textKey][]twod.TextOption{}
+	textOpts   any
 	textOptsMu sync.Mutex
 )
 
@@ -1514,11 +1518,17 @@ func textOptions(face *twod.Face, size, tracking float32, c color.Color, pixel b
 	k := textKey{face, size, tracking, c, pixel}
 	textOptsMu.Lock()
 	defer textOptsMu.Unlock()
-	if o, ok := textOpts[k]; ok {
+	kept := &textOpts
+	if of := draw.Kept(face); of != nil {
+		kept = of
+	}
+	made, _ := (*kept).(map[textKey][]twod.TextOption)
+	if o, ok := made[k]; ok {
 		return o
 	}
-	if len(textOpts) >= maxTextOpts {
-		clear(textOpts)
+	if made == nil || len(made) >= maxTextOpts {
+		made = map[textKey][]twod.TextOption{}
+		*kept = made
 	}
 	o := []twod.TextOption{
 		twod.Typeface(face), twod.FontSize(size), twod.Tracking(tracking), twod.Baseline(), twod.Color(c),
@@ -1526,7 +1536,7 @@ func textOptions(face *twod.Face, size, tracking float32, c color.Color, pixel b
 	if pixel {
 		o = append(o, twod.Pixelated())
 	}
-	textOpts[k] = o
+	made[k] = o
 	return o
 }
 

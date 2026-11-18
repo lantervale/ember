@@ -39,12 +39,14 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		if !some(ratio) {
 			// A natural ratio holds between content boxes, whatever box-sizing.
 			ratio = n.naturalRatio()
+			n.intrinsic = n.intrinsic || n.replaced && (styleSize.oneSided() || minSize.oneSided())
 			styleSize = styleSize.mSub(pbSum).withAspectRatio(ratio).mAdd(pbSum)
 			minSize = minSize.mSub(pbSum).withAspectRatio(ratio).mAdd(pbSum)
 		}
 		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
 		nodeSize = in.known.or(styleSize)
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
+			n.intrinsic = true
 			nodeSize = replacedSize(n.naturalIn(in.avail.w, pbSum.w).add(pbSum), ratio, minSize, maxSize)
 		}
 	}
@@ -80,6 +82,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	}
 	if n.replaced {
 		known = in.known.or(nodeSize).mSub(inset.sum())
+		n.intrinsic = n.intrinsic || !known.both()
 	}
 	if c := n.inline; c != nil && some(nodeSize.w) && n.control == noControl && c.fills() {
 		// A picture that fills is as wide as the lines' room, which is the box's, not

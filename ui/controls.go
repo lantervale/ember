@@ -43,7 +43,7 @@ func newMachine(n *Node) any {
 	value, _ := n.Attr("value")
 	disabled := has(n, "disabled")
 	switch n.Tag() {
-	case dom.Canvas:
+	case dom.Canvas, dom.Iframe:
 		if m, ok := dom.Data(n).Canvas.(*control.Canvas); ok {
 			return m
 		}

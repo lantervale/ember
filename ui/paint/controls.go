@@ -64,7 +64,7 @@ func marked(b *box.Box) bool {
 	}
 	t := b.Node.Tag()
 	return t == dom.Input || t == dom.Textarea || t == dom.Progress || t == dom.Meter ||
-		t == dom.Select || t == dom.Img || t == dom.Svg || t == dom.Canvas
+		t == dom.Select || t == dom.Img || t == dom.Svg || t == dom.Canvas || t == dom.Iframe
 }
 
 // modal reports whether b is a dialog shown modal, with a backdrop.
@@ -130,7 +130,7 @@ func (p *painter) marks(e entry, alpha float32) {
 			back, _ := selectionColors(shown(e.b), color.Color{}, alpha)
 			p.s.Rect(p.snap(content(e)), back)
 		}
-	case dom.Canvas:
+	case dom.Canvas, dom.Iframe:
 		p.canvasElement(e, c)
 	case dom.Select:
 		p.open(e)
@@ -260,7 +260,7 @@ func tracked(b *box.Box) bool {
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
-		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend:
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe:
 	}
 	return false
 }
@@ -554,7 +554,7 @@ func (p *painter) canvasElement(e entry, c geom.Rect) {
 	if !ok || m.Draw == nil || p.probing || c.W <= 0 || c.H <= 0 {
 		return
 	}
-	if p.record(livePart{kind: liveCanvas, e: e, rect: c}, c) {
+	if p.record(livePart{kind: liveCanvas, e: e, rect: c, timed: m.Live}, c) {
 		p.drawCanvas(m, c)
 	}
 }
@@ -569,7 +569,12 @@ func (p *painter) drawCanvas(m *control.Canvas, c geom.Rect) {
 	tc.SetTransform(xf.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(c.X, c.Y)}))
 	k := &m.Kept
 	moved := k.Version != m.Version || k.At != c || k.Transform != xf || k.Scale != p.scale
-	if !k.Ok || moved || !tc.Replay(&k.Recording) {
+	switch {
+	case m.Live:
+		tc.SetSize(geom.V2(c.W, c.H))
+		m.Draw(tc)
+		tc.SetSize(size)
+	case !k.Ok || moved || !tc.Replay(&k.Recording):
 		tc.SetSize(geom.V2(c.W, c.H))
 		mark := tc.Mark()
 		m.Draw(tc)

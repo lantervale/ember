@@ -83,6 +83,15 @@ type Box struct {
 	// box above it up to its containing block: what it draws lies where
 	// that containing block placed it, outside these boxes' own overflow.
 	Escapes bool
+	// Ink bounds what the box and the boxes under it draw and can be hit
+	// at, in the box's space: their border boxes, shadows, outlines and
+	// text. Loose is set when no rectangle bounds them where paint tests
+	// it: the box, or one under it, is placed from elsewhere, moves
+	// without a layout, is transformed, or is one paint looks for wherever
+	// it lies. Paint works both out (Tree.Inked) and skips a box that is
+	// not Loose where its Ink is out of view or misses the pointer.
+	Ink   geom.Rect
+	Loose bool
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Fragments is an inline element's border box on each line it spans,
@@ -154,6 +163,11 @@ type Tree struct {
 	// or refresh left them.
 	Live    []*Box
 	Applied [][2]geom.Vec2
+	// Inked is set once paint has worked out every box's Ink and Loose
+	// for the tree as it stands. A layout's tree starts without; whatever
+	// else changes a box's size, its place or the style it is shown with,
+	// but a scroll, clears it.
+	Inked bool
 }
 
 // Metrics are a font's vertical metrics at a size, in points: CSS's

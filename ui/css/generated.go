@@ -1,7 +1,6 @@
 package css
 
 import (
-	"reflect"
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -74,7 +73,7 @@ func (r *restyler) keep(n *dom.Node, data *dom.Pipeline, slot **dom.Node, p dom.
 	}
 	gd := dom.Data(g)
 	old := gd.Style
-	changed := old == nil || !reflect.DeepEqual(old, st)
+	changed := old == nil || !old.Equal(st)
 	if changed {
 		gd.Style = st
 		if r.changed != nil && old != nil {
@@ -107,7 +106,7 @@ func (r *restyler) markerOf(n *dom.Node, data *dom.Pipeline, rem float32) {
 		x := &ctx{c: data.Style, em: data.Style.Font.Size, rem: rem}
 		st, _ = x.pseudo(r.pm, n, r.sheets, "marker")
 	}
-	if !reflect.DeepEqual(data.Marker, st) {
+	if !data.Marker.Equal(st) {
 		data.Marker = st
 		data.Dirty |= dom.DirtyLayout
 		r.recount = true

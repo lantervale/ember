@@ -34,18 +34,20 @@ static void emberSwipe(id self, SEL _cmd, NSEvent *event) {
 }
 
 static void emberListen(void *nswindow) {
-	NSView *view = [(NSWindow *)nswindow contentView];
-	view.allowedTouchTypes = NSTouchTypeMaskIndirect;
-	view.wantsRestingTouches = YES;
-	Class c = object_getClass(view);
-	const char *types = "v@:@";
-	class_addMethod(c, @selector(touchesBeganWithEvent:), (IMP)emberTouches, types);
-	class_addMethod(c, @selector(touchesMovedWithEvent:), (IMP)emberTouches, types);
-	class_addMethod(c, @selector(touchesEndedWithEvent:), (IMP)emberTouches, types);
-	class_addMethod(c, @selector(touchesCancelledWithEvent:), (IMP)emberTouches, types);
-	class_addMethod(c, @selector(magnifyWithEvent:), (IMP)emberMagnify, types);
-	class_addMethod(c, @selector(rotateWithEvent:), (IMP)emberRotate, types);
-	class_addMethod(c, @selector(swipeWithEvent:), (IMP)emberSwipe, types);
+	@autoreleasepool {
+		NSView *view = [(NSWindow *)nswindow contentView];
+		view.allowedTouchTypes = NSTouchTypeMaskIndirect;
+		view.wantsRestingTouches = YES;
+		Class c = object_getClass(view);
+		const char *types = "v@:@";
+		class_addMethod(c, @selector(touchesBeganWithEvent:), (IMP)emberTouches, types);
+		class_addMethod(c, @selector(touchesMovedWithEvent:), (IMP)emberTouches, types);
+		class_addMethod(c, @selector(touchesEndedWithEvent:), (IMP)emberTouches, types);
+		class_addMethod(c, @selector(touchesCancelledWithEvent:), (IMP)emberTouches, types);
+		class_addMethod(c, @selector(magnifyWithEvent:), (IMP)emberMagnify, types);
+		class_addMethod(c, @selector(rotateWithEvent:), (IMP)emberRotate, types);
+		class_addMethod(c, @selector(swipeWithEvent:), (IMP)emberSwipe, types);
+	}
 }
 */
 import "C"

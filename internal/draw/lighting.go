@@ -4,6 +4,7 @@ import (
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/slot"
+	"github.com/lantervale/ember/internal/wm"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/world"
@@ -370,6 +371,7 @@ func debugsOf(w *world.World) *lightDebugs {
 	if d == nil {
 		d = &lightDebugs{byWin: map[*platform.Window]LightDebug{}}
 		slot.Set(w, d)
+		wm.OnGone(w, func(gone *platform.Window) { delete(d.byWin, gone) })
 	}
 	return d
 }

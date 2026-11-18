@@ -631,6 +631,20 @@ func (r *Readback) Done(read func(rows []byte, row int, tag any)) {
 	}
 }
 
+// Release lets the readback's buffers go, for one that copies no more.
+func (r *Readback) Release() {
+	for i := range r.slots {
+		s := &r.slots[i]
+		if s.buf != nil {
+			s.buf.Release()
+		}
+		if !s.settle.IsUndefined() && !s.pending {
+			s.settle.Release()
+		}
+		*s = readbackSlot{}
+	}
+}
+
 // Read copies t back, waiting for it, as an opaque RGBA image, top row
 // first: a capture. It awaits, so only between frames.
 func (d *Device) Read(t *Texture) (*image.RGBA, error) {
@@ -684,3 +698,5 @@ func (t *Timers) Span(_ string) Span { return Span{} }
 func (t *Timers) Resolve(_ *Encoder) {}
 
 func (t *Timers) Submitted() {}
+
+func (t *Timers) Release() {}

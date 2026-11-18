@@ -20,6 +20,7 @@ One constructor per element, taking `Arg`s: attributes, and children, since a `*
 | [`button`](19-button.md), [`input`](20-input.md), [`select`](21-select.md), [`option`](22-option.md), [`textarea`](23-textarea.md), [`progress`](24-progress.md), [`meter`](25-meter.md) | controls |
 | [`details`](26-details.md), [`summary`](27-summary.md), [`dialog`](28-dialog.md), [`table`](29-table.md), [`thead`](30-thead.md), [`tbody`](31-tbody.md), [`tr`](32-tr.md), [`th`](33-th.md), [`td`](34-td.md), [`caption`](41-caption.md), [`tfoot`](42-tfoot.md) | folding, dialogs and tables |
 | [`img`](35-img.md), [`hr`](36-hr.md), [`canvas`](37-canvas.md), [`svg`](85-svg.md) | pictures |
+| [`iframe`](86-iframe.md) | a Document in another |
 
 Each constructor is the tag's name: `ui.Div`, `ui.H1`, `ui.Textarea`, `ui.Canvas`.
 

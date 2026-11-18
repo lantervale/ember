@@ -10,6 +10,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -33,7 +34,11 @@ func (i *icon) Texture(w, h int, scale float32) *twod.Texture {
 	return twod.NewTexture(image.NewRGBA(image.Rect(0, 0, w, h)))
 }
 
+// shapesOf paints b once, i its picture of shapes: not also the two times
+// EMBER_UI_CULL=check paints to compare, which would ask i for its texture
+// three times.
 func shapesOf(i *icon, b *box.Box, opts ...Option) *recorder {
+	defer cull.Set(cull.On, nil)()
 	found := func(name string) Vector {
 		if name == "icon.svg" {
 			return i

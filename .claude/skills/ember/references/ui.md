@@ -133,6 +133,16 @@ Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`
 - `ui.OnClick` on a canvas runs on a click on it; `doc.PointerOn(n) (geom.Vec2, bool)` is then the pointer in the canvas's own points, false when it is off the canvas.
 - Tell automation what a canvas shows with `ui.Attr("role", "meter")` and `ui.Attr("aria-valuenow", v)`.
 
+## A Document in another: ui.Iframe
+
+`ui.Iframe(child *ui.Document, args ...ui.Arg) *ui.Node` shows a Document the program built in an `iframe` element: 300 by 150 with an inset border unless CSS or its `width`, `height` and `frameborder` attributes say otherwise.
+
+- The child lays out in the frame's content box (its `@media` follows it), is clipped to it, and scrolls there with `ui.ScrollingViewport()`.
+- `doc.SetFrame(n, child)` swaps what it shows (nil for nothing), `doc.Frame(n)` reads it, `doc.FrameShown(n)` says whether it was drawn last frame.
+- The pointer reaches the child only where nothing of the page lies over the frame; the wheel scrolls the child first, then the page; keys go to the child while the frame has the page's focus; Tab walks in and out.
+- `doc.FramePoint(n, at) (geom.Vec2, bool)` turns a page point into the child's, for `child.ElementAt`.
+- In tests, drive it through the window's input as any screen; automation ids of the child are under the frame's id.
+
 ## Focus and keys
 
 | Need | API |

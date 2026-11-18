@@ -33,8 +33,23 @@ func (d *Document) toWindow(r geom.Rect) geom.Rect {
 	return geom.Rect{X: r.X * z, Y: r.Y * z, W: r.W * z, H: r.H * z}
 }
 
-// mouse is the pointer in the Document's points.
-func (d *Document) mouse(c *twod.Canvas) geom.Vec2 { return c.Mouse().Scale(1 / d.Zoom()) }
+// outerZoom is the zoom of the Documents d shows inside, 1 in a window.
+func (d *Document) outerZoom() float32 {
+	z := float32(1)
+	for f := d.framed; f != nil; f = f.host.framed {
+		z *= f.host.Zoom()
+	}
+	return z
+}
+
+// mouse is the pointer in the Document's points, away while it is kept
+// from a Document in an iframe.
+func (d *Document) mouse(c *twod.Canvas) geom.Vec2 {
+	if d.shield {
+		return farAway
+	}
+	return c.Mouse().Scale(1 / d.Zoom())
+}
 
 // zoomed runs paint with the canvas scaled by the zoom.
 func (d *Document) zoomed(c *twod.Canvas, paint func()) {

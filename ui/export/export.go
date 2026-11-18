@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/assets"
@@ -138,6 +139,9 @@ func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 			fmt.Fprintf(b, ` data-ember-snapshot="data:image/png;base64,%s"`, base64.StdEncoding.EncodeToString(data))
 		}
 	}
+	if n.Tag() == dom.Iframe {
+		frame(b, d, n)
+	}
 	b.WriteByte('>')
 	if n.Tag().Void() {
 		return
@@ -163,6 +167,23 @@ func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 	b.WriteString("</")
 	b.WriteString(n.Tag().String())
 	b.WriteByte('>')
+}
+
+// frame writes the Document the iframe n shows as its srcdoc, laid out
+// at n's content box when n has one.
+func frame(b *strings.Builder, d *ui.Document, n *dom.Node) {
+	child := d.Frame(n)
+	if child == nil {
+		return
+	}
+	if r, ok := d.BoxOf(n); ok {
+		child.Layout(geom.V2(r.W, r.H).Scale(1 / d.Zoom()))
+	}
+	var page strings.Builder
+	if err := Write(&page, child); err != nil {
+		return
+	}
+	fmt.Fprintf(b, ` srcdoc="%s"`, html.EscapeString(page.String()))
 }
 
 // attrs writes n's attributes, a control's as it is now: an input's

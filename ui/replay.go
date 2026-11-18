@@ -48,6 +48,9 @@ type replay struct {
 	// hit and pick are the last hit tests' answers.
 	hit  *box.Box
 	pick paint.Pick
+	// restyled is how many elements css had styled when the tree's ink
+	// was last known to stand (inked).
+	restyled int
 }
 
 // Why a frame repaints, as the F3 overlay counts them.
@@ -93,6 +96,20 @@ func (d *Document) quietNow(c *twod.Canvas, animating bool) bool {
 	d.replay.in = in
 	return !switched && d.replay.replayedLast && !d.replay.repaint && !animating &&
 		(in == nil || !inputfeed.Of(in).Changed())
+}
+
+// inked is d's tree for a paint or a hit test, its boxes' ink to work out
+// again (box.Tree.Inked) when css styled an element since it last was:
+// shadows, outlines and transforms change it and ask for no layout. A
+// transition moving them does too (Draw).
+func (d *Document) inked() *box.Tree {
+	if n := d.trans.Restyled(); n != d.replay.restyled {
+		d.replay.restyled = n
+		if d.tree != nil {
+			d.tree.Inked = false
+		}
+	}
+	return d.tree
 }
 
 // options are the paint options of d's frames but the clock's, kept for

@@ -38,7 +38,8 @@ type ImageFetcher func(url string) ([]byte, error)
 // FetchImages has fetch get the pictures the Document's file systems
 // don't hold. A picture is asked for once, when it is first laid out or
 // painted; its element shows as one without a picture until it lands,
-// then the Document lays out and paints again. A fetch that fails, or
+// then the Document paints again, and lays out again what the picture's
+// size moves. A fetch that fails, or
 // bytes that are no picture, are a warning. ui/web has a fetcher over
 // HTTP.
 func FetchImages(fetch ImageFetcher) DocumentOption {
@@ -112,14 +113,15 @@ func fetched(url string, fetch ImageFetcher) fetchedImage {
 }
 
 // landImages takes the pictures fetched since the last layout: each
-// becomes its url's texture, and the Document is laid out and painted
-// again with them.
+// becomes its url's texture and is painted, and only an img whose box its
+// picture sizes is laid out again, with what its size moves.
 func (d *Document) landImages() {
 	f := &d.fetching
 	f.mu.Lock()
 	landed, drawn := f.landed, f.drawn
 	f.landed, f.drawn = nil, nil
 	f.mu.Unlock()
+	var shown map[string]bool
 	for _, got := range landed {
 		switch {
 		case got.err != nil:
@@ -130,7 +132,14 @@ func (d *Document) landImages() {
 		default:
 			d.images[got.url] = twod.NewTexture(got.img, twod.Encoded())
 		}
-		d.relayout = true
+		if shown == nil {
+			shown = map[string]bool{}
+		}
+		shown[got.url] = true
+	}
+	if shown != nil {
+		d.replay.repaint = true
+		d.kept.Landed(func(url string) bool { return shown[url] }, d, d.fonts)
 	}
 	for _, got := range drawn {
 		got.v.land(got.at, got.img, got.err)

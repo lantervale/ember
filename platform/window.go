@@ -8,8 +8,9 @@
 //	win := platform.NewWindow(platform.Title("Map"), platform.Size(420, 420))
 //	w.AddEntity(win)
 //
-// Removing the entity closes the window; closing it natively removes the
-// entity and emits WindowClosed.
+// Removing the entity closes the window. What the user's close does is the
+// window's OnClose rule: by default the primary window's ends the program
+// and another's removes the entity and emits WindowClosed.
 package platform
 
 import (
@@ -37,6 +38,7 @@ type options struct {
 	aspectW, aspectH           int
 	icon                       []image.Image
 	ownTitleBar                bool
+	onClose                    CloseRule
 }
 
 func Title(title string) Option { return func(o *options) { o.title = title } }
@@ -76,6 +78,31 @@ func Undecorated() Option { return func(o *options) { o.undecorated = true } }
 // window by that header. macOS only: Windows and Linux keep their title
 // bar above the content, and a page has none (decision 0091).
 func OwnTitleBar() Option { return func(o *options) { o.ownTitleBar = true } }
+
+// CloseRule is what a window does when the user asks to close it: its
+// close button, the system's shortcut for it, or RequestClose.
+type CloseRule int
+
+const (
+	// CloseQuitsIfPrimary ends the program when the window is the primary
+	// one, and closes any other. It is the rule of a window given none.
+	CloseQuitsIfPrimary CloseRule = iota
+	// CloseQuits ends the program.
+	CloseQuits
+	// CloseQuitsIfLast closes the window, and ends the program when no
+	// window is left.
+	CloseQuitsIfLast
+	// CloseOnly closes the window. The program runs on, without a window
+	// when it was the last, until it quits itself.
+	CloseOnly
+	// CloseAsks does nothing: the program reads WindowCloseRequested and
+	// decides, removing the window or quitting when it wants to.
+	CloseAsks
+)
+
+// OnClose is what the window does when the user asks to close it,
+// CloseQuitsIfPrimary by default.
+func OnClose(rule CloseRule) Option { return func(o *options) { o.onClose = rule } }
 
 // Background clears windows that show no camera, such as tool windows.
 func Background(c color.Color) Option { return func(o *options) { o.background = c } }
@@ -147,6 +174,12 @@ type Backend interface {
 	WindowPosition() (x, y int)
 }
 
+// ProgramReopened is emitted when the user asks for the program again
+// while it shows no window: a click on its Dock icon on macOS, where a
+// program that closed its last window runs on (CloseOnly). The program
+// opens a window in answer. No other system has the gesture.
+type ProgramReopened struct{}
+
 // Window is a native window, and an entity: children it holds, such as
 // cameras and UI elements, show in it.
 type Window struct {
@@ -164,6 +197,7 @@ type Window struct {
 	focused     bool
 	minimized   bool
 	capture     string
+	closing     bool
 	titleBar    TitleBarArea
 }
 
@@ -183,7 +217,16 @@ type Windowed interface {
 	GetWindow() *Window
 }
 
-// WindowClosed is emitted when the user closes a secondary window.
+// WindowCloseRequested is emitted when the user asks to close a window,
+// whatever its OnClose rule then does: a CloseAsks window waits for the
+// program to answer it.
+type WindowCloseRequested struct {
+	Window *Window
+}
+
+// WindowClosed is emitted when a window's OnClose rule closes it. A window
+// the program removes itself, or whose close ends the program without
+// closing it, emits none.
 type WindowClosed struct {
 	Window *Window
 }
@@ -224,6 +267,25 @@ func (w *Window) MinSize() geom.Vec2          { return w.opts.minSize }
 func (w *Window) MaxSize() geom.Vec2          { return w.opts.maxSize }
 func (w *Window) Icon() []image.Image         { return w.opts.icon }
 func (w *Window) OwnTitleBar() bool           { return w.opts.ownTitleBar }
+func (w *Window) OnClose() CloseRule          { return w.opts.onClose }
+
+// SetOnClose changes what the user's close does, such as CloseAsks while
+// the window holds unsaved work.
+func (w *Window) SetOnClose(rule CloseRule) { w.opts.onClose = rule }
+
+// RequestClose asks to close the window as its close button does: at the
+// start of the next frame the World emits WindowCloseRequested and
+// follows the window's OnClose rule. A menu's "Close window" calls it, and
+// a test, in the user's place.
+func (w *Window) RequestClose() { w.closing = true }
+
+// TakeCloseRequest returns and clears a pending close request. Called by
+// the World's windows.
+func (w *Window) TakeCloseRequest() bool {
+	asked := w.closing
+	w.closing = false
+	return asked
+}
 
 // TitleBarArea is the part of the window's top the system's title bar
 // lies over, for a header to pad itself by. It changes as the window goes

@@ -34,6 +34,9 @@ func hints(n *dom.Node) []Declaration {
 	case dom.Img:
 		add(propWidth, hintedSize(attr("width"), true))
 		add(propHeight, hintedSize(attr("height"), true))
+	case dom.Iframe:
+		add(propWidth, hintedSize(attr("width"), true))
+		add(propHeight, hintedSize(attr("height"), true))
 	case dom.Svg:
 		add(propWidth, hintedLength(attr("width")))
 		add(propHeight, hintedLength(attr("height")))

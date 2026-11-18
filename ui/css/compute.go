@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -80,7 +79,7 @@ func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
 	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all)}
 	pm := &matcher{off: m.off, ranks: m.ranks}
-	r := restyler{sheets: all, m: m, pm: pm, treeStates: treeStates(all), computed: new(int)}
+	r := restyler{sheets: all, m: m, pm: pm, computed: new(int)}
 	r.run(root, false)
 	return r.warns
 }
@@ -89,15 +88,18 @@ type restyler struct {
 	sheets []*Sheet
 	// m matches and cascades elements, pm their pseudo-elements.
 	m, pm *matcher
-	// treeStates are the states some selector reads above its subject:
-	// only a change of those restyles an element's descendants.
-	treeStates dom.State
-	// siblings is set when some selector has a sibling combinator, and
-	// besideStates are the states read before one: a change of those on
-	// an element, of what it reads there (readBeside) or of its parent's
-	// children restyles the elements after it and their subtrees.
-	siblings     bool
-	besideStates dom.State
+	// treeStates are the states some selector reads above its subject,
+	// and besideStates those read before a sibling combinator: only a
+	// change of those restyles an element's descendants, or the elements
+	// after it and theirs, and of them the ones in reach.
+	treeStates, besideStates dom.State
+	// reach are the subjects of the selectors that read a state that
+	// moved on an element above the one visited, or before one above.
+	reach []*Compound
+	// siblings is set when some selector has a sibling combinator: a
+	// change of what an element reads there (movesSiblings) or of its
+	// parent's children restyles the elements after it and their subtrees.
+	siblings bool
 	// computed counts the elements whose style was worked out.
 	computed *int
 	// la and lb are scratch styles for comparing what layout or
@@ -134,6 +136,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.after = r.after || x.pseudos["after"] != nil
 		r.marker = r.marker || x.pseudos["marker"] != nil
 		r.siblings = r.siblings || x.siblings
+		r.treeStates |= x.aboveStates
 		r.besideStates |= x.besideStates
 	}
 	r.visit(root, nil, 0, stale, stale)
@@ -152,9 +155,9 @@ func countsOn(key string) bool {
 // DirtyDescendant: a change paint alone shows leaves layout clean. force
 // restyles n; deep restyles its whole subtree, as a change of an id, a
 // class or an attribute some selector reads above its subject asks (one
-// no selector reads there restyles n alone). Children added or removed,
-// or a tree state that moved, restyle the children only, as the subset's
-// state selectors read their parent (tr:hover > td).
+// no selector reads there restyles n alone). Children added or removed
+// restyle the children only. A state that moved restyles, of the elements
+// under n, those the selectors reading it on n can match (reach).
 func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force, deep bool) bool {
 	data := dom.Data(n)
 	if n.IsText() {
@@ -165,10 +168,10 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	}
 	dirty := data.Dirty
 	inherits := false
-	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil {
+	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) {
 		inherits = r.restyle(n, data, parent, rem)
 	}
-	stateMoved := dirty&dom.DirtyState != 0 && (n.State()^data.StyledState)&r.treeStates != 0
+	moved := movedStates(n)
 	data.StyledState = n.State()
 	data.Dirty &^= dom.DirtyStyle | dom.DirtyTree | dom.DirtyState
 	if parent == nil {
@@ -179,22 +182,20 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 		r.recount = true
 	}
 	kidsChanged := tree && slices.Contains(data.Changed, dom.Children)
-	kidsDeep := deep || stateMoved || tree && r.readAbove(data.Changed) || kidsChanged && r.siblings
-	kidsForce := inherits || kidsDeep || kidsChanged
+	kidsDeep := deep || tree && r.readAbove(data.Changed) || kidsChanged && r.siblings
+	// A details' content shows by its state (closedSlot), whatever the sheets read.
+	slotted := moved&dom.Open != 0 && n.Tag() == dom.Details
+	kidsForce := inherits || kidsDeep || kidsChanged || slotted
 	data.Changed = data.Changed[:0]
-	if !kidsForce && dirty&dom.DirtyDescendant == 0 && !force {
+	reach := len(r.reach)
+	if moved&r.treeStates != 0 {
+		r.reaches(n, moved, false)
+	}
+	if !kidsForce && dirty&dom.DirtyDescendant == 0 && !force && len(r.reach) == 0 {
 		return data.Dirty&dom.DirtyLayout != 0
 	}
-	below := false
-	for _, c := range n.Children() {
-		after := r.siblings && r.movesSiblings(c)
-		if r.visit(c, data.Style, rem, kidsForce, kidsDeep) {
-			below = true
-		}
-		if after {
-			kidsForce, kidsDeep = true, true
-		}
-	}
+	below := r.children(n, data.Style, rem, kidsForce, kidsDeep)
+	r.reach = r.reach[:reach]
 	if below {
 		data.Dirty |= dom.DirtyDescendant
 	} else {
@@ -203,13 +204,36 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	return below || data.Dirty&dom.DirtyLayout != 0
 }
 
+// children visits n's children, whose parent's style is parent, and
+// reports whether one or a node below needs layout. What a sibling
+// combinator reads on one restyles those after it: all of them and
+// their subtrees for an id, a class or an attribute, those in reach for
+// a state.
+func (r *restyler) children(n *dom.Node, parent *style.Computed, rem float32, force, deep bool) bool {
+	below := false
+	for _, c := range n.Children() {
+		after := r.siblings && r.movesSiblings(c)
+		beside := movedStates(c) & r.besideStates
+		if r.visit(c, parent, rem, force, deep) {
+			below = true
+		}
+		if after {
+			force, deep = true, true
+		}
+		if beside != 0 {
+			r.reaches(c, beside, true)
+		}
+	}
+	return below
+}
+
 // restyle computes n's style again, and reports whether what its
 // children inherit changed.
 func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Computed, rem float32) bool {
 	s := r.compute(n, parent, rem)
 	*r.computed++
 	old := data.Style
-	if old != nil && reflect.DeepEqual(old, s) {
+	if old != nil && old.Equal(s) {
 		r.generate(n, data, rem)
 		return false
 	}
@@ -235,7 +259,7 @@ func (r *restyler) layoutChanged(a, b *style.Computed) bool {
 	r.la, r.lb = *a, *b
 	paintOnly(&r.la)
 	paintOnly(&r.lb)
-	return !reflect.DeepEqual(&r.la, &r.lb)
+	return !r.la.Equal(&r.lb)
 }
 
 func paintOnly(c *style.Computed) {
@@ -262,7 +286,7 @@ func (r *restyler) inheritedChanged(a, b *style.Computed) bool {
 		p.inherit(&r.la, a)
 		p.inherit(&r.lb, b)
 	}
-	return !reflect.DeepEqual(&r.la, &r.lb)
+	return !r.la.Equal(&r.lb)
 }
 
 // inheritedNames are the inherited longhands.
@@ -1762,19 +1786,47 @@ func (x *ctx) origin(v []Component) style.Size[style.Length] {
 	return o
 }
 
-// readAbove reports whether some sheet reads one of changed in a compound
-// above a selector's subject, or it is an attribute an element's
-// descendants are hinted by.
-// movesSiblings reports whether what changed on c, not restyled yet, is
-// read before a sibling combinator.
+// movedStates are the states of n that changed since css last styled it.
+func movedStates(n *dom.Node) dom.State {
+	data := dom.Data(n)
+	if data.Dirty&dom.DirtyState == 0 {
+		return 0
+	}
+	return n.State() ^ data.StyledState
+}
+
+// reaches adds to r.reach the subjects of the selectors that read one of
+// the states moved on n, before a sibling combinator (beside) or above
+// their subject, where n has what the compounds reading it name and no
+// @media rule has the selector's rule off.
+func (r *restyler) reaches(n *dom.Node, moved dom.State, beside bool) {
+	for si, s := range r.sheets {
+		var off []bool
+		if r.m.off != nil {
+			off = r.m.off[si]
+		}
+		x := s.indexed()
+		for i := range x.reads {
+			rd := &x.reads[i]
+			if rd.states&moved != 0 && rd.beside == beside && (off == nil || !off[rd.rule]) && rd.names(n) {
+				r.reach = append(r.reach, rd.subject)
+			}
+		}
+	}
+}
+
+// reached reports whether n may be the subject of a selector in r.reach.
+func (r *restyler) reached(n *dom.Node) bool {
+	return slices.ContainsFunc(r.reach, func(c *Compound) bool { return c.names(n) })
+}
+
+// movesSiblings reports whether a class, an id or an attribute that
+// changed on c, not restyled yet, is read before a sibling combinator.
 func (r *restyler) movesSiblings(c *dom.Node) bool {
 	if c.IsText() {
 		return false
 	}
 	data := dom.Data(c)
-	if data.Dirty&dom.DirtyState != 0 && (c.State()^data.StyledState)&r.besideStates != 0 {
-		return true
-	}
 	if data.Dirty&dom.DirtyTree == 0 {
 		return false
 	}
@@ -1788,6 +1840,9 @@ func (r *restyler) movesSiblings(c *dom.Node) bool {
 	return false
 }
 
+// readAbove reports whether some sheet reads one of changed in a compound
+// above a selector's subject, or it is an attribute an element's
+// descendants are hinted by.
 func (r *restyler) readAbove(changed []string) bool {
 	for _, k := range changed {
 		for _, sh := range r.sheets {

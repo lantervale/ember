@@ -2,7 +2,6 @@ package css
 
 import (
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 
@@ -133,7 +132,7 @@ func stopsDecorations(c *style.Computed) bool {
 func decoratedIn(ds []style.Decoration, f style.Font) []style.Decoration {
 	var out []style.Decoration
 	for i := range ds {
-		if reflect.DeepEqual(ds[i].Font, f) {
+		if ds[i].Font.Equal(f) {
 			continue
 		}
 		if out == nil {

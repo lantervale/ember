@@ -4,7 +4,10 @@
 // internal/chrome's pixel tests run both and compare them. With
 // EMBER_UI_BENCH set, it measures the page's frames instead (BenchmarkKitPages),
 // and with EMBER_UI_ALIGN set to a file it writes there, as JSON, what
-// align finds out of line (kit's TestKitPagesLineUp).
+// align finds out of line (kit's TestKitPagesLineUp). With EMBER_UI_LOOK
+// set, it draws the page headless, scrolled about, with every paint and
+// hit test done both walking every box and skipping those out of view,
+// and fails where the two differ (TestPagesDrawAndHitTheSameCulled).
 package pages
 
 import (
@@ -28,6 +31,10 @@ import (
 func Run(d *ui.Document, w, h int) {
 	if os.Getenv("EMBER_UI_BENCH") != "" {
 		bench(d, w, h)
+		return
+	}
+	if os.Getenv("EMBER_UI_LOOK") != "" {
+		look(d, w, h)
 		return
 	}
 	if path := os.Getenv("EMBER_UI_ALIGN"); path != "" {

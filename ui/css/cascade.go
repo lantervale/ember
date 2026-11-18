@@ -70,13 +70,15 @@ type index struct {
 	// above are the classes, ids and attributes some selector reads in a
 	// compound above its subject, keyed as dom.Pipeline.Changed.
 	above map[string]bool
-	// beside are those some selector reads before a sibling combinator,
-	// and besideStates the states: a change of one on an element can
-	// restyle the elements after it. siblings is set once a selector has
-	// such a combinator.
-	beside       map[string]bool
-	besideStates dom.State
-	siblings     bool
+	// beside are those some selector reads before a sibling combinator: a
+	// change of one on an element can restyle the elements after it.
+	// siblings is set once a selector has such a combinator.
+	beside   map[string]bool
+	siblings bool
+	// reads are the states the selectors read away from their subjects,
+	// aboveStates those read above one and besideStates before one.
+	reads                     []stateRead
+	aboveStates, besideStates dom.State
 }
 
 type entry struct {
@@ -92,9 +94,17 @@ func (s *Sheet) indexed() *index {
 				sel.aboveKeys(func(k string) { x.above[k] = true })
 				if sel.siblings() {
 					x.siblings = true
-					x.besideStates |= sel.besideStates()
 					sel.besideKeys(func(k string) { x.beside[k] = true })
 				}
+				subject := &sel.Compounds[len(sel.Compounds)-1]
+				sel.stateReads(func(on []*Compound, states dom.State, beside bool) {
+					x.reads = append(x.reads, stateRead{states: states, on: on, subject: subject, beside: beside, rule: ri})
+					if beside {
+						x.besideStates |= states
+					} else {
+						x.aboveStates |= states
+					}
+				})
 				into := &x.buckets
 				if sel.PseudoElement != "" {
 					into = x.pseudos[sel.PseudoElement]

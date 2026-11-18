@@ -50,6 +50,7 @@ func (d *Document) pressSelection(at geom.Vec2, extend bool) {
 	if !ok {
 		return
 	}
+	d.clearOtherSelections()
 	s := &d.sel
 	if s.clicks > 0 && s.clicks < byBlock && d.clock-s.clickAt <= doubleClick && at.Sub(s.clickWhere).Len() <= clickSlop {
 		s.clicks++

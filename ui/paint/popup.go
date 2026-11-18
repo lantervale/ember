@@ -1,6 +1,7 @@
 package paint
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/lantervale/ember/color"
@@ -8,6 +9,7 @@ import (
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -173,7 +175,18 @@ type Pick struct {
 // PickOption is the open select's Pick at p, in the root's space; a Pick
 // without a Select when none is open.
 func PickOption(t *box.Tree, p geom.Vec2, opts ...Option) Pick {
-	pt := scan(t, opts, p, false)
+	mode := cull.Now()
+	pick := pickOption(t, p, opts, mode == cull.Off)
+	if mode == cull.Check {
+		if whole := pickOption(t, p, opts, true); whole != pick {
+			cull.Differ(fmt.Sprintf("the option picked at %v: %+v, %+v walking every box", p, pick, whole))
+		}
+	}
+	return pick
+}
+
+func pickOption(t *box.Tree, p geom.Vec2, opts []Option, whole bool) Pick {
+	pt := scan(t, opts, p, false, whole)
 	if pt == nil {
 		return Pick{Index: -1}
 	}
@@ -198,20 +211,21 @@ func PickOption(t *box.Tree, p geom.Vec2, opts ...Option) Pick {
 
 // scan walks t in paint order without drawing, keeping the open selects
 // it meets and, hitting, the last element box holding at (found). Only
-// boxes whose ink holds at are walked to, and not hitting, none: the walk
-// then only finds the open selects. The caller puts the painter back in
-// scanners.
-func scan(t *box.Tree, opts []Option, at geom.Vec2, hitting bool) *painter {
+// boxes whose ink holds at are walked to, and not hitting, none but the
+// loose ones: the walk then only finds the open selects. whole walks
+// every box. The caller puts the painter back in scanners.
+func scan(t *box.Tree, opts []Option, at geom.Vec2, hitting, whole bool) *painter {
 	if t == nil || t.Root == nil {
 		return nil
 	}
+	inked(t)
 	pt := pooled[painter](&scanners)
 	s := pt.probe
 	if s == nil {
 		s = &probe{}
 	}
 	*s = probe{xf: geom.Identity2D(), clips: s.clips[:0]}
-	*pt = painter{s: s, probe: s, probing: true, point: at, pointless: !hitting,
+	*pt = painter{s: s, probe: s, probing: true, point: at, pointless: !hitting, whole: whole,
 		scratch: pt.scratch[:0], chain: pt.chain[:0], popups: pt.popups[:0], top: pt.top[:0], slabs: pt.slabs}
 	for _, o := range opts {
 		o(pt)

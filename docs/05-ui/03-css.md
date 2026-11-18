@@ -12,7 +12,7 @@ ui.Div(ui.Style("display: grid; grid-template-columns: 48px 1fr; gap: 4px 12px; 
 
 Stylesheets come from `ui.Stylesheet(fsys, name)`, after the user-agent sheet; `ui.Style(css)` is an element's style attribute, adding to what earlier arguments, such as `kit.Padding`, set. What a sheet gets wrong is in `doc.Warnings()`, never a crash.
 
-The presentational attributes of old pages style their element as Chrome reads them, under every rule of the sheets (decision 0092): `width` and `height` on an `img`, a `table`, a `td` or a `th` (pixels or a percentage), `bgcolor` on `body` and a table's parts, `text` on `body`, `align` on a `div`, a `p`, a heading and a table's parts, `valign` on a cell, its row or its row group, `nowrap` on a cell, `cellspacing` and `cellpadding` on a `table`. The others are in [What is missing](10-missing.md).
+The presentational attributes of old pages style their element as Chrome reads them, under every rule of the sheets (decision 0092): `width` and `height` on an `img`, an `iframe`, a `table`, a `td` or a `th` (pixels or a percentage), `bgcolor` on `body` and a table's parts, `text` on `body`, `align` on a `div`, a `p`, a heading and a table's parts, `valign` on a cell, its row or its row group, `nowrap` on a cell, `cellspacing` and `cellpadding` on a `table`. The others are in [What is missing](10-missing.md).
 
 | Selectors | |
 |---|---|
@@ -314,7 +314,7 @@ A sheet written for browsers holds what a game's sheet never does: prefixes of f
 | `user-select` | `auto` on the root, so the page's text is selected and copied as in a browser ([Selecting text](#selecting-text)) |
 | `box-sizing` | `content-box` unless the sheet says otherwise, as in a browser's own sheet. Sized by their border as in Chrome: `button`, `select`, `table`, `progress`, `meter`, and `input` of type checkbox, radio, button, submit, reset, search and color (`TestChromeSizesTheSameBoxesByTheirBorder`) |
 | `text-align` of a control | `start` on `input`, `select` and `textarea`, `center` on an `input` of type button, submit and reset, whatever their parent's, as in Chrome (`TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes`); without the option a control takes its parent's |
-| an element ui has none of in a selector (`applet`, `iframe`, `svg`, a custom element) | the selector matches nothing and goes without a word, its rule keeping the others: a reset that lists every element of HTML still applies. Inside `:not()` it keeps its warning and drops the rule |
+| an element ui has none of in a selector (`applet`, `object`, a custom element) | the selector matches nothing and goes without a word, its rule keeping the others: a reset that lists every element of HTML still applies. Inside `:not()` it keeps its warning and drops the rule |
 | vendor prefixes | read as the plain name where Chrome does, dropped without a word where Chrome drops them: the tables below |
 
 A prefixed name read as a plain one keeps its place in the cascade, so `-webkit-transform: rotate(3deg); transform: none` ends as `none` and the other order as the rotation. A warning about one names it as it was written.

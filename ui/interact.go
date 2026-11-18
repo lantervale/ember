@@ -172,6 +172,7 @@ func (d *Document) Focused(n *Node) bool { return n != nil && d.focused() == n }
 // it at the first layout where it can, unless another Focus came first or
 // n has left the Document by then.
 func (d *Document) Focus(n *Node) {
+	d.askedOf()
 	d.pendingFocus = nil
 	if !d.moveFocus(func() bool { return d.focus.Set(n, true) }) {
 		d.pendingFocus = n
@@ -247,7 +248,7 @@ func focusable(n *Node) (int, bool) {
 	if isLink(n) {
 		return 0, true
 	}
-	if !slices.Contains([]dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Summary}, n.Tag()) {
+	if !slices.Contains([]dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Summary, dom.Iframe}, n.Tag()) {
 		return 0, false
 	}
 	if t, _ := n.Attr("type"); t == "hidden" {
@@ -363,6 +364,8 @@ func (d *Document) autofocus(targets []control.Target[*Node]) {
 func (d *Document) interact(c *twod.Canvas) bool {
 	d.platform = currentPlatform()
 	d.drawnBy(c)
+	d.syncFrames()
+	d.shield = d.shielded()
 	d.claimed(c)
 	if d.replay.repaint || d.retargeting || !d.targeted {
 		d.retarget()
@@ -385,8 +388,14 @@ func (d *Document) interact(c *twod.Canvas) bool {
 	d.acts(c)
 	if in := c.Input(); in != nil {
 		dom.SetSelectorAttr(d.html, "data-input-device", in.LastDevice().String())
-		d.pointer(c, in)
-		if !d.fresh {
+		if d.shield {
+			d.pointer(c, d.idleInput())
+		} else {
+			d.pointer(c, in)
+		}
+		if entered := d.framed != nil && d.framed.entered; entered {
+			d.framed.entered = false
+		} else if !d.fresh && d.keyed() {
 			d.keys(c, in)
 		}
 	}
@@ -693,7 +702,8 @@ func (d *Document) hitAt(at geom.Vec2) (*box.Box, *Node) {
 	if !d.replay.quiet {
 		hit = nil
 		if d.tree != nil {
-			hit = paint.HitTest(d.tree, at, paint.Controls(d.machine), paint.Viewport(d.viewport), paint.Scale(d.fonts.Scale()))
+			hit = paint.HitTest(d.inked(), at,
+				paint.Controls(d.machine), paint.Viewport(d.viewport), paint.Scale(d.fonts.Scale()))
 		}
 		d.replay.hit = hit
 	}
@@ -716,7 +726,7 @@ func (d *Document) pickAt(at geom.Vec2) paint.Pick {
 	if !d.replay.quiet {
 		pick = paint.Pick{Index: -1}
 		if d.tree != nil && d.selectOpen() {
-			pick = paint.PickOption(d.tree, at, paint.Controls(d.machine), paint.Fonts(d.fonts), paint.Viewport(d.viewport))
+			pick = paint.PickOption(d.inked(), at, paint.Controls(d.machine), paint.Fonts(d.fonts), paint.Viewport(d.viewport))
 		}
 		d.replay.pick = pick
 	}
@@ -1055,6 +1065,9 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	d.shortcuts(c, in)
 	pressed := func(k input.Key) bool { return f.RawPressed(int(k)) || f.RawRepeated(int(k)) }
 	n := d.focused()
+	if child := frameOf(n); child != nil && child.framed != nil {
+		return
+	}
 	m := d.machine(n)
 	if t := textOf(m); t != nil && n != nil {
 		f.CaptureKeyboard()
@@ -1085,13 +1098,12 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 		}
 		taken.all = true
 	}
-	if pressed(input.KeyTab) && n != nil {
+	if pressed(input.KeyTab) && (n != nil || d.framed != nil) {
 		taken.add(input.KeyTab)
-		if isMenuItem(n) && roleOf(menuBoxOf(n)) == roleMenu {
+		if n != nil && isMenuItem(n) && roleOf(menuBoxOf(n)) == roleMenu {
 			d.closeAll(n, true)
 		}
-		back := f.RawDown(int(input.KeyShift))
-		d.moveFocus(func() bool { return d.focus.Tab(back) })
+		d.tab(f.RawDown(int(input.KeyShift)))
 		return
 	}
 	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
@@ -1435,6 +1447,9 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		w = geom.V2(w.Y, 0)
 	}
 	if w == (geom.Vec2{}) {
+		return false
+	}
+	if child := frameOf(firstOf(d.hovered)); child != nil && child.framed != nil && child.wheels(w) {
 		return false
 	}
 	for _, b := range held {

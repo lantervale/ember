@@ -126,6 +126,10 @@ func (f *Face) Blank(ranges []Range) *Face {
 // faces twod's NewFace refuses; twod sets it.
 var Wrap func(f *Face) any //nolint:gochecknoglobals // a hook twod sets
 
+// Kept is where an engine package keeps what it made of face, a
+// *twod.Face, so it goes when the face does; twod sets it.
+var Kept func(face any) *any //nolint:gochecknoglobals // a hook twod sets
+
 // Draws reports whether the face draws text as written: a picture for
 // each cluster of several characters (a flag, a ZWJ family, a keycap),
 // else a glyph in the face or a fallback for a single character.

@@ -131,6 +131,9 @@ func (s size) withAspectRatio(ratio float32) size {
 	return s
 }
 
+// oneSided reports a size with one side set and the other not, which a ratio fills in.
+func (s size) oneSided() bool { return some(s.w) != some(s.h) }
+
 type rect struct{ l, r, t, b float32 }
 
 func (r rect) add(o rect) rect     { return rect{r.l + o.l, r.r + o.r, r.t + o.t, r.b + o.b} }

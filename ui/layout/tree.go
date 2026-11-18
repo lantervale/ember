@@ -226,6 +226,9 @@ type node struct {
 	// it takes the width it is given.
 	shape box.Intrinsic
 	sized bool
+	// intrinsic is set once a layout of the node read its picture's size or
+	// proportions: with a width and a height of its own it never does.
+	intrinsic bool
 	// gutter is the scrollbar room layout chose beyond the style's, overflow auto's once the
 	// content overflows.
 	gutter size
@@ -312,6 +315,10 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 	}
 	if e.Tag() == dom.Canvas {
 		buildCanvas(n, e)
+		return n
+	}
+	if e.Tag() == dom.Iframe {
+		buildFrame(n)
 		return n
 	}
 	t.buildChildren(n, e.Flow())

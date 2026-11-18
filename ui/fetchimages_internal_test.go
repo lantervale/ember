@@ -15,7 +15,7 @@ import (
 	"github.com/lantervale/ember/geom"
 )
 
-func picture(t *testing.T, w, h int) []byte {
+func picture(t testing.TB, w, h int) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	require.NoError(t, png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, w, h))))

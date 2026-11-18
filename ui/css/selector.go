@@ -210,6 +210,20 @@ func elementsBefore(e *dom.Node) []*dom.Node {
 }
 
 func (c *Compound) matches(e *dom.Node) bool {
+	if !c.names(e) {
+		return false
+	}
+	for i := range c.pseudos {
+		if !c.pseudos[i].matches(e) {
+			return false
+		}
+	}
+	return true
+}
+
+// names reports whether e has c's type, ids, classes and attributes: all
+// of c but its pseudo-classes, so what no state of e changes.
+func (c *Compound) names(e *dom.Node) bool {
 	if c.Tag != dom.TextTag && c.Tag != e.Tag() {
 		return false
 	}
@@ -226,11 +240,6 @@ func (c *Compound) matches(e *dom.Node) bool {
 	for _, a := range c.Attrs {
 		v, ok := e.Attr(a.Name)
 		if !ok || !a.matches(v) {
-			return false
-		}
-	}
-	for i := range c.pseudos {
-		if !c.pseudos[i].matches(e) {
 			return false
 		}
 	}
@@ -798,52 +807,58 @@ func parseAttr(b Component) (Attr, *SelectorError) {
 	return a, nil
 }
 
-// treeStates are the states sheets' selectors read in compounds above
-// their subject, :not(), :is() and :where() included: a change of one may
-// change what an element's descendants match. The states read before a
-// sibling combinator are besideStates.
-func treeStates(sheets []*Sheet) dom.State {
-	var s dom.State
-	for _, sh := range sheets {
-		for _, r := range sh.Rules {
-			for _, sel := range r.Selectors {
-				s |= sel.treeStates()
-			}
-		}
-	}
-	return s
+// stateRead is a state a selector reads on an element other than its
+// subject, :not(), :is() and :where() included: a change of it there may
+// change what the selector matches.
+type stateRead struct {
+	states dom.State
+	// on is the compound that reads it, after those holding it in a
+	// pseudo-class of theirs on the same element, and subject the
+	// selector's last.
+	on      []*Compound
+	subject *Compound
+	// beside is set when the first combinator from on toward the subject
+	// is a sibling's: the selector then matches among the elements after
+	// the one in the state and under them, else under that one.
+	beside bool
+	rule   int
 }
 
-func (s Selector) treeStates() dom.State {
-	var st dom.State
-	for i, c := range s.Compounds {
-		for _, p := range c.pseudos {
-			if i < len(s.Compounds)-1 {
-				st |= p.reads()
-			}
-			for _, n := range p.sels {
-				st |= n.treeStates()
-				if i < len(s.Compounds)-1 {
-					st |= n.states()
-				}
-			}
-		}
-	}
-	return st
+// names reports whether e has what the compounds reading the state name.
+func (r *stateRead) names(e *dom.Node) bool {
+	return !slices.ContainsFunc(r.on, func(c *Compound) bool { return !c.names(e) })
 }
 
-// states are every state s reads.
-func (s Selector) states() dom.State {
-	var st dom.State
-	for _, c := range s.Compounds {
-		for _, p := range c.pseudos {
-			st |= p.reads()
+// stateReads calls add for each compound of s, and of the selectors its
+// pseudo-classes hold, that reads states on an element other than s's
+// subject, with on and beside as stateRead has them.
+func (s Selector) stateReads(add func(on []*Compound, states dom.State, beside bool)) {
+	s.readsFrom(nil, false, false, add)
+}
+
+// readsFrom is stateReads for a selector the compounds outer hold, whose
+// subject stands above the one asked about (apart), or before it (apart
+// and beside).
+func (s Selector) readsFrom(outer []*Compound, apart, beside bool,
+	add func(on []*Compound, states dom.State, beside bool)) {
+	for i := range s.Compounds {
+		c := &s.Compounds[i]
+		on, away, before := append(slices.Clip(outer), c), apart, beside
+		if i < len(s.Combinators) {
+			on, away, before = on[len(outer):], true, s.Combinators[i].sibling()
+		}
+		var states dom.State
+		for j := range c.pseudos {
+			p := &c.pseudos[j]
+			states |= p.reads()
 			for _, n := range p.sels {
-				st |= n.states()
+				n.readsFrom(on, away, before, add)
 			}
 		}
+		if away && states != 0 {
+			add(on, states, before)
+		}
 	}
-	return st
 }
 
 // reads is the state p itself tests.
@@ -867,27 +882,8 @@ func (s Selector) beside(i int) bool {
 	return i < len(s.Combinators) && s.Combinators[i].sibling()
 }
 
-// besideStates are the states s reads on an element before a sibling
-// combinator, and besideKeys the classes, ids and attributes, keyed as
-// dom.Pipeline.Changed.
-func (s Selector) besideStates() dom.State {
-	var st dom.State
-	for i, c := range s.Compounds {
-		for _, p := range c.pseudos {
-			if s.beside(i) {
-				st |= p.reads()
-			}
-			for _, n := range p.sels {
-				st |= n.besideStates()
-				if s.beside(i) {
-					st |= n.states()
-				}
-			}
-		}
-	}
-	return st
-}
-
+// besideKeys are the classes, ids and attributes s reads on an element
+// before a sibling combinator, keyed as dom.Pipeline.Changed.
 func (s Selector) besideKeys(add func(string)) {
 	for i, c := range s.Compounds {
 		if s.beside(i) {

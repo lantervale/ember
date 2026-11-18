@@ -8,6 +8,7 @@ import (
 
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/css"
@@ -110,6 +111,15 @@ type Document struct {
 	// placed, looked for again once followings moved past followingsSeen.
 	followers      []*Node
 	followingsSeen uint64
+	// framed is where d shows inside another Document, nil in a window;
+	// frames are d's iframes that show a Document, framedAt the one each
+	// showed at the last frame; shield is whether the pointer is kept
+	// from d this frame, and idle the input it then reads (frame.go).
+	framed   *framing
+	frames   []*Node
+	framedAt []*Document
+	shield   bool
+	idle     *input.State
 }
 
 // DocumentOption configures a Document.
@@ -477,9 +487,12 @@ func init() {
 // document draws it in its own space.
 func (d *Document) Draw(c *twod.Canvas) {
 	if win := c.Window(); win != nil {
-		d.fonts.SetScale(win.ContentScale() * d.Zoom())
+		d.fonts.SetScale(win.ContentScale() * d.Zoom() * d.outerZoom())
 	}
 	animating := d.tick(c)
+	if (animating || d.replay.animating) && d.tree != nil {
+		d.tree.Inked = false
+	}
 	size := d.drawSize(c)
 	d.viewport = geom.Rect{W: size.X, H: size.Y}
 	d.Layout(size)
@@ -522,7 +535,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.unsettled = false
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
 		Selection: d.selectionPaint()}
-	d.zoomed(c, func() { paint.Paint(c, d.tree, d.frameOptions()...) })
+	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
 	d.replay.recorded = c.Keep(m, &d.replay.last)
 	if apart && live.Any() {
 		d.zoomed(c, func() { paint.PaintLive(c, live, d.clock, d.options()...) })

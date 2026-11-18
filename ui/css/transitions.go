@@ -23,7 +23,6 @@ type Transitions struct {
 	given, all []*Sheet
 	changed    func(n *dom.Node, old, next *style.Computed)
 	m, pm      matcher
-	treeStates dom.State
 	// computed counts the elements restyled, for tests.
 	computed int
 	overlay  bool
@@ -114,7 +113,6 @@ func (t *Transitions) SetSheets(sheets []*Sheet) {
 		agent = browserAgent()
 	}
 	t.all = append([]*Sheet{agent}, sheets...)
-	t.treeStates = treeStates(t.all)
 	t.off, t.ranks = mediaOff(t.all, t.media), layerRanks(t.all)
 }
 
@@ -132,7 +130,7 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	if t.changed == nil {
 		t.changed = t.restyled
 	}
-	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm, treeStates: t.treeStates,
+	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm,
 		computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser}
 	r.run(root, t.stale)
 	t.stale = false

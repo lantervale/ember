@@ -104,6 +104,9 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0098 | [An svg element is one picture holding its markup](0098-an-svg-element-is-one-picture-holding-its-markup.md) | api |
 | 0099 | [A page's fonts are fetched, and WOFF2 is read in pure Go](0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md) | assets |
 | 0100 | [The GPU holds a picture while the picture lives](0100-the-gpu-holds-a-picture-while-the-picture-lives.md) | rendering |
+| 0101 | [Paint and hit testing skip the boxes out of view](0101-paint-and-hit-testing-skip-the-boxes-out-of-view.md) | rendering |
+| 0102 | [A window's close is a request its rule answers](0102-a-windows-close-is-a-request-its-rule-answers.md) | api |
+| 0103 | [An iframe shows a Document the program gives it](0103-an-iframe-shows-a-document-the-program-gives-it.md) | api |
 
 ## Writing one
 

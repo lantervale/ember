@@ -25,17 +25,21 @@ static void emberInsertText(id self, SEL _cmd, id string, NSRange replacement) {
 }
 
 static void emberListenText(void *nswindow) {
-	NSView *view = [(NSWindow *)nswindow contentView];
-	Method m = class_getInstanceMethod(object_getClass(view), @selector(insertText:replacementRange:));
-	if (m != NULL) {
-		method_setImplementation(m, (IMP)emberInsertText);
+	@autoreleasepool {
+		NSView *view = [(NSWindow *)nswindow contentView];
+		Method m = class_getInstanceMethod(object_getClass(view), @selector(insertText:replacementRange:));
+		if (m != NULL) {
+			method_setImplementation(m, (IMP)emberInsertText);
+		}
 	}
 }
 
 static void emberInsert(void *nswindow, char *text) {
-	NSView *view = [(NSWindow *)nswindow contentView];
-	[(id<NSTextInputClient>)view insertText:[NSString stringWithUTF8String:text]
-		replacementRange:NSMakeRange(NSNotFound, 0)];
+	@autoreleasepool {
+		NSView *view = [(NSWindow *)nswindow contentView];
+		[(id<NSTextInputClient>)view insertText:[NSString stringWithUTF8String:text]
+			replacementRange:NSMakeRange(NSNotFound, 0)];
+	}
 }
 */
 import "C"

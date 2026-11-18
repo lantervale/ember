@@ -49,6 +49,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | the diagonal where two solid border sides of other colours meet | not smoothed, where Chrome blends the two colours along it |
 | a picture with a ratio and no size (an SVG with only a `viewBox`) as an unsized flex item or absolutely positioned | no width, where Chrome gives it one: give it a width |
 | a replaced grid item | stretched to its cell |
+| the `width` and `height` attributes of an `img` as its proportions, when a rule takes one of the two back (`height: auto`, as responsive sheets do) | the box has its broken picture's proportions until the picture lands, then is laid out again, where Chrome keeps the room the attributes give (`aspect-ratio: auto 250 / 167`) |
 | a picture made a block (`display: block`) with a percentage `width` or `max-width`, in a box as wide as its content (a float, a flex item, a grid track) | counts for its own width at the box's narrowest, where Chrome counts it for none, so the box is wider, and a float round one is 3 points taller; one left inline counts for none |
 | a grid line named by no area (`grid-column-end: b` with no area `b`), or `grid-area: nowhere` | auto, where Chrome makes a line of that name after the grid |
 | names of lines in a track list (`[full-start] 1fr [full-end]`) | refused |
@@ -106,7 +107,22 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a press on an element and the pointer's moves while it is held (`pointerdown`, `pointermove`, pointer capture) | no callback hears them: light's developer tools read `win.Input().Mouse()` and `Down` each frame to drag their edge, and find what was pressed with `doc.ElementAt` |
 | the tooltip of a `title` attribute | not shown: light's Network rows name their address in its status bubble instead |
 | a `role="menu"` shown without an opener closing on a choice | stays open: its item's callback removes `open` |
-| a Document drawn in another's canvas, under an element of the outer one | still takes the pointer there: the outer stops drawing it (`doc.Invalidate`) while its own menu is open over it |
+
+## Frames
+
+| Missing | Today |
+|---|---|
+| a select's list, a menu, a tooltip or a dialog of a Document in an `iframe`, where it passes the frame's box | cut at the box: the top layer is the framed Document's own |
+| a modal dialog in a framed Document | holds that Document's input, not the page's round it |
+| the arrows, a pad's stick and Back (Escape) across a frame | stay in the Document that has the focus: only Tab walks in and out |
+| an `OnKey` or `OnBack` of the page round a frame, for a key pressed inside it | not heard: keys bubble inside one Document |
+| a selection running from a page into its frame, and select all over both | each Document selects its own text, one at a time |
+| `opacity` below 1 on an ancestor of an `iframe` | doesn't fade it, as a canvas |
+| an element lying over an `iframe` | the page is painted each frame while it does, where it replays with nothing over the frame |
+| `aspect-ratio` on an `iframe` with neither a width nor a height | 300 wide and the ratio's height, where Chrome fills the line |
+| a percentage `height` on an inline `iframe`, `canvas` or `img` | read as `auto`; made a block, it is the share of its container |
+| `scrolling="no"`, `allowtransparency`, `loading`, `sandbox`, `allow`, `name` | not read: what a frame may do is the program's |
+| a black `border: 2px inset` on an `iframe` | drawn as on any box, where Chrome keeps the greys of its default border |
 
 ## Pictures
 

@@ -37,7 +37,8 @@ html, body, div, section, header, footer, nav, main, aside, article, p, h1, h2, 
 details, summary, dialog, hr, pre, ul, ol, menu, dl, dt, dd, h5, h6, blockquote, figure, figcaption, form, address,
 hgroup, search, center, fieldset, legend { display: block; }
 li { display: list-item; }
-[hidden], input[type="hidden"] { display: none; }
+[hidden] { display: none; }
+input[type="hidden" i] { display: none !important; }
 table { border-spacing: 2px; }
 caption { text-align: center; }
 html { margin: 0; user-select: none; }
@@ -96,7 +97,9 @@ button, input, select, textarea {
   color: inherit; line-height: inherit; letter-spacing: inherit; text-align: inherit;
   text-indent: 0;
 }
-button, input, select, textarea, progress, meter, img, canvas, svg { display: inline-block; }
+button, input, select, textarea, progress, meter, img, canvas, svg, iframe { display: inline-block; }
+iframe { border: 2px inset #eeeeee; }
+iframe[frameborder="0"], iframe[frameborder="no" i] { border-width: 0; }
 button, select, input[type="checkbox"], input[type="range"] { cursor: default; }
 input, textarea { cursor: text; }
 button {

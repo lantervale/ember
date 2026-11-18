@@ -10,7 +10,7 @@ import (
 )
 
 func TestABrowsersSheetKeepsARuleNamingAnElementUIHasNot(t *testing.T) {
-	sheet, warns := css.Parse("", `html, applet, div, iframe.wide > p, video:not(.x) { margin: 0 }
+	sheet, warns := css.Parse("", `html, applet, div, object.wide > p, video:not(.x) { margin: 0 }
 video, e-page-transition { width: 1px }
 p:not(video) { height: 1px }
 p:is(video, div) { top: 1px }`, css.Browser())

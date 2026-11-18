@@ -18,6 +18,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -197,6 +198,10 @@ type painter struct {
 	// base is the surface's transform as painting starts: the root's
 	// space, where the viewport culls.
 	base geom.Transform2D
+	// whole walks every box, and reached counts those the walk came to
+	// under the root.
+	whole   bool
+	reached int
 	// probing is a scan's walk, which tells hit only of the boxes whose
 	// ink holds point, in the root's space, and of none when pointless.
 	probing, pointless bool
@@ -248,10 +253,22 @@ func Paint(s Surface, t *box.Tree, opts ...Option) {
 	if t == nil || t.Root == nil {
 		return
 	}
+	mode := cull.Now()
+	if mode == cull.Check {
+		checkPaint(s, t, opts)
+	}
+	paintOn(s, t, opts, mode == cull.Off)
+}
+
+// paintOn draws t onto s, walking every box when whole and else only
+// those whose ink shows (decision 0101), and returns how many boxes under
+// the root the walk reached.
+func paintOn(s Surface, t *box.Tree, opts []Option, whole bool) int {
+	inked(t)
 	p := pooled[painter](&painters)
 	defer painters.Put(p)
 	*p = painter{
-		s: s, base: s.Transform(),
+		s: s, base: s.Transform(), whole: whole,
 		scratch: p.scratch[:0], chain: p.chain[:0], popups: p.popups[:0], top: p.top[:0], slabs: p.slabs,
 	}
 	for _, o := range opts {
@@ -262,6 +279,7 @@ func Paint(s Surface, t *box.Tree, opts ...Option) {
 	p.page(t.Root)
 	p.use(nil)
 	p.drawPopups()
+	return p.reached
 }
 
 // page paints root's stacking context, then the top layer over it, each
@@ -471,6 +489,9 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		p.context(c, alpha)
 	}
 	for _, c := range l.scrollers {
+		if p.missed(c, geom.Rect{X: c.at.X, Y: c.at.Y, W: c.b.Size.X, H: c.b.Size.Y}) {
+			continue
+		}
 		p.use(c.clip)
 		BarsOf(c.b, c.at).paint(p.s, alpha)
 	}
@@ -478,7 +499,9 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 	p.s.SetTransform(saved)
 }
 
-// collect sorts e's descendants: its flow into own, down to but not into
+// collect sorts e's descendants, but those whose ink and all they hold
+// is out of view or off a scan's point (sight): its flow into own, down
+// to but not into
 // the stacking contexts it holds, and those contexts and the positioned
 // boxes into outer, the layers of the context they stack in. A positioned
 // box with z-index auto goes into outer's positioned layer in tree order,
@@ -500,9 +523,15 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	if extra != nil {
 		run = append(run[:len(run):len(run)], extra)
 	}
+	see := p.sight(inner)
 	for _, c := range run {
+		at := origin.Add(c.Pos)
+		if see.misses(c, at) {
+			continue
+		}
+		p.reached++
 		st := shown(c)
-		ce := entry{b: c, at: origin.Add(c.Pos), clip: placedClip(c, st, inner)}
+		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
 		switch {
 		case p.modal(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})

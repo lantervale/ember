@@ -362,8 +362,19 @@ func (f feed) RawReleased(key int) bool {
 
 func (f feed) RawRepeated(key int) bool       { return valid(Key(key)) && f.s.repeated[key] }
 func (f feed) GamepadChanges() ([]int, []int) { return f.s.joined, f.s.left }
-func (f feed) CapturePointer()                { f.s.pointerCaptured, f.s.nextPointer = true, true }
-func (f feed) CaptureKeyboard()               { f.s.keyboardCaptured, f.s.nextKeyboard = true, true }
+
+func (f feed) AdoptGamepads(from any) {
+	o, ok := from.(*State)
+	if !ok || o == f.s {
+		return
+	}
+	f.s.pads, f.s.livePads = o.pads, o.livePads
+	for i := range f.s.pads {
+		f.s.pads[i].state = f.s
+	}
+}
+func (f feed) CapturePointer()  { f.s.pointerCaptured, f.s.nextPointer = true, true }
+func (f feed) CaptureKeyboard() { f.s.keyboardCaptured, f.s.nextKeyboard = true, true }
 
 func (f feed) CaptureKeys(keys ...int) {
 	for _, k := range keys {

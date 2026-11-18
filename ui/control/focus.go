@@ -94,6 +94,20 @@ func (f *Focus[K]) Tab(back bool) bool {
 	return true
 }
 
+// Tabs reports whether Tab reaches a target.
+func (f *Focus[K]) Tabs() bool { return len(f.order()) > 0 }
+
+// AtEdge reports whether Tab would wrap: the focus is on the last target
+// in tab order, the first when back.
+func (f *Focus[K]) AtEdge(back bool) bool {
+	order := f.order()
+	i := slices.Index(order, f.at)
+	if back {
+		return i == 0
+	}
+	return i >= 0 && i == len(order)-1
+}
+
 // order is the targets Tab reaches: positive tabindexes ascending, then
 // the zeros in tree order.
 func (f *Focus[K]) order() []int {
