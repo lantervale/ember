@@ -1221,6 +1221,11 @@ var props = func() map[string]prop {
 		),
 		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
 			func(x *ctx, v []Component) float32 { return x.px(v[0]) }),
+		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
+			func(x *ctx, v []Component) style.WordSpacing {
+				l := x.length(v[0])
+				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
+			}),
 		"color": field(
 			func(c *style.Computed) *color.Color { return &c.Color },
 			func(x *ctx, v []Component) color.Color {

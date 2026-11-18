@@ -224,3 +224,36 @@ func TestASheetResolvesItsURLsFromItsAddress(t *testing.T) {
 		t.Errorf("a style attribute's url is the page's to resolve: %s", got)
 	}
 }
+
+func TestABrowsersControlsLeaveThePagesSpacingAndCase(t *testing.T) {
+	var controls []*dom.Node
+	for _, tag := range []dom.Tag{dom.Input, dom.Textarea, dom.Select, dom.Button} {
+		controls = append(controls, dom.NewElement(tag))
+	}
+	p := dom.NewElement(dom.P)
+	root := page(append([]*dom.Node{p}, controls...)...)
+	sheets := []*Sheet{sheet(t, `body { font-size: 20px; word-spacing: 1em; letter-spacing: 2px; text-transform: uppercase;
+text-shadow: 1px 1px #f00; }`)}
+	NewTransitions().Compute(root, sheets)
+	for _, n := range append(controls, p) {
+		s := styleOf(n)
+		if s.WordGap() != 20 || s.LetterSpacing != 2 || s.TextTransform != style.Uppercase || len(s.TextShadows) != 1 {
+			t.Errorf("%s: a game's control takes the page's text: %v %v %v %v", n.Tag(), s.WordGap(), s.LetterSpacing,
+				s.TextTransform, s.TextShadows)
+		}
+	}
+	root.Walk(func(n *dom.Node) bool { dom.Data(n).Style = nil; return true })
+	tr := NewTransitions()
+	tr.BrowserSheets()
+	tr.Compute(root, sheets)
+	for _, n := range controls {
+		s := styleOf(n)
+		if s.WordGap() != 0 || s.LetterSpacing != 0 || s.TextTransform != style.NoTransform || len(s.TextShadows) != 0 {
+			t.Errorf("%s: a browser's control starts from its own: %v %v %v %v", n.Tag(), s.WordGap(), s.LetterSpacing,
+				s.TextTransform, s.TextShadows)
+		}
+	}
+	if s := styleOf(p); s.WordGap() != 20 || s.LetterSpacing != 2 || s.TextTransform != style.Uppercase {
+		t.Errorf("a paragraph keeps the page's: %v %v %v", s.WordGap(), s.LetterSpacing, s.TextTransform)
+	}
+}

@@ -355,3 +355,49 @@ return out;`, &chromes)
 		}
 	}
 }
+
+// TestChromeSpacesTheTextOfControlsAsABrowsersSheetDoes asks a page with
+// Chrome's own sheet alone what each control keeps of a body's letter
+// and word spacing, case and text shadow.
+func TestChromeSpacesTheTextOfControlsAsABrowsersSheetDoes(t *testing.T) {
+	types := []string{"text", "search", "password", "number", "email", "button", "submit", "reset", "checkbox"}
+	const look = "font-size: 20px; word-spacing: 1em; letter-spacing: 2px; text-transform: uppercase; " +
+		"text-shadow: 1px 1px red"
+	var chromes [][4]string
+	typeList, _ := json.Marshal(types)
+	ask(t, geom.V2(800, 600), `
+const frame = document.createElement("iframe");
+document.body.appendChild(frame);
+const doc = frame.contentDocument, out = [];
+doc.open(); doc.write("<!DOCTYPE html><body style='`+look+`'>"); doc.close();
+const read = e => { doc.body.appendChild(e); const s = frame.contentWindow.getComputedStyle(e);
+	out.push([s.wordSpacing, s.letterSpacing, s.textTransform, s.textShadow]); };
+for (const type of `+string(typeList)+`) { const e = doc.createElement("input"); e.type = type; read(e); }
+for (const tag of ["textarea", "select", "button", "p"]) read(doc.createElement(tag));
+return out;`, &chromes)
+	d := ui.NewDocument(ui.BrowserSheets())
+	d.Body().SetStyle(look)
+	for _, typ := range types {
+		d.Body().Append(ui.Input(ui.Type(typ)))
+	}
+	d.Body().Append(ui.Textarea(), ui.Select(), ui.Button(), ui.P())
+	d.Layout(geom.V2(800, 600))
+	px := func(v float32) string { return fmt.Sprintf("%gpx", v) }
+	for i, n := range d.Body().Children() {
+		s := dom.Data(n).Style
+		got := [4]string{px(s.WordGap()), px(s.LetterSpacing), "none", "none"}
+		if s.LetterSpacing == 0 {
+			got[1] = "normal"
+		}
+		if s.TextTransform != 0 {
+			got[2] = "uppercase"
+		}
+		if len(s.TextShadows) > 0 {
+			got[3] = "rgb(255, 0, 0) 1px 1px 0px"
+		}
+		if got != chromes[i] {
+			typ, _ := n.Attr("type")
+			t.Errorf("%s %s: ember %v, Chrome %v", n.Tag(), typ, got, chromes[i])
+		}
+	}
+}

@@ -72,6 +72,7 @@ var properties = map[string]property{
 	"font-style":             {inherited: true, initial: "normal"},
 	"line-height":            {inherited: true, initial: "normal"},
 	"letter-spacing":         {inherited: true, initial: "normal"},
+	"word-spacing":           {inherited: true, initial: "normal"},
 	"border-spacing":         {inherited: true, initial: "0"},
 	"caption-side":           {inherited: true, initial: "top"},
 	"table-layout":           {initial: "auto"},

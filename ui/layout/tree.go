@@ -934,7 +934,7 @@ func (t *tree) listMarker(n *node) {
 	}
 	switch {
 	case text != "":
-		w := t.fonts.Advance(st.Font, text) + st.LetterSpacing*float32(len([]rune(text)))
+		w := t.fonts.Advance(st.Font, text) + st.Spacing(text)
 		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
 		m.Size = geom.Vec2{X: w, Y: line.Rect.H}
 		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}

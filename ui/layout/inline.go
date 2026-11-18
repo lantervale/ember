@@ -357,8 +357,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		}
 		p := piece{kind: kind, run: i, text: s, at: from}
 		if kind == word || kind == gap {
-			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) +
-				r.st.LetterSpacing*float32(len([]rune(s)))
+			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) + r.st.Spacing(s)
 		}
 		c.pieces = append(c.pieces, p)
 	}
@@ -432,7 +431,7 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		g, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
 		at += len(g)
 		adv := fonts.Advance(st.Font, strings.ReplaceAll(s[:at], zeroWidthSpace, ""))
-		w := adv - prev + st.LetterSpacing*float32(len([]rune(g)))
+		w := adv - prev + st.Spacing(g)
 		prev = adv
 		if at > len(g) {
 			c.pieces = append(c.pieces, piece{kind: emergency, run: i})
@@ -1522,7 +1521,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 			if i < len(pieces) && isText(pieces[i].kind) && pieces[i].run == run {
 				end = walk.at()
 			}
-			r := geom.Rect{X: start, Y: y, W: end - start, H: lh}
+			r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
 			frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart,
 				cut && i == len(pieces))
 			frag.Start = from
@@ -1632,7 +1631,7 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, x, perGap, y,
 		m := t.metricsOf(c, sp.st)
 		top := y + lb + sp.shift - m.Ascent - sp.padding.t - sp.border.t
 		bottom := y + lb + sp.shift + m.Descent + sp.padding.b + sp.border.b
-		r := geom.Rect{X: left, Y: top, W: right - left, H: bottom - top}
+		r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
 		rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
 		seen[k] = true
 		lines[sp.box] = append(lines[sp.box], r)
@@ -1736,7 +1735,7 @@ func (t *tree) fitPrefix(st *style.Computed, text string, room float32) (string,
 	}
 	width := func(i int) float32 {
 		s := text[:ends[i]]
-		return t.fonts.Advance(st.Font, s) + st.LetterSpacing*float32(utf8.RuneCountInString(s))
+		return t.fonts.Advance(st.Font, s) + st.Spacing(s)
 	}
 	lo, hi := 0, len(ends)-1
 	for lo < hi {
@@ -1764,7 +1763,7 @@ func (t *tree) fitSuffix(st *style.Computed, text string, room float32) (string,
 	}
 	width := func(i int) float32 {
 		s := text[starts[i]:]
-		return t.fonts.Advance(st.Font, s) + st.LetterSpacing*float32(utf8.RuneCountInString(s))
+		return t.fonts.Advance(st.Font, s) + st.Spacing(s)
 	}
 	lo, hi := 0, len(starts)-1
 	for lo < hi {

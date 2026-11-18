@@ -81,7 +81,7 @@ func TestPseudoElementsStandWhereChromeTakesThem(t *testing.T) {
 func TestPseudoElementStylesMatchChrome(t *testing.T) {
 	d := ui.NewDocument(ui.CSS(`
 body { color: #123456; font-size: 20px; }
-.card { color: #a00; position: relative; letter-spacing: 1px; }
+.card { color: #a00; position: relative; letter-spacing: 1px; word-spacing: 3px; }
 .card::before { content: "a"; font-size: 150%; font-weight: 700; padding-left: 0.5em; background-color: #0a0; }
 .card::after { content: ""; position: absolute; display: inline; opacity: 0.5; margin-top: 2em; color: #00a; }
 .card:first-child::before { font-style: italic; }
@@ -91,8 +91,8 @@ body { color: #123456; font-size: 20px; }
 p, p::before { color: #0aa; content: "both"; }
 p::after { content: none; color: #f00; }
 ol { color: #333; }
-li::marker { color: #b0b; font-size: 12px; font-weight: 700; letter-spacing: 2px; padding-left: 9px;
-  background-color: #ff0; }
+li::marker { color: #b0b; font-size: 12px; font-weight: 700; letter-spacing: 2px; word-spacing: 0.5em;
+  padding-left: 9px; background-color: #ff0; }
 li.plain { font-style: italic; }
 .over::before { content: "1"; color: #111; }
 #over.over::before { color: #222; }
@@ -104,9 +104,9 @@ div.over::before { color: #333 !important; }
 		ui.Ol(ui.Li(ui.Text("styled")), ui.Li(ui.Class("plain"), ui.Text("too"))),
 		ui.Div(ui.ID("over"), ui.Class("over"), ui.Text("over")),
 	)
-	props := []string{"color", "font-size", "font-weight", "font-style", "letter-spacing", "display", "position",
-		"padding-left", "margin-top", "opacity", "background-color"}
-	markerProps := []string{"color", "font-size", "font-weight", "font-style", "letter-spacing"}
+	props := []string{"color", "font-size", "font-weight", "font-style", "letter-spacing", "word-spacing", "display",
+		"position", "padding-left", "margin-top", "opacity", "background-color"}
+	markerProps := []string{"color", "font-size", "font-weight", "font-style", "letter-spacing", "word-spacing"}
 	names, _ := json.Marshal(props)
 	raw, err := chrome.Eval(d, geom.V2(800, 600), fmt.Sprintf(`
 return Array.from(document.body.querySelectorAll("*")).map(e => Object.fromEntries(

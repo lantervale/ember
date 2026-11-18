@@ -47,7 +47,7 @@ var (
 	fontProps   = []string{"font", "font-family", "font-size", "font-style", "font-weight", "line-height"}
 	markerProps = append([]string{"color", "content", "cursor", "letter-spacing", "overflow-wrap", "quotes",
 		"text-shadow", "text-transform", "white-space", "transition", "transition-property", "transition-duration",
-		"transition-timing-function", "transition-delay", "-webkit-font-smoothing"}, fontProps...)
+		"transition-timing-function", "transition-delay", "-webkit-font-smoothing", "word-spacing"}, fontProps...)
 	placeholderProps = []string{"color", "opacity"}
 	selectionProps   = []string{"color", "background-color", "background"}
 	backdropProps    = []string{"background-color", "background", "opacity"}

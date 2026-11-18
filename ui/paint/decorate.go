@@ -3,7 +3,9 @@ package paint
 import (
 	"math"
 	"slices"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
@@ -1389,7 +1391,7 @@ func (p *painter) text(e entry, alpha float32) {
 			}
 			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, st.PixelText)
 			for _, f := range b.Lines {
-				p.s.Text(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Text, o...)
+				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Text, st, o)
 			}
 		}
 	}
@@ -1400,9 +1402,43 @@ func (p *painter) text(e entry, alpha float32) {
 		return
 	}
 	for _, f := range b.Lines {
-		p.s.Text(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, opts...)
+		p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, st, opts)
 	}
 	p.decorations(e, st, style.LineThrough, alpha)
+}
+
+// words draws text from at as opts draw it, each word separator widened
+// by st's word-spacing: whole without one, else word by word, each where
+// layout measured it.
+func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
+	gap := st.WordGap()
+	if gap == 0 {
+		p.s.Text(at, text, opts...)
+		return
+	}
+	for len(text) > 0 {
+		i := strings.IndexFunc(text, style.WordSeparator)
+		if i < 0 {
+			p.s.Text(at, text, opts...)
+			return
+		}
+		if i > 0 {
+			p.s.Text(at, text[:i], opts...)
+			at.X += p.advance(st, text[:i], opts)
+		}
+		_, n := utf8.DecodeRuneInString(text[i:])
+		at.X += p.advance(st, text[i:i+n], opts) + gap
+		text = text[i+n:]
+	}
+}
+
+// advance is how far s takes the text after it, its letters spaced: by
+// layout's fonts, or without them by the face opts draw it in.
+func (p *painter) advance(st *style.Computed, s string, opts []twod.TextOption) float32 {
+	if p.fonts == nil {
+		return twod.Measure(s, opts...).X
+	}
+	return p.fonts.Advance(st.Font, s) + st.LetterSpacing*float32(utf8.RuneCountInString(s))
 }
 
 // selectionColors are the ::selection of the element st styles: its
@@ -1444,7 +1480,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
 		if k < 0 {
-			p.s.Text(at, f.Text, plain...)
+			p.words(at, f.Text, st, plain)
 			continue
 		}
 		// room above and below a line for what its glyphs draw outside it
@@ -1474,7 +1510,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(part.clip)
-			p.s.Text(at, f.Text, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, st.PixelText)...)
+			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, st.PixelText))
 			p.s.PopClip()
 		}
 	}

@@ -16,18 +16,35 @@ import (
 // positions, through cases when text-transform changed the case.
 type line struct {
 	xs []float32
-	// src, font and case are what xs was measured from, so a frame where
-	// none changed keeps the line.
-	src   []rune
-	font  style.Font
-	tt    style.TextTransform
-	cases *caseMap
+	// src, font, spacing and case are what xs was measured from, so a
+	// frame where none changed keeps the line.
+	src     []rune
+	font    style.Font
+	spacing spacing
+	tt      style.TextTransform
+	cases   *caseMap
 }
 
-func newLine(text []rune, f style.Font, fonts box.Fonts) *line {
-	l := &line{xs: make([]float32, len(text)+1), font: f}
-	for i := range text {
-		l.xs[i+1] = fonts.Advance(f, string(text[:i+1]))
+// spacing is the room a style adds after each character and after each
+// word separator.
+type spacing struct{ letter, word float32 }
+
+func spacingOf(st *style.Computed) spacing { return spacing{st.LetterSpacing, st.WordGap()} }
+
+// after is the room s adds after r.
+func (s spacing) after(r rune) float32 {
+	if s.word != 0 && style.WordSeparator(r) {
+		return s.letter + s.word
+	}
+	return s.letter
+}
+
+func newLine(text []rune, st *style.Computed, fonts box.Fonts) *line {
+	l := &line{xs: make([]float32, len(text)+1), font: st.Font, spacing: spacingOf(st)}
+	var room float32
+	for i, r := range text {
+		room += l.spacing.after(r)
+		l.xs[i+1] = fonts.Advance(st.Font, string(text[:i+1])) + room
 	}
 	return l
 }
@@ -68,26 +85,28 @@ func (d *Document) layText() {
 		}
 		src := t.Editor.Runes()
 		if t.Multiline() {
-			d.layArea(n, t, s.Font)
+			d.layArea(n, t, s)
 			continue
 		}
-		if l, ok := t.Layout.(*line); ok && slices.Equal(l.src, src) && sameFont(l.font, s.Font) && l.tt == s.TextTransform {
+		if l, ok := t.Layout.(*line); ok && slices.Equal(l.src, src) && sameFont(l.font, s.Font) &&
+			l.spacing == spacingOf(s) && l.tt == s.TextTransform {
 			continue
 		}
 		shown, cases := d.shownText(n, t)
 		if !t.Empty() {
 			n.SetShadow(shown, false)
 		}
-		l := newLine([]rune(shown), s.Font, d.fonts)
+		l := newLine([]rune(shown), s, d.fonts)
 		l.src, l.tt, l.cases = slices.Clone(src), s.TextTransform, cases
 		t.Layout = l
 	}
 }
 
 // layArea cuts a textarea's text along the lines layout gave it, once
-// its text, font, width or case changed; lines laid out from other text
-// than it draws wait for the next layout.
-func (d *Document) layArea(n *Node, t *control.Text, f style.Font) {
+// its text, font, spacing, width or case changed; lines laid out from
+// other text than it draws wait for the next layout.
+func (d *Document) layArea(n *Node, t *control.Text, st *style.Computed) {
+	f := st.Font
 	if d.tree == nil {
 		return
 	}
@@ -97,8 +116,9 @@ func (d *Document) layArea(n *Node, t *control.Text, f style.Font) {
 	}
 	src := t.Editor.Runes()
 	width := b.ContentRect().W
-	tt := dom.Data(n).Style.TextTransform
-	if a, ok := t.Layout.(*area); ok && a.width == width && slices.Equal(a.src, src) && sameFont(a.font, f) && a.tt == tt {
+	tt := st.TextTransform
+	if a, ok := t.Layout.(*area); ok && a.width == width && slices.Equal(a.src, src) && sameFont(a.font, f) &&
+		a.spacing == spacingOf(st) && a.tt == tt {
 		return
 	}
 	var run *box.Box
@@ -118,7 +138,7 @@ func (d *Document) layArea(n *Node, t *control.Text, f style.Font) {
 		n.SetShadow(shown, false)
 		return
 	}
-	a := newArea([]rune(shown), run, f, d.fonts, rows)
+	a := newArea([]rune(shown), run, st, d.fonts, rows)
 	a.src, a.width, a.tt, a.cases = slices.Clone(src), width, tt, cases
 	t.Layout = a
 }
@@ -249,13 +269,14 @@ type area struct {
 	xs           [][]float32
 	rows         []geom.Rect
 	page         int
-	// src, font, width and case are what it was cut from; its positions
-	// are the drawn text's, cases mapping the value's to them.
-	src   []rune
-	font  style.Font
-	width float32
-	tt    style.TextTransform
-	cases *caseMap
+	// src, font, spacing, width and case are what it was cut from; its
+	// positions are the drawn text's, cases mapping the value's to them.
+	src     []rune
+	font    style.Font
+	spacing spacing
+	width   float32
+	tt      style.TextTransform
+	cases   *caseMap
 }
 
 func (a *area) Lines() int     { return len(a.starts) }
@@ -290,8 +311,9 @@ func (a *area) Row(line int) geom.Rect { return a.rows[min(max(line, 0), len(a.r
 
 // newArea cuts text along run's lines, the fragments layout made of it:
 // a hard break starts a line, a soft one drops the spaces it broke at.
-func newArea(text []rune, run *box.Box, f style.Font, fonts box.Fonts, rowsShown int) *area {
-	a := &area{font: f}
+func newArea(text []rune, run *box.Box, st *style.Computed, fonts box.Fonts, rowsShown int) *area {
+	f := st.Font
+	a := &area{font: f, spacing: spacingOf(st)}
 	m := fonts.Metrics(f)
 	lh := m.Ascent + m.Descent + m.LineGap
 	var frags []box.Fragment
@@ -304,8 +326,10 @@ func newArea(text []rune, run *box.Box, f style.Font, fonts box.Fonts, rowsShown
 	next := float32(0)
 	add := func(start int, shown []rune, r geom.Rect) {
 		xs := make([]float32, len(shown)+1)
-		for j := range shown {
-			xs[j+1] = fonts.Advance(f, string(shown[:j+1]))
+		var room float32
+		for j, r := range shown {
+			room += a.spacing.after(r)
+			xs[j+1] = fonts.Advance(f, string(shown[:j+1])) + room
 		}
 		a.starts, a.ends = append(a.starts, start), append(a.ends, start+len(shown))
 		a.xs, a.rows = append(a.xs, xs), append(a.rows, r)
@@ -342,7 +366,8 @@ func newArea(text []rune, run *box.Box, f style.Font, fonts box.Fonts, rowsShown
 			last := len(a.starts) - 1
 			a.ends[last] = end
 			for _, r := range text[q:end] {
-				a.xs[last] = append(a.xs[last], a.xs[last][len(a.xs[last])-1]+fonts.Advance(f, string(r)))
+				a.xs[last] = append(a.xs[last],
+					a.xs[last][len(a.xs[last])-1]+fonts.Advance(f, string(r))+a.spacing.after(r))
 			}
 		}
 		if end >= len(text) {

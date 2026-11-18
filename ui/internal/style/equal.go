@@ -92,6 +92,7 @@ func (t *Text) equal(o *Text) bool {
 	return t.Font.Equal(o.Font) &&
 		t.LineHeight == o.LineHeight &&
 		t.LetterSpacing == o.LetterSpacing &&
+		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&
 		t.WhiteSpace == o.WhiteSpace &&

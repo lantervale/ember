@@ -19,13 +19,18 @@ func DefaultImages() map[string][]byte {
 // selection but where it asks for one (decision 0090). A field's text
 // starts at its start whatever its parent's text-align, as Chrome's
 // (TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes), where a
-// game's takes its parent's.
+// game's takes its parent's; so do a control's letter and word spacing,
+// its case and its text shadow start from none
+// (TestChromeSpacesTheTextOfControlsAsABrowsersSheetDoes).
 const BrowserDefault = `* { box-sizing: content-box; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
 html { user-select: auto; }
 input, select, textarea { text-align: start; }
 input[type="button"], input[type="submit"], input[type="reset"] { text-align: center; }
+button, input, select, textarea {
+  letter-spacing: normal; word-spacing: normal; text-transform: none; text-shadow: none;
+}
 `
 
 // Default is the user-agent sheet: what every element looks like before
@@ -94,7 +99,7 @@ pre { margin: 1em 0; white-space: pre; }
 button, input, select, textarea {
   appearance: none; margin: 0; padding: 0; border: 0; background: none;
   font-family: inherit; font-size: inherit; font-weight: inherit; font-style: inherit;
-  color: inherit; line-height: inherit; letter-spacing: inherit; text-align: inherit;
+  color: inherit; line-height: inherit; letter-spacing: inherit; word-spacing: inherit; text-align: inherit;
   text-indent: 0;
 }
 button, input, select, textarea, progress, meter, img, canvas, svg, iframe { display: inline-block; }
