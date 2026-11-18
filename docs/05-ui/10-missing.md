@@ -13,7 +13,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `::selection`'s `color` in a text field | the field's text keeps its colour; only `background-color` applies |
 | the default selection colour on Windows and Linux | macOS's blue everywhere |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
-| monospace text at a fractional size (a `code` in 13px text is 10.5625px) | drawn a little wider than it is measured, so a selection after it covers the edge of its last letter |
+| text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
@@ -46,6 +46,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a picture with a ratio and no size (an SVG with only a `viewBox`) as an unsized flex item or absolutely positioned | no width, where Chrome gives it one: give it a width |
 | a replaced grid item | stretched to its cell |
 | a `position: fixed` box in an element that scrolls on its own | moves with that element |
+| an absolutely positioned box placed by a block above an element that scrolls | not cut by that element, as in Chrome, but moves with its scroll |
+| a part with no text of an inline element cut by a block inside it, when it has a border or a padding | no line and no box, where Chrome keeps a line for it |
+| `position: relative`, `opacity` on an inline element holding blocks | its lines move and fade, the blocks inside it do not |
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
 | `disabled` on a `form` or a `fieldset`, `bdo`, a `font` element's attributes | read, and they do nothing |
 
@@ -65,7 +68,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 |---|---|
 | `@import` | not followed |
 | `@keyframes`, `animation` | refused: `transition` |
-| `@font-face` in a `ui.CSS` sheet | warns: fonts are read from a `Stylesheet`'s files |
+| `@font-face` in a `ui.CSS` sheet | warns: fonts are read from a `Stylesheet`'s files; a page's icon font is not fetched, so its icons show as the letters they are written with, in the next family, as Chrome shows them when the file fails to load |
 | `prefers-color-scheme`, `hover`, `pointer`, `prefers-reduced-motion` | fixed answers: light, a mouse, no preference |
 | viewport units in a media query's length | refused |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
