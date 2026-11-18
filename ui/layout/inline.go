@@ -115,6 +115,9 @@ type inlineSpan struct {
 	margin, border, padding rect
 	// shift is how far below the line's baseline the span's own stands.
 	shift float32
+	// noStart and noEnd are set on a part of an element blocks cut that is not its
+	// first or not its last: it has no edge there.
+	noStart, noEnd bool
 }
 
 type pieceKind uint8
@@ -253,12 +256,19 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			continue
 		}
 		b := &box.Box{Kind: box.Element, Node: it.element, Style: st}
-		t.place(it.element, b)
+		inside := it.inside
+		if it.cut != nil {
+			it.cut.parts = append(it.cut.parts, b)
+		} else {
+			t.place(it.element, b)
+			inside = t.flatten(c.owner, it.element.Flow())
+		}
 		first := len(c.runs)
 		outer := c.shift
 		c.shift += baselineShift(st, parent.Style)
-		t.gather(c, b, t.flatten(c.owner, it.element.Flow()))
-		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs), shift: c.shift}
+		t.gather(c, b, inside)
+		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs), shift: c.shift,
+			noStart: it.cut != nil && !it.first, noEnd: it.cut != nil && !it.last}
 		c.shift = outer
 		for i := first; i < len(c.runs); i++ {
 			s.runs = append(s.runs, i)
@@ -559,6 +569,12 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		sp.padding = edges(sp.st.Padding, parent.w)
 		b := sp.st.Border
 		sp.border = rect{l: b.Left, r: b.Right, t: b.Top, b: b.Bottom}
+		if sp.noStart {
+			sp.margin.l, sp.border.l, sp.padding.l = 0, 0, 0
+		}
+		if sp.noEnd {
+			sp.margin.r, sp.border.r, sp.padding.r = 0, 0, 0
+		}
 	}
 	for i := range c.pieces {
 		if p := &c.pieces[i]; p.kind == edge {

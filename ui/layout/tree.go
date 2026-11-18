@@ -240,6 +240,8 @@ type node struct {
 	// anonymous is set when it wraps inline content in anonymous blocks among its kids.
 	contents  []keyed
 	anonymous bool
+	// cuts are the inline elements among its content that blocks cut in parts.
+	cuts []*cutInline
 	// readsParent is set when the node's style resolves against its parent's size, which
 	// its cache then keys on.
 	readsParent bool
@@ -495,10 +497,10 @@ func (t *tree) adopt(n *node, parent *node) {
 // buildChildren gives n its in-flow children: elements, and the text between them either
 // as n's own inline content or wrapped in anonymous blocks.
 func (t *tree) buildChildren(n *node, children []*dom.Node) {
-	items := t.flatten(n, children)
 	container := n.st.Display
 	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
 		container == style.GridDisplay || container == style.InlineGrid
+	items := t.lift(n, t.flatten(n, children))
 	if !inFlexOrGrid && !hasBlockChild(items) {
 		t.buildInline(n, items)
 		return
@@ -521,6 +523,8 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.kids = append(n.kids, anon)
 			n.anonymous = true
 			inFlow = true
+		} else {
+			emptyParts(run, len(n.kids))
 		}
 		run = nil
 	}
@@ -601,6 +605,148 @@ func onlyCollapsibleSpace(run []item) bool {
 type item struct {
 	element *dom.Node
 	text    *dom.Node
+	// cut is set on a part of an inline element blocks cut: inside are the children of
+	// the element the part holds, first and last say which of its parts it is.
+	cut         *cutInline
+	inside      []item
+	first, last bool
+}
+
+// cutInline is an inline element holding blocks in the flow. They cut it in parts, the
+// lines before, between and after them, and stand among its container's children. Its
+// box says where the element is, round its parts and its blocks as Chrome's
+// getBoundingClientRect; the parts draw it, each a box of its own.
+type cutInline struct {
+	box    *box.Box
+	parts  []*box.Box
+	blocks []*dom.Node
+	// empty are its parts that hold no line, each by how many of its container's kids
+	// stand before it: a place of no size the element's box reaches, as Chrome's.
+	empty []int
+}
+
+// emptyParts notes a run of no line, after the first before kids of its container, on
+// the cut elements whose parts it holds.
+func emptyParts(run []item, before int) {
+	for _, it := range run {
+		if it.cut != nil {
+			it.cut.empty = append(it.cut.empty, before)
+			emptyParts(it.inside, before)
+		}
+	}
+}
+
+// emptyPart is where a part of no line stands in n, after the first before of its
+// kids: under the last of them in the flow, at the start of n's content.
+func (n *node) emptyPart(before int) geom.Rect {
+	at := geom.Rect{X: n.final.border.l + n.final.padding.l, Y: n.final.border.t + n.final.padding.t}
+	for _, k := range n.kids[:before] {
+		if k.st.Display != style.DisplayNone && k.st.Float == style.FloatNone && !outOfFlow(k.st.Position) {
+			at.Y = k.box.Pos.Y + k.box.Size.Y
+		}
+	}
+	return at
+}
+
+// lift is items with the blocks inside their inline elements lifted among them, each
+// such element cut in parts round its blocks and noted on owner.
+func (t *tree) lift(owner *node, items []item) []item {
+	if !slices.ContainsFunc(items, func(it item) bool { return it.element != nil && cutByBlocks(it.element) }) {
+		return items
+	}
+	var out []item
+	for _, it := range items {
+		if it.element == nil || !cutByBlocks(it.element) {
+			out = append(out, it)
+			continue
+		}
+		b := &box.Box{Kind: box.Element, Node: it.element, Style: styleOf(it.element)}
+		t.place(it.element, b)
+		cut := &cutInline{box: b}
+		owner.cuts = append(owner.cuts, cut)
+		owner.contents = append(owner.contents, keyed{it.element, b})
+		part := item{element: it.element, cut: cut, first: true}
+		for _, in := range t.lift(owner, t.flatten(owner, it.element.Flow())) {
+			if in.cut != nil || in.element == nil || !inFlowBlock(in.element) {
+				part.inside = append(part.inside, in)
+				continue
+			}
+			cut.blocks = append(cut.blocks, in.element)
+			out = append(out, part, in)
+			part = item{element: it.element, cut: cut}
+		}
+		part.last = true
+		out = append(out, part)
+	}
+	return out
+}
+
+// placeCuts puts the box of each inline element blocks cut in n round its parts and its
+// blocks, once n's children are written.
+func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
+	for _, c := range n.cuts {
+		var r geom.Rect
+		found := false
+		for _, p := range c.parts {
+			at, ok := p.Pos, false
+			for a := p.Parent; a != nil && !ok; a = a.Parent {
+				if ok = a == n.box; !ok {
+					at = at.Add(a.Pos)
+				}
+			}
+			if ok {
+				r = unionRect(r, geom.Rect{X: at.X, Y: at.Y, W: p.Size.X, H: p.Size.Y}, found)
+				found = true
+			}
+		}
+		for _, before := range c.empty {
+			r = unionRect(r, n.emptyPart(before), found)
+			found = true
+		}
+		for _, e := range c.blocks {
+			if b := of[e]; b != nil && b.Parent == n.box {
+				r = unionRect(r, geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: b.Size.X, H: b.Size.Y}, found)
+				found = true
+			}
+		}
+		c.box.Parent = n.box
+		c.box.Pos, c.box.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
+	}
+}
+
+// inFlowBlock reports an element that is a block in the flow of its container.
+func inFlowBlock(e *dom.Node) bool {
+	st := styleOf(e)
+	return st.Display != style.DisplayNone && !outOfFlow(st.Position) && st.Float == style.FloatNone &&
+		elementBlockLevel(e)
+}
+
+// isInline reports an element whose box is an inline one, its content in its
+// container's lines.
+func isInline(e *dom.Node) bool {
+	st := styleOf(e)
+	return st.Display == style.Inline && !outOfFlow(st.Position) && st.Float == style.FloatNone && !isTable(e)
+}
+
+// cutByBlocks reports an inline element holding a block in the flow, through the inline
+// elements it holds.
+func cutByBlocks(e *dom.Node) bool { return isInline(e) && holdsBlock(e) }
+
+// holdsBlock reports a block in the flow among e's children, those of its display:
+// contents children and those of the inline elements it holds.
+func holdsBlock(e *dom.Node) bool {
+	for _, c := range e.Flow() {
+		switch {
+		case c.IsText():
+		case styleOf(c).Display == style.Contents:
+			if holdsBlock(c) {
+				return true
+			}
+		case inFlowBlock(c) || cutByBlocks(c):
+			return true
+		}
+	}
+	return false
 }
 
 // flatten lists children with display: contents replaced by theirs, noted on owner.
@@ -644,7 +790,8 @@ func hasBlockChild(items []item) bool {
 			if st.Display == style.DisplayNone || outOfFlow(st.Position) {
 				continue
 			}
-			if elementBlockLevel(it.element) || !isAtomicDisplay(st.Display) && floatInside(it.element) {
+			if elementBlockLevel(it.element) || it.cut != nil ||
+				!isAtomicDisplay(st.Display) && floatInside(it.element) {
 				return true
 			}
 		}
@@ -725,6 +872,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		for _, c := range n.kids {
 			t.writeIn(c, n, false)
 		}
+		n.placeCuts(t.out.Of)
 		return
 	}
 	b.Children = b.Children[:0]
@@ -739,6 +887,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	}
 	t.atomsIntoSpans(n)
 	t.listMarker(n)
+	n.placeCuts(t.out.Of)
 }
 
 // markerGap is how far a bullet stands from its item's content, past its own offset, as
