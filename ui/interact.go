@@ -13,6 +13,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/layout"
 	"github.com/lantervale/ember/ui/paint"
 	"github.com/lantervale/ember/world"
 )
@@ -25,8 +26,10 @@ type interaction struct {
 	// pendingFocus is the element a Focus asked for before it could take
 	// the focus, given it at the next retarget where it can.
 	pendingFocus *Node
-	// pendingReveal is the element a ScrollIntoView asked to show.
+	// pendingReveal is the element a ScrollIntoView or a ScrollToStart
+	// asked to show, and revealStart whether at the start of its scrollers.
 	pendingReveal *Node
+	revealStart   bool
 	// opening is set by ShowModal: the keys and pad buttons down at the
 	// next read, openKeys and openPad, opened the modal and act in it only
 	// once released.
@@ -183,7 +186,43 @@ func (d *Document) Focus(n *Node) {
 // it, as the DOM's scrollIntoView({block: "nearest"}). An element not laid
 // out yet, such as one shown this frame, is shown once it is; one that
 // leaves the Document first is forgotten.
-func (d *Document) ScrollIntoView(n *Node) { d.pendingReveal = n }
+func (d *Document) ScrollIntoView(n *Node) { d.pendingReveal, d.revealStart = n, false }
+
+// ScrollToStart scrolls the containers holding n so that its top is at
+// the top of each one's view, as far as each scrolls, as the DOM's
+// scrollIntoView() and a browser going to a fragment: across, it comes in
+// by its nearest edge. It waits for an element not laid out yet as
+// ScrollIntoView does, and the last of the two asked in a frame is done.
+func (d *Document) ScrollToStart(n *Node) { d.pendingReveal, d.revealStart = n, true }
+
+// Scroll is how far n's content is scrolled, in the Document's own points,
+// before its zoom: the viewport's for the root element (HTML) of a
+// Document with ScrollingViewport, zero for an element that scrolls
+// nothing.
+func (d *Document) Scroll(n *Node) geom.Vec2 {
+	if d.tree != nil {
+		if b := d.scroller(n); b != nil {
+			return b.Scroll
+		}
+	}
+	return dom.Data(n).Scroll
+}
+
+// SetScroll scrolls n's content to off, kept within what n scrolls: at
+// once for an element laid out, at its first layout for another, where a
+// page shown again is put back where it was left. Nothing else scrolls,
+// and a ScrollIntoView or ScrollToStart still waited for comes after it.
+func (d *Document) SetScroll(n *Node, off geom.Vec2) {
+	dom.Data(n).Scroll = geom.V2(max(off.X, 0), max(off.Y, 0))
+	if d.tree == nil {
+		return
+	}
+	layout.Refresh(d.tree, d.html)
+	if b := d.scroller(n); b != nil {
+		dom.Data(n).Scroll = b.Scroll
+	}
+	d.scrolled = true
+}
 
 // revealPending does what a ScrollIntoView asked once n has a box.
 func (d *Document) revealPending() {
@@ -196,7 +235,7 @@ func (d *Document) revealPending() {
 		return
 	}
 	if d.tree != nil && d.tree.Of[n] != nil {
-		d.reveal(n)
+		d.reveal(n, d.revealStart)
 		d.pendingReveal = nil
 	}
 }
@@ -512,7 +551,7 @@ func (d *Document) moveFocus(move func() bool) bool {
 			d.ClearSelection()
 		}
 		if after != nil && d.focus.Active() {
-			d.reveal(after)
+			d.reveal(after, false)
 		}
 	}
 	return moved
@@ -1559,8 +1598,9 @@ func (d *Document) pointed() *Node {
 
 // reveal scrolls each container holding n, innermost first, by the least
 // that brings n into its view: its nearest edge to the view's, or its
-// start when it is bigger than the view.
-func (d *Document) reveal(n *Node) {
+// start when it is bigger than the view. With start its top goes to the
+// view's top, as far as the container scrolls.
+func (d *Document) reveal(n *Node, start bool) {
 	if d.tree == nil {
 		return
 	}
@@ -1573,7 +1613,11 @@ func (d *Document) reveal(n *Node) {
 		r, v := b.Rect(), bars.View
 		off := bars.Scroll
 		off.X += nearest(r.X, r.W, v.X, v.W)
-		off.Y += nearest(r.Y, r.H, v.Y, v.H)
+		if start {
+			off.Y += r.Y - v.Y
+		} else {
+			off.Y += nearest(r.Y, r.H, v.Y, v.H)
+		}
 		off.X = min(max(off.X, 0), max(bars.Content.X-v.W, 0))
 		off.Y = min(max(off.Y, 0), max(bars.Content.Y-v.H, 0))
 		d.setScroll(s, off)

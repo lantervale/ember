@@ -114,6 +114,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0108 | [A program follows the system's appearance and languages](0108-a-program-follows-the-systems-appearance-and-languages.md) | api |
 | 0109 | [A right drag selects text only where a Document asks](0109-a-right-drag-selects-text-only-where-a-document-asks.md) | api |
 | 0110 | [A Document scales what the wheel scrolls](0110-a-document-scales-what-the-wheel-scrolls.md) | api |
+| 0111 | [A program scrolls a Document by an element](0111-a-program-scrolls-a-document-by-an-element.md) | api |
 
 ## Writing one
 

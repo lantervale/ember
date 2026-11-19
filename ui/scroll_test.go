@@ -275,3 +275,58 @@ func TestAPagingKeyIsTheGamesOnlyWhenNothingScrolled(t *testing.T) {
 	assert.True(t, s.in.Down(input.KeyHome), "nothing there to scroll home: the game has it")
 	s.in.SetKey(input.KeyHome, false)
 }
+
+func TestADocumentSaysAndSetsWhereAScrollerIsScrolled(t *testing.T) {
+	s := newScroller(t)
+	assert.Equal(t, geom.Vec2{}, s.doc.Scroll(s.list))
+	s.wheel(s.list.Box().Center(), geom.V2(0, 1))
+	assert.Equal(t, geom.V2(0, s.scrolled()), s.doc.Scroll(s.list), "what the wheel scrolled is read")
+	assert.Positive(t, s.scrolled())
+
+	s.doc.SetScroll(s.list, geom.V2(0, 120))
+	assert.Equal(t, geom.V2(0, 120), s.doc.Scroll(s.list), "read at once")
+	s.w.RunFrames(2)
+	assert.InDelta(t, 120, s.scrolled(), 1e-3)
+	assert.InDelta(t, 0, s.outerScrolled(), 1e-3, "no other scroller moves")
+
+	s.doc.SetScroll(s.list, geom.V2(-50, 9999))
+	assert.Equal(t, geom.V2(0, 300), s.doc.Scroll(s.list), "kept within what scrolls")
+	s.w.RunFrames(2)
+	assert.InDelta(t, 300, s.scrolled(), 1e-3)
+
+	s.doc.SetScroll(s.items[0], geom.V2(0, 40))
+	s.w.RunFrames(2)
+	assert.Equal(t, geom.Vec2{}, s.doc.Scroll(s.items[0]), "an element that scrolls nothing stays at zero")
+	assert.InDelta(t, 300, s.scrolled(), 1e-3)
+}
+
+func TestTheViewportsScrollIsTheRootElements(t *testing.T) {
+	p := newScrollingPage(t, "")
+	p.doc.SetScroll(p.doc.HTML(), geom.V2(0, 500))
+	p.w.RunFrames(2)
+	assert.InDelta(t, 500, p.scrolled(), 1e-3)
+	assert.Equal(t, geom.V2(0, 500), p.doc.Scroll(p.doc.HTML()))
+
+	p.key(input.KeyEnd)
+	assert.Equal(t, geom.V2(0, pageHeight-300), p.doc.Scroll(p.doc.HTML()), "the keys' scroll is read too")
+
+	p.doc.SetScroll(p.doc.HTML(), geom.V2(0, -10))
+	p.w.RunFrames(2)
+	assert.InDelta(t, 0, p.scrolled(), 1e-3)
+}
+
+func TestAScrollSetBeforeTheFirstLayoutIsKept(t *testing.T) {
+	doc := ui.NewDocument(ui.ScrollingViewport(), ui.OverlayScrollbars(), ui.CSS("body { margin: 0; }"))
+	low := ui.Div(ui.Style("height: 30px"))
+	doc.Body().Append(ui.Div(ui.Style("height: 1000px")), low, ui.Div(ui.Style("height: 1000px")))
+	doc.SetScroll(doc.HTML(), geom.V2(0, 1000))
+	assert.Equal(t, geom.V2(0, 1000), doc.Scroll(doc.HTML()))
+	win := platform.NewWindow(platform.Size(400, 300))
+	win.Add(doc)
+	w := ember.New().AddEntities(win)
+	w.RunFrames(2)
+	assert.InDelta(t, 0, low.Box().Y, 1e-3)
+	doc.SetScroll(doc.HTML(), geom.V2(0, 1e6))
+	w.RunFrames(2)
+	assert.Equal(t, geom.V2(0, 1730), doc.Scroll(doc.HTML()), "and one past the end ends at it once laid out")
+}
