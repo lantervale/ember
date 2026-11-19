@@ -122,6 +122,8 @@ type Document struct {
 	framedAt []*Document
 	shield   bool
 	idle     *input.State
+	// wheel is how many times the wheel's turn d scrolls by (wheel.go).
+	wheel float32
 }
 
 // DocumentOption configures a Document.
@@ -135,6 +137,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 		fonts: fonts.Builtin(),
 		trans: css.NewTransitions(),
 		clock: -1,
+		wheel: 1,
 	}
 	d.html.Append(d.body)
 	d.trans.MeasureFonts(d.fontUnits)

@@ -206,6 +206,37 @@ func TestTheWheelScrollsAnIframeThenThePage(t *testing.T) {
 	}
 }
 
+func TestTheWheelFactorOfTheOutermostDocumentHoldsInItsIframes(t *testing.T) {
+	p := newFramePage(t)
+	p.host.SetWheelScroll(-1)
+	p.child.SetWheelScroll(3)
+	p.in.SetMouse(p.inFrame(20, 100))
+	p.frames(2)
+	slotAt := func() float32 { r, _ := p.host.BoxOf(p.slot); return r.Y }
+	firstAt := func() float32 { r, _ := p.child.BoxOf(p.first); return r.Y }
+	slot, first := slotAt(), firstAt()
+	p.in.AddWheel(geom.V2(0, -1))
+	p.frames(2)
+	moved := first - firstAt()
+	if moved <= 0 || slotAt() != slot {
+		t.Fatalf("a reversed wheel moved the frame by %v and the page by %v", -moved, slotAt()-slot)
+	}
+	p.host.SetWheelScroll(-2)
+	p.in.AddWheel(geom.V2(0, -1))
+	p.frames(2)
+	if got := first - firstAt() - moved; got < 2*moved-0.01 || got > 2*moved+0.01 {
+		t.Fatalf("at twice the factor the frame moved by %v after %v", got, moved)
+	}
+	for first = firstAt() + 1; firstAt() < first; {
+		first = firstAt()
+		p.in.AddWheel(geom.V2(0, -3))
+		p.frames(2)
+	}
+	if slotAt() >= slot {
+		t.Fatal("the reversed wheel does not reach the page once the frame is at its end")
+	}
+}
+
 func TestTabWalksThroughAnIframeBothWays(t *testing.T) {
 	p := newFramePage(t)
 	focused := func() string {

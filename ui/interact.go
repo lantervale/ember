@@ -1452,7 +1452,7 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 	if inputfeed.Of(in).RawDown(int(input.KeyShift)) && w.X == 0 {
 		w = geom.V2(w.Y, 0)
 	}
-	if w == (geom.Vec2{}) {
+	if w = d.wheeled(w); w == (geom.Vec2{}) {
 		return false
 	}
 	if child := frameOf(firstOf(d.hovered)); child != nil && child.framed != nil && child.wheels(w) {

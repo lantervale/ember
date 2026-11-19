@@ -75,6 +75,38 @@ func TestTheWheelScrollsTheScrollerUnderThePointer(t *testing.T) {
 	assert.Greater(t, first, float32(20), "three lines a notch, as the old ember/ui")
 }
 
+func TestADocumentScalesWhatTheWheelScrolls(t *testing.T) {
+	plain := newScroller(t)
+	assert.InDelta(t, 1, plain.doc.WheelScroll(), 1e-6, "as the wheel says unless asked")
+	plain.wheel(plain.list.Box().Center(), geom.V2(0, 1))
+	notch := plain.scrolled()
+	s := newScroller(t, ui.WheelScroll(2))
+	s.wheel(s.list.Box().Center(), geom.V2(0, 1))
+	assert.InDelta(t, 2*notch, s.scrolled(), 1e-3, "twice as far")
+	s.doc.SetWheelScroll(0.5)
+	assert.InDelta(t, 0.5, s.doc.WheelScroll(), 1e-6)
+	s.wheel(s.list.Box().Center(), geom.V2(0, 1))
+	assert.InDelta(t, 2.5*notch, s.scrolled(), 1e-3, "then half a notch more")
+	s.doc.SetWheelScroll(0)
+	s.wheel(s.list.Box().Center(), geom.V2(0, 1))
+	assert.InDelta(t, 2.5*notch, s.scrolled(), 1e-3, "and not at all")
+	assert.Zero(t, s.outerScrolled())
+}
+
+func TestANegativeWheelFactorReversesTheWheel(t *testing.T) {
+	s := newScroller(t, ui.WheelScroll(-1))
+	s.wheel(s.list.Box().Center(), geom.V2(0, 1))
+	assert.Zero(t, s.scrolled(), "a notch that scrolled down scrolls up, and the list is at its start")
+	assert.Zero(t, s.outerScrolled())
+	s.wheel(s.list.Box().Center(), geom.V2(0, -1))
+	assert.Positive(t, s.scrolled(), "the other way scrolls down")
+	for range 20 {
+		s.wheel(s.list.Box().Center(), geom.V2(0, -1))
+	}
+	assert.InDelta(t, 300, s.scrolled(), 1e-3, "the list at its end")
+	assert.Positive(t, s.outerScrolled(), "the outer box took the rest, the same way")
+}
+
 func TestAtItsEndTheWheelScrollsTheNextScrollerOut(t *testing.T) {
 	s := newScroller(t)
 	for range 20 {
