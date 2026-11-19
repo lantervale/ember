@@ -3,14 +3,20 @@ package css
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 )
 
 // Dim is a length, percentage or number as a sum of parts, the form calc()
 // resolves to before layout: calc(100% - 2rem + 4px) is Pct 100, Rem -2,
-// Px 4. A plain value has one part.
+// Px 4. A plain value has one part. Rel are the parts in the units a font
+// or the viewport measures, and terms the min(), max() and clamp() no sum
+// of parts says.
 type Dim struct {
 	Num, Px, Pct, Em, Rem, Fr float64
+	Rel                       [relUnits]float64
+	terms                     []boundTerm
+	rel                       uint16
 	kind                      dimKind
 }
 
@@ -22,6 +28,63 @@ const (
 	dimPercent
 	dimFlex
 )
+
+// boundTerm is factor times the least of args, or the greatest when most:
+// clamp(a, b, c) is max(a, min(b, c)).
+type boundTerm struct {
+	factor float64
+	most   bool
+	args   []Dim
+}
+
+// relUnit is a unit a font or the viewport measures.
+type relUnit uint8
+
+const (
+	unitEx relUnit = iota
+	unitCh
+	unitCap
+	unitIc
+	unitLh
+	unitRex
+	unitRch
+	unitRcap
+	unitRic
+	unitRlh
+	unitVw
+	unitVh
+	unitVmin
+	unitVmax
+	relUnits
+)
+
+const (
+	fontUnits     = 1<<(unitRlh+1) - 1
+	viewportUnits = (1<<relUnits - 1) &^ fontUnits
+)
+
+// relativeUnits are the units of Rel by name: the small, large and
+// dynamic viewports are the one viewport, and the inline and block axes
+// the horizontal and the vertical.
+//
+//nolint:gochecknoglobals // lookup table
+var relativeUnits = func() map[string]relUnit {
+	units := map[string]relUnit{"ex": unitEx, "ch": unitCh, "cap": unitCap, "ic": unitIc, "lh": unitLh,
+		"rex": unitRex, "rch": unitRch, "rcap": unitRcap, "ric": unitRic, "rlh": unitRlh}
+	for name, u := range map[string]relUnit{"vw": unitVw, "vh": unitVh, "vi": unitVw, "vb": unitVh,
+		nameVmin: unitVmin, nameVmax: unitVmax} {
+		for _, size := range []string{"", "s", "l", "d"} {
+			units[size+name] = u
+		}
+	}
+	return units
+}()
+
+// Units are what the relative units of a Dim stand for, in points.
+type Units struct {
+	Em, Rem float64
+	Rel     [relUnits]float64
+}
 
 // IsNumber reports whether d is a plain number.
 func (d Dim) IsNumber() bool { return d.kind == dimNumber }
@@ -39,32 +102,98 @@ func (d Dim) add(o Dim, sign float64) (Dim, error) {
 	if (d.kind|o.kind)&dimFlex != 0 {
 		return Dim{}, fmt.Errorf("fr can't be used in calc()")
 	}
-	return Dim{
+	sum := Dim{
 		Num: d.Num + sign*o.Num, Px: d.Px + sign*o.Px, Pct: d.Pct + sign*o.Pct,
 		Em: d.Em + sign*o.Em, Rem: d.Rem + sign*o.Rem,
-		kind: d.kind | o.kind,
-	}, nil
+		rel: d.rel | o.rel, kind: d.kind | o.kind,
+	}
+	if sum.rel != 0 {
+		for i := range sum.Rel {
+			sum.Rel[i] = d.Rel[i] + sign*o.Rel[i]
+		}
+	}
+	if len(d.terms)+len(o.terms) > 0 {
+		sum.terms = append(slices.Clone(d.terms), o.scale(sign).terms...)
+	}
+	return sum, nil
 }
 
 func (d Dim) scale(f float64) Dim {
-	return Dim{Num: d.Num * f, Px: d.Px * f, Pct: d.Pct * f, Em: d.Em * f, Rem: d.Rem * f, Fr: d.Fr * f, kind: d.kind}
+	out := Dim{Num: d.Num * f, Px: d.Px * f, Pct: d.Pct * f, Em: d.Em * f, Rem: d.Rem * f, Fr: d.Fr * f,
+		rel: d.rel, kind: d.kind}
+	if d.rel != 0 {
+		for i := range d.Rel {
+			out.Rel[i] = d.Rel[i] * f
+		}
+	}
+	if len(d.terms) > 0 {
+		out.terms = slices.Clone(d.terms)
+		for i := range out.terms {
+			out.terms[i].factor *= f
+		}
+	}
+	return out
 }
 
-// Absolute resolves em and rem against font sizes in points, leaving Px
-// and Pct.
-func (d Dim) Absolute(em, rem float64) Dim {
+// Absolute resolves the relative units against u, leaving Px and Pct,
+// and works out each min(), max() and clamp() no percentage is in.
+func (d Dim) Absolute(u *Units) Dim {
 	if d.kind == dimNumber {
 		return d
 	}
-	d.Px += d.Em*em + d.Rem*rem
+	d.Px += d.Em*u.Em + d.Rem*u.Rem
 	d.Em, d.Rem = 0, 0
+	if d.rel != 0 {
+		for i, n := range d.Rel {
+			d.Px += n * u.Rel[i]
+		}
+		d.Rel, d.rel = [relUnits]float64{}, 0
+	}
+	if len(d.terms) == 0 {
+		return d
+	}
+	terms := d.terms
+	d.terms = nil
+	for _, t := range terms {
+		args := make([]Dim, len(t.args))
+		known := true
+		for i, a := range t.args {
+			args[i] = a.Absolute(u)
+			known = known && args[i].Pct == 0 && len(args[i].terms) == 0
+		}
+		if !known {
+			d.terms = append(d.terms, boundTerm{factor: t.factor, most: t.most, args: args})
+			continue
+		}
+		v := args[0].Px
+		for _, a := range args[1:] {
+			if t.most {
+				v = max(v, a.Px)
+			} else {
+				v = min(v, a.Px)
+			}
+		}
+		d.Px += t.factor * v
+	}
 	return d
 }
 
 // Resolve returns d in points against basis, the length 100% stands for.
-// em and rem must be resolved first (Absolute).
+// The relative units must be resolved first (Absolute).
 func (d Dim) Resolve(basis float64) float64 {
-	return d.Px + d.Pct*basis/100
+	v := d.Px + d.Pct*basis/100
+	for _, t := range d.terms {
+		best := t.args[0].Resolve(basis)
+		for _, a := range t.args[1:] {
+			if t.most {
+				best = max(best, a.Resolve(basis))
+			} else {
+				best = min(best, a.Resolve(basis))
+			}
+		}
+		v += t.factor * best
+	}
+	return v
 }
 
 // absoluteUnits are the absolute lengths in CSS pixels.
@@ -74,7 +203,7 @@ var absoluteUnits = map[string]float64{"px": 1, "in": 96, "cm": 96 / 2.54, "mm":
 	"pt": 96.0 / 72, "pc": 16}
 
 // parseDim reads one component as a length, percentage, number or flex
-// value, calc() included.
+// value, calc(), min(), max() and clamp() included.
 func parseDim(c Component) (Dim, error) {
 	switch c.Kind {
 	case Number:
@@ -94,10 +223,18 @@ func parseDim(c Component) (Dim, error) {
 		case "fr":
 			return Dim{Fr: c.Num, kind: dimFlex}, nil
 		}
-		return Dim{}, fmt.Errorf("unit %q is not supported; use px, %%, em, rem, fr or an absolute unit", c.Unit)
+		if u, ok := relativeUnits[unit]; ok {
+			d := Dim{rel: 1 << u, kind: dimLength}
+			d.Rel[u] = c.Num
+			return d, nil
+		}
+		return Dim{}, fmt.Errorf("unit %q is not supported", c.Unit)
 	case Function:
-		if strings.EqualFold(c.Text, "calc") {
+		switch strings.ToLower(c.Text) {
+		case fnCalc:
 			return parseCalc(c.Args)
+		case "min", "max", "clamp":
+			return parseBound(strings.ToLower(c.Text), c.Args)
 		}
 		return Dim{}, fmt.Errorf("%s() is not supported here", c.Text)
 	case EOF, Ident, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Whitespace, CDO, CDC, Colon, Semicolon,
@@ -105,6 +242,51 @@ func parseDim(c Component) (Dim, error) {
 		// nothing special for these tokens
 	}
 	return Dim{}, fmt.Errorf("expected a length, found %q", c.String())
+}
+
+// parseBound reads min(), max() or clamp(): each argument a calc() sum,
+// all numbers or all lengths and percentages.
+func parseBound(name string, args []Component) (Dim, error) {
+	var of []Dim
+	for _, arg := range splitOn(args, func(c Component) bool { return c.Kind == Comma }) {
+		d, err := parseCalc(arg)
+		if err != nil {
+			return Dim{}, fmt.Errorf("%s(): %w", name, err)
+		}
+		if d.IsFlex() || len(of) > 0 && d.IsNumber() != of[0].IsNumber() {
+			return Dim{}, fmt.Errorf("%s() takes numbers, or lengths and percentages", name)
+		}
+		of = append(of, d)
+	}
+	if name == "clamp" {
+		if len(of) != 3 {
+			return Dim{}, fmt.Errorf("clamp() takes a minimum, a value and a maximum")
+		}
+		return bound(true, of[0], bound(false, of[1], of[2])), nil
+	}
+	return bound(name == "max", of...), nil
+}
+
+// bound is the least of args, or the greatest when most, worked out at
+// once when they are numbers.
+func bound(most bool, args ...Dim) Dim {
+	out := Dim{terms: []boundTerm{{factor: 1, most: most, args: args}}}
+	for _, a := range args {
+		out.kind |= a.kind
+		out.rel |= a.rel
+	}
+	if out.kind != dimNumber {
+		return out
+	}
+	v := args[0].Num
+	for _, a := range args[1:] {
+		if most {
+			v = max(v, a.Num)
+		} else {
+			v = min(v, a.Num)
+		}
+	}
+	return Dim{Num: v, kind: dimNumber}
 }
 
 func parseCalc(args []Component) (Dim, error) {

@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/lantervale/ember/ui/internal/fonts"
+import (
+	"github.com/lantervale/ember/ui/css"
+	"github.com/lantervale/ember/ui/internal/fonts"
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 // SystemFonts lets font-family name the fonts installed on the machine,
 // as a web page's does: a family that is neither one of the engine's
@@ -35,4 +39,26 @@ func (d *Document) landFonts() {
 		d.warn(err)
 	}
 	d.landPageFonts()
+}
+
+// fontUnits are what ex, ch, cap, ic and lh stand for in f, as Chrome
+// has them: the face's x-height and capital height, half an em and the
+// ascent where it says none, the advance of its zero and of its 水, half
+// an em and an em where it has no such glyph, and its normal line.
+func (d *Document) fontUnits(f style.Font) css.FontUnits {
+	m := d.fonts.Metrics(f)
+	u := css.FontUnits{Ex: m.XHeight, Ch: f.Size / 2, Cap: m.CapHeight, Ic: f.Size, Line: m.Ascent + m.Descent + m.LineGap}
+	if u.Ex <= 0 {
+		u.Ex = f.Size / 2
+	}
+	if u.Cap <= 0 {
+		u.Cap = m.Ascent
+	}
+	if d.fonts.Has(f, '0') {
+		u.Ch = d.fonts.Advance(f, "0")
+	}
+	if d.fonts.Has(f, '水') {
+		u.Ic = d.fonts.Advance(f, "水")
+	}
+	return u
 }

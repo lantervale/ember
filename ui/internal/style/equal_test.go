@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"testing"
+	"unique"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -119,6 +120,10 @@ func filled(t *testing.T) style.Computed {
 //nolint:exhaustive // the kinds a style is made of; another fails the test
 func fill(t *testing.T, v reflect.Value, styles int) {
 	t.Helper()
+	if v.Type() == reflect.TypeFor[unique.Handle[style.Calc]]() {
+		v.Set(reflect.ValueOf(unique.Make(style.Calc{N: 1, Steps: [style.CalcSteps]style.CalcStep{{Px: 1.5}}})))
+		return
+	}
 	require.True(t, v.CanSet(), "an unexported field of %s", v.Type())
 	switch v.Kind() {
 	case reflect.Bool:
@@ -180,6 +185,10 @@ func change(t *testing.T, v reflect.Value, path string, changed func(path string
 		v.Set(to)
 		changed(path + what)
 		v.Set(old)
+	}
+	if v.Type() == reflect.TypeFor[unique.Handle[style.Calc]]() {
+		try(" another", reflect.ValueOf(unique.Make(style.Calc{N: 1, Steps: [style.CalcSteps]style.CalcStep{{Px: 7}}})))
+		return
 	}
 	switch v.Kind() {
 	case reflect.Bool:
@@ -272,6 +281,10 @@ func clone(t *testing.T, c *style.Computed) *style.Computed {
 func copyOf(t *testing.T, v reflect.Value) reflect.Value {
 	t.Helper()
 	out := reflect.New(v.Type()).Elem()
+	if v.Type() == reflect.TypeFor[unique.Handle[style.Calc]]() {
+		out.Set(v)
+		return out
+	}
 	switch v.Kind() {
 	case reflect.Array:
 		for i := range v.Len() {

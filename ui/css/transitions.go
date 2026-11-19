@@ -33,9 +33,13 @@ type Transitions struct {
 	media Media
 	off   [][]bool
 	ranks [][]int32
-	// stale is set once media has changed which rules apply: the next
-	// Compute restyles the whole tree.
+	// stale is set once media has changed which rules apply, or what a
+	// unit some length is in stands for: the next Compute restyles the
+	// whole tree.
 	stale bool
+	// env is what lengths are measured against: the fonts, and media's
+	// viewport.
+	env measures
 }
 
 // nodeAnim is one element's running transitions and the style it shows.
@@ -87,14 +91,33 @@ func (t *Transitions) SetMedia(m Media) bool {
 		return false
 	}
 	t.media = m
+	resized := t.env.width != m.Width || t.env.height != m.Height
+	t.env.width, t.env.height = m.Width, m.Height
 	if t.all == nil {
 		return false
 	}
-	off := mediaOff(t.all, m)
-	if sameOff(off, t.off) {
+	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
+		t.off, t.stale = off, true
+	} else if resized && t.env.used&viewportUnits != 0 {
+		t.stale = true
+	}
+	return t.stale
+}
+
+// MeasureFonts has the units that read a font (ex, ch, cap, ic, lh and
+// the root's) ask font what they stand for; without it they are CSS's
+// fallbacks off the font size. Set it before the first Compute.
+func (t *Transitions) MeasureFonts(font func(style.Font) FontUnits) { t.env.font = font }
+
+// FontsChanged tells that what MeasureFonts answers may have changed, a
+// font having landed, and reports whether some length reads it: the
+// caller then flags the root DirtyStyle, and the next Compute restyles
+// the whole tree.
+func (t *Transitions) FontsChanged() bool {
+	if t.env.used&fontUnits == 0 {
 		return false
 	}
-	t.off, t.stale = off, true
+	t.stale = true
 	return true
 }
 
@@ -131,7 +154,7 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 		t.changed = t.restyled
 	}
 	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm,
-		computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser}
+		computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser, env: &t.env}
 	r.run(root, t.stale)
 	t.stale = false
 	t.refresh()

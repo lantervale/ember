@@ -36,7 +36,7 @@ func (r *restyler) generated(n *dom.Node, parent *style.Computed, rem float32, n
 		return nil
 	}
 	c := initial
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, overlay: r.overlay, node: n}
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, overlay: r.overlay, node: n}
 	x.cascaded(casc, false)
 	if r.browser && casc.longhands[orderIndex["box-sizing"]] == nil {
 		// The browser sheet's * rule, which sizes elements by their content,
@@ -103,7 +103,7 @@ func (r *restyler) keep(n *dom.Node, data *dom.Pipeline, slot **dom.Node, p dom.
 func (r *restyler) markerOf(n *dom.Node, data *dom.Pipeline, rem float32) {
 	var st *style.Computed
 	if r.marker && data.Style.ListItem && r.may(n, "marker") {
-		x := &ctx{c: data.Style, em: data.Style.Font.Size, rem: rem}
+		x := &ctx{c: data.Style, em: data.Style.Font.Size, rem: rem, env: r.env, sized: true, lined: true}
 		st, _ = x.pseudo(r.pm, n, r.sheets, "marker")
 	}
 	if !data.Marker.Equal(st) {
@@ -214,7 +214,7 @@ func (r *restyler) fill(g *dom.Node, st *style.Computed, counting func(style.Con
 // anonymous is the style of a box no author rule reaches, under parent.
 func (r *restyler) anonymous(n *dom.Node, parent *style.Computed) *style.Computed {
 	c := initial
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: parent.Font.Size, node: n}
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: parent.Font.Size, env: r.env, node: n}
 	x.cascaded(r.pm.cascade(r.pm.matched(n, r.sheets[:1], nil)), false)
 	return &c
 }

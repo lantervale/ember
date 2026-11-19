@@ -81,13 +81,15 @@ func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
 	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all)}
 	pm := &matcher{off: m.off, ranks: m.ranks}
-	r := restyler{sheets: all, m: m, pm: pm, computed: new(int)}
+	r := restyler{sheets: all, m: m, pm: pm, computed: new(int), env: &measures{}}
 	r.run(root, false)
 	return r.warns
 }
 
 type restyler struct {
 	sheets []*Sheet
+	// env is what lengths are measured against besides font sizes.
+	env *measures
 	// m matches and cascades elements, pm their pseudo-elements.
 	m, pm *matcher
 	// treeStates are the states some selector reads above its subject,
@@ -140,6 +142,13 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.siblings = r.siblings || x.siblings
 		r.treeStates |= x.aboveStates
 		r.besideStates |= x.besideStates
+	}
+	if r.env == nil {
+		r.env = &measures{}
+	}
+	r.env.root = root
+	if stale {
+		r.env.used = 0
 	}
 	r.visit(root, nil, 0, stale, stale)
 	r.count(root)
@@ -322,10 +331,18 @@ func explicitInherit(sheets []*Sheet) bool {
 type ctx struct {
 	c, parent *style.Computed
 	em, rem   float32
-	vars      map[string][]Component
-	resolving map[string]bool
-	raw       map[string]*Declaration
-	trans     [4][]Component
+	// env is what the units of a font and of the viewport are measured
+	// against, and u those of the length being read.
+	env *measures
+	u   Units
+	// sized and lined are set once the element's font-size and its
+	// line-height are known: until then the units of the font and lh read
+	// the parent's. root is set for the root, whose root units are its own.
+	sized, lined, root bool
+	vars               map[string][]Component
+	resolving          map[string]bool
+	raw                map[string]*Declaration
+	trans              [4][]Component
 	// base is where the sheet the declaration being applied came from is.
 	base     *origin
 	expanded map[*Declaration]map[string][]Component
@@ -338,19 +355,26 @@ type ctx struct {
 	node *dom.Node
 }
 
-// order puts font-size first (em needs it), then color (currentcolor
-// needs it), then the rest.
+// leading are the longhands the others read, in the order they are
+// applied before them: the font's family, style and weight, which its
+// own units measure, then font-size (em), line-height (lh) and color
+// (currentcolor).
 //
-//nolint:gochecknoglobals,goconst // derived from the properties
+//nolint:gochecknoglobals,goconst // a fixed list
+var leading = []string{"font-family", "font-style", "font-weight", propFontSize, "line-height", "color"}
+
+// order puts the leading longhands first, then the rest.
+//
+//nolint:gochecknoglobals // derived from the properties
 var order, orderIndex = func() ([]string, map[string]int) {
 	names := make([]string, 0, len(properties))
 	for n := range properties {
-		if n != "font-size" && n != "color" {
+		if !slices.Contains(leading, n) {
 			names = append(names, n)
 		}
 	}
 	slices.Sort(names)
-	names = append([]string{"font-size", "color"}, names...)
+	names = append(slices.Clone(leading), names...)
 	index := make(map[string]int, len(names))
 	for i, n := range names {
 		index[n] = i
@@ -401,7 +425,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		rem = initial.Font.Size
 	}
 	c := initial
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, overlay: r.overlay,
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
 	x.cascaded(casc, root)
 	if closedSlot(n) {
@@ -451,11 +475,14 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 	for i := range longhands {
 		l := &longhands[i]
 		x.apply(l, casc.longhands[i])
-		if l.name == "font-size" {
-			x.em = x.c.Font.Size
+		switch l.name {
+		case propFontSize:
+			x.em, x.sized = x.c.Font.Size, true
 			if root {
 				x.rem = x.c.Font.Size
 			}
+		case "line-height":
+			x.lined = true
 		}
 	}
 	x.finish(root)
@@ -489,15 +516,18 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	}
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
-	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, node: n}
+	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n}
 	px.customs(casc.custom)
 	for i := range longhands {
+		l := &longhands[i]
 		if d := casc.longhands[i]; d != nil {
-			l := &longhands[i]
 			px.apply(l, d)
-			if l.name == "font-size" {
-				px.em = ps.Font.Size
-			}
+		}
+		switch l.name {
+		case propFontSize:
+			px.em, px.sized = ps.Font.Size, true
+		case "line-height":
+			px.lined = true
 		}
 	}
 	ps.FollowColor(ps.Color)
@@ -973,8 +1003,72 @@ func (x *ctx) length(c Component) style.Length {
 	if d.IsFlex() {
 		return style.Length{Kind: style.Fr, Px: float32(d.Fr)}
 	}
-	d = d.Absolute(float64(x.em), float64(x.rem))
-	return style.Length{Kind: style.Fixed, Px: float32(d.Px), Percent: float32(d.Pct), IsPercent: d.HasPercent()}
+	d = d.Absolute(x.units(&d))
+	l := style.Length{Kind: style.Fixed, Px: float32(d.Px), Percent: float32(d.Pct), IsPercent: d.HasPercent()}
+	if len(d.terms) > 0 {
+		l.Px, l.Percent = float32(d.Resolve(0)), 0
+		l.Calc, l.IsPercent = calcOf(d)
+	}
+	return l
+}
+
+// units are what d's relative units stand for on the element.
+func (x *ctx) units(d *Dim) *Units {
+	u := &x.u
+	u.Em, u.Rem = float64(x.em), float64(x.rem)
+	if d.rel == 0 {
+		return u
+	}
+	if x.env != nil {
+		x.env.used |= d.rel
+	}
+	for i := range relUnits {
+		if d.rel&(1<<i) != 0 {
+			u.Rel[i] = float64(x.unit(i))
+		}
+	}
+	return u
+}
+
+// unit is what one of u stands for on the element: a unit of the font in
+// the element's own, or its parent's while its font-size is being read
+// (lh its parent's line height while its line-height is), a root unit in
+// the root's, a viewport unit in the viewport.
+func (x *ctx) unit(u relUnit) float32 {
+	if u >= unitVw {
+		w, h := x.env.viewport()
+		return [...]float32{w, h, min(w, h), max(w, h)}[u-unitVw] / 100
+	}
+	st, sized, lined := x.c, x.sized, x.lined
+	if u >= unitRex {
+		u -= unitRex
+		if root := x.env.rootStyle(); root != nil && !x.root {
+			st, sized, lined = root, true, true
+		}
+	}
+	if !sized || u == unitLh && !lined {
+		st = x.parent
+	}
+	in := x.env.fontUnits(st.Font)
+	switch u {
+	case unitEx:
+		return in.Ex
+	case unitCh:
+		return in.Ch
+	case unitCap:
+		return in.Cap
+	case unitIc:
+		return in.Ic
+	case unitLh, unitRex, unitRch, unitRcap, unitRic, unitRlh, unitVw, unitVh, unitVmin, unitVmax, relUnits:
+	}
+	switch lh := st.LineHeight; {
+	case lh.Normal:
+		return in.Line
+	case lh.Factor != 0:
+		return lh.Factor * st.Font.Size
+	default:
+		return lh.Px
+	}
 }
 
 func (x *ctx) px(c Component) float32 {
@@ -1254,6 +1348,10 @@ var props = func() map[string]prop {
 					return style.LineHeight{Normal: true}
 				case v[0].Kind == Number:
 					return style.LineHeight{Factor: float32(v[0].Num)}
+				case v[0].Kind == Function:
+					if d, _ := parseDim(v[0]); d.IsNumber() {
+						return style.LineHeight{Factor: float32(d.Num)}
+					}
 				}
 				l := x.length(v[0])
 				return style.LineHeight{Px: l.Px + l.Percent*x.em/100}

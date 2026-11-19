@@ -25,7 +25,10 @@ const (
 	kwInherit      = "inherit"
 	kwBaseline     = "baseline"
 
-	unitRem = "rem"
+	unitRem  = "rem"
+	nameVmin = "vmin"
+	nameVmax = "vmax"
+	fnCalc   = "calc"
 
 	fnTranslate  = "translate"
 	fnTranslateX = "translatex"

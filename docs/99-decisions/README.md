@@ -109,6 +109,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0103 | [An iframe shows a Document the program gives it](0103-an-iframe-shows-a-document-the-program-gives-it.md) | api |
 | 0104 | [vertical-align places boxes on their line as Chrome does](0104-vertical-align-places-boxes-on-their-line-as-chrome-does.md) | api |
 | 0105 | [A table is what display says, with the boxes it misses](0105-a-table-is-what-display-says-with-the-boxes-it-misses.md) | rendering |
+| 0106 | [css asks what a unit stands for, and leaves layout the bounds over a percentage](0106-css-asks-what-a-unit-stands-for-and-leaves-layout-the-bounds-over-a-percentage.md) | rendering |
 
 ## Writing one
 

@@ -625,7 +625,7 @@ func backgroundTiles(view, first geom.Rect, st *style.Computed, draw func(tile g
 // of length extent, at l from the start, or from the end when fromEnd: a
 // percentage puts the image's point at the area's point.
 func place(l style.Length, fromEnd bool, origin, extent, img float32) float32 {
-	off := l.Px + l.Percent*(extent-img)/100
+	off := l.At(extent - img)
 	if fromEnd {
 		return origin + extent - img - off
 	}

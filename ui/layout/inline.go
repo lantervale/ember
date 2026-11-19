@@ -740,7 +740,7 @@ func (c *inlineContent) indent(width float32) float32 {
 	if width >= unbounded {
 		return l.Px
 	}
-	return l.Px + l.Percent*width/100
+	return l.At(width)
 }
 
 func (c *inlineContent) wrapsAt(i int) bool {

@@ -101,9 +101,9 @@ func (v mediaValue) at(m Media) float64 {
 		return v.num * w / 100
 	case "vh":
 		return v.num * h / 100
-	case "vmin":
+	case nameVmin:
 		return v.num * min(w, h) / 100
-	case "vmax":
+	case nameVmax:
 		return v.num * max(w, h) / 100
 	}
 	return v.num
@@ -368,7 +368,7 @@ func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 	}
 	inner := items(c.Args)
 	nested := len(inner) > 0 && (inner[0].Kind == LParen ||
-		inner[0].Kind == Function && !strings.EqualFold(inner[0].Text, "calc"))
+		inner[0].Kind == Function && !strings.EqualFold(inner[0].Text, fnCalc))
 	if nested || len(inner) > 1 && isWord(inner[0], "not") {
 		cond, ok := p.condition(inner, true)
 		if !ok {
@@ -568,12 +568,12 @@ func mediaLengthOf(v []Component, unit string) (mediaValue, bool) {
 	case len(v) != 1:
 	case v[0].Kind == Number && v[0].Num == 0:
 		return mediaValue{}, true
-	case v[0].Kind == Function && strings.EqualFold(v[0].Text, "calc"):
+	case v[0].Kind == Function && strings.EqualFold(v[0].Text, fnCalc):
 		if d, err := parseCalc(v[0].Args); err == nil && d.kind == dimLength {
 			return mediaValue{num: d.Px + 16*(d.Em+d.Rem)}, true
 		}
 	case v[0].Kind != Dimension:
-	case slices.Contains([]string{"vw", "vh", "vmin", "vmax"}, unit):
+	case slices.Contains([]string{"vw", "vh", nameVmin, nameVmax}, unit):
 		return mediaValue{num: v[0].Num, unit: unit}, true
 	case lengthUnits[unit] != 0:
 		return mediaValue{num: v[0].Num * lengthUnits[unit]}, true

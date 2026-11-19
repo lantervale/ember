@@ -332,9 +332,10 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 		root = root.Parent()
 	}
 	c := *dom.Data(n).Style
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: dom.Data(root).Style.Font.Size, node: n}
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: dom.Data(root).Style.Font.Size, env: &t.env,
+		root: root == n, node: n}
 	x.customs(casc.custom)
-	x.em = c.Font.Size
+	x.em, x.sized, x.lined = c.Font.Size, true, true
 
 	out := make(map[string]cascadedValue, len(names))
 	var inherited []string
@@ -414,7 +415,7 @@ func (x *ctx) written(v []Component) string {
 		}
 		if c.Kind == Dimension {
 			if d, err := parseDim(c); err == nil && !d.IsFlex() {
-				b.WriteString(pixels(d.Absolute(float64(x.em), float64(x.rem)).Px))
+				b.WriteString(pixels(d.Absolute(x.units(&d)).Px))
 				continue
 			}
 		}

@@ -28,7 +28,10 @@ The presentational attributes of old pages style their element as Chrome reads t
 | Values | |
 |---|---|
 | `px` (a point), `%`, `em`, `rem`, `fr`, and the absolute `pt`, `pc`, `in`, `cm`, `mm`, `Q` at 96 `px` an inch | units |
+| `ex`, `ch`, `cap`, `ic`, `lh`, and the root's `rex`, `rch`, `rcap`, `ric`, `rlh` | the element's font: its x-height, the advance of its `0`, the height of its capitals, the advance of its `水`, its line height; half an em, half an em, the ascent and an em where the face says nothing, as Chrome. In `font-size` they read the parent's font, and `lh` in `line-height` the parent's line. A font that lands styles again the lengths written in them |
+| `vw`, `vh`, `vmin`, `vmax`, `vi`, `vb`, and each with `s`, `l` or `d` before it (`dvh`, `svw`…) | hundredths of the Document's viewport, an iframe's being its own box; the small, large and dynamic viewports are the one there is. A viewport that changes styles again the lengths written in them, and nothing where none is |
 | `auto`, `min-content`, `max-content`, `fit-content`, `minmax()`, `repeat()`, `calc()`, `var()` | sizes and functions |
+| `min()`, `max()`, `clamp()` | the least, the greatest, a value between two, of lengths and percentages or of numbers, in each other and in `calc()`; over a percentage they are worked out by layout against what the percentage is of, as `width: min(100%, 500px)` |
 | hex, `rgb()`, `oklch()`, named colours, `transparent`, `currentColor` | colours |
 | `linear-gradient(<angle> or to <side or corner>, <colour> [<length or %> [<length or %>]], …)` | in `background-image` or `background`: two stops or more, two positions on one stop a hard edge; `deg`, `rad`, `grad` or `turn`; `to` a corner follows the box's shape; colours blend in encoded sRGB, as Chrome's |
 | `radial-gradient([circle or ellipse] [closest-side, closest-corner, farthest-side or farthest-corner] [at <position>], <colour> [<length or %>], …)` | an ellipse to the farthest corner from the middle by default; length stops measure along the horizontal radius |

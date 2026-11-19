@@ -223,8 +223,11 @@ func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 		px = 1
 	}
 	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
-		XHeight: float32(m.XHeight) / 64 * scale}
+		XHeight: float32(m.XHeight) / 64 * scale, CapHeight: float32(m.CapHeight) / 64 * scale}
 }
+
+// Has reports whether f's own face has a glyph for r.
+func (s *Set) Has(f style.Font, r rune) bool { return s.hasGlyph(s.Face(f), r) }
 
 func round(v float32) float32 { return float32(int(v + 0.5)) }
 

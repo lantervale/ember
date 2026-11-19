@@ -135,6 +135,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 		clock: -1,
 	}
 	d.html.Append(d.body)
+	d.trans.MeasureFonts(d.fontUnits)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)
@@ -333,6 +334,9 @@ func (d *Document) Body() *Node { return d.body }
 func (d *Document) Layout(size geom.Vec2) {
 	d.landImages()
 	d.landFonts()
+	if d.relayout && d.trans.FontsChanged() {
+		dom.Data(d.html).Dirty |= dom.DirtyStyle
+	}
 	if d.trans.SetMedia(css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale()}) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}

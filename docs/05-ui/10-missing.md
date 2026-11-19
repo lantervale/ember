@@ -98,7 +98,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
 | the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
 | `:has()`, `:focus-within`, `:lang()`, `:empty`, `:target`, `:read-only`, `:read-write`, the `s` flag of an attribute selector | refused: the rule is dropped |
-| `min()`, `max()`, `clamp()` in a length, `vh` and `vw` | refused |
+| `min()`, `max()`, `clamp()` over a percentage in `line-height`, `word-spacing`, `vertical-align`, a gradient's stop, or longer than 16 steps | worked out as if the percentage were of nothing |
+| `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
+| `clamp()` with `none`, `round()`, `mod()`, `rem()`, `abs()`, `sign()` and the other math functions, `cqw` and the container units | refused |
 | `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `@counter-style`, `revert` | refused |
 
 ## Windows
