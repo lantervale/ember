@@ -172,6 +172,19 @@ span { color: var(--c); width: var(--w); }
 	}
 }
 
+func TestAVarThatHoldsNothingLeavesTheDeclarationUnset(t *testing.T) {
+	sp := dom.NewElement(dom.Span)
+	root := page(with(el(dom.Div, "p"), sp))
+	Compute(root, []*Sheet{sheet(t, `
+#p { color: #0f0; --none: ; }
+span { transform: var(--none); box-shadow: var(--none); color: var(--none); width: var(--none) }
+`)})
+	if s := styleOf(sp); len(s.Transform) != 0 || len(s.Shadows) != 0 || s.Color != hex("#0f0") ||
+		s.Size.Width.Kind != style.Auto {
+		t.Errorf("unset: %v %v %v %v", s.Transform, s.Shadows, s.Color, s.Size.Width)
+	}
+}
+
 func TestStatesAndStructure(t *testing.T) {
 	b1, b2 := dom.NewElement(dom.Button), dom.NewElement(dom.Button)
 	root := page(with(el(dom.Nav, ""), b1, b2))

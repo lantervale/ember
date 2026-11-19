@@ -714,6 +714,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	}
 	if ok {
 		v = items(v)
+		ok = len(v) > 0
 	}
 	kw := ""
 	if ok {
