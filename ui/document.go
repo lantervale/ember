@@ -75,6 +75,8 @@ type Document struct {
 	// systemFonts is whether font-family names the machine's fonts
 	// (SystemFonts).
 	systemFonts bool
+	// rightDragSelects is whether a drag of the right button selects text.
+	rightDragSelects bool
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool

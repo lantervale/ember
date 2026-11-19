@@ -188,6 +188,7 @@ func (d *Document) unframe(n *Node) {
 		return true
 	})
 	d.ClearSelection()
+	d.sel.rightArmed, d.sel.rightDragged = false, false
 	if d.owner.owning {
 		d.release()
 	}
@@ -305,7 +306,7 @@ func (d *Document) shielded() bool {
 	if f == nil {
 		return false
 	}
-	if len(d.pressed) > 0 || d.dragging != nil || d.drag != nil || d.held != nil || d.sel.held {
+	if len(d.pressed) > 0 || d.dragging != nil || d.drag != nil || d.held != nil || d.sel.held || d.sel.rightArmed {
 		return false
 	}
 	return f.host.shield || firstOf(f.host.hovered) != f.n

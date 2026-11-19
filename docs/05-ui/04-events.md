@@ -40,6 +40,7 @@ func (s *Settings) Update(f world.Frame) {
 | `ui.OnDrop` | `ui.Dropped{Target, Dragged}` | a draggable element let go over it, a drop target |
 | `ui.OnDragEnd` | `ui.DragEnded{Source, Dropped}` | its drag ended, taken by a target or cancelled |
 | `ui.OnSelectionChange` | `ui.SelectionChanged{Node}` | the Document's selected text set, moved or cleared; `Node` is `body`, so the callback goes on `body` or `html` |
+| `ui.OnRightDragSelect` | `ui.RightDragSelected{Node}` | text selected by a drag of the right button, let go, in a Document with `ui.RightDragSelects()`; `Node` is `body`, as above |
 
 | A callback is | |
 |---|---|
@@ -51,7 +52,7 @@ func (s *Settings) Update(f world.Frame) {
 remove := ui.On(slot, ui.EventClick, equip) // added to a live element; remove() takes it off
 ```
 
-Every event is emitted as a World event whether or not it has callbacks. Callbacks run right after their event, in the Document's Update, in the order they were added, and only while their element is in the Document. Most stay on their element; `OnBack`, `OnKey`, `OnContextMenu` and `OnSelectionChange` bubble: the focused element's handlers run, then each ancestor's up to `html`, innermost first, `e.Node` still the focused element, until one calls `e.StopPropagation()`. So one `OnBack` on a screen's root hears its Escape and pad East; on `body` or `html` it also hears a Back with nothing focused, which emits no World event ([decision 0060](../99-decisions/0060-back-and-key-callbacks-bubble.md)). World events are emitted late in a frame and read the next. A point on a box's right or bottom edge is outside it, as Chrome's `elementFromPoint` has it. `doc.Value(e.Node)` reads what a control now holds.
+Every event is emitted as a World event whether or not it has callbacks. Callbacks run right after their event, in the Document's Update, in the order they were added, and only while their element is in the Document. Most stay on their element; `OnBack`, `OnKey`, `OnContextMenu`, `OnSelectionChange` and `OnRightDragSelect` bubble: the focused element's handlers run, then each ancestor's up to `html`, innermost first, `e.Node` still the focused element, until one calls `e.StopPropagation()`. So one `OnBack` on a screen's root hears its Escape and pad East; on `body` or `html` it also hears a Back with nothing focused, which emits no World event ([decision 0060](../99-decisions/0060-back-and-key-callbacks-bubble.md)). World events are emitted late in a frame and read the next. A point on a box's right or bottom edge is outside it, as Chrome's `elementFromPoint` has it. `doc.Value(e.Node)` reads what a control now holds.
 
 ## Selected text
 
@@ -84,6 +85,13 @@ Over text a press would select, the pointer is `platform.CursorText` while the e
 | `doc.ClearSelection()` | selects nothing |
 | `doc.SelectionRects()` | the rectangles it is drawn in, in the Document's space |
 | automation's `select-all` | on a recorded label whose text takes a selection, selects it; on a text field, its text, as before |
+
+Only the left button selects, as in Chrome. A Document made with `ui.RightDragSelects()` also selects with the right one ([decision 0109](../99-decisions/0109-a-right-drag-selects-text-only-where-a-document-asks.md)): pressed where a left press would begin a selection and held 4 points away, it selects by characters from the press to the pointer, scrolling as a left drag does. Let go with text selected, it emits `ui.RightDragSelected` (`ui.OnRightDragSelect` on `body`) and no `ContextClicked`, in the Document and in those showing it through an iframe; let go where it fell, or with nothing selected, it is the right click it is without the option, and leaves the selection alone. So a program can answer a selection made that way, with a card of what to do with it, and leave the left button's a plain one:
+
+```go
+page := ui.NewDocument(ui.BrowserSheets(), ui.RightDragSelects())
+ui.OnRightDragSelect(func() { card.Open(page.Selection().Text) }).Apply(page.Body())
+```
 
 The selection is kept by node and offset, so it outlives a restyle, a relayout and a scroll; it goes when one of its ends leaves the Document. A field that takes the focus takes the selection: the page's is cleared, and the field's own works as ever. Keys reach the selection only while no field of any Document in the window has the keyboard, so a page drawn inside another Document's canvas and that Document's fields each keep their own copy and select all.
 

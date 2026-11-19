@@ -41,6 +41,12 @@ func (s Selection) Empty() bool { return s.Anchor == s.Focus }
 // body, so a callback on it or on the html hears it.
 type SelectionChanged struct{ Node *Node }
 
+// RightDragSelected is text selected by a drag of the right button, let
+// go, in a Document where RightDragSelects: its Selection says what. It
+// stands for the ContextClicked of that press. Node is the Document's
+// body, so a callback on it or on the html hears it (decision 0109).
+type RightDragSelected struct{ Node *Node }
+
 // selecting is a Document's selection and what the pointer is doing to it.
 type selecting struct {
 	anchor, focus Position
@@ -55,6 +61,13 @@ type selecting struct {
 	clicks     int
 	clickAt    float32
 	clickWhere geom.Vec2
+	// rightArmed is the right button held since a press where a selection
+	// may begin, in a Document where RightDragSelects: at rightAt in the
+	// text and rightFrom in the Document. rightDragged is that press a
+	// drag, once the pointer went dragStart from it, until the next press.
+	rightArmed, rightDragged bool
+	rightAt                  Position
+	rightFrom                geom.Vec2
 	// scrolledAt is the clock when a drag last scrolled a container.
 	scrolledAt float32
 	// runs are the text nodes with fragments in tree order and maps what

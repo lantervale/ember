@@ -454,6 +454,8 @@ func emit(w *world.World, e any) {
 		world.Emit(w, e)
 	case SelectionChanged:
 		world.Emit(w, e)
+	case RightDragSelected:
+		world.Emit(w, e)
 	}
 }
 
@@ -634,7 +636,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.cssCursor(c)
 		d.selectionCursor(c, hit, at)
 	}
-	d.rightClick(in)
+	d.rightClick(in, at)
 	if d.pointerTaken(c, in, at, hit) {
 		return
 	}
@@ -887,16 +889,20 @@ func (d *Document) endDrag(dropped bool) {
 
 // rightClick reports a right click: the right button pressed and released
 // on the same element, not the page's html or body, which are the game's.
-func (d *Document) rightClick(in *input.State) {
+// A drag that selected text between the two, where RightDragSelects, in
+// the Document or in one of its iframes, is none.
+func (d *Document) rightClick(in *input.State, at geom.Vec2) {
 	n := firstOf(d.hovered)
 	if n == d.html || n == d.body {
 		n = nil
 	}
 	if in.Pressed(input.MouseRight) {
 		d.rightPressed = n
+		d.pressRightSelection(at)
 	}
+	d.heldRightSelection(in, at)
 	if in.Released(input.MouseRight) {
-		if n != nil && n == d.rightPressed {
+		if n != nil && n == d.rightPressed && !d.rightSelected() {
 			d.events = append(d.events, ContextClicked{Node: n})
 		}
 		d.rightPressed = nil

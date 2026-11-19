@@ -42,11 +42,7 @@ func (d *Document) pressSelection(at geom.Vec2, extend bool) {
 	if !d.startsSelection() {
 		return
 	}
-	var p Position
-	ok := false
-	for b := d.tree.Of[firstOf(d.hovered)]; b != nil && !ok; b = b.Parent {
-		p, ok = d.positionNear(at, b)
-	}
+	p, ok := d.placeUnder(at)
 	if !ok {
 		return
 	}
@@ -68,6 +64,103 @@ func (d *Document) pressSelection(at geom.Vec2, extend bool) {
 		s.base[0], s.base[1] = d.unitAt(p)
 		d.point(s.base[0], s.base[1])
 	}
+}
+
+// placeUnder is the place nearest at in the text of the element under
+// the pointer, or of the nearest element round it holding some.
+func (d *Document) placeUnder(at geom.Vec2) (Position, bool) {
+	for b := d.tree.Of[firstOf(d.hovered)]; b != nil; b = b.Parent {
+		if p, ok := d.positionNear(at, b); ok {
+			return p, true
+		}
+	}
+	return Position{}, false
+}
+
+// RightDragSelects has a drag of the right button select the Document's
+// text as one of the left does, which no browser does: pressed where a
+// left press would begin a selection and moved, it selects by characters
+// from the press to the pointer, scrolling what the text scrolls in past
+// its edges. Let go with text selected, the drag is a RightDragSelected
+// and no ContextClicked, of the Document nor of those it is shown in;
+// let go where it began, or with nothing selected, it is the right click
+// it is without the option, which leaves the selection as it was. Each
+// Document takes the option for itself, one in an iframe too (decision
+// 0109).
+func RightDragSelects() DocumentOption {
+	return func(d *Document) { d.rightDragSelects = true }
+}
+
+// RightDragSelects reports whether a drag of the right button selects
+// the Document's text.
+func (d *Document) RightDragSelects() bool { return d.rightDragSelects }
+
+// pressRightSelection arms a selection where a right press at falls, if
+// a left press there would begin one, and forgets the last right drag,
+// the Document's and those of the Documents it shows.
+func (d *Document) pressRightSelection(at geom.Vec2) {
+	s := &d.sel
+	s.rightArmed = false
+	d.forgetRightDrag()
+	if !d.rightDragSelects || s.held || !d.startsSelection() {
+		return
+	}
+	if p, ok := d.placeUnder(at); ok {
+		s.rightArmed, s.rightAt, s.rightFrom = true, p, at
+	}
+}
+
+func (d *Document) forgetRightDrag() {
+	d.sel.rightDragged = false
+	for _, child := range d.framedAt {
+		if child != nil {
+			child.forgetRightDrag()
+		}
+	}
+}
+
+// heldRightSelection makes the armed right press a drag once the pointer
+// is dragStart from it, the selection then following the pointer from
+// the place pressed, and says the selection it leaves when the button
+// is let go. A left press takes the selection from it.
+func (d *Document) heldRightSelection(in *input.State, at geom.Vec2) {
+	s := &d.sel
+	switch {
+	case !s.rightArmed || in.Pressed(input.MouseRight):
+		return
+	case in.Pressed(input.MouseLeft):
+		s.rightArmed, s.rightDragged = false, false
+		return
+	case !in.Down(input.MouseRight):
+		s.rightArmed = false
+		if s.rightDragged && s.anchor != s.focus {
+			d.events = append(d.events, RightDragSelected{Node: d.body})
+		}
+		return
+	}
+	if !s.rightDragged {
+		if at.Sub(s.rightFrom).Len() < dragStart {
+			return
+		}
+		d.clearOtherSelections()
+		s.rightDragged, s.clicks, s.unit = true, 0, byCharacter
+		d.point(s.rightAt, s.rightAt)
+	}
+	d.dragSelection(at)
+}
+
+// rightSelected reports whether the last right press became a drag that
+// has text selected, in the Document or in one it shows: no right click.
+func (d *Document) rightSelected() bool {
+	if d.sel.rightDragged && d.sel.anchor != d.sel.focus {
+		return true
+	}
+	for _, child := range d.framedAt {
+		if child != nil && child.rightSelected() {
+			return true
+		}
+	}
+	return false
 }
 
 // unitAt is the word or the block at p, as the drag's unit has it.
