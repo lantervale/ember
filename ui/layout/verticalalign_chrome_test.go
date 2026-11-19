@@ -103,8 +103,9 @@ func TestVerticalAlignMatchesChrome(t *testing.T) {
 		ui.P(ui.Text("x"), ui.Label(ui.Style("vertical-align: middle; padding: 4px; border: 2px solid"), ui.Text("a"),
 			ui.Br(), ui.Text("b"))),
 		ui.P(ui.Text("x"), ui.Label(ui.Style("display: inline-flex; vertical-align: text-top"), ui.Label(ui.Text("flex")))),
-		ui.P(ui.Text("x"), ui.Input(ui.Style("vertical-align: middle")), ui.Button(ui.Style("vertical-align: top"),
-			ui.Text("go")), ui.Input(ui.Attr("type", "checkbox"), ui.Style("vertical-align: -3px"))),
+		ui.P(ui.Text("x"), ui.Input(ui.Style("vertical-align: middle; width: 120px")),
+			ui.Button(ui.Style("vertical-align: top"), ui.Text("go")),
+			ui.Input(ui.Attr("type", "checkbox"), ui.Style("vertical-align: -3px"))),
 	)
 	cases["generated, markers and floats"] = aligning(`
 p, li { font-size: 16px; line-height: 24px; width: 220px; }

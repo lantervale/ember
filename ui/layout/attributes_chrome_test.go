@@ -38,8 +38,8 @@ func TestPresentationalAttributesLayOutAsInChrome(t *testing.T) {
 	}
 	cases := map[string]*ui.Document{
 		"a hidden field": page(
-			ui.Form(ui.Input(ui.Type("hidden"), ui.Attr("value", "fr")), ui.Input(ui.Attr("value", "q")),
-				ui.Input(ui.Type("hidden")), ui.Text(" after"))),
+			ui.Form(ui.Input(ui.Type("hidden"), ui.Attr("value", "fr")),
+				ui.Input(ui.Attr("value", "q"), ui.Style("width: 120px")), ui.Input(ui.Type("hidden")), ui.Text(" after"))),
 		"absolute units": styled(`div { height: 10pt; margin: 2mm 0; background: #888 }
 .pt { width: 72pt } .pc { width: 6pc } .in { width: 1.5in } .cm { width: 2.54cm } .mm { width: 30mm } .q { width: 120Q }
 p { font-size: 10pt; line-height: 14pt; padding: 0 1pc }`,

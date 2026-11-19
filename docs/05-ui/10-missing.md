@@ -171,4 +171,5 @@ Things built and tested, with a part no test against Chrome covers yet.
 - A float low in a column, at narrow widths.
 - A percentage `top` on a relative child inside columns.
 - The largest raster of an SVG (8192 pixels a side) against the device's own limit.
-- The Linux and Windows thresholds of the pixel pages added since `viewport-top`.
+- The Linux and Windows thresholds of the pixel pages added since `word-spacing`: those of `iframe`, `table-model`, `background-boxes`, `word-spacing`, `vertical-align` and `font-smoothing` are what the runners measured once, their text drawn differently there.
+- The `mitres` page on the macOS and Linux runners, where Chrome's screenshot has the page's background and none of its boxes: it is compared on a desktop Mac and on the Windows runner only.
