@@ -44,7 +44,15 @@ hgroup, search, center, fieldset, legend { display: block; }
 li { display: list-item; }
 [hidden] { display: none; }
 input[type="hidden" i] { display: none !important; }
-table { border-spacing: 2px; }
+table { display: table; border-spacing: 2px; }
+thead { display: table-header-group; }
+tbody { display: table-row-group; }
+tfoot { display: table-footer-group; }
+tr { display: table-row; }
+td, th { display: table-cell; }
+caption { display: table-caption; }
+col { display: table-column; }
+colgroup { display: table-column-group; }
 caption { text-align: center; }
 html { margin: 0; user-select: none; }
 body { margin: 8px; }

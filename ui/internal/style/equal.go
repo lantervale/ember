@@ -34,6 +34,7 @@ func (b *Box) equal(o *Box) bool {
 		b.ListItem == o.ListItem &&
 		b.FlowRoot == o.FlowRoot &&
 		b.Table == o.Table &&
+		b.TablePart == o.TablePart &&
 		b.BoxSizing == o.BoxSizing &&
 		b.Position == o.Position &&
 		b.Float == o.Float &&
@@ -120,6 +121,7 @@ func (t *Text) equal(o *Text) bool {
 		t.QuotesNone == o.QuotesNone &&
 		t.ListStyle == o.ListStyle &&
 		t.BorderSpacing == o.BorderSpacing &&
+		t.BorderCollapse == o.BorderCollapse &&
 		t.CaptionSide == o.CaptionSide &&
 		t.TableLayout == o.TableLayout &&
 		t.TextTransform == o.TextTransform &&
@@ -149,6 +151,9 @@ func (l *Look) equal(o *Look) bool {
 		l.BackgroundNoRepeat == o.BackgroundNoRepeat &&
 		l.BackgroundRepeat == o.BackgroundRepeat &&
 		l.BackgroundPosition == o.BackgroundPosition &&
+		l.BackgroundAttachment == o.BackgroundAttachment &&
+		l.BackgroundOrigin == o.BackgroundOrigin &&
+		l.BackgroundClip == o.BackgroundClip &&
 		l.MaskImage.equal(&o.MaskImage) &&
 		l.MaskSize == o.MaskSize &&
 		l.MaskNoRepeat == o.MaskNoRepeat &&
@@ -159,6 +164,7 @@ func (l *Look) equal(o *Look) bool {
 		l.ObjectPosition == o.ObjectPosition &&
 		l.BorderColor == o.BorderColor &&
 		l.BorderStyle == o.BorderStyle &&
+		l.BorderHidden == o.BorderHidden &&
 		l.BorderImage.equal(&o.BorderImage) &&
 		l.BorderImageRepeat == o.BorderImageRepeat &&
 		l.BorderImageWidth == o.BorderImageWidth &&

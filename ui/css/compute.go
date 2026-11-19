@@ -823,18 +823,18 @@ func (x *ctx) finish(root bool) {
 	switch x.parent.Display {
 	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
 		if !root {
-			c.Display = blockified(c.Display)
+			c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 			c.Float = style.FloatNone
 		}
 	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
 		// not a flex or grid container
 	}
 	if root || c.Position == style.Absolute || c.Position == style.FixedPosition {
-		c.Display = blockified(c.Display)
+		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 		c.Float = style.FloatNone
 	}
 	if c.Float != style.FloatNone {
-		c.Display = blockified(c.Display)
+		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 	}
 	x.transitions()
 	c.FollowColor(c.Color)
@@ -1016,6 +1016,17 @@ var displays = map[string]style.Display{
 	"flex": style.FlexDisplay, "inline-flex": style.InlineFlex, "grid": style.GridDisplay,
 	"inline-grid": style.InlineGrid, "none": style.DisplayNone, "contents": style.Contents,
 	"list-item": style.Block, "flow-root": style.Block, "table": style.Block, "inline-table": style.InlineBlock,
+	"table-row": style.Block, "table-cell": style.Block, "table-row-group": style.Block,
+	"table-header-group": style.Block, "table-footer-group": style.Block, "table-column": style.Block,
+	"table-column-group": style.Block, "table-caption": style.Block,
+}
+
+//nolint:gochecknoglobals // lookup table
+var tableParts = map[string]style.TablePart{
+	"table-row": style.TableRow, "table-cell": style.TableCell, "table-row-group": style.TableRowGroup,
+	"table-header-group": style.TableHeaderGroup, "table-footer-group": style.TableFooterGroup,
+	"table-column": style.TableColumn, "table-column-group": style.TableColumnGroup,
+	"table-caption": style.TableCaption,
 }
 
 //nolint:gochecknoglobals,goconst // lookup tables
@@ -1081,9 +1092,11 @@ var props = func() map[string]prop {
 				x.c.ListItem = isWord(v[0], "list-item")
 				x.c.FlowRoot = isWord(v[0], "flow-root")
 				x.c.Table = isWord(v[0], "table") || isWord(v[0], "inline-table")
+				x.c.TablePart = tableParts[strings.ToLower(v[0].Text)]
 			},
 			inherit: func(dst, src *style.Computed) {
 				dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
+				dst.TablePart = src.TablePart
 			},
 		},
 		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
@@ -1279,6 +1292,8 @@ var props = func() map[string]prop {
 		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
+		"border-collapse": field(func(c *style.Computed) *bool { return &c.BorderCollapse },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
 			map[string]style.TableLayout{"auto": style.TableAuto, "fixed": style.TableFixed}),
 		"white-space": keyword(func(c *style.Computed) *style.WhiteSpace { return &c.WhiteSpace },
@@ -1344,6 +1359,19 @@ var props = func() map[string]prop {
 		}),
 		"background-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.BackgroundPosition },
 			(*ctx).position),
+		"background-attachment": keyword(
+			func(c *style.Computed) *style.BackgroundAttachment { return &c.BackgroundAttachment },
+			map[string]style.BackgroundAttachment{
+				"scroll": style.AttachScroll, "fixed": style.AttachFixed, "local": style.AttachLocal,
+			}),
+		"background-origin": keyword(func(c *style.Computed) *style.BackgroundBox { return &c.BackgroundOrigin },
+			map[string]style.BackgroundBox{
+				"padding-box": style.InitialBox, "border-box": style.UnderBorder, "content-box": style.UnderContent,
+			}),
+		"background-clip": keyword(func(c *style.Computed) *style.BackgroundBox { return &c.BackgroundClip },
+			map[string]style.BackgroundBox{
+				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
+			}),
 		"mask-image": field(func(c *style.Computed) *style.Image { return &c.MaskImage },
 			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }),
 		"mask-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize }, (*ctx).backgroundSize),
@@ -1465,8 +1493,16 @@ var props = func() map[string]prop {
 	}
 	for i, side := range []string{"top", "right", "bottom", "left"} {
 		m["border-"+side+"-width"] = field(func(c *style.Computed) *float32 { return sideOf(&c.Border, i) }, borderWidthOf)
-		m["border-"+side+"-style"] = keyword(func(c *style.Computed) *style.BorderStyle { return sideOf(&c.BorderStyle, i) },
-			borderStyles)
+		m["border-"+side+"-style"] = prop{
+			set: func(x *ctx, v []Component) {
+				*sideOf(&x.c.BorderStyle, i) = borderStyles[strings.ToLower(v[0].Text)]
+				*sideOf(&x.c.BorderHidden, i) = isWord(v[0], "hidden")
+			},
+			inherit: func(dst, src *style.Computed) {
+				*sideOf(&dst.BorderStyle, i) = *sideOf(&src.BorderStyle, i)
+				*sideOf(&dst.BorderHidden, i) = *sideOf(&src.BorderHidden, i)
+			},
+		}
 		m["border-"+side+"-color"] = currentField(style.BorderTopCurrent<<i,
 			func(c *style.Computed) *color.Color { return sideOf(&c.BorderColor, i) })
 	}
@@ -1574,6 +1610,14 @@ func tiling(get func(*style.Computed) (*bool, *style.RepeatAxes)) prop {
 			no, axes := get(x.c)
 			*no, *axes = isWord(v[0], "no-repeat"), style.RepeatBoth
 			switch {
+			case len(v) == 2:
+				across, down := isWord(v[0], "repeat"), isWord(v[1], "repeat")
+				*no = !across && !down
+				if across && !down {
+					*axes = style.RepeatX
+				} else if down && !across {
+					*axes = style.RepeatY
+				}
 			case isWord(v[0], "repeat-x"):
 				*axes = style.RepeatX
 			case isWord(v[0], "repeat-y"):

@@ -3,6 +3,7 @@
 package box
 
 import (
+	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -110,6 +111,9 @@ type Box struct {
 	// its grid: its background, border and shadows frame the box less it, as
 	// Chrome's table wrapper leaves the captions out.
 	Wrap Edges
+	// Collapsed is the borders of a table that collapses them, which it
+	// draws over its cells: nil for any other box.
+	Collapsed []Edge
 }
 
 // Columns are a multi-column container's columns, side by side from its
@@ -260,4 +264,14 @@ func (i Intrinsic) Natural(area geom.Vec2) geom.Vec2 {
 // of pixels: ok is false for a picture that does, sized by ImageSize.
 type IntrinsicImages interface {
 	ImageIntrinsic(url string) (in Intrinsic, ok bool)
+}
+
+// Edge is one border of a table's grid where its borders collapse: Rect
+// is what it covers in the table's box, Across whether it runs along a
+// row.
+type Edge struct {
+	Rect   geom.Rect
+	Style  style.BorderStyle
+	Color  color.Color
+	Across bool
 }

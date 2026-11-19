@@ -393,13 +393,46 @@ func expandTransition(v []Component, out map[string][]Component) error {
 	return nil
 }
 
-// expandBackground reads background's colour, image and repeat in any order, and the
-// rest as its position, which a slash and a size may follow.
+// expandBackground splits the background shorthand: a colour, an image, a
+// repeat of one or two words, an attachment, one box for the origin and
+// the clip or two, and a position with a size after a slash, in any
+// order. Of several layers the colour is the last one's, which alone may
+// have one, and the rest the first with a picture's: ui draws one layer.
 func expandBackground(v []Component, out map[string][]Component) error {
-	var pos []Component
+	layers := splitOn(v, func(c Component) bool { return c.Kind == Comma })
+	var drawn map[string][]Component
+	for i, l := range layers {
+		layer := map[string][]Component{}
+		if len(l) == 0 {
+			return fmt.Errorf("background: an empty layer")
+		}
+		if err := backgroundLayer(l, layer); err != nil {
+			return err
+		}
+		if c := layer["background-color"]; c != nil {
+			if i != len(layers)-1 {
+				return fmt.Errorf("background: only the last layer takes a colour")
+			}
+			out["background-color"] = c
+			delete(layer, "background-color")
+		}
+		img := layer["background-image"]
+		if drawn == nil && (i == len(layers)-1 || img != nil && !isWord(img[0], kwNone)) {
+			drawn = layer
+		}
+	}
+	for name, value := range drawn {
+		out[name] = value
+	}
+	return nil
+}
+
+func backgroundLayer(v []Component, out map[string][]Component) error {
+	var pos, boxes []Component
 	posEnd := -1
 	for i := 0; i < len(v); i++ {
 		c := v[i]
+		one := []Component{c}
 		switch {
 		case isSlash(c):
 			if posEnd != i || out["background-size"] != nil {
@@ -415,13 +448,23 @@ func expandBackground(v []Component, out map[string][]Component) error {
 			out["background-size"] = v[i+1 : i+1+n]
 			i += n
 		case out["background-color"] == nil && colorTerm(c) == nil:
-			out["background-color"] = []Component{c}
+			out["background-color"] = one
 		case out["background-image"] == nil && (isWord(c, kwNone) || imageTerm(c) == nil):
-			out["background-image"] = []Component{c}
-		case out["background-repeat"] == nil && checks["background-repeat"]([]Component{c}) == nil:
-			out["background-repeat"] = []Component{c}
-		case out["background-size"] != nil:
+			out["background-image"] = one
+		case out["background-repeat"] == nil && checkTiling(one) == nil:
+			out["background-repeat"] = one
+			if i+1 < len(v) && checkTiling(v[i:i+2]) == nil {
+				out["background-repeat"] = v[i : i+2]
+				i++
+			}
+		case out["background-attachment"] == nil && checks["background-attachment"](one) == nil:
+			out["background-attachment"] = one
+		case len(boxes) < 2 && backgroundBox(c) == nil:
+			boxes = append(boxes, c)
+		case out["background-size"] != nil && posEnd >= 0:
 			return fmt.Errorf("background: %s after the size", c.String())
+		case posEnd >= 0 && posEnd != i:
+			return fmt.Errorf("background: %s is not part of a background", c.String())
 		default:
 			pos, posEnd = append(pos, c), i+1
 		}
@@ -431,6 +474,9 @@ func expandBackground(v []Component, out map[string][]Component) error {
 			return err
 		}
 		out["background-position"] = pos
+	}
+	if len(boxes) > 0 {
+		out["background-origin"], out["background-clip"] = boxes[:1], boxes[len(boxes)-1:]
 	}
 	return nil
 }

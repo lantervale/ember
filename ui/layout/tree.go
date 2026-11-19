@@ -166,6 +166,8 @@ type tree struct {
 	lost     map[*dom.Node]*box.Box
 	// anonymousStyles is the style of the anonymous blocks of each parent style.
 	anonymousStyles map[*style.Computed]*style.Computed
+	// anonymousTables is the style of the anonymous tables of each parent style.
+	anonymousTables map[*style.Computed]*style.Computed
 	// flowStyles are the styles multi-column containers lay their content out with, by
 	// their own.
 	flowStyles map[*style.Computed]*style.Computed
@@ -217,6 +219,15 @@ type node struct {
 	pendingOOF []oofCandidate
 	control    controlKind
 	role       tableRole
+	// cell marks a table's cell, an element or an anonymous one; lowered is how far its
+	// content stands below its content box's top to have its first line on its row's
+	// baseline.
+	cell    bool
+	lowered float32
+	// shared is the borders of a table that collapses them, and collapsed what that
+	// leaves the table or one of its cells for borders, nil where borders are apart.
+	shared    *borderGrid
+	collapsed *rect
 	// replaced is an img, natural its picture's size (zero without one).
 	replaced bool
 	natural  size
@@ -306,7 +317,7 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		return n
 	}
 	if isTable(e) {
-		t.buildTable(n, e)
+		t.buildTable(n, e.Flow())
 		return n
 	}
 	if e.Tag() == dom.Img || e.Tag() == dom.Svg {
@@ -535,12 +546,21 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 		}
 		run = nil
 	}
-	for _, it := range items {
+	for i := 0; i < len(items); i++ {
+		it := items[i]
 		if it.text != nil {
 			run = append(run, it)
 			continue
 		}
 		st := styleOf(it.element)
+		if !inFlexOrGrid && it.cut == nil && partOf(it.element) != style.NoTablePart {
+			parts, next := tableParts(items, i)
+			flush()
+			n.kids = append(n.kids, t.anonymousTable(n, parts))
+			n.anonymous, inFlow = true, true
+			i = next - 1
+			continue
+		}
 		if !inFlexOrGrid && st.Float != style.FloatNone && st.Display != style.DisplayNone {
 			// A float among inline content stands before it, the text going on round it.
 			n.kids = append(n.kids, t.build(it.element, n))
@@ -560,6 +580,26 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.holdsFloats = true
 		}
 	}
+}
+
+// tableParts lists the table parts that follow one another from items[i], with the white
+// space between them, and the index after the last: what one anonymous table wraps.
+func tableParts(items []item, i int) ([]*dom.Node, int) {
+	var parts []*dom.Node
+	kept, end := 0, i
+	for j := i; j < len(items); j++ {
+		it := items[j]
+		if it.text != nil && isCollapsibleSpace(it.text.Text()) {
+			parts = append(parts, it.text)
+			continue
+		}
+		if it.element == nil || it.cut != nil || partOf(it.element) == style.NoTablePart {
+			break
+		}
+		parts = append(parts, it.element)
+		kept, end = len(parts), j+1
+	}
+	return parts[:kept], end
 }
 
 // buildInline gives n inline content alone: its items as its own lines, and nodes for
@@ -786,7 +826,7 @@ func isBlockLevel(st *style.Computed) bool {
 }
 
 // elementBlockLevel is isBlockLevel for an element, which a table always is.
-func elementBlockLevel(e *dom.Node) bool { return isTable(e) || isBlockLevel(styleOf(e)) }
+func elementBlockLevel(e *dom.Node) bool { return isBlockLevel(styleOf(e)) }
 
 // hasBlockChild reports a child that makes the container lay blocks out: one in the flow
 // that is block-level, as a float is, or an inline element with a float inside.
@@ -974,7 +1014,7 @@ func keepLayout(n *node, cumulative point) { keepIn(n, cumulative, false) }
 // keepIn is keepLayout under a display: none ancestor when hidden, where out-of-flow
 // boxes take their parent's place too, as no containing block places them.
 func keepIn(n *node, cumulative point, hidden bool) {
-	n.final = n.unrounded
+	n.final = n.laid()
 	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
 	n.absolute = point{cumulative.x + n.unrounded.location.x, cumulative.y + n.unrounded.location.y}
 	if n.frag != nil {

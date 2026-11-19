@@ -250,3 +250,11 @@ func TestAScrollingCardHoldsWhatRunsPastIt(t *testing.T) {
 func TestACardOfAutoHeightGrowsToFit(t *testing.T) {
 	assert.Empty(t, rules(align.Check(laid(card("")))))
 }
+
+func TestACellSpanningRowsRunsPastItsRowAndIsNoOverflow(t *testing.T) {
+	table := ui.Table(
+		ui.Thead(ui.Tr(ui.Th(ui.Text("Player"), ui.Attr("rowspan", "2")), ui.Th(ui.Text("Run"))),
+			ui.Tr(ui.Th(ui.Text("Score")))),
+		ui.Tbody(ui.Tr(ui.Td(ui.Text("Ayla")), ui.Td(ui.Text("4210")))))
+	assert.Empty(t, align.Check(laid(table)), "its text stands in the middle of both rows: the table holds it")
+}

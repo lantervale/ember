@@ -139,11 +139,12 @@ type Box struct {
 	// FlowRoot is display: flow-root, laid out as Block, holding its floats
 	// and standing beside those around it.
 	FlowRoot bool
-	// Table is display: table or inline-table on any element, laid out as
-	// a flow root that shrinks to its content: the one cell CSS wraps round
-	// children that are no rows or cells. A table element is laid out as a
-	// table whatever this says.
+	// Table is display: table or inline-table: the element is laid out as
+	// a table, its children its rows, row groups, columns and captions, or
+	// wrapped in anonymous ones. TablePart is one of those displays, on an
+	// element that is none once it floats or leaves the flow.
 	Table     bool
+	TablePart TablePart
 	BoxSizing BoxSizing
 	Position  Position
 	// Float and Clear are float and clear; a float applies to a box in the
@@ -365,6 +366,21 @@ type LineHeight struct {
 	Px     float32
 }
 
+// TablePart is the part of a table an element's display makes it.
+type TablePart uint8
+
+const (
+	NoTablePart TablePart = iota
+	TableRow
+	TableCell
+	TableRowGroup
+	TableHeaderGroup
+	TableFooterGroup
+	TableColumn
+	TableColumnGroup
+	TableCaption
+)
+
 // CaptionSide is caption-side: a table's caption above it or below.
 type CaptionSide uint8
 
@@ -508,9 +524,12 @@ type Text struct {
 	ListStyle ListStyle
 	// BorderSpacing is a table's border-spacing, across and down, in points.
 	BorderSpacing [2]float32
-	CaptionSide   CaptionSide
-	TableLayout   TableLayout
-	TextTransform TextTransform
+	// BorderCollapse is border-collapse: collapse: a table's cells share
+	// their borders, the widest winning each edge.
+	BorderCollapse bool
+	CaptionSide    CaptionSide
+	TableLayout    TableLayout
+	TextTransform  TextTransform
 	// PixelText draws the text's glyphs unsmoothed, as
 	// -webkit-font-smoothing: none does in Chrome: for pixel fonts.
 	PixelText bool
@@ -635,9 +654,17 @@ type Look struct {
 	// BackgroundRepeat is the axis a repeated image tiles along: both, or
 	// one for repeat-x and repeat-y.
 	BackgroundRepeat RepeatAxes
-	// BackgroundPosition is where the image's top-left sits in the padding
-	// box.
+	// BackgroundPosition is where the image's top-left sits in the box
+	// BackgroundOrigin names.
 	BackgroundPosition BackgroundPosition
+	// BackgroundAttachment is background-attachment: what the image is
+	// placed in and moves with.
+	BackgroundAttachment BackgroundAttachment
+	// BackgroundOrigin is background-origin, the box the image is placed
+	// in (the padding box when InitialBox), and BackgroundClip
+	// background-clip, the box the background shows in (the border box
+	// when InitialBox).
+	BackgroundOrigin, BackgroundClip BackgroundBox
 	// MaskImage is mask-image: the picture whose alpha is the shape the
 	// background colour is painted through (decision 0093), sized, tiled
 	// and placed in the border box by MaskSize, MaskNoRepeat, MaskRepeat
@@ -655,7 +682,10 @@ type Look struct {
 	ObjectPosition BackgroundPosition
 	BorderColor    Sides[color.Color]
 	BorderStyle    Sides[BorderStyle]
-	BorderImage    Image
+	// BorderHidden marks the sides whose border-style is hidden: none, and
+	// in a table of collapsed borders no border at all on that edge.
+	BorderHidden Sides[bool]
+	BorderImage  Image
 	// BorderImageRepeat is border-image-repeat across and down.
 	BorderImageRepeat [2]ImageRepeat
 	// BorderImageWidth is border-image-width: how thick the border image's
@@ -777,6 +807,31 @@ const (
 	ListUpperAlpha
 	ListLowerRoman
 	ListUpperRoman
+)
+
+// BackgroundAttachment is background-attachment.
+type BackgroundAttachment uint8
+
+const (
+	// AttachScroll places the image in its element's box, where it stays
+	// as the element's content scrolls.
+	AttachScroll BackgroundAttachment = iota
+	// AttachFixed places it in the viewport, shown where the element is.
+	AttachFixed
+	// AttachLocal places it in the element's content, and it scrolls with
+	// it.
+	AttachLocal
+)
+
+// BackgroundBox is one of an element's boxes, for background-origin and
+// background-clip: InitialBox is the property's own initial one.
+type BackgroundBox uint8
+
+const (
+	InitialBox BackgroundBox = iota
+	UnderBorder
+	UnderPadding
+	UnderContent
 )
 
 // BackgroundPosition is background-position: X from the left edge, or from

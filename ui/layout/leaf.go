@@ -24,7 +24,7 @@ func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, ins
 func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	pb := padding.add(border)
 	pbSum := pb.sum()
 	adj := boxSizingAdjustment(st, pbSum)
@@ -132,7 +132,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		collapsesThrough: !preventsCollapse && s.h == 0 && measured.h == 0,
 	}
 	if some(first) {
-		shift := fmax(s.h-inset.vertical()-measured.h, 0) * contentShare(n)
+		shift := fmax(s.h-inset.vertical()-measured.h, 0)*contentShare(n) + n.lowered
 		out.firstBaseline = pb.t + shift + first
 		out.lastBaseline = pb.t + shift + last
 	}

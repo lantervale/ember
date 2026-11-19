@@ -702,6 +702,17 @@ func spillPast(b *box.Box, axis int) (*box.Box, float32) {
 	return nil, 0
 }
 
+// rowOf reports a table's row or row group, which a cell spanning rows
+// runs past: the table holds it.
+func rowOf(st *style.Computed) bool {
+	switch st.TablePart {
+	case style.TableRow, style.TableRowGroup, style.TableHeaderGroup, style.TableFooterGroup:
+		return true
+	case style.NoTablePart, style.TableCell, style.TableColumn, style.TableColumnGroup, style.TableCaption:
+	}
+	return false
+}
+
 // holds walks up from b, whose ink is r, to the first block box that
 // doesn't hold r, and reports it.
 func (c *checker) holds(b *box.Box, r geom.Rect, seen map[*box.Box]bool) {
@@ -713,7 +724,7 @@ func (c *checker) holds(b *box.Box, r geom.Rect, seen map[*box.Box]bool) {
 			return
 		}
 		st := a.Style
-		if a.Node == nil || a.Kind != box.Element || st == nil || st.Display == style.Inline {
+		if a.Node == nil || a.Kind != box.Element || st == nil || st.Display == style.Inline || rowOf(st) {
 			continue
 		}
 		box := a.Rect()

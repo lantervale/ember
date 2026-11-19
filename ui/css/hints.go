@@ -19,6 +19,8 @@ var hintedBelow = map[string]bool{"[cellpadding": true, "[valign": true}
 // valign and nowrap, a table's cellspacing and its cellpadding on its
 // cells, body's text. What an attribute says that the subset has no
 // declaration for hints nothing.
+//
+//nolint:funlen // one case per kind of element
 func hints(n *dom.Node) []Declaration {
 	var src strings.Builder
 	add := func(name, value string) {
@@ -57,6 +59,9 @@ func hints(n *dom.Node) []Declaration {
 		add("text-align", hintedAlign(attr("align")))
 		add("vertical-align", hintedCellAlign(attr("valign")))
 		add(propHeight, hintedRowHeight(n))
+	case dom.Col, dom.Colgroup:
+		add(propWidth, hintedSize(attr("width"), false))
+		add("background-color", hintedColor(attr("bgcolor")))
 	case dom.Td, dom.Th:
 		add(propWidth, hintedSize(attr("width"), false))
 		add(propHeight, hintedSize(attr("height"), false))

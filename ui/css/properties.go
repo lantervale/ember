@@ -74,6 +74,7 @@ var properties = map[string]property{
 	"letter-spacing":         {inherited: true, initial: "normal"},
 	"word-spacing":           {inherited: true, initial: "normal"},
 	"border-spacing":         {inherited: true, initial: "0"},
+	"border-collapse":        {inherited: true, initial: "separate"},
 	"caption-side":           {inherited: true, initial: "top"},
 	"table-layout":           {initial: "auto"},
 	"text-align":             {inherited: true, initial: "start"},
@@ -108,14 +109,18 @@ var properties = map[string]property{
 	"background-repeat":   {initial: "repeat"},
 	"background-size":     {initial: "auto"},
 	"background-position": {initial: "0% 0%"},
-	"mask-image":          {initial: "none"}, // one layer, a url(): the shape of the background colour
-	"mask-repeat":         {initial: "repeat"},
-	"mask-size":           {initial: "auto"},
-	"mask-position":       {initial: "0% 0%"},
-	"object-fit":          {initial: "fill"},
-	"object-position":     {initial: "50% 50%"},
-	"box-shadow":          {initial: "none"},
-	"outline-width":       {initial: "medium"}, "outline-style": {initial: "none"},
+	// fixed is placed in the Document's viewport, an iframe's own
+	"background-attachment": {initial: "scroll"},
+	"background-origin":     {initial: "padding-box"},
+	"background-clip":       {initial: "border-box"},
+	"mask-image":            {initial: "none"}, // one layer, a url(): the shape of the background colour
+	"mask-repeat":           {initial: "repeat"},
+	"mask-size":             {initial: "auto"},
+	"mask-position":         {initial: "0% 0%"},
+	"object-fit":            {initial: "fill"},
+	"object-position":       {initial: "50% 50%"},
+	"box-shadow":            {initial: "none"},
+	"outline-width":         {initial: "medium"}, "outline-style": {initial: "none"},
 	"outline-color": {initial: "currentcolor"}, "outline-offset": {initial: "0"},
 	"opacity":          {initial: "1"},
 	"transform":        {initial: "none"},
@@ -172,7 +177,7 @@ var shorthands = map[string][]string{
 	"columns":       {"column-width", "column-count"},
 	"column-rule":   {"column-rule-width", "column-rule-style", "column-rule-color"},
 	"background": {"background-color", "background-image", "background-repeat", "background-position",
-		"background-size"},
+		"background-size", "background-attachment", "background-origin", "background-clip"},
 	"list-style": {"list-style-type"},
 	"font":       {"font-style", "font-weight", "font-size", "line-height", "font-family"},
 	"transition": {"transition-property", "transition-duration", "transition-timing-function", "transition-delay"},
@@ -186,7 +191,6 @@ var shorthands = map[string][]string{
 //
 //nolint:gochecknoglobals // unsupported properties' advice
 var outside = map[string]string{
-	"border-collapse":  "tables as layout are not supported; use grid",
 	"word-wrap":        "word-wrap is the old name of overflow-wrap",
 	"grid-gap":         "grid-gap is the old name of gap",
 	"grid-row-gap":     "grid-row-gap is the old name of row-gap",

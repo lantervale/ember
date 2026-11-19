@@ -912,8 +912,11 @@ type breaker struct {
 	cur      line
 	at, kept pen
 	pending  int
-	empty    bool
-	blank    bool
+	// spaced is the space the edges hung on the line's last unit came after, -1 past
+	// any other unit: the line may still end at it, whatever follows the edges.
+	spaced int
+	empty  bool
+	blank  bool
 }
 
 func (b *breaker) finish(next int) {
@@ -927,7 +930,7 @@ func (b *breaker) open(i int, x, avail, push float32) {
 	b.cur = line{from: i, to: i, x: x, avail: avail, push: push}
 	b.at = newPen(b.c.unit, 0)
 	b.kept = b.at
-	b.pending = -1
+	b.pending, b.spaced = -1, -1
 	b.empty, b.blank = true, true
 }
 
@@ -975,6 +978,10 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 			}
 		}
 		b.at, b.kept = next, kept
+		b.spaced = -1
+		if hung {
+			b.spaced = b.pending
+		}
 		b.pending = -1
 		b.cur.to = end
 		b.empty = false
@@ -991,6 +998,9 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 func (b *breaker) wrapsBefore(i int) bool {
 	if b.pending >= 0 {
 		return b.c.wrapsAt(b.pending)
+	}
+	if b.spaced >= 0 && b.c.wrapsAt(b.spaced) {
+		return true
 	}
 	return b.c.wrapsAt(i)
 }
@@ -1535,7 +1545,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 				l.size = size{a.width, a.height}
 				st := a.node.st
 				l.padding = edges(st.Padding, content)
-				l.border = borders(st)
+				l.border = a.node.borders()
 				g := scrollbarGutter(st)
 				l.scrollbar = size{g.x, g.y}
 				l.overflow = a.overflow

@@ -124,6 +124,8 @@ func Thead(args ...Arg) *Node    { return element(dom.Thead, args) }
 func Tbody(args ...Arg) *Node    { return element(dom.Tbody, args) }
 func Tfoot(args ...Arg) *Node    { return element(dom.Tfoot, args) }
 func Caption(args ...Arg) *Node  { return element(dom.Caption, args) }
+func Col(args ...Arg) *Node      { return element(dom.Col, args) }
+func Colgroup(args ...Arg) *Node { return element(dom.Colgroup, args) }
 func Tr(args ...Arg) *Node       { return element(dom.Tr, args) }
 func Th(args ...Arg) *Node       { return element(dom.Th, args) }
 func Td(args ...Arg) *Node       { return element(dom.Td, args) }

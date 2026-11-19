@@ -346,7 +346,7 @@ func (n *node) fitGutter(out output) bool {
 		return false
 	}
 	g := n.ownGutter()
-	port := out.size.sub(borders(st).sum()).sub(size{g.x, g.y})
+	port := out.size.sub(n.borders().sum()).sub(size{g.x, g.y})
 	r := out.overflow.rect
 	const slack = 0.01
 	changed := false
@@ -430,7 +430,7 @@ func (t *tree) inFlowRoot(n *node, avail spaces) (placed, []oofCandidate) {
 	if n.context() == contextBlock || n.isBlockLeaf() {
 		ratio := aspectRatio(st)
 		padding := edges(st.Padding, parent.w)
-		pb := padding.add(borders(st)).sum()
+		pb := padding.add(n.borders()).sum()
 		adj := boxSizingAdjustment(st, pb)
 		minSize := resolveSize(st.MinSize, parent).withAspectRatio(ratio).mAdd(adj)
 		maxSize := resolveMax(st.MaxSize, parent).withAspectRatio(ratio).mAdd(adj)
@@ -463,7 +463,7 @@ func (t *tree) inFlowRoot(n *node, avail spaces) (placed, []oofCandidate) {
 		overflow:  out.overflow,
 		scrollbar: size{gutter.x, gutter.y},
 		padding:   padding,
-		border:    borders(st),
+		border:    n.borders(),
 		margin:    margin,
 	}
 	n.unrounded = layout
@@ -483,7 +483,7 @@ func roundLayout(n *node, cumulative point) { roundIn(n, cumulative, false) }
 
 // roundIn is roundLayout under a display: none ancestor when hidden, as keepIn.
 func roundIn(n *node, cumulative point, hidden bool) {
-	u := n.unrounded
+	u := n.laid()
 	x, y := cumulative.x+u.location.x, cumulative.y+u.location.y
 	l := u
 	l.location = point{round(x) - round(cumulative.x), round(y) - round(cumulative.y)}

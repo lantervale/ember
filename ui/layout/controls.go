@@ -50,7 +50,8 @@ func controlOf(e *dom.Node) controlKind {
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
-		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe:
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
+		dom.Col, dom.Colgroup:
 	}
 	return noControl
 }
@@ -92,11 +93,14 @@ func (t *tree) inputText(n *node) float32 {
 // centresContent reports a button, input, select or cell, which place their content in
 // the height of their content box.
 func centresContent(n *node) bool {
+	if n.cell {
+		return true
+	}
 	if n.box.Node == nil {
 		return false
 	}
 	tag := n.box.Node.Tag()
-	return tag == dom.Button || tag == dom.Input || tag == dom.Select || tag == dom.Td || tag == dom.Th
+	return tag == dom.Button || tag == dom.Input || tag == dom.Select
 }
 
 // contentAlign is where n's content stands in its height: where its align-content says,
@@ -106,7 +110,7 @@ func contentAlign(n *node) style.Align {
 	if n.st.AlignContent != style.AlignNormal || !centresContent(n) {
 		return n.st.AlignContent
 	}
-	if tag := n.box.Node.Tag(); tag != dom.Td && tag != dom.Th {
+	if !n.cell {
 		return style.AlignCenter
 	}
 	switch n.st.VerticalAlign {
@@ -120,13 +124,29 @@ func contentAlign(n *node) style.Align {
 	return style.AlignStart
 }
 
+// onBaseline reports a cell whose first line stands on its row's baseline: one with a
+// vertical-align that is not top, middle or bottom, and no align-content.
+func onBaseline(n *node) bool {
+	return n.cell && n.st.AlignContent == style.AlignNormal && n.st.VerticalAlign != style.AlignTop &&
+		contentAlign(n) == style.AlignStart
+}
+
+// lower sets how far a cell's content stands below its content box's top, its layouts
+// with another forgotten.
+func (n *node) lower(by float32) {
+	if n.lowered != by {
+		n.lowered = by
+		n.cache.clear()
+	}
+}
+
 // textTop is where the owner's first line box starts: the top of its content box, or the
 // lines centred in it for a button, input or select, or where a cell's vertical-align
 // puts them, unless its align-content says where.
 func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
 	share := contentShare(n)
 	if share == 0 {
-		return top
+		return top + n.lowered
 	}
 	h := float32(0)
 	for _, l := range ls {

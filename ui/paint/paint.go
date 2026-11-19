@@ -404,7 +404,8 @@ func (p *painter) context(e entry, alpha float32) { p.stack(e, alpha, false) }
 // stack paints e and what stacks with it: everything in it when it is a
 // stacking context, or only its flow when pseudo, the rest having been
 // hoisted into the context around it.
-// inFlow paints e's in-flow children in their passes: their boxes, then
+// inFlow paints e's in-flow children in their passes: their boxes, the
+// borders tables collapse over them, then
 // the floats, each whole, then their text and markers, then e's and their control marks, then e's and
 // their outlines.
 func (p *painter) inFlow(e entry, l *layers, alpha float32) {
@@ -412,6 +413,16 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		if c.b.Kind == box.Element {
 			p.use(c.clip)
 			p.decorate(c, alpha)
+		}
+	}
+	if e.b.Collapsed != nil {
+		p.use(e.clip)
+		p.collapsedBorders(e, alpha)
+	}
+	for _, c := range l.flow {
+		if c.b.Collapsed != nil {
+			p.use(c.clip)
+			p.collapsedBorders(c, alpha)
 		}
 	}
 	for _, c := range l.floats {

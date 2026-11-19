@@ -131,7 +131,7 @@ func TestValidate(t *testing.T) {
 		"background": {"url(x.png) / cover", "url(x.png) center /", "center / cover / contain", "/ cover center",
 			"center / red", "center / 10px 20px 30px", "center / cover 10px", "url(x.png) center no-repeat / cover"},
 		"resize":  {"auto", "12px"},
-		"display": {"table-cell", "flex grid", "-webkit-box"},
+		"display": {"ruby", "flex grid", "-webkit-box"},
 		"width":   {"-1px", "1fr", "12", "red"},
 		"padding": {"-2px", "1px 2px 3px 4px 5px"},
 		"margin":  {"1px / 2px"},
@@ -159,9 +159,9 @@ func TestValidate(t *testing.T) {
 }
 
 func TestParseDropsBadValues(t *testing.T) {
-	sheet, warns := Parse("t.css", "p { display: table-cell; width: var(--w); color: #fff }")
-	if got := warnings(warns); got != `t.css:1:14: display: expected block, inline, inline-block, flex, inline-flex, `+
-		`grid, inline-grid, none, contents, list-item, flow-root, table, inline-table, found "table-cell"` {
+	sheet, warns := Parse("t.css", "p { display: ruby; width: var(--w); color: #fff }")
+	if got := warnings(warns); !strings.HasPrefix(got, "t.css:1:14: display: expected block, inline, ") ||
+		!strings.HasSuffix(got, `, found "ruby"`) {
 		t.Errorf("warnings: %s", got)
 	}
 	if n := len(sheet.Rules[0].Decls); n != 2 {

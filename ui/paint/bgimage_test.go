@@ -348,3 +348,83 @@ func TestRepeatXAndRepeatYTileAlongOneAxisOnly(t *testing.T) {
 	require.Len(t, down, 2, "repeat-y: one column")
 	assert.Equal(t, down[0].Rect.X, down[1].Rect.X)
 }
+
+func TestABackgroundFillsItsClipBoxAndStartsAtItsOrigin(t *testing.T) {
+	framed := func(edit func(s *style.Computed)) *box.Box {
+		b := withImage(120, 40, func(s *style.Computed) {
+			s.Background = red
+			edit(s)
+		})
+		b.Border = box.Edges{Top: 2, Right: 2, Bottom: 2, Left: 2}
+		b.Padding = box.Edges{Top: 3, Right: 3, Bottom: 3, Left: 3}
+		return b
+	}
+	r := pictures(framed(func(*style.Computed) {}))
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 40}, r.of("rect")[0].Rect, "the colour under the border")
+	assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 10, H: 6}, r.of("image")[0].Rect, "the picture from the padding box")
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 40}, r.of("image")[0].Clip, "and under the border where it tiles")
+
+	r = pictures(framed(func(s *style.Computed) {
+		s.BackgroundClip, s.BackgroundOrigin = style.UnderPadding, style.UnderBorder
+	}))
+	assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 116, H: 36}, r.of("rect")[0].Rect)
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 10, H: 6}, r.of("image")[0].Rect)
+	assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 116, H: 36}, r.of("image")[0].Clip)
+
+	r = pictures(framed(func(s *style.Computed) {
+		s.BackgroundClip, s.BackgroundOrigin = style.UnderContent, style.UnderContent
+	}))
+	assert.Equal(t, geom.Rect{X: 15, Y: 15, W: 110, H: 30}, r.of("rect")[0].Rect)
+	assert.Equal(t, geom.Rect{X: 15, Y: 15, W: 10, H: 6}, r.of("image")[0].Rect)
+}
+
+func TestAFixedBackgroundIsPlacedInTheViewportAndALocalOneScrolls(t *testing.T) {
+	fixed := withImage(120, 40, func(s *style.Computed) {
+		s.BackgroundAttachment = style.AttachFixed
+		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(20), Y: style.Px(15)}
+	})
+	img := pictures(fixed).of("image")[0]
+	assert.Equal(t, geom.Rect{X: 20, Y: 15, W: 10, H: 6}, img.Rect, "from the viewport's corner, wherever the box is")
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 40}, img.Clip, "shown where the box is")
+
+	scroller := func(a style.BackgroundAttachment) *box.Box {
+		b := withImage(120, 40, func(s *style.Computed) {
+			s.BackgroundAttachment = a
+			s.Overflow = style.Size[style.Overflow]{Width: style.Scroll, Height: style.Scroll}
+		})
+		b.Content, b.Scroll = geom.V2(120, 400), geom.V2(0, 4)
+		return b
+	}
+	assert.Equal(t, geom.V2(10, 10), placeOfImage(scroller(style.AttachScroll)),
+		"a background stays in its box as the content scrolls")
+	assert.Equal(t, geom.V2(10, 6), placeOfImage(scroller(style.AttachLocal)), "a local one goes with the content")
+}
+
+func placeOfImage(b *box.Box) geom.Vec2 {
+	r := pictures(b).of("image")[0].Rect
+	return geom.V2(r.X, r.Y)
+}
+
+func TestAnInlineOverSeveralLinesShowsItsBackgroundAsOneBoxSliced(t *testing.T) {
+	seen := func(b *box.Box) []geom.Rect {
+		var out []geom.Rect
+		for _, o := range pictures(b).of("image") {
+			if in := intersect(o.Rect, o.Clip); in.W > 0 && in.H > 0 {
+				out = append(out, o.Rect)
+			}
+		}
+		return out
+	}
+	b := withImage(100, 20, func(s *style.Computed) {
+		s.Display = style.Inline
+		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(50)}
+	})
+	b.Padding = box.Edges{Right: 12}
+	b.Fragments = []geom.Rect{{X: 30, Y: 0, W: 70, H: 10}, {X: 0, Y: 10, W: 52, H: 10}}
+	assert.Equal(t, []geom.Rect{{X: 10 + 52 - 10, Y: 10 + 10 + 2, W: 10, H: 6}}, seen(b),
+		"a picture at the right shows at the end of the last line, not of each")
+
+	b = withImage(100, 20, func(s *style.Computed) { s.Display = style.Inline })
+	b.Fragments = []geom.Rect{{X: 30, Y: 0, W: 70, H: 10}, {X: 0, Y: 10, W: 52, H: 10}}
+	assert.Equal(t, []geom.Rect{{X: 10 + 30, Y: 10, W: 10, H: 6}}, seen(b), "one at the left at the start of the first")
+}

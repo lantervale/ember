@@ -20,7 +20,7 @@ func (t *tree) grid(n *node, in input) output {
 	st := n.st
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -376,7 +376,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	insetH := span{resolve(st.Inset.Left, cb.w), resolve(st.Inset.Right, cb.w)}
 	insetV := span{resolve(st.Inset.Top, cb.h), resolve(st.Inset.Bottom, cb.h)}
 	padding := edges(st.Padding, cb.w)
-	border := borders(st)
+	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	inherent := resolveSize(st.Size, cb).withAspectRatio(ratio).mAdd(adj)

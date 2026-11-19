@@ -151,7 +151,7 @@ func (t *tree) columns(n *node, in input) output {
 	st := n.st
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	g := n.ownGutter()
 	gutter := rect{r: g.x, b: g.y}
 	pbSize := padding.add(border).sum()
@@ -593,7 +593,7 @@ func keepFlow(n, m *node, flow, moved point) {
 		return
 	}
 	cs := m.columns
-	n.final = n.unrounded
+	n.final = n.laid()
 	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
 	rel := relativeShift(n)
 	moved = point{moved.x + rel.x, moved.y + rel.y}

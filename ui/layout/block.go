@@ -46,7 +46,7 @@ func (t *tree) block(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -80,7 +80,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	g := n.ownGutter()
 	gutter := rect{r: g.x, b: g.y}
 	pb := padding.add(border)
@@ -158,7 +158,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		contentH := res.height - rInset.vertical()
 		free := innerH - contentH
 		k := applyAlignmentFallback(free, 1, align(alignContent))
-		offset := computeAlignmentOffset(free, 1, 0, k, false, true)
+		offset := computeAlignmentOffset(free, 1, 0, k, false, true) + n.lowered
 		if some(res.firstBaseline) {
 			res.firstBaseline += offset
 		}
@@ -309,7 +309,7 @@ func (t *tree) blockItems(n *node, inner size) []*blockItem {
 		}
 		ratio := aspectRatio(st)
 		padding := edges(st.Padding, inner.w)
-		border := borders(st)
+		border := k.borders()
 		pbSum := padding.add(border).sum()
 		adj := boxSizingAdjustment(st, pbSum)
 		same := st.Display == style.Block && !outOfFlow(st.Position) && st.Float == style.FloatNone &&

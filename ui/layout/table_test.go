@@ -65,24 +65,26 @@ func TestTableCellsCentreTheirContent(t *testing.T) {
 
 func TestACellsVerticalAlignPlacesItsContent(t *testing.T) {
 	tall := cell("H", func(st *style.Computed) { st.Size.Height = style.Px(30) })
+	// On the baseline the text's first line stands on the row's, which the cell of a
+	// block alone sets at its content box's bottom, 11 down: the text 2 lower.
 	wants := []struct {
-		at   style.VerticalAlign
-		want float32
+		at          style.VerticalAlign
+		text, block float32
 	}{
-		{style.AlignTop, 1}, {style.AlignMiddle, 10}, {style.AlignBottom, 19}, {style.AlignBaselineText, 1},
-		{style.AlignSub, 1}, {style.AlignLength, 1},
+		{style.AlignTop, 1, 1}, {style.AlignMiddle, 10, 10}, {style.AlignBottom, 19, 19},
+		{style.AlignBaselineText, 3, 1}, {style.AlignSub, 3, 1}, {style.AlignLength, 3, 1},
 	}
 	padded := func(st *style.Computed) { st.Padding = style.All(style.Px(1)) }
 	for _, w := range wants {
-		at, want := w.at, w.want
+		at := w.at
 		words := cell("H", valign(at))
 		blocks := el(dom.Td, valign(at, padded), el(dom.Div, func(st *style.Computed) {
 			block(st)
 			st.Size.Height = style.Px(10)
 		}))
 		tr := lay(el(dom.Div, block, table(row(tall, words, blocks))), 400)
-		assert.Equal(t, want, tr.Of[words].Children[0].Pos.Y, "text, vertical-align %v", at)
-		assert.Equal(t, want, tr.Of[blocks].Children[0].Pos.Y, "a block, vertical-align %v", at)
+		assert.Equal(t, w.text, tr.Of[words].Children[0].Pos.Y, "text, vertical-align %v", at)
+		assert.Equal(t, w.block, tr.Of[blocks].Children[0].Pos.Y, "a block, vertical-align %v", at)
 	}
 	said := cell("H", valign(style.AlignTop), func(st *style.Computed) { st.AlignContent = style.AlignEnd })
 	tr := lay(el(dom.Div, block, table(row(tall, said))), 400)

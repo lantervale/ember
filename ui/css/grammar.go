@@ -1,6 +1,7 @@
 package css
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -245,7 +246,8 @@ func splitOn(v []Component, sep func(Component) bool) [][]Component {
 //nolint:gochecknoglobals,goconst // the properties' grammar
 var checks = map[string]check{
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
-		"contents", "list-item", "flow-root", "table", "inline-table")),
+		"contents", "list-item", "flow-root", "table", "inline-table", "table-row", "table-cell", "table-row-group",
+		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption")),
 	"box-sizing": single(words("content-box", "border-box")),
 	"width":      single(either(sizeLP, words("auto"), intrinsic)),
 	"height":     single(either(sizeLP, words("auto"), intrinsic)),
@@ -350,6 +352,7 @@ var checks = map[string]check{
 	"letter-spacing":         single(either(length, words("normal"))),
 	"word-spacing":           single(either(lengthPercent, words("normal"))),
 	"border-spacing":         repeated(length, 2),
+	"border-collapse":        single(words("separate", "collapse")),
 	"caption-side":           single(words("top", "bottom")),
 	"table-layout":           single(words("auto", "fixed")),
 	"text-align":             single(textAlign),
@@ -374,31 +377,34 @@ var checks = map[string]check{
 	"app-region":        single(words("none", "drag", "no-drag")),
 	"user-select":       single(words("auto", "text", "none", "all")),
 
-	"background-color":    single(colorTerm),
-	"background-image":    single(either(words("none"), imageTerm)),
-	"background-repeat":   single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
-	"background-size":     checkBackgroundSize,
-	"background-position": checkPosition,
-	"mask-image":          checkMaskImage,
-	"mask-repeat":         single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
-	"mask-size":           checkBackgroundSize,
-	"mask-position":       checkMaskPosition,
-	"text-shadow":         checkTextShadow,
-	"image-rendering":     single(words("auto", "pixelated")),
-	"accent-color":        single(either(words("auto"), colorTerm)),
-	"caret-color":         single(either(words("auto"), colorTerm)),
-	"object-fit":          single(words("fill", "contain", "cover", "none", "scale-down")),
-	"object-position":     checkPosition,
-	"box-shadow":          checkBoxShadow,
-	"outline-width":       single(borderWidth),
-	"outline-style":       single(borderStyle),
-	"outline-color":       single(colorTerm),
-	"outline-offset":      single(length),
-	"opacity":             single(dimTerm(allowNumber | allowPercent)),
-	"transform":           checkTransform,
-	"transform-origin":    checkTransformOrigin,
-	"appearance":          single(words("none", "auto", "textfield")),
-	"resize":              single(words("none", "both", "horizontal", "vertical")),
+	"background-color":      single(colorTerm),
+	"background-image":      single(either(words("none"), imageTerm)),
+	"background-repeat":     checkTiling,
+	"background-attachment": single(words("scroll", "fixed", "local")),
+	"background-origin":     single(backgroundBox),
+	"background-clip":       single(backgroundBox),
+	"background-size":       checkBackgroundSize,
+	"background-position":   checkPosition,
+	"mask-image":            checkMaskImage,
+	"mask-repeat":           single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
+	"mask-size":             checkBackgroundSize,
+	"mask-position":         checkMaskPosition,
+	"text-shadow":           checkTextShadow,
+	"image-rendering":       single(words("auto", "pixelated")),
+	"accent-color":          single(either(words("auto"), colorTerm)),
+	"caret-color":           single(either(words("auto"), colorTerm)),
+	"object-fit":            single(words("fill", "contain", "cover", "none", "scale-down")),
+	"object-position":       checkPosition,
+	"box-shadow":            checkBoxShadow,
+	"outline-width":         single(borderWidth),
+	"outline-style":         single(borderStyle),
+	"outline-color":         single(colorTerm),
+	"outline-offset":        single(length),
+	"opacity":               single(dimTerm(allowNumber | allowPercent)),
+	"transform":             checkTransform,
+	"transform-origin":      checkTransformOrigin,
+	"appearance":            single(words("none", "auto", "textfield")),
+	"resize":                single(words("none", "both", "horizontal", "vertical")),
 
 	"transition-property":        commaList(single(either(words("none", "all"), transitionTarget))),
 	"transition-duration":        commaList(single(timeTerm(true))),
@@ -943,4 +949,25 @@ func checkTextShadow(v []Component) error {
 		}
 		return nil
 	})(v)
+}
+
+// checkTiling is background-repeat: one word, or one for across and one
+// for down.
+func checkTiling(v []Component) error {
+	if across, down, ok := pair(v); ok {
+		return cmp.Or(repeatAxis(across), repeatAxis(down))
+	}
+	return single(words("repeat", "no-repeat", "repeat-x", "repeat-y"))(v)
+}
+
+func repeatAxis(c Component) error { return words("repeat", "no-repeat")(c) }
+
+func backgroundBox(c Component) error { return words("border-box", "padding-box", "content-box")(c) }
+
+// pair is v's two components when it has just two.
+func pair(v []Component) (Component, Component, bool) {
+	if len(v) != 2 {
+		return Component{}, Component{}, false
+	}
+	return v[0], v[1], true
 }

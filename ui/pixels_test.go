@@ -57,6 +57,8 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/rowspan-rows", 460, 160, 0.0002},
 		{"./internal/pages/rounded-clip", 560, 330, 0.0028},
 		{"./internal/pages/table-caption", 420, 160, 0.003},
+		{"./internal/pages/table-model", 640, 360, 0.0025},
+		{"./internal/pages/background-boxes", 640, 330, 0.0065},
 		{"./internal/pages/debug-grid", 640, 180, 0.004},
 		{"./internal/pages/decorations", 420, 560, 0.007},
 		{"./internal/pages/word-spacing", 420, 440, 0.0065},

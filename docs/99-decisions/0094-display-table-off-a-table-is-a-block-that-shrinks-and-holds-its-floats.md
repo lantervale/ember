@@ -1,6 +1,6 @@
 # 0094. Display table off a table is a block that shrinks and holds its floats
 
-- Status: Accepted
+- Status: Superseded by [0105](0105-a-table-is-what-display-says-with-the-boxes-it-misses.md)
 - Date: 2026-11-18
 - Area: rendering
 - Owner: engine

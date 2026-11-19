@@ -95,29 +95,181 @@ func around(r, gap geom.Rect) []geom.Rect {
 // under the row.
 func (p *painter) rowBackground(row *box.Box, at geom.Vec2, c color.Color) {
 	for _, cell := range row.Children {
-		if cell.Kind != box.Element || cell.Node == nil || (cell.Node.Tag() != dom.Td && cell.Node.Tag() != dom.Th) {
-			continue
-		}
 		p.fill(p.snap(geom.Rect{X: at.X + cell.Pos.X, Y: at.Y + cell.Pos.Y, W: cell.Size.X, H: cell.Size.Y}), radii{}, c)
 	}
 }
 
+// groupBackground paints a row group's background behind the cells of
+// its rows, as a row's.
+func (p *painter) groupBackground(group *box.Box, at geom.Vec2, c color.Color) {
+	for _, row := range group.Children {
+		p.rowBackground(row, at.Add(row.Pos), c)
+	}
+}
+
+// columnBackground paints the background of a table's column, or of a
+// group of them, behind what its cells have between its sides: the
+// layer under the rows' (CSS 2.1 §17.5.1). at is the column's place.
+func (p *painter) columnBackground(col *box.Box, at geom.Vec2, c color.Color) {
+	table, origin := col.Parent, at.Sub(col.Pos)
+	if table != nil && table.Style != nil && table.Style.TablePart == style.TableColumnGroup {
+		table, origin = table.Parent, origin.Sub(table.Pos)
+	}
+	if table == nil {
+		return
+	}
+	cells := func(row *box.Box, rowAt geom.Vec2) {
+		for _, cell := range row.Children {
+			l, r := max(rowAt.X+cell.Pos.X, at.X), min(rowAt.X+cell.Pos.X+cell.Size.X, at.X+col.Size.X)
+			if r > l {
+				p.fill(p.snap(geom.Rect{X: l, Y: rowAt.Y + cell.Pos.Y, W: r - l, H: cell.Size.Y}), radii{}, c)
+			}
+		}
+	}
+	for _, k := range table.Children {
+		switch partOf(k) {
+		case style.TableRowGroup, style.TableHeaderGroup, style.TableFooterGroup:
+			for _, row := range k.Children {
+				cells(row, origin.Add(k.Pos).Add(row.Pos))
+			}
+		case style.TableRow, style.NoTablePart:
+			cells(k, origin.Add(k.Pos))
+		case style.TableCell, style.TableColumn, style.TableColumnGroup, style.TableCaption:
+		}
+	}
+}
+
+// sharesBorders reports a table that collapses its borders, or a cell of one: the table
+// draws them all, over its cells.
+func sharesBorders(b *box.Box) bool {
+	if b.Collapsed != nil {
+		return true
+	}
+	if partOf(b) != style.TableCell {
+		return false
+	}
+	for a := b.Parent; a != nil && a.Style != nil; a = a.Parent {
+		if a.Style.Table {
+			return a.Collapsed != nil
+		}
+	}
+	return false
+}
+
+// collapsedBorders draws the borders of a table that collapses them (CSS 2.1 §17.6.2):
+// each edge of its grid once, in the style that won it. A groove or an outset is dark
+// then light across its width, a ridge or an inset light then dark.
+func (p *painter) collapsedBorders(e entry, alpha float32) {
+	if len(e.b.Collapsed) == 0 || p.probing || !shown(e.b).Visible {
+		return
+	}
+	for _, ed := range e.b.Collapsed {
+		r := p.snap(geom.Rect{X: e.at.X + ed.Rect.X, Y: e.at.Y + ed.Rect.Y, W: ed.Rect.W, H: ed.Rect.H})
+		c := fade(ed.Color, alpha)
+		if r.W <= 0 || r.H <= 0 || c.A <= 0 {
+			continue
+		}
+		switch ed.Style {
+		case style.BorderDashed, style.BorderDotted:
+			p.dashes(r, ed.Across, ed.Style == style.BorderDotted, c)
+		case style.BorderGroove, style.BorderOutset, style.BorderRidge, style.BorderInset:
+			first, second := shades(c)
+			if ed.Style == style.BorderRidge || ed.Style == style.BorderInset {
+				first, second = second, first
+			}
+			a, b := r, r
+			if ed.Across {
+				a.H = r.H / 2
+				b.Y, b.H = r.Y+a.H, r.H-a.H
+			} else {
+				a.W = r.W / 2
+				b.X, b.W = r.X+a.W, r.W-a.W
+			}
+			p.s.Rect(a, first)
+			p.s.Rect(b, second)
+		case style.BorderNone, style.BorderSolid:
+			p.s.Rect(r, c)
+		}
+	}
+}
+
+// partOf is the part of a table b's element is shown as: none for an
+// anonymous box, as the anonymous rows of a table are.
+func partOf(b *box.Box) style.TablePart {
+	if b.Kind != box.Element || b.Style == nil {
+		return style.NoTablePart
+	}
+	return b.Style.TablePart
+}
+
 // background paints e's background colour, its row's for a table row,
-// then its image inside edges, over r rounded by radius.
-func (p *painter) background(e entry, r geom.Rect, edges box.Edges, radius radii, st *style.Computed, alpha float32) {
+// then its image, over r rounded by radius with borders of edges: placed
+// in strip, r itself but for a line of an inline, whose box is its lines
+// end to end.
+func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radius radii, st *style.Computed,
+	alpha float32) {
 	b := e.b
 	if st.Background.A > 0 && !tracked(b) {
 		switch {
-		case b.Node != nil && b.Node.Tag() == dom.Tr:
+		case st.TablePart == style.TableRow:
 			p.rowBackground(b, e.at, fade(st.Background, alpha))
+		case st.TablePart == style.TableRowGroup || st.TablePart == style.TableHeaderGroup ||
+			st.TablePart == style.TableFooterGroup:
+			p.groupBackground(b, e.at, fade(st.Background, alpha))
+		case st.TablePart == style.TableColumn || st.TablePart == style.TableColumnGroup:
+			p.columnBackground(b, e.at, fade(st.Background, alpha))
 		case st.MaskImage.Source != "":
 			p.maskedFill(r, radius, st, alpha)
 		default:
-			p.fill(r, radius, fade(st.Background, alpha))
+			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundClip, style.UnderBorder))
+			p.fill(clip, rounding, fade(st.Background, alpha))
 		}
 	}
-	area := inside(r, edges)
-	p.backgroundImage(area, area, radius.inside(edges), st, alpha)
+	if st.BackgroundImage.Source == "" && st.BackgroundImage.Gradient == nil {
+		return
+	}
+	view, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundClip, style.UnderBorder))
+	area, _ := backgroundBox(b, strip, edges, radius, or(st.BackgroundOrigin, style.UnderPadding))
+	if strip != r {
+		area, _ = backgroundBox(b, strip, b.Border, radius, or(st.BackgroundOrigin, style.UnderPadding))
+	}
+	switch st.BackgroundAttachment {
+	case style.AttachFixed:
+		area = p.viewport
+	case style.AttachLocal:
+		pad := inside(r, edges)
+		view = intersect(view, pad)
+		area.X, area.Y = area.X-b.Scroll.X, area.Y-b.Scroll.Y
+		area.W, area.H = area.W+max(b.Content.X-pad.W, 0), area.H+max(b.Content.Y-pad.H, 0)
+	case style.AttachScroll:
+	}
+	p.backgroundImage(view, area, rounding, st, alpha)
+}
+
+func or(b, initial style.BackgroundBox) style.BackgroundBox {
+	if b == style.InitialBox {
+		return initial
+	}
+	return b
+}
+
+// backgroundBox is the box of b, whose border box is r with borders of
+// edges and corners of radius, that which names, and its corners.
+func backgroundBox(
+	b *box.Box, r geom.Rect, edges box.Edges, radius radii, which style.BackgroundBox,
+) (geom.Rect, radii) {
+	switch which {
+	case style.UnderPadding:
+		return inside(r, edges), radius.inside(edges)
+	case style.UnderContent:
+		in := box.Edges{
+			Top: edges.Top + b.Padding.Top, Right: edges.Right + b.Padding.Right,
+			Bottom: edges.Bottom + b.Padding.Bottom, Left: edges.Left + b.Padding.Left,
+		}
+		return inside(r, in), radius.inside(in)
+	case style.InitialBox, style.UnderBorder:
+	}
+	return r, radius
 }
 
 // decorate paints an element's shadows, background and border, on each
@@ -144,6 +296,15 @@ func (p *painter) decorate(e entry, alpha float32) {
 	if len(ps) > 1 {
 		radius = radii{}
 	}
+	// The lines of an inline are slices of one box, its lines end to end, and its
+	// background's picture is placed in that box: laid is how much of it the lines
+	// before took.
+	total, laid := float32(0), float32(0)
+	if len(ps) > 1 && !b.Broken {
+		for _, pc := range ps {
+			total += pc.rect.W
+		}
+	}
 	for _, pc := range ps {
 		r := p.snap(pc.rect)
 		for i := len(st.Shadows) - 1; i >= 0; i-- {
@@ -152,7 +313,12 @@ func (p *painter) decorate(e entry, alpha float32) {
 			}
 		}
 		if b != p.canvas {
-			p.background(e, r, pc.edges, radius, st, alpha)
+			strip := r
+			if total > 0 {
+				strip = geom.Rect{X: r.X - laid, Y: r.Y, W: total, H: r.H}
+				laid += pc.rect.W
+			}
+			p.background(e, r, strip, pc.edges, radius, st, alpha)
 		}
 		for i := len(st.Shadows) - 1; i >= 0; i-- {
 			if sh := st.Shadows[i]; sh.Inset {
@@ -168,7 +334,7 @@ func (p *painter) decorate(e entry, alpha float32) {
 				p.border(r, pc.edges, radius, st, alpha)
 				p.s.PopClip()
 			}
-		} else {
+		} else if !sharesBorders(b) {
 			p.border(r, pc.edges, radius, st, alpha)
 		}
 	}

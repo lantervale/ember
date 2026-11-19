@@ -149,9 +149,8 @@ func stickyOffset(b *box.Box) geom.Vec2 {
 	port := rect{l: scAt.X + p.X + sc.Scroll.X, t: scAt.Y + p.Y + sc.Scroll.Y}
 	port.r, port.b = port.l+p.W, port.t+p.H
 
-	if n := b.Node; n != nil && (n.Tag() == dom.Th || n.Tag() == dom.Td) {
-		for parent.Parent != nil && parent.Node != nil &&
-			(parent.Node.Tag() == dom.Tr || parent.Node.Tag() == dom.Thead || parent.Node.Tag() == dom.Tbody) {
+	if b.Style != nil && b.Style.TablePart == style.TableCell {
+		for parent.Parent != nil && (parent.Style == nil || !parent.Style.Table) {
 			parent = parent.Parent
 		}
 	}

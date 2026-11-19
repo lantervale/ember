@@ -64,7 +64,9 @@ func TestParseWarnings(t *testing.T) {
 		{"@-moz-document url-prefix() { p { color: #f00 } }", `t.css:1:1: @-moz-document is not supported`},
 		{"p { -moz-transform: none }", `t.css:1:5: vendor-prefixed property "-moz-transform" is not supported`},
 		{"p { display: -webkit-flex }", `t.css:1:14: display: expected block, inline, inline-block, flex, ` +
-			`inline-flex, grid, inline-grid, none, contents, list-item, flow-root, table, inline-table, found "-webkit-flex"`},
+			`inline-flex, grid, inline-grid, none, contents, list-item, flow-root, table, inline-table, table-row, ` +
+			`table-cell, table-row-group, table-header-group, table-footer-group, table-column, ` +
+			`table-column-group, table-caption, found "-webkit-flex"`},
 		{"p::-webkit-scrollbar { color: #f00 }",
 			`t.css:1:4: the vendor-prefixed pseudo-element ::-webkit-scrollbar is not supported; rule dropped`},
 		{"a:-webkit-any-link { color: #f00 }",

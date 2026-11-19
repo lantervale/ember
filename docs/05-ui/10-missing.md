@@ -35,7 +35,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `::before`, `::after` on `progress`, `meter`, `table`, row groups, rows, and checkbox, radio and range inputs | no box, where Chrome makes one |
+| `::before`, `::after` on `progress`, `meter`, and checkbox, radio and range inputs | no box, where Chrome makes one |
 | `::marker` with `line-height`, `text-shadow`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
 | `::before::marker`, `::after::marker` | refused, where Chrome reads them |
 | `content: url()` on an element itself | read, and the element is not replaced |
@@ -50,7 +50,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
 | columns right to left | left to right only |
-| `display: table-row`, `table-cell` and the other parts of a table on an element that is none, `border-collapse` | refused: grid, `border-spacing`; `display: table` itself is a block that shrinks to its content |
+| `border-style: double`, and a collapsed border's `inset` and `outset` as Chrome shades them | `double` is refused; the two are drawn as a groove and a ridge |
+| `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
+| a table's collapsed borders where they meet at a corner, borders of different widths | the wider way goes through and the other stops beside it; Chrome's joins differ by a few pixels there |
 | a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
 | `border-inline`, `border-block` and their `-width`, `-style`, `-color`, `overflow-inline`, `overflow-block` | refused; the logical names of one side are [read](03-css.md#logical-properties) |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
@@ -68,16 +70,16 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an empty inline element after a `br` that ends its block | its box of no size stands on the `br`'s line, where Chrome puts it a line lower |
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
 | `disabled` on a `form` or a `fieldset`, `bdo`, a `font` element's attributes | read, and they do nothing |
-| the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `col` and `colgroup` | read, and they do nothing |
-| `vertical-align: baseline` on a table cell, `valign="baseline"` | as `top`: the first lines of a row's cells are not put on one baseline |
+| the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
 | a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |
 
 ## Backgrounds and borders
 
 | Missing | Today |
 |---|---|
-| several background layers | one |
-| `background-origin`, `background-clip`, `background-attachment` | not read: a background is placed in the padding box and cut to it, so it does not show under a translucent or dashed border |
+| several background layers | one: in the `background` shorthand the first with a picture, over the last one's colour; in a longhand the list is refused |
+| `background-clip: text`, `background-repeat: space` and `round` | refused |
+| `background-attachment: fixed` on an element under a transform | placed in the viewport, where Chrome places it in the element |
 | a scaled picture's tile seams | each tile keeps its own edge, where Chrome blends across: about a pixel row |
 | a `border-image` from an SVG on a dense screen | rasterised at one pixel a point, so blurred |
 | a canvas picture in a Document without `ui.ScrollingViewport()` | placed in the window, where Chrome places it in `html`'s box |
