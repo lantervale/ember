@@ -15,6 +15,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/image/font/gofont/gobold"
 )
 
 func TestAMachineMovedWithoutTheDomRepaints(t *testing.T) {
@@ -205,4 +206,44 @@ func TestARepaintPassesItsFrameWithoutMakingOptions(t *testing.T) {
 	frames(1)
 	assert.Same(t, &opts[0], &d.frameOptions()[0], "the same options, frame after frame")
 	assert.Equal(t, d.clock, d.replay.frame.Time, "with this frame's clock")
+}
+
+func glyphQuads(l *draw.List) int {
+	n := 0
+	for i := 0; i+3 < len(l.Vertices); i += 4 {
+		if draw.Kind(l.Vertices[i].Shape.X) == draw.KindText {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAFrameUncoveredThenChangedIsDrawnOnce(t *testing.T) {
+	held := make(chan struct{})
+	child := NewDocument(FetchFonts(func(string, string) ([]byte, error) {
+		<-held
+		return gobold.TTF, nil
+	}), CSS(`@font-face { font-family: Heavy; src: url(heavy.ttf); }
+div { font: 25px/1 Heavy; }`))
+	child.Body().Append(Div(Text("1 2 3 4")))
+	outer := NewDocument(CSS(`iframe { width: 300px; height: 100px; border: 0; }
+.over { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: red; }`))
+	over := Div(Class("over"))
+	outer.Body().Append(Iframe(child), over)
+	win := platform.NewWindow(platform.Size(400, 300))
+	win.Add(outer)
+	w := ember.New().AddEntities(win)
+	w.RunFrames(6)
+	require.Equal(t, 4, glyphQuads(draw.FrontFor(w, win)), "covered, the frame's text in the fallback family")
+
+	outer.Body().Remove(over)
+	w.RunFrames(6)
+	assert.Equal(t, 4, glyphQuads(draw.FrontFor(w, win)), "uncovered and still, the same text once")
+
+	close(held)
+	child.pageFonts.Wait()
+	for frame := range 6 {
+		w.RunFrames(1)
+		assert.Equal(t, 4, glyphQuads(draw.FrontFor(w, win)), "frame %d after the font landed", frame)
+	}
 }

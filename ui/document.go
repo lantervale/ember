@@ -537,14 +537,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 		Selection: d.selectionPaint()}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
 	d.replay.recorded = c.Keep(m, &d.replay.last)
-	if apart && live.Any() {
-		d.zoomed(c, func() { paint.PaintLive(c, live, d.clock, d.options()...) })
-		if live.Covered() {
-			// Kept apart, they are in no recording: drawn on top this once,
-			// the next frame paints them in their place.
-			d.replay.recorded = false
-		}
-	}
+	d.paintApart(c, apart)
 	d.replay.inPlace = live.Covered()
 	d.replay.replayedLast = false
 	d.replay.repaint, d.replay.size, d.replay.scale = d.unsettled, size, d.fonts.Scale()
@@ -563,6 +556,28 @@ func (d *Document) tick(c *twod.Canvas) bool {
 		d.drawnIn(w.Time().Frame)
 	}
 	return animating
+}
+
+// paintApart draws the live parts a paint kept out of its recording on
+// top of it, and has the next frame paint again where the recording
+// isn't one to replay.
+func (d *Document) paintApart(c *twod.Canvas, apart bool) {
+	live := &d.replay.live
+	switch {
+	case !live.Any():
+	case apart:
+		d.zoomed(c, func() { paint.PaintLive(c, live, d.clock, d.options()...) })
+		if live.Covered() {
+			// Kept apart, they are in no recording: drawn on top this once,
+			// the next frame paints them in their place.
+			d.replay.recorded = false
+		}
+	case !live.Covered():
+		// Painted in their place and covered no more, they are in the
+		// recording: the next frame paints them apart again, or a replay
+		// would draw them twice.
+		d.replay.recorded = false
+	}
 }
 
 // drawSize is the size the document lays out at, in CSS pixels: c's own, or
