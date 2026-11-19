@@ -15,6 +15,7 @@ import (
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui"
+	_ "github.com/lantervale/ember/ui/svg" // the svg element's pictures
 )
 
 func main() {

@@ -54,6 +54,12 @@ func TestThePageCarriesItsFontsAndDefaults(t *testing.T) {
 	assert.Less(t, strings.Index(got, "<script>x</script>"), strings.Index(got, "</head>"))
 }
 
+func TestOverlayScrollbarsAreWrittenTakingNoRoom(t *testing.T) {
+	got := written(t, ui.NewDocument(ui.OverlayScrollbars()))
+	assert.Contains(t, got, "::-webkit-scrollbar { width: 0; height: 0; }")
+	assert.NotContains(t, got, "15px; height: 15px")
+}
+
 func TestControlsAreWrittenAsTheyAreNow(t *testing.T) {
 	d := ui.NewDocument()
 	name := ui.Input(ui.Value("old"))
@@ -228,6 +234,20 @@ func TestAScrolledBoxScrollsTheSameInChrome(t *testing.T) {
 	assert.Contains(t, got, "e.scrollTop = y")
 }
 
+func TestAScrollingViewportIsWrittenForChromeToScroll(t *testing.T) {
+	d := ui.NewDocument(ui.ScrollingViewport())
+	d.Body().Append(ui.Div(ui.Style("height: 5000px")))
+	dom.Data(d.HTML()).Scroll = geom.V2(0, 420)
+	got := written(t, d)
+	assert.Contains(t, got, `<html data-ember-scroll="0 420" `+ScrollingViewport+`>`)
+	assert.NotContains(t, got, "html::-webkit-scrollbar", "the page shows its bar")
+	assert.Contains(t, got, "::-webkit-scrollbar { width: 15px; height: 15px; }")
+
+	still := written(t, ui.NewDocument())
+	assert.Contains(t, still, "html::-webkit-scrollbar { display: none; }", "a window's Document shows none")
+	assert.NotContains(t, still, ScrollingViewport)
+}
+
 type words map[string]string
 
 func (m words) Tr(s string) string {
@@ -275,4 +295,77 @@ func TestACheckedRadioIsWrittenChecked(t *testing.T) {
 	got := written(t, d)
 	assert.Contains(t, got, `<input type="radio" name="mode" checked="">`)
 	assert.Contains(t, got, `<input type="radio" name="mode">`)
+}
+
+func TestMediaRulesTravelForChromeToAnswer(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`p { color: #100; } @media (max-width: 600px) { p { color: #200; colour: red; } }`))
+	got := written(t, d)
+	assert.Contains(t, got, "p { color: #100; }\n@media (max-width: 600px) { p { color: #200; } }\n")
+}
+
+func TestABrowsersSheetTravelsAsItWasWritten(t *testing.T) {
+	site := `@layer base { p { -webkit-transform: rotate(3deg); -moz-transform: none; width: 100px } }
+@supports (display: grid) { p:hover { color: red } }`
+	d := ui.NewDocument(ui.BrowserSheets(), ui.CSS(site))
+	got := written(t, d)
+	assert.Contains(t, got, "@layer base { p { -webkit-transform: rotate(3deg); -moz-transform: none; width: 100px } }",
+		"Chrome reads the sheet itself, not what ui made of it")
+	assert.Contains(t, got, "p:is(:hover, [data-ember-hover]) { color: red }", "states still travel")
+	agent := got[strings.Index(got, "@layer ember-user-agent {"):strings.Index(got, ".truncate-start")]
+	assert.Contains(t, agent, "* { box-sizing: border-box; }")
+	assert.Contains(t, agent, "* { box-sizing: content-box; }\nbutton, select, table,",
+		"the user-agent layer ends as a browser's own sheet")
+	assert.NotContains(t, written(t, ui.NewDocument(ui.CSS(site))), "box-sizing: content-box")
+}
+
+func TestASheetsURLsTravelFromItsAddress(t *testing.T) {
+	d := ui.NewDocument(ui.BrowserSheets(),
+		ui.CSS(`p { background-image: url(../img/wall.png); }`, ui.From("https://cdn.test/site/css/main.css")),
+		ui.CSS(`a { background-image: url("door.png"); }`, ui.From("https://cdn.test/site/css/main.css")))
+	got := written(t, d)
+	assert.Contains(t, got, "url(https://cdn.test/site/img/wall.png)")
+	assert.Contains(t, got, "url(https://cdn.test/site/css/door.png)")
+}
+
+func TestColumnsTravelForChromeToLayOut(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`.m { columns: 2 120px; column-gap: 2em; column-rule: 1px solid #888; column-fill: auto; }
+p { break-inside: avoid; orphans: 3; widows: 3; page-break-inside: avoid; break-before: column; }`))
+	d.Body().Append(ui.Div(ui.Style("column-count: 3")))
+	got := written(t, d)
+	assert.Contains(t, got,
+		".m { columns: 2 120px; column-gap: 2em; column-rule: 1px solid #888; column-fill: auto; }")
+	assert.Contains(t, got, "p { break-inside: avoid; orphans: 3; widows: 3; break-inside: avoid; break-before: column; }",
+		"the old page-break-inside under its name of today")
+	assert.Contains(t, got, `<div style="column-count: 3">`)
+}
+
+func TestPseudoElementRulesTravelAsWritten(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`li:nth-child(2)::before { content: counter(n) " " attr(title); }
+li::marker { color: red; }`))
+	d.Body().Append(ui.Ul(ui.Li(ui.Text("a")), ui.Li(ui.Text("b"))))
+	got := written(t, d)
+	assert.Contains(t, got, `li:nth-child(2)::before { content: counter(n) " " attr(title); }`)
+	assert.Contains(t, got, "li::marker { color: red; }")
+	assert.Contains(t, got, "::before, ::after { box-sizing: border-box; }")
+	assert.Contains(t, got, "<ul><li>a</li><li>b</li></ul>", "generated boxes are Chrome's to make")
+	assert.NotContains(t, written(t, ui.NewDocument(ui.BrowserSheets())), "::before, ::after { box-sizing")
+}
+
+func TestTheSelectionTravelsForChromeToSelect(t *testing.T) {
+	d := ui.NewDocument(ui.CSS("body { user-select: text; }"))
+	first := ui.P(ui.Text("one "), ui.Text("twó three"), ui.B(ui.Text("bold")), ui.Text("after"))
+	second := ui.P(ui.Text("second"))
+	d.Body().Append(first, second)
+	assert.NotContains(t, written(t, d), "data-ember-anchor", "nothing selected, nothing written")
+
+	d.Select(ui.Position{Node: first.Children()[1], Offset: 5}, ui.Position{Node: first.Children()[3], Offset: 2})
+	got := written(t, d)
+	assert.Contains(t, got, `<p data-ember-anchor="0 9" data-ember-focus="2 2">`,
+		"text nodes side by side are one in Chrome, and its offsets count from that one's start")
+	assert.Contains(t, got, "getSelection().setBaseAndExtent")
+
+	d.Select(ui.Position{Node: second.Children()[0], Offset: 3}, ui.Position{Node: first.Children()[0], Offset: 1})
+	got = written(t, d)
+	assert.Contains(t, got, `<p data-ember-focus="0 1">`)
+	assert.Contains(t, got, `<p data-ember-anchor="0 3">`, "backwards as it was made")
 }

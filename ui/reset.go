@@ -17,7 +17,7 @@ func (d *Document) resetField(n *Node) *Node {
 	if n == nil || n.IsText() || n.Tag() != dom.Button {
 		return nil
 	}
-	if t, _ := n.Attr("type"); t != "reset" {
+	if t, _ := n.Attr("type"); t != typeReset {
 		return nil
 	}
 	if id, _ := n.Attr("aria-controls"); id != "" {

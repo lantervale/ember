@@ -6,7 +6,7 @@ Taffy c6421c1c, `src/` (about 30k lines of Rust). `go test -run TestTaffy -v` re
 |---|---|---|
 | `geometry.rs`, `util/{math,resolve}.rs`, `style/available_space.rs` | `geometry.go` (NaN is none), `style.go` | done |
 | `tree/cache.rs`, `compute/{mod,leaf}.rs` | `cache.go`, `compute.go`, `leaf.go` | done; leaf 30/30 |
-| `compute/block.rs` | `block.go` | done, without floats; block 484/484 |
+| `compute/block.rs`, `compute/float.rs` | `block.go`, `floats.go` | done; block 490/490, float 80/80 |
 | `compute/flexbox.rs` | `flex.go` | done; flex 1232/1232 |
 | `compute/grid/*` | `grid*.go` | done; grid 1076/1076 |
 | `compute/oof.rs`, `compute/common/*` | `oof.go`, `common.go` | done |
@@ -25,4 +25,17 @@ Beyond Taffy (`inline.go`), with Chrome cases in `chrome_test.go`:
 
 Still to do: `position: sticky`, `z-index` ordering data, clamping `Box.Scroll`, `order`, `overflow-wrap`, padding, borders and margins of inline elements, `text-align: justify`, and relayout of only what's dirty (each `Layout` builds the tree anew).
 
-Not ported: floats, `flex-wrap: balance`, `contain`, right-to-left, vertical writing, Taffy's `TaffyTree` storage and its `calc()` pointer (calc arrives resolved from css).
+Floats differ from Taffy in three places, each checked against Chrome (`float_chrome_test.go`):
+
+- A formatting context's root grows to its floats' bottom plus its own bottom padding and border.
+- A child's auto margins count in the insets its content sees, so lines in a centred column find the floats where they are.
+- Text goes round floats: a leaf laid out among floats breaks each line in the room `lineSlot` leaves at its height (`flowLines`), and its layout is never cached, being the context's as much as its own. A float among inline content, or inside an inline element, is built as a block-level child of the block container, before the anonymous block of the text it was written in.
+
+Multi-column layout is not Taffy's (`columns.go`, decision 0088), checked against Chrome (`columns_chrome_test.go`):
+
+- `dispatch` hands a block container with a `column-count` or a `column-width` to `columns`, which lays the node out once with a style of its own (`flowStyle`: no sizes, no columns) at the used column width, so block and leaf layout and their caches are untouched.
+- `flowUnits` lists what can't be cut, in flow order: each line, each whole box (`breaksInside` says which boxes are cut), and empty room, which cuts anywhere. `fillColumns` fills columns of a height from that list with Chrome's rules: margins dropped at a cut, forced breaks, and the best earlier break when a cut would leave too few lines (`orphans`, `widows`) or break an `avoid`. `balancedHeight` starts from the flow's height over the count, or the tallest unit, and grows by the least that lets one more unit in until the columns are enough.
+- Placement is at write time: `keepColumns` gives each node of the flow its `flowFrag`, `keepFlow` moves it to its column, `writeColumns` sets `Broken`, `Fragments` and the rectangle round them on a cut box, and `writeLines` shifts each line to its column.
+- Positioned boxes are laid out by the container as elsewhere; one with no inset starts in the column of its line, or of the block before it.
+
+Not ported: `flex-wrap: balance`, `contain`, right-to-left, vertical writing, Taffy's `TaffyTree` storage and its `calc()` pointer (calc arrives resolved from css).

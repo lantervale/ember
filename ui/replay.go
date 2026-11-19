@@ -48,6 +48,9 @@ type replay struct {
 	// hit and pick are the last hit tests' answers.
 	hit  *box.Box
 	pick paint.Pick
+	// restyled is how many elements css had styled when the tree's ink
+	// was last known to stand (inked).
+	restyled int
 }
 
 // Why a frame repaints, as the F3 overlay counts them.
@@ -95,13 +98,28 @@ func (d *Document) quietNow(c *twod.Canvas, animating bool) bool {
 		(in == nil || !inputfeed.Of(in).Changed())
 }
 
+// inked is d's tree for a paint or a hit test, its boxes' ink to work out
+// again (box.Tree.Inked) when css styled an element since it last was:
+// shadows, outlines and transforms change it and ask for no layout. A
+// transition moving them does too (Draw).
+func (d *Document) inked() *box.Tree {
+	if n := d.trans.Restyled(); n != d.replay.restyled {
+		d.replay.restyled = n
+		if d.tree != nil {
+			d.tree.Inked = false
+		}
+	}
+	return d.tree
+}
+
 // options are the paint options of d's frames but the clock's, kept for
 // the viewport and scale they were made for.
 func (d *Document) options() []paint.Option {
 	if d.replay.opts == nil || d.replay.optsAt != d.viewport || d.replay.optsScale != d.fonts.Scale() {
 		d.replay.opts = []paint.Option{
 			paint.Faces(d.face), paint.Fonts(d.fonts), paint.Controls(d.machine),
-			paint.Viewport(d.viewport), paint.Images(d.image), paint.Scale(d.fonts.Scale()),
+			paint.Viewport(d.viewport), paint.Images(d.image), paint.Vectors(d.vector),
+			paint.Scale(d.fonts.Scale()),
 		}
 		d.replay.frameOpts = slices.Concat(d.replay.opts, []paint.Option{paint.Each(&d.replay.frame)})
 		d.replay.optsAt, d.replay.optsScale = d.viewport, d.fonts.Scale()

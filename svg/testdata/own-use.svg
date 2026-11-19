@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="96" height="96" viewBox="-60 -60 120 120">
+  <defs>
+    <path id="petal" d="M0 0C10-14 10-34 0-48C-10-34-10-14 0 0z"/>
+    <g id="pair" stroke="#402" stroke-width="1.5">
+      <use xlink:href="#petal"/>
+      <use href="#petal" transform="rotate(180)" fill-opacity=".5"/>
+    </g>
+    <g id="star">
+      <polygon id="arm" points="0,-12 3,-3 0,0 -3,-3" fill="#fc0"/>
+      <use href="#arm" transform="rotate(72)"/>
+      <use href="#arm" transform="rotate(144)"/>
+      <use href="#arm" transform="rotate(216)"/>
+      <use href="#arm" transform="rotate(288)"/>
+    </g>
+  </defs>
+  <g fill="#e36">
+    <use href="#pair"/>
+    <use href="#pair" transform="rotate(45)" fill="#39c"/>
+    <use href="#pair" transform="rotate(90)" opacity=".6"/>
+    <use href="#pair" transform="matrix(.7 .7 -.7 .7 0 0) scale(.8 1.1) skewX(10)" fill="#6a3"/>
+  </g>
+  <use href="#star" x="-42" y="-42"/>
+  <use href="#star" x="42" y="42" transform="scale(.8)"/>
+  <use href="#star" transform="translate(40 -40) scale(1.5 .75)"/>
+</svg>

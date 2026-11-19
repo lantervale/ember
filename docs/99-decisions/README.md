@@ -83,6 +83,38 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0077 | [What is lit around takes light past its corners](0077-what-is-lit-around-takes-light-past-its-corners.md) | rendering |
 | 0078 | [A tile lit around is lit round its bodies too](0078-a-tile-lit-around-is-lit-round-its-bodies-too.md) | rendering |
 | 0079 | [A soft crowd presses body against body](0079-a-soft-crowd-presses-body-against-body.md) | core |
+| 0080 | [Floats are laid out, text going round them](0080-floats-are-laid-out-text-going-round-them.md) | api |
+| 0081 | [System fonts are an option of a Document](0081-system-fonts-are-an-option-of-a-document.md) | api |
+| 0082 | [ui has the text elements pages are written with](0082-ui-has-the-text-elements-pages-are-written-with.md) | api |
+| 0083 | [Overlay scrollbars are an option of a Document](0083-overlay-scrollbars-are-an-option-of-a-document.md) | api |
+| 0084 | [A scrolling viewport is an option of a Document](0084-a-scrolling-viewport-is-an-option-of-a-document.md) | api |
+| 0085 | [Browser sheets are an option of a Document](0085-browser-sheets-are-an-option-of-a-document.md) | api |
+| 0086 | [Media queries are answered for the Document's viewport](0086-media-queries-are-answered-for-the-documents-viewport.md) | api |
+| 0087 | [SVG is read by ember's own reader, imported where it is wanted](0087-svg-is-read-by-embers-own-reader-imported-where-it-is-wanted.md) | assets |
+| 0088 | [Columns cut one flow, and a cut box stays one box](0088-columns-cut-one-flow-and-a-cut-box-stays-one-box.md) | api |
+| 0089 | [A generated box is a node of its element](0089-a-generated-box-is-a-node-of-its-element.md) | api |
+| 0090 | [A screen's text takes no selection until its sheet says so](0090-a-screens-text-takes-no-selection-until-its-sheet-says-so.md) | api |
+| 0091 | [A window keeps the system's frame under its own title bar](0091-a-window-keeps-the-systems-frame-under-its-own-title-bar.md) | api |
+| 0092 | [Presentational attributes are hints under every rule](0092-presentational-attributes-are-hints-under-every-rule.md) | api |
+| 0093 | [A mask image is the shape of the background colour](0093-a-mask-image-is-the-shape-of-the-background-colour.md) | rendering |
+| 0094 | [Display table off a table is a block that shrinks and holds its floats](0094-display-table-off-a-table-is-a-block-that-shrinks-and-holds-its-floats.md) | rendering |
+| 0095 | [A Document answers what a tool asks about an element](0095-a-document-answers-what-a-tool-asks-about-an-element.md) | api |
+| 0096 | [WebP pictures are read with the pictures of the web](0096-webp-pictures-are-read-with-the-pictures-of-the-web.md) | assets |
+| 0097 | [A Document's sheets are changed through handles, once a frame](0097-a-documents-sheets-are-changed-through-handles-once-a-frame.md) | api |
+| 0098 | [An svg element is one picture holding its markup](0098-an-svg-element-is-one-picture-holding-its-markup.md) | api |
+| 0099 | [A page's fonts are fetched, and WOFF2 is read in pure Go](0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md) | assets |
+| 0100 | [The GPU holds a picture while the picture lives](0100-the-gpu-holds-a-picture-while-the-picture-lives.md) | rendering |
+| 0101 | [Paint and hit testing skip the boxes out of view](0101-paint-and-hit-testing-skip-the-boxes-out-of-view.md) | rendering |
+| 0102 | [A window's close is a request its rule answers](0102-a-windows-close-is-a-request-its-rule-answers.md) | api |
+| 0103 | [An iframe shows a Document the program gives it](0103-an-iframe-shows-a-document-the-program-gives-it.md) | api |
+| 0104 | [vertical-align places boxes on their line as Chrome does](0104-vertical-align-places-boxes-on-their-line-as-chrome-does.md) | api |
+| 0105 | [A table is what display says, with the boxes it misses](0105-a-table-is-what-display-says-with-the-boxes-it-misses.md) | rendering |
+| 0106 | [css asks what a unit stands for, and leaves layout the bounds over a percentage](0106-css-asks-what-a-unit-stands-for-and-leaves-layout-the-bounds-over-a-percentage.md) | rendering |
+| 0107 | [ICO and BMP pictures are read by ember's own reader](0107-ico-and-bmp-pictures-are-read-by-embers-own-reader.md) | assets |
+| 0108 | [A program follows the system's appearance and languages](0108-a-program-follows-the-systems-appearance-and-languages.md) | api |
+| 0109 | [A right drag selects text only where a Document asks](0109-a-right-drag-selects-text-only-where-a-document-asks.md) | api |
+| 0110 | [A Document scales what the wheel scrolls](0110-a-document-scales-what-the-wheel-scrolls.md) | api |
+| 0111 | [A program scrolls a Document by an element](0111-a-program-scrolls-a-document-by-an-element.md) | api |
 
 ## Writing one
 

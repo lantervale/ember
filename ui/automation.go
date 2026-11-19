@@ -16,7 +16,8 @@ import (
 	"github.com/lantervale/ember/ui/layout"
 )
 
-// actSelectAll is the old ember/ui's act that selects a text field's text.
+// actSelectAll is the old ember/ui's act that selects a text field's
+// text, and the text inside a label that takes a selection.
 const actSelectAll = "select-all"
 
 // recorded is what automation sees of an element: nothing when role is "".
@@ -159,7 +160,11 @@ func (d *Document) recorded(n *Node) recorded {
 	}
 	switch m := d.machine(n).(type) {
 	case *control.Button:
-		return recorded{automation.RoleButton, ariaLabelOr(n, visibleText(n, d.shown)), nil, enabled, pressOnly()}
+		label := visibleText(n, d.shown)
+		if sh := dom.Data(n).Shadow; sh != nil {
+			label = d.shown(sh)
+		}
+		return recorded{automation.RoleButton, ariaLabelOr(n, label), nil, enabled, pressOnly()}
 	case *control.Checkbox:
 		return recorded{automation.RoleToggle, d.labelOf(n, d.shown), m.Checked, enabled, pressOrSet()}
 	case *control.Select:
@@ -214,14 +219,24 @@ func (d *Document) recorded(n *Node) recorded {
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label,
 		dom.Button, dom.Input, dom.Select, dom.Option, dom.Textarea, dom.Details, dom.Summary, dom.Dialog, dom.Table,
 		dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption,
-		dom.Tfoot:
+		dom.Tfoot, dom.Svg,
+		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
+		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
+		dom.Br,
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
+		dom.Col, dom.Colgroup:
 		// the others record by their role, tabindex or text below
 	}
-	if has(n, "tabindex") {
+	if pressable(n) {
 		return recorded{automation.RoleButton, visibleText(n, d.shown), nil, enabled, []string{automation.ActPress}}
 	}
 	if n.ID() != "" && n != d.html && n != d.body || textOnly(n) && scopeName(n) != "" {
-		return recorded{automation.RoleLabel, visibleText(n, d.shown), nil, true, nil}
+		var acts []string
+		if selects(dom.Data(n).Style) {
+			acts = []string{actSelectAll}
+		}
+		return recorded{automation.RoleLabel, visibleText(n, d.shown), nil, true, acts}
 	}
 	return recorded{}
 }
@@ -373,34 +388,10 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 		d.click(n)
 	case automation.ActSelect:
 		if s, ok := m.(*control.Select); ok {
-			if i, found := optionIndex(s, a.Value); found {
-				if !s.Open {
-					s.Click()
-				}
-				d.fire(n, s.ClickOption(i))
-				s.ClickOutside()
-			}
+			d.actSelect(n, s, a.Value)
 		}
 	case automation.ActSet:
-		switch m := m.(type) {
-		case *control.Checkbox:
-			if on, ok := a.Value.(bool); ok && on != m.Checked {
-				d.fire(n, m.Click())
-			}
-		case *control.Range:
-			if v, ok := toFloat(a.Value); ok {
-				d.fire(n, m.SetValue(v)|control.Changed)
-			}
-		}
-		if s, ok := a.Value.(string); ok && t != nil {
-			t.Focus()
-			t.Editor.Do(textedit.SelectAll, false, nil, nil)
-			e := t.Type(s)
-			if s == "" {
-				e |= t.Key(textedit.Backspace, false, nil)
-			}
-			d.fire(n, e|t.Blur())
-		}
+		d.actSet(n, m, a.Value)
 	case automation.ActContext:
 		d.events = append(d.events, ContextClicked{Node: n})
 	case automation.ActDrag:
@@ -415,12 +406,55 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 	case actSelectAll:
 		if t != nil {
 			t.Editor.Do(textedit.SelectAll, false, nil, nil)
+		} else if selects(dom.Data(n).Style) {
+			d.SelectContents(n)
 		}
 	case automation.ActSubmit:
 		if t != nil {
 			d.fire(n, t.Key(textedit.Submit, false, nil))
 		}
 	}
+}
+
+// actSelect chooses the option of a select that v names, as a click in
+// its list does.
+func (d *Document) actSelect(n *Node, s *control.Select, v any) {
+	i, found := optionIndex(s, v)
+	if !found {
+		return
+	}
+	if !s.Open {
+		s.Click()
+	}
+	d.fire(n, s.ClickOption(i))
+	s.ClickOutside()
+}
+
+// actSet gives the control m of n the value v: a checkbox its state, a
+// range its number, a text field its text, typed over what it held.
+func (d *Document) actSet(n *Node, m any, v any) {
+	switch m := m.(type) {
+	case *control.Checkbox:
+		if on, ok := v.(bool); ok && on != m.Checked {
+			d.fire(n, m.Click())
+		}
+	case *control.Range:
+		if f, ok := toFloat(v); ok {
+			d.fire(n, m.SetValue(f)|control.Changed)
+		}
+	}
+	t := textOf(m)
+	s, ok := v.(string)
+	if !ok || t == nil {
+		return
+	}
+	t.Focus()
+	t.Editor.Do(textedit.SelectAll, false, nil, nil)
+	e := t.Type(s)
+	if s == "" {
+		e |= t.Key(textedit.Backspace, false, nil)
+	}
+	d.fire(n, e|t.Blur())
 }
 
 func optionIndex(s *control.Select, v any) (int, bool) {

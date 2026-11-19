@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"path"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -17,18 +15,23 @@ import (
 
 //nolint:gochecknoglobals // the user agent sheet and initial style, built once and shared
 var (
-	agentOnce  sync.Once
-	agentSheet *Sheet
-	initial    = initialStyle()
+	agentOnce    sync.Once
+	agentSheet   *Sheet
+	browserOnce  sync.Once
+	browserSheet *Sheet
+	initial      = initialStyle()
 )
 
 // initialStyle is style.Initial with the initial values it leaves out:
+// border widths are medium, used only under a border-style (finish),
 // outline-width is medium whatever outline-style says, as in Chrome,
 // corners are 0, and the transform origin and background position are
 // percentages.
 func initialStyle() style.Computed {
 	c := style.Initial()
+	c.Border = style.Sides[float32]{Top: 3, Right: 3, Bottom: 3, Left: 3}
 	c.OutlineWidth = 3
+	c.ColumnRuleWidth = 3
 	zero := style.Size[style.Length]{Width: style.Px(0), Height: style.Px(0)}
 	c.Radius = style.Corners[style.Size[style.Length]]{TopLeft: zero, TopRight: zero, BottomRight: zero,
 		BottomLeft: zero}
@@ -37,6 +40,7 @@ func initialStyle() style.Computed {
 	c.AccentAuto, c.CaretAuto = true, true
 	none := style.Length{Kind: style.Fixed, IsPercent: true}
 	c.BackgroundPosition = style.BackgroundPosition{X: none, Y: none}
+	c.MaskPosition = c.BackgroundPosition
 	c.ObjectPosition = style.BackgroundPosition{X: half, Y: half}
 	return c
 }
@@ -52,26 +56,54 @@ func userAgent() *Sheet {
 	return agentSheet
 }
 
+// browserAgent is the user-agent sheet of a Document whose sheets are
+// read as a browser's: Default, then BrowserDefault.
+func browserAgent() *Sheet {
+	browserOnce.Do(func() {
+		s, warns := Parse("user-agent.css", Default+BrowserDefault)
+		if len(warns) > 0 {
+			panic(fmt.Sprint("css: the browser's user-agent sheet: ", warns))
+		}
+		browserSheet = s
+	})
+	return browserSheet
+}
+
 // Compute restyles the elements under root that changed since the last
 // call: those flagged DirtyStyle, the subtrees under DirtyTree, and the
 // descendants of any element whose style changed. Each gets
 // dom.Data(n).Style, a text node its parent's, and loses both flags; an
 // element whose style changed is flagged DirtyLayout. sheets are the
-// author's, after Default. The warnings are the style attributes'.
+// author's, after Default. The warnings are the style attributes'. Their
+// @media rules are answered for a viewport of no size: a Document's are
+// answered for its own, through Transitions.
 func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
-	r := restyler{sheets: all, m: &matcher{}, pm: &matcher{}, treeStates: treeStates(all), computed: new(int)}
-	r.visit(root, nil, 0, false, false)
+	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all)}
+	pm := &matcher{off: m.off, ranks: m.ranks}
+	r := restyler{sheets: all, m: m, pm: pm, computed: new(int), env: &measures{}}
+	r.run(root, false)
 	return r.warns
 }
 
 type restyler struct {
 	sheets []*Sheet
+	// env is what lengths are measured against besides font sizes.
+	env *measures
 	// m matches and cascades elements, pm their pseudo-elements.
 	m, pm *matcher
-	// treeStates are the states some selector reads above its subject:
-	// only a change of those restyles an element's descendants.
-	treeStates dom.State
+	// treeStates are the states some selector reads above its subject,
+	// and besideStates those read before a sibling combinator: only a
+	// change of those restyles an element's descendants, or the elements
+	// after it and theirs, and of them the ones in reach.
+	treeStates, besideStates dom.State
+	// reach are the subjects of the selectors that read a state that
+	// moved on an element above the one visited, or before one above.
+	reach []*Compound
+	// siblings is set when some selector has a sibling combinator: a
+	// change of what an element reads there (movesSiblings) or of its
+	// parent's children restyles the elements after it and their subtrees.
+	siblings bool
 	// computed counts the elements whose style was worked out.
 	computed *int
 	// la and lb are scratch styles for comparing what layout or
@@ -81,6 +113,52 @@ type restyler struct {
 	// changed, when set, is told of every element whose style changed
 	// from an earlier one, and sets its Shown.
 	changed func(n *dom.Node, old, next *style.Computed)
+	// overlay has scrolling boxes keep no gutter for their bars
+	// (Transitions.OverlayScrollbars).
+	overlay bool
+	// viewport has the root's overflow, or body's, go to the viewport
+	// (Transitions.ScrollingViewport).
+	viewport bool
+	// browser reads style attributes as a browser does
+	// (Transitions.BrowserSheets).
+	browser bool
+	// before, after and marker are set when some sheet has a rule for the
+	// pseudo-element: only then is one looked for.
+	before, after, marker bool
+	// counts is set once an element counts: a numbered list item, a
+	// counter property, or generated content of counters or quotes; and
+	// recount when what the counters read may have changed.
+	counts, recount bool
+}
+
+// run restyles the tree under root, all of it when stale, then counts
+// its counters again where they may have moved.
+func (r *restyler) run(root *dom.Node, stale bool) {
+	for _, s := range r.sheets {
+		x := s.indexed()
+		r.before = r.before || x.pseudos["before"] != nil
+		r.after = r.after || x.pseudos["after"] != nil
+		r.marker = r.marker || x.pseudos["marker"] != nil
+		r.siblings = r.siblings || x.siblings
+		r.treeStates |= x.aboveStates
+		r.besideStates |= x.besideStates
+	}
+	if r.env == nil {
+		r.env = &measures{}
+	}
+	r.env.root = root
+	if stale {
+		r.env.used = 0
+	}
+	r.visit(root, nil, 0, stale, stale)
+	r.count(root)
+}
+
+// countsOn reports a change of an element, as dom.Pipeline.Changed names
+// it, that moves the counters: a child added or removed, or one of the
+// attributes a list counts from.
+func countsOn(key string) bool {
+	return key == dom.Children || key == "[start" || key == "[reversed" || key == "[value"
 }
 
 // visit restyles n where it needs it, and its subtree, and reports
@@ -88,9 +166,9 @@ type restyler struct {
 // DirtyDescendant: a change paint alone shows leaves layout clean. force
 // restyles n; deep restyles its whole subtree, as a change of an id, a
 // class or an attribute some selector reads above its subject asks (one
-// no selector reads there restyles n alone). Children added or removed,
-// or a tree state that moved, restyle the children only, as the subset's
-// state selectors read their parent (tr:hover > td).
+// no selector reads there restyles n alone). Children added or removed
+// restyle the children only. A state that moved restyles, of the elements
+// under n, those the selectors reading it on n can match (reach).
 func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force, deep bool) bool {
 	data := dom.Data(n)
 	if n.IsText() {
@@ -101,28 +179,34 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	}
 	dirty := data.Dirty
 	inherits := false
-	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil {
+	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) {
 		inherits = r.restyle(n, data, parent, rem)
 	}
-	stateMoved := dirty&dom.DirtyState != 0 && (n.State()^data.StyledState)&r.treeStates != 0
+	moved := movedStates(n)
 	data.StyledState = n.State()
 	data.Dirty &^= dom.DirtyStyle | dom.DirtyTree | dom.DirtyState
 	if parent == nil {
 		rem = data.Style.Font.Size
 	}
 	tree := dirty&dom.DirtyTree != 0
-	kidsDeep := deep || stateMoved || tree && r.readAbove(data.Changed)
-	kidsForce := inherits || kidsDeep || tree && slices.Contains(data.Changed, dom.Children)
+	if tree && slices.ContainsFunc(data.Changed, countsOn) {
+		r.recount = true
+	}
+	kidsChanged := tree && slices.Contains(data.Changed, dom.Children)
+	kidsDeep := deep || tree && r.readAbove(data.Changed) || kidsChanged && r.siblings
+	// A details' content shows by its state (closedSlot), whatever the sheets read.
+	slotted := moved&dom.Open != 0 && n.Tag() == dom.Details
+	kidsForce := inherits || kidsDeep || kidsChanged || slotted
 	data.Changed = data.Changed[:0]
-	if !kidsForce && dirty&dom.DirtyDescendant == 0 && !force {
+	reach := len(r.reach)
+	if moved&r.treeStates != 0 {
+		r.reaches(n, moved, false)
+	}
+	if !kidsForce && dirty&dom.DirtyDescendant == 0 && !force && len(r.reach) == 0 {
 		return data.Dirty&dom.DirtyLayout != 0
 	}
-	below := false
-	for _, c := range n.Children() {
-		if r.visit(c, data.Style, rem, kidsForce, kidsDeep) {
-			below = true
-		}
-	}
+	below := r.children(n, data.Style, rem, kidsForce, kidsDeep)
+	r.reach = r.reach[:reach]
 	if below {
 		data.Dirty |= dom.DirtyDescendant
 	} else {
@@ -131,13 +215,37 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	return below || data.Dirty&dom.DirtyLayout != 0
 }
 
+// children visits n's children, whose parent's style is parent, and
+// reports whether one or a node below needs layout. What a sibling
+// combinator reads on one restyles those after it: all of them and
+// their subtrees for an id, a class or an attribute, those in reach for
+// a state.
+func (r *restyler) children(n *dom.Node, parent *style.Computed, rem float32, force, deep bool) bool {
+	below := false
+	for _, c := range n.Children() {
+		after := r.siblings && r.movesSiblings(c)
+		beside := movedStates(c) & r.besideStates
+		if r.visit(c, parent, rem, force, deep) {
+			below = true
+		}
+		if after {
+			force, deep = true, true
+		}
+		if beside != 0 {
+			r.reaches(c, beside, true)
+		}
+	}
+	return below
+}
+
 // restyle computes n's style again, and reports whether what its
 // children inherit changed.
 func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Computed, rem float32) bool {
 	s := r.compute(n, parent, rem)
 	*r.computed++
 	old := data.Style
-	if old != nil && reflect.DeepEqual(old, s) {
+	if old != nil && old.Equal(s) {
+		r.generate(n, data, rem)
 		return false
 	}
 	data.Style = s
@@ -146,10 +254,12 @@ func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Comput
 	} else {
 		data.Shown = s
 	}
-	inherits := old == nil || r.inheritedChanged(old, s)
+	inherits := old == nil || r.inheritedChanged(old, s) || old.OverflowPropagated != s.OverflowPropagated
 	if old == nil || r.layoutChanged(old, s) {
 		data.Dirty |= dom.DirtyLayout
+		r.recount = true
 	}
+	r.generate(n, data, rem)
 	return inherits
 }
 
@@ -160,7 +270,7 @@ func (r *restyler) layoutChanged(a, b *style.Computed) bool {
 	r.la, r.lb = *a, *b
 	paintOnly(&r.la)
 	paintOnly(&r.lb)
-	return !reflect.DeepEqual(&r.la, &r.lb)
+	return !r.la.Equal(&r.lb)
 }
 
 func paintOnly(c *style.Computed) {
@@ -168,23 +278,34 @@ func paintOnly(c *style.Computed) {
 	var zero color.Color
 	c.Color, c.PlaceholderColor, c.SelectionColor, c.AccentColor, c.CaretColor = zero, zero, zero, zero, zero
 	c.HasPlaceholder, c.HasSelection, c.AccentAuto, c.CaretAuto, c.ColorInherited = false, false, false, false, false
+	c.SelectionText, c.HasSelectionText, c.UserSelect = zero, false, 0
 	c.TextShadows, c.CurrentColor, c.Vars, c.Backdrop = nil, 0, nil, color.Color{}
+	c.TextDecoration, c.Decorations = style.TextDecoration{}, nil
 }
 
 // inheritedChanged reports whether a and b differ in what an element's
 // children take from it: its inherited properties and custom properties,
-// or anything at all where some declaration inherits explicitly.
+// the longhands some declaration inherits explicitly, or anything at all
+// where a shorthand does.
 func (r *restyler) inheritedChanged(a, b *style.Computed) bool {
 	if explicitInherit(r.sheets) {
 		return true
 	}
 	r.la, r.lb = style.Computed{Vars: a.Vars}, style.Computed{Vars: b.Vars}
+	r.la.Decorations, r.lb.Decorations = a.Decorations, b.Decorations
 	for _, name := range inheritedNames {
 		p := props[name]
 		p.inherit(&r.la, a)
 		p.inherit(&r.lb, b)
 	}
-	return !reflect.DeepEqual(&r.la, &r.lb)
+	for _, s := range r.sheets {
+		for _, name := range s.indexed().inherited {
+			p := props[name]
+			p.inherit(&r.la, a)
+			p.inherit(&r.lb, b)
+		}
+	}
+	return !r.la.Equal(&r.lb)
 }
 
 // inheritedNames are the inherited longhands.
@@ -201,7 +322,7 @@ var inheritedNames = func() []string {
 }()
 
 // explicitInherit reports whether some declaration in sheets (the user
-// agent's first) sets a property that isn't inherited to inherit.
+// agent's first) sets a shorthand or a custom property to inherit.
 func explicitInherit(sheets []*Sheet) bool {
 	return slices.ContainsFunc(sheets, func(s *Sheet) bool { return s.indexed().inherits })
 }
@@ -210,33 +331,76 @@ func explicitInherit(sheets []*Sheet) bool {
 type ctx struct {
 	c, parent *style.Computed
 	em, rem   float32
-	vars      map[string][]Component
-	resolving map[string]bool
-	raw       map[string]*Declaration
-	trans     [4][]Component
-	// base is the directory of the sheet the declaration being applied came from.
-	base     string
+	// env is what the units of a font and of the viewport are measured
+	// against, and u those of the length being read.
+	env *measures
+	u   Units
+	// sized and lined are set once the element's font-size and its
+	// line-height are known: until then the units of the font and lh read
+	// the parent's. root is set for the root, whose root units are its own.
+	sized, lined, root bool
+	vars               map[string][]Component
+	resolving          map[string]bool
+	raw                map[string]*Declaration
+	trans              [4][]Component
+	// base is where the sheet the declaration being applied came from is.
+	base     *origin
 	expanded map[*Declaration]map[string][]Component
+	// overlay is the restyler's: scrollbars keep no gutter.
+	overlay bool
+	// toViewport is set for the root and for its body where the viewport
+	// scrolls: the two whose overflow it may take.
+	toViewport bool
+	// node is the element, which attr() reads.
+	node *dom.Node
 }
 
-// order puts font-size first (em needs it), then color (currentcolor
-// needs it), then the rest.
+// leading are the longhands the others read, in the order they are
+// applied before them: the font's family, style and weight, which its
+// own units measure, then font-size (em), line-height (lh) and color
+// (currentcolor).
 //
-//nolint:gochecknoglobals,goconst // derived from the properties
+//nolint:gochecknoglobals,goconst // a fixed list
+var leading = []string{"font-family", "font-style", "font-weight", propFontSize, "line-height", "color"}
+
+// order puts the leading longhands first, then the rest.
+//
+//nolint:gochecknoglobals // derived from the properties
 var order, orderIndex = func() ([]string, map[string]int) {
 	names := make([]string, 0, len(properties))
 	for n := range properties {
-		if n != "font-size" && n != "color" {
+		if !slices.Contains(leading, n) {
 			names = append(names, n)
 		}
 	}
 	slices.Sort(names)
-	names = append([]string{"font-size", "color"}, names...)
+	names = append(slices.Clone(leading), names...)
 	index := make(map[string]int, len(names))
 	for i, n := range names {
 		index[n] = i
 	}
 	return names, index
+}()
+
+// longhand is one of order's longhands with what every element's
+// computation reads of it, looked up once: how it is set and inherited,
+// whether it is inherited, and whether its initial value is currentcolor.
+type longhand struct {
+	name               string
+	prop               prop
+	inherited, current bool
+}
+
+// longhands are order's, in its order.
+//
+//nolint:gochecknoglobals // derived from the properties
+var longhands = func() []longhand {
+	out := make([]longhand, len(order))
+	for i, name := range order {
+		p := properties[name]
+		out[i] = longhand{name: name, prop: props[name], inherited: p.inherited, current: p.initial == kwCurrentColor}
+	}
+	return out
 }()
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -246,12 +410,14 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	var inline []Declaration
 	if src := n.Style(); src != "" {
 		var warns []Warning
-		inline, warns = ParseInline(src)
+		p := parser{toks: Tokenize(src), browser: r.browser}
+		inline, warns = p.inline()
 		for _, w := range warns {
 			w.File = describe(n) + " style"
 			r.warns = append(r.warns, w)
 		}
 	}
+	r.m.hints = hints(n)
 	casc := r.m.cascade(r.m.matched(n, r.sheets, inline))
 	root := parent == nil
 	if root {
@@ -259,55 +425,114 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		rem = initial.Font.Size
 	}
 	c := initial
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem}
-	x.customs(casc.custom)
-	for i, name := range order {
-		x.apply(name, casc.longhands[i])
-		if name == "font-size" {
-			x.em = c.Font.Size
-			if root {
-				x.rem = c.Font.Size
-			}
-		}
-	}
-	x.finish(root)
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
+		toViewport: r.viewport && (root || rootBody(n)), node: n}
+	x.cascaded(casc, root)
 	if closedSlot(n) {
 		c.Display = style.DisplayNone
 	}
 	c.EllipsisStart = slices.Contains(n.Classes(), "truncate-start")
-	if _, shows := n.Attr("placeholder"); shows {
+	if _, shows := n.Attr("placeholder"); shows && r.may(n, "placeholder") {
 		if ph, ok := x.pseudo(r.pm, n, r.sheets, "placeholder"); ok {
-			c.PlaceholderColor, c.HasPlaceholder = ph.Color, true
+			c.PlaceholderColor, c.HasPlaceholder = fadeColor(ph.Color, ph.Opacity), true
 		}
 	}
-	if sel, ok := x.pseudo(r.pm, n, r.sheets, "selection"); ok {
-		c.SelectionColor, c.HasSelection = sel.Background, true
+	// A ::selection inherits from the parent's ::selection, property by
+	// property, as Chrome's highlight pseudo-elements do.
+	c.SelectionColor, c.HasSelection = parent.SelectionColor, parent.HasSelection
+	c.SelectionText, c.HasSelectionText = parent.SelectionText, parent.HasSelectionText
+	if r.may(n, "selection") {
+		r.selection(x, n)
 	}
-	if n.Tag() == dom.Dialog {
+	if n.Tag() == dom.Dialog && r.may(n, "backdrop") {
 		if bd, ok := x.pseudo(r.pm, n, r.sheets, "backdrop"); ok {
-			c.Backdrop = bd.Background
+			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
+	}
+	if c.ListItem && c.ListStyle.Numeric() || len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
+		r.counts = true
 	}
 	return &c
 }
 
-// pseudo computes the element's pseudo-element's one property: its own cascade,
-// inheriting from the element; false when no rule sets it.
-func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (style.Computed, bool) {
-	if !slices.ContainsFunc(sheets, func(s *Sheet) bool { return s.indexed().pseudos[name] }) {
-		return style.Computed{}, false
+// selection gives x's style what n's own ::selection declares.
+func (r *restyler) selection(x *ctx, n *dom.Node) {
+	sel, ok := x.pseudo(r.pm, n, r.sheets, "selection")
+	if !ok {
+		return
 	}
-	casc := m.cascade(m.matchedFor(n, sheets, nil, name))
-	prop := pseudoElements[name]
-	d := casc.longhands[orderIndex[prop]]
-	if d == nil {
-		return style.Computed{}, false
+	if r.pm.declared("background-color") {
+		x.c.SelectionColor, x.c.HasSelection = sel.Background, true
+	}
+	if r.pm.declared("color") {
+		x.c.SelectionText, x.c.HasSelectionText = sel.Color, true
+	}
+}
+
+// cascaded applies every longhand's winner, then what depends on several.
+func (x *ctx) cascaded(casc cascaded, root bool) {
+	x.customs(casc.custom)
+	for i := range longhands {
+		l := &longhands[i]
+		x.apply(l, casc.longhands[i])
+		switch l.name {
+		case propFontSize:
+			x.em, x.sized = x.c.Font.Size, true
+			if root {
+				x.rem = x.c.Font.Size
+			}
+		case "line-height":
+			x.lined = true
+		}
+	}
+	x.finish(root)
+}
+
+func fadeColor(c color.Color, opacity float32) color.Color {
+	c.A *= opacity
+	return c
+}
+
+// may reports whether some rule of the sheets may style n's pseudo-element
+// name: one names it, in a bucket n is in.
+func (r *restyler) may(n *dom.Node, name string) bool {
+	for _, s := range r.sheets {
+		if b := s.indexed().pseudos[name]; b != nil && b.may(n) {
+			return true
+		}
+	}
+	return false
+}
+
+// pseudo computes the style of the element's pseudo-element name, one
+// that draws with the element's box (::placeholder, ::selection,
+// ::backdrop, ::marker): the element's own with the properties the
+// pseudo-element takes set by its rules, inheriting from the element;
+// false when no rule sets any.
+func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*style.Computed, bool) {
+	casc := m.cascadeFor(m.matchedFor(n, sheets, nil, name), name)
+	if !slices.ContainsFunc(casc.longhands, func(d *Declaration) bool { return d != nil }) && len(casc.custom) == 0 {
+		return nil, false
 	}
 	ps := *x.c
-	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem}
+	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
+	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n}
 	px.customs(casc.custom)
-	px.apply(prop, d)
-	return ps, true
+	for i := range longhands {
+		l := &longhands[i]
+		if d := casc.longhands[i]; d != nil {
+			px.apply(l, d)
+		}
+		switch l.name {
+		case propFontSize:
+			px.em, px.sized = ps.Font.Size, true
+		case "line-height":
+			px.lined = true
+		}
+	}
+	ps.FollowColor(ps.Color)
+	ps.TextShadows = followColor(ps.TextShadows, ps.Color)
+	return &ps, true
 }
 
 func describe(n *dom.Node) string {
@@ -453,14 +678,14 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 
 // apply computes one longhand from its winning declaration, or from
 // inheritance or its initial value when it has none.
-func (x *ctx) apply(name string, d *Declaration) {
-	p := props[name]
+func (x *ctx) apply(l *longhand, d *Declaration) {
+	name, p := l.name, l.prop
 	if d == nil {
-		if properties[name].inherited {
+		if l.inherited {
 			p.inherit(x.c, x.parent)
 			x.c.ColorInherited = x.c.ColorInherited || name == "color"
 		} else {
-			x.reset(name, p)
+			x.reset(l)
 		}
 		return
 	}
@@ -489,6 +714,7 @@ func (x *ctx) apply(name string, d *Declaration) {
 	}
 	if ok {
 		v = items(v)
+		ok = len(v) > 0
 	}
 	kw := ""
 	if ok {
@@ -503,18 +729,18 @@ func (x *ctx) apply(name string, d *Declaration) {
 		kw = kwUnset
 	}
 	if name == "color" {
-		x.c.ColorInherited = kw == "inherit" || kw == kwUnset || kw == "" && isWord(v[0], kwCurrentColor)
+		x.c.ColorInherited = kw == kwInherit || kw == kwUnset || kw == "" && isWord(v[0], kwCurrentColor)
 	}
 	switch kw {
-	case "inherit":
+	case kwInherit:
 		p.inherit(x.c, x.parent)
 	case "initial":
-		x.reset(name, p)
+		x.reset(l)
 	case kwUnset:
-		if properties[name].inherited {
+		if l.inherited {
 			p.inherit(x.c, x.parent)
 		} else {
-			x.reset(name, p)
+			x.reset(l)
 		}
 	default:
 		p.set(x, v)
@@ -523,12 +749,66 @@ func (x *ctx) apply(name string, d *Declaration) {
 
 // reset gives a longhand its initial value; currentcolor is the
 // element's colour.
-func (x *ctx) reset(name string, p prop) {
-	if properties[name].initial == kwCurrentColor {
-		p.set(x, currentColor)
+func (x *ctx) reset(l *longhand) {
+	if l.current {
+		l.prop.set(x, currentColor)
 		return
 	}
-	p.inherit(x.c, &initial)
+	l.prop.inherit(x.c, &initial)
+}
+
+// rootBody reports whether n is the root's first body element, whose
+// overflow the viewport takes when the root's is visible.
+func rootBody(n *dom.Node) bool {
+	p := n.Parent()
+	if n.Tag() != dom.Body || p == nil || p.Parent() != nil {
+		return false
+	}
+	for _, c := range p.Children() {
+		if !c.IsText() && c.Tag() == dom.Body {
+			return c == n
+		}
+	}
+	return false
+}
+
+// propagateOverflow hands the element's overflow to the viewport, as CSS
+// does the root's, or body's while the root's is visible: the viewport's
+// style is the element's Viewport, where visible is auto and clip hidden,
+// and the element's own overflow is visible. A root with a visible
+// overflow still holds the style of a viewport that scrolls when its
+// content overflows; a body's is the root's then.
+func (x *ctx) propagateOverflow(root bool) {
+	c := x.c
+	own := c.Overflow != style.Size[style.Overflow]{}
+	if !root && (!own || x.parent.OverflowPropagated) {
+		return
+	}
+	of := func(o style.Overflow) style.Overflow {
+		switch o {
+		case style.Visible:
+			return style.OverflowAuto
+		case style.Clip:
+			return style.Hidden
+		case style.Hidden, style.Scroll, style.OverflowAuto:
+		}
+		return o
+	}
+	v := initial
+	v.Display, v.Font = style.Block, c.Font
+	v.Overflow = style.Size[style.Overflow]{Width: of(c.Overflow.Width), Height: of(c.Overflow.Height)}
+	v.ScrollbarNone = c.ScrollbarNone
+	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
+		if v.ScrollbarOverlay = x.overlay; !x.overlay {
+			v.ScrollbarWidth = 15
+		}
+	}
+	c.Viewport = &v
+	if own {
+		c.OverflowPropagated = true
+		c.Overflow = style.Size[style.Overflow]{}
+		c.ScrollbarWidth, c.ScrollbarOverlay = 0, false
+	}
 }
 
 // finish applies what depends on several properties.
@@ -559,27 +839,38 @@ func (x *ctx) finish(root bool) {
 	}
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
 		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto) && !c.ScrollbarNone {
-		c.ScrollbarWidth = 15
+		if c.ScrollbarOverlay = x.overlay; !x.overlay {
+			c.ScrollbarWidth = 15
+		}
 	}
 	if scrolls(ox) && !scrolls(oy) {
 		c.Overflow.Height = fix(oy)
 	} else if scrolls(oy) && !scrolls(ox) {
 		c.Overflow.Width = fix(ox)
 	}
+	if x.toViewport {
+		x.propagateOverflow(root)
+	}
 	switch x.parent.Display {
 	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
 		if !root {
-			c.Display = blockified(c.Display)
+			c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
+			c.Float = style.FloatNone
 		}
 	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
 		// not a flex or grid container
 	}
 	if root || c.Position == style.Absolute || c.Position == style.FixedPosition {
-		c.Display = blockified(c.Display)
+		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
+		c.Float = style.FloatNone
+	}
+	if c.Float != style.FloatNone {
+		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 	}
 	x.transitions()
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
+	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	if c.AccentAuto {
 		c.AccentColor = c.Color
@@ -693,18 +984,18 @@ func currentField(f style.CurrentColorFields, get func(*style.Computed) *color.C
 func (x *ctx) length(c Component) style.Length {
 	if c.Kind == Ident {
 		switch strings.ToLower(c.Text) {
-		case "min-content":
+		case kwMinContent:
 			return style.Length{Kind: style.MinContent}
-		case "max-content", "content":
+		case kwMaxContent, kwContent:
 			return style.Length{Kind: style.MaxContent}
-		case "fit-content":
+		case kwFitContent:
 			return style.Length{Kind: style.FitContent}
 		case kwNone:
 			return style.Length{Kind: style.None}
 		}
 		return style.Length{}
 	}
-	if c.Kind == Function && strings.EqualFold(c.Text, "fit-content") {
+	if c.Kind == Function && strings.EqualFold(c.Text, kwFitContent) {
 		l := x.length(items(c.Args)[0])
 		l.Kind = style.FitContent
 		return l
@@ -713,8 +1004,72 @@ func (x *ctx) length(c Component) style.Length {
 	if d.IsFlex() {
 		return style.Length{Kind: style.Fr, Px: float32(d.Fr)}
 	}
-	d = d.Absolute(float64(x.em), float64(x.rem))
-	return style.Length{Kind: style.Fixed, Px: float32(d.Px), Percent: float32(d.Pct), IsPercent: d.HasPercent()}
+	d = d.Absolute(x.units(&d))
+	l := style.Length{Kind: style.Fixed, Px: float32(d.Px), Percent: float32(d.Pct), IsPercent: d.HasPercent()}
+	if len(d.terms) > 0 {
+		l.Px, l.Percent = float32(d.Resolve(0)), 0
+		l.Calc, l.IsPercent = calcOf(d)
+	}
+	return l
+}
+
+// units are what d's relative units stand for on the element.
+func (x *ctx) units(d *Dim) *Units {
+	u := &x.u
+	u.Em, u.Rem = float64(x.em), float64(x.rem)
+	if d.rel == 0 {
+		return u
+	}
+	if x.env != nil {
+		x.env.used |= d.rel
+	}
+	for i := range relUnits {
+		if d.rel&(1<<i) != 0 {
+			u.Rel[i] = float64(x.unit(i))
+		}
+	}
+	return u
+}
+
+// unit is what one of u stands for on the element: a unit of the font in
+// the element's own, or its parent's while its font-size is being read
+// (lh its parent's line height while its line-height is), a root unit in
+// the root's, a viewport unit in the viewport.
+func (x *ctx) unit(u relUnit) float32 {
+	if u >= unitVw {
+		w, h := x.env.viewport()
+		return [...]float32{w, h, min(w, h), max(w, h)}[u-unitVw] / 100
+	}
+	st, sized, lined := x.c, x.sized, x.lined
+	if u >= unitRex {
+		u -= unitRex
+		if root := x.env.rootStyle(); root != nil && !x.root {
+			st, sized, lined = root, true, true
+		}
+	}
+	if !sized || u == unitLh && !lined {
+		st = x.parent
+	}
+	in := x.env.fontUnits(st.Font)
+	switch u {
+	case unitEx:
+		return in.Ex
+	case unitCh:
+		return in.Ch
+	case unitCap:
+		return in.Cap
+	case unitIc:
+		return in.Ic
+	case unitLh, unitRex, unitRch, unitRcap, unitRic, unitRlh, unitVw, unitVh, unitVmin, unitVmax, relUnits:
+	}
+	switch lh := st.LineHeight; {
+	case lh.Normal:
+		return in.Line
+	case lh.Factor != 0:
+		return lh.Factor * st.Font.Size
+	default:
+		return lh.Px
+	}
 }
 
 func (x *ctx) px(c Component) float32 {
@@ -743,12 +1098,30 @@ func num(c Component) float32 {
 	return float32(d.Num)
 }
 
+//nolint:gochecknoglobals // lookup table
+var verticalAligns = map[string]style.VerticalAlign{
+	kwBaseline: style.AlignBaselineText, "sub": style.AlignSub, "super": style.AlignSuper,
+	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
+	kwTop: style.AlignTop, kwBottom: style.AlignBottom,
+}
+
 //nolint:gochecknoglobals,goconst // lookup table
 var displays = map[string]style.Display{
 	"inline": style.Inline, "block": style.Block, "inline-block": style.InlineBlock,
 	"flex": style.FlexDisplay, "inline-flex": style.InlineFlex, "grid": style.GridDisplay,
 	"inline-grid": style.InlineGrid, "none": style.DisplayNone, "contents": style.Contents,
-	"list-item": style.Block,
+	"list-item": style.Block, "flow-root": style.Block, "table": style.Block, "inline-table": style.InlineBlock,
+	"table-row": style.Block, "table-cell": style.Block, "table-row-group": style.Block,
+	"table-header-group": style.Block, "table-footer-group": style.Block, "table-column": style.Block,
+	"table-column-group": style.Block, "table-caption": style.Block,
+}
+
+//nolint:gochecknoglobals // lookup table
+var tableParts = map[string]style.TablePart{
+	"table-row": style.TableRow, "table-cell": style.TableCell, "table-row-group": style.TableRowGroup,
+	"table-header-group": style.TableHeaderGroup, "table-footer-group": style.TableFooterGroup,
+	"table-column": style.TableColumn, "table-column-group": style.TableColumnGroup,
+	"table-caption": style.TableCaption,
 }
 
 //nolint:gochecknoglobals,goconst // lookup tables
@@ -765,12 +1138,18 @@ var (
 		"none": style.BorderNone, "hidden": style.BorderNone, "solid": style.BorderSolid,
 		"dashed": style.BorderDashed, "dotted": style.BorderDotted,
 		"inset": style.BorderInset, "outset": style.BorderOutset,
+		"groove": style.BorderGroove, "ridge": style.BorderRidge,
 	}
 	overflows = map[string]style.Overflow{
 		"visible": style.Visible, "hidden": style.Hidden, "clip": style.Clip,
 		"scroll": style.Scroll, "auto": style.OverflowAuto,
 	}
 )
+
+//nolint:gochecknoglobals,goconst // a keyword table
+var breaks = map[string]style.Break{
+	"avoid": style.BreakAvoid, "avoid-column": style.BreakAvoid, "column": style.BreakColumn,
+}
 
 func borderWidthOf(x *ctx, v []Component) float32 {
 	switch {
@@ -806,9 +1185,36 @@ var props = func() map[string]prop {
 			set: func(x *ctx, v []Component) {
 				x.c.Display = displays[strings.ToLower(v[0].Text)]
 				x.c.ListItem = isWord(v[0], "list-item")
+				x.c.FlowRoot = isWord(v[0], "flow-root")
+				x.c.Table = isWord(v[0], "table") || isWord(v[0], "inline-table")
+				x.c.TablePart = tableParts[strings.ToLower(v[0].Text)]
 			},
-			inherit: func(dst, src *style.Computed) { dst.Display, dst.ListItem = src.Display, src.ListItem },
+			inherit: func(dst, src *style.Computed) {
+				dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
+				dst.TablePart = src.TablePart
+			},
 		},
+		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
+			"none": style.FloatNone, "left": style.FloatLeft, "right": style.FloatRight,
+			"inline-start": style.FloatLeft, "inline-end": style.FloatRight,
+		}),
+		"vertical-align": {
+			set: func(x *ctx, v []Component) {
+				x.c.VerticalShift = style.Length{}
+				if v[0].Kind == Ident {
+					x.c.VerticalAlign = verticalAligns[strings.ToLower(v[0].Text)]
+					return
+				}
+				x.c.VerticalAlign, x.c.VerticalShift = style.AlignLength, x.length(v[0])
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.VerticalAlign, dst.VerticalShift = src.VerticalAlign, src.VerticalShift
+			},
+		},
+		"clear": keyword(func(c *style.Computed) *style.Clear { return &c.Clear }, map[string]style.Clear{
+			"none": style.ClearNone, "left": style.ClearLeft, "right": style.ClearRight, "both": style.ClearBoth,
+			"inline-start": style.ClearLeft, "inline-end": style.ClearRight,
+		}),
 		"box-sizing": keyword(func(c *style.Computed) *style.BoxSizing { return &c.BoxSizing },
 			map[string]style.BoxSizing{"border-box": style.BorderBox, "content-box": style.ContentBox}),
 		"position": keyword(func(c *style.Computed) *style.Position { return &c.Position }, map[string]style.Position{
@@ -868,8 +1274,28 @@ var props = func() map[string]prop {
 		"order": field(func(c *style.Computed) *int { return &c.Order },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
 
+		"column-count": field(func(c *style.Computed) *int { return &c.ColumnCount },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+		"column-width": lengthField(func(c *style.Computed) *style.Length { return &c.ColumnWidth }),
+		"column-fill": field(func(c *style.Computed) *bool { return &c.ColumnFillAuto },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "auto") }),
+		"column-span":       {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}},
+		"column-rule-width": field(func(c *style.Computed) *float32 { return &c.ColumnRuleWidth }, borderWidthOf),
+		"column-rule-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.ColumnRuleStyle }, borderStyles),
+		"column-rule-color": currentField(style.ColumnRuleCurrent,
+			func(c *style.Computed) *color.Color { return &c.ColumnRuleColor }),
+		"break-inside": field(func(c *style.Computed) *bool { return &c.BreakInsideAvoid },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }),
+		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
+		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
+		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+		"widows": field(func(c *style.Computed) *int { return &c.Widows },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+
 		"grid-template-columns": field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Columns }, (*ctx).tracks),
 		"grid-template-rows":    field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Rows }, (*ctx).tracks),
+		"grid-template-areas":   field(func(c *style.Computed) *[]style.GridArea { return &c.Areas }, templateAreas),
 		"grid-auto-columns":     field(func(c *style.Computed) *[]style.Track { return &c.AutoColumns }, (*ctx).autoTracks),
 		"grid-auto-rows":        field(func(c *style.Computed) *[]style.Track { return &c.AutoRows }, (*ctx).autoTracks),
 		"grid-auto-flow": field(
@@ -923,6 +1349,10 @@ var props = func() map[string]prop {
 					return style.LineHeight{Normal: true}
 				case v[0].Kind == Number:
 					return style.LineHeight{Factor: float32(v[0].Num)}
+				case v[0].Kind == Function:
+					if d, _ := parseDim(v[0]); d.IsNumber() {
+						return style.LineHeight{Factor: float32(d.Num)}
+					}
 				}
 				l := x.length(v[0])
 				return style.LineHeight{Px: l.Px + l.Percent*x.em/100}
@@ -930,6 +1360,11 @@ var props = func() map[string]prop {
 		),
 		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
 			func(x *ctx, v []Component) float32 { return x.px(v[0]) }),
+		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
+			func(x *ctx, v []Component) style.WordSpacing {
+				l := x.length(v[0])
+				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
+			}),
 		"color": field(
 			func(c *style.Computed) *color.Color { return &c.Color },
 			func(x *ctx, v []Component) color.Color {
@@ -939,16 +1374,25 @@ var props = func() map[string]prop {
 				return linear(v[0])
 			},
 		),
-		"-webkit-font-smoothing": keyword(func(c *style.Computed) *bool { return &c.PixelText },
-			map[string]bool{"none": true}),
+		"-webkit-font-smoothing": {
+			set: func(x *ctx, v []Component) {
+				kw := strings.ToLower(v[0].Text)
+				x.c.PixelText, x.c.ExactText = kw == kwNone, kw == "antialiased"
+			},
+			inherit: func(dst, src *style.Computed) { dst.PixelText, dst.ExactText = src.PixelText, src.ExactText },
+		},
 		"text-transform": keyword(func(c *style.Computed) *style.TextTransform { return &c.TextTransform },
 			map[string]style.TextTransform{"none": style.NoTransform, "uppercase": style.Uppercase,
 				"lowercase": style.Lowercase, "capitalize": style.Capitalize}),
 		"text-align": keyword(func(c *style.Computed) *style.TextAlign { return &c.TextAlign },
 			map[string]style.TextAlign{"start": style.Start, "end": style.End, "left": style.Left, "right": style.Right,
-				"center": style.Center, "justify": style.Justify}),
+				"center": style.Center, "justify": style.Justify, "-webkit-left": style.BlockLeft,
+				"-webkit-right": style.BlockRight, "-webkit-center": style.BlockCenter}),
+		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
+		"border-collapse": field(func(c *style.Computed) *bool { return &c.BorderCollapse },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
 			map[string]style.TableLayout{"auto": style.TableAuto, "fixed": style.TableFixed}),
 		"white-space": keyword(func(c *style.Computed) *style.WhiteSpace { return &c.WhiteSpace },
@@ -977,14 +1421,27 @@ var props = func() map[string]prop {
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}),
-		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle },
-			map[string]style.ListStyle{"disc": style.ListDisc, "none": style.ListNone,
-				"disclosure-closed": style.ListDisclosureClosed, "disclosure-open": style.ListDisclosureOpen}),
+		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle }, listStyles),
 		"visibility": field(func(c *style.Computed) *bool { return &c.Visible }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "visible")
 		}),
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }),
+		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "drag") }),
+		"user-select": field(func(c *style.Computed) *style.UserSelect { return &c.UserSelect },
+			func(_ *ctx, v []Component) style.UserSelect {
+				switch strings.ToLower(v[0].Text) {
+				case "text":
+					return style.SelectText
+				case "none":
+					return style.SelectNone
+				case kwAll:
+					return style.SelectAll
+				}
+				// auto set on an element is text in Chrome, whatever its parent
+				return style.SelectText
+			}),
 		"cursor": field(func(c *style.Computed) *string { return &c.Cursor }, func(_ *ctx, v []Component) string {
 			if isWord(v[0], "auto") {
 				return ""
@@ -994,27 +1451,43 @@ var props = func() map[string]prop {
 
 		"background-color": colorField(func(c *style.Computed) *color.Color { return &c.Background }),
 		"background-image": field(func(c *style.Computed) *style.Image { return &c.BackgroundImage }, backgroundImage),
-		"background-size": {
-			set: func(x *ctx, v []Component) {
-				v = items(v)
-				px := func(c Component) float32 {
-					if isWord(c, "auto") {
-						return 0
-					}
-					return x.px(c)
-				}
-				x.c.BackgroundSize = [2]float32{px(v[0]), 0}
-				if len(v) > 1 {
-					x.c.BackgroundSize[1] = px(v[1])
-				}
-			},
-			inherit: func(dst, src *style.Computed) { dst.BackgroundSize = src.BackgroundSize },
-		},
-		"background-repeat": field(func(c *style.Computed) *bool { return &c.BackgroundNoRepeat },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "no-repeat") }),
+		"background-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.BackgroundSize },
+			(*ctx).backgroundSize),
+		"background-repeat": tiling(func(c *style.Computed) (*bool, *style.RepeatAxes) {
+			return &c.BackgroundNoRepeat, &c.BackgroundRepeat
+		}),
 		"background-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.BackgroundPosition },
 			(*ctx).position),
+		"background-attachment": keyword(
+			func(c *style.Computed) *style.BackgroundAttachment { return &c.BackgroundAttachment },
+			map[string]style.BackgroundAttachment{
+				"scroll": style.AttachScroll, "fixed": style.AttachFixed, "local": style.AttachLocal,
+			}),
+		"background-origin": keyword(func(c *style.Computed) *style.BackgroundBox { return &c.BackgroundOrigin },
+			map[string]style.BackgroundBox{
+				"padding-box": style.InitialBox, "border-box": style.UnderBorder, "content-box": style.UnderContent,
+			}),
+		"background-clip": keyword(func(c *style.Computed) *style.BackgroundBox { return &c.BackgroundClip },
+			map[string]style.BackgroundBox{
+				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
+			}),
+		"mask-image": field(func(c *style.Computed) *style.Image { return &c.MaskImage },
+			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }),
+		"mask-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize }, (*ctx).backgroundSize),
+		"mask-repeat": tiling(func(c *style.Computed) (*bool, *style.RepeatAxes) {
+			return &c.MaskNoRepeat, &c.MaskRepeat
+		}),
+		"mask-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.MaskPosition },
+			(*ctx).position),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows),
+		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
+			decorationLine),
+		"text-decoration-style": keyword(func(c *style.Computed) *style.DecorationStyle { return &c.TextDecoration.Style },
+			decorationStyles),
+		"text-decoration-color": currentField(style.DecorationCurrent,
+			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
+		"text-decoration-thickness": lengthField(
+			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
@@ -1119,13 +1592,22 @@ var props = func() map[string]prop {
 	}
 	for i, side := range []string{"top", "right", "bottom", "left"} {
 		m["border-"+side+"-width"] = field(func(c *style.Computed) *float32 { return sideOf(&c.Border, i) }, borderWidthOf)
-		m["border-"+side+"-style"] = keyword(func(c *style.Computed) *style.BorderStyle { return sideOf(&c.BorderStyle, i) },
-			borderStyles)
+		m["border-"+side+"-style"] = prop{
+			set: func(x *ctx, v []Component) {
+				*sideOf(&x.c.BorderStyle, i) = borderStyles[strings.ToLower(v[0].Text)]
+				*sideOf(&x.c.BorderHidden, i) = isWord(v[0], "hidden")
+			},
+			inherit: func(dst, src *style.Computed) {
+				*sideOf(&dst.BorderStyle, i) = *sideOf(&src.BorderStyle, i)
+				*sideOf(&dst.BorderHidden, i) = *sideOf(&src.BorderHidden, i)
+			},
+		}
 		m["border-"+side+"-color"] = currentField(style.BorderTopCurrent<<i,
 			func(c *style.Computed) *color.Color { return sideOf(&c.BorderColor, i) })
 	}
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}}
 	m["border-image-outset"] = noop
+	maps.Copy(m, contentProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
@@ -1198,10 +1680,55 @@ func imageSource(x *ctx, v []Component) string {
 	} else if a := items(v[0].Args); v[0].Kind == Function && len(a) > 0 {
 		src = a[0].Text
 	}
-	if src == "" || strings.Contains(src, ":") || x == nil || x.base == "" {
+	if x == nil {
 		return src
 	}
-	return path.Join(x.base, src)
+	return x.base.resolve(src)
+}
+
+func (x *ctx) backgroundSize(v []Component) style.BackgroundSize {
+	v = items(v)
+	switch {
+	case isWord(v[0], "cover"):
+		return style.BackgroundSize{Scale: style.ScaleCover}
+	case isWord(v[0], "contain"):
+		return style.BackgroundSize{Scale: style.ScaleContain}
+	}
+	size := style.BackgroundSize{Width: x.length(v[0])}
+	if len(v) > 1 {
+		size.Height = x.length(v[1])
+	}
+	return size
+}
+
+// tiling is background-repeat, and mask-repeat: whether the picture
+// tiles, and along which axes.
+func tiling(get func(*style.Computed) (*bool, *style.RepeatAxes)) prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			no, axes := get(x.c)
+			*no, *axes = isWord(v[0], "no-repeat"), style.RepeatBoth
+			switch {
+			case len(v) == 2:
+				across, down := isWord(v[0], "repeat"), isWord(v[1], "repeat")
+				*no = !across && !down
+				if across && !down {
+					*axes = style.RepeatX
+				} else if down && !across {
+					*axes = style.RepeatY
+				}
+			case isWord(v[0], "repeat-x"):
+				*axes = style.RepeatX
+			case isWord(v[0], "repeat-y"):
+				*axes = style.RepeatY
+			}
+		},
+		inherit: func(dst, src *style.Computed) {
+			no, axes := get(dst)
+			sno, saxes := get(src)
+			*no, *axes = *sno, *saxes
+		},
+	}
 }
 
 func gridLine(_ *ctx, v []Component) style.GridLine {
@@ -1212,6 +1739,9 @@ func gridLine(_ *ctx, v []Component) style.GridLine {
 	}
 	if isWord(v[0], "auto") {
 		return style.GridLine{}
+	}
+	if lineName(v) {
+		return style.GridLine{Name: v[0].Text}
 	}
 	return style.GridLine{Line: int(v[0].Num)}
 }
@@ -1436,14 +1966,72 @@ func (x *ctx) origin(v []Component) style.Size[style.Length] {
 	return o
 }
 
+// movedStates are the states of n that changed since css last styled it.
+func movedStates(n *dom.Node) dom.State {
+	data := dom.Data(n)
+	if data.Dirty&dom.DirtyState == 0 {
+		return 0
+	}
+	return n.State() ^ data.StyledState
+}
+
+// reaches adds to r.reach the subjects of the selectors that read one of
+// the states moved on n, before a sibling combinator (beside) or above
+// their subject, where n has what the compounds reading it name and no
+// @media rule has the selector's rule off.
+func (r *restyler) reaches(n *dom.Node, moved dom.State, beside bool) {
+	for si, s := range r.sheets {
+		var off []bool
+		if r.m.off != nil {
+			off = r.m.off[si]
+		}
+		x := s.indexed()
+		for i := range x.reads {
+			rd := &x.reads[i]
+			if rd.states&moved != 0 && rd.beside == beside && (off == nil || !off[rd.rule]) && rd.names(n) {
+				r.reach = append(r.reach, rd.subject)
+			}
+		}
+	}
+}
+
+// reached reports whether n may be the subject of a selector in r.reach.
+func (r *restyler) reached(n *dom.Node) bool {
+	return slices.ContainsFunc(r.reach, func(c *Compound) bool { return c.names(n) })
+}
+
+// movesSiblings reports whether a class, an id or an attribute that
+// changed on c, not restyled yet, is read before a sibling combinator.
+func (r *restyler) movesSiblings(c *dom.Node) bool {
+	if c.IsText() {
+		return false
+	}
+	data := dom.Data(c)
+	if data.Dirty&dom.DirtyTree == 0 {
+		return false
+	}
+	for _, k := range data.Changed {
+		for _, sh := range r.sheets {
+			if sh.indexed().beside[k] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // readAbove reports whether some sheet reads one of changed in a compound
-// above a selector's subject.
+// above a selector's subject, or it is an attribute an element's
+// descendants are hinted by.
 func (r *restyler) readAbove(changed []string) bool {
 	for _, k := range changed {
 		for _, sh := range r.sheets {
 			if sh.indexed().above[k] {
 				return true
 			}
+		}
+		if hintedBelow[k] {
+			return true
 		}
 	}
 	return false

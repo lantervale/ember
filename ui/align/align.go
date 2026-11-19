@@ -297,7 +297,8 @@ func (c *checker) centred(n *dom.Node, b *box.Box) {
 		c.faultf("centre", n, dy, 0, "label %.2fpt below the middle of its %.2fpt box (%.2fpt off)", dy, pad.H, abs(dy))
 		return
 	}
-	if a := b.Style.TextAlign; n.Tag() == dom.Button && a != style.Left && a != style.Right && a != style.End {
+	if a := b.Style.TextAlign; n.Tag() == dom.Button && a != style.Left && a != style.Right && a != style.End &&
+		a != style.BlockLeft && a != style.BlockRight {
 		content := inFlowRect(b, text)
 		if dx := (content.X + content.W/2) - (pad.X + pad.W/2); abs(dx) > Tolerance {
 			c.faultf("centre", n, dx, 0, "label %.2fpt right of the middle of its %.2fpt box (%.2fpt off)", dx, pad.W, abs(dx))
@@ -701,6 +702,17 @@ func spillPast(b *box.Box, axis int) (*box.Box, float32) {
 	return nil, 0
 }
 
+// rowOf reports a table's row or row group, which a cell spanning rows
+// runs past: the table holds it.
+func rowOf(st *style.Computed) bool {
+	switch st.TablePart {
+	case style.TableRow, style.TableRowGroup, style.TableHeaderGroup, style.TableFooterGroup:
+		return true
+	case style.NoTablePart, style.TableCell, style.TableColumn, style.TableColumnGroup, style.TableCaption:
+	}
+	return false
+}
+
 // holds walks up from b, whose ink is r, to the first block box that
 // doesn't hold r, and reports it.
 func (c *checker) holds(b *box.Box, r geom.Rect, seen map[*box.Box]bool) {
@@ -712,7 +724,7 @@ func (c *checker) holds(b *box.Box, r geom.Rect, seen map[*box.Box]bool) {
 			return
 		}
 		st := a.Style
-		if a.Node == nil || a.Kind != box.Element || st == nil || st.Display == style.Inline {
+		if a.Node == nil || a.Kind != box.Element || st == nil || st.Display == style.Inline || rowOf(st) {
 			continue
 		}
 		box := a.Rect()

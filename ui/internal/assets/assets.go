@@ -12,6 +12,10 @@ import (
 // such as ember:select-arrow, or a path in its stylesheets' file systems.
 var Of func(doc any, url string) ([]byte, bool) //nolint:gochecknoglobals // a hook ui sets
 
+// MediaType is the media type of a picture's bytes, the file name's: a
+// registered vector format's, else what the bytes look like.
+var MediaType func(name string, data []byte) string //nolint:gochecknoglobals // a hook ui sets
+
 // Styled computes a ui.Document's styles without laying it out, for
 // export to read them.
 var Styled func(doc any) //nolint:gochecknoglobals // a hook ui sets

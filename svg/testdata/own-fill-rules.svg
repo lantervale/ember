@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <polygon points="50,5 79,95 3,39 97,39 21,95" fill="#c33"/>
+  <polygon points="150,5 179,95 103,39 197,39 121,95" fill="#36c" fill-rule="evenodd"/>
+  <path d="M40 40h20v20h-20zM45 45v10h10v-10z" fill="#fff"/>
+  <path fill="#fff" fill-rule="evenodd" d="M140 40a10 10 0 1 0 20 0a10 10 0 1 0-20 0zm5 0a5 5 0 1 1 10 0a5 5 0 1 1-10 0z" transform="translate(0 10)"/>
+  <path d="M90 70q10-30 20 0t-20 0" fill="#090" fill-opacity=".7" stroke="#000" stroke-width=".5"/>
+</svg>

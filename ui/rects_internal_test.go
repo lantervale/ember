@@ -5,7 +5,9 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/lantervale/ember"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,4 +108,36 @@ func TestWhatAHiddenElementHoldsLosesItsBox(t *testing.T) {
 	d.Layout(geom.V2(300, 200))
 	assert.Equal(t, geom.Rect{}, inner.Box(), "under a hidden block")
 	assert.Equal(t, geom.Rect{}, inline.Box(), "a hidden inline element")
+}
+
+func TestAnotherDeviceLaysNothingOutAgainUnlessAStyleReadsIt(t *testing.T) {
+	run := func(css string) (*Document, *Node, func()) {
+		p := P(Text("a paragraph"))
+		d := NewDocument(CSS(css))
+		d.Body().Append(p)
+		for range 50 {
+			d.Body().Append(P(Text("another")))
+		}
+		win := platform.NewWindow(platform.Size(300, 200))
+		win.Add(d)
+		w := ember.New().AddEntities(win)
+		w.RunFrames(4)
+		return d, p, func() {
+			win.Input().SetMouse(geom.V2(150, 190))
+			w.RunFrames(3)
+		}
+	}
+	d, p, mouse := run(`p { height: 20px }`)
+	placed, height := d.placed, p.Box().H
+	mouse()
+	device, _ := d.HTML().Attr("data-input-device")
+	require.Equal(t, "mouse", device)
+	assert.Equal(t, placed, d.placed, "no style reads the device: nothing is laid out again")
+	assert.InDelta(t, height, p.Box().H, 0.01)
+
+	d, p, mouse = run(`p { height: 20px } [data-input-device="mouse"] p { height: 30px }`)
+	placed = d.placed
+	mouse()
+	assert.Greater(t, d.placed, placed, "a style that reads it lays out what it changed")
+	assert.InDelta(t, 30, p.Box().H, 0.01)
 }

@@ -27,6 +27,8 @@ type Node struct {
 	parent   *Node
 	children []*Node
 	pipe     Pipeline
+	// gen is set on a generated node (NewGenerated).
+	gen Pseudo
 }
 
 // NewElement is an element of tag with no attributes or children.
@@ -177,19 +179,30 @@ func (n *Node) SetAttr(name, value string) {
 		n.SetStyle(value)
 		return
 	}
+	n.setAttr(name, value, DirtyStyle|DirtyTree|DirtyLayout)
+}
+
+// SetSelectorAttr sets on n an attribute that only selectors read, as the
+// Document's own data-input-device: n is styled again, and what reads it
+// below, and laid out only where a style then changed.
+func SetSelectorAttr(n *Node, name, value string) {
+	n.setAttr(name, value, DirtyStyle|DirtyTree)
+}
+
+func (n *Node) setAttr(name, value string, dirty Dirty) {
 	for i, a := range n.attrs {
 		if a.Name == name {
 			if a.Value != value {
 				n.attrs[i].Value = value
 				n.changed("[" + name)
-				n.mark(DirtyStyle | DirtyTree | DirtyLayout)
+				n.mark(dirty)
 			}
 			return
 		}
 	}
 	n.attrs = append(n.attrs, Attr{name, value})
 	n.changed("[" + name)
-	n.mark(DirtyStyle | DirtyTree | DirtyLayout)
+	n.mark(dirty)
 }
 
 func (n *Node) RemoveAttr(name string) {
@@ -239,13 +252,14 @@ func (n *Node) SetState(f State, on bool) {
 // Append adds children at the end, taking them from any parent they had.
 //
 // A row given to a table goes in its last child when that is a tbody,
-// else in a new tbody, as HTML's parser places it.
+// else in a new tbody, and a col in a colgroup the same way, as HTML's
+// parser places them.
 func (n *Node) Append(children ...*Node) {
 	for _, c := range children {
-		if n.tag == Table && c.tag == Tr {
+		if wrap, ok := impliedIn(n.tag, c.tag); ok {
 			body := n.lastChild()
-			if body == nil || body.tag != Tbody {
-				body = NewElement(Tbody)
+			if body == nil || body.tag != wrap {
+				body = NewElement(wrap)
 				n.Append(body)
 			}
 			body.Append(c)
@@ -260,6 +274,18 @@ func (n *Node) Append(children ...*Node) {
 	}
 	n.changed(Children)
 	n.mark(DirtyTree | DirtyLayout)
+}
+
+// impliedIn is the element HTML's parser puts between a parent and a
+// child it does not take itself.
+func impliedIn(parent, child Tag) (Tag, bool) {
+	switch {
+	case parent == Table && child == Tr:
+		return Tbody, true
+	case parent == Table && child == Col:
+		return Colgroup, true
+	}
+	return 0, false
 }
 
 func (n *Node) lastChild() *Node {
@@ -291,6 +317,7 @@ func (n *Node) changed(keys ...string) {
 // mark flags the node and tells its ancestors a descendant changed.
 func (n *Node) mark(d Dirty) {
 	n.pipe.Dirty |= d
+	n.pipe.picture = ""
 	for p := n.parent; p != nil; p = p.parent {
 		p.pipe.Dirty |= DirtyDescendant
 	}

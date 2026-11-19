@@ -14,6 +14,7 @@ import (
 func cell(s string, edit ...func(*style.Computed)) *dom.Node {
 	return el(dom.Td, func(st *style.Computed) {
 		st.Padding = style.All(style.Px(1))
+		st.VerticalAlign = style.AlignMiddle
 		for _, e := range edit {
 			e(st)
 		}
@@ -60,6 +61,34 @@ func TestTableCellsCentreTheirContent(t *testing.T) {
 	tr := lay(el(dom.Div, block, tb), 400)
 	assert.Equal(t, float32(30), tr.Of[short].Size.Y, "a row is as tall as its tallest cell")
 	assert.Equal(t, float32(10), tr.Of[short].Children[0].Pos.Y, "1 of padding, then (28-10)/2")
+}
+
+func TestACellsVerticalAlignPlacesItsContent(t *testing.T) {
+	tall := cell("H", func(st *style.Computed) { st.Size.Height = style.Px(30) })
+	// On the baseline the text's first line stands on the row's, which the cell of a
+	// block alone sets at its content box's bottom, 11 down: the text 2 lower.
+	wants := []struct {
+		at          style.VerticalAlign
+		text, block float32
+	}{
+		{style.AlignTop, 1, 1}, {style.AlignMiddle, 10, 10}, {style.AlignBottom, 19, 19},
+		{style.AlignBaselineText, 3, 1}, {style.AlignSub, 3, 1}, {style.AlignLength, 3, 1},
+	}
+	padded := func(st *style.Computed) { st.Padding = style.All(style.Px(1)) }
+	for _, w := range wants {
+		at := w.at
+		words := cell("H", valign(at))
+		blocks := el(dom.Td, valign(at, padded), el(dom.Div, func(st *style.Computed) {
+			block(st)
+			st.Size.Height = style.Px(10)
+		}))
+		tr := lay(el(dom.Div, block, table(row(tall, words, blocks))), 400)
+		assert.Equal(t, w.text, tr.Of[words].Children[0].Pos.Y, "text, vertical-align %v", at)
+		assert.Equal(t, w.block, tr.Of[blocks].Children[0].Pos.Y, "a block, vertical-align %v", at)
+	}
+	said := cell("H", valign(style.AlignTop), func(st *style.Computed) { st.AlignContent = style.AlignEnd })
+	tr := lay(el(dom.Div, block, table(row(tall, said))), 400)
+	assert.Equal(t, float32(19), tr.Of[said].Children[0].Pos.Y, "align-content says first")
 }
 
 func TestBorderSpacingSetsTheRoomBetweenCells(t *testing.T) {

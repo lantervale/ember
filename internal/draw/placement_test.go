@@ -111,3 +111,32 @@ func TestAFontWithoutASCIIKerningSkipsIt(t *testing.T) {
 	f := Regular.Size(16)
 	assert.InDelta(t, f.Measure("A").X+f.Measure("V").X, f.Measure("AV").X, 1e-4)
 }
+
+func TestTextOfAFractionalSizeKeepsItsOwnAdvances(t *testing.T) {
+	const text = "A demonstration of what can be accomplished through"
+	for _, size := range []float32{13.44, 13.5, 10.5625} {
+		want := unrounded(t, 'i', float64(size))
+		assert.InDelta(t, 10*want, Style{Size: size}.Measure("iiiiiiiiii").X, 1e-2, "%v points measured", size)
+		var whole, c List
+		whole.Text(geom.Vec2{}, text+" i", Style{Size: float32(math.Round(float64(size)))})
+		c.Text(geom.Vec2{}, text+" i", Style{Size: size})
+		rw, _ := quads(&whole)
+		rects, _ := quads(&c)
+		require.Len(t, rects, len(rw))
+		last, lastWhole := rects[len(rects)-1], rw[len(rw)-1]
+		ratio := size / float32(math.Round(float64(size)))
+		assert.InDelta(t, lastWhole.X*ratio, last.X, 0.5, "%v points: the last letter where its own size puts it", size)
+		assert.InDelta(t, lastWhole.H*ratio, last.H, 1e-2, "and as tall as its size")
+	}
+}
+
+func TestTextOfAFractionalSizeIsDrawnAtItsSizeUnderAScale(t *testing.T) {
+	var c List
+	c.SetTransform(geom.Transform2D{X: geom.V2(2, 0), Y: geom.V2(0, 2)})
+	c.Text(geom.Vec2{}, "iiiiiiiiiii", Style{Size: 13.44})
+	rects, _ := quads(&c)
+	require.Len(t, rects, 11)
+	assert.InDelta(t, 2*10*unrounded(t, 'i', 13.44), rects[10].X-rects[0].X, 0.51, "ten advances of 13.44 points")
+	assert.Equal(t, float32(27), c.Batches[len(c.Batches)-1].Atlas.size,
+		"rasterized at the whole size nearest what the screen shows")
+}

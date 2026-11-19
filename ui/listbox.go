@@ -135,7 +135,7 @@ func (d *Document) listboxIntent(listbox *Node, i control.Intent) bool {
 	if selectOption(listbox, live[next]) {
 		d.fire(listbox, control.Changed)
 	}
-	d.reveal(live[next])
+	d.reveal(live[next], false)
 	return true
 }
 

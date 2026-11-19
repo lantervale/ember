@@ -80,7 +80,7 @@ func TestAPercentRadiusIsOfTheBoxAndNeverPastHalfItsSide(t *testing.T) {
 	assert.Equal(t, float32(10), r.of("round")[0].Radius)
 }
 
-func TestSquareBordersAreOneRectPerSideInTheirOwnColour(t *testing.T) {
+func TestSquareBordersAreOneMiteredSidePerColour(t *testing.T) {
 	b := el(0, 0, 100, 40, func(s *style.Computed) {
 		s.Border = style.Sides[float32]{Top: 1, Right: 2, Bottom: 3, Left: 4}
 		s.BorderStyle = style.All(style.BorderSolid)
@@ -88,8 +88,11 @@ func TestSquareBordersAreOneRectPerSideInTheirOwnColour(t *testing.T) {
 	})
 	r := newRecorder()
 	Paint(r, tree(b))
-	assert.Equal(t, "red green blue black", r.order(names))
-	sides := r.of("rect")
+	sides := r.of("triangles")
+	require.Len(t, sides, 4)
+	for i, want := range []color.Color{red, green, blue, black} {
+		assert.Equal(t, want, sides[i].Color)
+	}
 	assert.Equal(t, geom.Rect{W: 100, H: 1}, sides[0].Rect)
 	assert.Equal(t, geom.Rect{X: 98, W: 2, H: 40}, sides[1].Rect)
 	assert.Equal(t, geom.Rect{Y: 37, W: 100, H: 3}, sides[2].Rect)
@@ -293,6 +296,30 @@ func TestPositionedDescendantsStayInTheirScrollersClip(t *testing.T) {
 	r := newRecorder()
 	Paint(r, tree(el(0, 0, 300, 300, nil, clip)))
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 100, H: 50}, r.of("rect")[0].Clip)
+}
+
+func TestAnAbsoluteBoxLiesOutsideTheClipsUnderItsContainingBlock(t *testing.T) {
+	hidden := func(s *style.Computed) {
+		s.Overflow = style.Size[style.Overflow]{Width: style.Hidden, Height: style.Hidden}
+	}
+	item := el(0, 0, 80, 40, func(s *style.Computed) { s.Background, s.Position = red, style.Absolute })
+	list := el(0, 0, 100, 0, hidden, item)
+	nav := el(20, 20, 100, 40, func(s *style.Computed) { s.Position = style.Relative }, list)
+	frame := el(10, 10, 60, 200, hidden, nav)
+	root := el(0, 0, 300, 300, nil, frame)
+	r := newRecorder()
+	tr := tree(root)
+	Paint(r, tr)
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 60, H: 200}, r.of("rect")[0].Clip,
+		"not cut by the list between it and the block that placed it, cut by the frame above that block")
+	assert.Same(t, item, HitTest(tr, geom.V2(40, 40)))
+	assert.Same(t, root, HitTest(tr, geom.V2(80, 40)), "out of the frame")
+
+	fixed := el(0, 0, 80, 40, func(s *style.Computed) { s.Background, s.Position = red, style.FixedPosition })
+	r = newRecorder()
+	Paint(r, tree(el(0, 0, 300, 300, nil,
+		el(10, 10, 60, 20, func(s *style.Computed) { hidden(s); s.Position = style.Relative }, fixed))))
+	assert.Equal(t, geom.Rect{}, r.of("rect")[0].Clip, "a fixed box is placed by the viewport alone")
 }
 
 func TestScrollingShiftsTheContentButNotTheScroller(t *testing.T) {

@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"math"
 	"slices"
 	"strings"
 
@@ -38,6 +39,10 @@ type Retained struct {
 	// replaced and gone are the sweep's lists, kept for their room.
 	replaced []keyed
 	gone     []*node
+	// viewport is the box of a viewport that scrolls, and viewportGutter
+	// the room its overflow: auto bars took in the last layout.
+	viewport       *box.Box
+	viewportGutter size
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -96,7 +101,16 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, op
 	if r == nil {
 		return t.out, nil
 	}
-	t.root(r, avail)
+	port := viewportOf(root)
+	if !avail.values().both() {
+		port = nil
+	}
+	var gutter, content size
+	if port != nil {
+		gutter, content = t.viewport(r, avail.values(), port)
+	} else {
+		t.root(r, avail)
+	}
 	if rounding {
 		roundLayout(r, point{})
 	} else {
@@ -104,6 +118,10 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, op
 	}
 	t.out.Root = r.box
 	t.write(r, nil)
+	r.box.Parent = nil
+	if port != nil {
+		t.out.Root = t.viewportBox(r.box, port, avail.values(), gutter, content)
+	}
 	t.out.Live, t.out.Applied = t.out.Live[:0], t.out.Applied[:0]
 	collectLive(t.out.Root, t.out)
 	t.markEscapes(r)
@@ -120,6 +138,12 @@ func clean(n *dom.Node) {
 		for _, c := range n.Children() {
 			clean(c)
 		}
+	}
+	if d.Before != nil {
+		clean(d.Before)
+	}
+	if d.After != nil {
+		clean(d.After)
 	}
 }
 
@@ -142,6 +166,13 @@ type tree struct {
 	lost     map[*dom.Node]*box.Box
 	// anonymousStyles is the style of the anonymous blocks of each parent style.
 	anonymousStyles map[*style.Computed]*style.Computed
+	// anonymousTables is the style of the anonymous tables of each parent style.
+	anonymousTables map[*style.Computed]*style.Computed
+	// flowStyles are the styles multi-column containers lay their content out with, by
+	// their own.
+	flowStyles map[*style.Computed]*style.Computed
+	// breakStyles are the styles of the line breaks br elements hold, by their own.
+	breakStyles map[*style.Computed]*style.Computed
 	// regutter are the elements whose scrollbar gutter changed in this
 	// retained layout.
 	regutter []*dom.Node
@@ -188,9 +219,27 @@ type node struct {
 	pendingOOF []oofCandidate
 	control    controlKind
 	role       tableRole
+	// cell marks a table's cell, an element or an anonymous one; lowered is how far its
+	// content stands below its content box's top to have its first line on its row's
+	// baseline.
+	cell    bool
+	lowered float32
+	// shared is the borders of a table that collapses them, and collapsed what that
+	// leaves the table or one of its cells for borders, nil where borders are apart.
+	shared    *borderGrid
+	collapsed *rect
 	// replaced is an img, natural its picture's size (zero without one).
 	replaced bool
 	natural  size
+	// shape is what a picture that doesn't ask for a size of pixels asks
+	// for, sized being whether the img has one: natural is then the size
+	// it takes with no other, but with proportions alone (fills), where
+	// it takes the width it is given.
+	shape box.Intrinsic
+	sized bool
+	// intrinsic is set once a layout of the node read its picture's size or
+	// proportions: with a width and a height of its own it never does.
+	intrinsic bool
 	// gutter is the scrollbar room layout chose beyond the style's, overflow auto's once the
 	// content overflows.
 	gutter size
@@ -205,9 +254,18 @@ type node struct {
 	// anonymous is set when it wraps inline content in anonymous blocks among its kids.
 	contents  []keyed
 	anonymous bool
+	// cuts are the inline elements among its content that blocks cut in parts.
+	cuts []*cutInline
 	// readsParent is set when the node's style resolves against its parent's size, which
 	// its cache then keys on.
 	readsParent bool
+	// holdsFloats is set when a float is among its kids or under one of them: laid out
+	// in its parent's formatting context, it places floats there each time.
+	holdsFloats bool
+	// columns is how a multi-column container's last layout cut its flow, and frag the
+	// node's place in the flow of the multi-column container it is in, nil outside one.
+	columns *columnSet
+	frag    *flowFrag
 }
 
 func (n *node) context() context {
@@ -259,10 +317,10 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		return n
 	}
 	if isTable(e) {
-		t.buildTable(n, e)
+		t.buildTable(n, e.Flow())
 		return n
 	}
-	if e.Tag() == dom.Img {
+	if e.Tag() == dom.Img || e.Tag() == dom.Svg {
 		t.buildImage(n, e)
 		return n
 	}
@@ -270,7 +328,11 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		buildCanvas(n, e)
 		return n
 	}
-	t.buildChildren(n, e.Children())
+	if e.Tag() == dom.Iframe {
+		buildFrame(n)
+		return n
+	}
+	t.buildChildren(n, e.Flow())
 	return n
 }
 
@@ -281,7 +343,7 @@ func (t *tree) kept(e *dom.Node) *node {
 		return nil
 	}
 	d := dom.Data(e)
-	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.st != d.Style || !slices.Equal(n.children, e.Children()) {
+	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.st != d.Style || !e.SameFlow(n.children) {
 		return nil
 	}
 	return n
@@ -294,7 +356,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 	st := styleOf(e)
 	old := t.prevNodes[e]
 	if n := old; n != nil && n.st == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
-		slices.Equal(n.children, e.Children()) {
+		e.SameFlow(n.children) {
 		t.retire(n, false)
 		b := n.box
 		*b = box.Box{Kind: box.Element, Node: e, Style: st, Children: b.Children[:0]}
@@ -313,7 +375,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 			n.gutter = old.gutter
 		}
 		t.nodes[e] = n
-		n.children = slices.Clone(e.Children())
+		n.children = slices.Clone(e.Flow())
 	}
 	return n
 }
@@ -340,9 +402,13 @@ func (t *tree) retire(old *node, kids bool) {
 	t.retireInline(old)
 	if old.anonymous {
 		for _, k := range old.kids {
-			if k.box.Kind == box.AnonymousBlock {
+			switch {
+			case k.box.Kind == box.AnonymousBlock:
 				t.retireInline(k)
 				t.gone = append(t.gone, k.kids...)
+			case k.st.Float != style.FloatNone:
+				// maybe a float from inside an inline element, no child of the element's
+				t.gone = append(t.gone, k)
 			}
 		}
 	}
@@ -449,39 +515,55 @@ func (t *tree) adopt(n *node, parent *node) {
 // buildChildren gives n its in-flow children: elements, and the text between them either
 // as n's own inline content or wrapped in anonymous blocks.
 func (t *tree) buildChildren(n *node, children []*dom.Node) {
-	items := t.flatten(n, children)
 	container := n.st.Display
 	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
 		container == style.GridDisplay || container == style.InlineGrid
+	items := t.lift(n, t.flatten(n, children))
 	if !inFlexOrGrid && !hasBlockChild(items) {
-		for _, it := range items {
-			if it.element == nil {
-				continue
-			}
-			if st := styleOf(it.element); outOfFlow(st.Position) || st.Display == style.DisplayNone {
-				n.kids = append(n.kids, t.build(it.element, n))
-			}
-		}
-		n.inline = t.inlineOf(n, items)
+		t.buildInline(n, items)
 		return
 	}
 	var run []item
+	// inFlow is set once the container holds content in the flow: the anonymous blocks
+	// after it don't start with the container's first line.
+	inFlow := false
 	flush := func() {
 		if onlyCollapsibleSpace(run) {
 			run = nil
 			return
 		}
 		anon := t.anonymous(n)
-		if content := t.inlineOf(anon, run); content != nil {
+		content := t.inlineOf(anon, run)
+		n.liftFloats(anon)
+		if content != nil {
+			content.unindented = inFlow
 			anon.inline = content
 			n.kids = append(n.kids, anon)
 			n.anonymous = true
+			inFlow = true
+		} else {
+			emptyParts(run, len(n.kids))
 		}
 		run = nil
 	}
-	for _, it := range items {
+	for i := 0; i < len(items); i++ {
+		it := items[i]
 		if it.text != nil {
 			run = append(run, it)
+			continue
+		}
+		st := styleOf(it.element)
+		if !inFlexOrGrid && it.cut == nil && partOf(it.element) != style.NoTablePart {
+			parts, next := tableParts(items, i)
+			flush()
+			n.kids = append(n.kids, t.anonymousTable(n, parts))
+			n.anonymous, inFlow = true, true
+			i = next - 1
+			continue
+		}
+		if !inFlexOrGrid && st.Float != style.FloatNone && st.Display != style.DisplayNone {
+			// A float among inline content stands before it, the text going on round it.
+			n.kids = append(n.kids, t.build(it.element, n))
 			continue
 		}
 		if !inFlexOrGrid && !elementBlockLevel(it.element) {
@@ -490,8 +572,64 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 		}
 		flush()
 		n.kids = append(n.kids, t.build(it.element, n))
+		inFlow = inFlow || st.Display != style.DisplayNone && !outOfFlow(st.Position)
 	}
 	flush()
+	for _, k := range n.kids {
+		if k.st.Float != style.FloatNone || k.holdsFloats {
+			n.holdsFloats = true
+		}
+	}
+}
+
+// tableParts lists the table parts that follow one another from items[i], with the white
+// space between them, and the index after the last: what one anonymous table wraps.
+func tableParts(items []item, i int) ([]*dom.Node, int) {
+	var parts []*dom.Node
+	kept, end := 0, i
+	for j := i; j < len(items); j++ {
+		it := items[j]
+		if it.text != nil && isCollapsibleSpace(it.text.Text()) {
+			parts = append(parts, it.text)
+			continue
+		}
+		if it.element == nil || it.cut != nil || partOf(it.element) == style.NoTablePart {
+			break
+		}
+		parts = append(parts, it.element)
+		kept, end = len(parts), j+1
+	}
+	return parts[:kept], end
+}
+
+// buildInline gives n inline content alone: its items as its own lines, and nodes for
+// those out of the flow or not shown.
+func (t *tree) buildInline(n *node, items []item) {
+	for _, it := range items {
+		if it.element == nil {
+			continue
+		}
+		if st := styleOf(it.element); outOfFlow(st.Position) || st.Display == style.DisplayNone {
+			n.kids = append(n.kids, t.build(it.element, n))
+		}
+	}
+	n.inline = t.inlineOf(n, items)
+}
+
+// liftFloats moves the floats inside an anonymous block's inline elements to n, where
+// they stand before the block.
+func (n *node) liftFloats(anon *node) {
+	kept := anon.kids[:0]
+	for _, k := range anon.kids {
+		if k.st.Float == style.FloatNone {
+			kept = append(kept, k)
+			continue
+		}
+		k.parent = n
+		n.kids = append(n.kids, k)
+		n.anonymous = true
+	}
+	anon.kids = kept
 }
 
 // onlyCollapsibleSpace reports a run of text nodes that white-space collapses away.
@@ -514,6 +652,148 @@ func onlyCollapsibleSpace(run []item) bool {
 type item struct {
 	element *dom.Node
 	text    *dom.Node
+	// cut is set on a part of an inline element blocks cut: inside are the children of
+	// the element the part holds, first and last say which of its parts it is.
+	cut         *cutInline
+	inside      []item
+	first, last bool
+}
+
+// cutInline is an inline element holding blocks in the flow. They cut it in parts, the
+// lines before, between and after them, and stand among its container's children. Its
+// box says where the element is, round its parts and its blocks as Chrome's
+// getBoundingClientRect; the parts draw it, each a box of its own.
+type cutInline struct {
+	box    *box.Box
+	parts  []*box.Box
+	blocks []*dom.Node
+	// empty are its parts that hold no line, each by how many of its container's kids
+	// stand before it: a place of no size the element's box reaches, as Chrome's.
+	empty []int
+}
+
+// emptyParts notes a run of no line, after the first before kids of its container, on
+// the cut elements whose parts it holds.
+func emptyParts(run []item, before int) {
+	for _, it := range run {
+		if it.cut != nil {
+			it.cut.empty = append(it.cut.empty, before)
+			emptyParts(it.inside, before)
+		}
+	}
+}
+
+// emptyPart is where a part of no line stands in n, after the first before of its
+// kids: under the last of them in the flow, at the start of n's content.
+func (n *node) emptyPart(before int) geom.Rect {
+	at := geom.Rect{X: n.final.border.l + n.final.padding.l, Y: n.final.border.t + n.final.padding.t}
+	for _, k := range n.kids[:before] {
+		if k.st.Display != style.DisplayNone && k.st.Float == style.FloatNone && !outOfFlow(k.st.Position) {
+			at.Y = k.box.Pos.Y + k.box.Size.Y
+		}
+	}
+	return at
+}
+
+// lift is items with the blocks inside their inline elements lifted among them, each
+// such element cut in parts round its blocks and noted on owner.
+func (t *tree) lift(owner *node, items []item) []item {
+	if !slices.ContainsFunc(items, func(it item) bool { return it.element != nil && cutByBlocks(it.element) }) {
+		return items
+	}
+	var out []item
+	for _, it := range items {
+		if it.element == nil || !cutByBlocks(it.element) {
+			out = append(out, it)
+			continue
+		}
+		b := &box.Box{Kind: box.Element, Node: it.element, Style: styleOf(it.element)}
+		t.place(it.element, b)
+		cut := &cutInline{box: b}
+		owner.cuts = append(owner.cuts, cut)
+		owner.contents = append(owner.contents, keyed{it.element, b})
+		part := item{element: it.element, cut: cut, first: true}
+		for _, in := range t.lift(owner, t.flatten(owner, it.element.Flow())) {
+			if in.cut != nil || in.element == nil || !inFlowBlock(in.element) {
+				part.inside = append(part.inside, in)
+				continue
+			}
+			cut.blocks = append(cut.blocks, in.element)
+			out = append(out, part, in)
+			part = item{element: it.element, cut: cut}
+		}
+		part.last = true
+		out = append(out, part)
+	}
+	return out
+}
+
+// placeCuts puts the box of each inline element blocks cut in n round its parts and its
+// blocks, once n's children are written.
+func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
+	for _, c := range n.cuts {
+		var r geom.Rect
+		found := false
+		for _, p := range c.parts {
+			at, ok := p.Pos, false
+			for a := p.Parent; a != nil && !ok; a = a.Parent {
+				if ok = a == n.box; !ok {
+					at = at.Add(a.Pos)
+				}
+			}
+			if ok {
+				r = unionRect(r, geom.Rect{X: at.X, Y: at.Y, W: p.Size.X, H: p.Size.Y}, found)
+				found = true
+			}
+		}
+		for _, before := range c.empty {
+			r = unionRect(r, n.emptyPart(before), found)
+			found = true
+		}
+		for _, e := range c.blocks {
+			if b := of[e]; b != nil && b.Parent == n.box {
+				r = unionRect(r, geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: b.Size.X, H: b.Size.Y}, found)
+				found = true
+			}
+		}
+		c.box.Parent = n.box
+		c.box.Pos, c.box.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
+	}
+}
+
+// inFlowBlock reports an element that is a block in the flow of its container.
+func inFlowBlock(e *dom.Node) bool {
+	st := styleOf(e)
+	return st.Display != style.DisplayNone && !outOfFlow(st.Position) && st.Float == style.FloatNone &&
+		elementBlockLevel(e)
+}
+
+// isInline reports an element whose box is an inline one, its content in its
+// container's lines.
+func isInline(e *dom.Node) bool {
+	st := styleOf(e)
+	return st.Display == style.Inline && !outOfFlow(st.Position) && st.Float == style.FloatNone && !isTable(e)
+}
+
+// cutByBlocks reports an inline element holding a block in the flow, through the inline
+// elements it holds.
+func cutByBlocks(e *dom.Node) bool { return isInline(e) && holdsBlock(e) }
+
+// holdsBlock reports a block in the flow among e's children, those of its display:
+// contents children and those of the inline elements it holds.
+func holdsBlock(e *dom.Node) bool {
+	for _, c := range e.Flow() {
+		switch {
+		case c.IsText():
+		case styleOf(c).Display == style.Contents:
+			if holdsBlock(c) {
+				return true
+			}
+		case inFlowBlock(c) || cutByBlocks(c):
+			return true
+		}
+	}
+	return false
 }
 
 // flatten lists children with display: contents replaced by theirs, noted on owner.
@@ -528,7 +808,7 @@ func (t *tree) flatten(owner *node, children []*dom.Node) []item {
 			b := &box.Box{Kind: box.Element, Node: c, Style: styleOf(c)}
 			t.place(c, b)
 			owner.contents = append(owner.contents, keyed{c, b})
-			items = append(items, t.flatten(owner, c.Children())...)
+			items = append(items, t.flatten(owner, c.Flow())...)
 			continue
 		}
 		items = append(items, item{element: c})
@@ -546,15 +826,40 @@ func isBlockLevel(st *style.Computed) bool {
 }
 
 // elementBlockLevel is isBlockLevel for an element, which a table always is.
-func elementBlockLevel(e *dom.Node) bool { return isTable(e) || isBlockLevel(styleOf(e)) }
+func elementBlockLevel(e *dom.Node) bool { return isBlockLevel(styleOf(e)) }
 
+// hasBlockChild reports a child that makes the container lay blocks out: one in the flow
+// that is block-level, as a float is, or an inline element with a float inside.
 func hasBlockChild(items []item) bool {
 	for _, it := range items {
 		if it.element != nil {
 			st := styleOf(it.element)
-			if st.Display != style.DisplayNone && elementBlockLevel(it.element) && !outOfFlow(st.Position) {
+			if st.Display == style.DisplayNone || outOfFlow(st.Position) {
+				continue
+			}
+			if elementBlockLevel(it.element) || it.cut != nil ||
+				!isAtomicDisplay(st.Display) && floatInside(it.element) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// floatInside reports a float under the inline element e, through the inline elements
+// it holds.
+func floatInside(e *dom.Node) bool {
+	for _, c := range e.Flow() {
+		if c.IsText() {
+			continue
+		}
+		st := styleOf(c)
+		switch {
+		case st.Display == style.DisplayNone || outOfFlow(st.Position):
+		case st.Float != style.FloatNone:
+			return true
+		case !isAtomicDisplay(st.Display) && floatInside(c):
+			return true
 		}
 	}
 	return false
@@ -607,10 +912,14 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Content = geom.Vec2{X: f.overflow.rect.r - f.overflow.rect.l, Y: f.overflow.rect.b - f.overflow.rect.t}
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w, Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
+	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
+		n.writeColumns()
+	}
 	if !rewrite {
 		for _, c := range n.kids {
 			t.writeIn(c, n, false)
 		}
+		n.placeCuts(t.out.Of)
 		return
 	}
 	b.Children = b.Children[:0]
@@ -624,6 +933,79 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		t.writeIn(c, n, true)
 	}
 	t.atomsIntoSpans(n)
+	t.listMarker(n)
+	n.placeCuts(t.out.Of)
+}
+
+// markerGap is how far a bullet stands from its item's content, past its own offset, as
+// Chrome's.
+const markerGap = 7
+
+// listMarker gives a list item its ::marker box, outside the item beside its first line:
+// a number, or its ::marker's content, ending where the item's content starts, a bullet
+// Chrome's distance before it. An item without a line has none. The box's style is the
+// ::marker's where a rule styles it, the item's otherwise.
+func (t *tree) listMarker(n *node) {
+	e := n.box.Node
+	if e == nil || n.box.Kind != box.Element || !n.st.ListItem || e.Tag() == dom.Summary ||
+		n.st.Display == style.DisplayNone {
+		return
+	}
+	line, at, ok := firstLine(n.box, geom.Vec2{})
+	if !ok {
+		return
+	}
+	data := dom.Data(e)
+	st := n.st
+	if data.Marker != nil {
+		st = data.Marker
+	}
+	m := &box.Box{Kind: box.Marker, Node: e, Style: st}
+	left := n.final.border.l + n.final.padding.l
+	ascent := float32(math.Round(float64(t.fonts.Metrics(st.Font).Ascent)))
+	baseline := at.Y + line.Baseline
+	text := ""
+	switch {
+	case data.HasMarkerText:
+		inWord := false
+		text = shownText(data.MarkerText, st, nil, &inWord)
+	case st.ListStyle.Numeric():
+		text = st.ListStyle.Format(data.Ordinal) + ". "
+	}
+	switch {
+	case text != "":
+		w := t.fonts.Advance(st.Font, text) + st.Spacing(text)
+		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
+		m.Size = geom.Vec2{X: w, Y: line.Rect.H}
+		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}
+	case data.HasMarkerText:
+		return
+	case st.ListStyle == style.ListDisc || st.ListStyle == style.ListCircle || st.ListStyle == style.ListSquare:
+		offset := float32(math.Floor(float64(ascent * 2 / 3)))
+		side := float32(math.Floor(float64((offset + 1) / 2)))
+		top := float32(math.Floor(float64(3 * (ascent - offset) / 2)))
+		m.Pos = geom.Vec2{X: left - offset - markerGap, Y: baseline - ascent + top}
+		m.Size = geom.Vec2{X: side, Y: side}
+	default:
+		return
+	}
+	n.box.Append(m)
+}
+
+// firstLine is the first line fragment under b, with its box's place in b.
+func firstLine(b *box.Box, at geom.Vec2) (box.Fragment, geom.Vec2, bool) {
+	if b.Kind == box.TextRun && len(b.Lines) > 0 {
+		return b.Lines[0], at, true
+	}
+	for _, c := range b.Children {
+		if c.Kind == box.Marker {
+			continue
+		}
+		if f, p, ok := firstLine(c, at.Add(c.Pos)); ok {
+			return f, p, true
+		}
+	}
+	return box.Fragment{}, geom.Vec2{}, false
 }
 
 // keepLayout places every box without rounding, for fixtures that turn it off.
@@ -632,10 +1014,17 @@ func keepLayout(n *node, cumulative point) { keepIn(n, cumulative, false) }
 // keepIn is keepLayout under a display: none ancestor when hidden, where out-of-flow
 // boxes take their parent's place too, as no containing block places them.
 func keepIn(n *node, cumulative point, hidden bool) {
-	n.final = n.unrounded
+	n.final = n.laid()
 	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
 	n.absolute = point{cumulative.x + n.unrounded.location.x, cumulative.y + n.unrounded.location.y}
+	if n.frag != nil {
+		n.frag = nil
+	}
 	hidden = hidden || n.st.Display == style.DisplayNone
+	if n.columns != nil && !hidden {
+		keepColumns(n)
+		return
+	}
 	for _, c := range n.kids {
 		if hidden || !outOfFlow(c.st.Position) || c.st.Display == style.DisplayNone {
 			keepIn(c, n.absolute, hidden)

@@ -19,6 +19,10 @@ type Feed interface {
 	// GamepadChanges is the pads that connected and disconnected as this
 	// frame began, by ID.
 	GamepadChanges() (connected, disconnected []int)
+	// AdoptGamepads takes the pads of from, an *input.State, as they
+	// are, so none reads as connecting again: the pads are the primary
+	// window's, and pass on with it.
+	AdoptGamepads(from any)
 	// CapturePointer and CaptureKeyboard mark the pointer or the whole
 	// keyboard as the UI's for the rest of this frame and all of the next.
 	CapturePointer()

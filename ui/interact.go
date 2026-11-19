@@ -13,6 +13,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/layout"
 	"github.com/lantervale/ember/ui/paint"
 	"github.com/lantervale/ember/world"
 )
@@ -25,8 +26,10 @@ type interaction struct {
 	// pendingFocus is the element a Focus asked for before it could take
 	// the focus, given it at the next retarget where it can.
 	pendingFocus *Node
-	// pendingReveal is the element a ScrollIntoView asked to show.
+	// pendingReveal is the element a ScrollIntoView or a ScrollToStart
+	// asked to show, and revealStart whether at the start of its scrollers.
 	pendingReveal *Node
+	revealStart   bool
 	// opening is set by ShowModal: the keys and pad buttons down at the
 	// next read, openKeys and openPad, opened the modal and act in it only
 	// once released.
@@ -47,6 +50,11 @@ type interaction struct {
 	// two in turn, so the focus reads the last while the next is made.
 	candidates []candidate
 	shows      []*Node
+	// radios are the named radio inputs of that walk, in tree order, group
+	// the buffer their groups are read in, and grouped counts the walks of
+	// the tree a radio's group was read by, for tests.
+	radios, group []*Node
+	grouped       int
 	// shortcutItems are the menu items with aria-keyshortcuts, parsed their
 	// keys as last read.
 	shortcutItems []*Node
@@ -69,6 +77,7 @@ type interaction struct {
 	pointerClick, lastClick *Node
 	lastClickAt             float32
 	clicks                  int
+	textClicks              textClicks
 	// pointerAt is where the pointer was this frame, in the Document's
 	// space.
 	pointerAt geom.Vec2
@@ -97,6 +106,12 @@ type interaction struct {
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
 	rightPressed *Node
+	// dragPressed, dragPressAt and dragPressFrom are the last press in a
+	// drag region (app-region), when and where, for the double click that
+	// follows it.
+	dragPressed   bool
+	dragPressAt   float32
+	dragPressFrom geom.Vec2
 	// caretSeen is the focused text field's caret and length the last
 	// time it was scrolled into view (followCaret).
 	caretSeen caretState
@@ -124,6 +139,8 @@ type interaction struct {
 	held    *windowDrag
 	raised  *Node
 	raisedZ int
+	// sel is the text selected outside the fields (decision 0090).
+	sel selecting
 }
 
 // navKeys and navPad are what focus navigation reads while it shows.
@@ -158,6 +175,7 @@ func (d *Document) Focused(n *Node) bool { return n != nil && d.focused() == n }
 // it at the first layout where it can, unless another Focus came first or
 // n has left the Document by then.
 func (d *Document) Focus(n *Node) {
+	d.askedOf()
 	d.pendingFocus = nil
 	if !d.moveFocus(func() bool { return d.focus.Set(n, true) }) {
 		d.pendingFocus = n
@@ -168,7 +186,43 @@ func (d *Document) Focus(n *Node) {
 // it, as the DOM's scrollIntoView({block: "nearest"}). An element not laid
 // out yet, such as one shown this frame, is shown once it is; one that
 // leaves the Document first is forgotten.
-func (d *Document) ScrollIntoView(n *Node) { d.pendingReveal = n }
+func (d *Document) ScrollIntoView(n *Node) { d.pendingReveal, d.revealStart = n, false }
+
+// ScrollToStart scrolls the containers holding n so that its top is at
+// the top of each one's view, as far as each scrolls, as the DOM's
+// scrollIntoView() and a browser going to a fragment: across, it comes in
+// by its nearest edge. It waits for an element not laid out yet as
+// ScrollIntoView does, and the last of the two asked in a frame is done.
+func (d *Document) ScrollToStart(n *Node) { d.pendingReveal, d.revealStart = n, true }
+
+// Scroll is how far n's content is scrolled, in the Document's own points,
+// before its zoom: the viewport's for the root element (HTML) of a
+// Document with ScrollingViewport, zero for an element that scrolls
+// nothing.
+func (d *Document) Scroll(n *Node) geom.Vec2 {
+	if d.tree != nil {
+		if b := d.scroller(n); b != nil {
+			return b.Scroll
+		}
+	}
+	return dom.Data(n).Scroll
+}
+
+// SetScroll scrolls n's content to off, kept within what n scrolls: at
+// once for an element laid out, at its first layout for another, where a
+// page shown again is put back where it was left. Nothing else scrolls,
+// and a ScrollIntoView or ScrollToStart still waited for comes after it.
+func (d *Document) SetScroll(n *Node, off geom.Vec2) {
+	dom.Data(n).Scroll = geom.V2(max(off.X, 0), max(off.Y, 0))
+	if d.tree == nil {
+		return
+	}
+	layout.Refresh(d.tree, d.html)
+	if b := d.scroller(n); b != nil {
+		dom.Data(n).Scroll = b.Scroll
+	}
+	d.scrolled = true
+}
 
 // revealPending does what a ScrollIntoView asked once n has a box.
 func (d *Document) revealPending() {
@@ -181,7 +235,7 @@ func (d *Document) revealPending() {
 		return
 	}
 	if d.tree != nil && d.tree.Of[n] != nil {
-		d.reveal(n)
+		d.reveal(n, d.revealStart)
 		d.pendingReveal = nil
 	}
 }
@@ -230,7 +284,10 @@ func focusable(n *Node) (int, bool) {
 	if n.Tag() == dom.Dialog {
 		return -1, true
 	}
-	if !slices.Contains([]dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Summary}, n.Tag()) {
+	if isLink(n) {
+		return 0, true
+	}
+	if !slices.Contains([]dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Summary, dom.Iframe}, n.Tag()) {
 		return 0, false
 	}
 	if t, _ := n.Attr("type"); t == "hidden" {
@@ -238,6 +295,14 @@ func focusable(n *Node) (int, bool) {
 	}
 	return 0, true
 }
+
+// isLink reports an a element with an href: one that takes the focus and
+// clicks.
+func isLink(n *Node) bool { return n.Tag() == dom.A && has(n, "href") }
+
+// pressable reports an element without a control that still clicks: one
+// with a tabindex, or a link.
+func pressable(n *Node) bool { return has(n, "tabindex") || isLink(n) }
 
 // candidate is an element that takes the focus, with its own tabindex.
 type candidate struct {
@@ -255,21 +320,8 @@ type candidate struct {
 func (d *Document) retarget() {
 	if d.restructure || !d.targeted {
 		d.candidates, d.shows, d.shortcutItems = d.candidates[:0], d.shows[:0], d.shortcutItems[:0]
-		d.html.Walk(func(n *Node) bool {
-			if n.IsText() {
-				return false
-			}
-			if isMenuItem(n) && has(n, "aria-keyshortcuts") {
-				d.shortcutItems = append(d.shortcutItems, n)
-			}
-			if isTab(n) || d.resetField(n) != nil {
-				d.shows = append(d.shows, n)
-			}
-			if i, ok := focusable(n); ok {
-				d.candidates = append(d.candidates, candidate{n, i})
-			}
-			return true
-		})
+		d.radios = d.radios[:0]
+		d.html.Walk(d.found)
 		d.restructure = false
 	}
 	for _, n := range d.shows {
@@ -290,7 +342,7 @@ func (d *Document) retarget() {
 			i = d.tabTabIndex(n, i)
 		}
 		if d.isRadio(n) {
-			i = d.radioTabIndex(n, i)
+			i = d.radioTabIndex(n, d.walkedGroup(n), i)
 		}
 		if isMenuItem(n) {
 			i = d.menuTabIndex(n)
@@ -302,6 +354,27 @@ func (d *Document) retarget() {
 	d.autofocus(targets)
 	d.focusPending()
 	d.targeted = true
+}
+
+// found keeps n, met on retarget's walk of the tree, in the lists it is
+// one of, and reports whether the walk goes on below it.
+func (d *Document) found(n *Node) bool {
+	if n.IsText() {
+		return false
+	}
+	if d.namedRadio(n) {
+		d.radios = append(d.radios, n)
+	}
+	if isMenuItem(n) && has(n, "aria-keyshortcuts") {
+		d.shortcutItems = append(d.shortcutItems, n)
+	}
+	if isTab(n) || d.resetField(n) != nil {
+		d.shows = append(d.shows, n)
+	}
+	if i, ok := focusable(n); ok {
+		d.candidates = append(d.candidates, candidate{n, i})
+	}
+	return true
 }
 
 // autofocus gives the focus to the first target with autofocus, in tree
@@ -330,11 +403,14 @@ func (d *Document) autofocus(targets []control.Target[*Node]) {
 func (d *Document) interact(c *twod.Canvas) bool {
 	d.platform = currentPlatform()
 	d.drawnBy(c)
+	d.syncFrames()
+	d.shield = d.shielded()
 	d.claimed(c)
 	if d.replay.repaint || d.retargeting || !d.targeted {
 		d.retarget()
 	}
 	d.revealPending()
+	d.keepSelection()
 	before := d.focused()
 	d.layText()
 	d.trap()
@@ -350,9 +426,15 @@ func (d *Document) interact(c *twod.Canvas) bool {
 	}
 	d.acts(c)
 	if in := c.Input(); in != nil {
-		d.html.SetAttr("data-input-device", in.LastDevice().String())
-		d.pointer(c, in)
-		if !d.fresh {
+		dom.SetSelectorAttr(d.html, "data-input-device", in.LastDevice().String())
+		if d.shield {
+			d.pointer(c, d.idleInput())
+		} else {
+			d.pointer(c, in)
+		}
+		if entered := d.framed != nil && d.framed.entered; entered {
+			d.framed.entered = false
+		} else if !d.fresh && d.keyed() {
 			d.keys(c, in)
 		}
 	}
@@ -409,6 +491,10 @@ func emit(w *world.World, e any) {
 		world.Emit(w, e)
 	case DragEnded:
 		world.Emit(w, e)
+	case SelectionChanged:
+		world.Emit(w, e)
+	case RightDragSelected:
+		world.Emit(w, e)
 	}
 }
 
@@ -461,9 +547,11 @@ func (d *Document) moveFocus(move func() bool) bool {
 		}
 		if t := textOf(d.machine(after)); t != nil {
 			t.Focus()
+			// a field taking the focus takes the selection with it, as in Chrome
+			d.ClearSelection()
 		}
 		if after != nil && d.focus.Active() {
-			d.reveal(after)
+			d.reveal(after, false)
 		}
 	}
 	return moved
@@ -517,7 +605,7 @@ func (d *Document) click(n *Node) {
 	case *control.Canvas:
 		d.fire(n, control.Clicked)
 	case nil:
-		if _, ok := n.Attr("tabindex"); ok {
+		if pressable(n) {
 			d.fire(n, control.Clicked)
 		}
 	}
@@ -552,7 +640,7 @@ func (d *Document) activates(n *Node) bool {
 	switch {
 	case d.machine(n) != nil && n.Tag() != dom.Details && n.Tag() != dom.Dialog:
 		return true
-	case n.Tag() == dom.Summary || n.Tag() == dom.Label || has(n, "tabindex"):
+	case n.Tag() == dom.Summary || n.Tag() == dom.Label || pressable(n):
 		return true
 	}
 	return isMenuItem(n) || isGridRow(n) || isSortHeader(n) || isOption(n)
@@ -585,20 +673,13 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 	}
 	if !d.edgeCursor(c, at) {
 		d.cssCursor(c)
+		d.selectionCursor(c, hit, at)
 	}
-	d.rightClick(in)
-	if d.dragPointer(c, in, at) {
+	d.rightClick(in, at)
+	if d.pointerTaken(c, in, at, hit) {
 		return
 	}
-	if d.windowPointer(in, at) {
-		return
-	}
-	if d.wheelNumber(in) {
-		return
-	}
-	if d.scrollPointer(c, in, hit) {
-		return
-	}
+	d.heldSelection(in, at)
 	pick := d.pickAt(at)
 	open, _ := d.machine(pick.Select).(*control.Select)
 	if open != nil && pick.Index >= 0 && pick.Index < len(open.Options) && !open.Options[pick.Index].Disabled {
@@ -614,26 +695,56 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		return
 	}
 	if in.Down(input.MouseLeft) && !in.Pressed(input.MouseLeft) && len(d.pressed) > 0 {
-		if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
-			d.caretAt(d.pressed[0], t, at, true)
-		}
-		if held, r := d.dragged(); r != nil {
-			d.fire(held, r.Drag(d.along(held, at)))
-		}
+		d.leftHeld(at)
 	}
 	if in.Released(input.MouseLeft) {
 		d.leftRelease(open, pick)
 	}
 }
 
+// pointerTaken reports the pointer taken before the elements get it: by
+// a press that moves the system's window, a drag of an element, a
+// window of the Document's own, the wheel over a number field, or the
+// scrollbars.
+func (d *Document) pointerTaken(c *twod.Canvas, in *input.State, at geom.Vec2, hit *box.Box) bool {
+	return d.appRegionPress(c, in) || d.dragPointer(c, in, at) || d.windowPointer(in, at) || d.wheelNumber(in) ||
+		d.scrollPointer(c, in, hit)
+}
+
+// heldSelection extends the selection a press began while the button is
+// held, and lets go of it once it is up.
+func (d *Document) heldSelection(in *input.State, at geom.Vec2) {
+	if !d.sel.held || in.Pressed(input.MouseLeft) {
+		return
+	}
+	if in.Down(input.MouseLeft) {
+		d.dragSelection(at)
+		return
+	}
+	d.sel.held = false
+}
+
+// leftHeld moves what the held left button drags: the selection of the
+// text field pressed, a slider's thumb.
+func (d *Document) leftHeld(at geom.Vec2) {
+	if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
+		d.dragText(d.pressed[0], t, at)
+	}
+	if held, r := d.dragged(); r != nil {
+		d.fire(held, r.Drag(d.along(held, at)))
+	}
+}
+
 // hitAt is the box under at and the innermost element holding it, the
-// replay's own while the frame replays quietly.
+// element of a generated box under it, the replay's own while the frame
+// replays quietly.
 func (d *Document) hitAt(at geom.Vec2) (*box.Box, *Node) {
 	hit := d.replay.hit
 	if !d.replay.quiet {
 		hit = nil
 		if d.tree != nil {
-			hit = paint.HitTest(d.tree, at, paint.Controls(d.machine), paint.Viewport(d.viewport), paint.Scale(d.fonts.Scale()))
+			hit = paint.HitTest(d.inked(), at,
+				paint.Controls(d.machine), paint.Viewport(d.viewport), paint.Scale(d.fonts.Scale()))
 		}
 		d.replay.hit = hit
 	}
@@ -643,6 +754,8 @@ func (d *Document) hitAt(at geom.Vec2) (*box.Box, *Node) {
 		for b := hit; n == nil && b != nil; b = b.Parent {
 			n = b.Node
 		}
+		// a ::before or ::after box is its element's to the pointer
+		n = dom.Origin(n)
 	}
 	return hit, n
 }
@@ -654,7 +767,7 @@ func (d *Document) pickAt(at geom.Vec2) paint.Pick {
 	if !d.replay.quiet {
 		pick = paint.Pick{Index: -1}
 		if d.tree != nil && d.selectOpen() {
-			pick = paint.PickOption(d.tree, at, paint.Controls(d.machine), paint.Fonts(d.fonts), paint.Viewport(d.viewport))
+			pick = paint.PickOption(d.inked(), at, paint.Controls(d.machine), paint.Fonts(d.fonts), paint.Viewport(d.viewport))
 		}
 		d.replay.pick = pick
 	}
@@ -696,11 +809,12 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		return d.focus.Set(takes, false)
 	})
 	if t := textOf(d.machine(takes)); t != nil {
-		d.caretAt(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
+		d.pressText(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	}
 	if r, ok := d.machine(takes).(*control.Range); ok {
 		d.fire(takes, r.Press(d.along(takes, at)))
 	}
+	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	return false
 }
 
@@ -814,20 +928,59 @@ func (d *Document) endDrag(dropped bool) {
 
 // rightClick reports a right click: the right button pressed and released
 // on the same element, not the page's html or body, which are the game's.
-func (d *Document) rightClick(in *input.State) {
+// A drag that selected text between the two, where RightDragSelects, in
+// the Document or in one of its iframes, is none.
+func (d *Document) rightClick(in *input.State, at geom.Vec2) {
 	n := firstOf(d.hovered)
 	if n == d.html || n == d.body {
 		n = nil
 	}
 	if in.Pressed(input.MouseRight) {
 		d.rightPressed = n
+		d.pressRightSelection(at)
 	}
+	d.heldRightSelection(in, at)
 	if in.Released(input.MouseRight) {
-		if n != nil && n == d.rightPressed {
+		if n != nil && n == d.rightPressed && !d.rightSelected() {
 			d.events = append(d.events, ContextClicked{Node: n})
 		}
 		d.rightPressed = nil
 	}
+}
+
+// appRegionPress hands a left press in a drag region (app-region: drag)
+// to the window: it moves the system's window, and a second press within
+// 400ms, where the first was, is a double click on its title bar. What clicks, and what is in
+// it, is no part of the region, so a header's buttons and tabs need no
+// no-drag. The press is the window's alone: it moves no focus and clicks
+// nothing.
+func (d *Document) appRegionPress(c *twod.Canvas, in *input.State) bool {
+	win := c.Window()
+	if win == nil || !in.Pressed(input.MouseLeft) || !d.inDragRegion() {
+		return false
+	}
+	if d.dragPressed && d.clock-d.dragPressAt <= 0.4 && d.pointerAt.Sub(d.dragPressFrom).Len() < dragStart {
+		d.dragPressed = false
+		win.DoubleClickTitleBar()
+		return true
+	}
+	d.dragPressed, d.dragPressAt, d.dragPressFrom = true, d.clock, d.pointerAt
+	win.StartDrag()
+	return true
+}
+
+// inDragRegion reports whether the pointer is over a drag region, off
+// what clicks in it.
+func (d *Document) inDragRegion() bool {
+	for i, n := range d.hovered {
+		if st := dom.Data(n).Style; st == nil || !st.AppDrag {
+			return i > 0
+		}
+		if d.activates(n) {
+			return false
+		}
+	}
+	return len(d.hovered) > 0
 }
 
 // pressOpen opens t on the press, as macOS menu bars and Chrome's select
@@ -957,6 +1110,9 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	d.shortcuts(c, in)
 	pressed := func(k input.Key) bool { return f.RawPressed(int(k)) || f.RawRepeated(int(k)) }
 	n := d.focused()
+	if child := frameOf(n); child != nil && child.framed != nil {
+		return
+	}
 	m := d.machine(n)
 	if t := textOf(m); t != nil && n != nil {
 		f.CaptureKeyboard()
@@ -972,6 +1128,9 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	}
 	var taken keySet
 	defer d.keysLeft(in, n, &taken)
+	if d.selectionKeys(c, in, &taken) {
+		return
+	}
 	if n != nil && d.focus.Active() {
 		f.CaptureKeys(navKeys...)
 		f.CaptureGamepadButtons(navPad...)
@@ -984,13 +1143,12 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 		}
 		taken.all = true
 	}
-	if pressed(input.KeyTab) && n != nil {
+	if pressed(input.KeyTab) && (n != nil || d.framed != nil) {
 		taken.add(input.KeyTab)
-		if isMenuItem(n) && roleOf(menuBoxOf(n)) == roleMenu {
+		if n != nil && isMenuItem(n) && roleOf(menuBoxOf(n)) == roleMenu {
 			d.closeAll(n, true)
 		}
-		back := f.RawDown(int(input.KeyShift))
-		d.moveFocus(func() bool { return d.focus.Tab(back) })
+		d.tab(f.RawDown(int(input.KeyShift)))
 		return
 	}
 	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
@@ -1165,7 +1323,7 @@ func (d *Document) intent(n *Node, m any, i control.Intent) bool {
 		}
 		return d.radioArrow(n, i)
 	}
-	if m == nil && i == control.Activate && has(n, "tabindex") {
+	if m == nil && i == control.Activate && pressable(n) {
 		d.fire(n, control.Clicked)
 		return true
 	}
@@ -1302,7 +1460,7 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 	}
 	at := d.mouse(c)
 	if n := d.dragging; n != nil {
-		b := d.tree.Of[n]
+		b := d.scroller(n)
 		s := d.scrolling(n)
 		if b != nil {
 			off, _ := s.Input(paint.BarsOf(b, origin(b)), paint.Pointer{At: at, Down: in.Down(input.MouseLeft)}, d.lineStep(b))
@@ -1333,7 +1491,10 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 	if inputfeed.Of(in).RawDown(int(input.KeyShift)) && w.X == 0 {
 		w = geom.V2(w.Y, 0)
 	}
-	if w == (geom.Vec2{}) {
+	if w = d.wheeled(w); w == (geom.Vec2{}) {
+		return false
+	}
+	if child := frameOf(firstOf(d.hovered)); child != nil && child.framed != nil && child.wheels(w) {
 		return false
 	}
 	for _, b := range held {
@@ -1437,8 +1598,9 @@ func (d *Document) pointed() *Node {
 
 // reveal scrolls each container holding n, innermost first, by the least
 // that brings n into its view: its nearest edge to the view's, or its
-// start when it is bigger than the view.
-func (d *Document) reveal(n *Node) {
+// start when it is bigger than the view. With start its top goes to the
+// view's top, as far as the container scrolls.
+func (d *Document) reveal(n *Node, start bool) {
 	if d.tree == nil {
 		return
 	}
@@ -1451,7 +1613,11 @@ func (d *Document) reveal(n *Node) {
 		r, v := b.Rect(), bars.View
 		off := bars.Scroll
 		off.X += nearest(r.X, r.W, v.X, v.W)
-		off.Y += nearest(r.Y, r.H, v.Y, v.H)
+		if start {
+			off.Y += r.Y - v.Y
+		} else {
+			off.Y += nearest(r.Y, r.H, v.Y, v.H)
+		}
 		off.X = min(max(off.X, 0), max(bars.Content.X-v.W, 0))
 		off.Y = min(max(off.Y, 0), max(bars.Content.Y-v.H, 0))
 		d.setScroll(s, off)
@@ -1476,7 +1642,7 @@ func nearest(a, al, v, vl float32) float32 {
 func scrollContainers(b *box.Box) []*box.Box {
 	var out []*box.Box
 	for ; b != nil; b = b.Parent {
-		if b.Kind != box.Element || b.Node == nil || b.Style == nil {
+		if b.Kind != box.Element && b.Kind != box.Viewport || b.Node == nil || b.Style == nil {
 			continue
 		}
 		o := b.Style.Overflow
@@ -1488,6 +1654,15 @@ func scrollContainers(b *box.Box) []*box.Box {
 }
 
 func scrolls(o style.Overflow) bool { return o == style.Scroll || o == style.OverflowAuto }
+
+// scroller is the box whose scroll offset n keeps: n's own, or for the
+// root element of a viewport that scrolls, the viewport's.
+func (d *Document) scroller(n *Node) *box.Box {
+	if root := d.tree.Root; root != nil && root.Kind == box.Viewport && root.Node == n {
+		return root
+	}
+	return d.tree.Of[n]
+}
 
 // canScroll reports whether a container with bars still has room to
 // scroll the way w turns.

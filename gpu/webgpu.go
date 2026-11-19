@@ -17,6 +17,7 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/world"
+	xdraw "golang.org/x/image/draw"
 )
 
 // webgpu2D draws the 2D lists through WebGPU, into the texture the desktop
@@ -36,8 +37,10 @@ type webgpu2D struct {
 	uniforms, vertices, indices *wgpu.Buffer
 	drawGroup                   *wgpu.BindGroup
 
-	atlases map[*draw.Font]gpuTexture
-	images  map[*render.Texture]gpuTexture
+	// atlases and images are the fonts' atlases and the pictures on the
+	// GPU, each until its font or picture is collected (decision 0100).
+	atlases *kept[draw.Font]
+	images  *kept[render.Texture]
 	// targets are the textures passes draw into, by the texture their
 	// pictures show, kept while their window draws them.
 	targets map[*render.Texture]*passTarget
@@ -189,8 +192,8 @@ func (r *webgpu2D) init(d *wgpu.Device) error {
 	}
 	r.pipelines = map[pipelineKey]*wgpu.RenderPipeline{}
 	r.groups = map[groupKey]*wgpu.BindGroup{}
-	r.atlases = map[*draw.Font]gpuTexture{}
-	r.images = map[*render.Texture]gpuTexture{}
+	r.atlases = newKept[draw.Font]()
+	r.images = newKept[render.Texture]()
 	r.targets = map[*render.Texture]*passTarget{}
 	for i, nearest := range [2]bool{false, true} {
 		for j, repeat := range [2]bool{false, true} {
@@ -280,12 +283,12 @@ func (r *webgpu2D) image(t *render.Texture) *wgpu.Texture {
 	if t == nil || t.Image == nil {
 		return r.blank
 	}
-	c, ok := r.images[t]
+	c, ok := r.images.get(t)
 	if ok && c.version == t.Version() {
 		return c.gpu
 	}
 	if ok && r.patch(t, c.gpu) {
-		r.images[t] = gpuTexture{gpu: c.gpu, version: t.Version()}
+		r.images.set(t, gpuTexture{gpu: c.gpu, version: t.Version()})
 		return c.gpu
 	}
 	if ok {
@@ -298,19 +301,44 @@ func (r *webgpu2D) image(t *render.Texture) *wgpu.Texture {
 		rgba = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 		imagedraw.Draw(rgba, rgba.Bounds(), t.Image, b.Min, imagedraw.Src)
 	}
+	if rgba = uploadable(rgba); rgba == nil {
+		return r.blank
+	}
 	format := wgpu.RGBA8UnormSrgb
 	if t.Encoded {
 		format = wgpu.RGBA8Unorm
 	}
 	g := r.dev.CreateTexture(rgba.Rect.Dx(), rgba.Rect.Dy(), format, wgpu.UsageTextureBinding|wgpu.UsageCopyDst)
 	if rects, whole := t.Changes(); !whole && len(rects) > 0 && r.patch(t, g) {
-		r.images[t] = gpuTexture{gpu: g, version: t.Version()}
+		r.images.set(t, gpuTexture{gpu: g, version: t.Version()})
 		return g
 	}
 	r.dev.WriteTexture(g, rgba.Pix, rgba.Stride)
-	r.images[t] = gpuTexture{gpu: g, version: t.Version()}
+	r.images.set(t, gpuTexture{gpu: g, version: t.Version()})
 	t.Uploaded()
 	return g
+}
+
+// maxTextureSide is the longest side of a texture every WebGPU device
+// takes; the device is asked for no more, and no glyph atlas grows past it.
+const maxTextureSide = draw.MaxAtlasSide
+
+// uploadable is img as a device takes it: itself when it fits, scaled down
+// on each side over maxTextureSide (a draw's texture coordinates are
+// fractions of the picture, so it draws at the same size, softer), nil
+// when it is empty. A texture of another size fails on the device, and
+// every draw of the frame with it.
+func uploadable(img *image.RGBA) *image.RGBA {
+	w, h := img.Rect.Dx(), img.Rect.Dy()
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	if w <= maxTextureSide && h <= maxTextureSide {
+		return img
+	}
+	fit := image.NewRGBA(image.Rect(0, 0, min(w, maxTextureSide), min(h, maxTextureSide)))
+	xdraw.ApproxBiLinear.Scale(fit, fit.Rect, img, img.Rect, xdraw.Src, nil)
+	return fit
 }
 
 // patch uploads the rectangles of t touched since its last upload into
@@ -343,7 +371,7 @@ func (r *webgpu2D) atlas(f *draw.Font) *wgpu.Texture {
 	if f == nil {
 		return r.alpha
 	}
-	c, ok := r.atlases[f]
+	c, ok := r.atlases.get(f)
 	if ok && c.version == f.Version() {
 		return c.gpu
 	}
@@ -354,8 +382,18 @@ func (r *webgpu2D) atlas(f *draw.Font) *wgpu.Texture {
 	a := f.Atlas
 	g := r.dev.CreateTexture(a.Rect.Dx(), a.Rect.Dy(), wgpu.R8Unorm, wgpu.UsageTextureBinding|wgpu.UsageCopyDst)
 	r.dev.WriteTexture(g, a.Pix, a.Stride)
-	r.atlases[f] = gpuTexture{gpu: g, version: f.Version()}
+	r.atlases.set(f, gpuTexture{gpu: g, version: f.Version()})
 	return g
+}
+
+// sweep releases the textures of the fonts and the pictures collected
+// since the last frame.
+func (r *webgpu2D) sweep() {
+	release := func(g gpuTexture) { g.gpu.Release() }
+	atlases, images := r.atlases.sweep(release), r.images.sweep(release)
+	if atlases || images {
+		r.forgetGroups()
+	}
 }
 
 // forgetGroups lets every texture bind group go, when a texture they hold
@@ -616,6 +654,7 @@ func (r *webgpu2D) count(w *world.World) {
 	r.stats = w.Stats()
 	if f := w.Time().Frame; f != r.frame {
 		r.frame = f
+		r.sweep()
 		r.stats.Draws2D, r.stats.Binds2D, r.stats.Vertices2D, r.stats.Passes2D = 0, 0, 0, 0
 	}
 }

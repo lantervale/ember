@@ -1,6 +1,8 @@
 package style
 
 import (
+	"unicode/utf8"
+
 	"github.com/lantervale/ember/color"
 )
 
@@ -44,6 +46,7 @@ func Initial() Computed {
 			LineHeight: LineHeight{Normal: true},
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
+			Orphans:    2, Widows: 2,
 		},
 		Look: Look{
 			Opacity: 1, Visible: true, TransformOrigin: Size[Length]{Percent(50), Percent(50)},
@@ -70,6 +73,16 @@ const (
 	Contents
 )
 
+// UserSelect is whether a selection takes an element's text.
+type UserSelect uint8
+
+const (
+	SelectText UserSelect = iota
+	SelectNone
+	// SelectAll is taken whole or not at all.
+	SelectAll
+)
+
 type BoxSizing uint8
 
 const (
@@ -87,6 +100,26 @@ const (
 	Sticky
 )
 
+// Float is float: the side of its containing block a box is taken out of
+// the flow to, the content after it wrapping round it.
+type Float uint8
+
+const (
+	FloatNone Float = iota
+	FloatLeft
+	FloatRight
+)
+
+// Clear is clear: the sides whose earlier floats a box goes below.
+type Clear uint8
+
+const (
+	ClearNone Clear = iota
+	ClearLeft
+	ClearRight
+	ClearBoth
+)
+
 type Overflow uint8
 
 const (
@@ -102,9 +135,28 @@ type Box struct {
 	Display Display
 	// ListItem is display: list-item, laid out as Block, with a marker
 	// where the element has one (a summary's).
-	ListItem  bool
+	ListItem bool
+	// FlowRoot is display: flow-root, laid out as Block, holding its floats
+	// and standing beside those around it.
+	FlowRoot bool
+	// Table is display: table or inline-table: the element is laid out as
+	// a table, its children its rows, row groups, columns and captions, or
+	// wrapped in anonymous ones. TablePart is one of those displays, on an
+	// element that is none once it floats or leaves the flow.
+	Table     bool
+	TablePart TablePart
 	BoxSizing BoxSizing
 	Position  Position
+	// Float and Clear are float and clear; a float applies to a box in the
+	// flow of a block container, not to a flex or grid item or a box
+	// position takes out of the flow.
+	Float Float
+	Clear Clear
+	// VerticalAlign is vertical-align: where an inline-level box stands on its line, or
+	// a table cell's content in the cell. VerticalShift is how far up an AlignLength
+	// raises it, its percentage of the box's own line height.
+	VerticalAlign VerticalAlign
+	VerticalShift Length
 	// Inset is top, right, bottom, left; Auto where unset.
 	Inset   Sides[Length]
 	Size    Size[Length]
@@ -123,10 +175,45 @@ type Box struct {
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
+	// ScrollbarOverlay is a Document's overlay scrollbars on a box that
+	// shows bars: they take no gutter and draw over its content.
+	ScrollbarOverlay bool
+	// Viewport is the style of the viewport, in a Document whose viewport
+	// scrolls: on the root always, and on body when the viewport takes
+	// body's overflow. OverflowPropagated is set on the one of them whose
+	// overflow the viewport took: its own Overflow is visible.
+	Viewport           *Computed
+	OverflowPropagated bool
 	// ZIndex applies when ZAuto is false.
 	ZIndex int
 	ZAuto  bool
+	// ColumnCount is column-count, 0 for auto, and ColumnWidth column-width,
+	// auto or points: either makes the box a multi-column container, whose
+	// column-gap is Gap.Width.
+	ColumnCount int
+	ColumnWidth Length
+	// ColumnFillAuto is column-fill: auto: columns fill in turn, not
+	// balanced.
+	ColumnFillAuto bool
+	// BreakInsideAvoid is break-inside: avoid; BreakBefore and BreakAfter
+	// are break-before and break-after between columns.
+	BreakInsideAvoid        bool
+	BreakBefore, BreakAfter Break
 }
+
+// Multicol reports a multi-column container.
+func (b *Box) Multicol() bool { return b.ColumnCount > 0 || b.ColumnWidth.Kind != Auto }
+
+// Break is a break-before or break-after between columns.
+type Break uint8
+
+const (
+	BreakAuto Break = iota
+	// BreakAvoid keeps the boxes on either side in one column where it can.
+	BreakAvoid
+	// BreakColumn starts a new column.
+	BreakColumn
+)
 
 type FlexDirection uint8
 
@@ -200,14 +287,45 @@ type TrackRepeat struct {
 }
 
 // GridLine is one end of a placement: auto, a line number (negative from
-// the end), or a span.
+// the end), a span, or the name of an area of the container's, whose
+// edge on that side it is.
 type GridLine struct {
 	Line int
 	Span int
+	Name string
 }
 
-// IsAuto reports a line that is neither a number nor a span.
-func (g GridLine) IsAuto() bool { return g.Line == 0 && g.Span == 0 }
+// IsAuto reports a line that is neither a number, a span nor a name.
+func (g GridLine) IsAuto() bool { return g.Line == 0 && g.Span == 0 && g.Name == "" }
+
+// GridArea is a named area of grid-template-areas: the lines round it,
+// from 1.
+type GridArea struct {
+	Name        string
+	Row, Column [2]int
+}
+
+// AreaLines is lines with each named one as a line number: the edge of
+// the area of that name among areas, auto when there is none.
+func AreaLines(areas []GridArea, lines [2]GridLine, column bool) [2]GridLine {
+	for i, l := range lines {
+		if l.Name == "" {
+			continue
+		}
+		lines[i] = GridLine{}
+		for _, a := range areas {
+			if a.Name != l.Name {
+				continue
+			}
+			if column {
+				lines[i].Line = a.Column[i]
+			} else {
+				lines[i].Line = a.Row[i]
+			}
+		}
+	}
+	return lines
+}
 
 type GridFlow uint8
 
@@ -219,8 +337,10 @@ const (
 )
 
 type Grid struct {
-	Columns     []TrackRepeat
-	Rows        []TrackRepeat
+	Columns []TrackRepeat
+	Rows    []TrackRepeat
+	// Areas are grid-template-areas' named areas.
+	Areas       []GridArea
 	AutoColumns []Track
 	AutoRows    []Track
 	Flow        GridFlow
@@ -245,6 +365,21 @@ type LineHeight struct {
 	Factor float32
 	Px     float32
 }
+
+// TablePart is the part of a table an element's display makes it.
+type TablePart uint8
+
+const (
+	NoTablePart TablePart = iota
+	TableRow
+	TableCell
+	TableRowGroup
+	TableHeaderGroup
+	TableFooterGroup
+	TableColumn
+	TableColumnGroup
+	TableCaption
+)
 
 // CaptionSide is caption-side: a table's caption above it or below.
 type CaptionSide uint8
@@ -273,6 +408,10 @@ const (
 	Capitalize
 )
 
+// TextAlign is a text-align. The Block ones are Chrome's -webkit-left,
+// -webkit-right and -webkit-center, which HTML's align attribute and
+// center element stand for: lines as the plain word, and the blocks
+// narrower than their container placed the same way.
 type TextAlign uint8
 
 const (
@@ -282,6 +421,9 @@ const (
 	Right
 	Center
 	Justify
+	BlockLeft
+	BlockRight
+	BlockCenter
 )
 
 type WhiteSpace uint8
@@ -294,13 +436,51 @@ const (
 	PreLine
 )
 
+// WordSpacing is word-spacing: Px points after each word separator, and
+// Percent of the font size, which a child inherits as a percentage of
+// its own.
+type WordSpacing struct{ Px, Percent float32 }
+
+// WordSeparator reports whether word-spacing follows r: a space or a
+// no-break space, the two Chrome widens.
+func WordSeparator(r rune) bool { return r == ' ' || r == '\u00a0' }
+
+// WordGap is the room word-spacing adds after each word separator in t's
+// font.
+func (t *Text) WordGap() float32 { return t.WordSpacing.Px + t.WordSpacing.Percent*t.Font.Size/100 }
+
+// Spacing is the room letter-spacing and word-spacing add to s: the one
+// after each character, the other after each word separator.
+func (t *Text) Spacing(s string) float32 {
+	word := t.WordGap()
+	if word == 0 {
+		if t.LetterSpacing == 0 {
+			return 0
+		}
+		return t.LetterSpacing * float32(utf8.RuneCountInString(s))
+	}
+	n, seps := 0, 0
+	for _, r := range s {
+		n++
+		if WordSeparator(r) {
+			seps++
+		}
+	}
+	return t.LetterSpacing*float32(n) + word*float32(seps)
+}
+
 type Text struct {
 	Font          Font
 	LineHeight    LineHeight
 	LetterSpacing float32
+	WordSpacing   WordSpacing
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace
+	// TextIndent is text-indent: how far the first line of a block's text
+	// starts in from its edge, out when negative; a percentage is of the
+	// block's width.
+	TextIndent Length
 	// PlaceholderColor is the color of the element's ::placeholder, set
 	// when HasPlaceholder is (a ::placeholder rule matched).
 	PlaceholderColor color.Color
@@ -309,33 +489,62 @@ type Text struct {
 	// while it is modal; transparent draws none.
 	Backdrop color.Color
 	// SelectionColor is the ::selection background-color, set when
-	// HasSelection is (a ::selection rule matched).
-	SelectionColor color.Color
-	HasSelection   bool
+	// HasSelection is (a ::selection rule of the element or of an
+	// ancestor set it), and SelectionText its color, set when
+	// HasSelectionText is. With either set the other is CSS's own:
+	// no background, the text's colour.
+	SelectionColor   color.Color
+	HasSelection     bool
+	SelectionText    color.Color
+	HasSelectionText bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
+	// TextDecoration is the element's own text-decoration, and Decorations
+	// those drawn on its text, the outermost box's first: its ancestors',
+	// unless it is a float, out of flow or an atomic inline, then its own.
+	TextDecoration TextDecoration
+	Decorations    []Decoration
 	// AccentColor and CaretColor are accent-color and caret-color,
 	// resolved: their element's color when AccentAuto or CaretAuto (auto
 	// or currentColor, kept as such when inherited).
 	AccentColor, CaretColor color.Color
 	AccentAuto, CaretAuto   bool
+	// Content is the content property: what a ::before, ::after or
+	// ::marker box holds.
+	Content Content
+	// CounterReset, CounterIncrement and CounterSet are the counter
+	// properties, in the order written.
+	CounterReset, CounterIncrement, CounterSet []Counter
+	// Quotes are the quotes property's marks, an opening and a closing one
+	// per depth; none when QuotesNone, the language's own when empty.
+	Quotes     []string
+	QuotesNone bool
 	// ListStyle is list-style-type: a summary's disclosure triangle, or
 	// none.
 	ListStyle ListStyle
 	// BorderSpacing is a table's border-spacing, across and down, in points.
 	BorderSpacing [2]float32
-	CaptionSide   CaptionSide
-	TableLayout   TableLayout
-	TextTransform TextTransform
+	// BorderCollapse is border-collapse: collapse: a table's cells share
+	// their borders, the widest winning each edge.
+	BorderCollapse bool
+	CaptionSide    CaptionSide
+	TableLayout    TableLayout
+	TextTransform  TextTransform
 	// PixelText draws the text's glyphs unsmoothed, as
 	// -webkit-font-smoothing: none does in Chrome: for pixel fonts.
 	PixelText bool
+	// ExactText draws them at their exact coverage, without stem
+	// darkening, as -webkit-font-smoothing: antialiased does in Chrome.
+	ExactText bool
 	// Ellipsis is text-overflow: ellipsis.
 	Ellipsis bool
 	// EllipsisStart cuts the start of the text rather than its end, as a
 	// path keeps its last folders: class truncate-start, an ember
 	// extension.
 	EllipsisStart bool
+	// Orphans and Widows are the fewest lines of a block left at the end
+	// of a column and taken to the start of the next.
+	Orphans, Widows int
 	// BreakWord is overflow-wrap: anywhere or break-word.
 	BreakWord bool
 	// BreakAnywhere is overflow-wrap: anywhere, whose breaks also count
@@ -355,6 +564,10 @@ const (
 	// on bottom and right.
 	BorderInset
 	BorderOutset
+	// BorderGroove and BorderRidge draw a side in two halves: groove's
+	// outer one as inset and inner one as outset, ridge's the other way.
+	BorderGroove
+	BorderRidge
 )
 
 // Shadow is one box-shadow.
@@ -434,15 +647,33 @@ type Transition struct {
 type Look struct {
 	Background      color.Color
 	BackgroundImage Image
-	// BackgroundSize is background-size in points, across and down; 0 is
-	// auto: the image's own size, or its width's or height's share of it.
-	BackgroundSize [2]float32
+	BackgroundSize  BackgroundSize
 	// BackgroundNoRepeat is background-repeat: no-repeat; the image tiles
 	// otherwise.
 	BackgroundNoRepeat bool
-	// BackgroundPosition is where the image's top-left sits in the padding
-	// box.
+	// BackgroundRepeat is the axis a repeated image tiles along: both, or
+	// one for repeat-x and repeat-y.
+	BackgroundRepeat RepeatAxes
+	// BackgroundPosition is where the image's top-left sits in the box
+	// BackgroundOrigin names.
 	BackgroundPosition BackgroundPosition
+	// BackgroundAttachment is background-attachment: what the image is
+	// placed in and moves with.
+	BackgroundAttachment BackgroundAttachment
+	// BackgroundOrigin is background-origin, the box the image is placed
+	// in (the padding box when InitialBox), and BackgroundClip
+	// background-clip, the box the background shows in (the border box
+	// when InitialBox).
+	BackgroundOrigin, BackgroundClip BackgroundBox
+	// MaskImage is mask-image: the picture whose alpha is the shape the
+	// background colour is painted through (decision 0093), sized, tiled
+	// and placed in the border box by MaskSize, MaskNoRepeat, MaskRepeat
+	// and MaskPosition as a background image is by its own.
+	MaskImage    Image
+	MaskSize     BackgroundSize
+	MaskNoRepeat bool
+	MaskRepeat   RepeatAxes
+	MaskPosition BackgroundPosition
 	// ObjectFit and ObjectPosition place a replaced element's picture
 	// (an img's) in its content box.
 	// ImageRendering is image-rendering: how pictures scale.
@@ -451,7 +682,10 @@ type Look struct {
 	ObjectPosition BackgroundPosition
 	BorderColor    Sides[color.Color]
 	BorderStyle    Sides[BorderStyle]
-	BorderImage    Image
+	// BorderHidden marks the sides whose border-style is hidden: none, and
+	// in a table of collapsed borders no border at all on that edge.
+	BorderHidden Sides[bool]
+	BorderImage  Image
 	// BorderImageRepeat is border-image-repeat across and down.
 	BorderImageRepeat [2]ImageRepeat
 	// BorderImageWidth is border-image-width: how thick the border image's
@@ -464,14 +698,25 @@ type Look struct {
 	OutlineStyle  BorderStyle
 	OutlineColor  color.Color
 	OutlineOffset float32
-	Opacity       float32
+	// ColumnRule* are column-rule: the line drawn between the columns of a
+	// multi-column container.
+	ColumnRuleWidth float32
+	ColumnRuleStyle BorderStyle
+	ColumnRuleColor color.Color
+	Opacity         float32
 	// Visible is visibility: visible.
 	Visible bool
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool
+	// AppDrag is app-region: drag, its own or the one of the box it is
+	// in: a press there moves the system's window.
+	AppDrag bool
 	// Cursor is the cursor keyword, "" for auto.
 	Cursor string
+	// UserSelect is user-select as used: auto is its parent's, text on the
+	// root.
+	UserSelect UserSelect
 	// Transform is transform's functions in order, about
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
@@ -507,6 +752,8 @@ const (
 	BorderBottomCurrent
 	BorderLeftCurrent
 	OutlineCurrent
+	DecorationCurrent
+	ColumnRuleCurrent
 )
 
 // FollowColor sets every colour marked currentColor to c.
@@ -514,7 +761,8 @@ func (s *Computed) FollowColor(c color.Color) {
 	for f, p := range map[CurrentColorFields]*color.Color{
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
 		BorderBottomCurrent: &s.BorderColor.Bottom, BorderLeftCurrent: &s.BorderColor.Left,
-		OutlineCurrent: &s.OutlineColor,
+		OutlineCurrent: &s.OutlineColor, DecorationCurrent: &s.TextDecoration.Color,
+		ColumnRuleCurrent: &s.ColumnRuleColor,
 	} {
 		if s.CurrentColor&f != 0 {
 			*p = c
@@ -522,8 +770,28 @@ func (s *Computed) FollowColor(c color.Color) {
 	}
 }
 
-// ListStyle is a list-style-type: ui draws only details' disclosure
-// triangles. ListDisc is CSS's initial value, which draws nothing in ui.
+// VerticalAlign is a vertical-align: where an inline-level box stands on its line
+// (CSS 2 section 10.8), from its parent's baseline, or from the line's top or bottom.
+type VerticalAlign uint8
+
+const (
+	AlignBaselineText VerticalAlign = iota
+	// AlignSub and AlignSuper shift as Chrome does: a fifth of the parent's font size
+	// and a pixel down, a third of it and a pixel up.
+	AlignSub
+	AlignSuper
+	AlignTextTop
+	AlignTextBottom
+	AlignMiddle
+	AlignTop
+	AlignBottom
+	// AlignLength raises the box by the style's VerticalShift.
+	AlignLength
+)
+
+// ListStyle is a list-style-type: a list item's bullet or number, drawn
+// outside its box, or a summary's disclosure triangle, first on its line.
+// ListDisc is CSS's initial value.
 type ListStyle uint8
 
 const (
@@ -531,6 +799,39 @@ const (
 	ListNone
 	ListDisclosureClosed
 	ListDisclosureOpen
+	ListCircle
+	ListSquare
+	ListDecimal
+	ListDecimalLeadingZero
+	ListLowerAlpha
+	ListUpperAlpha
+	ListLowerRoman
+	ListUpperRoman
+)
+
+// BackgroundAttachment is background-attachment.
+type BackgroundAttachment uint8
+
+const (
+	// AttachScroll places the image in its element's box, where it stays
+	// as the element's content scrolls.
+	AttachScroll BackgroundAttachment = iota
+	// AttachFixed places it in the viewport, shown where the element is.
+	AttachFixed
+	// AttachLocal places it in the element's content, and it scrolls with
+	// it.
+	AttachLocal
+)
+
+// BackgroundBox is one of an element's boxes, for background-origin and
+// background-clip: InitialBox is the property's own initial one.
+type BackgroundBox uint8
+
+const (
+	InitialBox BackgroundBox = iota
+	UnderBorder
+	UnderPadding
+	UnderContent
 )
 
 // BackgroundPosition is background-position: X from the left edge, or from
@@ -541,6 +842,27 @@ type BackgroundPosition struct {
 	X, Y                  Length
 	FromRight, FromBottom bool
 }
+
+// BackgroundSize is background-size: cover or contain, else a width and a
+// height, each a length, a percentage of the padding box, or auto: the
+// image's own size, or what keeps its proportions beside the other.
+type BackgroundSize struct {
+	Scale         BackgroundScale
+	Width, Height Length
+}
+
+// BackgroundScale is a background-size that scales the image whole.
+type BackgroundScale uint8
+
+const (
+	// ScaleNone sizes the image by its Width and Height.
+	ScaleNone BackgroundScale = iota
+	// ScaleCover is the smallest size covering the padding box, the
+	// image's proportions kept.
+	ScaleCover
+	// ScaleContain is the largest size fitting in it.
+	ScaleContain
+)
 
 // ObjectFit is object-fit: how an img's picture fills its content box.
 type ObjectFit uint8
@@ -556,6 +878,15 @@ const (
 	FitNone
 	// FitScaleDown is FitNone or FitContain, whichever is smaller.
 	FitScaleDown
+)
+
+// RepeatAxes are the axes a background image tiles along.
+type RepeatAxes uint8
+
+const (
+	RepeatBoth RepeatAxes = iota
+	RepeatX
+	RepeatY
 )
 
 // ImageRepeat is border-image-repeat along one axis: how a border image's

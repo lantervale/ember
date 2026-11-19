@@ -23,6 +23,10 @@ import (
 //nolint:gochecknoglobals // fixed values every paint reads; Go has no constant colours, tables or shapes
 var (
 	selectionColor = color.Hex("#3390ff66")
+	// pageSelection is the colour behind text selected outside a field
+	// with no ::selection rule: Chrome's on macOS with the blue accent,
+	// #b3d7fe over white, measured over black and white.
+	pageSelection = color.Hex("#80bcfd99")
 	// meterColors are a meter's fill by region, Chrome's green, amber and
 	// red.
 	meterColors = map[control.Region]color.Color{
@@ -60,7 +64,7 @@ func marked(b *box.Box) bool {
 	}
 	t := b.Node.Tag()
 	return t == dom.Input || t == dom.Textarea || t == dom.Progress || t == dom.Meter ||
-		t == dom.Select || t == dom.Img || t == dom.Canvas
+		t == dom.Select || t == dom.Img || t == dom.Svg || t == dom.Canvas || t == dom.Iframe
 }
 
 // modal reports whether b is a dialog shown modal, with a backdrop.
@@ -119,16 +123,27 @@ func (p *painter) marks(e entry, alpha float32) {
 	case dom.Meter:
 		m := meterOf(p.machine(n), n)
 		p.bar(c, float32(m.Fraction()), trackInk(st, alpha), fade(meterColors[m.Region()], alpha))
-	case dom.Img:
+	case dom.Img, dom.Svg:
 		p.img(e, alpha)
-	case dom.Canvas:
+		if p.sel != nil && p.sel.Holds(e.b.Node) {
+			// a picture inside a selection is tinted with it, as Chrome's
+			back, _ := selectionColors(shown(e.b), color.Color{}, alpha)
+			p.s.Rect(p.snap(content(e)), back)
+		}
+	case dom.Canvas, dom.Iframe:
 		p.canvasElement(e, c)
 	case dom.Select:
 		p.open(e)
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
 		dom.Option, dom.Details, dom.Summary, dom.Dialog, dom.Table, dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td, dom.Hr,
-		dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot: // only marked controls come here
+		dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
+		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
+		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
+		dom.Br,
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
+		dom.Col, dom.Colgroup: // only marked controls come here
 	}
 }
 
@@ -241,7 +256,13 @@ func tracked(b *box.Box) bool {
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
 		dom.Select, dom.Option, dom.Textarea, dom.Details, dom.Summary, dom.Dialog, dom.Table, dom.Thead, dom.Tbody, dom.Tr,
-		dom.Th, dom.Td, dom.Img, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot:
+		dom.Th, dom.Td, dom.Img, dom.Svg, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
+		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
+		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
+		dom.Br,
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
+		dom.Col, dom.Colgroup:
 	}
 	return false
 }
@@ -263,18 +284,48 @@ func accentInk(st *style.Computed, alpha float32) color.Color {
 	return fade(st.AccentColor, alpha)
 }
 
-// marker draws a summary's disclosure triangle as Chrome paints its
+// marker draws a list item's bullet or number in its box, or a summary's
+// disclosure triangle as Chrome paints its
 // ::marker: Blink's canonical triangle in a square 0.657em wide whose
 // top is 0.670em above the baseline, from the marker's start, pointing
 // right while closed and down while open, in the summary's colour.
 func (p *painter) marker(e entry, alpha float32) {
 	st := shown(e.b)
-	disclosure := st.ListStyle == style.ListDisclosureClosed || st.ListStyle == style.ListDisclosureOpen
-	if !st.Visible || len(e.b.Lines) == 0 || !disclosure || p.culled(e, inkOf(e, st)) {
+	if n := e.b.Node; n != nil && dom.Data(n).Marker != nil && e.b.Style == dom.Data(n).Marker {
+		// a ::marker a rule styles draws in its own style
+		st = e.b.Style
+	}
+	if !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
 	ink := fade(st.Color, alpha)
 	if ink.A <= 0 {
+		return
+	}
+	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	disclosure := st.ListStyle == style.ListDisclosureClosed || st.ListStyle == style.ListDisclosureOpen
+	switch {
+	case disclosure:
+	case len(e.b.Lines) > 0 && (e.b.Node == nil || e.b.Node.Tag() != dom.Summary):
+		// a list item's number, or its ::marker's content
+		for _, f := range e.b.Lines {
+			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterSpacing, ink, smoothingOf(st))
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, st, opts)
+		}
+		return
+	case st.ListStyle == style.ListDisc:
+		p.s.Circle(r.Center(), r.W/2, ink)
+		return
+	case st.ListStyle == style.ListCircle:
+		p.s.Border(r, r.W/2, 1, ink)
+		return
+	case st.ListStyle == style.ListSquare:
+		p.s.Rect(r, ink)
+		return
+	default:
+		return
+	}
+	if len(e.b.Lines) == 0 {
 		return
 	}
 	size := markerSize * st.Font.Size
@@ -505,7 +556,7 @@ func (p *painter) canvasElement(e entry, c geom.Rect) {
 	if !ok || m.Draw == nil || p.probing || c.W <= 0 || c.H <= 0 {
 		return
 	}
-	if p.record(livePart{kind: liveCanvas, e: e, rect: c}, c) {
+	if p.record(livePart{kind: liveCanvas, e: e, rect: c, timed: m.Live}, c) {
 		p.drawCanvas(m, c)
 	}
 }
@@ -520,7 +571,12 @@ func (p *painter) drawCanvas(m *control.Canvas, c geom.Rect) {
 	tc.SetTransform(xf.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(c.X, c.Y)}))
 	k := &m.Kept
 	moved := k.Version != m.Version || k.At != c || k.Transform != xf || k.Scale != p.scale
-	if !k.Ok || moved || !tc.Replay(&k.Recording) {
+	switch {
+	case m.Live:
+		tc.SetSize(geom.V2(c.W, c.H))
+		m.Draw(tc)
+		tc.SetSize(size)
+	case !k.Ok || moved || !tc.Replay(&k.Recording):
 		tc.SetSize(geom.V2(c.W, c.H))
 		mark := tc.Mark()
 		m.Draw(tc)

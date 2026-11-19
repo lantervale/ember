@@ -46,16 +46,18 @@ type livePart struct {
 	ink  color.Color
 	rect geom.Rect
 	list popup
+	// timed is a canvas drawn each frame (control.Canvas.Live).
+	timed bool
 }
 
 // Any reports whether the paint drew anything live.
 func (l *LiveSet) Any() bool { return len(l.parts) > 0 }
 
 // Timed reports whether a part moves with the clock: all but canvases,
-// which change only when invalidated.
+// which change only when invalidated, unless they are drawn each frame.
 func (l *LiveSet) Timed() bool {
 	for _, p := range l.parts {
-		if p.kind != liveCanvas {
+		if p.kind != liveCanvas || p.timed {
 			return true
 		}
 	}

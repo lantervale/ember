@@ -7,6 +7,7 @@ ember's code is under the MIT licence ([LICENSE](LICENSE)). This file lists wher
 Drawn for ember in this repository, with no outside source, and given to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/):
 
 - the examples' sprites, tiles and panels: every `walker.png`, `tiles.png`, `objects.png`, `crate.png` and `panel.png` under `examples/` (outside `examples/internal/crypt`), `examples/15-themes/wood.png`, `examples/24-many-sprites/bunny.png`, `disc.png`, `orb.png` and `stone.png` in `examples/43-recolours-and-masks`, `examples/45-bitmap-font/arcade.png`, and `examples/48-mouse/move.png` and `move@2x.png`;
+- the svg reader's own samples: every `own-*.svg` in `svg/testdata`, their copies and `bare.svg` in `ui/internal/pages/svg-pictures`;
 - the ui pages' pictures: `panel.png` in `ui/internal/pages/kit-04-image`, `kit-26-thumbnails`, `nine-patch` and `pixelated`, and `beach.png` in the four `ui/internal/pages/kit-32*` pages;
 - the ui kit's pictures and test icons: `ui/kit/images/*.png`, `ui/css/images/select-arrow.png`, `ui/kit/testdata/icons/icons.ttf` and `ui/internal/pages/kit-03-icons/icons.ttf`;
 - the site's brand: the favicons, `site.webmanifest` and `images/logo.svg` in `.hugo/static`;
@@ -32,4 +33,5 @@ Each beside the files it covers:
 - Source Code Pro (SIL OFL 1.1), the engine's Mono face: [internal/draw/fonts/SourceCodePro-OFL.txt](internal/draw/fonts/SourceCodePro-OFL.txt).
 - The WebGPU headers (BSD-3-Clause) and wgpu-native's (MIT or Apache-2.0): [internal/wgpu/include/webgpu/README.md](internal/wgpu/include/webgpu/README.md). `task package` puts wgpu-native's licences beside the library it ships.
 - GitHub's gemoji shortcode table (MIT): [internal/emojinames/LICENSE-gemoji](internal/emojinames/LICENSE-gemoji).
+- [svg/testdata/README.md](svg/testdata/README.md): the icons the svg reader is tested on, unchanged: Bootstrap Icons (MIT), Feather (MIT), Heroicons (MIT), Octicons (MIT), Tabler Icons (MIT), Material Design Icons (Apache-2.0), Simple Icons (CC0 1.0; the marks they draw are their owners' trademarks) and one Twemoji picture, `twemoji-smile.svg` (© Twitter, Inc. and other contributors, [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)). `ui/internal/pages/svg-pictures` holds copies of `feather-settings.svg`, `heroicons-solid-cog.svg` and `material-home.svg`.
 - Taffy's layout test fixtures (MIT): [ui/layout/LICENSE-taffy](ui/layout/LICENSE-taffy).

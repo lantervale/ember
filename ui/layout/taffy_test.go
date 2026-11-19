@@ -18,7 +18,7 @@ import (
 type ahemFonts struct{}
 
 func (ahemFonts) Metrics(f style.Font) box.Metrics {
-	return box.Metrics{Ascent: 0.8 * f.Size, Descent: 0.2 * f.Size}
+	return box.Metrics{Ascent: 0.8 * f.Size, Descent: 0.2 * f.Size, XHeight: 0.8 * f.Size}
 }
 
 func (ahemFonts) Advance(f style.Font, text string) float32 {
@@ -194,8 +194,8 @@ func viewportSpace(v string) space {
 // height of 1, and the root is absolutely positioned.
 func fixtureDOM(fn *fixtureNode, isRoot bool) (*dom.Node, map[*fixtureNode]*dom.Node, error) {
 	nodes := map[*fixtureNode]*dom.Node{}
-	var build func(fn *fixtureNode, isRoot bool) (*dom.Node, error)
-	build = func(fn *fixtureNode, isRoot bool) (*dom.Node, error) {
+	var build func(fn *fixtureNode, isRoot bool, container style.Display) (*dom.Node, error)
+	build = func(fn *fixtureNode, isRoot bool, container style.Display) (*dom.Node, error) {
 		e := dom.NewElement(dom.Div)
 		st := style.Initial()
 		st.Display = style.FlexDisplay
@@ -209,6 +209,13 @@ func fixtureDOM(fn *fixtureNode, isRoot bool) (*dom.Node, map[*fixtureNode]*dom.
 				return nil, fmt.Errorf("%s=%q: %w", k, v, err)
 			}
 		}
+		// As the cascade does: a float applies in a block container's flow, and is a block.
+		if container == style.FlexDisplay || container == style.GridDisplay || outOfFlow(st.Position) {
+			st.Float = style.FloatNone
+		}
+		if st.Float != style.FloatNone && st.Display == style.Inline {
+			st.Display = style.Block
+		}
 		dom.Data(e).Style = &st
 		nodes[fn] = e
 		if fn.IsText {
@@ -218,7 +225,7 @@ func fixtureDOM(fn *fixtureNode, isRoot bool) (*dom.Node, map[*fixtureNode]*dom.
 			e.Append(txt)
 		}
 		for _, c := range fn.Children {
-			ce, err := build(c, false)
+			ce, err := build(c, false, st.Display)
 			if err != nil {
 				return nil, err
 			}
@@ -226,7 +233,7 @@ func fixtureDOM(fn *fixtureNode, isRoot bool) (*dom.Node, map[*fixtureNode]*dom.
 		}
 		return e, nil
 	}
-	root, err := build(fn, isRoot)
+	root, err := build(fn, isRoot, style.Block)
 	return root, nodes, err
 }
 
@@ -323,6 +330,8 @@ func applyFixtureStyle(st *style.Computed, k, v string) error {
 			st.Display = style.GridDisplay
 		case "block":
 			st.Display = style.Block
+		case "flow-root":
+			st.Display, st.FlowRoot = style.Block, true
 		case "none":
 			st.Display = style.DisplayNone
 		default:
@@ -340,6 +349,26 @@ func applyFixtureStyle(st *style.Computed, k, v string) error {
 			st.Position = style.FixedPosition
 		case "sticky":
 			st.Position = style.Sticky
+		}
+	case "float":
+		switch v {
+		case "left":
+			st.Float = style.FloatLeft
+		case "right":
+			st.Float = style.FloatRight
+		default:
+			err = fmt.Errorf("unknown float")
+		}
+	case "clear":
+		switch v {
+		case "left":
+			st.Clear = style.ClearLeft
+		case "right":
+			st.Clear = style.ClearRight
+		case "both":
+			st.Clear = style.ClearBoth
+		default:
+			err = fmt.Errorf("unknown clear")
 		}
 	case "box-sizing":
 		if v == "content-box" {

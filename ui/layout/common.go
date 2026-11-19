@@ -204,7 +204,7 @@ func resolveSizingKeyword(l style.Length, stretch, basis float32) (keywordKind, 
 			return keywordMeasure, def(l.Px)
 		}
 		if some(basis) {
-			return keywordMeasure, def(l.Px + l.Percent*basis/100)
+			return keywordMeasure, def(l.At(basis))
 		}
 	case style.Auto, style.Fixed, style.Fr, style.None:
 	}

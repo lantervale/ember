@@ -15,6 +15,20 @@ const (
 	kwInset        = "inset"
 	kwStart        = "start"
 	kwEnd          = "end"
+	kwAll          = "all"
+	kwMinContent   = "min-content"
+	kwMaxContent   = "max-content"
+	kwFitContent   = "fit-content"
+	kwContent      = "content"
+	kwAuto         = "auto"
+	kwMiddle       = "middle"
+	kwInherit      = "inherit"
+	kwBaseline     = "baseline"
+
+	unitRem  = "rem"
+	nameVmin = "vmin"
+	nameVmax = "vmax"
+	fnCalc   = "calc"
 
 	fnTranslate  = "translate"
 	fnTranslateX = "translatex"
@@ -34,4 +48,19 @@ const (
 	propFontFamily        = "font-family"
 	propFontWeight        = "font-weight"
 	propFontStyle         = "font-style"
+	propBreakInside       = "break-inside"
+	propWidth             = "width"
+	propHeight            = "height"
+	propFontSize          = "font-size"
+
+	propTextDecorationStyle     = "text-decoration-style"
+	propTextDecorationColor     = "text-decoration-color"
+	propTextDecorationThickness = "text-decoration-thickness"
+
+	shortBackground  = "background"
+	shortBorderImage = "border-image"
+	shortTransition  = "transition"
+	shortFont        = "font"
+
+	classAnyLink = "any-link"
 )

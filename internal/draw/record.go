@@ -53,6 +53,21 @@ func (c *List) Mark() Mark {
 	return Mark{len(c.Vertices), len(c.Indices), len(c.Batches), c.state()}
 }
 
+// Resume puts the List's state back as it was at m, its clips cut back
+// to the depth they had there: what a drawing that stopped halfway left
+// set. What was drawn since stays.
+func (c *List) Resume(m Mark, clips int) {
+	s := m.state
+	c.transform, c.transformed, c.modulate, c.modulated = s.transform, s.transformed, s.modulate, s.modulated
+	c.blend, c.SnapVertices, c.light, c.left, c.class = s.blend, s.snap, s.light, s.left, s.class
+	if clips < len(c.clips) {
+		c.clips = c.clips[:clips]
+	}
+}
+
+// Clips is how many clips are pushed.
+func (c *List) Clips() int { return len(c.clips) }
+
 // Recording is a range of a List copied to be drawn again, as it was, at
 // the same place under the same state: a UI host's last frame, replayed
 // when nothing in it changed. It keeps the fonts and textures it drew

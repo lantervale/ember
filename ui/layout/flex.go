@@ -201,7 +201,7 @@ func (t *tree) flex(n *node, in input) output {
 	st := n.st
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	pbSum := padding.sum().add(border.sum())
 	adj := boxSizingAdjustment(st, pbSum)
 	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -366,7 +366,7 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 	d := flexDir(st.Direction)
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, parent.w)
-	border := borders(st)
+	border := n.borders()
 	adj := boxSizingAdjustment(st, padding.sum().add(border.sum()))
 	alignContent := align(st.AlignContent)
 	if alignContent.keyword == style.AlignNormal {
@@ -451,7 +451,7 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 		}
 		ratio := aspectRatio(st)
 		padding := edges(st.Padding, c.nodeInnerSize.w)
-		border := borders(st)
+		border := k.borders()
 		adj := boxSizingAdjustment(st, padding.add(border).sum())
 		it := &all[i]
 		*it = flexItem{

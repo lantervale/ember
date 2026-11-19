@@ -186,3 +186,38 @@ func TestTheCursorAndClipboardReachTheWindow(t *testing.T) {
 		t.Fatalf("calls %v, want %v", f.calls, want)
 	}
 }
+
+func TestAWindowWithItsOwnTitleBarSaysWhatToKeepClear(t *testing.T) {
+	if w := NewWindow(); w.OwnTitleBar() || w.TitleBarArea() != (TitleBarArea{}) {
+		t.Fatal("the system's title bar, and nothing to keep clear, by default")
+	}
+	w := NewWindow(OwnTitleBar())
+	if !w.OwnTitleBar() || w.TitleBarArea() != (TitleBarArea{}) {
+		t.Fatal("a window not open has no title bar to keep clear yet")
+	}
+	area := TitleBarArea{Left: 78, Height: 28}
+	w.SyncTitleBar(area)
+	if w.TitleBarArea() != area {
+		t.Fatalf("the area is %v, want the backend's %v", w.TitleBarArea(), area)
+	}
+	w.SyncTitleBar(TitleBarArea{})
+	if w.TitleBarArea() != (TitleBarArea{}) {
+		t.Fatal("fullscreen hides the title bar: nothing to keep clear")
+	}
+}
+
+func (f *fake) StartDrag()           { f.recordf("drag") }
+func (f *fake) DoubleClickTitleBar() { f.recordf("double click") }
+
+func TestADragAndATitleBarDoubleClickReachTheOpenWindow(t *testing.T) {
+	w := NewWindow(OwnTitleBar())
+	w.StartDrag()
+	w.DoubleClickTitleBar()
+	f := &fake{}
+	w.Attach(f)
+	w.StartDrag()
+	w.DoubleClickTitleBar()
+	if want := []string{"drag", "double click"}; fmt.Sprint(f.calls) != fmt.Sprint(want) {
+		t.Fatalf("calls %q, want %q: a closed window drags nothing", f.calls, want)
+	}
+}

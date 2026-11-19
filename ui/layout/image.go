@@ -3,8 +3,15 @@ package layout
 import (
 	"strconv"
 
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 )
+
+// defaultWidth and defaultHeight are the size CSS gives a replaced
+// element whose picture asks for none.
+const defaultWidth, defaultHeight = 300, 150
 
 // brokenIcon is the side of the icon an img that didn't load shows, as Chrome's
 // (paint.BrokenIcon).
@@ -15,24 +22,78 @@ const brokenIcon = 16
 // text on a line, the icon alone without alt text, nothing with an empty one.
 func (t *tree) buildImage(n *node, e *dom.Node) {
 	n.replaced = true
-	if t.images == nil {
-		return
+	n.natural, n.shape, n.sized = pictureOf(e, n.st, t.images, t.fonts)
+}
+
+// pictureOf is what the picture of the img e gives its box: its natural size, and for a
+// picture that doesn't ask for a size of pixels what it asks for, sized being whether e
+// has one.
+func pictureOf(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fonts) (size, box.Intrinsic, bool) {
+	if images == nil {
+		return size{}, box.Intrinsic{}, false
 	}
-	src, ok := e.Attr("src")
+	src, ok := dom.Picture(e)
 	if !ok {
-		return
+		return size{}, box.Intrinsic{}, false
 	}
-	if s, found := t.images.ImageSize(src); found {
-		n.natural = size{s.X, s.Y}
-		return
+	if shapes, has := images.(box.IntrinsicImages); has {
+		if in, found := shapes.ImageIntrinsic(src); found {
+			if fillsRoom(in) {
+				return size{}, in, true
+			}
+			s := in.Natural(geom.V2(defaultWidth, defaultHeight))
+			return size{s.X, s.Y}, in, true
+		}
+	}
+	if s, found := images.ImageSize(src); found {
+		return size{s.X, s.Y}, box.Intrinsic{}, false
 	}
 	alt, hasAlt := e.Attr("alt")
 	switch {
 	case !hasAlt:
-		n.natural = size{brokenIcon, brokenIcon}
+		return size{brokenIcon, brokenIcon}, box.Intrinsic{}, false
 	case alt != "":
-		m := t.fonts.Metrics(n.st.Font)
-		n.natural = size{brokenIcon + t.fonts.Advance(n.st.Font, alt), max(brokenIcon, m.Ascent+m.Descent+m.LineGap)}
+		m := fonts.Metrics(st.Font)
+		return size{brokenIcon + fonts.Advance(st.Font, alt), max(brokenIcon, m.Ascent+m.Descent+m.LineGap)},
+			box.Intrinsic{}, false
+	}
+	return size{}, box.Intrinsic{}, false
+}
+
+// Landed tells the kept layout that the pictures landed reports arrived since it ran.
+// An img of one whose layout read its picture's size or proportions is flagged to be
+// laid out again, as a changed element is; any other keeps its box, its node taking the
+// picture's size for the layouts to come.
+func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts box.Fonts) {
+	for e, n := range r.nodes {
+		if !n.replaced || e.Tag() != dom.Img && e.Tag() != dom.Svg {
+			continue
+		}
+		src, ok := dom.Picture(e)
+		if !ok || !landed(src) {
+			continue
+		}
+		natural, shape, sized := pictureOf(e, n.st, images, fonts)
+		switch {
+		case natural == n.natural && shape == n.shape && sized == n.sized:
+		case n.intrinsic || n.fills() || sized && fillsRoom(shape):
+			relay(e)
+		default:
+			n.natural, n.shape, n.sized = natural, shape, sized
+		}
+	}
+}
+
+// relay flags e to be laid out again: with the generated box it is in and the element
+// that box is of, as css flags a change of generated content.
+func relay(e *dom.Node) {
+	dom.Data(e).Dirty |= dom.DirtyLayout
+	p := e.Parent()
+	for ; p != nil && e.Generated(); e, p = p, p.Parent() {
+		dom.Data(p).Dirty |= dom.DirtyLayout
+	}
+	for ; p != nil; p = p.Parent() {
+		dom.Data(p).Dirty |= dom.DirtyDescendant
 	}
 }
 
@@ -41,6 +102,15 @@ func (t *tree) buildImage(n *node, e *dom.Node) {
 func buildCanvas(n *node, e *dom.Node) {
 	n.replaced = true
 	n.natural = size{attrSize(e, "width", 300), attrSize(e, "height", 150)}
+}
+
+// buildFrame makes an iframe a replaced box of 300 by 150 whose sides
+// don't hold each other: its width and height attributes are hints css
+// reads, as Chrome's.
+func buildFrame(n *node) {
+	n.replaced, n.sized = true, true
+	n.natural = size{defaultWidth, defaultHeight}
+	n.shape = box.Intrinsic{Width: defaultWidth, Height: defaultHeight}
 }
 
 func attrSize(e *dom.Node, name string, or float32) float32 {
@@ -53,10 +123,43 @@ func attrSize(e *dom.Node, name string, or float32) float32 {
 
 // naturalRatio is a replaced box's width over height, none without a picture.
 func (n *node) naturalRatio() float32 {
+	if n.sized {
+		if n.shape.Ratio > 0 {
+			return n.shape.Ratio
+		}
+		return none
+	}
 	if !n.replaced || n.natural.w <= 0 || n.natural.h <= 0 {
 		return none
 	}
 	return n.natural.w / n.natural.h
+}
+
+// fills reports an img whose picture has proportions and asks for no
+// size: it is as wide as the room it is given, as Chrome lays it out,
+// and adds nothing to its block's own width.
+func (n *node) fills() bool { return n.sized && fillsRoom(n.shape) }
+
+// fillsRoom reports a picture that has proportions and asks for no size.
+func fillsRoom(in box.Intrinsic) bool { return in.Ratio > 0 && in.Width <= 0 && in.Height <= 0 }
+
+// naturalIn is the natural size of a replaced node in the room avail: a picture that
+// fills takes it.
+func (n *node) naturalIn(avail space, pb float32) size {
+	if n.fills() {
+		return n.filled(avail, pb)
+	}
+	return n.natural
+}
+
+// filled is the natural size of an img that fills, in avail less its
+// padding and border.
+func (n *node) filled(avail space, pb float32) size {
+	if avail.kind != definite {
+		return size{}
+	}
+	w := max(avail.v-pb, 0)
+	return size{w, w / n.shape.Ratio}
 }
 
 // replacedSize is a replaced box's size with neither side set: its natural size, scaled

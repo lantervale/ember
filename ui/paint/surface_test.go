@@ -26,6 +26,8 @@ type op struct {
 	Xform  geom.Transform2D
 	// Baseline is a text's: At is its baseline, not its top.
 	Baseline bool
+	// Pixelated and Exact are a text's smoothing.
+	Pixelated, Exact bool
 	// Radii are a per-corner shape's.
 	Radii [4]float32
 	// Points and Colors are a coloured mesh's, and Alpha each colour's.
@@ -113,7 +115,8 @@ func (r *recorder) TrianglesColored(points []geom.Vec2, colors []color.Color, in
 }
 func (r *recorder) Text(at geom.Vec2, text string, opts ...twod.TextOption) geom.Vec2 {
 	t := twod.NewText(text, opts...)
-	r.add(op{Kind: "text", At: at, Text: text, Color: t.Color(), Baseline: t.Baseline()})
+	r.add(op{Kind: "text", At: at, Text: text, Color: t.Color(), Baseline: t.Baseline(), Pixelated: t.Pixelated(),
+		Exact: t.ExactCoverage()})
 	return geom.Vec2{}
 }
 func (r *recorder) Image(b geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color) {

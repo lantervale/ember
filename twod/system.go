@@ -44,7 +44,19 @@ type System struct {
 	culls map[*platform.Window]*cull
 }
 
-func (s *System) New(w *world.World) { s.world = w }
+func (s *System) New(w *world.World) {
+	s.world = w
+	wm.OnGone(w, s.forget)
+}
+
+// forget drops what the system keeps for win, a window that left the
+// World.
+func (s *System) forget(win *platform.Window) {
+	delete(s.entries, win)
+	delete(s.culls, win)
+	delete(s.scene.cameras, win)
+	delete(s.scene.feeds, win)
+}
 
 // AddByInterface gives a sprite joining the World the list of playing
 // sprites, and lists it if it plays already.

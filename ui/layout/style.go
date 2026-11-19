@@ -14,7 +14,7 @@ func resolve(l style.Length, basis float32) float32 {
 	if !some(basis) {
 		return none
 	}
-	return l.Px + l.Percent*basis/100
+	return l.At(basis)
 }
 
 // hasPercent reports a length with a percentage part, 0% included.

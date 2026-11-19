@@ -10,6 +10,7 @@
 | Enter, Space, the pad's South | press the focused element |
 | Escape, the pad's East | close a menu or a modal dialog, else `BackPressed` |
 | a click | focuses quietly, without the outline |
+| Cmd/Ctrl+C, Cmd/Ctrl+A, Shift and a moving key | copy, select all and extend the [selected text](04-events.md#selected-text), while no field has the focus and there is text to select; otherwise the game's |
 
 | | |
 |---|---|

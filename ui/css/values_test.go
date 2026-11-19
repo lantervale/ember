@@ -2,6 +2,7 @@ package css //nolint:testpackage // tests the unexported value parsers (parseCol
 
 import (
 	"math"
+	"reflect"
 	"testing"
 )
 
@@ -24,6 +25,10 @@ func TestParseDim(t *testing.T) {
 		{"1.5em", Dim{Em: 1.5, kind: dimLength}},
 		{"2rem", Dim{Rem: 2, kind: dimLength}},
 		{"1fr", Dim{Fr: 1, kind: dimFlex}},
+		{"12pt", Dim{Px: 16, kind: dimLength}},
+		{"2pc", Dim{Px: 32, kind: dimLength}},
+		{"0.5IN", Dim{Px: 48, kind: dimLength}},
+		{"calc(1in + 3pt)", Dim{Px: 100, kind: dimLength}},
 		{"3", Dim{Num: 3, kind: dimNumber}},
 		{"calc(100% - 2rem)", Dim{Pct: 100, Rem: -2, kind: dimPercent | dimLength}},
 		{"calc(4px * 3 + 1em / 2)", Dim{Px: 12, Em: 0.5, kind: dimLength}},
@@ -33,15 +38,15 @@ func TestParseDim(t *testing.T) {
 	}
 	for _, c := range cases {
 		got, err := parseDim(valueOf(t, c.src))
-		if err != nil || got != c.want {
+		if err != nil || !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%q: got %+v, %v; want %+v", c.src, got, err, c.want)
 		}
 	}
 }
 
 func TestParseDimErrors(t *testing.T) {
-	for _, src := range []string{"12pt", "calc(1px+2px)", "calc(1px + 2)", "calc(2px * 3px)", "calc(1px / 0)",
-		"calc(1px / 2px)", "calc(1fr + 1px)", "calc()", "calc(1px 2px)", "red", "min(1px, 2px)"} {
+	for _, src := range []string{"12vx", "calc(1px+2px)", "calc(1px + 2)", "calc(2px * 3px)", "calc(1px / 0)",
+		"calc(1px / 2px)", "calc(1fr + 1px)", "calc()", "calc(1px 2px)", "red", "min(1px, 2)"} {
 		if _, err := parseDim(valueOf(t, src)); err == nil {
 			t.Errorf("%q: no error", src)
 		}
@@ -50,7 +55,7 @@ func TestParseDimErrors(t *testing.T) {
 
 func TestDimResolve(t *testing.T) {
 	d, _ := parseDim(valueOf(t, "calc(100% - 2rem + 1em)"))
-	if got := d.Absolute(10, 16).Resolve(200); got != 200-32+10 {
+	if got := d.Absolute(&Units{Em: 10, Rem: 16}).Resolve(200); got != 200-32+10 {
 		t.Errorf("got %v", got)
 	}
 }

@@ -2,7 +2,12 @@
 //
 // The plugin opens every window entity, the first added being the primary,
 // and a default window when the game added none. Every window draws with
-// one WebGPU device; removing the entity closes it. A window presents at
+// one WebGPU device; removing the entity closes it, and the oldest window
+// left is the primary from then. A close button asks its window to close
+// (Window.RequestClose), which the window's Closing rule answers; the loop
+// ends when the World quits, and runs on without a window, at the fixed
+// step's pace, when the program closed its last one and didn't quit. A
+// window presents at
 // the display's refresh unless the game gave it platform.VSync(false), so
 // a visible frame takes a whole refresh however little work it holds; F3
 // and EMBER_STATS show that work apart. Hidden windows draw offscreen and
@@ -124,6 +129,7 @@ func (p Plugin) Build(w *world.World) {
 		sound:    audiodevice.New(),
 	}
 	w.AddView(d.sound)
+	w.AddView(&d.preferences)
 	w.AddView(&d.windows).SetRunner(func(*world.World) error { return d.guard(d.run) })
 }
 
@@ -150,11 +156,13 @@ func (d *driver) guard(run func() error) error {
 	return nil
 }
 
+// title is the primary window's, the last primary's once the World has
+// no window, so the crash log stays where it was.
 func (d *driver) title() string {
 	if win := wm.Primary(d.world); win != nil {
-		return win.Title()
+		d.lastTitle = win.Title()
 	}
-	return ""
+	return d.lastTitle
 }
 
 func (d *driver) crashPath() string { return crashPath(d.crashLog, d.title()) }
@@ -187,6 +195,7 @@ func (d *driver) fail(reason string, stack []byte) {
 }
 
 type native struct {
+	driver  *driver
 	h       *glfw.Window
 	entity  platform.Windowed
 	window  *platform.Window
@@ -305,6 +314,7 @@ func (n *native) sync() {
 		ww, wh, fw, fh = asked(ww, wh, fw, fh, n.askedW, n.askedH)
 	}
 	fw, fh = framebuffer(ww, wh, fw, fh, n.pixels)
+	n.syncTitleBar()
 	n.window.Sync(geom.V2(float32(ww), float32(wh)), geom.V2(float32(fw), float32(fh)), n.focused)
 }
 
@@ -349,7 +359,7 @@ type driver struct {
 	world *world.World
 	// crashLog is the game's crash log path, empty for the default;
 	// graphics, vendor and renderer describe the device once it exists.
-	crashLog                   string
+	crashLog, lastTitle        string
 	graphics, vendor, renderer string
 	// gpu is the device every window draws with.
 	inst   *wgpu.Instance
@@ -367,16 +377,28 @@ type driver struct {
 	// input device.
 	scripted bool
 	windows  world.Group[platform.Windowed]
-	natives  map[*platform.Window]*native
-	sound    *audiodevice.Output
-	primary  *native
-	opened   int
+	// preferences are the World's, kept as the system's: appearance and
+	// languages as last read, asked the time it was last polled.
+	preferences world.Group[platform.Preferred]
+	appearance  platform.Appearance
+	languages   []string
+	asked       time.Time
+	natives     map[*platform.Window]*native
+	sound       *audiodevice.Output
+	// primary is the primary window's native, nil while the World has no
+	// window; last is when the frame before began.
+	primary *native
+	opened  int
+	last    time.Time
 
 	recording bool
 	// live is set when frames are drawn from a window refresh, while the
 	// OS holds the loop in a live resize; framing guards against nesting.
 	live    bool
 	framing bool
+	// waiting is what windows asked of the system inside a frame that the
+	// system animates, started once the frame is over.
+	waiting []waiting
 	gifFPS  int
 	gifs    map[*native]*capture.GIF
 }
@@ -458,17 +480,27 @@ func (d *driver) readsBack() bool {
 // afterTick runs what follows a frame's tick: the pads' rumble, the
 // windows opened and closed, and the screenshot Shift+F12 asks for.
 func (d *driver) afterTick(in *input.State) error {
-	if !d.scripted {
+	if in != nil && !d.scripted {
 		rumbleGamepads(in)
 	}
+	shot := in != nil && in.Pressed(input.KeyF12) && (in.Down(input.KeyLeftShift) || in.Down(input.KeyRightShift))
 	if err := d.open(); err != nil {
 		return err
 	}
 	d.close()
-	if in.Pressed(input.KeyF12) && (in.Down(input.KeyLeftShift) || in.Down(input.KeyRightShift)) {
+	if shot && d.primary != nil {
 		d.primary.window.Capture(time.Now().Format("ember-20060102-150405.png"))
 	}
 	return nil
+}
+
+// input is the primary window's input, where the pads and the scripts
+// play, nil while the World has no window.
+func (d *driver) input() *input.State {
+	if d.primary == nil {
+		return nil
+	}
+	return d.primary.window.Input()
 }
 
 // runSettings are a run's EMBER_* settings: what it captures, and how
@@ -544,7 +576,7 @@ func (d *driver) endFrame(
 			return true, err
 		}
 	}
-	if set.animated && d.gifs[d.primary].Len() >= set.gifFrames {
+	if set.animated && d.primary != nil && d.gifs[d.primary].Len() >= set.gifFrames {
 		return true, d.writeGIFs(set.capturePath)
 	}
 	return final || (set.maxFrames > 0 && frame >= set.maxFrames), nil
@@ -595,20 +627,25 @@ func (d *driver) run() error {
 	stats, report := d.statsFromEnv()
 	defer report()
 	defer pprof.StopCPUProfile()
-	in := d.primary.window.Input()
+	watchApp()
 
-	last := time.Now()
+	d.last = time.Now()
 	for frame := 1; !d.world.ShouldQuit(); frame++ {
 		begun := time.Now()
-		glfw.PollEvents()
-		d.framing = true
-		if d.primary.h.ShouldClose() {
+		d.runBetween()
+		d.poll()
+		d.closeRequested()
+		if d.world.ShouldQuit() {
 			break
 		}
-		d.closeRequested()
-		pollGamepads(in, devices(d.scripted, joysticks))
-		played.apply(in, d.primary.window, frame-1)
-		dt := frameTime(&last, set.capturePath != "")
+		d.framing = true
+		d.syncSystem()
+		in := d.input()
+		if in != nil {
+			pollGamepads(in, devices(d.scripted, joysticks))
+			played.apply(in, d.primary.window, frame-1)
+		}
+		dt := frameTime(&d.last, set.capturePath != "")
 
 		d.world.Tick(dt)
 		d.swapPending()
@@ -631,13 +668,84 @@ func (d *driver) run() error {
 			break
 		}
 	}
+	d.closeOthers()
+	return nil
+}
+
+// poll takes the system's events. While the World has no window nothing
+// paces the loop, no display to wait for: it waits for an event, or for
+// the fixed step to come round, so a program without a window ticks at
+// that rate and leaves the processor alone. A hidden run never waits.
+func (d *driver) poll() {
+	if len(d.natives) > 0 || d.scripted {
+		glfw.PollEvents()
+		return
+	}
+	d.world.Stats().RenderTime = 0
+	if wait := idle(time.Since(d.last), d.world.Time().FixedDelta); wait > 0 {
+		glfw.WaitEventsTimeout(wait.Seconds())
+		return
+	}
+	glfw.PollEvents()
+}
+
+// idle is how long a loop without a window waits before its next frame,
+// since the frame before began since ago: what is left of a fixed step.
+func idle(since time.Duration, step float32) time.Duration {
+	return max(0, time.Duration(float64(step)*float64(time.Second))-since)
+}
+
+// closeOthers destroys every window but the primary once the loop ends.
+func (d *driver) closeOthers() {
 	d.swapPending()
 	for _, n := range d.natives {
 		if n != d.primary {
 			d.destroy(n)
 		}
 	}
-	return nil
+}
+
+// resized follows n's new size, and draws a frame at it at once when the
+// loop isn't there to: a window drawing through a layer of its own gets
+// no refresh from the system while it is resized, only its sizes.
+func (d *driver) resized(n *native) {
+	n.sync()
+	if d.lags(n) {
+		d.refresh()
+	}
+}
+
+// lags reports whether n shows a frame of another size than its
+// framebuffer's, which the system stretches to fill it, outside a frame
+// of the loop: the OS holds the loop in a live resize, a zoom or a move
+// to fullscreen.
+func (d *driver) lags(n *native) bool {
+	fb := n.window.FramebufferSize()
+	return d.live && !d.framing && n.configured != [2]int{int(fb.X), int(fb.Y)}
+}
+
+// waiting is something a window asked of the system inside a frame.
+type waiting struct {
+	n  *native
+	do func()
+}
+
+// between has do run between two frames of the loop: what the system
+// animates or holds the loop for, a zoom or a drag of the window, is
+// drawn frame by frame only from there.
+func (n *native) between(do func()) {
+	n.driver.waiting = append(n.driver.waiting, waiting{n, do})
+}
+
+// runBetween runs what the windows still open asked for with between.
+func (d *driver) runBetween() {
+	asked := d.waiting
+	d.waiting = nil
+	for _, w := range asked {
+		if d.natives[w.n.window] == w.n {
+			w.do()
+		}
+	}
 }
 
 // refresh draws a frame while the OS holds the loop, in a live resize or
@@ -660,6 +768,9 @@ func (d *driver) refresh() {
 	}
 	wm.SetCurrent(d.world, nil)
 	d.world.EndFrame()
+	// The loop's next frame counts its time from here, not from before
+	// the system held it.
+	d.last = time.Now()
 }
 
 func (d *driver) sorted() []*native {
@@ -747,36 +858,57 @@ func (d *driver) open() error {
 			return err
 		}
 		d.natives[win] = n
-		if win == wm.Primary(d.world) {
-			d.primary = n
-		}
 	}
+	d.primary = d.natives[wm.Primary(d.world)]
 	return nil
 }
 
-// close destroys native windows whose entity left the world.
+// close destroys native windows whose entity left the world, the primary
+// too: the oldest window left is the primary from then.
 func (d *driver) close() {
-	for win, n := range d.natives {
-		if n == d.primary {
-			continue
-		}
-		if _, ok := d.windows.Get(n.entity.ID()); !ok {
-			d.destroy(n)
-			delete(d.natives, win)
-		}
+	for _, n := range d.left() {
+		d.destroy(n)
 	}
 }
 
-// closeRequested turns native close buttons on secondary windows into
-// entity removal plus a WindowClosed event.
-func (d *driver) closeRequested() {
-	for _, n := range d.natives {
-		if n != d.primary && n.h.ShouldClose() {
-			n.h.SetShouldClose(false)
-			world.Emit(d.world, platform.WindowClosed{Window: n.window})
-			d.world.RemoveEntity(n.entity)
+// left takes out of the driver the natives whose entity left the world,
+// and follows the primary.
+func (d *driver) left() []*native {
+	var out []*native
+	for win, n := range d.natives {
+		if _, ok := d.windows.Get(n.entity.ID()); !ok {
+			out = append(out, n)
+			delete(d.natives, win)
+			delete(d.gifs, n)
 		}
 	}
+	d.primary = d.natives[wm.Primary(d.world)]
+	return out
+}
+
+// closeRequested turns the close buttons pressed into requests to close
+// their windows, which the World answers at once by each window's Closing
+// rule, so the loop knows before the frame whether the program ends. The
+// system asking the program itself to quit, macOS's Quit, ends it
+// whatever the windows' rules.
+func (d *driver) closeRequested() {
+	quit := appQuitRequested()
+	for _, n := range d.natives {
+		if n.h.ShouldClose() {
+			n.h.SetShouldClose(false)
+			if !quit {
+				n.window.RequestClose()
+			}
+		}
+	}
+	if quit {
+		d.world.Quit()
+		return
+	}
+	if appReopened() {
+		world.Emit(d.world, platform.ProgramReopened{})
+	}
+	wm.Closing(d.world)
 }
 
 func (d *driver) create(e platform.Windowed) (*native, error) {
@@ -801,6 +933,7 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	}
 	d.opened++
 	n := &native{
+		driver:   d,
 		h:        h,
 		entity:   e,
 		window:   win,
@@ -811,6 +944,11 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	}
 	if d.hidden {
 		n.askedW, n.askedH = int(size.X), int(size.Y)
+	}
+	if n.owns() {
+		// The content takes the title bar's room: back to the size asked.
+		ownTitleBar(h)
+		h.SetSize(int(size.X), int(size.Y))
 	}
 	if err = d.attach(n); err != nil {
 		h.Destroy()
@@ -823,11 +961,12 @@ func (d *driver) create(e platform.Windowed) (*native, error) {
 	px, py := h.GetPos()
 	win.SyncPosition(geom.V2(float32(px), float32(py)))
 	h.SetPosCallback(func(_ *glfw.Window, x, y int) { win.SyncPosition(geom.V2(float32(x), float32(y))) })
-	h.SetSizeCallback(func(*glfw.Window, int, int) { n.sync() })
-	h.SetFramebufferSizeCallback(func(*glfw.Window, int, int) { n.sync() })
+	h.SetSizeCallback(func(*glfw.Window, int, int) { d.resized(n) })
+	h.SetFramebufferSizeCallback(func(*glfw.Window, int, int) { d.resized(n) })
 	h.SetRefreshCallback(func(*glfw.Window) { d.refresh() })
 	h.SetFocusCallback(func(_ *glfw.Window, f bool) { n.focused = f; n.sync() })
 	if !d.scripted {
+		watchPresses()
 		d.listen(h, win)
 	}
 	return n, nil
@@ -883,6 +1022,9 @@ func (d *driver) destroy(n *native) {
 	if n.surface != nil {
 		d.show(n)
 		n.surface.Release()
+	}
+	if n.hiddenFrame != nil {
+		n.hiddenFrame.Release()
 	}
 	n.h.Destroy()
 }

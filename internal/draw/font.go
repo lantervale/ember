@@ -2,15 +2,16 @@ package draw
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"math"
+	"runtime"
 	"strings"
 	"sync"
 	"unicode/utf8"
+	"weak"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/render"
@@ -46,10 +47,17 @@ type Face struct {
 	font      *opentype.Font
 	fallbacks []*Face
 	emoji     Emoji
-	sizes     map[float32]*Font
+	// only are the characters the face draws of those it has (Only), all
+	// without any; blank those drawn as nothing when no face has them
+	// (Blank).
+	only, blank []Range
+	sizes       map[float32]*Font
 	// pixelSizes are the face's pixelated fonts (PixelSize), apart, so
 	// smoothed text never shares their atlas.
 	pixelSizes map[float32]*Font
+	// exactSizes are its fonts without stem darkening (ExactSize), apart
+	// as well.
+	exactSizes map[float32]*Font
 }
 
 // The engine's faces.
@@ -84,8 +92,46 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, fallbacks: fallbacks, emoji: emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, fallbacks: fallbacks, emoji: emoji,
+		sizes: map[float32]*Font{}}
 }
+
+// Range is the characters from Lo to Hi.
+type Range struct{ Lo, Hi rune }
+
+// Covers reports whether r is in ranges, or ranges is empty: a face
+// with none draws every character it has.
+func Covers(ranges []Range, r rune) bool {
+	for _, u := range ranges {
+		if r >= u.Lo && r <= u.Hi {
+			return true
+		}
+	}
+	return len(ranges) == 0
+}
+
+// Only is f drawing only the characters in ranges, as an @font-face's
+// unicode-range has it: another is left to the faces after it.
+func (f *Face) Only(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, fallbacks: f.fallbacks, emoji: f.emoji,
+		sizes: map[float32]*Font{}}
+}
+
+// Blank is f drawing nothing, in no room, for a character in ranges
+// that neither it nor its fallbacks have, where another shows as '?':
+// what a face still on its way may draw.
+func (f *Face) Blank(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, fallbacks: f.fallbacks, emoji: f.emoji,
+		sizes: map[float32]*Font{}}
+}
+
+// Wrap makes the twod.Face of f, for the engine packages that build
+// faces twod's NewFace refuses; twod sets it.
+var Wrap func(f *Face) any //nolint:gochecknoglobals // a hook twod sets
+
+// Kept is where an engine package keeps what it made of face, a
+// *twod.Face, so it goes when the face does; twod sets it.
+var Kept func(face any) *any //nolint:gochecknoglobals // a hook twod sets
 
 // Draws reports whether the face draws text as written: a picture for
 // each cluster of several characters (a flag, a ZWJ family, a keycap),
@@ -107,6 +153,9 @@ func (f *Face) Draws(text string) bool {
 			return
 		}
 		for _, src := range append([]*Face{f}, f.fallbacks...) {
+			if !Covers(src.only, first) {
+				continue
+			}
 			if idx, err := src.font.GlyphIndex(&buf, first); err == nil && idx != 0 {
 				return
 			}
@@ -120,17 +169,44 @@ func (f *Face) Draws(text string) bool {
 // crisp on high-density displays.
 const oversample = 2
 
+// MaxAtlasSide is the longest side of a glyph atlas: of a texture every
+// WebGPU device takes. A font so large that sixteen of its glyphs don't
+// fit in a row starts with an empty atlas of that width and rasterizes
+// each glyph when it is first drawn; one whose atlas is full draws no new
+// glyph, keeping its advance.
+const MaxAtlasSide = 8192
+
 // Size returns the font rasterized at px logical pixels.
 func (f *Face) Size(px float32) *Font {
 	px = float32(math.Round(float64(px)))
 	if fnt, ok := f.sizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, false)
+	fnt, err := newFont(f, px, darkened)
 	if err != nil {
 		panic(err)
 	}
 	f.sizes[px] = fnt
+	return fnt
+}
+
+// ExactSize returns the font at px logical pixels rasterized at each
+// glyph's exact coverage, without stem darkening: a square is its pixels
+// and nothing beside them, as Chrome draws
+// -webkit-font-smoothing: antialiased.
+func (f *Face) ExactSize(px float32) *Font {
+	px = float32(math.Round(float64(px)))
+	if fnt, ok := f.exactSizes[px]; ok {
+		return fnt
+	}
+	fnt, err := newFont(f, px, exact)
+	if err != nil {
+		panic(err)
+	}
+	if f.exactSizes == nil {
+		f.exactSizes = map[float32]*Font{}
+	}
+	f.exactSizes[px] = fnt
 	return fnt
 }
 
@@ -142,7 +218,7 @@ func (f *Face) PixelSize(px float32) *Font {
 	if fnt, ok := f.pixelSizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, true)
+	fnt, err := newFont(f, px, unsmoothed)
 	if err != nil {
 		panic(err)
 	}
@@ -193,6 +269,10 @@ type Font struct {
 	asciiKerns []*[128 * 128]fixed.Int26_6
 	faces      []font.Face
 	sources    []*opentype.Font
+	// only are the characters each source draws, and blank those drawn
+	// as nothing when no source has them (Face.Only, Face.Blank).
+	only       [][]Range
+	blank      []Range
 	emoji      Emoji
 	buf        sfnt.Buffer
 	cell       int
@@ -200,14 +280,26 @@ type Font struct {
 	ascent     float32
 	lineHeight float32
 	size       float32
-	// pixel rasterizes glyphs without smoothing (PixelSize).
-	pixel bool
+	// smoothing is how glyphs are rasterized.
+	smoothing smoothing
 }
+
+// smoothing is what a font makes of a glyph's coverage: darkened, its
+// stems heavier as Chrome's text on macOS (Size); exact, as covered
+// (ExactSize); unsmoothed, each pixel covered or not (PixelSize).
+type smoothing uint8
+
+const (
+	darkened smoothing = iota
+	exact
+	unsmoothed
+)
 
 const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûüœ·•×÷°±…—–’“”«»€£¥©®™←↑→↓★♥"
 
-func newFont(f *Face, px float32, pixel bool) (*Font, error) {
-	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, pixel: pixel}
+func newFont(f *Face, px float32, how smoothing) (*Font, error) {
+	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, smoothing: how,
+		blank: f.blank}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
@@ -217,12 +309,17 @@ func newFont(f *Face, px float32, pixel bool) (*Font, error) {
 			return nil, err
 		}
 		out.faces, out.sources = append(out.faces, face), append(out.sources, src.font)
+		out.only = append(out.only, src.only)
 		out.asciiKerns = append(out.asciiKerns, asciiKerning(src.font))
 	}
 	m := out.faces[0].Metrics()
 	out.ascent = float32(m.Ascent.Ceil()) / oversample
 	out.lineHeight = float32(m.Height.Ceil()) / oversample
 	out.cell = (m.Ascent + m.Descent).Ceil() + 4
+	if w := nextPow2(16 * (out.cell + 2)); w > MaxAtlasSide {
+		out.Atlas = image.NewAlpha(image.Rect(0, 0, MaxAtlasSide, min(nextPow2(out.cell+2), MaxAtlasSide)))
+		return out, nil
+	}
 	out.Atlas = image.NewAlpha(image.Rect(0, 0, nextPow2(16*(out.cell+2)), nextPow2(8*(out.cell+2))))
 	for r := rune(32); r < 127; r++ {
 		out.glyph(r)
@@ -327,18 +424,32 @@ func (f *Font) kern(p, g glyph) float32 {
 	return v
 }
 
+// kerning holds each font's ASCII table while the font lives: keyed
+// weakly, so a page's font goes when its page does.
+//
 //nolint:gochecknoglobals // a cache every font shares, under its mutex
 var (
-	kerning   = map[*opentype.Font]*[128 * 128]fixed.Int26_6{}
+	kerning   = map[weak.Pointer[opentype.Font]]*[128 * 128]fixed.Int26_6{}
 	kerningMu sync.Mutex
 )
+
+// keepKerning caches src's table until src is collected.
+func keepKerning(src *opentype.Font, t *[128 * 128]fixed.Int26_6) {
+	key := weak.Make(src)
+	kerning[key] = t
+	runtime.AddCleanup(src, func(key weak.Pointer[opentype.Font]) {
+		kerningMu.Lock()
+		defer kerningMu.Unlock()
+		delete(kerning, key)
+	}, key)
+}
 
 // asciiKerning is src's kerning between ASCII characters, in font units
 // as 26.6, read once for every size; nil when it kerns none of them.
 func asciiKerning(src *opentype.Font) *[128 * 128]fixed.Int26_6 {
 	kerningMu.Lock()
 	defer kerningMu.Unlock()
-	if t, ok := kerning[src]; ok {
+	if t, ok := kerning[weak.Make(src)]; ok {
 		return t
 	}
 	var buf sfnt.Buffer
@@ -356,16 +467,13 @@ func asciiKerning(src *opentype.Font) *[128 * 128]fixed.Int26_6 {
 			}
 			if k, err := src.Kern(&buf, idx[a], idx[b], upem, font.HintingNone); err == nil && k != 0 {
 				t[a*128+b], kerns = k, true
-			} else if errors.Is(err, sfnt.ErrNotFound) {
-				kerning[src] = nil
-				return nil
 			}
 		}
 	}
 	if !kerns {
 		t = nil
 	}
-	kerning[src] = t
+	keepKerning(src, t)
 	return t
 }
 
@@ -403,13 +511,16 @@ func (f *Font) glyphAt(r rune, phase int) glyph {
 func (f *Font) raster(r rune, phase int) glyph {
 	face, idx := -1, sfnt.GlyphIndex(0)
 	for i, src := range f.sources {
+		if !Covers(f.only[i], r) {
+			continue
+		}
 		if x, err := src.GlyphIndex(&f.buf, r); err == nil && x != 0 {
 			face, idx = i, x
 			break
 		}
 	}
 	if face < 0 {
-		if r == '?' {
+		if r == '?' || (len(f.blank) > 0 && Covers(f.blank, r)) {
 			return glyph{}
 		}
 		return f.glyphAt('?', phase)
@@ -418,12 +529,17 @@ func (f *Font) raster(r rune, phase int) glyph {
 	x := fixed.Int26_6(phase * 64 / phases) //nolint:gosec // phase < phases, so at most 64
 	dr, mask, mp, _, ok := f.faces[face].Glyph(fixed.Point26_6{X: x}, r)
 	if ok && !dr.Empty() {
-		dst := f.place(dr.Dx()+2, dr.Dy()+2)
+		dst, room := f.place(dr.Dx()+2, dr.Dy()+2)
+		if !room {
+			return g
+		}
 		draw.Draw(f.Atlas, dst.Inset(1), mask, mp, draw.Src)
-		if f.pixel {
+		switch f.smoothing {
+		case unsmoothed:
 			threshold(f.Atlas, dst)
-		} else {
+		case darkened:
 			embolden(f.Atlas, dst, darkening(f.size*oversample))
+		case exact:
 		}
 		f.version++
 		g.offset = geom.V2(float32(dr.Min.X-1), float32(dr.Min.Y-1)).Scale(1.0 / oversample)
@@ -474,20 +590,26 @@ func threshold(a *image.Alpha, r image.Rectangle) {
 }
 
 // place finds room for a w×h glyph in the atlas, row by row, doubling the
-// atlas's height when it is full.
-func (f *Font) place(w, h int) image.Rectangle {
+// atlas's height when it is full; there is none once the atlas would
+// pass MaxAtlasSide.
+func (f *Font) place(w, h int) (image.Rectangle, bool) {
 	row := max(f.cell, h) + 2
-	if f.penX+w+2 > f.Atlas.Rect.Dx() {
-		f.penX, f.penY = 0, f.penY+row
+	penX, penY := f.penX, f.penY
+	if penX+w+2 > f.Atlas.Rect.Dx() {
+		penX, penY = 0, penY+row
 	}
+	if w+2 > f.Atlas.Rect.Dx() || penY+row > MaxAtlasSide {
+		return image.Rectangle{}, false
+	}
+	f.penX, f.penY = penX, penY
 	for f.penY+row > f.Atlas.Rect.Dy() {
-		grown := image.NewAlpha(image.Rect(0, 0, f.Atlas.Rect.Dx(), f.Atlas.Rect.Dy()*2))
+		grown := image.NewAlpha(image.Rect(0, 0, f.Atlas.Rect.Dx(), min(f.Atlas.Rect.Dy()*2, MaxAtlasSide)))
 		draw.Draw(grown, f.Atlas.Rect, f.Atlas, image.Point{}, draw.Src)
 		f.Atlas = grown
 	}
 	at := image.Rect(f.penX+1, f.penY+1, f.penX+1+w, f.penY+1+h)
 	f.penX += w + 2
-	return at
+	return at, true
 }
 
 // uv is g's rectangle in the atlas, in texels: the atlas only grows,

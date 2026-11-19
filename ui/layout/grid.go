@@ -20,7 +20,7 @@ func (t *tree) grid(n *node, in input) output {
 	st := n.st
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -77,8 +77,8 @@ func (t *tree) grid(n *node, in input) output {
 			continue
 		}
 		placements = append(placements, itemPlacement{
-			h: placementOf(k.st.Column, colCount),
-			v: placementOf(k.st.Row, rowCount),
+			h: placementOf(style.AreaLines(st.Areas, k.st.Column, true), colCount),
+			v: placementOf(style.AreaLines(st.Areas, k.st.Row, false), rowCount),
 		})
 		items = append(items, newGridItem(k, alignItems, justifyItems, i))
 	}
@@ -262,7 +262,7 @@ func (t *tree) grid(n *node, in input) output {
 		}
 		var area rect
 		if claimsHere.take(k.st.Position) {
-			area = staticGridArea(k.st, finalRows, finalCols, rows, columns, border, g, borderBox)
+			area = staticGridArea(st.Areas, k.st, finalRows, finalCols, rows, columns, border, g, borderBox)
 		} else {
 			area = rect{
 				l: border.l + padding.l,
@@ -281,6 +281,7 @@ func (t *tree) grid(n *node, in input) output {
 		order++
 	}
 	n.grid = newGridInfo(finalCols, columns, finalRows, rows)
+	n.grid.areas = st.Areas
 	area := oofArea{size: borderBox.sub(paddingBoxInset.sum()), offset: point{paddingBoxInset.l, paddingBoxInset.t}}
 	if isScrollContainer(st) {
 		overflow = overflow.union(rect{r: padding.r, b: padding.b})
@@ -375,7 +376,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	insetH := span{resolve(st.Inset.Left, cb.w), resolve(st.Inset.Right, cb.w)}
 	insetV := span{resolve(st.Inset.Top, cb.h), resolve(st.Inset.Bottom, cb.h)}
 	padding := edges(st.Padding, cb.w)
-	border := borders(st)
+	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	inherent := resolveSize(st.Size, cb).withAspectRatio(ratio).mAdd(adj)
@@ -527,7 +528,7 @@ func gridRelativeOffset(pos style.Position, inset span) float32 {
 	return or(inset.start, or(-inset.end, 0))
 }
 
-func staticGridArea(st *style.Computed, rowCounts, colCounts trackCounts,
+func staticGridArea(areas []style.GridArea, st *style.Computed, rowCounts, colCounts trackCounts,
 	rows, columns []gridTrack, border rect, gutter point, borderBox size) rect {
 	axisIndexes := func(lines [2]style.GridLine, counts trackCounts) (int, int, bool, bool) {
 		s, e, okS, okE := placementOf(lines, counts.explicit).resolveAbsolute()
@@ -555,8 +556,8 @@ func staticGridArea(st *style.Computed, rowCounts, colCounts trackCounts,
 		}
 		return tracks[i].offset
 	}
-	cs, ce, okCS, okCE := axisIndexes(st.Column, colCounts)
-	rs, re, okRS, okRE := axisIndexes(st.Row, rowCounts)
+	cs, ce, okCS, okCE := axisIndexes(style.AreaLines(areas, st.Column, true), colCounts)
+	rs, re, okRS, okRE := axisIndexes(style.AreaLines(areas, st.Row, false), rowCounts)
 	r := rect{l: border.l, r: borderBox.w - border.r - gutter.x, t: border.t, b: borderBox.h - border.b - gutter.y}
 	if okCS {
 		r.l = startEdge(columns, cs)
@@ -584,6 +585,7 @@ type gridAxisInfo struct {
 // gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo.
 type gridInfo struct {
 	columns, rows gridAxisInfo
+	areas         []style.GridArea
 }
 
 func newGridAxisInfo(counts trackCounts, tracks []gridTrack) gridAxisInfo {
@@ -675,7 +677,7 @@ func (g *gridAxisInfo) resolve(lines [2]style.GridLine, paddingStart, paddingEnd
 // absoluteArea is the containing block an absolutely positioned child's grid lines give it
 // inside the padding box.
 func (g *gridInfo) absoluteArea(st *style.Computed, paddingBox rect) rect {
-	c := g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
-	r := g.rows.resolve(st.Row, paddingBox.t, paddingBox.b)
+	c := g.columns.resolve(style.AreaLines(g.areas, st.Column, true), paddingBox.l, paddingBox.r)
+	r := g.rows.resolve(style.AreaLines(g.areas, st.Row, false), paddingBox.t, paddingBox.b)
 	return rect{l: c.start, r: c.end, t: r.start, b: r.end}
 }

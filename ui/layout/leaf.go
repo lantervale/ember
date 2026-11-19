@@ -2,14 +2,29 @@ package layout
 
 import "github.com/lantervale/ember/ui/internal/style"
 
+// flowAmong has the lines of n take the room the floats of ctx leave them, at the width
+// the block has, and reports whether there are such floats.
+func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, inset rect) bool {
+	flows := ctx != nil && n.control == noControl && some(width) && ctx.hasFloats()
+	if flows || c.flowed {
+		c.broken = nil
+	}
+	c.flowed = flows
+	if flows {
+		ctx.setContentInset(inset.l, inset.r)
+		c.flow, c.flowTop, c.flowLeft = ctx, inset.t, inset.l
+	}
+	return flows
+}
+
 // leaf lays out a node without child boxes: empty, or holding inline content, Taffy's
 // compute_leaf_layout with text as its measure function.
 //
 //nolint:cyclop,funlen,gocyclo // Taffy's compute_leaf_layout, kept in its shape
-func (t *tree) leaf(n *node, in input) output {
+func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
+	border := n.borders()
 	pb := padding.add(border)
 	pbSum := pb.sum()
 	adj := boxSizingAdjustment(st, pbSum)
@@ -24,13 +39,15 @@ func (t *tree) leaf(n *node, in input) output {
 		if !some(ratio) {
 			// A natural ratio holds between content boxes, whatever box-sizing.
 			ratio = n.naturalRatio()
+			n.intrinsic = n.intrinsic || n.replaced && (styleSize.oneSided() || minSize.oneSided())
 			styleSize = styleSize.mSub(pbSum).withAspectRatio(ratio).mAdd(pbSum)
 			minSize = minSize.mSub(pbSum).withAspectRatio(ratio).mAdd(pbSum)
 		}
 		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
 		nodeSize = in.known.or(styleSize)
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
-			nodeSize = replacedSize(n.natural.add(pbSum), ratio, minSize, maxSize)
+			n.intrinsic = true
+			nodeSize = replacedSize(n.naturalIn(in.avail.w, pbSum.w).add(pbSum), ratio, minSize, maxSize)
 		}
 	}
 
@@ -40,7 +57,7 @@ func (t *tree) leaf(n *node, in input) output {
 	inset.b += gutter.y
 
 	block := isBlockDisplay(st.Display)
-	preventsCollapse := !block || isScrollContainer(st) || outOfFlow(st.Position) ||
+	preventsCollapse := !block || blockEstablishesBFC(st) || outOfFlow(st.Position) ||
 		padding.t > 0 || padding.b > 0 || border.t > 0 || border.b > 0 ||
 		(some(nodeSize.h) && nodeSize.h > 0) || (some(minSize.h) && minSize.h > 0)
 
@@ -65,8 +82,23 @@ func (t *tree) leaf(n *node, in input) output {
 	}
 	if n.replaced {
 		known = in.known.or(nodeSize).mSub(inset.sum())
+		n.intrinsic = n.intrinsic || !known.both()
 	}
-	measured, first, last := t.measureContent(n, known, avail)
+	if c := n.inline; c != nil && some(nodeSize.w) && n.control == noControl && c.fills() {
+		// A picture that fills is as wide as the lines' room, which is the box's, not
+		// what the content would take.
+		known.w = mClamp(nodeSize.w, minSize.w, maxSize.w) - inset.horizontal()
+	}
+	if c := n.inline; c != nil && c.flowAmong(ctx, n, in.known.w, inset) {
+		defer func() { c.flow = nil }()
+		known.w = in.known.w - inset.horizontal()
+	}
+	// A box that takes its content's width gives its content's percentages that width.
+	basis := avail.w.value()
+	if !some(in.known.w) && !some(nodeSize.w) {
+		basis = none
+	}
+	measured, first, last := t.measureContent(n, known, avail, basis)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
 	s := clamped
 	if r := aspectRatio(st); in.sizing == inherentSize && some(r) {
@@ -100,10 +132,7 @@ func (t *tree) leaf(n *node, in input) output {
 		collapsesThrough: !preventsCollapse && s.h == 0 && measured.h == 0,
 	}
 	if some(first) {
-		shift := float32(0)
-		if centresContent(n) {
-			shift = fmax(s.h-inset.vertical()-measured.h, 0) / 2
-		}
+		shift := fmax(s.h-inset.vertical()-measured.h, 0)*contentShare(n) + n.lowered
 		out.firstBaseline = pb.t + shift + first
 		out.lastBaseline = pb.t + shift + last
 	}
@@ -137,6 +166,7 @@ func (t *tree) leafChildren(n *node, out *output, pb, border rect, gutter point)
 			position: k.st.Position,
 			x:        staticFromStart(pb.l),
 			y:        staticFromStart(pb.t),
+			inline:   true,
 		}
 		if o := n.inline.oofOf(k); o != nil {
 			c.x, c.y = staticFromStart(o.static.x), staticFromStart(o.static.y)
@@ -157,8 +187,9 @@ func ratioHeight(w, ratio float32) float32 {
 	return 0
 }
 
-// measureContent is the size of a leaf's content: its text, or nothing.
-func (t *tree) measureContent(n *node, known size, avail spaces) (size, float32, float32) {
+// measureContent is the size of a leaf's content: its text, or nothing. basis is the
+// width its percentages are of, none for the width found here.
+func (t *tree) measureContent(n *node, known size, avail spaces, basis float32) (size, float32, float32) {
 	if n.replaced {
 		return measureReplaced(n, known), none, none
 	}
@@ -168,6 +199,6 @@ func (t *tree) measureContent(n *node, known size, avail spaces) (size, float32,
 	if n.control != noControl {
 		return t.measureControl(n, known)
 	}
-	s, first, last := t.measure(n.inline, known, avail, size{avail.w.value(), none})
+	s, first, last := t.measure(n.inline, known, avail, size{basis, none})
 	return size{or(known.w, s.w), or(known.h, s.h)}, first, last
 }

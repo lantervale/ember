@@ -5,12 +5,13 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
-// tableRole marks the nodes of a table: the table, its row groups and its rows; its
-// cells are ordinary block containers.
+// tableRole marks the nodes of a table: the table, its row groups, its rows, its columns
+// and their groups; its cells are ordinary block containers.
 type tableRole uint8
 
 const (
@@ -19,84 +20,133 @@ const (
 	roleGroup
 	roleRow
 	roleCaption
+	roleColumn
+	roleColumnGroup
 )
 
-// isTable reports a table element left at its table display (an author's flex, grid or
-// none wins).
+// isTable reports an element laid out as a table: display table or inline-table.
 func isTable(e *dom.Node) bool {
-	if e.Tag() != dom.Table {
+	if e.IsText() {
 		return false
 	}
-	d := styleOf(e).Display
-	return d == style.Inline || d == style.Block || d == style.InlineBlock
+	st := styleOf(e)
+	return st.Table && (st.Display == style.Block || st.Display == style.InlineBlock)
+}
+
+// partOf is the part of a table e is shown as, none for a text, an element not shown, a
+// control and a replaced element.
+func partOf(e *dom.Node) style.TablePart {
+	if e.IsText() {
+		return style.NoTablePart
+	}
+	st := styleOf(e)
+	if st.Display == style.DisplayNone || controlOf(e) != noControl {
+		return style.NoTablePart
+	}
+	switch e.Tag() { //nolint:exhaustive // the replaced elements, never a table's parts
+	case dom.Img, dom.Svg, dom.Canvas, dom.Iframe:
+		return style.NoTablePart
+	}
+	return st.TablePart
 }
 
 func shown(e *dom.Node) bool { return !e.IsText() && styleOf(e).Display != style.DisplayNone }
 
+// flat lists children with those of display: contents in their place, noted on owner.
+func (t *tree) flat(owner *node, children []*dom.Node) []*dom.Node {
+	items := t.flatten(owner, children)
+	out := make([]*dom.Node, 0, len(items))
+	for _, it := range items {
+		if it.text != nil {
+			out = append(out, it.text)
+		} else {
+			out = append(out, it.element)
+		}
+	}
+	return out
+}
+
+// loose gathers the children of a table part that are none of its own, for the
+// anonymous part CSS wraps them in (CSS 2 §17.2.1).
+type loose struct {
+	run []*dom.Node
+}
+
+// add puts c in the run, unless it is not shown or white space before anything else.
+func (l *loose) add(c *dom.Node) {
+	if c.IsText() && len(l.run) == 0 && isCollapsibleSpace(c.Text()) || !c.IsText() && !shown(c) {
+		return
+	}
+	l.run = append(l.run, c)
+}
+
+// flush hands the run to wrap, if there is one.
+func (l *loose) flush(wrap func([]*dom.Node)) {
+	if len(l.run) > 0 {
+		wrap(l.run)
+		l.run = nil
+	}
+}
+
 // buildTable gives a table its captions, its row groups and rows, and each row its
-// cells. The groups go as Chrome draws them: the first thead on top, the bodies and loose
-// rows, then the first tfoot.
-func (t *tree) buildTable(n *node, e *dom.Node) {
+// cells, from children. What is no part of a table where it stands is wrapped in the
+// anonymous row or cell it misses. The columns and their groups go first, under the rows
+// that are drawn over them, then the row groups as Chrome draws them: the first header
+// group on top, the bodies and loose rows, then the first footer group.
+func (t *tree) buildTable(n *node, children []*dom.Node) {
 	n.role = roleTable
-	row := func(r *dom.Node, parent *node) *node {
-		if k := t.kept(r); k != nil {
-			t.adopt(k, parent)
-			return k
-		}
-		rn := t.leafBox(r, parent, roleRow)
-		for _, c := range r.Children() {
-			if shown(c) && (c.Tag() == dom.Td || c.Tag() == dom.Th) {
-				rn.kids = append(rn.kids, t.build(c, rn))
-			}
-		}
-		return rn
-	}
-	group := func(c *dom.Node) *node {
-		if k := t.kept(c); k != nil {
-			t.adopt(k, n)
-			return k
-		}
-		g := t.leafBox(c, n, roleGroup)
-		for _, r := range c.Children() {
-			if shown(r) && r.Tag() == dom.Tr {
-				g.kids = append(g.kids, row(r, g))
-			}
-		}
-		return g
-	}
 	var head, foot *node
-	var body []*node
-	for _, c := range e.Children() {
-		if !shown(c) {
-			continue
-		}
-		switch c.Tag() {
-		case dom.Caption:
+	var body, columns []*node
+	var rest loose
+	wrap := func(run []*dom.Node) {
+		body = append(body, t.anonymousRow(n, run))
+		n.anonymous = true
+	}
+	for _, c := range t.flat(n, children) {
+		switch partOf(c) {
+		case style.TableCaption:
+			rest.flush(wrap)
 			cn := t.build(c, n)
 			cn.role = roleCaption
 			n.kids = append(n.kids, cn)
-		case dom.Thead:
-			if g := group(c); head == nil {
+		case style.TableHeaderGroup:
+			rest.flush(wrap)
+			if g := t.buildGroup(c, n); head == nil {
 				head = g
 			} else {
 				body = append(body, g)
 			}
-		case dom.Tfoot:
-			if g := group(c); foot == nil {
+		case style.TableFooterGroup:
+			rest.flush(wrap)
+			if g := t.buildGroup(c, n); foot == nil {
 				foot = g
 			} else {
 				body = append(body, g)
 			}
-		case dom.Tbody:
-			body = append(body, group(c))
-		case dom.Tr:
-			body = append(body, row(c, n))
-		case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
-			dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
-			dom.Input, dom.Select, dom.Option, dom.Textarea, dom.Details, dom.Summary, dom.Dialog, dom.Table, dom.Th, dom.Td,
-			dom.Progress, dom.Meter, dom.Img, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre: // not placed by the table
+		case style.TableRowGroup:
+			rest.flush(wrap)
+			body = append(body, t.buildGroup(c, n))
+		case style.TableRow:
+			rest.flush(wrap)
+			body = append(body, t.buildRow(c, n))
+		case style.TableColumn:
+			rest.flush(wrap)
+			columns = append(columns, t.leafBox(c, n, roleColumn))
+		case style.TableColumnGroup:
+			rest.flush(wrap)
+			g := t.leafBox(c, n, roleColumnGroup)
+			for _, k := range t.flat(g, c.Flow()) {
+				if partOf(k) == style.TableColumn {
+					g.kids = append(g.kids, t.leafBox(k, g, roleColumn))
+				}
+			}
+			columns = append(columns, g)
+		case style.NoTablePart, style.TableCell:
+			rest.add(c)
 		}
 	}
+	rest.flush(wrap)
+	n.kids = append(n.kids, columns...)
 	if head != nil {
 		n.kids = append(n.kids, head)
 	}
@@ -104,6 +154,95 @@ func (t *tree) buildTable(n *node, e *dom.Node) {
 	if foot != nil {
 		n.kids = append(n.kids, foot)
 	}
+	if !n.st.BorderCollapse {
+		n.separate()
+	}
+}
+
+// buildGroup is the node of the row group c with its rows.
+func (t *tree) buildGroup(c *dom.Node, parent *node) *node {
+	if k := t.kept(c); k != nil {
+		t.adopt(k, parent)
+		return k
+	}
+	g := t.leafBox(c, parent, roleGroup)
+	var rest loose
+	wrap := func(run []*dom.Node) {
+		g.kids = append(g.kids, t.anonymousRow(g, run))
+		g.anonymous = true
+	}
+	for _, r := range t.flat(g, c.Flow()) {
+		if partOf(r) == style.TableRow {
+			rest.flush(wrap)
+			g.kids = append(g.kids, t.buildRow(r, g))
+			continue
+		}
+		rest.add(r)
+	}
+	rest.flush(wrap)
+	return g
+}
+
+// buildRow is the node of the row r with its cells.
+func (t *tree) buildRow(r *dom.Node, parent *node) *node {
+	if k := t.kept(r); k != nil {
+		t.adopt(k, parent)
+		return k
+	}
+	rn := t.leafBox(r, parent, roleRow)
+	t.buildCells(rn, t.flat(rn, r.Flow()))
+	return rn
+}
+
+// buildCells gives the row rn its cells from children, those that are none wrapped in
+// anonymous cells.
+func (t *tree) buildCells(rn *node, children []*dom.Node) {
+	var rest loose
+	wrap := func(run []*dom.Node) {
+		cn := t.anonymous(rn)
+		cn.cell = true
+		t.buildChildren(cn, run)
+		rn.kids = append(rn.kids, cn)
+		rn.anonymous = true
+	}
+	for _, c := range children {
+		if partOf(c) == style.TableCell {
+			rest.flush(wrap)
+			cn := t.build(c, rn)
+			cn.cell = true
+			rn.kids = append(rn.kids, cn)
+			continue
+		}
+		rest.add(c)
+	}
+	rest.flush(wrap)
+}
+
+// anonymousRow is the row a table or a row group wraps round children that are none.
+func (t *tree) anonymousRow(parent *node, children []*dom.Node) *node {
+	rn := t.anonymous(parent)
+	rn.role = roleRow
+	t.buildCells(rn, children)
+	return rn
+}
+
+// anonymousTable is the table a container wraps round the table parts among its
+// children that stand in none: border-spacing and all the rest at their initial values.
+func (t *tree) anonymousTable(parent *node, parts []*dom.Node) *node {
+	st := t.anonymousTables[parent.st]
+	if st == nil {
+		s := style.Initial()
+		s.Display, s.Table = style.Block, true
+		s.Text = parent.st.Text
+		st = &s
+		if t.anonymousTables == nil {
+			t.anonymousTables = map[*style.Computed]*style.Computed{}
+		}
+		t.anonymousTables[parent.st] = st
+	}
+	n := &node{box: &box.Box{Kind: box.AnonymousBlock, Style: st}, st: st, parent: parent, fresh: true}
+	t.buildTable(n, parts)
+	return n
 }
 
 // leafBox is the node of a row group or row, whose children the table places itself.
@@ -122,7 +261,7 @@ func (n *node) rows() []*node {
 			rows = append(rows, k.kids...)
 		case roleRow:
 			rows = append(rows, k)
-		case roleNone, roleTable, roleCaption:
+		case roleNone, roleTable, roleCaption, roleColumn, roleColumnGroup:
 		}
 	}
 	return rows
@@ -185,7 +324,7 @@ func (t *tree) placeCaptions(n *node, w, y float32) {
 			size:     out.size,
 			overflow: out.overflow,
 			padding:  edges(c.st.Padding, w),
-			border:   borders(c.st),
+			border:   c.borders(),
 			margin:   m,
 		}
 		*at += out.size.h + m.vertical()
@@ -203,7 +342,8 @@ func (t *tree) table(n *node, in input) output {
 	border := borders(st)
 	inset := padding.add(border)
 	rows := n.rows()
-	if fixedLayout(st, in) || slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).spans }) {
+	if fixedLayout(st, in) || len(n.tracks()) > 0 || st.BorderCollapse ||
+		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general }) {
 		return t.spanned(n, in, rows)
 	}
 	sx, sy := st.BorderSpacing[0], st.BorderSpacing[1]
@@ -213,13 +353,16 @@ func (t *tree) table(n *node, in input) output {
 	}
 	colMin, colMax := make([]float32, cols), make([]float32, cols)
 	fixed := make([]bool, cols)
+	percent := make([]float32, cols)
 	for _, r := range rows {
 		tr := t.rowWidths(r)
 		for i := range r.kids {
 			colMin[i], colMax[i] = max(colMin[i], tr.lo[i]), max(colMax[i], tr.hi[i])
 			fixed[i] = fixed[i] || tr.fixed[i]
+			percent[i] = max(percent[i], tr.percent[i])
 		}
 	}
+	percent = heldPercents(percent)
 	sumMin, sumMax := float32(0), float32(0)
 	for i := range cols {
 		sumMin += colMin[i]
@@ -238,31 +381,20 @@ func (t *tree) table(n *node, in input) output {
 			w += inset.horizontal()
 		}
 	}
-	w = or(w, autoTableWidth(in.avail.w, sumMin, sumMax, extra))
+	w = or(w, autoTableWidth(in.avail.w, sumMin, percentMax(colMax, percent, sumMax), extra))
 	w = max(w, sumMin+extra, t.captionMin(n))
 	if in.run == computeSize && in.axis == axisHorizontal {
 		return sizeOutput(size{w, 0})
 	}
 
-	widths := columnWidths(colMin, colMax, fixed, sumMin, sumMax, w-extra)
+	widths := percentWidths(colMin, colMax, fixed, percent, sumMin, sumMax, w-extra)
 	content := w - inset.horizontal()
 	heights := make([]float32, len(rows))
 	for ri, r := range rows {
 		heights[ri] = t.rowHeight(r, widths, content)
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := inset.vertical() + above + below
-	if len(rows) > 0 {
-		hgt += sy
-	}
-	for _, h := range heights {
-		hgt += h + sy
-	}
-	if some(in.known.h) {
-		hgt = in.known.h
-	} else if sh := resolve(st.Size.Height, in.parent.h); some(sh) {
-		hgt = max(hgt, sh)
-	}
+	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
 	s := size{w, hgt}
 	if in.run == computeSize {
 		return sizeOutput(s)
@@ -297,7 +429,7 @@ func (t *tree) table(n *node, in input) output {
 				size:     out.size,
 				overflow: out.overflow,
 				padding:  edges(c.st.Padding, content),
-				border:   borders(c.st),
+				border:   c.borders(),
 			}
 			candidates = append(candidates, translateCandidates(out.oof, point{inset.l + sx + x, y})...)
 			x += widths[i] + sx
@@ -319,7 +451,7 @@ func (t *tree) table(n *node, in input) output {
 				bottom = top
 			}
 			k.unrounded = placed{location: point{inset.l + sx, top}, size: size{rowW, max(bottom-top, 0)}}
-		case roleNone, roleTable, roleCaption:
+		case roleNone, roleTable, roleCaption, roleColumn, roleColumnGroup:
 		}
 	}
 	t.placeCaptions(n, w, hgt-below)
@@ -341,9 +473,14 @@ func (t *tree) table(n *node, in input) output {
 type tableRow struct {
 	lo, hi []float32
 	fixed  []bool
+	// percent is each cell's width where it is a percentage of the table's, else 0.
+	percent []float32
 	// colspan and rowspan are each cell's, spans whether any is more than one.
 	colspan, rowspan []int
 	spans            bool
+	// general is set when the row needs the table's general layout: a cell that spans,
+	// or one on the row's baseline.
+	general bool
 
 	tall    bool
 	widths  []float32
@@ -362,16 +499,22 @@ func (t *tree) rowWidths(r *node) *tableRow {
 		return r.row
 	}
 	tr := &tableRow{lo: make([]float32, len(r.kids)), hi: make([]float32, len(r.kids)), fixed: make([]bool, len(r.kids)),
-		colspan: make([]int, len(r.kids)), rowspan: make([]int, len(r.kids))}
+		percent: make([]float32, len(r.kids)), colspan: make([]int, len(r.kids)), rowspan: make([]int, len(r.kids))}
 	for i, c := range r.kids {
 		tr.colspan[i], tr.rowspan[i] = cellSpan(c, "colspan", 1, 1000), cellSpan(c, "rowspan", 0, 65534)
 		tr.spans = tr.spans || tr.colspan[i] != 1 || tr.rowspan[i] != 1
+		tr.general = tr.general || tr.spans || onBaseline(c)
 		lo := t.measureChildSize(c, noSize, noSize,
 			spaces{minContentSpace, maxContentSpace}, inherentSize, horizontal, [2]bool{})
 		hi := t.measureChildSize(c, noSize, noSize, maxContentSpaces, inherentSize, horizontal, [2]bool{})
 		if w := resolve(c.st.Size.Width, none); some(w) {
+			if contentBox(c.st) {
+				w += edges(c.st.Padding, 0).add(c.borders()).horizontal()
+			}
 			lo, hi = max(lo, w), max(lo, w)
 			tr.fixed[i] = true
+		} else if wl := c.st.Size.Width; wl.Kind == style.Fixed && wl.Px == 0 && wl.Percent > 0 {
+			tr.percent[i] = wl.Percent
 		}
 		tr.lo[i], tr.hi[i] = lo, hi
 	}
@@ -449,9 +592,157 @@ func columnWidths(colMin, colMax []float32, fixed []bool, sumMin, sumMax, conten
 	return widths
 }
 
+// tableMax is the width a table whose percentages nothing can satisfy asks for, as
+// Chrome's.
+const tableMax = 1000000
+
+// heldPercents are the columns' percentages held to 100 in all, the first columns
+// served first, as Chrome holds them.
+func heldPercents(percent []float32) []float32 {
+	left := float32(100)
+	for i, p := range percent {
+		percent[i] = min(p, left)
+		left -= percent[i]
+	}
+	return percent
+}
+
+// percentMax is the max-content width of a table's columns, sumMax, once those with a
+// percentage are counted: the width at which each holds its max-content as its share,
+// and the others theirs in what the percentages leave.
+func percentMax(colMax, percent []float32, sumMax float32) float32 {
+	total, rest := float32(0), float32(0)
+	for i, p := range percent {
+		total += p
+		switch {
+		case p > 0:
+			sumMax = max(sumMax, colMax[i]*100/p)
+		default:
+			rest += colMax[i]
+		}
+	}
+	switch {
+	case total == 0 || rest == 0:
+		return sumMax
+	case total >= 100:
+		return tableMax
+	}
+	return max(sumMax, rest*100/(100-total))
+}
+
+// percentWidths shares a table's content width out when columns have a percentage of
+// it: those take their share, their min-content at least, and the others share the rest
+// as columnWidths does; where the shares leave less than the others' min-contents, the
+// columns with a percentage give way down to their own, and with no other column they
+// share everything by their percentages.
+func percentWidths(
+	colMin, colMax []float32, fixed []bool, percent []float32, sumMin, sumMax, content float32,
+) []float32 {
+	if !slices.ContainsFunc(percent, func(p float32) bool { return p > 0 }) {
+		return columnWidths(colMin, colMax, fixed, sumMin, sumMax, content)
+	}
+	widths := make([]float32, len(colMin))
+	var restMin, restMax, shares, sharesMin, total float32
+	var restLo, restHi []float32
+	var restFixed []bool
+	for i, p := range percent {
+		if p > 0 {
+			widths[i] = max(colMin[i], p*content/100)
+			shares += widths[i]
+			sharesMin += colMin[i]
+			total += p
+			continue
+		}
+		restMin += colMin[i]
+		restMax += colMax[i]
+		restLo, restHi, restFixed = append(restLo, colMin[i]), append(restHi, colMax[i]), append(restFixed, fixed[i])
+	}
+	switch {
+	case shares+restMin > content:
+		f := float32(0)
+		if shares > sharesMin {
+			f = max(content-restMin-sharesMin, 0) / (shares - sharesMin)
+		}
+		for i, p := range percent {
+			if p > 0 {
+				widths[i] = colMin[i] + (widths[i]-colMin[i])*f
+			} else {
+				widths[i] = colMin[i]
+			}
+		}
+	case len(restLo) == 0:
+		for i, p := range percent {
+			widths[i] += (content - shares) * p / total
+		}
+	default:
+		rest := columnWidths(restLo, restHi, restFixed, restMin, restMax, content-shares)
+		at := 0
+		for i, p := range percent {
+			if p == 0 {
+				widths[i] = rest[at]
+				at++
+			}
+		}
+	}
+	return widths
+}
+
+// track is a column or a column group without columns, and the table's columns it
+// stands for: span of them from first. group is the column's group, nil outside one.
+type track struct {
+	col, group  *node
+	first, span int
+}
+
+// tracks lists the table's columns in order, through its column groups.
+func (n *node) tracks() []track {
+	var out []track
+	at := 0
+	add := func(c, g *node) {
+		span := cellSpan(c, "span", 1, 1000)
+		out = append(out, track{col: c, group: g, first: at, span: span})
+		at += span
+	}
+	for _, k := range n.kids {
+		switch k.role {
+		case roleColumn:
+			add(k, nil)
+		case roleColumnGroup:
+			if len(k.kids) == 0 {
+				add(k, nil)
+			}
+			for _, c := range k.kids {
+				add(c, k)
+			}
+		case roleNone, roleTable, roleCaption, roleGroup, roleRow:
+		}
+	}
+	return out
+}
+
+// width is the width the track's column asks for, its group's when it has none: in
+// points, or a percentage of the table's.
+func (tr track) width() (float32, float32) {
+	for _, c := range []*node{tr.col, tr.group} {
+		if c == nil {
+			continue
+		}
+		if w := resolve(c.st.Size.Width, none); some(w) {
+			return w, 0
+		}
+		if wl := c.st.Size.Width; wl.Kind == style.Fixed && wl.Px == 0 && wl.Percent > 0 {
+			return none, wl.Percent
+		}
+	}
+	return none, 0
+}
+
 // cellSpan is a cell's colspan or rowspan attribute, 1 when missing or not a number,
 // held to [lo, hi].
 func cellSpan(c *node, name string, lo, hi int) int {
+	if c.box.Node == nil {
+		return 1
+	}
 	v, ok := c.box.Node.Attr(name)
 	if !ok {
 		return 1
@@ -481,6 +772,14 @@ type slot struct {
 // rowspan held to the end of its row group (0 spanning to there); cols is the grid's
 // width.
 func (t *tree) slots(n *node, rows []*node) ([]slot, int) {
+	return gridSlots(n, rows, func(r *node, ci int) (int, int) {
+		tr := t.rowWidths(r)
+		return tr.colspan[ci], tr.rowspan[ci]
+	})
+}
+
+// gridSlots is slots with each cell's colspan and rowspan read by spans.
+func gridSlots(n *node, rows []*node, spans func(r *node, ci int) (int, int)) ([]slot, int) {
 	var cells []slot
 	var cols int
 	end := make([]int, len(rows))
@@ -495,18 +794,17 @@ func (t *tree) slots(n *node, rows []*node) ([]slot, int) {
 			for ; i < last; i++ {
 				end[i] = last
 			}
-		case roleNone, roleTable, roleCaption:
+		case roleNone, roleTable, roleCaption, roleColumn, roleColumnGroup:
 		}
 	}
 	var busy []int
 	for ri, r := range rows {
-		tr := t.rowWidths(r)
 		col := 0
 		for ci, c := range r.kids {
 			for col < len(busy) && busy[col] > 0 {
 				col++
 			}
-			cs, rs := tr.colspan[ci], tr.rowspan[ci]
+			cs, rs := spans(r, ci)
 			if rs == 0 || ri+rs > end[ri] {
 				rs = end[ri] - ri
 			}
@@ -536,14 +834,23 @@ func (t *tree) slots(n *node, rows []*node) ([]slot, int) {
 // and a cell spanning rows grows them to fit it in proportion to their heights, as
 // Chrome does.
 //
-//nolint:funlen // Chrome's table layout with spans in one pass, as its doc walks it
+//nolint:funlen,gocognit,gocyclo,cyclop,nestif // Chrome's table layout with spans in one pass, as its doc walks it
 func (t *tree) spanned(n *node, in input, rows []*node) output {
 	st := n.st
+	tracks := n.tracks()
 	padding := edges(st.Padding, in.parent.w)
-	border := borders(st)
-	inset := padding.add(border)
 	sx, sy := st.BorderSpacing[0], st.BorderSpacing[1]
+	if st.BorderCollapse {
+		t.collapse(n, rows, tracks)
+		padding, sx, sy = rect{}, 0, 0
+	}
+	border := n.borders()
+	inset := padding.add(border)
 	cells, cols := t.slots(n, rows)
+	if len(tracks) > 0 {
+		last := tracks[len(tracks)-1]
+		cols = max(cols, last.first+last.span)
+	}
 	spacingW := float32(0)
 	if cols > 0 {
 		spacingW = sx * float32(cols+1)
@@ -560,23 +867,49 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	}
 	colMin, colMax := make([]float32, cols), make([]float32, cols)
 	fixed := make([]bool, cols)
+	// single are the columns' max-content widths from their single-column cells alone,
+	// which their percentages widen the table by.
+	percent, single := make([]float32, cols), make([]float32, cols)
 	fixedW := slices.Repeat([]float32{-1}, cols)
 	if fixedLayout(st, in) {
 		if len(rows) > 0 {
 			firstRowWidths(cells, fixedW, w-extra, inner)
+		}
+		for _, tr := range tracks {
+			if cw, _ := tr.width(); some(cw) {
+				for k := tr.first; k < tr.first+tr.span; k++ {
+					fixedW[k] = cw
+				}
+			}
 		}
 		for k, fw := range fixedW {
 			colMin[k], colMax[k] = max(fw, 0), max(fw, 0)
 		}
 	} else {
 		spannedColumns(cells, colMin, colMax, fixed, inner)
+		for _, c := range cells {
+			if tr := c.cell.parent.row; c.cs == 1 {
+				percent[c.col], single[c.col] = max(percent[c.col], tr.percent[c.ci]), max(single[c.col], tr.hi[c.ci])
+			}
+		}
+		for _, tr := range tracks {
+			cw, pc := tr.width()
+			for k := tr.first; k < tr.first+tr.span; k++ {
+				if some(cw) {
+					colMin[k], colMax[k], fixed[k] = max(colMin[k], cw), max(colMax[k], cw), true
+					single[k] = max(single[k], cw)
+				}
+				percent[k] = max(percent[k], pc)
+			}
+		}
+		percent = heldPercents(percent)
 	}
 	sumMin, sumMax := float32(0), float32(0)
 	for k := range cols {
 		sumMin += colMin[k]
 		sumMax += colMax[k]
 	}
-	w = or(w, autoTableWidth(in.avail.w, sumMin, sumMax, extra))
+	w = or(w, autoTableWidth(in.avail.w, sumMin, percentMax(single, percent, sumMax), extra))
 	w = max(w, sumMin+extra, t.captionMin(n))
 	if in.run == computeSize && in.axis == axisHorizontal {
 		return sizeOutput(size{w, 0})
@@ -586,7 +919,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	if fixedLayout(st, in) {
 		widths = fixedWidths(fixedW, w-extra)
 	} else {
-		widths = columnWidths(colMin, colMax, fixed, sumMin, sumMax, w-extra)
+		widths = percentWidths(colMin, colMax, fixed, percent, sumMin, sumMax, w-extra)
 	}
 	colX := make([]float32, cols+1)
 	for k := range cols {
@@ -598,35 +931,32 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	for ri, r := range rows {
 		heights[ri] = or(resolve(r.st.Size.Height, none), 0)
 	}
-	measure := func(c slot) float32 {
+	lowered, baselines := t.baselines(cells, len(rows), cellW, content)
+	measure := func(i int) float32 {
+		c := cells[i]
 		cw := cellW(c)
-		return t.measureChildSize(c.cell, size{cw, none}, size{content, none},
+		return lowered[i] + t.measureChildSize(c.cell, size{cw, none}, size{content, none},
 			spaces{def(cw), maxContentSpace}, inherentSize, vertical, [2]bool{})
 	}
-	for _, c := range cells {
+	for i, c := range cells {
 		if c.rs == 1 {
-			heights[c.row] = max(heights[c.row], measure(c))
+			heights[c.row] = max(heights[c.row], measure(i))
 		}
 	}
-	tall := slices.DeleteFunc(slices.Clone(cells), func(c slot) bool { return c.rs == 1 })
-	slices.SortStableFunc(tall, func(a, b slot) int { return cmp.Compare(a.rs, b.rs) })
-	for _, c := range tall {
+	var tall []int
+	for i, c := range cells {
+		if c.rs != 1 {
+			tall = append(tall, i)
+		}
+	}
+	slices.SortStableFunc(tall, func(a, b int) int { return cmp.Compare(cells[a].rs, cells[b].rs) })
+	for _, i := range tall {
+		c := cells[i]
 		rows := heights[c.row : c.row+c.rs]
-		share(rows, slices.Clone(rows), measure(c)-sy*float32(c.rs-1))
+		share(rows, slices.Clone(rows), measure(i)-sy*float32(c.rs-1))
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := inset.vertical() + above + below
-	if len(rows) > 0 {
-		hgt += sy
-	}
-	for _, h := range heights {
-		hgt += h + sy
-	}
-	if some(in.known.h) {
-		hgt = in.known.h
-	} else if sh := resolve(st.Size.Height, in.parent.h); some(sh) {
-		hgt = max(hgt, sh)
-	}
+	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
 	s := size{w, hgt}
 	if in.run == computeSize {
 		return sizeOutput(s)
@@ -657,12 +987,25 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 				bottom = top
 			}
 			k.unrounded = placed{location: point{inset.l + sx, top}, size: size{rowW, max(bottom-top, 0)}}
-		case roleNone, roleTable, roleCaption:
+		case roleNone, roleTable, roleCaption, roleColumn, roleColumnGroup:
+		}
+	}
+	gridH := max(rowY[len(rows)]-sy-rowY[0], 0)
+	for _, tr := range tracks {
+		at := point{inset.l + sx + colX[tr.first], rowY[0]}
+		tr.col.unrounded = placed{location: at, size: size{max(colX[tr.first+tr.span]-colX[tr.first]-sx, 0), gridH}}
+		if g := tr.group; g != nil {
+			if tr.col == g.kids[0] {
+				g.unrounded = placed{location: at, size: size{0, gridH}}
+			}
+			tr.col.unrounded.location = point{at.x - g.unrounded.location.x, 0}
+			g.unrounded.size.w = at.x + tr.col.unrounded.size.w - g.unrounded.location.x
 		}
 	}
 	var candidates []oofCandidate
-	for _, c := range cells {
+	for i, c := range cells {
 		cw, ch := cellW(c), rowY[c.row+c.rs]-rowY[c.row]-sy
+		c.cell.lower(lowered[i])
 		out := t.performChildLayout(c.cell, size{cw, ch}, size{content, none},
 			spaces{def(cw), def(ch)}, inherentSize)
 		c.cell.unrounded = placed{
@@ -670,21 +1013,82 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 			size:     out.size,
 			overflow: out.overflow,
 			padding:  edges(c.cell.st.Padding, content),
-			border:   borders(c.cell.st),
+			border:   c.cell.borders(),
 		}
 		candidates = append(candidates, translateCandidates(out.oof, point{inset.l + sx + colX[c.col], rowY[c.row]})...)
+	}
+	if n.shared != nil {
+		at := func(lines []float32, origin float32) []float32 {
+			out := make([]float32, len(lines))
+			for i, l := range lines {
+				out[i] = origin + l
+			}
+			return out
+		}
+		n.box.Collapsed = n.shared.edges(at(colX, inset.l), rowY)
+	}
+	if n.shared != nil {
+		at := func(lines []float32, origin float32) []float32 {
+			out := make([]float32, len(lines))
+			for i, l := range lines {
+				out[i] = origin + l
+			}
+			return out
+		}
+		n.box.Collapsed = n.shared.edges(at(colX, inset.l), rowY)
 	}
 	t.placeCaptions(n, w, hgt-below)
 	n.captionRoom = [2]float32{above, below}
 	padded := rect{r: s.w - border.horizontal(), b: s.h - border.vertical()}
+	first := none
+	if len(rows) > 0 {
+		first = baselines[0]
+		for i, c := range cells {
+			if c.row == 0 && c.rs == 1 && !some(baselines[0]) {
+				first = fmax(or(first, 0),
+					measure(i)-edges(c.cell.st.Padding, content).b-c.cell.borders().b)
+			}
+		}
+		first += rowY[0]
+	}
 	return output{
 		size:          s,
 		overflow:      finalizeOverflow(padded, s.sub(border.sum()), [2]bool{}, false),
-		firstBaseline: none,
+		firstBaseline: first,
 		lastBaseline:  none,
 		oof:           candidates,
 		area:          &oofArea{size: s.sub(border.sum()), offset: point{border.l, border.t}},
 	}
+}
+
+// baselines is how far each cell's content is lowered to stand on its row's baseline,
+// and each row's baseline from its top, none in a row with no cell on it (an inline
+// table then stands on the lowest content box of its first row, as Chrome's): the lowest
+// first baseline of its cells that are on it, with cellW their widths in a table of
+// content width. A cell without a line has its content box's bottom for one.
+func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, content float32) ([]float32, []float32) {
+	lowered, own := make([]float32, len(cells)), make([]float32, len(cells))
+	rowBase := slices.Repeat([]float32{none}, rows)
+	for i, c := range cells {
+		if !onBaseline(c.cell) {
+			c.cell.lower(0)
+			continue
+		}
+		cw := cellW(c)
+		out := t.probeChildLayout(c.cell, size{cw, none}, size{content, none},
+			spaces{def(cw), maxContentSpace}, inherentSize)
+		own[i] = out.firstBaseline - c.cell.lowered
+		if !some(out.firstBaseline) {
+			own[i] = out.size.h - edges(c.cell.st.Padding, content).b - c.cell.borders().b
+		}
+		rowBase[c.row] = fmax(or(rowBase[c.row], 0), own[i])
+	}
+	for i, c := range cells {
+		if onBaseline(c.cell) {
+			lowered[i] = rowBase[c.row] - own[i]
+		}
+	}
+	return lowered, rowBase
 }
 
 // autoTableWidth is a table's width with none given: its columns' min-content or
@@ -735,6 +1139,37 @@ func spannedColumns(cells []slot, colMin, colMax []float32, fixed []bool, inner 
 			colMax[k] = max(colMax[k], colMin[k])
 		}
 	}
+}
+
+// tableHeight is the height of a table whose rows are heights tall, around being its
+// inset and captions: the rows' with the spacing round them, or the height the table is
+// given, which grows the rows where it is above theirs.
+func tableHeight(st *style.Computed, in input, heights []float32, sy, around float32) float32 {
+	hgt := around
+	if len(heights) > 0 {
+		hgt += sy
+	}
+	for _, h := range heights {
+		hgt += h + sy
+	}
+	if given := or(in.known.h, resolve(st.Size.Height, in.parent.h)); some(given) && given > hgt {
+		growRows(heights, given-hgt)
+		return given
+	}
+	if some(in.known.h) {
+		return in.known.h
+	}
+	return hgt
+}
+
+// growRows shares extra, the height a table is given beyond its rows', between them in
+// proportion to their heights.
+func growRows(heights []float32, extra float32) {
+	have := float32(0)
+	for _, h := range heights {
+		have += h
+	}
+	share(heights, slices.Clone(heights), have+extra)
 }
 
 // share grows cols so they hold need between them, the shortfall shared in proportion

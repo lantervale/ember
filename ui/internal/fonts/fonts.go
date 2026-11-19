@@ -26,10 +26,21 @@ import (
 type Face struct {
 	Family string
 	Weight int
-	Italic bool
-	TTF    []byte
-	font   *sfnt.Font
-	upem   float32
+	// WeightMax is the heaviest weight a variable font's face covers, 0
+	// or Weight for one weight.
+	WeightMax int
+	Italic    bool
+	// Ranges are the characters the face draws, all without any.
+	Ranges []Range
+	// TTF is the face's file, nil while it is on its way (web).
+	TTF  []byte
+	font *sfnt.Font
+	upem float32
+	// web is the file of an @font-face's face that is fetched.
+	web *File
+	// file is the installed font the face is read from when it is first
+	// drawn with, nil for a face added with its bytes.
+	file *installedFace
 }
 
 // Of is a ui.Document's set, for export.
@@ -43,6 +54,8 @@ type Set struct {
 	buf   sfnt.Buffer
 	// scale is device pixels per point, 0 for 1.
 	scale float32
+	installing
+	webFonts
 }
 
 // SetScale sets the device pixels per point the text is drawn at, which
@@ -88,8 +101,25 @@ func (s *Set) Add(family string, weight int, italic bool, ttf []byte) error {
 	return nil
 }
 
-// Faces is every face, in the order added.
-func (s *Set) Faces() []*Face { return s.faces }
+// Faces is every face, in the order added; of the installed ones, those
+// drawn with so far.
+func (s *Set) Faces() []*Face {
+	if s.installed == nil && len(s.web) == 0 {
+		return s.faces
+	}
+	var read []*Face
+	for _, c := range s.faces {
+		if c.font != nil {
+			read = append(read, c)
+		}
+	}
+	for _, c := range s.web {
+		if c.font != nil {
+			read = append(read, c)
+		}
+	}
+	return read
+}
 
 // generic are the generic families and the faces drawing them.
 //
@@ -110,8 +140,26 @@ func genericFace(name string) (string, bool) {
 }
 
 // Face is the face drawing f: the first family of its list the set has,
-// else Go, then the closest weight in the asked style.
+// or the machine has once SetInstalled says what it holds, else Go, then
+// the closest weight in the asked style.
 func (s *Set) Face(f style.Font) *Face {
+	if ch := s.chained(f); ch != nil {
+		return ch.first()
+	}
+	return s.plainFace(f)
+}
+
+// plainFace is Face without the faces of the web.
+func (s *Set) plainFace(f style.Font) *Face {
+	for {
+		c := s.pick(f)
+		if c == nil || c.font != nil || s.read(c) {
+			return c
+		}
+	}
+}
+
+func (s *Set) pick(f style.Font) *Face {
 	family := "Go"
 	for _, name := range f.Family {
 		if g, ok := genericFace(name); ok {
@@ -120,6 +168,12 @@ func (s *Set) Face(f style.Font) *Face {
 		if s.has(name) {
 			family = name
 			break
+		}
+		if s.installed != nil {
+			if in := s.installedFamily(name); in != "" {
+				family = in
+				break
+			}
 		}
 	}
 	var best *Face
@@ -152,13 +206,15 @@ func (s *Set) has(family string) bool {
 
 // Metrics are the face's hhea metrics at f.Size, ascent and descent
 // rounded to whole device pixels as Chrome rounds them.
-func (s *Set) Metrics(f style.Font) box.Metrics {
-	c := s.Face(f)
+func (s *Set) Metrics(f style.Font) box.Metrics { return s.metricsOf(s.Face(f), f.Size) }
+
+// metricsOf are c's metrics at size.
+func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 	m, err := c.font.Metrics(&s.buf, fixed.I(int(c.upem)), font.HintingNone)
 	if err != nil {
 		return box.Metrics{}
 	}
-	scale := f.Size / c.upem
+	scale := size / c.upem
 	ascent := float32(m.Ascent) / 64 * scale
 	descent := float32(m.Descent) / 64 * scale
 	gap := float32(m.Height)/64*scale - ascent - descent
@@ -166,8 +222,12 @@ func (s *Set) Metrics(f style.Font) box.Metrics {
 	if px <= 0 {
 		px = 1
 	}
-	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0)}
+	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
+		XHeight: float32(m.XHeight) / 64 * scale, CapHeight: float32(m.CapHeight) / 64 * scale}
 }
+
+// Has reports whether f's own face has a glyph for r.
+func (s *Set) Has(f style.Font, r rune) bool { return s.hasGlyph(s.Face(f), r) }
 
 func round(v float32) float32 { return float32(int(v + 0.5)) }
 
@@ -225,6 +285,9 @@ func (s *Set) fallbackAdvance(c *Face, r rune, size float32) (float32, bool) {
 
 // advance is text's width in f's face, the fallback's characters in it.
 func (s *Set) advance(f style.Font, text string) float32 {
+	if ch := s.chained(f); ch != nil {
+		return s.chainAdvance(ch, f.Size, text)
+	}
 	c := s.Face(f)
 	ppem := fixed.I(int(c.upem))
 	var w fixed.Int26_6
@@ -271,7 +334,7 @@ func (s *Set) Fallback() *Face {
 // below U+3000, as a CSS unicode-range; "" for none.
 func (s *Set) FallbackRanges(c *Face) string {
 	fb := s.Fallback()
-	if fb == nil || fb == c {
+	if fb == nil || fb == c || c.web != nil {
 		return ""
 	}
 	var ranges []string
@@ -305,6 +368,9 @@ func (s *Set) FallbackRanges(c *Face) string {
 // FallbackMetrics are the Fallback face's metrics at f's size when it
 // draws some of text, as box.FallbackFonts says.
 func (s *Set) FallbackMetrics(f style.Font, text string) (box.Metrics, bool) {
+	if ch := s.chained(f); ch != nil {
+		return s.chainFallbackMetrics(ch, f.Size, text)
+	}
 	c, fb := s.Face(f), s.Fallback()
 	if fb == nil || fb == c {
 		return box.Metrics{}, false
@@ -327,6 +393,9 @@ var _ box.FallbackFonts = (*Set)(nil)
 // character (a variation selector aside), a glyph of f's face or of the
 // fallback. A keycap, a toned emoji or a flag needs its picture.
 func (s *Set) Draws(f style.Font, text string) bool {
+	if ch := s.chained(f); ch != nil {
+		return s.chainDraws(ch, text)
+	}
 	c, fb := s.Face(f), s.Fallback()
 	rest, state := text, -1
 	var g string

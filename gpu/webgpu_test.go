@@ -1,6 +1,8 @@
 package gpu //nolint:testpackage // tests the unexported blend and clamp tables
 
 import (
+	"image"
+	"image/color"
 	"testing"
 	"unsafe"
 
@@ -52,4 +54,22 @@ func TestAClipIsKeptToItsTarget(t *testing.T) {
 	assert.Equal(t, 0, clampTo(-3, 100))
 	assert.Equal(t, 100, clampTo(140, 100))
 	assert.Equal(t, 42, clampTo(41.6, 100))
+}
+
+func TestAPictureOverTheLargestTextureIsUploadedSmaller(t *testing.T) {
+	wide := image.NewRGBA(image.Rect(0, 0, maxTextureSide+808, 4))
+	for x := range wide.Rect.Dx() {
+		wide.SetRGBA(x, 0, color.RGBA{R: 255, A: 255})
+	}
+	got := uploadable(wide)
+	assert.Equal(t, image.Rect(0, 0, maxTextureSide, 4), got.Rect,
+		"its long side is the largest a device takes, the other kept")
+	assert.Equal(t, color.RGBA{R: 255, A: 255}, got.RGBAAt(maxTextureSide-1, 0), "and it is the whole picture, scaled")
+
+	tall := uploadable(image.NewRGBA(image.Rect(0, 0, 3, 2*maxTextureSide)))
+	assert.Equal(t, image.Rect(0, 0, 3, maxTextureSide), tall.Rect)
+
+	fits := image.NewRGBA(image.Rect(0, 0, maxTextureSide, 16))
+	assert.Same(t, fits, uploadable(fits), "one that fits is uploaded as it is")
+	assert.Nil(t, uploadable(image.NewRGBA(image.Rect(0, 0, 0, 16))), "an empty one has nothing to upload")
 }

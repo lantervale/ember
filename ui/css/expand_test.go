@@ -63,6 +63,27 @@ func TestExpand(t *testing.T) {
 			"transition-property": "opacity , color", "transition-duration": "0.2s , 100ms",
 			"transition-timing-function": "ease , ease-in", "transition-delay": "0s , 1s"}},
 		{"margin", "inherit", map[string]string{"margin-top": "inherit", "margin-left": "inherit"}},
+		{"background", "transparent url(paper.jpg) top left repeat-y", map[string]string{
+			"background-image": "url(paper.jpg)", "background-position": "top left", "background-repeat": "repeat-y"}},
+		{"background", "url(x.png) no-repeat center / cover #fff", map[string]string{"background-image": "url(x.png)",
+			"background-repeat": "no-repeat", "background-position": "center", "background-size": "cover",
+			"background-color": "#fff"}},
+		{"background", "left 4px top / 50% auto repeat-x url(x.png)", map[string]string{
+			"background-position": "left 4px top", "background-size": "50% auto", "background-repeat": "repeat-x"}},
+		{"background", "0 0 / 8px linear-gradient(red, blue)", map[string]string{"background-position": "0 0",
+			"background-size": "8px", "background-image": "linear-gradient(red, blue)"}},
+		{"background", "red", map[string]string{"background-size": "auto", "background-position": "0% 0%"}},
+		{"font", "75% georgia, sans-serif", map[string]string{"font-size": "75%", "font-family": "georgia , sans-serif",
+			"font-style": "normal", "font-weight": "normal", "line-height": "normal"}},
+		{"font", "italic normal 1.4em georgia, sans-serif", map[string]string{"font-style": "italic",
+			"font-weight": "normal", "font-size": "1.4em", "font-family": "georgia , sans-serif"}},
+		{"font", "italic 1.1em/2.2 georgia", map[string]string{"font-style": "italic", "font-size": "1.1em",
+			"line-height": "2.2", "font-family": "georgia"}},
+		{"font", `bold 10px/14px "Go Mono", monospace`, map[string]string{"font-weight": "bold", "font-size": "10px",
+			"line-height": "14px", "font-family": `"Go Mono" , monospace`, "font-style": "normal"}},
+		{"font", "600 italic small Verdana", map[string]string{"font-weight": "600", "font-style": "italic",
+			"font-size": "small", "font-family": "Verdana"}},
+		{"font", "inherit", map[string]string{"font-size": "inherit", "font-family": "inherit", "line-height": "inherit"}},
 	}
 	for _, c := range cases {
 		got := expanded(t, c.name, c.src)
@@ -79,10 +100,12 @@ func TestExpand(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	good := map[string][]string{
-		"appearance": {"none", "auto", "textfield"},
-		"resize":     {"none", "both", "horizontal", "vertical"},
-		"display":    {"grid", "inline-flex", "contents", "inherit"},
-		"width":      {"50%", "calc(100% - 2rem)", "max-content", "auto", "0"},
+		"appearance":      {"none", "auto", "textfield"},
+		"background-size": {"auto", "cover", "contain", "50%", "auto 100%", "12px 50%", "calc(100% - 8px) auto", "0"},
+		"background":      {"url(x.png) center / contain", "url(x.png) 10px 20% / 50% auto no-repeat", "center / 100% 100%"},
+		"resize":          {"none", "both", "horizontal", "vertical"},
+		"display":         {"grid", "inline-flex", "contents", "inherit"},
+		"width":           {"50%", "calc(100% - 2rem)", "max-content", "auto", "0"},
 		"grid-template-columns": {"max-content 1fr", "repeat(3, minmax(0, 1fr))", "repeat(auto-fill, 120px) 20%",
 			"repeat(auto-fit, minmax(100px, 1fr))", "fit-content(40%) auto"},
 		"box-shadow":                 {"none", "0 2px 4px #0008", "inset 1px 1px #000, 0 0 8px 2px rgb(0 0 0 / 50%)"},
@@ -102,8 +125,13 @@ func TestValidate(t *testing.T) {
 		}
 	}
 	bad := map[string][]string{
+		"font":              {"georgia", "12px", "italic georgia", "12px/ georgia", "small-caps 12px georgia", "caption"},
+		"background-repeat": {"repeat-z", "repeat repeat repeat"},
+		"background-size":   {"cover 10px", "contain cover", "-4px", "10px 20px 30px", "stretch"},
+		"background": {"url(x.png) / cover", "url(x.png) center /", "center / cover / contain", "/ cover center",
+			"center / red", "center / 10px 20px 30px", "center / cover 10px", "url(x.png) center no-repeat / cover"},
 		"resize":  {"auto", "12px"},
-		"display": {"table", "flex grid", "-webkit-box"},
+		"display": {"ruby", "flex grid", "-webkit-box"},
 		"width":   {"-1px", "1fr", "12", "red"},
 		"padding": {"-2px", "1px 2px 3px 4px 5px"},
 		"margin":  {"1px / 2px"},
@@ -115,7 +143,7 @@ func TestValidate(t *testing.T) {
 		"transform":     {"rotate(10px)", "translate3d(1px, 1px, 1px)", "scale(1 2)"},
 		"transition":    {"width 1s", "opacity 1s 2s 3s"},
 		"flex":          {"1 2 3", "-1", "1 auto 2"},
-		"border-style":  {"groove"},
+		"border-style":  {"double"},
 		"color":         {"reddish", "#12"},
 		"font-weight":   {"1001", "heavy"},
 		"font-family":   {"12px"},
@@ -131,9 +159,9 @@ func TestValidate(t *testing.T) {
 }
 
 func TestParseDropsBadValues(t *testing.T) {
-	sheet, warns := Parse("t.css", "p { display: table; width: var(--w); color: #fff }")
-	if got := warnings(warns); got != `t.css:1:14: display: expected block, inline, inline-block, flex, inline-flex, `+
-		`grid, inline-grid, none, contents, list-item, found "table"` {
+	sheet, warns := Parse("t.css", "p { display: ruby; width: var(--w); color: #fff }")
+	if got := warnings(warns); !strings.HasPrefix(got, "t.css:1:14: display: expected block, inline, ") ||
+		!strings.HasSuffix(got, `, found "ruby"`) {
 		t.Errorf("warnings: %s", got)
 	}
 	if n := len(sheet.Rules[0].Decls); n != 2 {

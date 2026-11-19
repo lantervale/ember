@@ -8,14 +8,14 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"net/http"
-	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/assets"
@@ -42,6 +42,10 @@ func Snapshots(of func(n *ui.Node) ([]byte, bool)) Option {
 	return func(p *page) { p.snapshot = of }
 }
 
+// generatedBoxes sizes Chrome's ::before and ::after boxes by their
+// border box as ui's are, which the user-agent sheet's * rule leaves out.
+const generatedBoxes = "::before, ::after { box-sizing: border-box; }\n"
+
 // Write writes d as a self-contained HTML page: the user-agent sheet,
 // the fonts as data URLs, the document's sheets, then its tree.
 func Write(w io.Writer, d *ui.Document, opts ...Option) error {
@@ -53,15 +57,18 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 	var b strings.Builder
 	b.WriteString("<!DOCTYPE html>\n<html")
 	attrs(&b, d, d.HTML())
+	if d.ScrollingViewport() {
+		b.WriteString(" " + ScrollingViewport)
+	}
 	b.WriteString(">\n<head>\n<meta charset=\"utf-8\">\n<style>\n")
 	for _, f := range fonts.Of(d).Faces() {
 		style := "normal"
 		if f.Italic {
 			style = "italic"
 		}
-		fmt.Fprintf(&b, "@font-face { font-family: %q; font-weight: %d; font-style: %s; "+
+		fmt.Fprintf(&b, "@font-face { font-family: %q; %s font-style: %s; "+
 			"src: url(data:font/ttf;base64,%s); }\n",
-			f.Family, f.Weight, style, base64.StdEncoding.EncodeToString(f.TTF))
+			f.Family, f.Descriptors(), style, base64.StdEncoding.EncodeToString(f.TTF))
 	}
 	set := fonts.Of(d)
 	for _, f := range set.Faces() {
@@ -75,16 +82,30 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 				f.Family, f.Weight, style, base64.StdEncoding.EncodeToString(set.Fallback().TTF), r)
 		}
 	}
-	b.WriteString(classicScrollbars)
+	switch {
+	case d.OverlayScrollbars():
+		b.WriteString(overlayScrollbars)
+	case d.ScrollingViewport():
+		b.WriteString(classicScrollbars)
+	default:
+		b.WriteString(classicScrollbars + stillViewport)
+	}
 	b.WriteString(bareBars)
-	b.WriteString("@layer ember-user-agent {\n" + states(inline(d, css.Default, "")) + "}\n")
+	agent := css.Default
+	if d.BrowserSheets() {
+		agent += css.BrowserDefault
+	} else {
+		agent += generatedBoxes
+	}
+	b.WriteString("@layer ember-user-agent {\n" + states(inline(d, agent, nil)) + "}\n")
 	b.WriteString(truncateStart)
 	for _, s := range d.Sheets() {
-		b.WriteString(states(inline(d, s.String(), path.Dir(s.Name))))
+		b.WriteString(states(inline(d, s.String(), s.URL)))
 	}
 	b.WriteString("</style>\n")
 	b.WriteString(showModals)
 	b.WriteString(scrollTo)
+	b.WriteString(selectText)
 	b.WriteString(drawSnapshots)
 	for _, h := range p.head {
 		b.WriteString(h)
@@ -118,8 +139,15 @@ func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 			fmt.Fprintf(b, ` data-ember-snapshot="data:image/png;base64,%s"`, base64.StdEncoding.EncodeToString(data))
 		}
 	}
+	if n.Tag() == dom.Iframe {
+		frame(b, d, n)
+	}
 	b.WriteByte('>')
 	if n.Tag().Void() {
+		return
+	}
+	if n.Tag() == dom.Svg {
+		b.WriteString(n.Markup() + "</svg>")
 		return
 	}
 	if ph, ok := n.Attr("placeholder"); ok && n.Tag() == dom.Select && d.Selected(n) < 0 {
@@ -139,6 +167,23 @@ func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 	b.WriteString("</")
 	b.WriteString(n.Tag().String())
 	b.WriteByte('>')
+}
+
+// frame writes the Document the iframe n shows as its srcdoc, laid out
+// at n's content box when n has one.
+func frame(b *strings.Builder, d *ui.Document, n *dom.Node) {
+	child := d.Frame(n)
+	if child == nil {
+		return
+	}
+	if r, ok := d.BoxOf(n); ok {
+		child.Layout(geom.V2(r.W, r.H).Scale(1 / d.Zoom()))
+	}
+	var page strings.Builder
+	if err := Write(&page, child); err != nil {
+		return
+	}
+	fmt.Fprintf(b, ` srcdoc="%s"`, html.EscapeString(page.String()))
 }
 
 // attrs writes n's attributes, a control's as it is now: an input's
@@ -161,19 +206,16 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	if s := dom.Data(n).Scroll; s.X != 0 || s.Y != 0 {
 		write("data-ember-scroll", fmt.Sprintf("%g %g", s.X, s.Y))
 	}
-	style, _ := n.Attr("style")
-	if thumb := switchThumb(d, n); thumb != "" {
-		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+thumb), "; ")
+	if sel := d.Selection(); !sel.Empty() {
+		if sel.Anchor.Node.Parent() == n {
+			write("data-ember-anchor", place(d, sel.Anchor))
+		}
+		if sel.Focus.Node.Parent() == n {
+			write("data-ember-focus", place(d, sel.Focus))
+		}
 	}
-	if bar := barLook(d, n); bar != "" {
-		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
-	}
-	if c, ok := placeholderColor(d, n); ok {
-		style = strings.TrimSpace(style + "; color: " + c)
-		style = strings.TrimPrefix(style, "; ")
-	}
-	if style != "" {
-		write("style", inline(d, style, "."))
+	if style := liveStyle(d, n); style != "" {
+		write("style", inline(d, style, nil))
 	}
 	typ, _ := n.Attr("type")
 	var layer uint64
@@ -194,7 +236,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		}
 		if n.Tag() == dom.Img && a.Name == "src" {
 			if data, ok := assets.Of(d, a.Value); ok {
-				write("src", "data:"+http.DetectContentType(data)+";base64,"+base64.StdEncoding.EncodeToString(data))
+				write("src", "data:"+assets.MediaType(a.Value, data)+";base64,"+base64.StdEncoding.EncodeToString(data))
 				continue
 			}
 		}
@@ -204,20 +246,43 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		}
 		write(a.Name, a.Value)
 	}
+	if name, value, ok := controlState(d, n, typ); ok {
+		write(name, value)
+	}
+}
+
+// liveStyle is n's style attribute with what its control shows now: a
+// switch's thumb, a bar's fill, a placeholder's colour.
+func liveStyle(d *ui.Document, n *dom.Node) string {
+	style, _ := n.Attr("style")
+	if thumb := switchThumb(d, n); thumb != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+thumb), "; ")
+	}
+	if bar := barLook(d, n); bar != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
+	}
+	if c, ok := placeholderColor(d, n); ok {
+		style = strings.TrimSpace(style + "; color: " + c)
+		style = strings.TrimPrefix(style, "; ")
+	}
+	return style
+}
+
+// controlState is the attribute that says a control's state now: a
+// checkbox or radio checked, an input's value, the chosen option
+// selected.
+func controlState(d *ui.Document, n *dom.Node, typ string) (string, string, bool) {
 	switch {
 	case n.Tag() == dom.Input && (typ == "checkbox" || typ == "radio"):
-		if d.Checked(n) {
-			write("checked", "")
-		}
+		return "checked", "", d.Checked(n)
 	case n.Tag() == dom.Input:
-		if v := d.Value(n); v != "" {
-			write("value", v)
-		}
+		v := d.Value(n)
+		return "value", v, v != ""
 	case n.Tag() == dom.Option:
-		if p := n.Parent(); p != nil && p.Tag() == dom.Select && optionIndex(p, n) == d.Selected(p) {
-			write("selected", "")
-		}
+		p := n.Parent()
+		return "selected", "", p != nil && p.Tag() == dom.Select && optionIndex(p, n) == d.Selected(p)
 	}
+	return "", "", false
 }
 
 func optionIndex(sel, opt *dom.Node) int {
@@ -235,21 +300,27 @@ func optionIndex(sel, opt *dom.Node) int {
 
 var urls = regexp.MustCompile(`url\(\s*(['"]?)([^'")]+)['"]?\s*\)`)
 
-// inline replaces the urls of css, relative to dir as css resolves a
-// sheet's (dir "" for none, "." for a style attribute), by data URLs of
-// the document's images, so the page carries them.
-func inline(d *ui.Document, src, dir string) string {
+// inline replaces the urls of css, each named as resolve has it (a
+// sheet's URL; nil for the user-agent sheet and a style attribute, whose
+// urls are as written), by data URLs of the document's images, so the
+// page carries them. A picture the document doesn't hold keeps its url,
+// written in full when its sheet has an address: the page is no longer
+// beside it.
+func inline(d *ui.Document, src string, resolve func(string) string) string {
 	return urls.ReplaceAllStringFunc(src, func(m string) string {
 		url := urls.FindStringSubmatch(m)[2]
 		name := url
-		if !strings.Contains(url, ":") && dir != "" && dir != "." {
-			name = path.Join(dir, url)
+		if resolve != nil {
+			name = resolve(url)
 		}
 		b, ok := assets.Of(d, name)
+		if !ok && name != url && strings.Contains(name, "://") {
+			return "url(" + name + ")"
+		}
 		if !ok {
 			return m
 		}
-		return fmt.Sprintf("url(data:%s;base64,%s)", http.DetectContentType(b), base64.StdEncoding.EncodeToString(b))
+		return fmt.Sprintf("url(data:%s;base64,%s)", assets.MediaType(name, b), base64.StdEncoding.EncodeToString(b))
 	})
 }
 
@@ -455,6 +526,39 @@ const (
 		`.sort((a, b) => a.dataset.emberModal - b.dataset.emberModal).forEach(d => d.showModal()));</script>` + "\n"
 )
 
+// place is where p stands for Chrome: the index of its text node among
+// its parent's child nodes, text nodes side by side being one there, and
+// its offset in that node in UTF-16 units.
+func place(d *ui.Document, p ui.Position) string {
+	index, offset, text := 0, 0, false
+	for _, c := range p.Node.Parent().Children() {
+		if !c.IsText() {
+			index, offset, text = index+1, 0, false
+			continue
+		}
+		if !text {
+			index, text = index+1, true
+		}
+		s := []rune(layout.Translated(c, tr(d)))
+		if c == p.Node {
+			offset += len(utf16.Encode(s[:min(p.Offset, len(s))]))
+			break
+		}
+		offset += len(utf16.Encode(s))
+	}
+	return fmt.Sprintf("%d %d", index-1, offset)
+}
+
+// selectText selects in Chrome the text the Document has selected, once
+// the page is parsed and again once it has loaded.
+const selectText = `<script>const emberSelect = () => { ` +
+	`const end = name => { const e = document.querySelector("[data-ember-" + name + "]"); if (!e) return null; ` +
+	`const [i, o] = e.dataset["ember" + name[0].toUpperCase() + name.slice(1)].split(" ").map(Number); ` +
+	`return [e.childNodes[i], o]; };
+const a = end("anchor"), f = end("focus"); if (a && f) getSelection().setBaseAndExtent(a[0], a[1], f[0], f[1]); };
+addEventListener("DOMContentLoaded", emberSelect); ` +
+	`addEventListener("load", () => document.fonts.ready.then(emberSelect));</script>` + "\n"
+
 // scrollTo scrolls each scroller to the offset the Document has it at,
 // once the page is parsed and again once it has loaded, its fonts with it.
 const scrollTo = `<script>const emberScroll = () => document.querySelectorAll("[data-ember-scroll]").forEach(e => { ` +
@@ -484,10 +588,24 @@ const img = new Image(); img.onload = () => c.getContext("2d").drawImage(img, 0,
 const truncateStart = ".truncate-start { direction: rtl; text-align: left; }\n"
 
 // classicScrollbars has Chrome reserve the 15-point gutter css gives
-// scrolling boxes (style.Box.ScrollbarWidth), not overlay scrollbars; the
-// page itself shows none, as a window's document doesn't.
-const classicScrollbars = "::-webkit-scrollbar { width: 15px; height: 15px; }\n" +
-	"html::-webkit-scrollbar { display: none; }\n" + thumbs
+// scrolling boxes (style.Box.ScrollbarWidth), not overlay scrollbars.
+const classicScrollbars = "::-webkit-scrollbar { width: 15px; height: 15px; }\n" + thumbs
+
+// stillViewport has the page itself show no bar, as the Document of a
+// window does unless its viewport scrolls (ui.ScrollingViewport).
+const stillViewport = "html::-webkit-scrollbar { display: none; }\n"
+
+// ScrollingViewport is the attribute html carries in the page of a
+// Document whose viewport scrolls: Chrome scrolls it as ui does, to the
+// offset data-ember-scroll gives html, so whatever opens the page must
+// leave the viewport its size and its bar.
+const ScrollingViewport = "data-ember-scrolling-viewport"
+
+// overlayScrollbars has Chrome keep no room for the bars of a Document
+// with ui.OverlayScrollbars, whatever the machine's own are; Chrome then
+// draws none, so a picture of the page lacks the thumbs paint lays over
+// the content.
+const overlayScrollbars = "::-webkit-scrollbar { width: 0; height: 0; }\n"
 
 // thumbs draws Chrome's scrollbar thumbs as paint draws ember's: 6 points
 // wide, 2 from the far edge and 4 from the track's ends, rounded by 3, in

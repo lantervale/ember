@@ -43,7 +43,7 @@ func newMachine(n *Node) any {
 	value, _ := n.Attr("value")
 	disabled := has(n, "disabled")
 	switch n.Tag() {
-	case dom.Canvas:
+	case dom.Canvas, dom.Iframe:
 		if m, ok := dom.Data(n).Canvas.(*control.Canvas); ok {
 			return m
 		}
@@ -99,6 +99,8 @@ func newMachine(n *Node) any {
 			}
 			num.SetReadOnly(has(n, "readonly"))
 			return num
+		case "button", "submit", typeReset:
+			return &control.Button{Disabled: disabled}
 		case "search":
 			t = control.NewSearch(value)
 		case "password":
@@ -111,10 +113,31 @@ func newMachine(n *Node) any {
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label,
 		dom.Option, dom.Summary, dom.Table, dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td, dom.Progress, dom.Meter,
-		dom.Img, dom.Hr, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot:
+		dom.Img, dom.Svg, dom.Hr, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
+		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
+		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
+		dom.Br,
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
+		dom.Col, dom.Colgroup:
 		// no control of their own
 	}
 	return nil
+}
+
+// buttonLabel is what an input that is a button shows: its value, else
+// what Chrome says of a submit or a reset.
+func buttonLabel(n *Node) string {
+	if v, ok := n.Attr("value"); ok {
+		return v
+	}
+	switch t, _ := n.Attr("type"); t {
+	case "submit":
+		return "Submit"
+	case typeReset:
+		return "Reset"
+	}
+	return ""
 }
 
 // textOf is a text field's editing machine, a number's included.
@@ -135,6 +158,9 @@ func (d *Document) sync(n *Node, m any) {
 	switch m := m.(type) {
 	case *control.Button:
 		m.Disabled = disabled
+		if n.Tag() == dom.Input {
+			n.SetShadow(buttonLabel(n), false)
+		}
 	case *control.Range:
 		m.Disabled = disabled
 	}
@@ -187,9 +213,13 @@ func (d *Document) sync(n *Node, m any) {
 }
 
 // Value is a control's value now: a text field's or textarea's text, the
-// selected option's value, a range's number, "on" for a checked checkbox.
+// selected option's value, a range's number, "on" for a checked checkbox,
+// a button's value attribute.
 func (d *Document) Value(n *Node) string {
 	switch m := d.machine(n).(type) {
+	case *control.Button:
+		v, _ := n.Attr("value")
+		return v
 	case *control.Checkbox:
 		if m.Checked {
 			return "on"
@@ -238,6 +268,26 @@ func (d *Document) SetValue(n *Node, v string) {
 		}
 	}
 	d.sync(n, d.machine(n))
+}
+
+// SelectionRange is where a text field's selection begins and ends, in
+// characters of its value, as the DOM's selectionStart and selectionEnd:
+// both the caret's place when nothing is selected, and 0 for what is no
+// text field.
+func (d *Document) SelectionRange(n *Node) (int, int) {
+	if t := textOf(d.machine(n)); t != nil {
+		return t.Editor.Selection()
+	}
+	return 0, 0
+}
+
+// SetSelectionRange selects a text field's characters from from up to to,
+// kept inside its value, as the DOM's setSelectionRange; the caret stands
+// at to. It moves no focus and emits no event.
+func (d *Document) SetSelectionRange(n *Node, from, to int) {
+	if t := textOf(d.machine(n)); t != nil {
+		t.Editor.Select(from, to)
+	}
 }
 
 // Checked reports whether a checkbox or a radio is checked.

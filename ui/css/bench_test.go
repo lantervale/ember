@@ -63,3 +63,55 @@ func BenchmarkRestyleHover(b *testing.B) {
 		tr.Compute(root, sheets)
 	}
 }
+
+// laidOut clears the flags layout clears, which a Document's frame does
+// before the next restyle.
+func laidOut(root *dom.Node) {
+	root.Walk(func(n *dom.Node) bool { dom.Data(n).Dirty = 0; return true })
+}
+
+// BenchmarkRestyleHoverBigSubtree is the pointer coming over, then
+// leaving, a container of 6,000 elements in a page whose sheet reads
+// hover above its subjects, on other elements.
+func BenchmarkRestyleHoverBigSubtree(b *testing.B) {
+	root, menu := wide(2000)
+	s, warns := Parse("bench.css", ".side:hover .item { color: #f00 } li:hover > ul { display: block } "+
+		".tab:hover + .tab { color: #f00 } .menu:hover { background-color: #111 }")
+	if len(warns) > 0 {
+		b.Fatal(warnings(warns))
+	}
+	sheets := []*Sheet{s}
+	tr := NewTransitions()
+	tr.Compute(root, sheets)
+	laidOut(root)
+	on := false
+	b.ReportAllocs()
+	for b.Loop() {
+		on = !on
+		for n := menu; n != nil; n = n.Parent() {
+			n.SetState(dom.Hover, on)
+		}
+		tr.Compute(root, sheets)
+	}
+}
+
+// BenchmarkRestyleHoverReached is the same hover where a selector reads
+// it on the container for the 2,000 items under it.
+func BenchmarkRestyleHoverReached(b *testing.B) {
+	root, menu := wide(2000)
+	s, warns := Parse("bench.css", ".menu:hover .item { background-color: #f00 }")
+	if len(warns) > 0 {
+		b.Fatal(warnings(warns))
+	}
+	sheets := []*Sheet{s}
+	tr := NewTransitions()
+	tr.Compute(root, sheets)
+	laidOut(root)
+	on := false
+	b.ReportAllocs()
+	for b.Loop() {
+		on = !on
+		menu.SetState(dom.Hover, on)
+		tr.Compute(root, sheets)
+	}
+}

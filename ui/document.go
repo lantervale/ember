@@ -8,6 +8,7 @@ import (
 
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/css"
@@ -41,17 +42,52 @@ type Document struct {
 	tree       *box.Tree
 	fonts      *fonts.Set
 	faces      map[*fonts.Face]*twod.Face
-	sheets     []*css.Sheet
-	warns      []error
-	warned     map[string]bool
+	// authored are the stylesheets in cascade order, sheets what the
+	// cascade reads of those not disabled, and resheet is set once one
+	// changed: the next frame takes them again (take).
+	authored []*Sheet
+	sheets   []*css.Sheet
+	resheet  bool
+	warns    []error
+	warned   map[string]bool
 	// files are the stylesheets' file systems, where their images are;
 	// images the textures decoded from them.
 	files  []fs.FS
 	images map[string]*twod.Texture
-	trans  *css.Transitions
-	emoji  *twod.EmojiSet
+	// vectors are the pictures drawn from shapes among them (vector),
+	// painted counts the paints, which they age their sizes by, and
+	// unsettled is whether one asked the last paint for a size it waits
+	// to see asked again before drawing it.
+	vectors   map[string]*vector
+	painted   uint64
+	unsettled bool
+	// fetch gets the pictures files don't hold (FetchImages); fetching
+	// are those on their way.
+	fetch    ImageFetcher
+	fetching fetches
+	// pageFonts are the fonts of its @font-face rules that are fetched
+	// (FetchFonts).
+	pageFonts pageFonts
+	trans     *css.Transitions
+	emoji     *twod.EmojiSet
 	// clock is the World's real time at the last Draw, -1 before it.
 	clock float32
+	// systemFonts is whether font-family names the machine's fonts
+	// (SystemFonts).
+	systemFonts bool
+	// rightDragSelects is whether a drag of the right button selects text.
+	rightDragSelects bool
+	// overlayBars is whether scrollbars lie over the content
+	// (OverlayScrollbars).
+	overlayBars bool
+	// scrollingViewport is whether the viewport scrolls
+	// (ScrollingViewport).
+	scrollingViewport bool
+	// browserSheets is whether the sheets and style attributes are read
+	// as a browser reads them (BrowserSheets), and loading the sheets
+	// the options gave, read once every option has spoken.
+	browserSheets bool
+	loading       []func()
 	// viewport is the canvas: the window, or the host's area.
 	viewport geom.Rect
 	// laidAt and laidScale are the viewport and font scale tree was laid
@@ -77,6 +113,17 @@ type Document struct {
 	// placed, looked for again once followings moved past followingsSeen.
 	followers      []*Node
 	followingsSeen uint64
+	// framed is where d shows inside another Document, nil in a window;
+	// frames are d's iframes that show a Document, framedAt the one each
+	// showed at the last frame; shield is whether the pointer is kept
+	// from d this frame, and idle the input it then reads (frame.go).
+	framed   *framing
+	frames   []*Node
+	framedAt []*Document
+	shield   bool
+	idle     *input.State
+	// wheel is how many times the wheel's turn d scrolls by (wheel.go).
+	wheel float32
 }
 
 // DocumentOption configures a Document.
@@ -90,21 +137,100 @@ func NewDocument(opts ...DocumentOption) *Document {
 		fonts: fonts.Builtin(),
 		trans: css.NewTransitions(),
 		clock: -1,
+		wheel: 1,
 	}
 	d.html.Append(d.body)
+	d.trans.MeasureFonts(d.fontUnits)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)
 	}
+	for _, load := range d.loading {
+		load()
+	}
+	d.loading = nil
 	return d
 }
+
+// BrowserSheets reads the Document's stylesheets and style attributes as
+// a browser reads a page's, for sheets written for browsers, as the web
+// explorer shows. Their @supports rules apply where ui supports what
+// they ask, their @layer rules are cascade layers, a width is its
+// content's (box-sizing: content-box) but for the controls a browser
+// sizes by their border, and each vendor's prefixed names are read as
+// Chrome reads them: a -webkit- name that is another name of a plain one
+// is that one, where it stands in the cascade, and what Chrome drops
+// (-moz-, -ms-, -o-, -khtml-) goes without a warning. The guide's CSS
+// page has each vendor's table. What ui still can't read keeps its
+// warning. Without the option each of these is a warning, so a game's
+// own sheet says what it gets wrong, and a width is the border box's.
+// It reads every sheet of the Document, wherever it stands among the
+// options.
+func BrowserSheets() DocumentOption {
+	return func(d *Document) {
+		d.browserSheets = true
+		d.trans.BrowserSheets()
+	}
+}
+
+// BrowserSheets reports whether the Document reads its sheets as a
+// browser does.
+func (d *Document) BrowserSheets() bool { return d.browserSheets }
+
+// parsing are the css options the Document reads a sheet with.
+func (d *Document) parsing(opts ...css.ParseOption) []css.ParseOption {
+	if d.browserSheets {
+		opts = append(opts, css.Browser())
+	}
+	return opts
+}
+
+// OverlayScrollbars draws every scrollbar of the Document over the
+// content it scrolls, in no room of its own, as macOS and phones draw
+// theirs: a box that scrolls keeps its whole width for its content,
+// where a classic bar takes 15 points of it. The bars work as classic
+// ones do, and show whenever the content overflows: a dark thumb with a
+// light edge, seen on a page of any colour. It is for showing pages laid
+// out for such bars, as the web explorer does; CSS has no word for it.
+func OverlayScrollbars() DocumentOption {
+	return func(d *Document) {
+		d.overlayBars = true
+		d.trans.OverlayScrollbars()
+	}
+}
+
+// OverlayScrollbars reports whether scrollbars lie over the content.
+func (d *Document) OverlayScrollbars() bool { return d.overlayBars }
+
+// ScrollingViewport has the Document's viewport scroll, as a browser's
+// does: html keeps its own height, the page's, and what of it overflows
+// the window, or the area of the element hosting the Document, scrolls
+// there by the wheel, the keys and a scrollbar, as in any box that
+// scrolls. The viewport takes html's overflow, or body's while html's is
+// visible, as CSS has it, so html { overflow: hidden } leaves it still
+// and no bar. A position: fixed box stays put in the window, a sticky
+// one sticks to it, and percentages of html and body are still of the
+// window. The canvas background, html's or body's, covers the window,
+// its picture placed in html's box, so it scrolls with the page. The
+// whole viewport then takes the pointer. Without the option a window's
+// Document never scrolls as a whole and html is the root box: a game's
+// screen is as big as its window.
+func ScrollingViewport() DocumentOption {
+	return func(d *Document) {
+		d.scrollingViewport = true
+		d.trans.ScrollingViewport()
+	}
+}
+
+// ScrollingViewport reports whether the Document's viewport scrolls.
+func (d *Document) ScrollingViewport() bool { return d.scrollingViewport }
 
 // Stylesheet adds the CSS file name in fsys, after those added before.
 // Its @font-face files are read from fsys too. What it gets wrong is in
 // Warnings.
 func Stylesheet(fsys fs.FS, name string) DocumentOption {
-	return func(d *Document) {
-		s, warns, err := css.Load(fsys, name)
+	return later(func(d *Document) {
+		s, warns, err := css.Load(fsys, name, d.parsing()...)
 		if err != nil {
 			d.warns = append(d.warns, err)
 			return
@@ -112,42 +238,62 @@ func Stylesheet(fsys fs.FS, name string) DocumentOption {
 		for _, w := range warns {
 			d.warns = append(d.warns, w)
 		}
-		for _, f := range s.FontFaces() {
-			ttf, readErr := fs.ReadFile(fsys, f.Src)
-			if readErr == nil {
-				readErr = d.fonts.Add(f.Family, f.Weight, f.Italic, ttf)
-			}
-			if readErr != nil {
-				d.warns = append(d.warns, readErr)
-			}
-		}
-		d.sheets = append(d.sheets, s)
+		d.addFontFaces(s.FontFaces(), fsys)
+		text, _ := fs.ReadFile(fsys, name)
+		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: string(text), name: name})
+		d.resheet = true
 		d.files = append(d.files, fsys)
-	}
+	})
 }
+
+// later has load run once every option of the Document has been
+// applied, in the order the options stand, so BrowserSheets reads the
+// sheets given before it too.
+func later(load func(d *Document)) DocumentOption {
+	return func(d *Document) { d.loading = append(d.loading, func() { load(d) }) }
+}
+
+// SheetOption says more of a stylesheet given to CSS.
+type SheetOption func(*sheetSource)
+
+type sheetSource struct{ from, media string }
+
+// From gives a sheet the address it was fetched from, as a browser
+// knows a linked sheet's: a url() in it is then resolved from that
+// address, where it otherwise names a picture as the Document's file
+// systems or its fetcher know it. The sheet's From reads it back.
+func From(address string) SheetOption { return func(s *sheetSource) { s.from = address } }
 
 // Images adds fsys to where url() and an img's src look for pictures, as a
 // stylesheet's own files are: the game's art passed in, read by name, the
 // last added first. It adds no rules.
 func Images(fsys fs.FS) DocumentOption {
-	return func(d *Document) { d.files = append(d.files, fsys) }
+	return later(func(d *Document) { d.files = append(d.files, fsys) })
 }
 
 // CSS adds a stylesheet written in the code, as a <style> element does,
-// after the sheets before it. Its @font-face rules have no files to read,
-// so they are warnings: fonts come with Stylesheet.
-func CSS(text string) DocumentOption {
-	return func(d *Document) {
-		s, warns := css.Parse("style", text)
+// after the sheets before it. Its @font-face rules have no files to read:
+// they are fetched with FetchFonts, and warnings without it. A sheet
+// fetched from elsewhere says where with From.
+func CSS(text string, opts ...SheetOption) DocumentOption {
+	var src sheetSource
+	for _, o := range opts {
+		o(&src)
+	}
+	return later(func(d *Document) {
+		var parse []css.ParseOption
+		if src.from != "" {
+			parse = append(parse, css.From(src.from))
+		}
+		s, warns := css.Parse("style", text, d.parsing(parse...)...)
 		for _, w := range warns {
 			d.warns = append(d.warns, w)
 		}
-		for _, f := range s.FontFaces() {
-			d.warns = append(d.warns,
-				fmt.Errorf("css: @font-face %q in CSS has no file to read; load it with Stylesheet", f.Family))
-		}
-		d.sheets = append(d.sheets, s)
-	}
+		d.addFontFaces(s.FontFaces(), nil)
+		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: text, name: "style", from: src.from,
+			media: src.media})
+		d.resheet = true
+	})
 }
 
 // ByID is the element whose id is id, as getElementById: the first in tree
@@ -163,8 +309,13 @@ func (d *Document) ByID(id string) *Node {
 	return found
 }
 
-// Sheets are the document's stylesheets in order, after css.Default.
-func (d *Document) Sheets() []*css.Sheet { return d.sheets }
+// Sheets are the document's stylesheets as the cascade reads them, in
+// order, after css.Default: those not disabled, one changed since the
+// Document was made as it now stands.
+func (d *Document) Sheets() []*css.Sheet {
+	d.take()
+	return d.sheets
+}
 
 // Warnings is what the stylesheets and style attributes got wrong, and
 // files that could not be read.
@@ -177,12 +328,23 @@ func (d *Document) HTML() *Node { return d.html }
 func (d *Document) Body() *Node { return d.body }
 
 // Layout styles and lays the tree out in a viewport of size points, as
-// each frame does before drawing, and updates every Node.Box. When nothing
+// each frame does before drawing, and updates every Node.Box. The
+// sheets' @media rules are answered for that viewport, and the tree is
+// styled again when a size crosses one's boundary. Pictures
+// fetched since the last layout are taken first. When nothing
 // changed that layout reads, the boxes are kept and only scroll offsets
 // and sticky boxes are redone. Controls
 // show their state before styling, so their pseudo-classes restyle them
 // the same frame.
 func (d *Document) Layout(size geom.Vec2) {
+	d.landImages()
+	d.landFonts()
+	if d.relayout && d.trans.FontsChanged() {
+		dom.Data(d.html).Dirty |= dom.DirtyStyle
+	}
+	if d.trans.SetMedia(css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale()}) {
+		dom.Data(d.html).Dirty |= dom.DirtyStyle
+	}
 	d.style()
 	if d.relayout {
 		d.kept, d.relayout = layout.Retained{}, false
@@ -210,6 +372,7 @@ func (d *Document) Layout(size geom.Vec2) {
 // showing. A node moved to another Document is that one's to place.
 func (d *Document) lay(size geom.Vec2) {
 	d.tree = layout.Layout(d.html, size, d.fonts, layout.Images(d), layout.Retain(&d.kept), layout.Translate(d.tr()))
+	d.landFonts()
 	for _, n := range d.tree.Dropped {
 		if d.inDocument(n) {
 			dom.Data(n).Placed = nil
@@ -249,6 +412,7 @@ func dropNode(s []*Node, n *Node) []*Node {
 // style shows the controls' state, then computes the styles of what
 // changed, a Shadow text's from its element's.
 func (d *Document) style() {
+	d.take()
 	d.pin()
 	if dom.Data(d.html).Dirty == 0 {
 		// Nothing was added or changed: only the controls' own state can
@@ -301,6 +465,7 @@ func docOf(d any) *Document {
 //nolint:gochecknoinits // the internal packages reach the Document through these hooks, set once
 func init() {
 	assets.Of = func(d any, url string) ([]byte, bool) { return docOf(d).imageBytes(url) }
+	assets.MediaType = mediaType
 	fonts.Of = func(d any) *fonts.Set { return docOf(d).fonts }
 	assets.Styled = func(d any) { docOf(d).style() }
 	assets.Modal = func(doc any, n *dom.Node) (uint64, bool) {
@@ -331,9 +496,12 @@ func init() {
 // document draws it in its own space.
 func (d *Document) Draw(c *twod.Canvas) {
 	if win := c.Window(); win != nil {
-		d.fonts.SetScale(win.ContentScale() * d.Zoom())
+		d.fonts.SetScale(win.ContentScale() * d.Zoom() * d.outerZoom())
 	}
 	animating := d.tick(c)
+	if (animating || d.replay.animating) && d.tree != nil {
+		d.tree.Inked = false
+	}
 	size := d.drawSize(c)
 	d.viewport = geom.Rect{W: size.X, H: size.Y}
 	d.Layout(size)
@@ -372,20 +540,16 @@ func (d *Document) Draw(c *twod.Canvas) {
 	count(c, why)
 	m := c.Mark()
 	apart := !d.replay.inPlace
-	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()]}
-	d.zoomed(c, func() { paint.Paint(c, d.tree, d.frameOptions()...) })
+	d.painted++
+	d.unsettled = false
+	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
+		Selection: d.selectionPaint()}
+	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
 	d.replay.recorded = c.Keep(m, &d.replay.last)
-	if apart && live.Any() {
-		d.zoomed(c, func() { paint.PaintLive(c, live, d.clock, d.options()...) })
-		if live.Covered() {
-			// Kept apart, they are in no recording: drawn on top this once,
-			// the next frame paints them in their place.
-			d.replay.recorded = false
-		}
-	}
+	d.paintApart(c, apart)
 	d.replay.inPlace = live.Covered()
 	d.replay.replayedLast = false
-	d.replay.repaint, d.replay.size, d.replay.scale = false, size, d.fonts.Scale()
+	d.replay.repaint, d.replay.size, d.replay.scale = d.unsettled, size, d.fonts.Scale()
 }
 
 // tick moves the document's clock to the World's real time and steps its
@@ -403,6 +567,28 @@ func (d *Document) tick(c *twod.Canvas) bool {
 	return animating
 }
 
+// paintApart draws the live parts a paint kept out of its recording on
+// top of it, and has the next frame paint again where the recording
+// isn't one to replay.
+func (d *Document) paintApart(c *twod.Canvas, apart bool) {
+	live := &d.replay.live
+	switch {
+	case !live.Any():
+	case apart:
+		d.zoomed(c, func() { paint.PaintLive(c, live, d.clock, d.options()...) })
+		if live.Covered() {
+			// Kept apart, they are in no recording: drawn on top this once,
+			// the next frame paints them in their place.
+			d.replay.recorded = false
+		}
+	case !live.Covered():
+		// Painted in their place and covered no more, they are in the
+		// recording: the next frame paints them apart again, or a replay
+		// would draw them twice.
+		d.replay.recorded = false
+	}
+}
+
 // drawSize is the size the document lays out at, in CSS pixels: c's own, or
 // the window's when c has none.
 func (d *Document) drawSize(c *twod.Canvas) geom.Vec2 {
@@ -415,6 +601,9 @@ func (d *Document) drawSize(c *twod.Canvas) geom.Vec2 {
 }
 
 func (d *Document) face(f style.Font) *twod.Face {
+	if ch := d.fonts.Chained(f); ch != nil {
+		return d.chainFace(ch)
+	}
 	ff := d.fonts.Face(f)
 	if tf, ok := d.faces[ff]; ok {
 		return tf

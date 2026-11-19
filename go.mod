@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	connectrpc.com/connect v1.19.2
 	connectrpc.com/grpcreflect v1.3.0
+	github.com/andybalholm/brotli v1.3.0
 	github.com/ebitengine/oto/v3 v3.3.2
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728
 	github.com/jfreymuth/oggvorbis v1.0.3

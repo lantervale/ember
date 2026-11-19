@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"image"
 	"image/draw"
 	"image/png"
@@ -27,6 +28,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/export"
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/fonts"
 )
@@ -37,19 +39,65 @@ const Tolerance = 0.5
 const script = `<script>
 addEventListener("load", () => document.fonts.ready.then(() => {
 	const els = [document.documentElement, document.body,
-		...document.body.querySelectorAll("*:not([data-ember-implied])")];
+		...document.body.querySelectorAll("*:not([data-ember-implied]):not(svg *)")];
 	const out = document.createElement("script");
 	out.type = "application/json";
 	out.id = "ember-boxes";
 	out.textContent = JSON.stringify(els.map(e => {
 		const r = e.getBoundingClientRect();
-		return [r.x, r.y, r.width, r.height];
+		const box = [r.x, r.y, r.width, r.height];
+		const parts = e.getClientRects();
+		if (parts.length > 1 && getComputedStyle(e).display !== "inline") {
+			for (const p of parts) box.push(p.x, p.y, p.width, p.height);
+		}
+		return box;
 	}));
 	document.head.appendChild(out);
+	// A pseudo-element has no box a script can ask for: each ::before and
+	// ::after box is named as an anchor, and a fixed probe sized and placed
+	// by that anchor is measured in its place. A pseudo-element without a
+	// box anchors nothing, and its probe falls back far off the page.
+	const probes = [];
+	let rules = "";
+	els.forEach((e, i) => ["before", "after"].forEach((pe, k) => {
+		const content = getComputedStyle(e, "::" + pe).content;
+		if (content === "none" || content === "normal") return;
+		e.setAttribute("data-ember-pe", i);
+		rules += '[data-ember-pe="' + i + '"]::' + pe + " { anchor-name: --ember-" + pe + "-" + i + "; }\n";
+		const p = document.createElement("ember-probe");
+		p.style.cssText = "all: initial; position: fixed; visibility: hidden; pointer-events: none; " +
+			"position-anchor: --ember-" + pe + "-" + i + "; left: anchor(left, -99999px); top: anchor(top, -99999px); " +
+			"width: anchor-size(width, 0px); height: anchor-size(height, 0px);";
+		probes.push([i, k, p]);
+	}));
+	const sheet = document.createElement("style");
+	sheet.textContent = rules;
+	document.head.appendChild(sheet);
+	for (const p of probes) document.documentElement.appendChild(p[2]);
+	const pseudo = document.createElement("script");
+	pseudo.type = "application/json";
+	pseudo.id = "ember-pseudo-boxes";
+	pseudo.textContent = JSON.stringify(probes.map(([i, k, p]) => {
+		const r = p.getBoundingClientRect();
+		return [i, k, r.x, r.y, r.width, r.height];
+	}).filter(b => b[2] > -90000));
+	document.head.appendChild(pseudo);
 }));
 </script>`
 
-var boxesJSON = regexp.MustCompile(`<script type="application/json" id="ember-boxes">(.*?)</script>`)
+var (
+	boxesJSON  = regexp.MustCompile(`<script type="application/json" id="ember-boxes">(.*?)</script>`)
+	pseudoJSON = regexp.MustCompile(`<script type="application/json" id="ember-pseudo-boxes">(.*?)</script>`)
+)
+
+// generatedBox is the border box of an element's ::before box, or of its
+// ::after box when after, as Chrome lays it out; element counts html,
+// body and body's elements in document order.
+type generatedBox struct {
+	element int
+	after   bool
+	rect    geom.Rect
+}
 
 func browser() string {
 	if p := os.Getenv("EMBER_CHROME"); p != "" {
@@ -103,23 +151,50 @@ func crop(path string, w, h int) error {
 // Boxes lays page out in a viewport of size points, and returns the
 // border boxes of html, body and body's elements in document order.
 func Boxes(page []byte, size geom.Vec2) ([]geom.Rect, error) {
+	rects, _, _, err := boxes(page, size)
+	return rects, err
+}
+
+// boxes is Boxes with the parts of each block Chrome cut between
+// columns, its getClientRects: none for a block in one piece, or for an
+// inline element, whose rects are its lines'; and with the ::before and
+// ::after boxes Chrome generated.
+func boxes(page []byte, size geom.Vec2) ([]geom.Rect, [][]geom.Rect, []generatedBox, error) {
 	out, err := run(page, size, dumpDOM)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	m := boxesJSON.FindSubmatch(out)
 	if m == nil {
-		return nil, fmt.Errorf("chrome: no boxes in the page:\n%s", out)
+		return nil, nil, nil, fmt.Errorf("chrome: no boxes in the page:\n%s", out)
 	}
-	var raw [][4]float32
+	var raw [][]float32
 	if err = json.Unmarshal(m[1], &raw); err != nil {
-		return nil, err
+		return nil, nil, nil, err
+	}
+	var generated []generatedBox
+	if pm := pseudoJSON.FindSubmatch(out); pm != nil {
+		var list [][]float32
+		if err = json.Unmarshal(pm[1], &list); err != nil {
+			return nil, nil, nil, err
+		}
+		for _, g := range list {
+			generated = append(generated, generatedBox{element: int(g[0]), after: g[1] == 1,
+				rect: geom.Rect{X: g[2], Y: g[3], W: g[4], H: g[5]}})
+		}
 	}
 	rects := make([]geom.Rect, len(raw))
+	parts := make([][]geom.Rect, len(raw))
 	for i, r := range raw {
+		if len(r) < 4 || len(r)%4 != 0 {
+			return nil, nil, nil, fmt.Errorf("chrome: box %d has %d numbers", i, len(r))
+		}
 		rects[i] = geom.Rect{X: r[0], Y: r[1], W: r[2], H: r[3]}
+		for j := 4; j < len(r); j += 4 {
+			parts[i] = append(parts[i], geom.Rect{X: r[j], Y: r[j+1], W: r[j+2], H: r[j+3]})
+		}
 	}
-	return rects, nil
+	return rects, parts, generated, nil
 }
 
 // run runs one Chrome at a time across test processes: two headless
@@ -214,7 +289,9 @@ const minNarrowHeight = 500
 // never shows a scrollbar, and a page smaller than the window it opens in
 // keeps its size on the root. It returns the window to open: at least
 // minWidth wide, and for a narrow page's picture minNarrowHeight tall,
-// cropped back to size.
+// cropped back to size. The page of a Document whose viewport scrolls
+// (export.ScrollingViewport) is left as it is, so it needs a viewport at
+// least minWidth wide to dump its boxes; its picture is taken in a frame.
 func fit(page []byte, size geom.Vec2, shot bool) ([]byte, geom.Vec2) {
 	rule := "html { scrollbar-width: none; }"
 	window := size
@@ -223,6 +300,12 @@ func fit(page []byte, size geom.Vec2, shot bool) ([]byte, geom.Vec2) {
 		if shot {
 			window.Y = max(window.Y, minNarrowHeight)
 		}
+	}
+	if bytes.Contains(page, []byte(" "+export.ScrollingViewport)) {
+		if shot {
+			return framed(page, size), window
+		}
+		return page, window
 	}
 	if window.X > size.X {
 		rule += fmt.Sprintf(" html { width: %gpx; }", size.X)
@@ -236,6 +319,16 @@ func fit(page []byte, size geom.Vec2, shot bool) ([]byte, geom.Vec2) {
 		rule += fmt.Sprintf(" html { width: %gpx; height: %gpx; position: relative; }", size.X, size.Y)
 	}
 	return bytes.Replace(page, []byte("</head>"), []byte("<style>"+rule+"</style>\n</head>"), 1), window
+}
+
+// framed is the page of a Document whose viewport scrolls, in a frame of
+// size filling another page, for its picture: headless Chrome's
+// screenshot of a window scrolled itself comes out blank, while a frame's
+// viewport scrolls, holds fixed boxes and paints its canvas as a window's.
+func framed(page []byte, size geom.Vec2) []byte {
+	return fmt.Appendf(nil, `<!DOCTYPE html><html><body style="margin: 0">`+
+		`<iframe style="display: block; border: 0; width: %gpx; height: %gpx" srcdoc="%s"></iframe></body></html>`,
+		size.X, size.Y, html.EscapeString(string(page)))
 }
 
 // margin is how much bigger than its viewport Chrome's window is when it
@@ -373,14 +466,15 @@ type Report struct {
 
 // Match lays d out in a viewport of size points both in ui and in
 // Chrome, and fails t for every element whose box differs by more than
-// Tolerance on an edge.
+// Tolerance on an edge, and so for every ::before and ::after box: one of
+// the two alone having it fails too. Report.Boxes counts them all.
 func Match(t testing.TB, d *ui.Document, size geom.Vec2) Report {
 	t.Helper()
 	var page bytes.Buffer
 	if err := export.Write(&page, d, export.Head(script)); err != nil {
 		t.Fatal(err)
 	}
-	want, err := Boxes(page.Bytes(), size)
+	want, wantParts, wantGenerated, err := boxes(page.Bytes(), size)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,13 +492,72 @@ func Match(t testing.TB, d *ui.Document, size geom.Vec2) Report {
 	r := Report{Boxes: len(got)}
 	for i, n := range got {
 		g, w := n.Box(), want[i]
-		delta := max(abs(g.X-w.X), abs(g.Y-w.Y), abs(g.X+g.W-w.X-w.W), abs(g.Y+g.H-w.Y-w.H))
+		delta := edgeDelta(g, w)
+		got, parts := cutParts(n, g), wantParts[i]
+		if len(got) != len(parts) {
+			t.Errorf("%s: ember cuts it in %d parts %v, Chrome in %d %v", path(n), len(got), got, len(parts), parts)
+		} else {
+			for k := range parts {
+				delta = max(delta, edgeDelta(got[k], parts[k]))
+			}
+		}
 		r.MaxDelta = max(r.MaxDelta, delta)
 		if delta > Tolerance {
-			t.Errorf("%s: ember %v, Chrome %v", path(n), g, w)
+			t.Errorf("%s: ember %v %v, Chrome %v %v", path(n), g, got, w, parts)
+		}
+	}
+	chromes := map[*dom.Node]geom.Rect{}
+	for _, g := range wantGenerated {
+		data := dom.Data(got[g.element])
+		node, name := data.Before, "::before"
+		if g.after {
+			node, name = data.After, "::after"
+		}
+		if node == nil {
+			t.Errorf("%s%s: Chrome has a box %v, ember none", path(got[g.element]), name, g.rect)
+			continue
+		}
+		chromes[node] = g.rect
+	}
+	for _, n := range got {
+		for _, node := range []*dom.Node{dom.Data(n).Before, dom.Data(n).After} {
+			if node == nil {
+				continue
+			}
+			name := path(n) + "::" + node.Pseudo().String()
+			w, ok := chromes[node]
+			if !ok {
+				t.Errorf("%s: ember has a box %v, Chrome none", name, node.Box())
+				continue
+			}
+			r.Boxes++
+			delta := edgeDelta(node.Box(), w)
+			r.MaxDelta = max(r.MaxDelta, delta)
+			if delta > Tolerance {
+				t.Errorf("%s: ember %v, Chrome %v", name, node.Box(), w)
+			}
 		}
 	}
 	return r
+}
+
+func edgeDelta(g, w geom.Rect) float32 {
+	return max(abs(g.X-w.X), abs(g.Y-w.Y), abs(g.X+g.W-w.X-w.W), abs(g.Y+g.H-w.Y-w.H))
+}
+
+// cutParts are the parts of n's box that columns cut, at box in the
+// document's space: what Chrome's getClientRects gives for a block cut
+// between columns, where its getBoundingClientRect is their union.
+func cutParts(n *dom.Node, at geom.Rect) []geom.Rect {
+	b, ok := dom.Data(n).Placed.(*box.Box)
+	if !ok || !b.Broken {
+		return nil
+	}
+	out := make([]geom.Rect, len(b.Fragments))
+	for i, f := range b.Fragments {
+		out[i] = geom.Rect{X: at.X + f.X, Y: at.Y + f.Y, W: f.W, H: f.H}
+	}
+	return out
 }
 
 func abs(v float32) float32 { return float32(math.Abs(float64(v))) }
@@ -439,7 +592,7 @@ func StylesAfter(d *ui.Document, size geom.Vec2, props []string, script string) 
 	head := `<script>
 addEventListener("load", () => document.fonts.ready.then(() => {
 	const els = [document.documentElement, document.body,
-		...document.body.querySelectorAll("*:not([data-ember-implied])")];
+		...document.body.querySelectorAll("*:not([data-ember-implied]):not(svg *)")];
 	` + script + `
 	const out = document.createElement("script");
 	out.type = "application/json";

@@ -60,7 +60,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	switch name {
 	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius":
 		err = expandBox(long, v, out)
-	case "gap", "overflow", "place-items", "place-content", "place-self":
+	case "gap", "overflow", "place-items", "place-content", "place-self", "margin-inline", "margin-block",
+		"padding-inline", "padding-block", "inset-inline", "inset-block":
 		err = expandPair(long, v, out)
 	case kwFlex:
 		err = expandFlex(v, out)
@@ -68,30 +69,26 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandAnyOrder(long, v, out)
 	case "grid-column", "grid-row":
 		err = expandGridLines(long, v, out)
-	case "border-top", "border-right", "border-bottom", "border-left", "outline":
+	case "grid-area":
+		err = expandGridArea(long, v, out)
+	case "grid-template":
+		err = expandGridTemplate(v, out)
+	case "border-top", "border-right", "border-bottom", "border-left", "outline", "column-rule":
 		err = expandAnyOrder(long, v, out)
-	case "background":
+	case "columns":
+		err = expandColumns(v, out)
+	case shortBackground:
 		err = expandBackground(v, out)
 	case "border":
-		side := shorthands["border-top"]
-		one := map[string][]Component{}
-		if err = expandAnyOrder(side, v, one); err == nil {
-			for _, l := range side {
-				if one[l] == nil {
-					one[l] = initialValue(l)
-				}
-			}
-			for i, l := range long[:12] {
-				out[l] = one[side[i/4]]
-			}
-			for _, l := range long[12:] {
-				out[l] = initialValue(l)
-			}
-		}
-	case "border-image":
+		err = expandBorder(long, v, out)
+	case shortBorderImage:
 		err = expandBorderImage(v, out)
-	case "transition":
+	case shortTransition:
 		err = expandTransition(v, out)
+	case "text-decoration":
+		err = expandTextDecoration(v, out)
+	case shortFont:
+		err = expandFont(v, out)
 	case "list-style":
 		if len(v) != 1 || checks["list-style-type"](v) != nil {
 			err = fmt.Errorf("list-style takes one list-style-type, such as none")
@@ -110,6 +107,28 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		}
 	}
 	return out, nil
+}
+
+// expandBorder gives the four sides one side's width, style and colour,
+// and the border image its initial values.
+func expandBorder(long []string, v []Component, out map[string][]Component) error {
+	side := shorthands["border-top"]
+	one := map[string][]Component{}
+	if err := expandAnyOrder(side, v, one); err != nil {
+		return err
+	}
+	for _, l := range side {
+		if one[l] == nil {
+			one[l] = initialValue(l)
+		}
+	}
+	for i, l := range long[:12] {
+		out[l] = one[side[i/4]]
+	}
+	for _, l := range long[12:] {
+		out[l] = initialValue(l)
+	}
+	return nil
 }
 
 // expandBox fills four sides (or corners) from one to four values.
@@ -162,6 +181,27 @@ next:
 			}
 		}
 		return fmt.Errorf("%q fits none of %s", c.String(), strings.Join(long, ", "))
+	}
+	return nil
+}
+
+// expandColumns takes a column-width and a column-count in either order; auto stands for
+// whichever is left.
+func expandColumns(v []Component, out map[string][]Component) error {
+	if len(v) < 1 || len(v) > 2 {
+		return fmt.Errorf("columns takes a width and a count, found %d values", len(v))
+	}
+	for _, c := range v {
+		one := []Component{c}
+		switch {
+		case isWord(c, "auto"):
+		case out["column-count"] == nil && checks["column-count"](one) == nil:
+			out["column-count"] = one
+		case out["column-width"] == nil && checks["column-width"](one) == nil:
+			out["column-width"] = one
+		default:
+			return fmt.Errorf("columns takes one width and one count, found %q", c.String())
+		}
 	}
 	return nil
 }
@@ -326,7 +366,7 @@ func expandTransition(v []Component, out map[string][]Component) error {
 					return fmt.Errorf("a transition has at most two times")
 				}
 			case c.Kind == Ident && one["transition-property"].Kind == EOF:
-				if !isWord(c, "all", kwNone) {
+				if !isWord(c, kwAll, kwNone) {
 					if err := transitionTarget(c); err != nil {
 						return err
 					}
@@ -353,20 +393,80 @@ func expandTransition(v []Component, out map[string][]Component) error {
 	return nil
 }
 
-// expandBackground reads background's colour, image and repeat in any order, and the
-// rest as its position.
+// expandBackground splits the background shorthand: a colour, an image, a
+// repeat of one or two words, an attachment, one box for the origin and
+// the clip or two, and a position with a size after a slash, in any
+// order. Of several layers the colour is the last one's, which alone may
+// have one, and the rest the first with a picture's: ui draws one layer.
 func expandBackground(v []Component, out map[string][]Component) error {
-	var pos []Component
-	for _, c := range v {
+	layers := splitOn(v, func(c Component) bool { return c.Kind == Comma })
+	var drawn map[string][]Component
+	for i, l := range layers {
+		layer := map[string][]Component{}
+		if len(l) == 0 {
+			return fmt.Errorf("background: an empty layer")
+		}
+		if err := backgroundLayer(l, layer); err != nil {
+			return err
+		}
+		if c := layer["background-color"]; c != nil {
+			if i != len(layers)-1 {
+				return fmt.Errorf("background: only the last layer takes a colour")
+			}
+			out["background-color"] = c
+			delete(layer, "background-color")
+		}
+		img := layer["background-image"]
+		if drawn == nil && (i == len(layers)-1 || img != nil && !isWord(img[0], kwNone)) {
+			drawn = layer
+		}
+	}
+	for name, value := range drawn {
+		out[name] = value
+	}
+	return nil
+}
+
+func backgroundLayer(v []Component, out map[string][]Component) error {
+	var pos, boxes []Component
+	posEnd := -1
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		one := []Component{c}
 		switch {
+		case isSlash(c):
+			if posEnd != i || out["background-size"] != nil {
+				return fmt.Errorf("background: a size follows a position, as in center / cover")
+			}
+			n := 0
+			for n < 2 && i+1+n < len(v) && checkBackgroundSize(v[i+1:i+2+n]) == nil {
+				n++
+			}
+			if n == 0 {
+				return fmt.Errorf("background: expected a size after /")
+			}
+			out["background-size"] = v[i+1 : i+1+n]
+			i += n
 		case out["background-color"] == nil && colorTerm(c) == nil:
-			out["background-color"] = []Component{c}
+			out["background-color"] = one
 		case out["background-image"] == nil && (isWord(c, kwNone) || imageTerm(c) == nil):
-			out["background-image"] = []Component{c}
-		case out["background-repeat"] == nil && isWord(c, "repeat", "no-repeat"):
-			out["background-repeat"] = []Component{c}
+			out["background-image"] = one
+		case out["background-repeat"] == nil && checkTiling(one) == nil:
+			out["background-repeat"] = one
+			if i+1 < len(v) && checkTiling(v[i:i+2]) == nil {
+				out["background-repeat"] = v[i : i+2]
+				i++
+			}
+		case out["background-attachment"] == nil && checks["background-attachment"](one) == nil:
+			out["background-attachment"] = one
+		case len(boxes) < 2 && backgroundBox(c) == nil:
+			boxes = append(boxes, c)
+		case out["background-size"] != nil && posEnd >= 0:
+			return fmt.Errorf("background: %s after the size", c.String())
+		case posEnd >= 0 && posEnd != i:
+			return fmt.Errorf("background: %s is not part of a background", c.String())
 		default:
-			pos = append(pos, c)
+			pos, posEnd = append(pos, c), i+1
 		}
 	}
 	if len(pos) > 0 {
@@ -375,5 +475,53 @@ func expandBackground(v []Component, out map[string][]Component) error {
 		}
 		out["background-position"] = pos
 	}
+	if len(boxes) > 0 {
+		out["background-origin"], out["background-clip"] = boxes[:1], boxes[len(boxes)-1:]
+	}
+	return nil
+}
+
+// expandFont splits the font shorthand: style and weight in any order, a
+// size, a line height after a slash, then the families. What it leaves
+// out is reset, as CSS says.
+func expandFont(v []Component, out map[string][]Component) error {
+	i := 0
+	for ; i < len(v); i++ {
+		one := []Component{v[i]}
+		switch {
+		case isWord(v[i], "normal"):
+		case isWord(v[i], "small-caps") || checks["font-stretch-word"](one) == nil:
+			return fmt.Errorf("font: %s is not supported", v[i].String())
+		case out["font-style"] == nil && checks["font-style"](one) == nil:
+			out["font-style"] = one
+		case out["font-weight"] == nil && checks["font-weight"](one) == nil:
+			out["font-weight"] = one
+		default:
+			goto size
+		}
+	}
+size:
+	if i >= len(v) || checks["font-size"]([]Component{v[i]}) != nil {
+		if len(v) == 1 && v[0].Kind == Ident {
+			return fmt.Errorf("font takes a size and a family; system fonts such as %s are not supported", v[0].Text)
+		}
+		return fmt.Errorf("font takes a size then a family, such as 12px/1.5 Georgia")
+	}
+	out["font-size"] = []Component{v[i]}
+	i++
+	if i < len(v) && isSlash(v[i]) {
+		if i+1 >= len(v) || checks["line-height"]([]Component{v[i+1]}) != nil {
+			return fmt.Errorf("font: expected a line height after /")
+		}
+		out["line-height"] = []Component{v[i+1]}
+		i += 2
+	}
+	if i >= len(v) {
+		return fmt.Errorf("font takes a family after its size")
+	}
+	if err := checkFontFamily(v[i:]); err != nil {
+		return err
+	}
+	out["font-family"] = v[i:]
 	return nil
 }

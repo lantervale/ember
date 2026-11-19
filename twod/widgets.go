@@ -281,6 +281,26 @@ func (ws *windows) bindPrimary() {
 	}
 }
 
+// gone forgets a closed window's canvas. The canvas the others are reached
+// through outlives its window: it becomes the next primary's, or a fresh
+// one for no window until one opens.
+func (ws *windows) gone(win *platform.Window) {
+	c, ok := ws.byWin[win]
+	if !ok {
+		return
+	}
+	delete(ws.byWin, win)
+	if c != ws.primary {
+		return
+	}
+	if next, has := ws.byWin[wm.Primary(ws.world)]; has {
+		ws.primary = next
+		return
+	}
+	ws.primary = &Canvas{list: &draw.List{}, in: wm.Input(ws.world), windows: ws}
+	ws.byWin[nil] = ws.primary
+}
+
 // reset clears every canvas for the new frame and forgets closed windows.
 func (ws *windows) reset(time float32) {
 	ws.bindPrimary()
@@ -390,6 +410,7 @@ func (canvasPlugin) Build(a *world.World) {
 	slot.Set(a, ws)
 	draw.Install(a, ws)
 	a.AddView(ws.open)
+	wm.OnGone(a, ws.gone)
 	overlay := &ws.overlay
 	a.AddView(&overlay.gizmos)
 	a.On(world.PreUpdate, "ui.begin", func(world.Frame) {

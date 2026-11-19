@@ -36,6 +36,8 @@ const (
 	EventContext
 	EventDrop
 	EventDragEnd
+	EventSelectionChange
+	EventRightDragSelect
 )
 
 // Event is what a callback is told: the event's type and element, and
@@ -82,7 +84,10 @@ func (e Event) StopPropagation() {
 // first, as a DOM keydown or contextmenu does: Back and keys, which land on
 // the focused element (decision 0060), and a right click (decision 0062).
 // Every other event stays on its element.
-func bubbles(t EventType) bool { return t == EventBack || t == EventKey || t == EventContext }
+func bubbles(t EventType) bool {
+	return t == EventBack || t == EventKey || t == EventContext || t == EventSelectionChange ||
+		t == EventRightDragSelect
+}
 
 // OnClick runs fn after each Clicked on the element.
 func OnClick[F Handler](fn F) Arg { return on(EventClick, fn) }
@@ -128,6 +133,16 @@ func OnDrop[F Handler](fn F) Arg { return on(EventDrop, fn) }
 // OnDragEnd runs fn when the element's drag ends, dropped or cancelled
 // (Escape, or a release over no target), its Event's Dropped telling which.
 func OnDragEnd[F Handler](fn F) Arg { return on(EventDragEnd, fn) }
+
+// OnSelectionChange runs fn after each SelectionChanged of the Document,
+// on its body or its html: ui.OnSelectionChange(fn).Apply(doc.Body()).
+// The Document's Selection says what is selected then.
+func OnSelectionChange[F Handler](fn F) Arg { return on(EventSelectionChange, fn) }
+
+// OnRightDragSelect runs fn after each RightDragSelected of the Document,
+// on its body or its html, as OnSelectionChange: text selected by a drag
+// of the right button, in a Document where RightDragSelects.
+func OnRightDragSelect[F Handler](fn F) Arg { return on(EventRightDragSelect, fn) }
 
 // OnPointerEnter runs fn when the pointer comes over the element or into
 // it, once, as mouseenter: not again for its children.
@@ -299,6 +314,10 @@ func eventOf(raw any) (Event, bool) {
 		return Event{Type: EventDrop, Node: e.Target, Dragged: e.Dragged}, true
 	case DragEnded:
 		return Event{Type: EventDragEnd, Node: e.Source, Dropped: e.Dropped}, true
+	case SelectionChanged:
+		return Event{Type: EventSelectionChange, Node: e.Node}, true
+	case RightDragSelected:
+		return Event{Type: EventRightDragSelect, Node: e.Node}, true
 	}
 	return Event{}, false
 }

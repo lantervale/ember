@@ -20,7 +20,7 @@ doc.SortBy(scores, func(a, b *ui.Node, column int, descending bool) int { … })
 doc.Selected(scores)      // the selected body row, -1 for none
 ```
 
-Laid out by CSS's automatic table layout: columns as wide as their cells, rows as tall as their tallest cell, a cell spanning several sharing its extra width over its columns by their content and its height over its rows by theirs. With `table-layout: fixed` and a width, the first row's sized cells set their columns, the rest share what's left, and later rows widen nothing. Its children are a `caption` (above, or below with `caption-side: bottom`), `thead`, `tbody`, `tfoot` (under the bodies wherever it's written) or `tr`; only the first `thead` and `tfoot` are header and footer, others count as bodies. The table's border, padding, background and shadow frame the grid, not the caption; its outline goes round both. A selected row and a sorted header have no default look, as in Chrome: `kit.Table` styles them.
+Laid out by CSS's automatic table layout: columns as wide as their cells, a cell with a percentage width taking that share of the table and widening it until its content fits the share, a table given a height growing its rows to it, rows as tall as their tallest cell, a cell spanning several sharing its extra width over its columns by their content and its height over its rows by theirs. With `table-layout: fixed` and a width, the first row's sized cells set their columns, the rest share what's left, and later rows widen nothing. Its children are a `caption` (above, or below with `caption-side: bottom`), `thead`, `tbody`, `tfoot` (under the bodies wherever it's written) or `tr`; only the first `thead` and `tfoot` are header and footer, others count as bodies. The table's border, padding, background and shadow frame the grid, not the caption; its outline goes round both. A selected row and a sorted header have no default look, as in Chrome: `kit.Table` styles them.
 
 | Attribute | |
 |---|---|
@@ -28,6 +28,7 @@ Laid out by CSS's automatic table layout: columns as wide as their cells, rows a
 | `aria-sort` on a `th` | a press sorts the body rows by its column, ascending then reversed: by each cell's `data-sort`, else its text, as numbers when both read as one, else ignoring case |
 | `aria-disabled="true"` on a row | dimmed and skipped |
 | `colspan`, `rowspan` on a `th` or `td` | the cell spans columns and rows ([th](33-th.md)) |
+| `width`, `height`, `bgcolor`, `cellspacing`, `cellpadding`, `align="center"` | as old pages write them: its size in pixels or percent, its background, its `border-spacing`, its cells' padding, auto margins |
 
 | Default CSS | |
 |---|---|

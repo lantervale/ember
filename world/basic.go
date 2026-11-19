@@ -1,6 +1,7 @@
 package world
 
 import (
+	"slices"
 	"sync/atomic"
 )
 
@@ -111,7 +112,7 @@ func (e *BasicEntity) RemoveChild(child *BasicEntity) {
 		}
 	}
 	if at >= 0 {
-		e.children = append(e.children[:at], e.children[at+1:]...)
+		e.children = slices.Delete(e.children, at, at+1)
 		child.parent = nil
 	}
 }

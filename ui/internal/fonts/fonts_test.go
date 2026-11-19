@@ -39,6 +39,9 @@ func TestMeasuresScaleWithTheSize(t *testing.T) {
 	assert.Greater(t, m.Ascent, m.Descent)
 	assert.Greater(t, m.Descent, float32(0))
 	assert.GreaterOrEqual(t, m.LineGap, float32(0))
+	assert.Greater(t, m.XHeight, m.Ascent/3, "a lowercase x stands about half the ascent tall")
+	assert.Less(t, m.XHeight, m.Ascent)
+	assert.InDelta(t, 2*s.Metrics(small).XHeight, m.XHeight, 0.01)
 }
 
 func TestMetricsRoundToDevicePixels(t *testing.T) {

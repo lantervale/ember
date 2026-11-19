@@ -96,9 +96,8 @@ func ourLines(d *ui.Document, size geom.Vec2) ([][]chromeLine, []*dom.Node) {
 				}
 				lead := strings.TrimSuffix(f.Text, strings.TrimLeft(f.Text, " "))
 				trail := strings.TrimPrefix(f.Text, strings.TrimRight(f.Text, " "))
-				spacing := b.Style.LetterSpacing
-				lw := fs.Advance(font, lead) + spacing*float32(len(lead))
-				tw := fs.Advance(font, trail) + spacing*float32(len(trail))
+				lw := fs.Advance(font, lead) + b.Style.Spacing(lead)
+				tw := fs.Advance(font, trail) + b.Style.Spacing(trail)
 				r := [4]float32{o.X + f.Rect.X + lw, o.Y + f.Baseline - ascent, f.Rect.W - lw - tw, 0}
 				if n := len(ls); n > 0 && ls[n-1].Rect[1] == r[1] {
 					// a justified line: one fragment a word
@@ -215,6 +214,43 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 			ui.P(ui.Style("width: 180px; letter-spacing: 2px"), ui.Text(sentence)),
 			ui.P(ui.Style("width: 180px"), ui.Text("Normal then "),
 				ui.Span(ui.Style("letter-spacing: 0.3em"), ui.Text("SPACED OUT")), ui.Text(" and normal again.")),
+		),
+		"word-spacing": page(
+			ui.P(ui.Style("width: 180px; word-spacing: 6px"), ui.Text(sentence)),
+			ui.P(ui.Style("width: 180px"), ui.Text("Normal then "),
+				ui.Span(ui.Style("word-spacing: 0.5em"), ui.Text("three spaced words")), ui.Text(" and normal again.")),
+			ui.P(ui.Style("width: 180px; word-spacing: -2px"), ui.Text(sentence)),
+			ui.P(ui.Style("width: 180px; letter-spacing: 1px; word-spacing: 5px"), ui.Text(sentence)),
+			ui.P(ui.Style("width: 120px; word-spacing: 10px; text-align: right"), ui.Text(sentence)),
+			ui.P(ui.Style("word-spacing: 8px"), ui.Text("no\u00a0break\u00a0spaces widen too, "),
+				ui.Span(ui.Text("a span ")), ui.Span(ui.Style("word-spacing: 0"), ui.Text("then none ")), ui.Text("end")),
+		),
+		"word-spacing in children": page(
+			ui.P(ui.Style("width: 220px; word-spacing: 1em; font-size: 12px"), ui.Text("An em here, "),
+				ui.Span(ui.Style("font-size: 24px"), ui.Text("the same in a bigger span")), ui.Text(" and back.")),
+			ui.P(ui.Style("width: 220px; word-spacing: 50%"), ui.Text("Half an em, "),
+				ui.Span(ui.Style("font-size: 24px"), ui.Text("then half a bigger one")), ui.Text(" and back.")),
+			ui.P(ui.Style("width: 220px; word-spacing: calc(25% + 2px)"), ui.Text("A sum, "),
+				ui.Span(ui.Style("font-size: 24px"), ui.Text("in a bigger span")), ui.Text(" and back.")),
+		),
+		"word-spacing justified": page(
+			ui.P(ui.Style("width: 170px; text-align: justify; word-spacing: 4px"), ui.Text(sentence)),
+			ui.P(ui.Style("width: 170px; text-align: justify"), ui.Text("Justified with a "),
+				ui.Span(ui.Style("word-spacing: 12px"), ui.Text("span of wider spaces")),
+				ui.Text(" in the middle of it all, then the end.")),
+		),
+		"word-spacing and kept spaces": page(
+			ui.Div(ui.Style("width: 200px; white-space: pre-wrap; word-spacing: 5px"), ui.Text("one  two\n  three   four "),
+				ui.Span(ui.Text("five  six")), ui.Text("  seven")),
+			ui.Div(ui.Style("white-space: pre; word-spacing: 5px"), ui.Text("  pre  keeps   each "), ui.Span(ui.Text(" one "))),
+			ui.Div(ui.Style("width: 100px; white-space: pre-wrap; word-spacing: 30px"), ui.Text("aaa   bbb")),
+		),
+		"word-spacing and content widths": page(
+			ui.Div(ui.Style("display: flex"),
+				ui.Div(ui.Style("word-spacing: 10px"), ui.Text("max content width ")),
+				ui.Div(ui.Style("word-spacing: 10px; width: min-content"), ui.Text("min content width"))),
+			ui.Div(ui.Style("display: inline-block; word-spacing: -3px"), ui.Text("an inline block of tighter words")),
+			ui.Div(ui.Style("width: 126px; word-spacing: 30px"), ui.Span(ui.Text("aaa bbb ccc"))),
 		),
 		"ellipses": page(
 			ui.Div(ui.Style("width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 1px"),

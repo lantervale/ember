@@ -23,9 +23,23 @@ type Transitions struct {
 	given, all []*Sheet
 	changed    func(n *dom.Node, old, next *style.Computed)
 	m, pm      matcher
-	treeStates dom.State
 	// computed counts the elements restyled, for tests.
 	computed int
+	overlay  bool
+	viewport bool
+	browser  bool
+	// media is what @media rules are answered for, off the rules of each
+	// sheet they leave out, and ranks the sheets' cascade layers.
+	media Media
+	off   [][]bool
+	ranks [][]int32
+	// stale is set once media has changed which rules apply, or what a
+	// unit some length is in stands for: the next Compute restyles the
+	// whole tree.
+	stale bool
+	// env is what lengths are measured against: the fonts, and media's
+	// viewport.
+	env measures
 }
 
 // nodeAnim is one element's running transitions and the style it shows.
@@ -51,29 +65,105 @@ func NewTransitions() *Transitions {
 	return &Transitions{nodes: map[*dom.Node]*nodeAnim{}}
 }
 
+// OverlayScrollbars has every box that shows scrollbars keep no gutter
+// for them (ScrollbarWidth 0, ScrollbarOverlay set), from the next
+// element styled: set it before the first Compute.
+func (t *Transitions) OverlayScrollbars() { t.overlay = true }
+
+// ScrollingViewport has the viewport take the root's overflow, or body's
+// while the root's is visible, as a browser's does: that element's own
+// Overflow is visible, and the root's Viewport (body's, when it gave its
+// overflow) is the viewport's style, which scrolls unless the overflow it
+// took is hidden. Set it before the first Compute.
+func (t *Transitions) ScrollingViewport() { t.viewport = true }
+
+// BrowserSheets has the sheets start from a browser's own
+// (BrowserDefault after Default) and style attributes read as a
+// browser's (Browser). Set it before the first Compute.
+func (t *Transitions) BrowserSheets() { t.browser = true }
+
+// SetMedia answers the sheets' @media rules for m from now on, and
+// reports whether that changes which rules apply: the caller then flags
+// the root DirtyStyle, and the next Compute restyles the whole tree. A
+// viewport that crosses no rule's boundary costs only the queries.
+func (t *Transitions) SetMedia(m Media) bool {
+	if m == t.media {
+		return false
+	}
+	t.media = m
+	resized := t.env.width != m.Width || t.env.height != m.Height
+	t.env.width, t.env.height = m.Width, m.Height
+	if t.all == nil {
+		return false
+	}
+	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
+		t.off, t.stale = off, true
+	} else if resized && t.env.used&viewportUnits != 0 {
+		t.stale = true
+	}
+	return t.stale
+}
+
+// MeasureFonts has the units that read a font (ex, ch, cap, ic, lh and
+// the root's) ask font what they stand for; without it they are CSS's
+// fallbacks off the font size. Set it before the first Compute.
+func (t *Transitions) MeasureFonts(font func(style.Font) FontUnits) { t.env.font = font }
+
+// FontsChanged tells that what MeasureFonts answers may have changed, a
+// font having landed, and reports whether some length reads it: the
+// caller then flags the root DirtyStyle, and the next Compute restyles
+// the whole tree.
+func (t *Transitions) FontsChanged() bool {
+	if t.env.used&fontUnits == 0 {
+		return false
+	}
+	t.stale = true
+	return true
+}
+
+// SetSheets has the cascade read sheets, the author's, from now on:
+// what Matched and Computed answer from at once, and what the next
+// Compute styles the whole tree again from when they are not those it
+// had. Compute calls it with its own.
+func (t *Transitions) SetSheets(sheets []*Sheet) {
+	if slices.Equal(t.given, sheets) && t.all != nil {
+		return
+	}
+	t.stale = t.stale || t.all != nil
+	t.given = slices.Clone(sheets)
+	agent := userAgent()
+	if t.browser {
+		agent = browserAgent()
+	}
+	t.all = append([]*Sheet{agent}, sheets...)
+	t.off, t.ranks = mediaOff(t.all, t.media), layerRanks(t.all)
+}
+
 // Compute restyles root as css.Compute does, starting a transition for
 // each changed property its new style's transitions cover.
 // Nothing is done while root and its tree are clean.
 func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	t.root = root
 	dirty := dom.DirtyStyle | dom.DirtyTree | dom.DirtyState | dom.DirtyDescendant
-	if d := dom.Data(root); d.Style != nil && d.Dirty&dirty == 0 {
+	if d := dom.Data(root); d.Style != nil && d.Dirty&dirty == 0 && !t.stale {
 		return nil
 	}
-	if !slices.Equal(t.given, sheets) || t.all == nil {
-		t.given = slices.Clone(sheets)
-		t.all = append([]*Sheet{userAgent()}, sheets...)
-		t.treeStates = treeStates(t.all)
-	}
+	t.SetSheets(sheets)
+	t.m.off, t.pm.off, t.m.ranks, t.pm.ranks = t.off, t.off, t.ranks, t.ranks
 	if t.changed == nil {
 		t.changed = t.restyled
 	}
-	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm, treeStates: t.treeStates,
-		computed: &t.computed}
-	r.visit(root, nil, 0, false, false)
+	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm,
+		computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser, env: &t.env}
+	r.run(root, t.stale)
+	t.stale = false
 	t.refresh()
 	return r.warns
 }
+
+// Restyled is how many elements Compute has worked the style of out so
+// far: what a change cost, for tests and tools.
+func (t *Transitions) Restyled() int { return t.computed }
 
 // Step advances every transition by dt seconds and writes their values
 // into Shown. It reports whether any still runs.
@@ -202,7 +292,7 @@ func (t *Transitions) build(n *dom.Node, a *nodeAnim) {
 // carry shows c as the colour of n's children that inherit it, and of
 // theirs.
 func (t *Transitions) carry(n *dom.Node, c color.Color) {
-	for _, k := range n.Children() {
+	for _, k := range n.Flow() {
 		if k.IsText() {
 			continue
 		}
@@ -265,7 +355,7 @@ func clamp01f(v float32) float32 { return min(max(v, 0), 1) }
 func transitionFor(list []style.Transition, name string) (style.Transition, bool) {
 	for i := len(list) - 1; i >= 0; i-- {
 		p := list[i].Property
-		if p == name || p == "all" || p == propBorderColor && strings.HasPrefix(name, "border-") {
+		if p == name || p == kwAll || p == propBorderColor && strings.HasPrefix(name, "border-") {
 			return list[i], list[i].Duration+list[i].Delay > 0
 		}
 	}

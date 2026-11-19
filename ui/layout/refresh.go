@@ -8,7 +8,8 @@ import (
 )
 
 // Refresh brings a laid-out tree up to date with what can change without a layout: the
-// kept scroll offsets, clamped and copied into Box.Scroll, and the sticky boxes they move.
+// kept scroll offsets, clamped and copied into Box.Scroll, and the sticky boxes they move,
+// with the fixed ones a scrolled viewport holds in place.
 // It is for a frame in which no node is dirty and the viewport is the same, visits only
 // the tree's Live boxes, and reports whether any of them moved.
 func Refresh(t *box.Tree, _ *dom.Node) bool {
@@ -29,10 +30,11 @@ func Refresh(t *box.Tree, _ *dom.Node) bool {
 // collectLive refreshes every box below b, as a fresh layout leaves them, and gathers
 // the live ones and their offsets into t.
 func collectLive(b *box.Box, t *box.Tree) {
-	if b.Node != nil && b.Kind == box.Element || isSticky(b) {
+	moves := isSticky(b) || held(b) != nil
+	if scrollsItself(b) || moves {
 		refreshBox(b)
 	}
-	if b.Node != nil && b.Kind == box.Element && b.Style != nil && isScrollContainer(b.Style) || isSticky(b) {
+	if scrollsItself(b) && b.Style != nil && isScrollContainer(b.Style) || moves {
 		t.Live = append(t.Live, b)
 		t.Applied = append(t.Applied, [2]geom.Vec2{b.Scroll, b.Sticky})
 	}
@@ -43,16 +45,55 @@ func collectLive(b *box.Box, t *box.Tree) {
 
 func isSticky(b *box.Box) bool { return b.Style != nil && b.Style.Position == style.Sticky }
 
-// refreshBox brings b's scroll offset and sticky offset up to date.
+func isFixed(b *box.Box) bool {
+	return b.Kind == box.Element && b.Style != nil && b.Style.Position == style.FixedPosition
+}
+
+// scrollsItself reports whether b's node's scroll offset is b's own: an
+// element's, but for the root's under a viewport that scrolls, where it is
+// the viewport's.
+func scrollsItself(b *box.Box) bool {
+	if b.Node == nil {
+		return false
+	}
+	return b.Kind == box.Viewport || b.Kind == box.Element && (b.Parent == nil || b.Parent.Kind != box.Viewport)
+}
+
+// held is the scrolling viewport a fixed box stays put in, nil for any
+// other box: one in no such viewport, or inside a fixed box, which holds
+// it already.
+func held(b *box.Box) *box.Box {
+	if !isFixed(b) {
+		return nil
+	}
+	top := b.Parent
+	for ; top != nil && top.Parent != nil; top = top.Parent {
+		if isFixed(top) {
+			return nil
+		}
+	}
+	if top == nil || top.Kind != box.Viewport {
+		return nil
+	}
+	return top
+}
+
+// refreshBox brings b's scroll offset up to date, and how far it moved as
+// a sticky box, or as a fixed one in a viewport that scrolled.
 func refreshBox(b *box.Box) {
-	if b.Node != nil && b.Kind == box.Element {
+	if scrollsItself(b) {
 		b.Scroll = clampScroll(b)
 		dom.Data(b.Node).Scroll = b.Scroll
 	}
+	moved, ok := geom.Vec2{}, false
 	if isSticky(b) {
-		s := stickyOffset(b)
-		b.Pos = b.Pos.Sub(b.Sticky).Add(s)
-		b.Sticky = s
+		moved, ok = stickyOffset(b), true
+	} else if v := held(b); v != nil {
+		moved, ok = v.Scroll, true
+	}
+	if ok {
+		b.Pos = b.Pos.Sub(b.Sticky).Add(moved)
+		b.Sticky = moved
 	}
 }
 
@@ -108,9 +149,8 @@ func stickyOffset(b *box.Box) geom.Vec2 {
 	port := rect{l: scAt.X + p.X + sc.Scroll.X, t: scAt.Y + p.Y + sc.Scroll.Y}
 	port.r, port.b = port.l+p.W, port.t+p.H
 
-	if n := b.Node; n != nil && (n.Tag() == dom.Th || n.Tag() == dom.Td) {
-		for parent.Parent != nil && parent.Node != nil &&
-			(parent.Node.Tag() == dom.Tr || parent.Node.Tag() == dom.Thead || parent.Node.Tag() == dom.Tbody) {
+	if b.Style != nil && b.Style.TablePart == style.TableCell {
+		for parent.Parent != nil && (parent.Style == nil || !parent.Style.Table) {
 			parent = parent.Parent
 		}
 	}

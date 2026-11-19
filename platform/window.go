@@ -8,8 +8,9 @@
 //	win := platform.NewWindow(platform.Title("Map"), platform.Size(420, 420))
 //	w.AddEntity(win)
 //
-// Removing the entity closes the window; closing it natively removes the
-// entity and emits WindowClosed.
+// Removing the entity closes the window. What the user's close does is the
+// window's Closing rule: by default the primary window's ends the program
+// and another's removes the entity and emits WindowClosed.
 package platform
 
 import (
@@ -36,6 +37,8 @@ type options struct {
 	minSize, maxSize           geom.Vec2
 	aspectW, aspectH           int
 	icon                       []image.Image
+	ownTitleBar                bool
+	closeRule                  CloseRule
 }
 
 func Title(title string) Option { return func(o *options) { o.title = title } }
@@ -66,6 +69,40 @@ func Hidden() Option { return func(o *options) { o.hidden = true } }
 // Undecorated removes the system frame and title bar, for windows that
 // draw their own.
 func Undecorated() Option { return func(o *options) { o.undecorated = true } }
+
+// OwnTitleBar has the window's content fill its title bar, the title
+// hidden, for a program that draws its own header there, as a browser its
+// tabs. The window stays the system's: its buttons, edges, shadow and
+// corners, the bar as high as a toolbar's with the buttons centred in it.
+// TitleBarArea says what of it to keep clear, and StartDrag moves the
+// window by that header. macOS only: Windows and Linux keep their title
+// bar above the content, and a page has none (decision 0091).
+func OwnTitleBar() Option { return func(o *options) { o.ownTitleBar = true } }
+
+// CloseRule is what a window does when the user asks to close it: its
+// close button, the system's shortcut for it, or RequestClose.
+type CloseRule int
+
+const (
+	// CloseQuitsIfPrimary ends the program when the window is the primary
+	// one, and closes any other. It is the rule of a window given none.
+	CloseQuitsIfPrimary CloseRule = iota
+	// CloseQuits ends the program.
+	CloseQuits
+	// CloseQuitsIfLast closes the window, and ends the program when no
+	// window is left.
+	CloseQuitsIfLast
+	// CloseOnly closes the window. The program runs on, without a window
+	// when it was the last, until it quits itself.
+	CloseOnly
+	// CloseAsks does nothing: the program reads WindowCloseRequested and
+	// decides, removing the window or quitting when it wants to.
+	CloseAsks
+)
+
+// Closing is what the window does when the user asks to close it,
+// CloseQuitsIfPrimary by default.
+func Closing(rule CloseRule) Option { return func(o *options) { o.closeRule = rule } }
 
 // Background clears windows that show no camera, such as tool windows.
 func Background(c color.Color) Option { return func(o *options) { o.background = c } }
@@ -125,11 +162,23 @@ type Backend interface {
 	Restore()
 	SetFullscreen(on bool)
 	SetIcon(images []image.Image)
+	// StartDrag has the system move the window with the pointer, from
+	// the left press being handled, until its release.
+	StartDrag()
+	// DoubleClickTitleBar does what the system does for a double click
+	// on a title bar.
+	DoubleClickTitleBar()
 	// ScreenCursor queries the pointer in screen points right now,
 	// independent of queued events and in-flight window moves.
 	ScreenCursor() (x, y float64)
 	WindowPosition() (x, y int)
 }
+
+// ProgramReopened is emitted when the user asks for the program again
+// while it shows no window: a click on its Dock icon on macOS, where a
+// program that closed its last window runs on (CloseOnly). The program
+// opens a window in answer. No other system has the gesture.
+type ProgramReopened struct{}
 
 // Window is a native window, and an entity: children it holds, such as
 // cameras and UI elements, show in it.
@@ -148,6 +197,18 @@ type Window struct {
 	focused     bool
 	minimized   bool
 	capture     string
+	closing     bool
+	titleBar    TitleBarArea
+}
+
+// TitleBarArea is what the system keeps of a window's title bar once the
+// content fills it (OwnTitleBar), in points: the bar's Height from the
+// window's top, and the widths its buttons take at the Left and the Right
+// of it. All zero when the system draws no title bar over the content: a
+// window without OwnTitleBar, one fullscreen, or a system that keeps its
+// title bar above the content.
+type TitleBarArea struct {
+	Left, Right, Height float32
 }
 
 // Windowed is any entity that is a window.
@@ -156,7 +217,16 @@ type Windowed interface {
 	GetWindow() *Window
 }
 
-// WindowClosed is emitted when the user closes a secondary window.
+// WindowCloseRequested is emitted when the user asks to close a window,
+// whatever its Closing rule then does: a CloseAsks window waits for the
+// program to answer it.
+type WindowCloseRequested struct {
+	Window *Window
+}
+
+// WindowClosed is emitted when a window's Closing rule closes it. A window
+// the program removes itself, or whose close ends the program without
+// closing it, emits none.
 type WindowClosed struct {
 	Window *Window
 }
@@ -196,6 +266,55 @@ func (w *Window) Minimized() bool             { return w.minimized }
 func (w *Window) MinSize() geom.Vec2          { return w.opts.minSize }
 func (w *Window) MaxSize() geom.Vec2          { return w.opts.maxSize }
 func (w *Window) Icon() []image.Image         { return w.opts.icon }
+func (w *Window) OwnTitleBar() bool           { return w.opts.ownTitleBar }
+func (w *Window) Closing() CloseRule          { return w.opts.closeRule }
+
+// SetClosing changes what the user's close does, such as CloseAsks while
+// the window holds unsaved work.
+func (w *Window) SetClosing(rule CloseRule) { w.opts.closeRule = rule }
+
+// RequestClose asks to close the window as its close button does: at the
+// start of the next frame the World emits WindowCloseRequested and
+// follows the window's Closing rule. A menu's "Close window" calls it, and
+// a test, in the user's place.
+func (w *Window) RequestClose() { w.closing = true }
+
+// TakeCloseRequest returns and clears a pending close request. Called by
+// the World's windows.
+func (w *Window) TakeCloseRequest() bool {
+	asked := w.closing
+	w.closing = false
+	return asked
+}
+
+// TitleBarArea is the part of the window's top the system's title bar
+// lies over, for a header to pad itself by. It changes as the window goes
+// fullscreen and back, so read it each frame.
+func (w *Window) TitleBarArea() TitleBarArea { return w.titleBar }
+
+// SyncTitleBar records the title bar the system draws over the content.
+// Called by platform implementations, and by tests in their place.
+func (w *Window) SyncTitleBar(area TitleBarArea) { w.titleBar = area }
+
+// StartDrag has the system move the window with the pointer until the
+// left button, down now, is released: call it for a press on the
+// program's own header (ui does for an element with app-region: drag).
+// The release goes to the system, so the window's input reads the button
+// as up from then. macOS only; elsewhere the system's title bar drags.
+func (w *Window) StartDrag() {
+	if w.backend != nil {
+		w.backend.StartDrag()
+	}
+}
+
+// DoubleClickTitleBar does what the system does for a double click on a
+// title bar, for one on the program's own header: on macOS it zooms or
+// minimises the window, or does nothing, as the user's settings say.
+func (w *Window) DoubleClickTitleBar() {
+	if w.backend != nil {
+		w.backend.DoubleClickTitleBar()
+	}
+}
 
 // AspectRatio is the width:height kept while resizing, 0:0 when free.
 func (w *Window) AspectRatio() (int, int) { return w.opts.aspectW, w.opts.aspectH }

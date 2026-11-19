@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+  <!ENTITY ns_svg "http://www.w3.org/2000/svg">
+  <!ENTITY st0 "fill:#2a7;stroke:#052;stroke-width:2;">
+]>
+<svg xmlns="&ns_svg;" viewBox="0 0 100 100" color="#b40">
+  <style type="text/css"><![CDATA[
+    /* tags, classes, ids, descendants and children */
+    rect { fill: hsl(210, 60%, 45%); }
+    .warm { fill: hsl(20 80% 55%); }
+    #one { fill: rebeccapurple; }
+    g.row > circle { fill: rgb(20%, 60%, 20%); stroke: currentColor; stroke-width: 1.5 }
+    .row .deep { fill: #fc08; }
+    .hidden { display: none }
+  ]]></style>
+  <g display="none"><rect display="inline" width="100" height="100"/></g>
+  <rect x="5" y="5" width="25" height="25"/>
+  <rect x="37" y="5" width="25" height="25" class="warm"/>
+  <rect x="69" y="5" width="25" height="25" class="warm" id="one"/>
+  <rect x="5" y="37" width="25" height="25" class="warm" style="fill: #333"/>
+  <rect x="37" y="37" width="25" height="25" fill="red" stroke="currentColor" stroke-width="3"/>
+  <rect x="69" y="37" width="25" height="25" style="&st0;"/>
+  <rect class="hidden" width="100" height="100"/>
+  <g class="row" fill="red">
+    <circle cx="17" cy="82" r="11"/>
+    <g><circle cx="49" cy="82" r="11"/><circle class="deep" cx="62" cy="82" r="11"/></g>
+    <path d="M72 71h22v22h-22z" fill="currentColor" visibility="hidden"/>
+    <path d="M76 75h14v14h-14z" fill="currentColor"/>
+  </g>
+</svg>

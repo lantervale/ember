@@ -26,15 +26,21 @@ func (p *painter) missed(e entry, ink geom.Rect) bool {
 	if p.probing {
 		return p.pointless || !ink.Contains(p.s.Transform().Inverse().Xform(p.point))
 	}
-	if p.probing {
-		return false
-	}
+	view, bounded := p.view(e.clip)
+	return bounded && !shows(ink, view)
+}
+
+// view is what shows through the clip c in the space of the surface's
+// transform now: the viewport, when that is the root's space, within
+// every clip of c's chain met in that space; unbounded when nothing
+// bounds it there.
+func (p *painter) view(c *clip) (geom.Rect, bool) {
 	xf := p.s.Transform()
 	view, bounded := geom.Rect{}, false
 	if xf == p.base {
 		view, bounded = p.viewport, true
 	}
-	for c := e.clip; c != nil; c = c.parent {
+	for ; c != nil; c = c.parent {
 		if c.xf != xf {
 			continue
 		}
@@ -44,7 +50,13 @@ func (p *painter) missed(e entry, ink geom.Rect) bool {
 		}
 		view = intersect(view, c.rect)
 	}
-	return bounded && !overlaps(ink, view)
+	return view, bounded
+}
+
+// shows reports whether any of ink lies in view; none does in an empty
+// one, wherever its clips left its corner.
+func shows(ink, view geom.Rect) bool {
+	return view.W > 0 && view.H > 0 && overlaps(ink, view)
 }
 
 func intersect(a, b geom.Rect) geom.Rect {
@@ -79,7 +91,7 @@ func textInk(e entry, st *style.Computed) geom.Rect {
 			r = union(r, l)
 		}
 	}
-	return grow(r, st.Font.Size+shadowReach(st.TextShadows))
+	return grow(r, max(st.Font.Size, decorationReach(st))+shadowReach(st.TextShadows))
 }
 
 // shadowReach is how far outer shadows reach past their box.

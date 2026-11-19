@@ -25,8 +25,10 @@ func structure() map[string]element {
 		"caption": {scores, 224},
 		"tfoot":   {scores, 224},
 		"img":     {img, 136},
+		"svg":     {svg, 96},
 		"hr":      {hr, 152},
 		"canvas":  {canvas, 232},
+		"iframe":  {iframe, 336},
 	}
 }
 
@@ -109,6 +111,36 @@ func img(*ui.Document) *ui.Node {
 		ui.Text(" "),
 		ui.Img(ui.Attr("src", "panel.png"), ui.Style("width: 72px; image-rendering: pixelated")),
 	)
+}
+
+// svg is a compass drawn in the page, in the colour of its text, small
+// and large.
+func svg(*ui.Document) *ui.Node {
+	const compass = `<circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>` +
+		`<path d="M12 4l3 8-3 8-3-8z" fill="currentColor"/>`
+	return ui.Div(ui.Style("color: #e0a040"),
+		ui.Svg(compass, ui.Attr("viewBox", "0 0 24 24"), ui.Attr("width", "24")),
+		ui.Text(" "),
+		ui.Svg(compass, ui.Attr("viewBox", "0 0 24 24"), ui.Style("width: 72px; color: #7fb0d8")),
+	)
+}
+
+// iframe is a help page in a frame: a Document of its own, laid out in
+// the frame's box and scrolled there.
+func iframe(*ui.Document) *ui.Node {
+	help := ui.NewDocument(ui.ScrollingViewport(), ui.CSS(`
+		html { background-color: #1d2129; color: #d8d2c4; }
+		body { margin: 12px; }
+		h3 { margin: 0 0 8px; color: #e0a040; }
+		p { margin: 0 0 8px; }`))
+	help.Body().Append(
+		ui.H3(ui.Text("How to play")),
+		ui.P(ui.Text("Light the lantern before the stairs. The dark takes a heart a minute.")),
+		ui.P(ui.Text("Slimes fear the light: keep them at the edge of it and they stay there.")),
+		ui.P(ui.Text("Doors with a rune open to the key of the same colour, found a floor above.")),
+		ui.Button(ui.Text("Got it")),
+	)
+	return ui.Iframe(help, ui.ID("help"), ui.Attr("height", "160"))
 }
 
 // hr is a pause menu split in two by a rule.

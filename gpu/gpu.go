@@ -7,6 +7,8 @@ package gpu
 import (
 	"os"
 
+	"github.com/lantervale/ember/internal/wm"
+	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/twod/light"
@@ -38,6 +40,46 @@ func (p Plugin) Build(a *world.World) {
 		AddView(&sc.gizmos).
 		AddView(&sc.billboards)
 	a.AddPresenter(ui)
+	wm.OnGone(a, ui.forget)
+}
+
+// forget releases what the renderer keeps for win, a window that left the
+// World: its passes' textures, light pictures, 3D targets, timers and
+// probes on their way back.
+func (r *webgpu2D) forget(win *platform.Window) {
+	for tex, t := range r.targets {
+		if t.win == win {
+			r.forgetGroups()
+			t.release()
+			delete(r.targets, tex)
+		}
+	}
+	if t := r.timers[win]; t != nil {
+		t.Release()
+		delete(r.timers, win)
+	}
+	l := &r.lights
+	if p := l.pictures[win]; p != nil {
+		r.forgetGroups()
+		p.release()
+		delete(l.pictures, win)
+	}
+	if rb := l.readbacks[win]; rb != nil {
+		rb.Release()
+		delete(l.readbacks, win)
+	}
+	delete(l.lastRows, win)
+	delete(l.lastStretch, win)
+	if r.scene == nil {
+		return
+	}
+	if s := r.scene.surfaces[win]; s != nil {
+		s.releaseTargets()
+		if s.shadow != nil {
+			s.shadow.Release()
+		}
+		delete(r.scene.surfaces, win)
+	}
 }
 
 // timing is whether the GPU's passes are timed this frame: one frame in

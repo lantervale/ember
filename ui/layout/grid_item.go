@@ -112,7 +112,7 @@ func (it *gridItem) spannedLimit(a axis, tracks []gridTrack,
 }
 
 func (it *gridItem) paddingBorderSize(basis float32) size {
-	return edges(it.st.Padding, basis).add(borders(it.st)).sum()
+	return edges(it.st.Padding, basis).add(it.node.borders()).sum()
 }
 
 func isSelfStretch(a style.Align) bool { return a == style.AlignStretch || a == style.AlignNormal }

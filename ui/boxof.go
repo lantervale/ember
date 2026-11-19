@@ -4,6 +4,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/paint"
 )
 
 // BoxOf is n's content box in its window's points (the Document's, times its zoom), for a
@@ -29,4 +30,22 @@ func (d *Document) BoxOf(n *Node) (geom.Rect, bool) {
 	w := r.W - l - b.Border.Right - b.Padding.Right
 	h := r.H - t - b.Border.Bottom - b.Padding.Bottom
 	return d.toWindow(geom.Rect{X: r.X + l, Y: r.Y + t, W: max(w, 0), H: max(h, 0)}), true
+}
+
+// ElementAt is the innermost element under at, a point in the space BoxOf
+// answers in, as the DOM's elementFromPoint: what a click there would
+// find, through what takes no pointer; nil where no box takes it, outside
+// the Document and before its first layout.
+func (d *Document) ElementAt(at geom.Vec2) *Node {
+	if d.tree == nil {
+		return nil
+	}
+	hit := paint.HitTest(d.inked(), at.Scale(1/d.Zoom()), paint.Controls(d.machine), paint.Viewport(d.viewport),
+		paint.Scale(d.fonts.Scale()))
+	for b := hit; b != nil; b = b.Parent {
+		if n := dom.Origin(b.Node); n != nil && !n.IsText() {
+			return n
+		}
+	}
+	return nil
 }

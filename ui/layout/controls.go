@@ -45,7 +45,13 @@ func controlOf(e *dom.Node) controlKind {
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
 		dom.Option, dom.Details, dom.Summary, dom.Dialog, dom.Table, dom.Thead, dom.Tbody, dom.Tr, dom.Th, dom.Td,
-		dom.Progress, dom.Meter, dom.Img, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot:
+		dom.Progress, dom.Meter, dom.Img, dom.Svg, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre, dom.Caption, dom.Tfoot,
+		dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.H5, dom.H6, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
+		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
+		dom.Br,
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
+		dom.Col, dom.Colgroup:
 	}
 	return noControl
 }
@@ -63,7 +69,7 @@ func (t *tree) buildControl(n *node, kind controlKind) {
 		text += emptyLine
 	}
 	b := &box.Box{Kind: box.TextRun, Node: shadow, Style: styleOf(shadow)}
-	c := &inlineContent{owner: n, runs: []*textRun{{box: b, parent: n.box, st: &st, text: text}},
+	c := &inlineContent{owner: n, runs: []*textRun{{box: b, parent: n.box, st: &st, span: -1, text: text}},
 		unit: unitsPerPoint(t.fonts)}
 	c.cut(t.fonts)
 	n.inline = c
@@ -84,28 +90,93 @@ func (t *tree) inputText(n *node) float32 {
 	return t.fonts.Advance(styleOf(d.Shadow).Font, Translated(d.Shadow, t.translate)) + caretWidth
 }
 
-// centresContent reports a button, input or select, whose content Chrome centres
-// vertically in its content box.
+// centresContent reports a button, input, select or cell, which place their content in
+// the height of their content box.
 func centresContent(n *node) bool {
+	if n.cell {
+		return true
+	}
 	if n.box.Node == nil {
 		return false
 	}
 	tag := n.box.Node.Tag()
-	return tag == dom.Button || tag == dom.Input || tag == dom.Select || tag == dom.Td || tag == dom.Th
+	return tag == dom.Button || tag == dom.Input || tag == dom.Select
+}
+
+// contentAlign is where n's content stands in its height: where its align-content says,
+// else in the middle of a button, input or select, and where its vertical-align says in
+// a cell (top, middle or bottom; baseline and the rest as top).
+func contentAlign(n *node) style.Align {
+	if n.st.AlignContent != style.AlignNormal || !centresContent(n) {
+		return n.st.AlignContent
+	}
+	if !n.cell {
+		return style.AlignCenter
+	}
+	switch n.st.VerticalAlign {
+	case style.AlignMiddle:
+		return style.AlignCenter
+	case style.AlignBottom:
+		return style.AlignEnd
+	case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignTextTop, style.AlignTextBottom,
+		style.AlignTop, style.AlignLength:
+	}
+	return style.AlignStart
+}
+
+// onBaseline reports a cell whose first line stands on its row's baseline: one with a
+// vertical-align that is not top, middle or bottom, and no align-content.
+func onBaseline(n *node) bool {
+	return n.cell && n.st.AlignContent == style.AlignNormal && n.st.VerticalAlign != style.AlignTop &&
+		contentAlign(n) == style.AlignStart
+}
+
+// lower sets how far a cell's content stands below its content box's top, its layouts
+// with another forgotten.
+func (n *node) lower(by float32) {
+	if n.lowered != by {
+		n.lowered = by
+		n.cache.clear()
+	}
 }
 
 // textTop is where the owner's first line box starts: the top of its content box, or the
-// lines centred in it for a button, input or select.
+// lines centred in it for a button, input or select, or where a cell's vertical-align
+// puts them, unless its align-content says where.
 func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
-	if !centresContent(n) {
-		return top
+	share := contentShare(n)
+	if share == 0 {
+		return top + n.lowered
 	}
 	h := float32(0)
 	for _, l := range ls {
 		lh, _ := t.lineBox(n.inline, l)
-		h += lh
+		h += l.push + lh
 	}
-	return top + max(contentHeight-h, 0)/2
+	return top + max(contentHeight-h, 0)*share
+}
+
+// contentShare is the share of the free height a box that centres its content leaves
+// above it: half, or what its align-content says, or a cell's vertical-align.
+func contentShare(n *node) float32 {
+	if !centresContent(n) {
+		return 0
+	}
+	switch contentAlign(n) {
+	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline:
+		return 0
+	case style.AlignEnd, style.AlignFlexEnd:
+		return 1
+	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignCenter, style.AlignSpaceBetween,
+		style.AlignSpaceAround, style.AlignSpaceEvenly:
+	}
+	return 0.5
+}
+
+// isButtonInput reports an input that is a button, as wide as what it says.
+func isButtonInput(e *dom.Node) bool {
+	typ, _ := e.Attr("type")
+	return typ == "button" || typ == "submit" || typ == "reset"
 }
 
 func intAttr(e *dom.Node, name string, fallback int) int {
@@ -130,6 +201,10 @@ func (t *tree) measureControl(n *node, known size) (size, float32, float32) {
 	var w float32
 	switch n.control {
 	case inputControl:
+		if isButtonInput(e) {
+			w = t.fonts.Advance(st.Font, n.inline.runs[0].text)
+			break
+		}
 		w = float32(math.Ceil(float64(avg*float32(intAttr(e, "size", 20))))) + (maxCharFactor-1)*avg
 	case textareaControl:
 		w = avg * float32(intAttr(e, "cols", 20))

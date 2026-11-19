@@ -1,6 +1,7 @@
 package layout //nolint:testpackage // tests the layout tree and its unexported helpers
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,12 +20,35 @@ func el(tag dom.Tag, edit func(*style.Computed), children ...*dom.Node) *dom.Nod
 	st := style.Initial()
 	st.Font = style.Font{Family: []string{"ahem"}, Size: 10, Weight: 400}
 	st.LineHeight = style.LineHeight{Factor: 1}
+	agentDisplay(tag, &st)
 	if edit != nil {
 		edit(&st)
 	}
 	dom.Data(n).Style = &st
 	n.Append(children...)
+	for _, c := range n.Children() {
+		if d := dom.Data(c); !c.IsText() && d.Style == nil {
+			implied := style.Initial()
+			agentDisplay(c.Tag(), &implied)
+			d.Style = &implied
+		}
+	}
 	return n
+}
+
+// agentDisplay gives st the display the user agent's sheet gives a table's elements.
+func agentDisplay(tag dom.Tag, st *style.Computed) {
+	parts := map[dom.Tag]style.TablePart{ //nolint:exhaustive // the table's elements alone
+		dom.Tr: style.TableRow, dom.Td: style.TableCell, dom.Th: style.TableCell, dom.Tbody: style.TableRowGroup,
+		dom.Thead: style.TableHeaderGroup, dom.Tfoot: style.TableFooterGroup, dom.Caption: style.TableCaption,
+		dom.Col: style.TableColumn, dom.Colgroup: style.TableColumnGroup,
+	}
+	if part, ok := parts[tag]; ok {
+		st.Display, st.TablePart = style.Block, part
+	}
+	if tag == dom.Table {
+		st.Display, st.Table = style.Block, true
+	}
 }
 
 func text(s string) *dom.Node { return dom.NewText(s) }
@@ -489,4 +513,26 @@ func TestAnEditableFieldShowsItsTextAsTyped(t *testing.T) {
 	in, _ := control(dom.Input, "straße", func(st *style.Computed) { st.TextTransform = style.Uppercase })
 	tr := lay(el(dom.Div, block, in), 400)
 	assert.Equal(t, "straße", tr.Of[in].Children[0].Lines[0].Text, "edit fields stay untransformed for now")
+}
+
+func TestALineEndsAtASpaceBeforeTextThatDoesNotWrap(t *testing.T) {
+	nowrap := func(st *style.Computed) { st.WhiteSpace = style.NoWrapSpace }
+	item := func(s string) *dom.Node {
+		return el(dom.Span, nil, el(dom.A, nowrap, text(s)), el(dom.Span, nil, text(" - ")))
+	}
+	p := el(dom.P, width(120), item("HHH HHH"), item("HH HHHH"), text("\n"), item("HHH HH"))
+	tr := lay(p, 120)
+	var got []string
+	var walk func(b *box.Box, y float32)
+	walk = func(b *box.Box, y float32) {
+		for _, f := range b.Lines {
+			got = append(got, fmt.Sprintf("%s@%g", f.Text, y+f.Rect.Y))
+		}
+		for _, c := range b.Children {
+			walk(c, y+c.Pos.Y)
+		}
+	}
+	walk(tr.Of[p], 0)
+	assert.Equal(t, []string{"HHH HHH@0", " -@0", "HH HHHH@10", " -@10", "HHH HH@20", " -@20"}, got,
+		"the space that ends a separator is a place to break, though the link after it does not wrap")
 }

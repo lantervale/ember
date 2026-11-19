@@ -74,7 +74,7 @@ func TestTagNames(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, tag, got)
 	}
-	_, ok := TagNamed("center")
+	_, ok := TagNamed("marquee")
 	assert.False(t, ok)
 	assert.True(t, Input.Void())
 }
@@ -143,4 +143,18 @@ func TestSettingAnElementsTextToWhatItHoldsChangesNothing(t *testing.T) {
 	assert.Equal(t, "HP 39", span.Text())
 	assert.NotZero(t, Data(text).Dirty&DirtyLayout, "which lays out again")
 	assert.NotZero(t, Data(root).Dirty&DirtyDescendant)
+}
+
+func TestColsGivenToATableGoInAColgroup(t *testing.T) {
+	table := NewElement(Table)
+	a, b := NewElement(Col), NewElement(Col)
+	table.Append(a, b)
+	require.Len(t, table.Children(), 1)
+	group := table.Children()[0]
+	assert.Equal(t, Colgroup, group.Tag())
+	assert.True(t, slices.Equal([]*Node{a, b}, group.Children()), "one implied colgroup for consecutive cols")
+	assert.True(t, Col.Void())
+	tag, ok := TagNamed("colgroup")
+	assert.True(t, ok)
+	assert.Equal(t, Colgroup, tag)
 }

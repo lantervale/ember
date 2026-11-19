@@ -68,6 +68,16 @@ func TestATagFollowsAMovingSprite(t *testing.T) {
 	}
 }
 
+func TestATagFollowsItsSpriteOverAScrolledViewport(t *testing.T) {
+	p := newFollowPage(t, ui.ScrollingViewport(), ui.OverlayScrollbars())
+	p.doc.Body().Append(ui.Div(ui.Style("height: 2000px")))
+	p.w.RunFrames(2)
+	p.win.Input().AddWheel(geom.V2(0, 4))
+	p.w.RunFrames(3)
+	require.Negative(t, p.doc.HTML().Box().Y, "the page scrolled")
+	p.assertOn(t, "the page scrolled under it")
+}
+
 func TestATagFollowsWhileTheCameraFollowsSomethingElse(t *testing.T) {
 	p := newFollowPage(t)
 	hero := twod.NewText("@", twod.At(0, 0))

@@ -18,6 +18,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -85,13 +86,42 @@ type Frame struct {
 	Live  *LiveSet
 	Apart bool
 	Keep  *box.Box
+	// Selection is the text selected outside the fields, nil for none.
+	Selection Selection
+}
+
+// Selection is the text a Document has selected, as paint draws it.
+type Selection interface {
+	// Parts are the rectangles of a text run the selection covers, in the
+	// run's space as its fragments' are.
+	Parts(run *box.Box) []Selected
+	// Holds reports an element wholly inside the selection: a picture
+	// there is tinted.
+	Holds(n *dom.Node) bool
+}
+
+// Selected is the part of a text run's fragment Line a selection covers.
+type Selected struct {
+	Line int
+	Rect geom.Rect
+}
+
+// TransformOf is the transform b's own style turns it and what it holds
+// by, in the root's space, false when it has none.
+func TransformOf(b *box.Box) (geom.Transform2D, bool) {
+	st := shown(b)
+	if b.Kind != box.Element || st == nil || len(st.Transform) == 0 {
+		return geom.Transform2D{}, false
+	}
+	r := b.Rect()
+	return transform(st, geom.V2(r.X, r.Y), b.Size), true
 }
 
 // Each has every paint take f as it stands when the paint starts, as
 // Time, Live and Keep would.
 func Each(f *Frame) Option {
 	return func(p *painter) {
-		p.time, p.timed, p.keep = f.Time, true, f.Keep
+		p.time, p.timed, p.keep, p.sel = f.Time, true, f.Keep, f.Selection
 		if f.Live != nil {
 			f.Live.reset()
 			p.live, p.apart = f.Live, f.Apart
@@ -110,13 +140,33 @@ func Images(image func(name string) *twod.Texture) Option {
 	return func(p *painter) { p.image = image }
 }
 
+// Vector is a picture drawn from shapes, with no pixels of its own: what
+// it asks to be sized by, and its texture drawn at a size.
+type Vector interface {
+	Intrinsic() box.Intrinsic
+	// Texture is the picture drawn w×h device pixels large, scale of
+	// them to a point. It may be one of another size, to stretch over
+	// the same box, while the picture is being drawn or its size is
+	// changing, and nil when there is none yet.
+	Texture(w, h int, scale float32) *twod.Texture
+}
+
+// Vectors finds by name the pictures Images has no texture for because
+// they are drawn from shapes, nil for any other: each is drawn at the
+// size it is shown at, in device pixels.
+func Vectors(vector func(name string) Vector) Option {
+	return func(p *painter) { p.vector = vector }
+}
+
 type painter struct {
 	s       Surface
 	keep    *box.Box
 	face    func(style.Font) *twod.Face
 	fonts   box.Fonts
 	image   func(string) *twod.Texture
+	vector  func(string) Vector
 	control func(*dom.Node) any
+	sel     Selection
 	time    float32
 	timed   bool
 	scale   float32
@@ -148,6 +198,10 @@ type painter struct {
 	// base is the surface's transform as painting starts: the root's
 	// space, where the viewport culls.
 	base geom.Transform2D
+	// whole walks every box, and reached counts those the walk came to
+	// under the root.
+	whole   bool
+	reached int
 	// probing is a scan's walk, which tells hit only of the boxes whose
 	// ink holds point, in the root's space, and of none when pointless.
 	probing, pointless bool
@@ -184,13 +238,14 @@ func (p *painter) newClip(c clip) *clip {
 // transform of the stacking context it was met in. round and radii, when
 // radii aren't all zero, are the curve it also cuts to (decision 0058):
 // the padding box rounded by its inner radii, while rect stops at the
-// scrollbars' gutter.
+// scrollbars' gutter. by is the box whose overflow it is.
 type clip struct {
 	rect   geom.Rect
 	round  geom.Rect
 	radii  radii
 	xf     geom.Transform2D
 	parent *clip
+	by     *box.Box
 }
 
 // Paint draws t onto s.
@@ -198,10 +253,22 @@ func Paint(s Surface, t *box.Tree, opts ...Option) {
 	if t == nil || t.Root == nil {
 		return
 	}
+	mode := cull.Now()
+	if mode == cull.Check {
+		checkPaint(s, t, opts)
+	}
+	paintOn(s, t, opts, mode == cull.Off)
+}
+
+// paintOn draws t onto s, walking every box when whole and else only
+// those whose ink shows (decision 0101), and returns how many boxes under
+// the root the walk reached.
+func paintOn(s Surface, t *box.Tree, opts []Option, whole bool) int {
+	inked(t)
 	p := pooled[painter](&painters)
 	defer painters.Put(p)
 	*p = painter{
-		s: s, base: s.Transform(),
+		s: s, base: s.Transform(), whole: whole,
 		scratch: p.scratch[:0], chain: p.chain[:0], popups: p.popups[:0], top: p.top[:0], slabs: p.slabs,
 	}
 	for _, o := range opts {
@@ -212,6 +279,7 @@ func Paint(s Surface, t *box.Tree, opts ...Option) {
 	p.page(t.Root)
 	p.use(nil)
 	p.drawPopups()
+	return p.reached
 }
 
 // page paints root's stacking context, then the top layer over it, each
@@ -246,8 +314,19 @@ func (p *painter) start(root *box.Box) {
 
 // canvasBackground paints the root's background over the whole viewport,
 // or body's when the root has none, as CSS's canvas does; that box then
-// leaves it out of its own decoration.
+// leaves it out of its own decoration. In a viewport that scrolls, its
+// picture is placed in the root element's padding box, as Chrome places
+// it, so it scrolls with the page; otherwise in the viewport.
 func (p *painter) canvasBackground(root *box.Box) {
+	area := p.viewport
+	if root.Kind == box.Viewport {
+		if len(root.Children) == 0 {
+			return
+		}
+		at := root.Pos.Sub(root.Scroll)
+		root = root.Children[0]
+		area = padding(root, at.Add(root.Pos))
+	}
 	src := root
 	if !hasBackground(shown(root)) {
 		src = nil
@@ -266,7 +345,7 @@ func (p *painter) canvasBackground(root *box.Box) {
 	if st.Background.A > 0 {
 		p.s.Rect(p.viewport, st.Background)
 	}
-	p.backgroundImage(p.viewport, st, 1)
+	p.backgroundImage(p.viewport, area, radii{}, st, 1)
 }
 
 func hasBackground(st *style.Computed) bool {
@@ -287,7 +366,7 @@ type entry struct {
 
 // layers are a stacking context's descendants in paint order.
 type layers struct {
-	negative, flow, positioned, positive []entry
+	negative, flow, floats, positioned, positive []entry
 	// scrollers have their bars drawn once everything else is.
 	scrollers []entry
 }
@@ -309,7 +388,7 @@ func pooled[T any](pool *sync.Pool) *T {
 
 // free empties l, keeping its room, for the next stack.
 func (l *layers) free() {
-	for _, s := range []*[]entry{&l.negative, &l.flow, &l.positioned, &l.positive, &l.scrollers} {
+	for _, s := range []*[]entry{&l.negative, &l.flow, &l.floats, &l.positioned, &l.positive, &l.scrollers} {
 		clear(*s)
 		*s = (*s)[:0]
 	}
@@ -325,8 +404,9 @@ func (p *painter) context(e entry, alpha float32) { p.stack(e, alpha, false) }
 // stack paints e and what stacks with it: everything in it when it is a
 // stacking context, or only its flow when pseudo, the rest having been
 // hoisted into the context around it.
-// inFlow paints e's in-flow children in their passes: their boxes, then
-// their text and markers, then e's and their control marks, then e's and
+// inFlow paints e's in-flow children in their passes: their boxes, the
+// borders tables collapse over them, then
+// the floats, each whole, then their text and markers, then e's and their control marks, then e's and
 // their outlines.
 func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	for _, c := range l.flow {
@@ -334,6 +414,19 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 			p.use(c.clip)
 			p.decorate(c, alpha)
 		}
+	}
+	if e.b.Collapsed != nil {
+		p.use(e.clip)
+		p.collapsedBorders(e, alpha)
+	}
+	for _, c := range l.flow {
+		if c.b.Collapsed != nil {
+			p.use(c.clip)
+			p.collapsedBorders(c, alpha)
+		}
+	}
+	for _, c := range l.floats {
+		p.stack(c, alpha, true)
 	}
 	for _, c := range l.flow {
 		switch c.b.Kind {
@@ -343,7 +436,7 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		case box.Marker:
 			p.use(c.clip)
 			p.marker(c, alpha)
-		case box.Element, box.AnonymousBlock:
+		case box.Element, box.AnonymousBlock, box.Viewport:
 		}
 	}
 	if marked(e.b) {
@@ -407,6 +500,9 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		p.context(c, alpha)
 	}
 	for _, c := range l.scrollers {
+		if p.missed(c, geom.Rect{X: c.at.X, Y: c.at.Y, W: c.b.Size.X, H: c.b.Size.Y}) {
+			continue
+		}
 		p.use(c.clip)
 		BarsOf(c.b, c.at).paint(p.s, alpha)
 	}
@@ -414,17 +510,21 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 	p.s.SetTransform(saved)
 }
 
-// collect sorts e's descendants: its flow into own, down to but not into
+// collect sorts e's descendants, but those whose ink and all they hold
+// is out of view or off a scan's point (sight): its flow into own, down
+// to but not into
 // the stacking contexts it holds, and those contexts and the positioned
 // boxes into outer, the layers of the context they stack in. A positioned
 // box with z-index auto goes into outer's positioned layer in tree order,
 // and its own positioned descendants and contexts after it into outer too.
+// A float goes into own's floats, painted whole between the flow's boxes and
+// its text, its positioned descendants and contexts into outer likewise.
 func (p *painter) collect(e entry, own, outer *layers) {
 	b := e.b
 	inner := e.clip
 	if r, ok := clipRect(b, e.at); ok {
 		round, rr := clipRound(b, e.at)
-		inner = p.newClip(clip{rect: r, round: round, radii: rr, xf: p.s.Transform(), parent: e.clip})
+		inner = p.newClip(clip{rect: r, round: round, radii: rr, xf: p.s.Transform(), parent: e.clip, by: b})
 		if scrolls(shown(b)) {
 			own.scrollers = append(own.scrollers, e)
 		}
@@ -434,9 +534,15 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	if extra != nil {
 		run = append(run[:len(run):len(run)], extra)
 	}
+	see := p.sight(inner)
 	for _, c := range run {
-		ce := entry{b: c, at: origin.Add(c.Pos), clip: inner}
+		at := origin.Add(c.Pos)
+		if see.misses(c, at) {
+			continue
+		}
+		p.reached++
 		st := shown(c)
+		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
 		switch {
 		case p.modal(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
@@ -454,11 +560,34 @@ func (p *painter) collect(e entry, own, outer *layers) {
 			outer.positioned = append(outer.positioned, ce)
 			var flow layers
 			p.collect(ce, &flow, outer)
+		case st.Float != style.FloatNone:
+			ce.pseudo = true
+			own.floats = append(own.floats, ce)
+			var flow layers
+			p.collect(ce, &flow, outer)
 		default:
 			own.flow = append(own.flow, ce)
 			p.collect(ce, own, outer)
 		}
 	}
+}
+
+// placedClip is the clip of c, a child of the box inner is the clip in: inner, less,
+// for an absolutely or fixed positioned box, the clips of the boxes under its
+// containing block, whose overflow it lies outside.
+func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
+	if c.Kind != box.Element || st.Position != style.Absolute && st.Position != style.FixedPosition {
+		return inner
+	}
+	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
+		if st.Position == style.Absolute && shown(a).Position != style.Static {
+			break
+		}
+		if inner.by == a {
+			inner = inner.parent
+		}
+	}
+	return inner
 }
 
 // reachable is what of b's children, placed from origin, can show inside
@@ -559,7 +688,7 @@ const unbounded = 1e6
 // clips on either axis: its padding box less its scrollbars' gutter.
 func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 	o := shown(b).Overflow
-	if b.Kind != box.Element || o.Width == style.Visible && o.Height == style.Visible {
+	if b.Kind != box.Element && b.Kind != box.Viewport || o.Width == style.Visible && o.Height == style.Visible {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)
@@ -599,8 +728,12 @@ func padding(b *box.Box, at geom.Vec2) geom.Rect {
 
 // shown is the style b is painted with: its node's Shown, which holds
 // running transitions' values, or for an anonymous box the nearest
-// node's; its Style when no node has one.
+// node's; its Style when no node has one, and for a viewport, whose node
+// is the root element.
 func shown(b *box.Box) *style.Computed {
+	if b.Kind == box.Viewport {
+		return b.Style
+	}
 	for a := b; a != nil; a = a.Parent {
 		if a.Node != nil {
 			if s := dom.Data(a.Node).Shown; s != nil {
@@ -616,10 +749,10 @@ func shown(b *box.Box) *style.Computed {
 // what is drawn is transformed past the paint's base, a Document's zoom,
 // where pixels don't lie along r's edges.
 func (p *painter) snap(r geom.Rect) geom.Rect {
-	xf := p.s.Transform()
-	if p.scale <= 0 || xf != p.base || xf.X.Y != 0 || xf.Y.X != 0 || xf.X.X <= 0 || xf.X.X != xf.Y.Y {
+	if p.snapScale() <= 0 {
 		return r
 	}
+	xf := p.s.Transform()
 	// k is device pixels per point of the space the base draws into: the
 	// window's, when the base is a Document's zoom.
 	k := p.scale / xf.X.X
@@ -628,6 +761,16 @@ func (p *painter) snap(r geom.Rect) geom.Rect {
 	}
 	x0, y0 := round(r.X, xf.Origin.X), round(r.Y, xf.Origin.Y)
 	return geom.Rect{X: x0, Y: y0, W: round(r.X+r.W, xf.Origin.X) - x0, H: round(r.Y+r.H, xf.Origin.Y) - y0}
+}
+
+// snapScale is how many device pixels a point of what is drawn takes, 0
+// where snap leaves things as they are.
+func (p *painter) snapScale() float32 {
+	xf := p.s.Transform()
+	if p.scale <= 0 || xf != p.base || xf.X.Y != 0 || xf.Y.X != 0 || xf.X.X <= 0 || xf.X.X != xf.Y.Y {
+		return 0
+	}
+	return p.scale
 }
 
 func fade(c color.Color, alpha float32) color.Color { c.A *= alpha; return c }

@@ -1,0 +1,21 @@
+html { background-color: #f4f1ea; }
+body { margin: 0; padding: 10px; }
+.imgs { margin-bottom: 6px; }
+.imgs img { margin-right: 6px; background-color: #fff; }
+.grid { display: grid; grid-template-columns: repeat(11, 70px); gap: 6px; }
+.grid div { height: 56px; background-color: #fff; background-repeat: no-repeat; }
+.sized { background-image: url(own-use.svg); }
+.shaped { background-image: url(own-gradients.svg); }
+.bare { background-image: url(bare.svg); }
+.length { background-size: 40px 30px; }
+.one { background-size: 30px auto; background-position: center; }
+.high { background-size: auto 100%; background-position: right top; }
+.percent { background-size: 50% 75%; background-position: 10px bottom; }
+.cover { background-size: cover; background-position: center; }
+.contain { background-size: contain; background-position: center; }
+.over { background-size: 101%; background-position: left bottom; }
+.tiled { background-size: 20px 20px; background-repeat: repeat; }
+.across { background-size: 25px auto; background-repeat: repeat-x; background-position: 5px bottom; }
+.down { background-size: auto 22px; background-repeat: repeat-y; background-position: center; }
+.fill { width: 120px; margin-top: 8px; background-color: #fff; }
+.fill img { display: block; }

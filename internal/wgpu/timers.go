@@ -142,3 +142,22 @@ func (t *Timers) Submitted() {
 	C.ember_map_read(s.read.h, C.size_t(16*len(s.names)), s.wait)
 	s.pending = true
 }
+
+// Release lets the timers' query sets and buffers go, for timers that
+// time no more. Stamps still on their way back are dropped; their wait
+// stays for the callback that may yet come.
+func (t *Timers) Release() {
+	C.e_wgpuInstanceProcessEvents(t.d.inst.h)
+	for i := range t.slots {
+		s := &t.slots[i]
+		if s.set != nil {
+			C.e_wgpuQuerySetRelease(s.set)
+			s.resolve.Release()
+			s.read.Release()
+		}
+		if s.wait != nil && (!s.pending || s.wait.done != 0) {
+			freeWait(s.wait)
+		}
+		*s = timerSlot{}
+	}
+}

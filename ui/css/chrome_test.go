@@ -54,6 +54,12 @@ var compared = map[string]func(s *style.Computed) string{
 		return px(s.LineHeight.Px)
 	},
 	"letter-spacing": func(s *style.Computed) string { return px(s.LetterSpacing) },
+	"word-spacing": func(s *style.Computed) string {
+		if w := s.WordSpacing; w.Percent != 0 && w.Px == 0 {
+			return num(w.Percent) + "%"
+		}
+		return px(s.WordSpacing.Px)
+	},
 	"display": func(s *style.Computed) string {
 		if s.ListItem {
 			return "list-item"
@@ -70,7 +76,8 @@ var compared = map[string]func(s *style.Computed) string{
 	"margin-right": func(s *style.Computed) string { return length(s.Margin.Right) },
 	"opacity":      func(s *style.Computed) string { return num(s.Opacity) },
 	"text-align": func(s *style.Computed) string {
-		return []string{"start", "end", "left", "right", "center", "justify"}[s.TextAlign]
+		return []string{"start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",
+			"-webkit-center"}[s.TextAlign]
 	},
 	"text-transform": func(s *style.Computed) string {
 		return []string{"none", "uppercase", "lowercase", "capitalize"}[s.TextTransform]
@@ -265,7 +272,7 @@ func where(n *dom.Node) string {
 func TestCascadeMatchesChrome(t *testing.T) {
 	fsys := fstest.MapFS{"cascade.css": {Data: []byte(`
 :root { --ink: #f7efdd; --pad: 6px; --gap: calc(var(--pad) * 2); }
-body { color: var(--ink); font-size: 14px; line-height: 1.5; letter-spacing: 0.05em; }
+body { color: var(--ink); font-size: 14px; line-height: 1.5; letter-spacing: 0.05em; word-spacing: 0.25em; }
 #spec { color: #00f; }
 div.card { color: #0f0; padding: 4px; }
 .card.hot { color: #f00; background-color: rgb(10 20 30 / 50%); }
@@ -278,10 +285,11 @@ div { border-top: 3px solid; }
 .card > p:last-child { font-weight: lighter; text-align: center; }
 p:not(:first-child, :last-child) { white-space: nowrap; text-overflow: ellipsis; overflow-x: hidden; }
 span { font-size: 1.5em; padding-left: 1rem; border-left-color: currentcolor; }
-.reset { color: initial; font-size: unset; padding-top: inherit; letter-spacing: normal; }
+.reset { color: initial; font-size: unset; padding-top: inherit; letter-spacing: normal; word-spacing: normal; }
 .flex { display: flex; column-gap: var(--gap); }
 .flex > span { flex: 2 0 10px; order: 3; }
-.abs { position: absolute; z-index: 4; pointer-events: none; }
+.abs { position: absolute; z-index: 4; pointer-events: none; word-spacing: -2px; }
+.flex { word-spacing: 50%; }
 .vars {
   --pad: 11px; padding-top: var(--pad); margin-right: var(--missing, 7px);
   outline: 2px solid var(--ink); outline-offset: 1px;
@@ -876,7 +884,7 @@ textarea::placeholder { color: rebeccapurple; }
 		const s = getComputedStyle(e), p = getComputedStyle(e, "::placeholder");
 		const sel = getComputedStyle(e, "::selection");
 		return [s.backgroundRepeat, s.backgroundPositionX, s.backgroundPositionY, s.backgroundImage, p.color,
-			e.classList.contains("form") ? sel.backgroundColor : ""];
+			sel.backgroundColor];
 	});`)
 	if err != nil {
 		t.Fatal(err)
@@ -913,6 +921,10 @@ textarea::placeholder { color: rebeccapurple; }
 		w := want[i]
 		if !s.HasPlaceholder || n.Tag() != dom.Input && n.Tag() != dom.Textarea {
 			ours[4], w[4] = "", ""
+		}
+		if !s.HasSelection {
+			// Chrome's own colour, the system's
+			w[5] = ""
 		}
 		for k := range w {
 			if !same("", ours[k], w[k]) {

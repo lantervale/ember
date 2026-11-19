@@ -15,6 +15,8 @@ type Face struct {
 	face      *draw.Face
 	fallbacks []*Face
 	emoji     *EmojiSet
+	// kept is what an engine package made of the face (draw.Kept).
+	kept any
 }
 
 // FaceOption sets up a Face.
@@ -134,6 +136,17 @@ func parseFace(name string, ttf []byte) (*Face, error) {
 		return nil, err
 	}
 	return &Face{face: f}, nil
+}
+
+//nolint:gochecknoinits // the hook ui builds its pages' faces through, set once
+func init() {
+	draw.Wrap = func(f *draw.Face) any { return &Face{face: f} }
+	draw.Kept = func(face any) *any {
+		if f, ok := face.(*Face); ok && f != nil {
+			return &f.kept
+		}
+		return nil
+	}
 }
 
 func (f *Face) draw() *draw.Face {

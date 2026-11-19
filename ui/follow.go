@@ -6,6 +6,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/twod"
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -117,7 +118,7 @@ func (d *Document) follow(c *twod.Canvas) bool {
 
 // containerOrigin is the padding box's top-left of n's containing block
 // for position: absolute, its nearest positioned ancestor, else the
-// Document's origin.
+// page's origin, which a scrolled viewport moved.
 func (d *Document) containerOrigin(n *Node) geom.Vec2 {
 	for a := n.Parent(); a != nil; a = a.Parent() {
 		st := dom.Data(a).Style
@@ -128,6 +129,9 @@ func (d *Document) containerOrigin(n *Node) geom.Vec2 {
 			r := b.Rect()
 			return geom.V2(r.X+b.Border.Left, r.Y+b.Border.Top)
 		}
+	}
+	if root := d.tree.Root; root != nil && root.Kind == box.Viewport {
+		return root.Scroll.Scale(-1)
 	}
 	return geom.Vec2{}
 }

@@ -464,7 +464,7 @@ func TestATiledPictureShowsWhatIsPaintedAndARepaintPatchesItsPage(t *testing.T) 
 		t.Fatalf("the painted texels show: %d", v)
 	}
 	before := map[*wgpu.Texture]bool{}
-	for _, c := range r.images {
+	for _, c := range r.images.live {
 		before[c.gpu] = true
 	}
 	shade = 60
@@ -476,7 +476,7 @@ func TestATiledPictureShowsWhatIsPaintedAndARepaintPatchesItsPage(t *testing.T) 
 	if v := at(img, 45, 25); v < 198 || v > 202 {
 		t.Fatalf("its neighbour is untouched: %d", v)
 	}
-	for _, c := range r.images {
+	for _, c := range r.images.live {
 		if !before[c.gpu] {
 			t.Fatal("the page was patched, not made again")
 		}

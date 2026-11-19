@@ -2,24 +2,18 @@ package css
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/dom"
 )
 
-//nolint:gochecknoglobals // lookup table
+//nolint:gochecknoglobals,goconst // lookup table
 var stateNames = map[string]dom.State{
 	"hover": dom.Hover, "focus": dom.Focus, "focus-visible": dom.FocusVisible, "active": dom.Active,
 	"disabled": dom.Disabled, "checked": dom.Checked, "open": dom.Open, "modal": dom.Modal,
 }
-
-// pseudoElements are the subset's pseudo-elements and the one property
-// each takes.
-//
-//nolint:gochecknoglobals,goconst // lookup table
-var pseudoElements = map[string]string{"placeholder": "color", "selection": "background-color",
-	"backdrop": "background-color"}
 
 // Specificity is a selector's (ids, classes, types) weight, compared in
 // that order.
@@ -41,7 +35,17 @@ type Combinator uint8
 const (
 	Descendant Combinator = iota
 	Child
+	// Next is a + b, b the element right after a, and Later a ~ b, b any
+	// element after a under the same parent.
+	Next
+	Later
 )
+
+func (c Combinator) String() string {
+	return [...]string{" ", " > ", " + ", " ~ "}[c]
+}
+
+func (c Combinator) sibling() bool { return c == Next || c == Later }
 
 type pseudoKind uint8
 
@@ -52,20 +56,65 @@ const (
 	pseudoRoot
 	pseudoNot
 	pseudoNthChild
+	// pseudoLink is :link and :any-link, an element with an href, and
+	// pseudoVisited :visited, which nothing is: ui keeps no history.
+	pseudoLink
+	pseudoVisited
+	// pseudoIs is :is(), and pseudoWhere :where(), which weighs nothing.
+	pseudoIs
+	pseudoWhere
+	// pseudoEnabled is a control that is not disabled.
+	pseudoEnabled
+	pseudoOnlyChild
+	pseudoNthLastChild
+	pseudoFirstOfType
+	pseudoLastOfType
+	pseudoOnlyOfType
+	pseudoNthOfType
+	pseudoNthLastOfType
 )
 
 type pseudo struct {
 	kind  pseudoKind
 	state dom.State
-	not   []Selector
-	// a and b are :nth-child(An+B)'s.
+	// sels are what :not(), :is() and :where() were given.
+	sels []Selector
+	// a and b are :nth-child(An+B)'s, and the other :nth-'s.
 	a, b int
 }
 
 // Attr is an attribute selector: [Name], or [Name="Value"] when HasValue.
+// Op is how the value is matched: '=' the whole, '~' a word of it, '|' it
+// or its start before a hyphen, '^' its start, '$' its end, '*' a part.
+// Fold matches letters of either case.
 type Attr struct {
 	Name, Value string
 	HasValue    bool
+	Op          byte
+	Fold        bool
+}
+
+func (a Attr) matches(v string) bool {
+	if !a.HasValue {
+		return true
+	}
+	want := a.Value
+	if a.Fold {
+		v, want = strings.ToLower(v), strings.ToLower(want)
+	}
+	switch a.Op {
+	case '~':
+		return want != "" && !strings.ContainsAny(want, " \t\n\f\r") && slices.Contains(strings.Fields(v), want)
+	case '|':
+		return v == want || strings.HasPrefix(v, want+"-")
+	case '^':
+		return want != "" && strings.HasPrefix(v, want)
+	case '$':
+		return want != "" && strings.HasSuffix(v, want)
+	case '*':
+		return want != "" && strings.Contains(v, want)
+	}
+	return v == want
 }
 
 // Compound is a compound selector: a type (TextTag for any) with ids,
@@ -85,26 +134,27 @@ type Selector struct {
 	Compounds   []Compound
 	Combinators []Combinator
 	Specificity Specificity
-	// PseudoElement is "placeholder" or "selection" for a ::placeholder or
-	// ::selection selector, the subset's pseudo-elements; Matches then tests
-	// the element it belongs to.
+	// PseudoElement is the selector's pseudo-element, without its colons
+	// ("before" for ::before and :before, "part" for ::part(x)); Matches
+	// then tests the element it belongs to.
 	PseudoElement string
+	// pseudoArgs is what a functional pseudo-element was given, as written.
+	pseudoArgs string
 }
 
 func (s Selector) String() string {
 	var b strings.Builder
 	for i, c := range s.Compounds {
 		if i > 0 {
-			if s.Combinators[i-1] == Child {
-				b.WriteString(" > ")
-			} else {
-				b.WriteString(" ")
-			}
+			b.WriteString(s.Combinators[i-1].String())
 		}
 		b.WriteString(c.text)
 	}
 	if s.PseudoElement != "" {
 		b.WriteString("::" + s.PseudoElement)
+		if s.pseudoArgs != "" {
+			b.WriteString("(" + s.pseudoArgs + ")")
+		}
 	}
 	return b.String()
 }
@@ -121,9 +171,25 @@ func (s Selector) matchFrom(i int, e *dom.Node) bool {
 	if i == 0 {
 		return true
 	}
-	if s.Combinators[i-1] == Child {
+	switch s.Combinators[i-1] {
+	case Child:
 		p := e.Parent()
 		return p != nil && s.matchFrom(i-1, p)
+	case Next, Later:
+		before := elementsBefore(e)
+		for j := len(before) - 1; j >= 0; j-- {
+			if before[j].IsText() {
+				continue
+			}
+			if s.matchFrom(i-1, before[j]) {
+				return true
+			}
+			if s.Combinators[i-1] == Next {
+				return false
+			}
+		}
+		return false
+	case Descendant:
 	}
 	for p := e.Parent(); p != nil; p = p.Parent() {
 		if s.matchFrom(i-1, p) {
@@ -133,7 +199,31 @@ func (s Selector) matchFrom(i int, e *dom.Node) bool {
 	return false
 }
 
+// elementsBefore are the children of e's parent before e.
+func elementsBefore(e *dom.Node) []*dom.Node {
+	p := e.Parent()
+	if p == nil {
+		return nil
+	}
+	kids := p.Children()
+	return kids[:max(slices.Index(kids, e), 0)]
+}
+
 func (c *Compound) matches(e *dom.Node) bool {
+	if !c.names(e) {
+		return false
+	}
+	for i := range c.pseudos {
+		if !c.pseudos[i].matches(e) {
+			return false
+		}
+	}
+	return true
+}
+
+// names reports whether e has c's type, ids, classes and attributes: all
+// of c but its pseudo-classes, so what no state of e changes.
+func (c *Compound) names(e *dom.Node) bool {
 	if c.Tag != dom.TextTag && c.Tag != e.Tag() {
 		return false
 	}
@@ -149,41 +239,93 @@ func (c *Compound) matches(e *dom.Node) bool {
 	}
 	for _, a := range c.Attrs {
 		v, ok := e.Attr(a.Name)
-		if !ok || a.HasValue && v != a.Value {
+		if !ok || !a.matches(v) {
 			return false
 		}
 	}
-	for _, p := range c.pseudos {
-		switch p.kind {
-		case pseudoState:
-			if !e.State().Has(p.state) {
-				return false
-			}
-		case pseudoFirstChild:
-			if !edgeChild(e, 1) {
-				return false
-			}
-		case pseudoLastChild:
-			if !edgeChild(e, -1) {
-				return false
-			}
-		case pseudoRoot:
-			if e.Parent() != nil {
-				return false
-			}
-		case pseudoNthChild:
-			if !nth(p.a, p.b, childIndex(e)) {
-				return false
-			}
-		case pseudoNot:
-			for _, s := range p.not {
-				if s.Matches(e) {
-					return false
-				}
-			}
-		}
+	return true
+}
+
+func (p *pseudo) matches(e *dom.Node) bool {
+	switch p.kind {
+	case pseudoState:
+		return e.State().Has(p.state)
+	case pseudoFirstChild:
+		return edgeChild(e, 1)
+	case pseudoLastChild:
+		return edgeChild(e, -1)
+	case pseudoRoot:
+		return e.Parent() == nil
+	case pseudoLink:
+		_, ok := e.Attr("href")
+		return ok
+	case pseudoVisited:
+		return false
+	case pseudoNthChild:
+		return nth(p.a, p.b, childIndex(e))
+	case pseudoNot:
+		return !matchesAny(p.sels, e)
+	case pseudoIs, pseudoWhere:
+		return matchesAny(p.sels, e)
+	case pseudoEnabled:
+		return slices.Contains(controls, e.Tag()) && !e.State().Has(dom.Disabled)
+	case pseudoOnlyChild:
+		return edgeChild(e, 1) && edgeChild(e, -1)
+	case pseudoNthLastChild:
+		return nth(p.a, p.b, placeAmong(e, -1, false))
+	case pseudoFirstOfType:
+		return placeAmong(e, 1, true) == 1
+	case pseudoLastOfType:
+		return placeAmong(e, -1, true) == 1
+	case pseudoOnlyOfType:
+		return placeAmong(e, 1, true) == 1 && placeAmong(e, -1, true) == 1
+	case pseudoNthOfType:
+		return nth(p.a, p.b, placeAmong(e, 1, true))
+	case pseudoNthLastOfType:
+		return nth(p.a, p.b, placeAmong(e, -1, true))
 	}
 	return true
+}
+
+// controls are the elements :enabled is about.
+//
+//nolint:gochecknoglobals // lookup table
+var controls = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Option, dom.Fieldset}
+
+func matchesAny(sels []Selector, e *dom.Node) bool {
+	for _, s := range sels {
+		if s.Matches(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// placeAmong is e's place among its parent's element children, of its
+// type only when sameType, counted from the first (dir 1) or the last
+// (dir -1), from 1; 0 without a parent.
+func placeAmong(e *dom.Node, dir int, sameType bool) int {
+	p := e.Parent()
+	if p == nil {
+		return 0
+	}
+	kids := p.Children()
+	i, end := 0, len(kids)
+	if dir < 0 {
+		i, end = len(kids)-1, -1
+	}
+	n := 0
+	for ; i != end; i += dir {
+		c := kids[i]
+		if c.IsText() || sameType && c.Tag() != e.Tag() {
+			continue
+		}
+		n++
+		if c == e {
+			return n
+		}
+	}
+	return 0
 }
 
 // parseNth reads :nth-child()'s argument, odd, even or An+B, as a and b.
@@ -296,6 +438,9 @@ func ParseSelectors(src string) ([]Selector, error) {
 type SelectorError struct {
 	Pos Pos
 	Msg string
+	// unmatched is a selector naming an element ui has none of: read by a
+	// browser, it matches nothing here.
+	unmatched bool
 }
 
 func (e *SelectorError) Error() string {
@@ -334,24 +479,49 @@ func parseSelectors(cs []Component) ([]Selector, *SelectorError) {
 	return out, nil
 }
 
+// matched are the selectors of a list a browser's sheet keeps: those
+// naming an element ui has none of match nothing and go without a word,
+// as the vendors' parts do.
+func matched(cs []Component) []Component {
+	var out []Component
+	for _, part := range splitOn(cs, func(c Component) bool { return c.Kind == Comma }) {
+		if sel := trim(part); len(sel) > 0 {
+			if _, err := parseComplex(sel); err != nil && err.unmatched {
+				continue
+			}
+		}
+		if out != nil {
+			out = append(out, Component{Token: Token{Kind: Comma, Text: ","}})
+		}
+		out = append(slices.Grow(out, len(part)), part...)
+	}
+	return out
+}
+
 func parseComplex(cs []Component) (Selector, *SelectorError) {
 	var s Selector
-	if n := len(cs); n >= 3 && cs[n-3].Kind == Colon && cs[n-2].Kind == Colon && cs[n-1].Kind == Ident &&
-		pseudoElements[strings.ToLower(cs[n-1].Text)] != "" {
-		s.PseudoElement = strings.ToLower(cs[n-1].Text)
-		cs = cs[:n-3]
-		if len(cs) == 0 || cs[len(cs)-1].Kind == Whitespace {
-			cs = append(cs, Component{Token: Token{Kind: Delim, Text: "*", Pos: cs0Pos(cs)}})
+	name, n, err := pseudoElementAt(cs)
+	if err != nil {
+		return Selector{}, err
+	}
+	if n > 0 {
+		s.PseudoElement = name
+		if last := cs[len(cs)-1]; last.Kind == Function {
+			s.pseudoArgs = join(last.Args)
+		}
+		cs = cs[:len(cs)-n]
+		if len(cs) == 0 || cs[len(cs)-1].Kind == Whitespace || cs[len(cs)-1].Kind == Delim && cs[len(cs)-1].Text != "*" {
+			cs = append(slices.Clip(cs), Component{Token: Token{Kind: Delim, Text: "*", Pos: cs0Pos(cs)}})
 		}
 	}
 	i := 0
 	for {
-		c, n, err := parseCompound(cs[i:])
-		if err != nil {
-			return Selector{}, err
+		c, read, bad := parseCompound(cs[i:])
+		if bad != nil {
+			return Selector{}, bad
 		}
 		s.Compounds = append(s.Compounds, c)
-		i += n
+		i += read
 		sawSpace := false
 		for i < len(cs) && cs[i].Kind == Whitespace {
 			sawSpace = true
@@ -366,8 +536,12 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 			case ">":
 				comb = Child
 				i++
-			case "+", "~":
-				return Selector{}, selErr(t, "the %q combinator is not supported", t.Text)
+			case "+":
+				comb = Next
+				i++
+			case "~":
+				comb = Later
+				i++
 			}
 		}
 		if comb == Descendant && !sawSpace {
@@ -407,17 +581,21 @@ func (c *Compound) specificity() Specificity {
 		sp[2]++
 	}
 	for _, p := range c.pseudos {
-		if p.kind != pseudoNot {
-			sp[1]++
-			continue
-		}
-		var most Specificity
-		for _, s := range p.not {
-			if most.Less(s.Specificity) {
-				most = s.Specificity
+		switch p.kind {
+		case pseudoWhere:
+		case pseudoNot, pseudoIs:
+			var most Specificity
+			for _, s := range p.sels {
+				if most.Less(s.Specificity) {
+					most = s.Specificity
+				}
 			}
+			sp = sp.add(most)
+		case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
+			pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
+			pseudoNthOfType, pseudoNthLastOfType:
+			sp[1]++
 		}
-		sp = sp.add(most)
 	}
 	return sp
 }
@@ -430,7 +608,9 @@ func parseCompound(cs []Component) (Compound, int, *SelectorError) {
 		case t.Kind == Ident:
 			tag, ok := dom.TagNamed(strings.ToLower(t.Text))
 			if !ok {
-				return c, 0, selErr(t, "ui has no <%s> element", strings.ToLower(t.Text))
+				err := selErr(t, "ui has no <%s> element", strings.ToLower(t.Text))
+				err.unmatched = true
+				return c, 0, err
 			}
 			c.Tag = tag
 			i++
@@ -487,41 +667,18 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 	t := cs[1]
 	switch t.Kind {
 	case Colon:
-		return pseudo{}, 0, selErr(t, "pseudo-elements are not supported")
-	case Ident:
-		name := strings.ToLower(t.Text)
-		if st, ok := stateNames[name]; ok {
-			return pseudo{kind: pseudoState, state: st}, 2, nil
-		}
-		switch name {
-		case "first-child":
-			return pseudo{kind: pseudoFirstChild}, 2, nil
-		case "last-child":
-			return pseudo{kind: pseudoLastChild}, 2, nil
-		case "root":
-			return pseudo{kind: pseudoRoot}, 2, nil
-		}
-		return pseudo{}, 0, selErr(t, "the :%s pseudo-class is not supported", name)
-	case Function:
-		name := strings.ToLower(t.Text)
-		if name == "nth-child" {
-			a, b, ok := parseNth(join(t.Args))
-			if !ok {
-				return pseudo{}, 0, selErr(t, ":nth-child() takes odd, even or An+B")
+		if len(cs) > 2 && (cs[2].Kind == Ident || cs[2].Kind == Function) {
+			name := strings.ToLower(cs[2].Text)
+			if _, ok := pseudoElements[name]; ok {
+				return pseudo{}, 0, selErr(t, "::%s must end its selector: nothing may follow a pseudo-element", name)
 			}
-			return pseudo{kind: pseudoNthChild, a: a, b: b}, 2, nil
+			return pseudo{}, 0, selErr(t, "unknown pseudo-element ::%s", name)
 		}
-		if name != "not" {
-			return pseudo{}, 0, selErr(t, "the :%s() pseudo-class is not supported", name)
-		}
-		if len(trim(t.Args)) == 0 {
-			return pseudo{}, 0, selErr(t, ":not() is empty")
-		}
-		sels, err := parseSelectors(t.Args)
-		if err != nil {
-			return pseudo{}, 0, err
-		}
-		return pseudo{kind: pseudoNot, not: sels}, 2, nil
+		return pseudo{}, 0, selErr(t, "expected a pseudo-element after '::'")
+	case Ident:
+		return pseudoClass(t)
+	case Function:
+		return pseudoFunction(t)
 	case EOF, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Whitespace, CDO, CDC,
 		Semicolon, Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
 		// nothing special for these tokens
@@ -529,80 +686,235 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 	return pseudo{}, 0, selErr(t, "expected a pseudo-class after ':'")
 }
 
-// parseAttr reads [name] or [name="value"]; other matchers and flags are
-// outside the subset.
+// pseudoClass reads the pseudo-class a name after ':' is.
+func pseudoClass(t Component) (pseudo, int, *SelectorError) {
+	name := strings.ToLower(t.Text)
+	if pseudoElements[name].legacy {
+		return pseudo{}, 0, selErr(t, ":%s must end its selector: nothing may follow a pseudo-element", name)
+	}
+	if st, ok := stateNames[name]; ok {
+		return pseudo{kind: pseudoState, state: st}, 2, nil
+	}
+	switch name {
+	case "first-child":
+		return pseudo{kind: pseudoFirstChild}, 2, nil
+	case "last-child":
+		return pseudo{kind: pseudoLastChild}, 2, nil
+	case "root":
+		return pseudo{kind: pseudoRoot}, 2, nil
+	case "link", classAnyLink:
+		return pseudo{kind: pseudoLink}, 2, nil
+	case "visited":
+		return pseudo{kind: pseudoVisited}, 2, nil
+	case "enabled":
+		return pseudo{kind: pseudoEnabled}, 2, nil
+	case "only-child":
+		return pseudo{kind: pseudoOnlyChild}, 2, nil
+	case "first-of-type":
+		return pseudo{kind: pseudoFirstOfType}, 2, nil
+	case "last-of-type":
+		return pseudo{kind: pseudoLastOfType}, 2, nil
+	case "only-of-type":
+		return pseudo{kind: pseudoOnlyOfType}, 2, nil
+	}
+	return pseudo{}, 0, selErr(t, "the :%s pseudo-class is not supported", name)
+}
+
+// pseudoFunction reads the pseudo-class a function after ':' is.
+func pseudoFunction(t Component) (pseudo, int, *SelectorError) {
+	name := strings.ToLower(t.Text)
+	if kind, counts := nthKinds[name]; counts {
+		a, b, ok := parseNth(join(t.Args))
+		if !ok {
+			return pseudo{}, 0, selErr(t, ":%s() takes odd, even or An+B", name)
+		}
+		return pseudo{kind: kind, a: a, b: b}, 2, nil
+	}
+	switch name {
+	case "is":
+		return pseudo{kind: pseudoIs, sels: forgiving(t.Args)}, 2, nil
+	case "where":
+		return pseudo{kind: pseudoWhere, sels: forgiving(t.Args)}, 2, nil
+	case "not":
+	default:
+		return pseudo{}, 0, selErr(t, "the :%s() pseudo-class is not supported", name)
+	}
+	if len(trim(t.Args)) == 0 {
+		return pseudo{}, 0, selErr(t, ":not() is empty")
+	}
+	sels, err := parseSelectors(t.Args)
+	if err != nil {
+		err.unmatched = false
+		return pseudo{}, 0, err
+	}
+	return pseudo{kind: pseudoNot, sels: sels}, 2, nil
+}
+
+//nolint:gochecknoglobals // lookup table
+var nthKinds = map[string]pseudoKind{
+	"nth-child": pseudoNthChild, "nth-last-child": pseudoNthLastChild,
+	"nth-of-type": pseudoNthOfType, "nth-last-of-type": pseudoNthLastOfType,
+}
+
+// forgiving reads the selectors :is() and :where() were given, leaving
+// out the ones ui can't read, as CSS has it: with none left it matches
+// nothing.
+func forgiving(args []Component) []Selector {
+	var out []Selector
+	for _, part := range splitOn(args, func(c Component) bool { return c.Kind == Comma }) {
+		if part = trim(part); len(part) == 0 {
+			continue
+		}
+		if s, err := parseComplex(part); err == nil && s.PseudoElement == "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// parseAttr reads [name], [name="value"] and the other matchers (~=, |=,
+// ^=, $=, *=), with the i flag; Chrome reads no s flag.
 func parseAttr(b Component) (Attr, *SelectorError) {
 	v := items(b.Args)
 	if len(v) == 0 || v[0].Kind != Ident {
 		return Attr{}, selErr(b, "expected an attribute name in [ ]")
 	}
-	a := Attr{Name: strings.ToLower(v[0].Text)}
-	switch {
-	case len(v) == 1:
+	a := Attr{Name: strings.ToLower(v[0].Text), Op: '='}
+	if len(v) == 1 {
 		return a, nil
-	case v[1].Kind == Delim && v[1].Text == "=":
-		if len(v) == 3 && (v[2].Kind == Ident || v[2].Kind == String) {
-			a.Value, a.HasValue = v[2].Text, true
-			return a, nil
-		}
-		if len(v) == 4 {
-			return Attr{}, selErr(v[3], "attribute flags are not supported")
-		}
+	}
+	i := 1
+	if v[i].Kind == Delim && len(v[i].Text) == 1 && strings.ContainsAny(v[i].Text, "^$*|~") {
+		a.Op = v[i].Text[0]
+		i++
+	}
+	if i >= len(v) || v[i].Kind != Delim || v[i].Text != "=" {
+		at := v[min(i, len(v)-1)]
+		return Attr{}, selErr(at, "unexpected %q in [ ]", at.String())
+	}
+	i++
+	if i >= len(v) || v[i].Kind != Ident && v[i].Kind != String {
 		return Attr{}, selErr(b, "expected [%s=value]", a.Name)
-	case v[1].Kind == Delim && strings.ContainsAny(v[1].Text, "^$*|~"):
-		return Attr{}, selErr(v[1], "only [attr] and [attr=\"value\"] are supported, not %s=", v[1].Text)
 	}
-	return Attr{}, selErr(v[1], "unexpected %q in [ ]", v[1].String())
+	a.Value, a.HasValue = v[i].Text, true
+	switch rest := v[i+1:]; {
+	case len(rest) == 0:
+	case len(rest) == 1 && isWord(rest[0], "i"):
+		a.Fold = true
+	default:
+		return Attr{}, selErr(rest[0], "unexpected %q in [ ]", rest[0].String())
+	}
+	return a, nil
 }
 
-// treeStates are the states sheets' selectors read in compounds above
-// their subject, :not() included: a change of one may change what an
-// element's descendants match. Sibling combinators are outside the
-// subset, so a state reaches no sibling.
-func treeStates(sheets []*Sheet) dom.State {
-	var s dom.State
-	for _, sh := range sheets {
-		for _, r := range sh.Rules {
-			for _, sel := range r.Selectors {
-				s |= sel.treeStates()
+// stateRead is a state a selector reads on an element other than its
+// subject, :not(), :is() and :where() included: a change of it there may
+// change what the selector matches.
+type stateRead struct {
+	states dom.State
+	// on is the compound that reads it, after those holding it in a
+	// pseudo-class of theirs on the same element, and subject the
+	// selector's last.
+	on      []*Compound
+	subject *Compound
+	// beside is set when the first combinator from on toward the subject
+	// is a sibling's: the selector then matches among the elements after
+	// the one in the state and under them, else under that one.
+	beside bool
+	rule   int
+}
+
+// names reports whether e has what the compounds reading the state name.
+func (r *stateRead) names(e *dom.Node) bool {
+	return !slices.ContainsFunc(r.on, func(c *Compound) bool { return !c.names(e) })
+}
+
+// stateReads calls add for each compound of s, and of the selectors its
+// pseudo-classes hold, that reads states on an element other than s's
+// subject, with on and beside as stateRead has them.
+func (s Selector) stateReads(add func(on []*Compound, states dom.State, beside bool)) {
+	s.readsFrom(nil, false, false, add)
+}
+
+// readsFrom is stateReads for a selector the compounds outer hold, whose
+// subject stands above the one asked about (apart), or before it (apart
+// and beside).
+func (s Selector) readsFrom(outer []*Compound, apart, beside bool,
+	add func(on []*Compound, states dom.State, beside bool)) {
+	for i := range s.Compounds {
+		c := &s.Compounds[i]
+		on, away, before := append(slices.Clip(outer), c), apart, beside
+		if i < len(s.Combinators) {
+			on, away, before = on[len(outer):], true, s.Combinators[i].sibling()
+		}
+		var states dom.State
+		for j := range c.pseudos {
+			p := &c.pseudos[j]
+			states |= p.reads()
+			for _, n := range p.sels {
+				n.readsFrom(on, away, before, add)
 			}
 		}
+		if away && states != 0 {
+			add(on, states, before)
+		}
 	}
-	return s
 }
 
-func (s Selector) treeStates() dom.State {
-	var st dom.State
+// reads is the state p itself tests.
+func (p *pseudo) reads() dom.State {
+	switch p.kind {
+	case pseudoState:
+		return p.state
+	case pseudoEnabled:
+		return dom.Disabled
+	case pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink, pseudoVisited, pseudoIs,
+		pseudoWhere, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
+		pseudoNthOfType, pseudoNthLastOfType:
+	}
+	return 0
+}
+
+// beside reports whether the compound at i stands before a sibling
+// combinator: what it reads on an element says what the elements after
+// that one match.
+func (s Selector) beside(i int) bool {
+	return i < len(s.Combinators) && s.Combinators[i].sibling()
+}
+
+// besideKeys are the classes, ids and attributes s reads on an element
+// before a sibling combinator, keyed as dom.Pipeline.Changed.
+func (s Selector) besideKeys(add func(string)) {
 	for i, c := range s.Compounds {
+		if s.beside(i) {
+			c.keys(add)
+		}
 		for _, p := range c.pseudos {
-			if p.kind == pseudoState && i < len(s.Compounds)-1 {
-				st |= p.state
-			}
-			for _, n := range p.not {
-				st |= n.treeStates()
-				if i < len(s.Compounds)-1 {
-					st |= n.states()
+			for _, n := range p.sels {
+				n.besideKeys(add)
+				if s.beside(i) {
+					for _, nc := range n.Compounds {
+						nc.keys(add)
+					}
 				}
 			}
 		}
 	}
-	return st
 }
 
-// states are every state s reads.
-func (s Selector) states() dom.State {
-	var st dom.State
-	for _, c := range s.Compounds {
+// siblings reports whether s has a sibling combinator.
+func (s Selector) siblings() bool {
+	for i, c := range s.Compounds {
+		if s.beside(i) {
+			return true
+		}
 		for _, p := range c.pseudos {
-			if p.kind == pseudoState {
-				st |= p.state
-			}
-			for _, n := range p.not {
-				st |= n.states()
+			if slices.ContainsFunc(p.sels, Selector.siblings) {
+				return true
 			}
 		}
 	}
-	return st
+	return false
 }
 
 // aboveKeys adds the classes, ids and attributes s reads in a compound
@@ -615,7 +927,7 @@ func (s Selector) aboveKeys(add func(string)) {
 			c.keys(add)
 		}
 		for _, p := range c.pseudos {
-			for _, n := range p.not {
+			for _, n := range p.sels {
 				if above {
 					for _, nc := range n.Compounds {
 						nc.keys(add)

@@ -122,7 +122,7 @@ func fitContentLimit(l style.Length, parent float32) float32 {
 	if !some(parent) {
 		return none
 	}
-	return l.Px + l.Percent*parent/100
+	return l.At(parent)
 }
 
 func definiteLimit(l style.Length, parent float32) float32 {

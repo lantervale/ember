@@ -24,6 +24,9 @@ func Translate(tr func(message string) string) Option {
 // select's label are translated.
 func Translated(text *dom.Node, tr func(message string) string) string {
 	owner := text.Parent()
+	if owner != nil && owner.Generated() {
+		return text.Text()
+	}
 	if owner != nil && dom.Data(owner).Shadow == text && !dom.Data(owner).Placeholder && owner.Tag() != dom.Select {
 		return text.Text()
 	}
@@ -104,4 +107,13 @@ func endsInWord(text string, inWord bool) bool {
 		}
 	}
 	return inWord
+}
+
+// Shown is a text node's text as layout cuts it into fragments, which
+// Fragment.Start counts in: as tr says it and as st cases it, its white
+// space not yet collapsed. The first letter of a capitalized run that
+// continues a word may differ in case.
+func Shown(text *dom.Node, st *style.Computed, tr func(message string) string) string {
+	inWord := false
+	return shownText(Translated(text, tr), st, text.Parent(), &inWord)
 }

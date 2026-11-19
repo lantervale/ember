@@ -92,7 +92,9 @@ func (q *eventQueue[T]) endFrame(holdForStep bool) {
 	if holdForStep {
 		limit = max(min(limit, q.stepped), q.base)
 	}
-	q.events = append(q.events[:0], q.events[limit-q.base:]...)
+	kept := copy(q.events, q.events[limit-q.base:])
+	clear(q.events[kept:])
+	q.events = q.events[:kept]
 	q.base = limit
 	q.frameStart = q.next()
 }

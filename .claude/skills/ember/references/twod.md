@@ -13,6 +13,7 @@ ember.New().AddEntities(win).AddSystems(play).MustRun()
 |---|---|
 | `Title(title string)`, `Size(width, height int)`, `Background(c color.Color)`, `FixedSize()`; else `MinSize(w, h int)`, `MaxSize(w, h int)`, `AspectRatio(w, h int)` | size in points; examples are fixed unless their layout follows the window |
 | `Fullscreen()`, `Maximized()`, `Position(x, y int)`, `Undecorated()`, `AlwaysOnTop()`, `Hidden()`, `VSync(on bool)`, `Icon(images ...image.Image)` | |
+| `OwnTitleBar()` | the content fills the title bar, the system's buttons kept (macOS; elsewhere the title bar stays above). Pad a header by `win.TitleBarArea()` (`Left`, `Right`, `Height` in points, read each frame, zero in fullscreen) and mark it `app-region: drag` in a ui sheet; `win.StartDrag()` and `win.DoubleClickTitleBar()` for a header that isn't ui; tests set `win.SyncTitleBar(area)` |
 
 At run time: `win.SetTitle`, `SetSize(geom.Vec2)`, `SetFullscreen(bool)`, `SetBackground`, `SetCursor(platform.CursorHand)`, `Size()`, `Input()`. `platform.Hidden()` and `twod.Hidden()` differ.
 In the browser a resizable window fills the page and follows it, a `FixedSize()` one keeps its size, and full screen (the game's or the page's) fills the screen.

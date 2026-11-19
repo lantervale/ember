@@ -99,3 +99,20 @@ func (r *Readback) Done(read func(rows []byte, row int, tag any)) {
 		C.e_wgpuBufferUnmap(s.buf.h)
 	}
 }
+
+// Release lets the readback's buffers go, for one that copies no more. A
+// copy still in flight is dropped; its wait stays for the callback that
+// may yet come.
+func (r *Readback) Release() {
+	C.e_wgpuInstanceProcessEvents(r.d.inst.h)
+	for i := range r.slots {
+		s := &r.slots[i]
+		if s.buf != nil {
+			s.buf.Release()
+		}
+		if s.wait != nil && (!s.pending || s.wait.done != 0) {
+			freeWait(s.wait)
+		}
+		*s = readbackSlot{}
+	}
+}

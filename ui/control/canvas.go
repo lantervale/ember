@@ -7,11 +7,14 @@ import (
 
 // Canvas is a canvas element: the game's Draw, which paint calls in the
 // element's content box. Version moves on each Invalidate; Kept is paint's
-// last drawing of it, replayed while it still holds.
+// last drawing of it, replayed while it still holds. Live, it is drawn
+// each frame and nothing of it is kept, as what an iframe shows is: the
+// Document in it replays itself.
 type Canvas struct {
 	Draw    func(c *twod.Canvas)
 	Version uint64
 	Kept    Drawing
+	Live    bool
 }
 
 func (c *Canvas) Invalidate() { c.Version++ }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 	"github.com/stretchr/testify/assert"
@@ -61,5 +62,37 @@ func TestInsetDarkensTopAndLeftAndOutsetTheOthers(t *testing.T) {
 			}
 			assert.Equal(t, want, o.Color, "%s side %d (top, right, bottom, left)", c.name, i)
 		}
+	}
+}
+
+func TestGrooveIsAnInsetHalfRoundAnOutsetHalfAndRidgeTheOtherWay(t *testing.T) {
+	gray := color.RGB8(128, 128, 128)
+	darker, lighter := shades(gray)
+	for _, c := range []struct {
+		s     style.BorderStyle
+		outer color.Color
+		name  string
+	}{{style.BorderGroove, darker, "groove"}, {style.BorderRidge, lighter, "ridge"}} {
+		b := el(10, 10, 40, 30, func(s *style.Computed) {
+			s.BorderStyle = style.All(c.s)
+			s.BorderColor = style.All(gray)
+			s.Border = style.All[float32](4)
+		})
+		b.Border = box.Edges{Top: 4, Right: 4, Bottom: 4, Left: 4}
+		r := newRecorder()
+		Paint(r, tree(b))
+		sides := r.of("triangles")
+		if !assert.Len(t, sides, 8, "%s: an outer and an inner half per side", c.name) {
+			continue
+		}
+		inner := lighter
+		if c.outer == lighter {
+			inner = darker
+		}
+		assert.Equal(t, c.outer, sides[0].Color, "%s: the top's outer half", c.name)
+		assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 40, H: 2}, sides[0].Rect)
+		assert.Equal(t, inner, sides[4].Color, "%s: the top's inner half", c.name)
+		assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 36, H: 2}, sides[4].Rect)
+		assert.Equal(t, inner, sides[2].Color, "%s: the bottom's outer half", c.name)
 	}
 }

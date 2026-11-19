@@ -26,6 +26,7 @@ UI as modern HTML elements styled by a CSS subset, written from Go and laid out 
 | [Kit](07-kit/README.md) | ember's components: buttons, forms, tables, windows… |
 | [Matches Chrome](08-chrome.md) | how close each component is to Chrome's |
 | [Walkthroughs](09-walkthroughs/README.md) | small programs, file by file |
+| [What is missing](10-missing.md) | the known gaps, where a page written for a browser expects more |
 
 ## Try it
 
@@ -34,6 +35,8 @@ UI as modern HTML elements styled by a CSS subset, written from Go and laid out 
 [elements.go](../../examples/92-ui-kit/elements.go)
 
 [core.go](../../examples/92-ui-kit/core.go)
+
+[fetched.go](../../examples/92-ui-kit/fetched.go)
 
 [controls.go](../../examples/92-ui-kit/controls.go)
 

@@ -94,6 +94,8 @@ func (c *canvas) Maximize()                    {}
 func (c *canvas) Minimize()                    {}
 func (c *canvas) Restore()                     {}
 func (c *canvas) SetIcon(_ []image.Image)      {}
+func (c *canvas) StartDrag()                   {}
+func (c *canvas) DoubleClickTitleBar()         {}
 func (c *canvas) WindowPosition() (int, int)   { return 0, 0 }
 func (c *canvas) ScreenCursor() (float64, float64) {
 	m := c.in.Mouse()
