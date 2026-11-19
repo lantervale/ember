@@ -143,7 +143,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | an animated WebP | no picture, and a warning (`webp: invalid format`); an animated GIF shows its first frame |
-| AVIF, BMP, ICO | no picture, and a warning; `web.Images` asks for none of them |
+| AVIF | no picture, and a warning; `web.Images` does not ask for it |
+| a run-length encoded BMP (or such a bitmap in an ICO), a `.cur` cursor file | no picture, and a warning |
+| the picture of an ICO nearest the size it shows at | the largest of the file is shown, scaled, then the one of the most bits a pixel |
 | `srcset` and `sizes` on an `img`, `picture` with its `source`s | not read: the `img`'s `src` is the picture |
 | the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
 | an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |

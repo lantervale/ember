@@ -1,15 +1,16 @@
 // Package web gets a Document's pictures and fonts over HTTP: a fetcher
 // for ui.FetchImages, so a url() background or an img's src can name a
 // picture on the web, and one for ui.FetchFonts, so an @font-face can
-// name a font there. Importing it lets ui read JPEG, GIF and WebP
-// pictures beside PNG (a WebP that is an animation is none); an SVG is
-// asked for too and handed over as it is, for a Document to draw once
-// ui/svg is imported.
+// name a font there. Importing it lets ui read JPEG, GIF, WebP, ICO
+// and BMP pictures beside PNG (a WebP that is an animation is none, an
+// ICO shows its largest picture); an SVG is asked for too and handed
+// over as it is, for a Document to draw once ui/svg is imported.
 package web
 
 import (
 	"context"
 	"fmt"
+	"image"
 	_ "image/gif" // the pictures of the web, beside ui's PNG
 	_ "image/jpeg"
 	"io"
@@ -20,7 +21,14 @@ import (
 	_ "golang.org/x/image/webp" // and WebP
 
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/internal/ico"
 )
+
+//nolint:gochecknoinits // registers the formats on import, as the image packages above do
+func init() {
+	image.RegisterFormat("ico", "\x00\x00\x01\x00", ico.Decode, ico.DecodeConfig)
+	image.RegisterFormat("bmp", "BM????\x00\x00\x00\x00", ico.DecodeBMP, ico.DecodeBMPConfig)
+}
 
 const (
 	// MaxBytes is the largest picture Images reads; a larger one is an
@@ -78,8 +86,13 @@ func newFetcher(base string) *fetcher {
 
 func overHTTP(at *url.URL) bool { return at.Scheme == "http" || at.Scheme == "https" }
 
+// pictures names the pictures a Document reads once this package is
+// imported, and SVG, read once ui/svg is.
+const pictures = "image/png, image/jpeg, image/gif, image/webp, image/svg+xml, " +
+	"image/x-icon, image/vnd.microsoft.icon, image/bmp"
+
 func (f *fetcher) get(ref string) ([]byte, error) {
-	return f.fetch(ref, "image/png, image/jpeg, image/gif, image/webp, image/svg+xml", MaxBytes, "picture")
+	return f.fetch(ref, pictures, MaxBytes, "picture")
 }
 
 // fetch gets what ref names from base, asking for accept: the body of
