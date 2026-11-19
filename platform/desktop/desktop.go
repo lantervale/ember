@@ -129,6 +129,7 @@ func (p Plugin) Build(w *world.World) {
 		sound:    audiodevice.New(),
 	}
 	w.AddView(d.sound)
+	w.AddView(&d.preferences)
 	w.AddView(&d.windows).SetRunner(func(*world.World) error { return d.guard(d.run) })
 }
 
@@ -376,8 +377,14 @@ type driver struct {
 	// input device.
 	scripted bool
 	windows  world.Group[platform.Windowed]
-	natives  map[*platform.Window]*native
-	sound    *audiodevice.Output
+	// preferences are the World's, kept as the system's: appearance and
+	// languages as last read, asked the time it was last polled.
+	preferences world.Group[platform.Preferred]
+	appearance  platform.Appearance
+	languages   []string
+	asked       time.Time
+	natives     map[*platform.Window]*native
+	sound       *audiodevice.Output
 	// primary is the primary window's native, nil while the World has no
 	// window; last is when the frame before began.
 	primary *native
@@ -632,9 +639,7 @@ func (d *driver) run() error {
 			break
 		}
 		d.framing = true
-		for _, n := range d.natives {
-			n.syncTitleBar()
-		}
+		d.syncSystem()
 		in := d.input()
 		if in != nil {
 			pollGamepads(in, devices(d.scripted, joysticks))

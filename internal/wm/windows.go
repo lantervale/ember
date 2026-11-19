@@ -149,19 +149,30 @@ func Input(w *world.World) *input.State {
 // Plugin answers the windows asked to close and begins every window's
 // input frame before any other system runs, so a World run by RunFrames
 // or Tick sees what tests and backends set, and emits the pads that
-// connected and disconnected and the touches that began, moved and
-// lifted.
+// connected and disconnected, the touches that began, moved and lifted,
+// and the system's preferences that changed.
 type Plugin struct{}
 
 func (Plugin) Build(w *world.World) { w.AddSystems(&inputFrames{}) }
 
-type inputFrames struct{}
+type inputFrames struct {
+	preferences world.Group[platform.Preferred]
+}
 
 func (*inputFrames) Phase() world.Phase { return world.PreUpdate }
 func (*inputFrames) Priority() int      { return math.MaxInt }
 
-func (*inputFrames) Update(f world.Frame) {
+func (s *inputFrames) Update(f world.Frame) {
 	Closing(f.World)
+	for e := range s.preferences.All() {
+		p := e.GetPreferences()
+		if a, changed := p.TakeAppearance(); changed {
+			world.Emit(f.World, platform.AppearanceChanged{Appearance: a})
+		}
+		if l, changed := p.TakeLanguages(); changed {
+			world.Emit(f.World, platform.LanguagesChanged{Languages: l})
+		}
+	}
 	for _, e := range of(f.World).open {
 		in := e.GetWindow().Input()
 		feed := inputfeed.Of(in)

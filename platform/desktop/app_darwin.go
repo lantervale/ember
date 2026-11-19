@@ -64,8 +64,12 @@ import "C"
 
 // watchApp notes what the system asks of the program itself, not of a
 // window: to quit (the menu's Quit, the Dock's) and to show itself again
-// (a click on its Dock icon while it shows no window).
-func watchApp() { C.emberWatchApp() }
+// (a click on its Dock icon while it shows no window), and what the user
+// changes of their preferences.
+func watchApp() {
+	C.emberWatchApp()
+	watchPreferences()
+}
 
 // appQuitRequested reports, once, that the system asked the program to
 // quit since it was last read.
