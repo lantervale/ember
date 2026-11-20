@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/css"
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // MatchedRules is what the cascade found for the element n at the last
@@ -25,9 +26,11 @@ func (d *Document) MatchedRules(n *Node) []css.Match {
 // parent's where it inherits, the initial value otherwise. Keywords,
 // colours and percentages stay as written: what layout made of them is
 // in BoxesOf. As MatchedRules, it is for tools, and costs the cascade
-// of n and of its ancestors.
+// of n and of its ancestors. A change of n or of an element above it
+// since the last frame, a class on the root redefining a custom
+// property, is seen at once, as a browser's getComputedStyle sees it.
 func (d *Document) ComputedStyle(n *Node) []css.Property {
-	d.take()
+	d.restyleFor(n)
 	return d.trans.Computed(n)
 }
 
@@ -35,8 +38,21 @@ func (d *Document) ComputedStyle(n *Node) []css.Property {
 // is no longhand of the subset or custom property of n. A property that
 // does not inherit costs the cascade of n alone.
 func (d *Document) ComputedValue(n *Node, name string) (string, bool) {
-	d.take()
+	d.restyleFor(n)
 	return d.trans.ComputedValue(n, name)
+}
+
+// restyleFor works the styles out again before the frame does when n,
+// or an element above it, which n inherits from, changed since they last
+// were.
+func (d *Document) restyleFor(n *Node) {
+	d.take()
+	for a := n; a != nil; a = a.Parent() {
+		if dom.Data(a).Dirty&(dom.DirtyStyle|dom.DirtyTree|dom.DirtyState) != 0 {
+			d.style()
+			return
+		}
+	}
 }
 
 // Boxes are the four boxes of an element, each inside the one before.
