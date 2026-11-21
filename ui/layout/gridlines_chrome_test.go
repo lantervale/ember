@@ -24,7 +24,8 @@ func TestGridLineNamesLayOutAsInChrome(t *testing.T) {
 .page > * { min-width: 0 }`
 	cases := map[string]*ui.Document{
 		"a full-bleed page": styled(page+`
-.page { grid-template-columns: [full-start] minmax(1rem, 1fr) [content-start] minmax(0, 20rem) [content-end] minmax(1rem, 1fr) [full-end] }
+.page { grid-template-columns: [full-start] minmax(1rem, 1fr) [content-start] minmax(0, 20rem)
+	[content-end] minmax(1rem, 1fr) [full-end] }
 .page > * { grid-column: content } .page > .full { grid-column: full }`,
 			grid("a", "full", "b", "c")),
 		"names in repeat(), by number and by span": styled(page+`
@@ -54,7 +55,8 @@ func TestGridLineNamesLayOutAsInChrome(t *testing.T) {
 		"lines named by nothing": styled(page+`
 .page { grid-template-columns: 100px 100px; grid-template-areas: 'a b c' }
 .i { grid-column-end: nope; grid-row: 2 } .j { grid-area: nowhere } .k { grid-column: nope 2; grid-row: 3 }
-.l { grid-column: span nope / 2; grid-row: 4 } .m { grid-row: x -2; grid-column: 1 } .n { grid-column: 1 / span nope 2; grid-row: 5 }
+.l { grid-column: span nope / 2; grid-row: 4 } .m { grid-row: x -2; grid-column: 1 }
+.n { grid-column: 1 / span nope 2; grid-row: 5 }
 .o { grid-column: -1; grid-row: 6 } .p { grid-column: c; grid-row: 7 }`,
 			grid("i", "j", "k", "l", "m", "n", "o", "p")),
 		"the shorthand with names": styled(page+`
