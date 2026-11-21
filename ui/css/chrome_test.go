@@ -488,7 +488,7 @@ var everything = func() map[string]func(s *style.Computed) string {
 		"overflow-wrap": func(s *style.Computed) string {
 			return map[bool]string{true: "break-word", false: "normal"}[s.BreakWord]
 		},
-		"background-image":           func(s *style.Computed) string { return image(s.BackgroundImage.Source) },
+		"background-image":           func(s *style.Computed) string { return image(s.BackgroundLayer(0).Image.Source) },
 		"border-right-color":         func(s *style.Computed) string { return rgb(s.BorderColor.Right) },
 		"border-bottom-color":        func(s *style.Computed) string { return rgb(s.BorderColor.Bottom) },
 		"border-bottom-width":        func(s *style.Computed) string { return px(s.Border.Bottom) },
@@ -906,18 +906,14 @@ textarea::placeholder { color: rebeccapurple; }
 	}
 	for i, n := range got {
 		s := dom.Data(n).Style
-		repeat := "repeat"
-		if s.BackgroundNoRepeat {
-			repeat = "no-repeat"
-		}
 		selection := ""
 		if s.HasSelection {
 			selection = rgb(s.SelectionColor)
 		}
-		ours := [6]string{repeat,
-			positionCSS(s.BackgroundPosition.X, s.BackgroundPosition.FromRight),
-			positionCSS(s.BackgroundPosition.Y, s.BackgroundPosition.FromBottom),
-			image(s.BackgroundImage.Source), rgb(s.PlaceholderColor), selection}
+		ours := [6]string{repeatCSS(s.BackgroundLayer(0).Repeat),
+			positionCSS(s.BackgroundLayer(0).Position.X, s.BackgroundLayer(0).Position.FromRight),
+			positionCSS(s.BackgroundLayer(0).Position.Y, s.BackgroundLayer(0).Position.FromBottom),
+			image(s.BackgroundLayer(0).Image.Source), rgb(s.PlaceholderColor), selection}
 		w := want[i]
 		if !s.HasPlaceholder || n.Tag() != dom.Input && n.Tag() != dom.Textarea {
 			ours[4], w[4] = "", ""

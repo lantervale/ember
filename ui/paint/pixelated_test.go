@@ -34,12 +34,14 @@ func TestAPixelatedPictureGivesTiesToTheUpperLeftTexel(t *testing.T) {
 	require.Len(t, imgs, 1)
 	assert.Equal(t, nudged, imgs[0].UV, "a pixelated img")
 
-	bg := pictures(withImage(40, 40, func(s *style.Computed) { s.ImageRendering = style.RenderPixelated })).of("image")
+	bg := pictures(withImage(40, 40, func(s *style.Computed, _ *style.BackgroundLayer) {
+		s.ImageRendering = style.RenderPixelated
+	})).of("image")
 	require.Len(t, bg, 1)
 	assert.Equal(t, nudged, bg[0].UV, "a pixelated background")
 
-	tiled := pictures(withImage(40, 40, func(s *style.Computed) {
-		s.ImageRendering, s.BackgroundNoRepeat = style.RenderPixelated, false
+	tiled := pictures(withImage(40, 40, func(s *style.Computed, l *style.BackgroundLayer) {
+		s.ImageRendering, l.Repeat = style.RenderPixelated, style.BackgroundRepeat{}
 	})).of("image")
 	require.NotEmpty(t, tiled)
 	for _, tile := range tiled {

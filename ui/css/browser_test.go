@@ -191,7 +191,7 @@ func TestASheetResolvesItsURLsFromItsAddress(t *testing.T) {
 		}
 		p := el(dom.P, "p")
 		Compute(page(p), []*Sheet{s})
-		return styleOf(p).BackgroundImage.Source
+		return styleOf(p).BackgroundLayer(0).Image.Source
 	}
 	from := From("https://lantervale.example/css/site/main.css")
 	for ref, want := range map[string]string{
@@ -221,7 +221,7 @@ func TestASheetResolvesItsURLsFromItsAddress(t *testing.T) {
 	p := el(dom.P, "p")
 	p.SetStyle("background-image: url(door.png)")
 	Compute(page(p), []*Sheet{s})
-	if got := styleOf(p).BackgroundImage.Source; got != "door.png" {
+	if got := styleOf(p).BackgroundLayer(0).Image.Source; got != "door.png" {
 		t.Errorf("a style attribute's url is the page's to resolve: %s", got)
 	}
 }

@@ -13,7 +13,7 @@ func gradientOf(t *testing.T, decl string) *style.Gradient {
 	t.Helper()
 	d := el(dom.Div, "g")
 	Compute(page(d), []*Sheet{sheet(t, "#g { "+decl+" }")})
-	g := styleOf(d).BackgroundImage.Gradient
+	g := styleOf(d).BackgroundLayer(0).Image.Gradient
 	require.NotNil(t, g, decl)
 	return g
 }

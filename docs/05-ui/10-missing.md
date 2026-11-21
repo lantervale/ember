@@ -75,10 +75,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| several background layers | one: in the `background` shorthand the first with a picture, over the last one's colour; in a longhand the list is refused |
-| `background-clip: text`, `background-repeat: space` and `round` | refused |
+| `background-clip: text` | refused |
 | `background-attachment: fixed` on an element under a transform | placed in the viewport, where Chrome places it in the element |
-| a scaled picture's tile seams | each tile keeps its own edge, where Chrome blends across: about a pixel row |
+| a scaled picture's tile seams, the gaps of `background-repeat: space` | each tile keeps its own edge, where Chrome blends across: about a pixel row; a gap of a fraction of a pixel is a whole pixel or none, where Chrome blends it |
 | a `border-image` from an SVG on a dense screen | rasterised at one pixel a point, so blurred |
 | a canvas picture in a Document without `ui.ScrollingViewport()` | placed in the window, where Chrome places it in `html`'s box |
 

@@ -643,7 +643,7 @@ func TestBackgroundPosition(t *testing.T) {
 	for src, want := range cases {
 		d := el(dom.Div, "d")
 		Compute(page(d), []*Sheet{sheet(t, "#d { background-position: "+src+" }")})
-		if got := styleOf(d).BackgroundPosition; got != want {
+		if got := styleOf(d).BackgroundLayer(0).Position; got != want {
 			t.Errorf("%s: got %+v, want %+v", src, got, want)
 		}
 	}
@@ -658,15 +658,15 @@ func TestSelectArrowAndRelativeURLs(t *testing.T) {
 	s, b := el(dom.Select, "s"), el(dom.Div, "b")
 	s2, _ := Parse("ui/theme/tool.css", "#b { background: url(img/panel.png) no-repeat }")
 	Compute(page(s, b), []*Sheet{s2})
-	st := styleOf(s)
-	if st.BackgroundImage.Source != "ember:select-arrow" || !st.BackgroundNoRepeat || !st.BackgroundPosition.FromRight {
-		t.Errorf("select: %+v %v %+v", st.BackgroundImage, st.BackgroundNoRepeat, st.BackgroundPosition)
+	l := styleOf(s).BackgroundLayer(0)
+	if l.Image.Source != "ember:select-arrow" || l.Repeat != style.NoRepeat || !l.Position.FromRight {
+		t.Errorf("select: %+v %v %+v", l.Image, l.Repeat, l.Position)
 	}
 	if _, ok := DefaultImages()["ember:select-arrow"]; !ok {
 		t.Error("the arrow's PNG")
 	}
-	if src := styleOf(b).BackgroundImage.Source; src != "ui/theme/img/panel.png" || !styleOf(b).BackgroundNoRepeat {
-		t.Errorf("relative to the sheet: %q", src)
+	if l = styleOf(b).BackgroundLayer(0); l.Image.Source != "ui/theme/img/panel.png" || l.Repeat != style.NoRepeat {
+		t.Errorf("relative to the sheet: %q", l.Image.Source)
 	}
 }
 
@@ -913,14 +913,14 @@ func TestBackgroundSize(t *testing.T) {
 	for src, want := range cases {
 		d := el(dom.Div, "d")
 		Compute(page(d), []*Sheet{sheet(t, "#d { background-size: "+src+" }")})
-		if got := styleOf(d).BackgroundSize; got != want {
+		if got := styleOf(d).BackgroundLayer(0).Size; got != want {
 			t.Errorf("%s: got %+v, want %+v", src, got, want)
 		}
 	}
 	plain, kid := el(dom.Div, "p"), el(dom.Div, "k")
 	plain.Append(kid)
 	Compute(page(plain), []*Sheet{sheet(t, "#p { background-size: cover } #k { background-size: inherit }")})
-	if got := styleOf(kid).BackgroundSize; got != (style.BackgroundSize{Scale: style.ScaleCover}) {
+	if got := styleOf(kid).BackgroundLayer(0).Size; got != (style.BackgroundSize{Scale: style.ScaleCover}) {
 		t.Errorf("inherit: got %+v", got)
 	}
 	for _, bad := range []string{"cover contain", "cover 10px", "10px cover", "-1px", "10px -5%", "1px 2px 3px", "fill",
@@ -935,12 +935,12 @@ func TestTheBackgroundShorthandSetsAndResetsTheSize(t *testing.T) {
 	cover, reset := el(dom.Div, "c"), el(dom.Div, "r")
 	Compute(page(cover, reset), []*Sheet{sheet(t, `#c { background: url(a.png) no-repeat center / cover }
 #r { background-size: 10px; background: url(a.png) }`)})
-	st := styleOf(cover)
-	if st.BackgroundSize != (style.BackgroundSize{Scale: style.ScaleCover}) || !st.BackgroundNoRepeat ||
-		st.BackgroundPosition != (style.BackgroundPosition{X: pct(50), Y: pct(50)}) {
-		t.Errorf("center / cover: %+v %v %+v", st.BackgroundSize, st.BackgroundNoRepeat, st.BackgroundPosition)
+	l := styleOf(cover).BackgroundLayer(0)
+	if l.Size != (style.BackgroundSize{Scale: style.ScaleCover}) || l.Repeat != style.NoRepeat ||
+		l.Position != (style.BackgroundPosition{X: pct(50), Y: pct(50)}) {
+		t.Errorf("center / cover: %+v %v %+v", l.Size, l.Repeat, l.Position)
 	}
-	if got := styleOf(reset).BackgroundSize; got != (style.BackgroundSize{}) {
+	if got := styleOf(reset).BackgroundLayer(0).Size; got != (style.BackgroundSize{}) {
 		t.Errorf("the shorthand resets background-size: got %+v", got)
 	}
 }

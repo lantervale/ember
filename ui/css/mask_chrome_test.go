@@ -28,6 +28,21 @@ func sizeCSS(s style.BackgroundSize) string {
 	return lengthCSS(s.Width) + " " + lengthCSS(s.Height)
 }
 
+// repeatCSS is a background-repeat as Chrome computes it: one word when
+// it says both axes, two otherwise.
+func repeatCSS(r style.BackgroundRepeat) string {
+	words := [...]string{"repeat", "no-repeat", "space", "round"}
+	switch {
+	case r.X == r.Y:
+		return words[r.X]
+	case r.X == style.TileRepeat && r.Y == style.TileNoRepeat:
+		return "repeat-x"
+	case r.X == style.TileNoRepeat && r.Y == style.TileRepeat:
+		return "repeat-y"
+	}
+	return words[r.X] + " " + words[r.Y]
+}
+
 func TestMasksComputeAsInChrome(t *testing.T) {
 	fsys := fstest.MapFS{"m.css": {Data: []byte(`
 div { width: 20px; height: 20px; background-color: #36c; }
@@ -56,16 +71,7 @@ div { width: 20px; height: 20px; background-color: #36c; }
 	d.Layout(geom.V2(800, 600))
 	for i, n := range d.Body().Children() {
 		s := dom.Data(n).Style
-		repeat := "repeat"
-		switch {
-		case s.MaskNoRepeat:
-			repeat = "no-repeat"
-		case s.MaskRepeat == style.RepeatX:
-			repeat = "repeat-x"
-		case s.MaskRepeat == style.RepeatY:
-			repeat = "repeat-y"
-		}
-		ours := [4]string{image(s.MaskImage.Source), sizeCSS(s.MaskSize), repeat,
+		ours := [4]string{image(s.MaskImage.Source), sizeCSS(s.MaskSize), repeatCSS(s.MaskRepeat),
 			positionCSS(s.MaskPosition.X, s.MaskPosition.FromRight) + " " +
 				positionCSS(s.MaskPosition.Y, s.MaskPosition.FromBottom)}
 		for k := range ours {

@@ -378,13 +378,13 @@ var checks = map[string]check{
 	"user-select":       single(words("auto", "text", "none", "all")),
 
 	"background-color":      single(colorTerm),
-	"background-image":      single(either(words("none"), imageTerm)),
-	"background-repeat":     checkTiling,
-	"background-attachment": single(words("scroll", "fixed", "local")),
-	"background-origin":     single(backgroundBox),
-	"background-clip":       single(backgroundBox),
-	"background-size":       checkBackgroundSize,
-	"background-position":   checkPosition,
+	"background-image":      commaList(single(either(words("none"), imageTerm))),
+	"background-repeat":     commaList(checkTiling),
+	"background-attachment": commaList(single(words("scroll", "fixed", "local"))),
+	"background-origin":     commaList(single(backgroundBox)),
+	"background-clip":       commaList(single(backgroundBox)),
+	"background-size":       commaList(checkBackgroundSize),
+	"background-position":   commaList(checkPosition),
 	"mask-image":            checkMaskImage,
 	"mask-repeat":           single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
 	"mask-size":             checkBackgroundSize,
@@ -985,16 +985,16 @@ func checkTextShadow(v []Component) error {
 	})(v)
 }
 
-// checkTiling is background-repeat: one word, or one for across and one
-// for down.
+// checkTiling is a layer of background-repeat: one word, or one for
+// across and one for down.
 func checkTiling(v []Component) error {
 	if across, down, ok := pair(v); ok {
 		return cmp.Or(repeatAxis(across), repeatAxis(down))
 	}
-	return single(words("repeat", "no-repeat", "repeat-x", "repeat-y"))(v)
+	return single(words("repeat", "no-repeat", "repeat-x", "repeat-y", "space", "round"))(v)
 }
 
-func repeatAxis(c Component) error { return words("repeat", "no-repeat")(c) }
+func repeatAxis(c Component) error { return words("repeat", "no-repeat", "space", "round")(c) }
 
 func backgroundBox(c Component) error { return words("border-box", "padding-box", "content-box")(c) }
 

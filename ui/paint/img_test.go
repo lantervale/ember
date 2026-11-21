@@ -106,7 +106,7 @@ func TestPixelatedPicturesSampleTheirNearestPixels(t *testing.T) {
 }
 
 func TestABackgroundImageIsPixelatedToo(t *testing.T) {
-	bg := withImage(40, 40, func(s *style.Computed) { s.ImageRendering = style.RenderPixelated })
+	bg := withImage(40, 40, func(s *style.Computed, _ *style.BackgroundLayer) { s.ImageRendering = style.RenderPixelated })
 	assert.Equal(t, render.FilterNearest, pictures(bg).of("image")[0].Tex.Filter)
 }
 

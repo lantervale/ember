@@ -82,7 +82,7 @@ func TestNaNIsEqualOnlyWhereDeepEqualSaysSo(t *testing.T) {
 	inSlice := style.Initial()
 	inSlice.Shadows = []style.Shadow{{X: nan}}
 	behindPointer := style.Initial()
-	behindPointer.BackgroundImage.Gradient = &style.Gradient{Angle: nan}
+	behindPointer.BackgroundImages = []style.Image{{Gradient: &style.Gradient{Angle: nan}}}
 	inViewport := style.Initial()
 	inViewport.Viewport = &style.Computed{Look: style.Look{Opacity: nan}}
 	for name, s := range map[string]*style.Computed{

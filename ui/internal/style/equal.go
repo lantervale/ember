@@ -148,17 +148,15 @@ func (c *Content) equal(o *Content) bool {
 //nolint:cyclop,gocyclo // one comparison a field
 func (l *Look) equal(o *Look) bool {
 	return l.Background == o.Background &&
-		l.BackgroundImage.equal(&o.BackgroundImage) &&
-		l.BackgroundSize == o.BackgroundSize &&
-		l.BackgroundNoRepeat == o.BackgroundNoRepeat &&
-		l.BackgroundRepeat == o.BackgroundRepeat &&
-		l.BackgroundPosition == o.BackgroundPosition &&
-		l.BackgroundAttachment == o.BackgroundAttachment &&
-		l.BackgroundOrigin == o.BackgroundOrigin &&
-		l.BackgroundClip == o.BackgroundClip &&
+		sameSliceFunc(l.BackgroundImages, o.BackgroundImages, (*Image).equal) &&
+		sameSlice(l.BackgroundSizes, o.BackgroundSizes) &&
+		sameSlice(l.BackgroundRepeats, o.BackgroundRepeats) &&
+		sameSlice(l.BackgroundPositions, o.BackgroundPositions) &&
+		sameSlice(l.BackgroundAttachments, o.BackgroundAttachments) &&
+		sameSlice(l.BackgroundOrigins, o.BackgroundOrigins) &&
+		sameSlice(l.BackgroundClips, o.BackgroundClips) &&
 		l.MaskImage.equal(&o.MaskImage) &&
 		l.MaskSize == o.MaskSize &&
-		l.MaskNoRepeat == o.MaskNoRepeat &&
 		l.MaskRepeat == o.MaskRepeat &&
 		l.MaskPosition == o.MaskPosition &&
 		l.ImageRendering == o.ImageRendering &&

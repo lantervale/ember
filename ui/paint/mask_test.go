@@ -26,7 +26,7 @@ func masked(w, h float32, edit func(s *style.Computed)) *box.Box {
 
 func TestAMaskImageIsTheShapeOfTheBackgroundColour(t *testing.T) {
 	r := pictures(masked(20, 20, func(s *style.Computed) {
-		s.MaskNoRepeat = true
+		s.MaskRepeat = style.NoRepeat
 		s.MaskPosition = style.BackgroundPosition{X: style.Percent(50), Y: style.Percent(50)}
 	}))
 	assert.Empty(t, r.of("rect"), "the box is not filled")

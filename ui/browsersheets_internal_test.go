@@ -82,9 +82,9 @@ func TestASheetsURLIsFetchedFromTheSheetsAddress(t *testing.T) {
 
 	assert.Equal(t, "https://cdn.test/site/css/main.css", d.Sheets()[0].From())
 	assert.Empty(t, d.Sheets()[1].From())
-	wall := dom.Data(d.Body()).Style.BackgroundImage.Source
+	wall := dom.Data(d.Body()).Style.BackgroundLayer(0).Image.Source
 	assert.Equal(t, "https://cdn.test/site/img/wall.png", wall, "resolved from the sheet's address")
-	assert.Equal(t, "inline.png", dom.Data(p).Style.BackgroundImage.Source,
+	assert.Equal(t, "inline.png", dom.Data(p).Style.BackgroundLayer(0).Image.Source,
 		"a style attribute's is the page's to resolve")
 	d.image(wall)
 	d.fetching.Wait()
