@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -32,10 +33,11 @@ type candidates struct {
 	t     *testing.T
 	dir   string
 	names map[string]string
+	paths map[string]string
 }
 
 func newCandidates(t *testing.T) *candidates {
-	return &candidates{t: t, dir: t.TempDir(), names: map[string]string{}}
+	return &candidates{t: t, dir: t.TempDir(), names: map[string]string{}, paths: map[string]string{}}
 }
 
 // png is the address of a picture of the img, w pixels wide and half as
@@ -54,7 +56,8 @@ func (c *candidates) png(img string, w int) string {
 func (c *candidates) file(name string, data []byte) string {
 	path := filepath.Join(c.dir, name)
 	require.NoError(c.t, os.WriteFile(path, data, 0o600))
-	url := "file://" + filepath.ToSlash(path)
+	url := (&neturl.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(filepath.ToSlash(path), "/")}).String()
+	c.paths[url] = path
 	c.names[url] = name
 	return url
 }
@@ -63,7 +66,7 @@ func (c *candidates) file(name string, data []byte) string {
 // held.
 func (c *candidates) inline(img string, w int) string {
 	url := c.png(img, w)
-	data, err := os.ReadFile(strings.TrimPrefix(url, "file://"))
+	data, err := os.ReadFile(c.paths[url])
 	require.NoError(c.t, err)
 	inline := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 	c.names[inline] = c.names[url]
@@ -71,7 +74,7 @@ func (c *candidates) inline(img string, w int) string {
 }
 
 func (c *candidates) fetch(url string) ([]byte, error) {
-	return os.ReadFile(strings.TrimPrefix(url, "file://"))
+	return os.ReadFile(c.paths[url])
 }
 
 func TestAnImgChoosesThePictureChromeChoosesAndShowsItAtItsDensity(t *testing.T) {
