@@ -120,6 +120,22 @@ func TestStatesTravelForChrome(t *testing.T) {
 	assert.Contains(t, got, `:is(:focus, [data-ember-focus])`)
 }
 
+func TestTheTargetTheFocusWithinAndTheLanguageTravelForChrome(t *testing.T) {
+	sheet := "form:focus-within p, :target { color: #f00; }"
+	fsys := fstest.MapFS{"a.css": {Data: []byte(sheet)}}
+	d := ui.NewDocument(ui.Stylesheet(fsys, "a.css"), ui.Language("fr-BE"))
+	h := ui.H2(ui.Text("x"))
+	f := ui.Form(h)
+	d.Body().Append(f)
+	d.SetTarget(h)
+	f.SetState(dom.FocusWithin, true)
+	got := written(t, d)
+	assert.Contains(t, got, `<form data-ember-focus-within="">`)
+	assert.Contains(t, got, `<h2 data-ember-target="">`)
+	assert.Contains(t, got, `form:is(:focus-within, [data-ember-focus-within]) p, :is(:target, [data-ember-target])`)
+	assert.Contains(t, got, `<meta http-equiv="content-language" content="fr-BE">`)
+}
+
 func TestAnImgSourceTravelsAsADataURL(t *testing.T) {
 	png := css.DefaultImages()["ember:select-arrow"]
 	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"s.css": {Data: []byte("")}, "tile.png": {Data: png}}, "s.css"))

@@ -97,7 +97,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `filter`, `clip-path` | refused |
 | a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
 | the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
-| `:has()`, `:focus-within`, `:lang()`, `:empty`, `:target`, `:read-only`, `:read-write`, the `s` flag of an attribute selector | refused: the rule is dropped |
+| a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |
+| the values of `type`, `lang`, `rel` and HTML's other enumerated attributes compared whatever the case (`[type=TEXT]` matching `type="text"`), as Chrome does | compared as written |
+| `:dir()`, `:indeterminate`, `:placeholder-shown`, `:default`, `:valid`, `:invalid`, `:required`, `:optional`, `:in-range`, `:out-of-range` | refused: the rule is dropped |
 | `min()`, `max()`, `clamp()` over a percentage in `line-height`, `word-spacing`, `vertical-align`, a gradient's stop, or longer than 16 steps | worked out as if the percentage were of nothing |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `clamp()` with `none`, `round()`, `mod()`, `rem()`, `abs()`, `sign()` and the other math functions, `cqw` and the container units | refused |

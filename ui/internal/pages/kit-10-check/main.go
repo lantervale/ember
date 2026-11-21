@@ -45,7 +45,8 @@ func main() {
 			case dom.Focus | dom.FocusVisible:
 				pages.Pin(d, kit.CheckBox(c), s.state)
 			// States this page pins on the check itself.
-			case dom.Focus, dom.FocusVisible, dom.Active, dom.Disabled, dom.Checked, dom.Open, dom.Modal:
+			case dom.Focus, dom.FocusVisible, dom.Active, dom.Disabled, dom.Checked, dom.Open, dom.Modal, dom.FocusWithin,
+				dom.Target, dom.Empty:
 			}
 		}
 	}

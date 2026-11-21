@@ -158,3 +158,37 @@ func TestColsGivenToATableGoInAColgroup(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, Colgroup, tag)
 }
+
+func TestAnElementKeepsWhetherItIsEmpty(t *testing.T) {
+	div, span := NewElement(Div), NewElement(Span)
+	assert.True(t, div.State().Has(Empty))
+	text := NewText("")
+	div.Append(text)
+	assert.True(t, div.State().Has(Empty), "empty text leaves it empty")
+	clean(div)
+	text.SetText("x")
+	assert.False(t, div.State().Has(Empty))
+	assert.Equal(t, DirtyState|DirtyDescendant, Data(div).Dirty, "a state css reads, with no style of its own to redo")
+	div.Remove(text)
+	assert.True(t, div.State().Has(Empty))
+	div.Append(span)
+	assert.False(t, div.State().Has(Empty))
+	div.SetText("")
+	assert.True(t, div.State().Has(Empty))
+}
+
+func TestTheRootKeepsTheLanguageAndWhatCssMustRedo(t *testing.T) {
+	root, kid := NewElement(HTML), NewElement(Body)
+	root.Append(kid)
+	clean(root)
+	Data(root).Changed = nil
+	SetLanguage(root, "fr")
+	assert.Equal(t, "fr", Data(root).Language)
+	assert.Equal(t, DirtyStyle|DirtyTree, Data(root).Dirty)
+	assert.Equal(t, []string{"[lang"}, Data(root).Changed)
+	clean(root)
+	Invalidate(kid, ":has")
+	assert.Equal(t, DirtyStyle|DirtyTree, Data(kid).Dirty)
+	assert.Equal(t, DirtyDescendant, Data(root).Dirty)
+	assert.Contains(t, Data(kid).Changed, ":has")
+}

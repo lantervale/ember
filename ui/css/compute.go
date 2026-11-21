@@ -104,6 +104,13 @@ type restyler struct {
 	// change of what an element reads there (movesSiblings) or of its
 	// parent's children restyles the elements after it and their subtrees.
 	siblings bool
+	// anchors is set when some selector has a :has(), and hasBeside when
+	// one reads after the element it is on: a change below or after an
+	// element then flags it before the tree is visited (anchor).
+	// hasStates are the states the :has() read, and empty is set when
+	// some selector reads :empty, whose change on an element restyles it.
+	anchors, hasBeside, empty bool
+	hasStates                 dom.State
 	// computed counts the elements whose style was worked out.
 	computed *int
 	// la and lb are scratch styles for comparing what layout or
@@ -142,6 +149,10 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.siblings = r.siblings || x.siblings
 		r.treeStates |= x.aboveStates
 		r.besideStates |= x.besideStates
+		r.anchors = r.anchors || len(x.has) > 0
+		r.hasBeside = r.hasBeside || slices.ContainsFunc(x.has, func(h hasRead) bool { return h.beside })
+		r.hasStates |= x.hasStates
+		r.empty = r.empty || x.empty
 	}
 	if r.env == nil {
 		r.env = &measures{}
@@ -149,6 +160,8 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	r.env.root = root
 	if stale {
 		r.env.used = 0
+	} else if r.anchors && dom.Data(root).Style != nil {
+		r.anchor(root)
 	}
 	r.visit(root, nil, 0, stale, stale)
 	r.count(root)
@@ -178,11 +191,12 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 		return data.Dirty&dom.DirtyLayout != 0
 	}
 	dirty := data.Dirty
+	moved := movedStates(n)
 	inherits := false
-	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) {
+	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) ||
+		r.empty && moved&dom.Empty != 0 {
 		inherits = r.restyle(n, data, parent, rem)
 	}
-	moved := movedStates(n)
 	data.StyledState = n.State()
 	data.Dirty &^= dom.DirtyStyle | dom.DirtyTree | dom.DirtyState
 	if parent == nil {
@@ -1993,6 +2007,88 @@ func (r *restyler) reaches(n *dom.Node, moved dom.State, beside bool) {
 			}
 		}
 	}
+}
+
+// anchor flags, before the tree under n is styled, the elements whose
+// :has() a change may turn: round an element whose class, id, attribute
+// or state some :has() reads changed, and round one whose children
+// changed (flagAround). An element never styled is left with what is
+// under it: it is styled whole, and its parent's children changed.
+func (r *restyler) anchor(n *dom.Node) {
+	data := dom.Data(n)
+	if data.Style == nil {
+		return
+	}
+	tree := data.Dirty&dom.DirtyTree != 0
+	if tree && slices.Contains(data.Changed, dom.Children) {
+		r.flagAround(n, true)
+	}
+	if movedStates(n)&r.hasStates != 0 || tree && slices.ContainsFunc(data.Changed, r.readInHas) {
+		r.flagAround(n, false)
+	}
+	if data.Dirty&dom.DirtyDescendant == 0 {
+		return
+	}
+	for _, c := range n.Children() {
+		if !c.IsText() {
+			r.anchor(c)
+		}
+	}
+}
+
+// flagAround flags for their :has() the ancestors of e, and when some
+// :has() reads after its element, the elements before e and before each
+// ancestor; when e's children changed (kids), e itself too, and its
+// children.
+func (r *restyler) flagAround(e *dom.Node, kids bool) {
+	if kids {
+		r.flag(e, false)
+		if r.hasBeside {
+			for _, c := range e.Children() {
+				if !c.IsText() {
+					r.flag(c, true)
+				}
+			}
+		}
+	}
+	for x := e; x != nil; x = x.Parent() {
+		if x != e {
+			r.flag(x, false)
+		}
+		if r.hasBeside {
+			for _, b := range elementsBefore(x) {
+				if !b.IsText() {
+					r.flag(b, true)
+				}
+			}
+		}
+	}
+}
+
+// flag has a restyled for its :has() when a has what one reading below
+// it (beside unset), or after it, is on, in a rule no @media rule has
+// off.
+func (r *restyler) flag(a *dom.Node, beside bool) {
+	for si, s := range r.sheets {
+		var off []bool
+		if r.m.off != nil {
+			off = r.m.off[si]
+		}
+		x := s.indexed()
+		for i := range x.has {
+			h := &x.has[i]
+			if h.beside == beside && (off == nil || !off[h.rule]) && h.names(a) {
+				dom.Invalidate(a, ":has")
+				return
+			}
+		}
+	}
+}
+
+// readInHas reports whether some :has() reads the class, id or attribute
+// a dom.Pipeline.Changed key names.
+func (r *restyler) readInHas(key string) bool {
+	return slices.ContainsFunc(r.sheets, func(s *Sheet) bool { return s.indexed().hasKeys[key] })
 }
 
 // reached reports whether n may be the subject of a selector in r.reach.

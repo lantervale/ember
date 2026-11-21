@@ -81,8 +81,11 @@ type interaction struct {
 	// pointerAt is where the pointer was this frame, in the Document's
 	// space.
 	pointerAt geom.Vec2
-	// stated are the elements states() gave a pointer or focus state.
+	// stated are the elements states() gave a pointer or focus state, and
+	// within those the focus is in, its own and its ancestors.
 	stated   []*Node
+	within   []*Node
+	fragment *Node
 	platform textedit.Platform
 	events   []any
 	// scrolls are the scroll containers' thumb drags, and dragging the
@@ -194,6 +197,22 @@ func (d *Document) ScrollIntoView(n *Node) { d.pendingReveal, d.revealStart = n,
 // by its nearest edge. It waits for an element not laid out yet as
 // ScrollIntoView does, and the last of the two asked in a frame is done.
 func (d *Document) ScrollToStart(n *Node) { d.pendingReveal, d.revealStart = n, true }
+
+// SetTarget makes n the Document's target, the element :target matches,
+// as a browser does the one a fragment names (nil for none); it scrolls
+// nothing, which ScrollToStart does.
+func (d *Document) SetTarget(n *Node) {
+	if d.fragment != nil {
+		d.fragment.SetState(dom.Target, false)
+	}
+	d.fragment = n
+	if n != nil {
+		n.SetState(dom.Target, true)
+	}
+}
+
+// Target is the element SetTarget last made the Document's target.
+func (d *Document) Target() *Node { return d.fragment }
 
 // Scroll is how far n's content is scrolled, in the Document's own points,
 // before its zoom: the viewport's for the root element (HTML) of a
@@ -1406,18 +1425,30 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 // states sets each element's hover, active and focus pseudo-classes. While
 // another owns d's window (a modal of another Document), d's focused
 // element keeps the focus but matches neither :focus nor :focus-visible
-// (decision 0073).
+// (decision 0073), nor its ancestors :focus-within. An iframe holding
+// the focus of its Document holds the page's, so the elements round it
+// match :focus-within as in Chrome.
 //
 // Only the elements that held a state last frame or hold one now can
 // change, so it visits those rather than the tree.
 func (d *Document) states() {
 	focused, takes := d.focused(), d.takes()
+	d.within = d.within[:0]
+	for n, held := range d.pinned {
+		if held&dom.Focus != 0 {
+			d.within = ancestry(d.within, n)
+		}
+	}
+	if focused != nil && takes {
+		d.within = ancestry(d.within, focused)
+	}
 	set := func(n *Node) {
 		held := d.pinned[n]
 		n.SetState(dom.Hover, contains(d.hovered, n) || held&dom.Hover != 0)
 		n.SetState(dom.Active, contains(d.pressed, n) || held&dom.Active != 0)
 		n.SetState(dom.Focus, n == focused && takes || held&dom.Focus != 0)
 		n.SetState(dom.FocusVisible, n == focused && takes && d.focus.Active() || held&dom.FocusVisible != 0)
+		n.SetState(dom.FocusWithin, contains(d.within, n) || held&dom.FocusWithin != 0)
 	}
 	for _, n := range d.stated {
 		set(n)
@@ -1439,7 +1470,20 @@ func (d *Document) states() {
 	for n := range d.pinned {
 		add(n)
 	}
+	for _, n := range d.within {
+		add(n)
+	}
 	d.pin()
+}
+
+// ancestry is to with n and its ancestors added, those not in it yet.
+func ancestry(to []*Node, n *Node) []*Node {
+	for ; n != nil; n = n.Parent() {
+		if !contains(to, n) {
+			to = append(to, n)
+		}
+	}
+	return to
 }
 
 // pin sets the pseudo-classes a test page pinned on its nodes.

@@ -33,7 +33,7 @@ type Node struct {
 
 // NewElement is an element of tag with no attributes or children.
 func NewElement(tag Tag) *Node {
-	return &Node{tag: tag, pipe: Pipeline{Dirty: DirtyStyle}}
+	return &Node{tag: tag, state: Empty, pipe: Pipeline{Dirty: DirtyStyle}}
 }
 
 // NewText is a text node.
@@ -130,8 +130,12 @@ func (n *Node) Walk(fn func(*Node) bool) {
 func (n *Node) SetText(s string) {
 	if n.tag == TextTag {
 		if n.text != s {
+			flips := (n.text == "") != (s == "")
 			n.text = s
 			n.mark(DirtyLayout)
+			if flips && n.parent != nil {
+				n.parent.settle()
+			}
 		}
 		return
 	}
@@ -274,6 +278,7 @@ func (n *Node) Append(children ...*Node) {
 	}
 	n.changed(Children)
 	n.mark(DirtyTree | DirtyLayout)
+	n.settle()
 }
 
 // impliedIn is the element HTML's parser puts between a parent and a
@@ -302,7 +307,37 @@ func (n *Node) Remove(c *Node) {
 		c.parent, c.pipe.Placed = nil, nil
 		n.changed(Children)
 		n.mark(DirtyTree | DirtyLayout)
+		n.settle()
 	}
+}
+
+// settle keeps Empty in n's state as its children have it, flagging n
+// DirtyState alone when that changes: its own style is redone only where
+// a selector reads :empty.
+func (n *Node) settle() {
+	empty := !slices.ContainsFunc(n.children, func(c *Node) bool { return c.tag != TextTag || c.text != "" })
+	if empty != n.state.Has(Empty) {
+		n.state ^= Empty
+		n.mark(DirtyState)
+	}
+}
+
+// SetLanguage sets the language of the Document whose root is root, what
+// :lang() reads where no lang attribute names one (HTTP's
+// Content-Language); css restyles what reads it.
+func SetLanguage(root *Node, lang string) {
+	if root.pipe.Language != lang {
+		root.pipe.Language = lang
+		root.changed("[lang")
+		root.mark(DirtyStyle | DirtyTree)
+	}
+}
+
+// Invalidate has css restyle n for a change elsewhere that a selector
+// reads on it, noted in Changed as key.
+func Invalidate(n *Node, key string) {
+	n.changed(key)
+	n.mark(DirtyStyle | DirtyTree)
 }
 
 // changed notes keys among what changed for css, once each.

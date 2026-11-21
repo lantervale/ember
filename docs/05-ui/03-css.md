@@ -17,11 +17,16 @@ The presentational attributes of old pages style their element as Chrome reads t
 | Selectors | |
 |---|---|
 | `div`, `.class`, `#id`, `[attr]`, `[attr="value"]` | simple |
-| `[attr~="word"]`, `[attr\|="en"]`, `[attr^="start"]`, `[attr$="end"]`, `[attr*="part"]`, each with the `i` flag | an attribute's value by a word, a prefix before a hyphen, its start, its end, a part; `i` compares whatever the case |
+| `[attr~="word"]`, `[attr\|="en"]`, `[attr^="start"]`, `[attr$="end"]`, `[attr*="part"]`, each with the `i` flag | an attribute's value by a word, a prefix before a hyphen, its start, its end, a part; `i` compares whatever the case. The `s` flag drops the rule, as Chrome drops it |
 | `a b`, `a > b`, `a + b`, `a ~ b` | descendant, child, the next sibling, a later sibling |
 | `:hover`, `:focus`, `:focus-visible`, `:active`, `:disabled`, `:enabled`, `:checked`, `:open` | states; `:enabled` and `:disabled` match controls only |
-| `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:root` | structure |
+| `:focus-within` | the focused element and its ancestors; an iframe holding its Document's focus holds the page's, so the elements round it match too |
+| `:target` | the element `doc.SetTarget(n)` made the Document's target, as a browser does the one a fragment names; `ScrollToStart` scrolls to it |
+| `:read-write`, `:read-only` | a text field (an `input` typed in, a `textarea`) neither `readonly` nor disabled, or an element a `contenteditable` on it or above it makes editable; `:read-only` is every other element |
+| `:lang(en)` | the `lang` attribute of the element or of the nearest one above it, else the Document's language (`ui.Language(tag)`, `doc.SetLanguage`, a page's Content-Language): that range or it followed by a hyphen, whatever the case. As in Chrome, one identifier only, no list and no string, both tags well formed, and a `*` matches nothing |
+| `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:root`, `:empty` | structure; `:empty` is an element with no element in it and no text but empty text (a space is text, as in Chrome) |
 | `:not()`, `:is()`, `:where()` | a list of selectors: `:is()` and `:not()` weigh as their most specific one, `:where()` nothing; a selector `:is()` or `:where()` cannot read is left out of its list, as in Chrome |
+| `:has()` | relative selectors from the element: `.card:has(img)`, `li:has(> a)`, `h2:has(+ p)`, `:has(~ .x)`, weighing as their most specific one. As in Chrome, a `:has()` in another, a pseudo-element or an empty one drops the rule; a change below or after an element restyles it where its `:has()` reads what changed (decision [0113](../99-decisions/0113-has-flags-its-anchors-before-the-cascade.md)) |
 | `:link`, `:any-link`, `:visited` | an element with an `href`; nothing is visited, ui keeping no history, so a `:visited` rule is kept and matches nothing |
 | `::before`, `::after`, `::marker`, `::placeholder`, `::selection`, `::backdrop` | pseudo-elements, last in their selector: `li:nth-child(2)::before`, `a:hover::after` ([below](#pseudo-elements)) |
 

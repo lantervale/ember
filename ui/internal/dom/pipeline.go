@@ -70,6 +70,8 @@ type Pipeline struct {
 	// Counts is set on the root once something in its tree counts: css
 	// then keeps the counters of the whole tree.
 	Counts bool
+	// Language is the root's: the Document's language (SetLanguage).
+	Language string
 	// Marker is the style of a list item's ::marker when a rule styles it,
 	// and MarkerText its content when that is not normal (HasMarkerText).
 	Marker        *style.Computed

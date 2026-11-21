@@ -81,6 +81,70 @@ type index struct {
 	// aboveStates those read above one and besideStates before one.
 	reads                     []stateRead
 	aboveStates, besideStates dom.State
+	// has are the selectors' :has() pseudo-classes, hasKeys the classes,
+	// ids and attributes their selectors read, keyed as
+	// dom.Pipeline.Changed, and hasStates the states: a change of one
+	// below or after an element can turn that element's :has().
+	has       []hasRead
+	hasKeys   map[string]bool
+	hasStates dom.State
+	// empty is set once a selector reads :empty.
+	empty bool
+}
+
+// hasRead is a :has() of a rule: an element having what on names may
+// match it or stop matching after a change below it, or after it when
+// beside.
+type hasRead struct {
+	on     []*Compound
+	beside bool
+	rule   int
+}
+
+// names reports whether e has what the compounds holding the :has() name.
+func (r *hasRead) names(e *dom.Node) bool {
+	return !slices.ContainsFunc(r.on, func(c *Compound) bool { return !c.names(e) })
+}
+
+// inheritedAttrs are the attributes whose value an element's descendants read
+// as their own, keyed as dom.Pipeline.Changed: the pseudo-classes reading
+// them read them above their subject.
+//
+//nolint:gochecknoglobals // lookup table
+var inheritedAttrs = map[string]bool{"[lang": true, "[contenteditable": true}
+
+// indexHas notes in x what the :has() pseudo-classes of sel, a selector of
+// the rule ri, read, and what its other pseudo-classes read away from the
+// element they are on.
+func (x *index) indexHas(sel Selector, ri int) {
+	sel.hasReads(func(on []*Compound, rels []Selector, away, beside bool) {
+		switch {
+		case away && beside:
+			x.beside[":has"], x.siblings = true, true
+		case away:
+			x.above[":has"] = true
+		}
+		for _, r := range rels {
+			x.has = append(x.has, hasRead{on: on, beside: r.Combinators[0].sibling(), rule: ri})
+			r.walk(func(c *Compound) {
+				c.keys(func(k string) { x.hasKeys[k] = true })
+				for i := range c.pseudos {
+					x.hasStates |= c.pseudos[i].reads()
+				}
+			})
+		}
+	})
+	sel.walk(func(c *Compound) {
+		for i := range c.pseudos {
+			p := &c.pseudos[i]
+			x.empty = x.empty || p.kind == pseudoState && p.state&dom.Empty != 0
+			for _, k := range p.attrs() {
+				if inheritedAttrs[k] {
+					x.above[k] = true
+				}
+			}
+		}
+	})
 }
 
 type entry struct {
@@ -89,11 +153,13 @@ type entry struct {
 
 func (s *Sheet) indexed() *index {
 	s.once.Do(func() {
-		x := &index{pseudos: map[string]*buckets{}, above: map[string]bool{}, beside: map[string]bool{}}
+		x := &index{pseudos: map[string]*buckets{}, above: map[string]bool{}, beside: map[string]bool{},
+			hasKeys: map[string]bool{}}
 		for ri, r := range s.Rules {
 			for si, sel := range r.Selectors {
 				e := entry{ri, si}
 				sel.aboveKeys(func(k string) { x.above[k] = true })
+				x.indexHas(sel, ri)
 				if sel.siblings() {
 					x.siblings = true
 					sel.besideKeys(func(k string) { x.beside[k] = true })
