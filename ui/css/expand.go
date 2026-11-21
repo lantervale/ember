@@ -270,6 +270,9 @@ func expandGridLines(long []string, v []Component, out map[string][]Component) e
 	}
 	if len(parts) == 1 {
 		out[long[1]] = []Component{word("auto")}
+		if lineName(parts[0]) {
+			out[long[1]] = parts[0]
+		}
 	}
 	return nil
 }

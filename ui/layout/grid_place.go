@@ -42,10 +42,6 @@ func toOriginZero(g style.GridLine, explicit int) ozPlacement {
 	return ozPlacement{}
 }
 
-func placementOf(lines [2]style.GridLine, explicit int) ozLines {
-	return ozLines{toOriginZero(lines[0], explicit), toOriginZero(lines[1], explicit)}
-}
-
 func (p ozLines) isDefinite() bool { return p.start.kind == placeLine || p.end.kind == placeLine }
 
 func (p ozLines) indefiniteSpan() int {

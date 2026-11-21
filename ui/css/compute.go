@@ -1746,18 +1746,25 @@ func tiling(get func(*style.Computed) (*bool, *style.RepeatAxes)) prop {
 }
 
 func gridLine(_ *ctx, v []Component) style.GridLine {
-	for i, c := range v {
-		if isWord(c, "span") {
-			return style.GridLine{Span: int(v[1-i].Num)}
+	var g style.GridLine
+	span, n := false, 0
+	for _, c := range v {
+		switch {
+		case isWord(c, "auto"):
+		case isWord(c, "span"):
+			span = true
+		case c.Kind == Ident:
+			g.Name = c.Text
+		default:
+			n = int(c.Num)
 		}
 	}
-	if isWord(v[0], "auto") {
-		return style.GridLine{}
+	if span {
+		g.Span = max(n, 1)
+	} else {
+		g.Line = n
 	}
-	if lineName(v) {
-		return style.GridLine{Name: v[0].Text}
-	}
-	return style.GridLine{Line: int(v[0].Num)}
+	return g
 }
 
 //nolint:gochecknoglobals,goconst // lookup table
@@ -1826,23 +1833,51 @@ func (x *ctx) tracks(v []Component) []style.TrackRepeat {
 		return nil
 	}
 	var out []style.TrackRepeat
+	var before []string
 	for _, c := range v {
-		if c.Kind != Function || !strings.EqualFold(c.Text, "repeat") {
-			out = append(out, style.TrackRepeat{Count: 1, Tracks: []style.Track{x.track(c)}})
+		switch {
+		case c.Kind == LBracket:
+			before = lineNames(c)
+			continue
+		case c.Kind != Function || !strings.EqualFold(c.Text, "repeat"):
+			out = append(out, style.TrackRepeat{Count: 1, Tracks: []style.Track{x.track(c)}, Before: before})
+			before = nil
 			continue
 		}
 		args := items(c.Args)
-		r := style.TrackRepeat{Count: int(args[0].Num)}
+		r := style.TrackRepeat{Count: int(args[0].Num), Before: before}
+		before = nil
 		switch {
 		case isWord(args[0], "auto-fill"):
 			r.Count = style.AutoFill
 		case isWord(args[0], "auto-fit"):
 			r.Count = style.AutoFit
 		}
+		var names []string
+		named := false
 		for _, t := range args[2:] {
+			if t.Kind == LBracket {
+				names, named = lineNames(t), true
+				continue
+			}
+			r.Names = append(r.Names, names)
 			r.Tracks = append(r.Tracks, x.track(t))
+			names = nil
+		}
+		if r.Names = append(r.Names, names); !named {
+			r.Names = nil
 		}
 		out = append(out, r)
+	}
+	out[len(out)-1].After = before
+	return out
+}
+
+// lineNames are the names in a bracket, nil for none.
+func lineNames(c Component) []string {
+	var out []string
+	for _, n := range items(c.Args) {
+		out = append(out, n.Text)
 	}
 	return out
 }

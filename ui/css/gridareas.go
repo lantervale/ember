@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/style"
@@ -82,9 +83,9 @@ func templateAreas(_ *ctx, v []Component) []style.GridArea {
 	return areas
 }
 
-// lineName reports a grid line given as a name: an area's.
+// lineName reports a grid line given as a name alone.
 func lineName(v []Component) bool {
-	return len(v) == 1 && v[0].Kind == Ident && !isWord(v[0], "auto", "span", "inherit", "initial", kwUnset)
+	return len(v) == 1 && gridIdent(v[0])
 }
 
 // expandGridArea reads grid-area's row-start / column-start / row-end /
@@ -146,25 +147,55 @@ func expandGridTemplate(v []Component, out map[string][]Component) error {
 }
 
 // templateRows cuts the rows of a grid-template written as strings into
-// its areas and each row's height, auto for a string no height follows.
+// its areas and its row tracks: each row's height, auto for a string no
+// height follows, between the names of their lines, those after a row and
+// before the next on one line.
 func templateRows(rows []Component) ([]Component, []Component, error) {
-	var areas, heights []Component
-	for i := 0; i < len(rows); i++ {
-		if rows[i].Kind != String {
-			return nil, nil, fmt.Errorf("expected a string a row, found %q", rows[i].String())
+	var areas, tracks []Component
+	var after *Component
+	for i := 0; i < len(rows); {
+		names := after
+		after = nil
+		if rows[i].Kind == LBracket {
+			names = joinNames(names, rows[i])
+			i++
+		}
+		if i == len(rows) || rows[i].Kind != String {
+			return nil, nil, fmt.Errorf("expected a string a row, its height and the names of its lines")
 		}
 		areas = append(areas, rows[i])
-		if i+1 < len(rows) && rows[i+1].Kind != String {
+		i++
+		height := word("auto")
+		if i < len(rows) && rows[i].Kind != String && rows[i].Kind != LBracket {
+			height = rows[i]
 			i++
-			heights = append(heights, rows[i])
-		} else {
-			heights = append(heights, word("auto"))
 		}
+		if i < len(rows) && rows[i].Kind == LBracket {
+			after = &rows[i]
+			i++
+		}
+		if names != nil {
+			tracks = append(tracks, *names)
+		}
+		tracks = append(tracks, height)
+	}
+	if after != nil {
+		tracks = append(tracks, *after)
 	}
 	if err := checkTemplateAreas(areas); err != nil {
 		return nil, nil, err
 	}
-	return areas, heights, nil
+	return areas, tracks, nil
+}
+
+// joinNames is the bracket of the names of a and b, b alone when a is nil.
+func joinNames(a *Component, b Component) *Component {
+	if a == nil {
+		return &b
+	}
+	joined := *a
+	joined.Args = append(slices.Clone(a.Args), b.Args...)
+	return &joined
 }
 
 func containsString(v []Component) bool {

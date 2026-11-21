@@ -280,15 +280,21 @@ const (
 )
 
 // TrackList entry: Tracks repeated Count times (1 for no repeat()), or
-// AutoFill/AutoFit.
+// AutoFill/AutoFit. Before names the line before the entry and After the
+// line after it (the list's last entry's only); Names, when a repeat()
+// names any, are the names of the lines round its Tracks, one more than
+// them, its last and first meeting on one line between two repetitions.
 type TrackRepeat struct {
-	Count  int
-	Tracks []Track
+	Count         int
+	Tracks        []Track
+	Names         [][]string
+	Before, After []string
 }
 
 // GridLine is one end of a placement: auto, a line number (negative from
-// the end), a span, or the name of an area of the container's, whose
-// edge on that side it is.
+// the end), a span, the Line-th line (from the end when negative) or a
+// span to the Span-th line of a Name, or a Name alone: the line Name-start
+// or Name-end on that side, else the first line of that name.
 type GridLine struct {
 	Line int
 	Span int
@@ -303,28 +309,6 @@ func (g GridLine) IsAuto() bool { return g.Line == 0 && g.Span == 0 && g.Name ==
 type GridArea struct {
 	Name        string
 	Row, Column [2]int
-}
-
-// AreaLines is lines with each named one as a line number: the edge of
-// the area of that name among areas, auto when there is none.
-func AreaLines(areas []GridArea, lines [2]GridLine, column bool) [2]GridLine {
-	for i, l := range lines {
-		if l.Name == "" {
-			continue
-		}
-		lines[i] = GridLine{}
-		for _, a := range areas {
-			if a.Name != l.Name {
-				continue
-			}
-			if column {
-				lines[i].Line = a.Column[i]
-			} else {
-				lines[i].Line = a.Row[i]
-			}
-		}
-	}
-	return lines
 }
 
 type GridFlow uint8
