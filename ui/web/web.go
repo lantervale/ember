@@ -1,7 +1,8 @@
-// Package web gets a Document's pictures and fonts over HTTP: a fetcher
-// for ui.FetchImages, so a url() background or an img's src can name a
-// picture on the web, and one for ui.FetchFonts, so an @font-face can
-// name a font there. Importing it lets ui read JPEG, GIF, WebP, ICO
+// Package web gets a Document's pictures, fonts and imported sheets
+// over HTTP: a fetcher for ui.FetchImages, so a url() background or an
+// img's src can name a picture on the web, one for ui.FetchFonts, so an
+// @font-face can name a font there, and one for ui.FetchSheets, so an
+// @import can name a sheet there. Importing it lets ui read JPEG, GIF, WebP, ICO
 // and BMP pictures beside PNG (a WebP that is an animation is none, an
 // ICO shows its largest picture); an SVG is asked for too and handed
 // over as it is, for a Document to draw once ui/svg is imported.
@@ -14,6 +15,7 @@ import (
 	_ "image/gif" // the pictures of the web, beside ui's PNG
 	_ "image/jpeg"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"time"
@@ -71,7 +73,26 @@ const MaxFontBytes = 16 << 20
 func Fonts(base string) ui.FontFetcher {
 	f := newFetcher(base)
 	return func(ref, _ string) ([]byte, error) {
-		return f.fetch(ref, "font/woff2, font/woff, font/ttf, font/otf, */*;q=0.1", MaxFontBytes, "font")
+		return f.fetch(ref, "", "font/woff2, font/woff, font/ttf, font/otf, */*;q=0.1", MaxFontBytes, "font")
+	}
+}
+
+// MaxSheetBytes is the largest sheet Sheets reads; a larger one is an
+// error.
+const MaxSheetBytes = 8 << 20
+
+// Sheets is a fetcher for ui.FetchSheets that gets the sheets of a
+// page's @import rules with an HTTP GET, as Images gets its pictures:
+// an http or https address as it is, anything else as a reference from
+// base, the importing sheet's address as the referrer. The import of a
+// sheet that says where it came from (ui.From) arrives here in full. As
+// Chrome, it takes a sheet served as text/css or as no type: another
+// type is an error, as are an answer that isn't a success, a sheet over
+// MaxSheetBytes, and every fetch when base is no http or https address.
+func Sheets(base string) ui.SheetFetcher {
+	f := newFetcher(base)
+	return func(ref, sheet string) ([]byte, error) {
+		return f.fetch(ref, sheet, "text/css,*/*;q=0.1", MaxSheetBytes, "sheet")
 	}
 }
 
@@ -92,12 +113,14 @@ const pictures = "image/png, image/jpeg, image/gif, image/webp, image/svg+xml, "
 	"image/x-icon, image/vnd.microsoft.icon, image/bmp"
 
 func (f *fetcher) get(ref string) ([]byte, error) {
-	return f.fetch(ref, pictures, MaxBytes, "picture")
+	return f.fetch(ref, "", pictures, MaxBytes, "picture")
 }
 
-// fetch gets what ref names from base, asking for accept: the body of
-// a successful answer, no larger than limit.
-func (f *fetcher) fetch(ref, accept string, limit int64, what string) ([]byte, error) {
+// fetch gets what ref names from base, asking for accept with referrer
+// as the Referer when it says one: the body of a successful answer, no
+// larger than limit, and for a sheet one served as text/css or as no
+// type.
+func (f *fetcher) fetch(ref, referrer, accept string, limit int64, what string) ([]byte, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -113,6 +136,9 @@ func (f *fetcher) fetch(ref, accept string, limit int64, what string) ([]byte, e
 		return nil, err
 	}
 	req.Header.Set("Accept", accept)
+	if referrer != "" {
+		req.Header.Set("Referer", referrer)
+	}
 	resp, err := f.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -120,6 +146,11 @@ func (f *fetcher) fetch(ref, accept string, limit int64, what string) ([]byte, e
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("web: %s", resp.Status)
+	}
+	if what == "sheet" {
+		if kind, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); kind != "text/css" && kind != "" {
+			return nil, fmt.Errorf("web: the sheet is %s, not text/css", kind)
+		}
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {

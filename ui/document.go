@@ -69,8 +69,10 @@ type Document struct {
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
-	trans     *css.Transitions
-	emoji     *twod.EmojiSet
+	// pageSheets are the sheets its @import rules name (FetchSheets).
+	pageSheets pageSheets
+	trans      *css.Transitions
+	emoji      *twod.EmojiSet
 	// clock is the World's real time at the last Draw, -1 before it.
 	clock float32
 	// systemFonts is whether font-family names the machine's fonts
@@ -241,7 +243,7 @@ func Stylesheet(fsys fs.FS, name string) DocumentOption {
 		}
 		d.addFontFaces(s.FontFaces(), fsys)
 		text, _ := fs.ReadFile(fsys, name)
-		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: string(text), name: name})
+		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: string(text), name: name, fsys: fsys})
 		d.resheet = true
 		d.files = append(d.files, fsys)
 	})
@@ -340,6 +342,7 @@ func (d *Document) Body() *Node { return d.body }
 func (d *Document) Layout(size geom.Vec2) {
 	d.landImages()
 	d.landFonts()
+	d.landSheets()
 	if d.relayout && d.trans.FontsChanged() {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}

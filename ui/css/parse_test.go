@@ -58,7 +58,6 @@ func TestParseWarnings(t *testing.T) {
 		{"p {\n  colour: red;\n}", `t.css:2:3: unknown property "colour"`},
 		{"p { -webkit-transform: none }", `t.css:1:5: vendor-prefixed property "-webkit-transform" is not supported`},
 		{"p { word-wrap: break-word }", `t.css:1:5: word-wrap is the old name of overflow-wrap`},
-		{"@import url(a.css);", `t.css:1:1: @import is not supported`},
 		{"@supports (display: grid) { p { color: #f00 } }", `t.css:1:1: @supports is not supported`},
 		{"@layer base { p { color: #f00 } }", `t.css:1:1: @layer is not supported`},
 		{"@-moz-document url-prefix() { p { color: #f00 } }", `t.css:1:1: @-moz-document is not supported`},

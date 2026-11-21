@@ -98,6 +98,7 @@ func Join(name, media string, sheets []*Sheet) (*Sheet, []Warning) {
 		if at == 0 {
 			out.browser, out.from, out.origin = s.browser, s.from, s.origin
 		}
+		named := len(out.layers)
 		layers := make([]int, len(s.layers))
 		for i, full := range s.layers {
 			full = strings.ReplaceAll(full, anonymous, fmt.Sprint(anonymous, at, "-"))
@@ -109,6 +110,23 @@ func Join(name, media string, sheets []*Sheet) (*Sheet, []Warning) {
 		}
 		base := len(out.media)
 		out.media = append(out.media, s.media...)
+		for _, imp := range s.imports {
+			media := slices.Clone(within)
+			for _, m := range imp.media {
+				media = append(media, base+m)
+			}
+			imp.media = media
+			if imp.layer > 0 {
+				imp.layer = layers[imp.layer-1]
+			}
+			if imp.layers > 0 {
+				imp.layers = slices.Max(layers[:imp.layers])
+			} else {
+				imp.layers = named
+			}
+			imp.rules += len(out.Rules)
+			out.imports = append(out.imports, imp)
+		}
 		for _, r := range s.Rules {
 			if len(r.media) > 0 || within != nil {
 				moved := make([]int, 0, len(within)+len(r.media))
