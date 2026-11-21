@@ -122,6 +122,9 @@ func TestAMediaQueryFollowsTheViewport(t *testing.T) {
 		{"(resolution >= 50dpcm)", Media{Width: 300, Height: 700, Resolution: 2}, true},
 		{"(prefers-color-scheme: light)", Media{}, true},
 		{"(prefers-color-scheme: dark)", Media{}, false},
+		{"(prefers-reduced-motion: reduce)", Media{ReducedMotion: true}, true},
+		{"(prefers-reduced-motion)", Media{ReducedMotion: true}, true},
+		{"(prefers-reduced-motion: no-preference)", Media{ReducedMotion: true}, false},
 	} {
 		if got, warns := holds(c.query, c.m); got != c.want || warns != "" {
 			t.Errorf("@media %s at %+v: %v, want %v %s", c.query, c.m, got, c.want, warns)

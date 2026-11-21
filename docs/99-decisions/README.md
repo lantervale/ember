@@ -117,6 +117,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0111 | [A program scrolls a Document by an element](0111-a-program-scrolls-a-document-by-an-element.md) | api |
 | 0112 | [Imported sheets are fetched, and spliced where the import stands](0112-imported-sheets-are-fetched-and-spliced-where-the-import-stands.md) | api |
 | 0113 | [:has() flags its anchors before the cascade](0113-has-flags-its-anchors-before-the-cascade.md) | api |
+| 0114 | [Animations run on transitions' clock, over the cascade](0114-animations-run-on-transitions-clock-over-the-cascade.md) | rendering |
 | 0115 | [An img chooses its picture as Chrome does](0115-an-img-chooses-its-picture-as-chrome-does.md) | api |
 | 0117 | [A background keeps each longhand's list and paints its layers one by one](0117-a-background-keeps-each-longhands-list-and-paints-its-layers-one-by-one.md) | rendering |
 

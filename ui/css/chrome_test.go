@@ -850,6 +850,63 @@ div.x.on { transform: scale(2, 1.5) skewX(20deg) translate(30px, -6px); }
 	matchChromeShown(t, d, shownProps, 2, script, then, func(n *dom.Node) *style.Computed { return dom.Data(n).Shown })
 }
 
+func TestAnimationsMatchChrome(t *testing.T) {
+	src := `
+@keyframes fade { from { opacity: 0 } }
+@keyframes slide { from { transform: translateX(-40px); opacity: 0 } to { transform: none } }
+@keyframes spin { to { transform: rotate(360deg) } }
+@keyframes pulse { 0%, 100% { background-color: #102030 } 50% { background-color: #f0e0d0;
+  animation-timing-function: steps(3, end) } }
+@keyframes grow { from { width: 0 } to { width: 160px } }
+@keyframes flip { from { text-align: right; z-index: 5 } 60% { visibility: hidden } to { text-align: center } }
+@keyframes ink { to { color: #fff; border-color: #f00 } }
+@keyframes shift { 30% { transform: translate(2em, 1px) scale(1.5) } }
+div { width: 100px; height: 10px; position: relative; color: #000; background-color: #fff;
+  border: 1px solid; font-size: 10px; }
+.a { animation: fade 1s ease-out forwards }
+.b { animation: slide 0.8s cubic-bezier(0.2, 0.7, 0.4, 1) 0.2s both }
+.c { animation: spin 1s linear infinite }
+.d { animation: pulse 2s ease-in-out infinite alternate }
+.e { animation: grow 1.6s linear -0.3s 2 reverse }
+.f { animation: flip 2s linear forwards }
+.g { animation: ink 1s linear 0.5s 1.5 alternate-reverse backwards }
+.h { opacity: 0.5 !important; animation: fade 1s linear }
+.i { animation: fade 1s linear paused, spin 2s linear }
+.j { animation: shift 1.2s ease-in-out infinite }
+`
+	props := map[string]func(*style.Computed) string{
+		"opacity":          compared["opacity"],
+		"color":            compared["color"],
+		"background-color": compared["background-color"],
+		"border-top-color": compared["border-top-color"],
+		"text-align":       compared["text-align"],
+		"z-index":          compared["z-index"],
+		"visibility":       compared["visibility"],
+		"width":            everything["width"],
+		"transform":        func(s *style.Computed) string { return matrixCSS(s.Transform) },
+	}
+	for _, at := range []float32{0.1, 0.35, 0.9, 1.7, 3.1} {
+		t.Run(fmt.Sprint(at), func(t *testing.T) {
+			d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"a.css": {Data: []byte(src)}}, "a.css"))
+			for _, c := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"} {
+				d.Body().Append(ui.Div(ui.Class(c), ui.Span(ui.Text(c))))
+			}
+			tr := css.NewTransitions()
+			tr.Compute(d.HTML(), d.Sheets())
+			script := fmt.Sprintf(`document.getAnimations().forEach(a => {
+	const paused = a.playState === "paused";
+	a.pause();
+	if (!paused) a.currentTime = %v;
+});`, at*1000)
+			then := func() {
+				tr.Step(at)
+				tr.Compute(d.HTML(), d.Sheets())
+			}
+			matchChromeShown(t, d, props, 2, script, then, func(n *dom.Node) *style.Computed { return dom.Data(n).Shown })
+		})
+	}
+}
+
 // positionCSS is a background-position axis as Chrome computes it: an offset from the end
 // edge is calc(100% - offset).
 func positionCSS(l style.Length, fromEnd bool) string {

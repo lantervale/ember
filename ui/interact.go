@@ -459,6 +459,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 	}
 	d.states()
 	d.syncControls()
+	d.animationEvents()
 	changed := dom.Data(d.html).Dirty != 0
 	if w := c.World(); w != nil {
 		// A callback may raise events of its own (a back closing a
@@ -513,6 +514,14 @@ func emit(w *world.World, e any) {
 	case SelectionChanged:
 		world.Emit(w, e)
 	case RightDragSelected:
+		world.Emit(w, e)
+	case AnimationStarted:
+		world.Emit(w, e)
+	case AnimationIterated:
+		world.Emit(w, e)
+	case AnimationEnded:
+		world.Emit(w, e)
+	case AnimationCanceled:
 		world.Emit(w, e)
 	}
 }

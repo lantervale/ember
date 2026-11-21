@@ -35,8 +35,16 @@ func (r *restyler) generated(n *dom.Node, parent *style.Computed, rem float32, n
 	if casc.longhands[orderIndex["content"]] == nil {
 		return nil
 	}
+	r.overKeyframe(casc)
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, overlay: r.overlay, node: n}
+	g := dom.Data(n).Before
+	if name == "after" {
+		g = dom.Data(n).After
+	}
+	if g != nil && r.over != nil {
+		x.over = r.over(g)
+	}
 	x.cascaded(casc, false)
 	if r.browser && casc.longhands[orderIndex["box-sizing"]] == nil {
 		// The browser sheet's * rule, which sizes elements by their content,
@@ -76,7 +84,7 @@ func (r *restyler) keep(n *dom.Node, data *dom.Pipeline, slot **dom.Node, p dom.
 	changed := old == nil || !old.Equal(st)
 	if changed {
 		gd.Style = st
-		if r.changed != nil && old != nil {
+		if r.changed != nil {
 			r.changed(g, old, st)
 		} else {
 			setShown(g, st)

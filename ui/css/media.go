@@ -9,11 +9,13 @@ import (
 // Media is what @media rules are answered for: the viewport's size in
 // CSS pixels and the device pixels per CSS pixel, 1 when 0. The rest is
 // fixed: a colour screen in a light scheme with a mouse, and no
-// preference for less motion or more contrast. ui knows no screen, so
-// the device-* features are the viewport's.
+// preference for more contrast. ui knows no screen, so the device-*
+// features are the viewport's. ReducedMotion answers
+// prefers-reduced-motion: reduce.
 type Media struct {
 	Width, Height float32
 	Resolution    float32
+	ReducedMotion bool
 }
 
 func (m Media) dppx() float64 {
@@ -166,7 +168,12 @@ var mediaSpecs = map[string]*mediaSpec{
 	}},
 	"prefers-color-scheme": {kind: mediaWord, words: []string{"light", "dark"}, word: fixedWord("light")},
 	"prefers-reduced-motion": {kind: mediaWord, words: []string{mediaNoPreference, "reduce"},
-		word: fixedWord(mediaNoPreference), off: mediaNoPreference},
+		word: func(m Media) string {
+			if m.ReducedMotion {
+				return "reduce"
+			}
+			return mediaNoPreference
+		}, off: mediaNoPreference},
 	"prefers-contrast": {kind: mediaWord, words: []string{mediaNoPreference, "more", "less", "custom"},
 		word: fixedWord(mediaNoPreference), off: mediaNoPreference},
 	"forced-colors": {kind: mediaWord, words: []string{mediaNone, "active"}, word: fixedWord(mediaNone),

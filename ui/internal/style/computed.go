@@ -628,6 +628,37 @@ type Transition struct {
 	Easing          string
 }
 
+// Animation is one entry of the animation list: the @keyframes it runs,
+// in seconds, Iterations +Inf for infinite.
+type Animation struct {
+	Name            string
+	Duration, Delay float32
+	Easing          string
+	Iterations      float32
+	Direction       AnimationDirection
+	Fill            AnimationFill
+	Paused          bool
+}
+
+type AnimationDirection uint8
+
+const (
+	AnimateNormal AnimationDirection = iota
+	AnimateReverse
+	AnimateAlternate
+	AnimateAlternateReverse
+)
+
+// AnimationFill is animation-fill-mode.
+type AnimationFill uint8
+
+const (
+	FillNone AnimationFill = iota
+	FillForwards
+	FillBackwards
+	FillBoth
+)
+
 type Look struct {
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
@@ -702,6 +733,7 @@ type Look struct {
 	Transform       []TransformOp
 	TransformOrigin Size[Length]
 	Transitions     []Transition
+	Animations      []Animation
 }
 
 type TransformKind uint8

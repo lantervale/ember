@@ -86,9 +86,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | an `@import` inserted with `InsertRule` after other rules | followed, where Chrome refuses the insertion |
-| `@keyframes`, `animation` | refused: `transition` |
+| an animated property outside colours, `opacity`, `transform`, `box-shadow` and the box's lengths (`font-size`, `letter-spacing`, `border-radius`, `background-position`, `border-width`…) | flips halfway, where Chrome interpolates |
+| `animation-composition`, `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
 | `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
-| `prefers-color-scheme`, `hover`, `pointer`, `prefers-reduced-motion` | fixed answers: light, a mouse, no preference |
+| `prefers-color-scheme`, `hover`, `pointer` | fixed answers: light, a mouse |
+| `prefers-reduced-motion` from the system | the program sets it: `ui.ReducedMotion()` |
 | viewport units in a media query's length | refused |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
 | `filter`, `clip-path` | refused |

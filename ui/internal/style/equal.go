@@ -185,7 +185,8 @@ func (l *Look) equal(o *Look) bool {
 		l.UserSelect == o.UserSelect &&
 		sameSlice(l.Transform, o.Transform) &&
 		l.TransformOrigin == o.TransformOrigin &&
-		sameSlice(l.Transitions, o.Transitions)
+		sameSlice(l.Transitions, o.Transitions) &&
+		sameSlice(l.Animations, o.Animations)
 }
 
 func (i *Image) equal(o *Image) bool {

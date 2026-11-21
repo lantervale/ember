@@ -38,6 +38,10 @@ const (
 	EventDragEnd
 	EventSelectionChange
 	EventRightDragSelect
+	EventAnimationStart
+	EventAnimationIteration
+	EventAnimationEnd
+	EventAnimationCancel
 )
 
 // Event is what a callback is told: the event's type and element, and
@@ -67,6 +71,11 @@ type Event struct {
 	// whether a target took the element's drag (DragEnd).
 	Dragged *Node
 	Dropped bool
+	// Animation is the @keyframes name of an animation event, and
+	// Elapsed its time then (AnimationStart, AnimationIteration,
+	// AnimationEnd, AnimationCancel).
+	Animation string
+	Elapsed   float32
 
 	// stopped is where StopPropagation tells the dispatch to go no higher.
 	stopped *bool
@@ -160,6 +169,18 @@ func OnResize[F Handler](fn F) Arg { return on(EventResize, fn) }
 
 // OnFold runs fn after each WindowFolded of the window.
 func OnFold[F Handler](fn F) Arg { return on(EventFold, fn) }
+
+// OnAnimationStart runs fn after each AnimationStarted of the element.
+func OnAnimationStart[F Handler](fn F) Arg { return on(EventAnimationStart, fn) }
+
+// OnAnimationIteration runs fn after each AnimationIterated of the element.
+func OnAnimationIteration[F Handler](fn F) Arg { return on(EventAnimationIteration, fn) }
+
+// OnAnimationEnd runs fn after each AnimationEnded of the element.
+func OnAnimationEnd[F Handler](fn F) Arg { return on(EventAnimationEnd, fn) }
+
+// OnAnimationCancel runs fn after each AnimationCanceled of the element.
+func OnAnimationCancel[F Handler](fn F) Arg { return on(EventAnimationCancel, fn) }
 
 // On adds fn to n's callbacks for t, after those it has, and returns what
 // removes it again.
@@ -318,6 +339,14 @@ func eventOf(raw any) (Event, bool) {
 		return Event{Type: EventSelectionChange, Node: e.Node}, true
 	case RightDragSelected:
 		return Event{Type: EventRightDragSelect, Node: e.Node}, true
+	case AnimationStarted:
+		return Event{Type: EventAnimationStart, Node: e.Node, Animation: e.Name, Elapsed: e.Elapsed}, true
+	case AnimationIterated:
+		return Event{Type: EventAnimationIteration, Node: e.Node, Animation: e.Name, Elapsed: e.Elapsed}, true
+	case AnimationEnded:
+		return Event{Type: EventAnimationEnd, Node: e.Node, Animation: e.Name, Elapsed: e.Elapsed}, true
+	case AnimationCanceled:
+		return Event{Type: EventAnimationCancel, Node: e.Node, Animation: e.Name, Elapsed: e.Elapsed}, true
 	}
 	return Event{}, false
 }

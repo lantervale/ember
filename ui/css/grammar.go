@@ -410,6 +410,14 @@ var checks = map[string]check{
 	"transition-duration":        commaList(single(timeTerm(true))),
 	"transition-delay":           commaList(single(timeTerm(false))),
 	"transition-timing-function": commaList(single(timingFunction)),
+	"animation-name":             commaList(single(either(words(kwNone), keyframesName))),
+	"animation-duration":         commaList(single(timeTerm(true))),
+	"animation-delay":            commaList(single(timeTerm(false))),
+	"animation-timing-function":  commaList(single(timingFunction)),
+	"animation-iteration-count":  commaList(single(either(words(kwInfinite), iterationCount))),
+	"animation-direction":        commaList(single(words(animationDirections...))),
+	"animation-fill-mode":        commaList(single(words(animationFills...))),
+	"animation-play-state":       commaList(single(words(kwRunning, kwPaused))),
 
 	"text-decoration-line":      checkDecorationLine,
 	"text-decoration-style":     single(decorationStyle),
@@ -449,6 +457,28 @@ func transitionTarget(c Component) error {
 	}
 	return fmt.Errorf("transitions run only on colours, opacity, transform and box-shadow, not %q", c.String())
 }
+
+// keyframesName is an @keyframes name: an identifier other than none,
+// or a string.
+func keyframesName(c Component) error {
+	if c.Kind == String || c.Kind == Ident && !isWord(c, kwNone, "initial", "inherit", "unset", "default") {
+		return nil
+	}
+	return fmt.Errorf("expected a keyframes name, found %q", c.String())
+}
+
+func iterationCount(c Component) error {
+	if c.Kind == Number && c.Num >= 0 {
+		return nil
+	}
+	return fmt.Errorf("an iteration count is a number from 0 or infinite, found %q", c.String())
+}
+
+//nolint:gochecknoglobals // the keywords of two animation longhands
+var (
+	animationDirections = []string{"normal", "reverse", "alternate", "alternate-reverse"}
+	animationFills      = []string{kwNone, "forwards", "backwards", "both"}
+)
 
 func timingFunction(c Component) error {
 	if isWord(c, "ease", "linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end") {
