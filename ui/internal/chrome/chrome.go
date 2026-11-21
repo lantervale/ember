@@ -155,6 +155,14 @@ func Boxes(page []byte, size geom.Vec2) ([]geom.Rect, error) {
 	return rects, err
 }
 
+// PageBoxes is Boxes for a page written by hand rather than exported:
+// head goes in its head, before the script that measures, and body is
+// its body.
+func PageBoxes(head, body string, size geom.Vec2) ([]geom.Rect, error) {
+	return Boxes([]byte("<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"+head+"\n"+script+
+		"\n</head>\n<body>"+body+"</body>\n</html>\n"), size)
+}
+
 // boxes is Boxes with the parts of each block Chrome cut between
 // columns, its getClientRects: none for a block in one piece, or for an
 // inline element, whose rects are its lines'; and with the ::before and

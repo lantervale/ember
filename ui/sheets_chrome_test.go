@@ -4,6 +4,7 @@ package ui_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,4 +79,31 @@ func TestSheetsChangedWhileADocumentShowsLayOutAsChromes(t *testing.T) {
 			assert.Empty(t, d.Warnings())
 		})
 	}
+}
+
+// TestImportedSheetsExportAsChromeLaysThemOut writes a Document whose
+// sheet imports others as one page, each imported sheet in its import's
+// layer and media, and lays it out against Chrome.
+func TestImportedSheetsExportAsChromeLaysThemOut(t *testing.T) {
+	sheets := map[string]string{
+		"https://site.test/a.css": `@import "b.css"; .card { width: 50px; } @layer inner { .card { height: 30px; } }`,
+		"https://site.test/b.css": `.card { width: 70px; padding: 3px; } .wide { width: 300px; }`,
+		"https://site.test/c.css": `.card { margin: 5px; } .wide { width: 200px; }`,
+	}
+	fetch := func(url, _ string) ([]byte, error) { return []byte(sheets[url]), nil }
+	d := ui.NewDocument(ui.BrowserSheets(), ui.FetchSheets(fetch), ui.CSS(`@layer base;
+@import url(a.css) layer(theme) (min-width: 700px);
+@import url(c.css) layer;
+@layer base { .card { width: 10px; height: 10px; } }
+.wide { height: 12px; }`, ui.From("https://site.test/index.css")))
+	d.Body().Append(ui.Div(ui.Class("card")), ui.Div(ui.Class("card", "wide")))
+	for _, size := range []geom.Vec2{geom.V2(800, 600), geom.V2(600, 600)} {
+		require.Eventually(t, func() bool {
+			d.Layout(size)
+			return d.SheetsLoading() == 0
+		}, 5*time.Second, time.Millisecond)
+		r := chrome.Match(t, d, size)
+		t.Logf("%v: %d boxes, max delta %.3f pt", size, r.Boxes, r.MaxDelta)
+	}
+	assert.Empty(t, d.Warnings())
 }

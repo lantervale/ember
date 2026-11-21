@@ -141,7 +141,7 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | `animation` | `transition` |
 | the `mask` shorthand, a gradient as a `mask-image`, several mask layers | `mask-image: url()` and its longhands |
 | repeating gradients, colour hints, several background layers | one gradient |
-| `@import` and other at-rules but `@font-face` and `@media` | not supported |
+| at-rules but `@import`, `@font-face` and `@media` | not supported |
 
 ## Pseudo-elements
 
@@ -284,7 +284,36 @@ ui.NewDocument(
 )
 ```
 
-`sheet.From()` reads it back. A `url()` in a style attribute is the page's, resolved by the fetcher. `@font-face` files are read from a `Stylesheet`'s files, and fetched from the sheet's address with [`ui.FetchFonts`](01-document.md#fonts-that-arent-files).
+`sheet.From()` reads it back. A `url()` in a style attribute is the page's, resolved by the fetcher. `@font-face` files are read from a `Stylesheet`'s files, and fetched from the sheet's address with [`ui.FetchFonts`](01-document.md#fonts-that-arent-files), and so are the sheets it imports, with `ui.FetchSheets` ([below](#imported-sheets)).
+
+## Imported sheets
+
+Decision [0112](../99-decisions/0112-imported-sheets-are-fetched-and-spliced-where-the-import-stands.md).
+
+An `@import` brings another sheet's rules in where it stands, as in a browser. A `Stylesheet` reads the sheets it imports beside it in its file system; any other sheet, or one its files lack, has them fetched by the Document's `ui.FetchSheets`, from the importing sheet's address:
+
+```go
+doc := ui.NewDocument(
+	ui.BrowserSheets(),
+	ui.CSS(`@import url(theme.css) layer(theme) (min-width: 600px); body { margin: 0; }`,
+		ui.From("https://site.example/css/site.css")), // theme.css is https://site.example/css/theme.css
+	ui.FetchSheets(web.Sheets("https://site.example/")),
+)
+```
+
+| | |
+|---|---|
+| `ui.SheetFetcher` | `func(url, sheet string) ([]byte, error)`: the sheet's text for the address its `@import` names, in full when the importing sheet says where it came from (`ui.From`), beside its name otherwise; `sheet` is the importing sheet's address, what a request gives as its referrer |
+| `web.Sheets(base)` (package `ui/web`) | a fetcher over HTTP, as `web.Fonts`: a sheet served as a type other than `text/css` (none is taken, as Chrome takes it), over `web.MaxSheetBytes` (8 MB) or slower than `web.Timeout` is an error |
+| `doc.SheetsLoading()` | how many imported sheets are on their way |
+
+- `@import url(x.css)`, `@import "x.css"`, then `layer` or `layer(name)`, `supports(condition)` and a media query list, as CSS has them. `layer()` and `supports()` need `ui.BrowserSheets()`; without it they are warnings and the import goes.
+- The imported rules stand where the `@import` is: before the importing sheet's own, in order, so a later rule wins at equal specificity; under the import's media query list, answered for the viewport as it is resized; in its layer, the imported sheet's layers inside it, or named where the import stands when it has none. An import whose `supports()` fails is not fetched.
+- An imported sheet's own imports are followed from its address. An import of a sheet it is imported through (`a.css` importing `b.css` importing `a.css`) stops there with a warning, as Chrome stops it.
+- An `@import` after any rule but `@charset` and `@layer` statements, or inside a block, is ignored with a warning, as browsers ignore it.
+- A sheet is fetched once per Document, however many imports name it, and stands in each of their places. Until it lands the Document shows without it, then styles again, once a frame for all that landed. Its warnings, its `@font-face` rules and a failed fetch are the Document's, each with the sheet's address, and `doc.MatchedRules` names an imported rule by the sheet it came from.
+- Without `ui.FetchSheets`, an `@import` no file system holds is a warning, and the sheet shows without it.
+- `TestImportsCascadeAsChromes` (package `ui/web`) has Chrome and ui follow the same imports from a local server: order, a layer named before the import, media at two widths, `supports()`, a nested import, a cycle, a sheet imported twice, a sheet of the wrong type, one missing, one after a rule.
 
 ## Sheets changed while a Document shows
 
@@ -311,7 +340,7 @@ reset.Remove()
 | `sheet.InsertRule(i, text)`, `sheet.DeleteRule(i)` | one rule put before rule `i`, or taken out. Only the new rule is read. A rule ui reads part of is taken, what it drops a warning; the error is for a text that is no one rule, `ui.ErrNoRule` for an `i` out of range |
 
 - However many sheets change between two frames, and however often, the Document works its cascade out once, at the next frame, and lays out only what the new styles move. A thousand rules inserted one by one cost about 5 ms to read.
-- A run-time sheet is read as the Document's others: under `ui.BrowserSheets()` as a browser's, its `@media` answered for the viewport as it is resized, its `@layer` names shared with the other sheets, its warnings in `doc.Warnings()`. An `@font-face` in it is read as in `ui.CSS` when the sheet is added or replaced whole (not one inserted as a rule, and a face stays when its sheet goes), and `@import` is not read.
+- A run-time sheet is read as the Document's others: under `ui.BrowserSheets()` as a browser's, its `@media` answered for the viewport as it is resized, its `@layer` names shared with the other sheets, its warnings in `doc.Warnings()`. An `@font-face` in it is read as in `ui.CSS` when the sheet is added or replaced whole (not one inserted as a rule, and a face stays when its sheet goes), and its `@import` rules are followed as `ui.CSS`'s.
 - `doc.MatchedRules` and `doc.ComputedStyle` read the sheets as they stand, without waiting for the frame. A rule of a run-time sheet is named by its sheet (`style`, with its `From`), and one inserted alone stands at line 1 of its own text.
 - Each step of `TestSheetsChangedWhileADocumentShowsLayOutAsChromes` lays out as Chrome given the same sheets: a rule added later wins or loses by order, specificity and importance, and a removed sheet leaves the look before it.
 
@@ -334,7 +363,7 @@ A sheet written for browsers holds what a game's sheet never does: prefixes of f
 
 A prefixed name read as a plain one keeps its place in the cascade, so `-webkit-transform: rotate(3deg); transform: none` ends as `none` and the other order as the rotation. A warning about one names it as it was written.
 
-What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `animation`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@import`, `@font-face` in a sheet given as text without `ui.FetchFonts`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
+What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `animation`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@font-face` in a sheet given as text without `ui.FetchFonts`, `@import` without `ui.FetchSheets`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
 
 ### Vendor prefixes
 

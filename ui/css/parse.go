@@ -104,6 +104,9 @@ type Rule struct {
 	// layer is the @layer it stands in, as a place from 1 in its sheet's
 	// list; 0 in none.
 	layer int
+	// in is the sheet an @import brought it from, nil for its sheet's
+	// own.
+	in *Sheet
 }
 
 // Sheet is a parsed stylesheet. Name is the file it came from.
@@ -131,6 +134,11 @@ type Sheet struct {
 	text   string
 	joined []*Sheet
 	within string
+	// imports are its @import rules; a sheet Imported made has none, and
+	// stands for base with the sheets spliced in.
+	imports []Import
+	base    *Sheet
+	spliced []splice
 }
 
 // anonymous begins the name a layer without one goes by.
@@ -152,6 +160,9 @@ func (s *Sheet) URL(ref string) string { return s.origin.resolve(ref) }
 // sheet read as a browser's is its own text, as it was written: what ui
 // dropped of it is a browser's to read.
 func (s *Sheet) String() string {
+	if s.browser && s.base != nil {
+		return s.importedText()
+	}
 	if s.browser && s.joined != nil {
 		var b strings.Builder
 		for _, part := range s.joined {
@@ -288,8 +299,10 @@ type parser struct {
 	from    string
 	sheet   *Sheet
 	origin  *origin
-	// depth counts the @media, @supports and @layer blocks being read.
+	// depth counts the @media, @supports and @layer blocks being read,
+	// and begun is whether a rule an @import must come before was read.
 	depth int
+	begun bool
 }
 
 // scope is the @media rules and the @layer a rule stands in.
@@ -333,6 +346,7 @@ func (p *parser) item(in scope) bool {
 
 func (p *parser) styleRule(in scope) {
 	if r, ok := p.rule(); ok {
+		p.begun = true
 		r.media, r.layer = in.media, in.layer
 		p.sheet.Rules = append(p.sheet.Rules, r)
 	}
@@ -350,7 +364,12 @@ func (p *parser) atRule(t Token, in scope) {
 			name = as
 		}
 	}
+	if name != "import" && name != "charset" && name != "layer" {
+		p.begun = true
+	}
 	switch {
+	case name == "import":
+		p.importRule(t)
 	case name == "font-face":
 		if f, ok := p.fontFace(t.Pos); ok {
 			p.sheet.faces = append(p.sheet.faces, f)
@@ -503,6 +522,7 @@ func (p *parser) layer(t Token, in scope) {
 		p.warnf(t.Pos, "@layer: a block takes one name")
 		p.skipBlock()
 	default:
+		p.begun = true
 		if names[0] == "" {
 			names[0] = fmt.Sprint(anonymous, len(p.sheet.layers))
 		}

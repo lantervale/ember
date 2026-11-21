@@ -28,7 +28,8 @@ const (
 // presentational attributes.
 type Match struct {
 	Origin Origin
-	// Sheet is the rule's sheet, nil for what is no rule.
+	// Sheet is the rule's sheet, the one an @import brought it from for
+	// an imported rule, nil for what is no rule.
 	Sheet *Sheet
 	// Selector is the rule's selectors as CSS, "" for what is no rule.
 	Selector string
@@ -240,6 +241,9 @@ func (t *Transitions) match(f found) Match {
 	}
 	s, r := f.sheet, &f.sheet.Rules[f.rule]
 	m := Match{Sheet: s, Pos: r.Pos}
+	if r.in != nil {
+		m.Sheet = r.in
+	}
 	if s == t.all[0] {
 		m.Origin = Agent
 	}

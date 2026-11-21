@@ -86,7 +86,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `@import` | not followed |
+| an `@import` inserted with `InsertRule` after other rules | followed, where Chrome refuses the insertion |
 | `@keyframes`, `animation` | refused: `transition` |
 | `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
 | `prefers-color-scheme`, `hover`, `pointer`, `prefers-reduced-motion` | fixed answers: light, a mouse, no preference |

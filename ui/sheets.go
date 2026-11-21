@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strings"
 
@@ -24,7 +25,10 @@ type Sheet struct {
 	rules []*css.Sheet
 	split bool
 	// read is what the cascade reads of it, nil until made again.
-	read     *css.Sheet
+	read *css.Sheet
+	// fsys is the file system a Stylesheet was read from, where its
+	// imports are read first; nil for a sheet given as text.
+	fsys     fs.FS
 	name     string
 	from     string
 	media    string
@@ -218,19 +222,23 @@ func (s *Sheet) sheet() *css.Sheet {
 	if s.read != nil {
 		return s.read
 	}
-	if s.whole != nil && strings.TrimSpace(s.media) == "" {
-		s.read = s.whole
-		return s.read
+	read := s.whole
+	if s.whole == nil || strings.TrimSpace(s.media) != "" {
+		parts := s.rules
+		if s.whole != nil {
+			parts = []*css.Sheet{s.whole}
+		}
+		var warns []css.Warning
+		read, warns = css.Join(s.name, s.media, parts)
+		for _, w := range warns {
+			s.doc.warn(w)
+		}
 	}
-	parts := s.rules
-	if s.whole != nil {
-		parts = []*css.Sheet{s.whole}
+	var chain []string
+	if s.from != "" {
+		chain = []string{s.from}
 	}
-	var warns []css.Warning
-	s.read, warns = css.Join(s.name, s.media, parts)
-	for _, w := range warns {
-		s.doc.warn(w)
-	}
+	s.read = s.doc.imported(read, s.fsys, chain, s.from)
 	return s.read
 }
 
