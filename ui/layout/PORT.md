@@ -8,10 +8,10 @@ Taffy c6421c1c, `src/` (about 30k lines of Rust). `go test -run TestTaffy -v` re
 | `tree/cache.rs`, `compute/{mod,leaf}.rs` | `cache.go`, `compute.go`, `leaf.go` | done; leaf 30/30 |
 | `compute/block.rs`, `compute/float.rs` | `block.go`, `floats.go` | done; block 490/490, float 80/80 |
 | `compute/flexbox.rs` | `flex.go` | done; flex 1232/1232 |
-| `compute/grid/*` | `grid*.go` | done; grid 1076/1076 |
+| `compute/grid/*` | `grid*.go` | done; grid 1082/1098 |
 | `compute/oof.rs`, `compute/common/*` | `oof.go`, `common.go` | done |
 
-Counts are of the supported fixtures. Left out until style can say them: alignment safety (`safe`/`unsafe`), `self-start`/`self-end`, grid line names, `stretch` sizes. blockflex is 24/26: `flex-basis: 0%` needs a zero percentage kept apart from `0px`.
+Counts are of the supported fixtures. Left out until style can say them: alignment safety (`safe`/`unsafe`), `self-start`/`self-end`, `stretch` sizes. blockflex is 24/26: `flex-basis: 0%` needs a zero percentage kept apart from `0px`.
 
 Differences from Taffy, each one where Chrome disagrees with it:
 

@@ -69,6 +69,10 @@ func (t *tree) grid(n *node, in input) output {
 	strategies := outer.or(maxSize)
 	colReps, colCount := explicitGridSize(st, autoFit.w, strategy(strategies.w), horizontal)
 	rowReps, rowCount := explicitGridSize(st, autoFit.h, strategy(strategies.h), vertical)
+	colCount = max(colCount, templateAreaTracks(st.Areas, horizontal))
+	rowCount = max(rowCount, templateAreaTracks(st.Areas, vertical))
+	colLines := newGridLines(st, horizontal, colReps, colCount)
+	rowLines := newGridLines(st, vertical, rowReps, rowCount)
 
 	var items []*gridItem
 	var placements []itemPlacement
@@ -77,8 +81,8 @@ func (t *tree) grid(n *node, in input) output {
 			continue
 		}
 		placements = append(placements, itemPlacement{
-			h: placementOf(style.AreaLines(st.Areas, k.st.Column, true), colCount),
-			v: placementOf(style.AreaLines(st.Areas, k.st.Row, false), rowCount),
+			h: colLines.placement(k.st.Column),
+			v: rowLines.placement(k.st.Row),
 		})
 		items = append(items, newGridItem(k, alignItems, justifyItems, i))
 	}
@@ -262,7 +266,7 @@ func (t *tree) grid(n *node, in input) output {
 		}
 		var area rect
 		if claimsHere.take(k.st.Position) {
-			area = staticGridArea(st.Areas, k.st, finalRows, finalCols, rows, columns, border, g, borderBox)
+			area = staticGridArea(colLines, rowLines, k.st, finalRows, finalCols, rows, columns, border, g, borderBox)
 		} else {
 			area = rect{
 				l: border.l + padding.l,
@@ -280,8 +284,7 @@ func (t *tree) grid(n *node, in input) output {
 		})
 		order++
 	}
-	n.grid = newGridInfo(finalCols, columns, finalRows, rows)
-	n.grid.areas = st.Areas
+	n.grid = newGridInfo(colLines, finalCols, columns, rowLines, finalRows, rows)
 	area := oofArea{size: borderBox.sub(paddingBoxInset.sum()), offset: point{paddingBoxInset.l, paddingBoxInset.t}}
 	if isScrollContainer(st) {
 		overflow = overflow.union(rect{r: padding.r, b: padding.b})
@@ -528,10 +531,10 @@ func gridRelativeOffset(pos style.Position, inset span) float32 {
 	return or(inset.start, or(-inset.end, 0))
 }
 
-func staticGridArea(areas []style.GridArea, st *style.Computed, rowCounts, colCounts trackCounts,
+func staticGridArea(colLines, rowLines gridLines, st *style.Computed, rowCounts, colCounts trackCounts,
 	rows, columns []gridTrack, border rect, gutter point, borderBox size) rect {
-	axisIndexes := func(lines [2]style.GridLine, counts trackCounts) (int, int, bool, bool) {
-		s, e, okS, okE := placementOf(lines, counts.explicit).resolveAbsolute()
+	axisIndexes := func(p ozLines, counts trackCounts) (int, int, bool, bool) {
+		s, e, okS, okE := p.resolveAbsolute()
 		var si, ei int
 		if okS {
 			si, okS = counts.trackVecIndex(s)
@@ -556,8 +559,8 @@ func staticGridArea(areas []style.GridArea, st *style.Computed, rowCounts, colCo
 		}
 		return tracks[i].offset
 	}
-	cs, ce, okCS, okCE := axisIndexes(style.AreaLines(areas, st.Column, true), colCounts)
-	rs, re, okRS, okRE := axisIndexes(style.AreaLines(areas, st.Row, false), rowCounts)
+	cs, ce, okCS, okCE := axisIndexes(colLines.placement(st.Column), colCounts)
+	rs, re, okRS, okRE := axisIndexes(rowLines.placement(st.Row), rowCounts)
 	r := rect{l: border.l, r: borderBox.w - border.r - gutter.x, t: border.t, b: borderBox.h - border.b - gutter.y}
 	if okCS {
 		r.l = startEdge(columns, cs)
@@ -576,6 +579,7 @@ func staticGridArea(areas []style.GridArea, st *style.Computed, rowCounts, colCo
 
 // gridAxisInfo keeps one axis of a laid-out grid for its absolutely positioned children.
 type gridAxisInfo struct {
+	lines     gridLines
 	counts    trackCounts
 	positions []span
 	collapsed [][2]int
@@ -585,11 +589,10 @@ type gridAxisInfo struct {
 // gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo.
 type gridInfo struct {
 	columns, rows gridAxisInfo
-	areas         []style.GridArea
 }
 
-func newGridAxisInfo(counts trackCounts, tracks []gridTrack) gridAxisInfo {
-	info := gridAxisInfo{counts: counts, emptyLine: none}
+func newGridAxisInfo(lines gridLines, counts trackCounts, tracks []gridTrack) gridAxisInfo {
+	info := gridAxisInfo{lines: lines, counts: counts, emptyLine: none}
 	for i := range tracks {
 		tr := &tracks[i]
 		if tr.kind != trackTrack {
@@ -611,8 +614,12 @@ func newGridAxisInfo(counts trackCounts, tracks []gridTrack) gridAxisInfo {
 	return info
 }
 
-func newGridInfo(colCounts trackCounts, columns []gridTrack, rowCounts trackCounts, rows []gridTrack) *gridInfo {
-	return &gridInfo{columns: newGridAxisInfo(colCounts, columns), rows: newGridAxisInfo(rowCounts, rows)}
+func newGridInfo(colLines gridLines, colCounts trackCounts, columns []gridTrack,
+	rowLines gridLines, rowCounts trackCounts, rows []gridTrack) *gridInfo {
+	return &gridInfo{
+		columns: newGridAxisInfo(colLines, colCounts, columns),
+		rows:    newGridAxisInfo(rowLines, rowCounts, rows),
+	}
 }
 
 func (g *gridAxisInfo) trackEdge(index int, isStart bool) float32 {
@@ -639,7 +646,7 @@ func (g *gridAxisInfo) trackEdge(index int, isStart bool) float32 {
 
 func (g *gridAxisInfo) resolve(lines [2]style.GridLine, paddingStart, paddingEnd float32) span {
 	minLine, maxLine := -g.counts.negative, g.counts.explicit+g.counts.positive
-	s, e, okS, okE := placementOf(lines, g.counts.explicit).resolveAbsolute()
+	s, e, okS, okE := g.lines.placement(lines).resolveAbsolute()
 	toIndex := func(l int, ok bool) (int, bool) {
 		if !ok || l < minLine || l > maxLine {
 			return 0, false
@@ -677,7 +684,7 @@ func (g *gridAxisInfo) resolve(lines [2]style.GridLine, paddingStart, paddingEnd
 // absoluteArea is the containing block an absolutely positioned child's grid lines give it
 // inside the padding box.
 func (g *gridInfo) absoluteArea(st *style.Computed, paddingBox rect) rect {
-	c := g.columns.resolve(style.AreaLines(g.areas, st.Column, true), paddingBox.l, paddingBox.r)
-	r := g.rows.resolve(style.AreaLines(g.areas, st.Row, false), paddingBox.t, paddingBox.b)
+	c := g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	r := g.rows.resolve(st.Row, paddingBox.t, paddingBox.b)
 	return rect{l: c.start, r: c.end, t: r.start, b: r.end}
 }

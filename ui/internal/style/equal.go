@@ -77,7 +77,9 @@ func (g *Grid) equal(o *Grid) bool {
 }
 
 func (r *TrackRepeat) equal(o *TrackRepeat) bool {
-	return r.Count == o.Count && sameSlice(r.Tracks, o.Tracks)
+	return r.Count == o.Count && sameSlice(r.Tracks, o.Tracks) &&
+		sameSliceFunc(r.Names, o.Names, func(a, b *[]string) bool { return sameSlice(*a, *b) }) &&
+		sameSlice(r.Before, o.Before) && sameSlice(r.After, o.After)
 }
 
 // Equal reports whether f and o are the same font, as Computed.Equal

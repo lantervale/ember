@@ -135,7 +135,7 @@ func TestValidate(t *testing.T) {
 		"width":   {"-1px", "1fr", "12", "red"},
 		"padding": {"-2px", "1px 2px 3px 4px 5px"},
 		"margin":  {"1px / 2px"},
-		"grid-template-columns": {"[a] 1fr", "repeat(auto-fill, 20px) 1fr", "max-content repeat(auto-fill, 20px)",
+		"grid-template-columns": {"[a] [b] 1fr", "repeat(auto-fill, 20px) 1fr", "max-content repeat(auto-fill, 20px)",
 			"repeat(auto-fill, 1fr)", "repeat(auto-fit, 9px) repeat(auto-fill, 9px)", "minmax(1fr, 2fr)", "repeat(0, 1fr)",
 			"repeat(2, repeat(2, 1fr))"},
 		"grid-column":   {"0", "1 / 2 / 3", "span 0"},

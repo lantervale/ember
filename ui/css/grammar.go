@@ -502,17 +502,37 @@ func checkImageSlice(v []Component) error {
 	return nil
 }
 
+// checkGridLine reads auto, or a line number, a name or both, or span
+// with a count, a name or both, in any order.
 func checkGridLine(v []Component) error {
-	switch {
-	case len(v) == 1 && isWord(v[0], "auto"), lineName(v):
-		return nil
-	case len(v) == 1 && integer(v[0]) == nil && v[0].Num != 0:
-		return nil
-	case len(v) == 2 && isWord(v[0], "span") && integer(v[1]) == nil && v[1].Num > 0,
-		len(v) == 2 && isWord(v[1], "span") && integer(v[0]) == nil && v[0].Num > 0:
+	if len(v) == 1 && isWord(v[0], "auto") {
 		return nil
 	}
-	return fmt.Errorf("expected auto, a line number, an area's name or span n")
+	spans, numbers, names := 0, 0, 0
+	var n float64
+	for _, c := range v {
+		switch {
+		case isWord(c, "span"):
+			spans++
+		case integer(c) == nil:
+			numbers++
+			n = c.Num
+		case gridIdent(c):
+			names++
+		default:
+			return fmt.Errorf("expected auto, a line number, a line's name or span, found %q", c.String())
+		}
+	}
+	if spans > 1 || numbers > 1 || names > 1 || numbers+names == 0 ||
+		numbers == 1 && (n == 0 || spans == 1 && n < 0) {
+		return fmt.Errorf("expected auto, a line number, a line's name or span n, or a name with a number or span")
+	}
+	return nil
+}
+
+// gridIdent reports a name a grid line or area may take.
+func gridIdent(c Component) bool {
+	return c.Kind == Ident && !isWord(c, "auto", "span", "inherit", "initial", kwUnset, "default")
 }
 
 func checkAspectRatio(v []Component) error {
@@ -580,25 +600,42 @@ func checkTracks(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
 	}
-	if len(v) == 0 {
-		return fmt.Errorf("expected tracks")
-	}
 	if err := checkAutoRepeat(v); err != nil {
 		return err
 	}
-	for _, c := range v {
-		if c.Kind == LBracket {
-			return fmt.Errorf("named grid lines are not supported")
-		}
+	return trackList(v, func(c Component) error {
 		if c.Kind == Function && strings.EqualFold(c.Text, "repeat") {
-			if err := checkRepeat(c); err != nil {
+			return checkRepeat(c)
+		}
+		return trackSize(c)
+	})
+}
+
+// trackList checks tracks with names in brackets before, between and
+// after them, never two brackets in a row.
+func trackList(v []Component, track func(Component) error) error {
+	named, tracks := false, 0
+	for _, c := range v {
+		if c.Kind != LBracket {
+			named = false
+			tracks++
+			if err := track(c); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := trackSize(c); err != nil {
-			return err
+		if named {
+			return fmt.Errorf("a line's names go in one bracket")
 		}
+		named = true
+		for _, n := range items(c.Args) {
+			if !gridIdent(n) {
+				return fmt.Errorf("a line's name is a word other than span and auto, found %q", n.String())
+			}
+		}
+	}
+	if tracks == 0 {
+		return fmt.Errorf("expected tracks")
 	}
 	return nil
 }
@@ -635,7 +672,7 @@ func checkAutoRepeat(v []Component) error {
 			}
 		}
 		for _, t := range tracks {
-			if !fixedSize(t) {
+			if t.Kind != LBracket && !fixedSize(t) {
 				return fmt.Errorf("with repeat(auto-fill/auto-fit), every track needs a fixed size; %q is not", t.String())
 			}
 		}
@@ -666,15 +703,12 @@ func checkRepeat(c Component) error {
 	if !isWord(args[0], "auto-fill", "auto-fit") && (integer(args[0]) != nil || args[0].Num < 1) {
 		return fmt.Errorf("repeat()'s count is a positive integer, auto-fill or auto-fit")
 	}
-	for _, t := range args[2:] {
+	return trackList(args[2:], func(t Component) error {
 		if t.Kind == Function && strings.EqualFold(t.Text, "repeat") {
 			return fmt.Errorf("repeat() can't nest")
 		}
-		if err := trackSize(t); err != nil {
-			return err
-		}
-	}
-	return nil
+		return trackSize(t)
+	})
 }
 
 func checkBoxShadow(v []Component) error {

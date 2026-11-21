@@ -88,18 +88,3 @@ func TestGridTemplate(t *testing.T) {
 		}
 	}
 }
-
-func TestAreaLines(t *testing.T) {
-	areas := []style.GridArea{{Name: "main", Row: [2]int{2, 4}, Column: [2]int{2, 3}}}
-	named := [2]style.GridLine{{Name: "main"}, {Name: "main"}}
-	if got := style.AreaLines(areas, named, true); got != [2]style.GridLine{{Line: 2}, {Line: 3}} {
-		t.Errorf("columns %v", got)
-	}
-	if got := style.AreaLines(areas, named, false); got != [2]style.GridLine{{Line: 2}, {Line: 4}} {
-		t.Errorf("rows %v", got)
-	}
-	mixed := [2]style.GridLine{{Name: "nowhere"}, {Span: 2}}
-	if got := style.AreaLines(areas, mixed, true); got != [2]style.GridLine{{}, {Span: 2}} {
-		t.Errorf("an unknown name %v", got)
-	}
-}

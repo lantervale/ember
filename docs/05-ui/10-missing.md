@@ -61,8 +61,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a replaced grid item | stretched to its cell |
 | the `width` and `height` attributes of an `img` as its proportions, when a rule takes one of the two back (`height: auto`, as responsive sheets do) | the box has its broken picture's proportions until the picture lands, then is laid out again, where Chrome keeps the room the attributes give (`aspect-ratio: auto 250 / 167`) |
 | a picture made a block (`display: block`) with a percentage `width` or `max-width`, in a box as wide as its content (a float, a flex item, a grid track) | counts for its own width at the box's narrowest, where Chrome counts it for none, so the box is wider, and a float round one is 3 points taller; one left inline counts for none |
-| a grid line named by no area (`grid-column-end: b` with no area `b`), or `grid-area: nowhere` | auto, where Chrome makes a line of that name after the grid |
-| names of lines in a track list (`[full-start] 1fr [full-end]`) | refused |
 | a `position: fixed` box in an element that scrolls on its own | moves with that element |
 | an absolutely positioned box placed by a block above an element that scrolls | not cut by that element, as in Chrome, but moves with its scroll |
 | a part with no text of an inline element cut by a block inside it, when it has a border or a padding | no line and no box, where Chrome keeps a line for it |

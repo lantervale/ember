@@ -27,7 +27,7 @@ func (ahemFonts) Advance(f style.Font, text string) float32 {
 }
 
 // unsupported are the fixture values ui's style can't say yet: alignment safety,
-// self-start/self-end, grid line names and stretch sizes.
+// self-start/self-end and stretch sizes.
 func unsupported(f taffyFixture) string {
 	reason := ""
 	f.Root.walk(func(n *fixtureNode) {
@@ -37,13 +37,6 @@ func unsupported(f taffyFixture) string {
 				reason = "alignment safety"
 			case strings.HasPrefix(v, "self-"):
 				reason = "self-start/self-end"
-			case strings.Contains(v, "["):
-				reason = "grid line names"
-			case strings.HasPrefix(k, "grid-") && strings.IndexFunc(v, func(r rune) bool { return r >= 'a' && r <= 'z' }) >= 0 &&
-				!strings.HasPrefix(v, "span") && !strings.Contains(v, "px") && !strings.Contains(v, "fr") &&
-				!strings.Contains(v, "content") && !strings.Contains(v, "auto") && !strings.Contains(v, "minmax") &&
-				!strings.Contains(v, "repeat") && !strings.Contains(v, "%") && k != "grid-auto-flow":
-				reason = "grid line names"
 			case v == "stretch" && (k == "width" || k == "height" || k == "flex-basis"):
 				reason = "stretch sizes"
 			case k == "scrollbar-width" && strings.Contains(v, "px") == false && v != "0" && v != "15":
@@ -502,26 +495,39 @@ func applyFixtureStyle(st *style.Computed, k, v string) error {
 }
 
 func parseGridLine(v string) (style.GridLine, error) {
-	if v == "auto" {
-		return style.GridLine{}, nil
+	var g style.GridLine
+	span, n := false, 0
+	for _, w := range strings.Fields(v) {
+		switch {
+		case w == "auto":
+		case w == "span":
+			span = true
+		case w[0] == '-' || w[0] >= '0' && w[0] <= '9':
+			var err error
+			if n, err = strconv.Atoi(w); err != nil {
+				return g, err
+			}
+		default:
+			g.Name = w
+		}
 	}
-	if s, ok := strings.CutPrefix(v, "span "); ok {
-		n, err := strconv.Atoi(s)
-		return style.GridLine{Span: n}, err
+	if span {
+		g.Span = max(n, 1)
+	} else {
+		g.Line = n
 	}
-	n, err := strconv.Atoi(v)
-	return style.GridLine{Line: n}, err
+	return g, nil
 }
 
-// splitTopLevel splits on spaces outside parentheses.
+// splitTopLevel splits on spaces outside parentheses and brackets.
 func splitTopLevel(v string) []string {
 	var out []string
 	depth, start := 0, 0
 	for i, r := range v {
 		switch r {
-		case '(':
+		case '(', '[':
 			depth++
-		case ')':
+		case ')', ']':
 			depth--
 		case ' ':
 			if depth == 0 {
@@ -572,15 +578,36 @@ func parseTrackList(v string) ([]style.TrackRepeat, error) {
 		return nil, nil
 	}
 	var out []style.TrackRepeat
+	var before []string
 	for _, p := range splitTopLevel(v) {
+		if names, ok := lineNamesOf(p); ok {
+			before = names
+			continue
+		}
 		if inner, ok := strings.CutPrefix(p, "repeat("); ok {
 			inner = strings.TrimSuffix(inner, ")")
 			count, rest, _ := strings.Cut(inner, ",")
-			tracks, err := parseTracks(strings.TrimSpace(rest))
-			if err != nil {
-				return nil, err
+			r := style.TrackRepeat{Before: before}
+			before = nil
+			var names []string
+			named := false
+			for _, t := range splitTopLevel(strings.TrimSpace(rest)) {
+				if n, isNames := lineNamesOf(t); isNames {
+					names, named = n, true
+					continue
+				}
+				tr, err := parseTrack(t)
+				if err != nil {
+					return nil, err
+				}
+				r.Names = append(r.Names, names)
+				r.Tracks = append(r.Tracks, tr)
+				names = nil
 			}
-			r := style.TrackRepeat{Tracks: tracks}
+			if r.Names = append(r.Names, names); !named {
+				r.Names = nil
+			}
+			var err error
 			switch strings.TrimSpace(count) {
 			case "auto-fill":
 				r.Count = style.AutoFill
@@ -599,7 +626,19 @@ func parseTrackList(v string) ([]style.TrackRepeat, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, style.TrackRepeat{Count: 1, Tracks: []style.Track{tr}})
+		out = append(out, style.TrackRepeat{Count: 1, Tracks: []style.Track{tr}, Before: before})
+		before = nil
+	}
+	if len(out) > 0 {
+		out[len(out)-1].After = before
 	}
 	return out, nil
+}
+
+func lineNamesOf(v string) ([]string, bool) {
+	inner, ok := strings.CutPrefix(v, "[")
+	if !ok {
+		return nil, false
+	}
+	return strings.Fields(strings.TrimSuffix(inner, "]")), true
 }
