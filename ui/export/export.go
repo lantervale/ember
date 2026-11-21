@@ -60,7 +60,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 	if d.ScrollingViewport() {
 		b.WriteString(" " + ScrollingViewport)
 	}
-	b.WriteString(">\n<head>\n<meta charset=\"utf-8\">\n<style>\n")
+	b.WriteString(">\n<head>\n<meta charset=\"utf-8\">\n" + contentLanguage(d) + "<style>\n")
 	for _, f := range fonts.Of(d).Faces() {
 		style := "normal"
 		if f.Italic {
@@ -184,6 +184,15 @@ func frame(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		return
 	}
 	fmt.Fprintf(b, ` srcdoc="%s"`, html.EscapeString(page.String()))
+}
+
+// contentLanguage is the meta element giving the page the Document's
+// language, which Chrome's :lang() reads as a ui Document's.
+func contentLanguage(d *ui.Document) string {
+	if lang := d.Language(); lang != "" {
+		return `<meta http-equiv="content-language" content="` + html.EscapeString(lang) + "\">\n"
+	}
+	return ""
 }
 
 // attrs writes n's attributes, a control's as it is now: an input's
@@ -506,13 +515,15 @@ func placeholderColor(d *ui.Document, n *dom.Node) (string, bool) {
 var pseudo = []struct { //nolint:gochecknoglobals // a read-only table
 	name  string
 	state dom.State
-}{{"hover", dom.Hover}, {"active", dom.Active}, {"focus-visible", dom.FocusVisible}, {"focus", dom.Focus}}
+}{{"hover", dom.Hover}, {"active", dom.Active}, {"focus-visible", dom.FocusVisible}, {"focus-within", dom.FocusWithin},
+	{"focus", dom.Focus}, {"target", dom.Target}}
 
-var pseudoClasses = regexp.MustCompile(`:(hover|active|focus-visible|focus)\b`)
+var pseudoClasses = regexp.MustCompile(`:(hover|active|focus-visible|focus-within|focus|target)\b`)
 
-// states makes css's :hover, :active, :focus and :focus-visible also match
-// the elements export marks as in that state, so Chrome draws a pointer's
-// or the focus's look in a still page.
+// states makes css's :hover, :active, :focus, :focus-visible,
+// :focus-within and :target also match the elements export marks as in
+// that state, so Chrome draws a pointer's or the focus's look, or a
+// fragment's, in a still page.
 func states(css string) string {
 	return pseudoClasses.ReplaceAllString(css, ":is(:$1, [data-ember-$1])")
 }

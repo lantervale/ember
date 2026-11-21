@@ -13,6 +13,7 @@ import (
 var stateNames = map[string]dom.State{
 	"hover": dom.Hover, "focus": dom.Focus, "focus-visible": dom.FocusVisible, "active": dom.Active,
 	"disabled": dom.Disabled, "checked": dom.Checked, "open": dom.Open, "modal": dom.Modal,
+	"focus-within": dom.FocusWithin, "target": dom.Target, "empty": dom.Empty,
 }
 
 // Specificity is a selector's (ids, classes, types) weight, compared in
@@ -72,15 +73,25 @@ const (
 	pseudoOnlyOfType
 	pseudoNthOfType
 	pseudoNthLastOfType
+	// pseudoHas is :has(), whose selectors start at pseudoScope, the
+	// element :has() is tested on.
+	pseudoHas
+	pseudoScope
+	pseudoLang
+	pseudoReadOnly
+	pseudoReadWrite
 )
 
 type pseudo struct {
 	kind  pseudoKind
 	state dom.State
-	// sels are what :not(), :is() and :where() were given.
+	// sels are what :not(), :is() and :where() were given, and :has()'s
+	// relative selectors, each led by a compound of pseudoScope.
 	sels []Selector
 	// a and b are :nth-child(An+B)'s, and the other :nth-'s.
 	a, b int
+	// lang is the range :lang() was given.
+	lang string
 }
 
 // Attr is an attribute selector: [Name], or [Name="Value"] when HasValue.
@@ -161,11 +172,14 @@ func (s Selector) String() string {
 
 // Matches reports whether the element e matches s.
 func (s Selector) Matches(e *dom.Node) bool {
-	return s.matchFrom(len(s.Compounds)-1, e)
+	return s.matchFrom(len(s.Compounds)-1, e, nil)
 }
 
-func (s Selector) matchFrom(i int, e *dom.Node) bool {
-	if !s.Compounds[i].matches(e) {
+// matchFrom reports whether e matches s's compounds up to i, a relative
+// selector's first compound being scope: what it matches lies under
+// scope's parent, so ancestors are looked for no higher.
+func (s Selector) matchFrom(i int, e, scope *dom.Node) bool {
+	if !s.Compounds[i].matches(e, scope) {
 		return false
 	}
 	if i == 0 {
@@ -174,14 +188,14 @@ func (s Selector) matchFrom(i int, e *dom.Node) bool {
 	switch s.Combinators[i-1] {
 	case Child:
 		p := e.Parent()
-		return p != nil && s.matchFrom(i-1, p)
+		return p != nil && s.matchFrom(i-1, p, scope)
 	case Next, Later:
 		before := elementsBefore(e)
 		for j := len(before) - 1; j >= 0; j-- {
 			if before[j].IsText() {
 				continue
 			}
-			if s.matchFrom(i-1, before[j]) {
+			if s.matchFrom(i-1, before[j], scope) {
 				return true
 			}
 			if s.Combinators[i-1] == Next {
@@ -191,8 +205,72 @@ func (s Selector) matchFrom(i int, e *dom.Node) bool {
 		return false
 	case Descendant:
 	}
-	for p := e.Parent(); p != nil; p = p.Parent() {
-		if s.matchFrom(i-1, p) {
+	var top *dom.Node
+	if scope != nil {
+		top = scope.Parent()
+	}
+	for p := e.Parent(); p != nil && p != top; p = p.Parent() {
+		if s.matchFrom(i-1, p, scope) {
+			return true
+		}
+	}
+	return false
+}
+
+// has reports whether one of rels, relative selectors, matches an element
+// below or after a.
+func has(rels []Selector, a *dom.Node) bool {
+	for _, r := range rels {
+		last := len(r.Compounds) - 1
+		match := func(e *dom.Node) bool { return r.matchFrom(last, e, a) }
+		if !r.Combinators[0].sibling() {
+			if last == 1 && r.Combinators[0] == Child {
+				if slices.ContainsFunc(a.Children(), func(c *dom.Node) bool { return !c.IsText() && match(c) }) {
+					return true
+				}
+			} else if below(a, match) {
+				return true
+			}
+			continue
+		}
+		p := a.Parent()
+		if p == nil {
+			continue
+		}
+		// The element after a that the relative selector's sibling
+		// combinators lead to is the k-th, or one further on past a ~.
+		k, later := 0, false
+		for _, c := range r.Combinators {
+			if !c.sibling() {
+				break
+			}
+			k++
+			later = later || c == Later
+		}
+		deep := k < len(r.Combinators)
+		n := 0
+		for _, c := range p.Children()[a.Index()+1:] {
+			if c.IsText() {
+				continue
+			}
+			if n++; n < k {
+				continue
+			}
+			if match(c) || deep && below(c, match) {
+				return true
+			}
+			if !later {
+				break
+			}
+		}
+	}
+	return false
+}
+
+// below reports whether fn holds for an element under n.
+func below(n *dom.Node, fn func(*dom.Node) bool) bool {
+	for _, c := range n.Children() {
+		if !c.IsText() && (fn(c) || below(c, fn)) {
 			return true
 		}
 	}
@@ -209,12 +287,12 @@ func elementsBefore(e *dom.Node) []*dom.Node {
 	return kids[:max(slices.Index(kids, e), 0)]
 }
 
-func (c *Compound) matches(e *dom.Node) bool {
+func (c *Compound) matches(e, scope *dom.Node) bool {
 	if !c.names(e) {
 		return false
 	}
 	for i := range c.pseudos {
-		if !c.pseudos[i].matches(e) {
+		if p := &c.pseudos[i]; p.kind == pseudoScope && e != scope || p.kind != pseudoScope && !p.matches(e) {
 			return false
 		}
 	}
@@ -283,9 +361,94 @@ func (p *pseudo) matches(e *dom.Node) bool {
 		return nth(p.a, p.b, placeAmong(e, 1, true))
 	case pseudoNthLastOfType:
 		return nth(p.a, p.b, placeAmong(e, -1, true))
+	case pseudoHas:
+		return has(p.sels, e)
+	case pseudoLang:
+		return langMatches(language(e), p.lang)
+	case pseudoReadOnly:
+		return !editable(e)
+	case pseudoReadWrite:
+		return editable(e)
+	case pseudoScope:
 	}
 	return true
 }
+
+// language is e's language: the lang attribute of e or of the nearest
+// element above it that has one, else the Document's.
+func language(e *dom.Node) string {
+	for p := e; ; p = p.Parent() {
+		if v, ok := p.Attr("lang"); ok {
+			return v
+		}
+		if p.Parent() == nil {
+			return dom.Data(p).Language
+		}
+	}
+}
+
+// langMatches reports whether the language tag is in the range :lang()
+// was given, as Chrome has it: the range or it followed by a hyphen,
+// whatever the case, both well formed, and a wildcard matching nothing.
+func langMatches(tag, rng string) bool {
+	if !wellFormed(tag) || !wellFormed(rng) || len(tag) < len(rng) || !strings.EqualFold(tag[:len(rng)], rng) {
+		return false
+	}
+	return len(tag) == len(rng) || tag[len(rng)] == '-'
+}
+
+// wellFormed reports whether s is subtags of ASCII letters and digits
+// joined by hyphens, the first of letters alone.
+func wellFormed(s string) bool {
+	for i, sub := range strings.Split(s, "-") {
+		if sub == "" {
+			return false
+		}
+		for _, r := range sub {
+			letter := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+			if !letter && (i == 0 || r < '0' || r > '9') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// editable reports whether the user can edit e, what :read-write
+// matches: a text field neither read-only nor disabled, or an element a
+// contenteditable on it or above it makes editable.
+func editable(e *dom.Node) bool {
+	if e.Tag() == dom.Input {
+		kind, _ := e.Attr("type")
+		return !slices.Contains(uneditable, strings.ToLower(kind)) && usable(e)
+	}
+	if e.Tag() == dom.Textarea {
+		return usable(e)
+	}
+	for p := e; p != nil; p = p.Parent() {
+		if v, ok := p.Attr("contenteditable"); ok {
+			switch strings.ToLower(v) {
+			case "", "true", "plaintext-only":
+				return true
+			case "false":
+				return false
+			}
+		}
+	}
+	return false
+}
+
+// usable reports whether a field is neither read-only nor disabled.
+func usable(e *dom.Node) bool {
+	_, ro := e.Attr("readonly")
+	_, off := e.Attr("disabled")
+	return !ro && !off && !e.State().Has(dom.Disabled)
+}
+
+// uneditable are the types of input no text is typed in.
+//
+//nolint:gochecknoglobals,goconst // lookup table
+var uneditable = []string{"checkbox", "radio", "range", "color", "file", "hidden", "submit", "reset", "button", "image"}
 
 // controls are the elements :enabled is about.
 //
@@ -582,8 +745,8 @@ func (c *Compound) specificity() Specificity {
 	}
 	for _, p := range c.pseudos {
 		switch p.kind {
-		case pseudoWhere:
-		case pseudoNot, pseudoIs:
+		case pseudoWhere, pseudoScope:
+		case pseudoNot, pseudoIs, pseudoHas:
 			var most Specificity
 			for _, s := range p.sels {
 				if most.Less(s.Specificity) {
@@ -593,7 +756,7 @@ func (c *Compound) specificity() Specificity {
 			sp = sp.add(most)
 		case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 			pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
-			pseudoNthOfType, pseudoNthLastOfType:
+			pseudoNthOfType, pseudoNthLastOfType, pseudoLang, pseudoReadOnly, pseudoReadWrite:
 			sp[1]++
 		}
 	}
@@ -716,6 +879,10 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoLastOfType}, 2, nil
 	case "only-of-type":
 		return pseudo{kind: pseudoOnlyOfType}, 2, nil
+	case "read-only":
+		return pseudo{kind: pseudoReadOnly}, 2, nil
+	case "read-write":
+		return pseudo{kind: pseudoReadWrite}, 2, nil
 	}
 	return pseudo{}, 0, selErr(t, "the :%s pseudo-class is not supported", name)
 }
@@ -735,6 +902,14 @@ func pseudoFunction(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoIs, sels: forgiving(t.Args)}, 2, nil
 	case "where":
 		return pseudo{kind: pseudoWhere, sels: forgiving(t.Args)}, 2, nil
+	case "has":
+		rels, err := relatives(t)
+		return pseudo{kind: pseudoHas, sels: rels}, 2, err
+	case "lang":
+		if v := trim(t.Args); len(v) == 1 && v[0].Kind == Ident {
+			return pseudo{kind: pseudoLang, lang: v[0].Text}, 2, nil
+		}
+		return pseudo{}, 0, selErr(t, ":lang() takes one language range, as an identifier")
 	case "not":
 	default:
 		return pseudo{}, 0, selErr(t, "the :%s() pseudo-class is not supported", name)
@@ -748,6 +923,83 @@ func pseudoFunction(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{}, 0, err
 	}
 	return pseudo{kind: pseudoNot, sels: sels}, 2, nil
+}
+
+// relatives reads the relative selectors :has() was given, each from the
+// element tested: a selector naming an element ui has none of is left
+// out, as it matches nothing, and anything else wrong refuses the rule,
+// a :has() inside another included, as Chrome refuses it.
+func relatives(t Component) ([]Selector, *SelectorError) {
+	if len(trim(t.Args)) == 0 {
+		return nil, selErr(t, ":has() is empty")
+	}
+	var out []Selector
+	for _, part := range splitOn(t.Args, func(c Component) bool { return c.Kind == Comma }) {
+		part = trim(part)
+		if len(part) == 0 {
+			return nil, selErr(t, "an empty selector in :has()")
+		}
+		lead := Descendant
+		if c := part[0]; c.Kind == Delim {
+			switch c.Text {
+			case ">":
+				lead = Child
+			case "+":
+				lead = Next
+			case "~":
+				lead = Later
+			}
+			if lead != Descendant {
+				if part = trim(part[1:]); len(part) == 0 {
+					return nil, selErr(c, "nothing after %q in :has()", c.Text)
+				}
+			}
+		}
+		s, err := parseComplex(part)
+		switch {
+		case err != nil && err.unmatched:
+			continue
+		case err != nil:
+			return nil, err
+		case s.PseudoElement != "":
+			return nil, selErr(t, "::%s in :has()", s.PseudoElement)
+		}
+		if err = dropHas(s, t); err != nil {
+			return nil, err
+		}
+		s.Compounds = append([]Compound{{pseudos: []pseudo{{kind: pseudoScope}}}}, s.Compounds...)
+		s.Combinators = append([]Combinator{lead}, s.Combinators...)
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+// dropHas leaves the selectors holding a :has() out of the :is() and
+// :where() of s, a selector :has() was given, and refuses one that stands
+// elsewhere in it.
+func dropHas(s Selector, at Component) *SelectorError {
+	for i := range s.Compounds {
+		c := &s.Compounds[i]
+		for j := range c.pseudos {
+			p := &c.pseudos[j]
+			switch p.kind {
+			case pseudoHas:
+				return selErr(at, ":has() inside :has()")
+			case pseudoIs, pseudoWhere:
+				p.sels = slices.DeleteFunc(p.sels, func(n Selector) bool { return dropHas(n, at) != nil })
+			case pseudoNot:
+				for _, n := range p.sels {
+					if err := dropHas(n, at); err != nil {
+						return err
+					}
+				}
+			case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
+				pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
+				pseudoNthOfType, pseudoNthLastOfType, pseudoScope, pseudoLang, pseudoReadOnly, pseudoReadWrite:
+			}
+		}
+	}
+	return nil
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -851,7 +1103,7 @@ func (s Selector) readsFrom(outer []*Compound, apart, beside bool,
 		for j := range c.pseudos {
 			p := &c.pseudos[j]
 			states |= p.reads()
-			for _, n := range p.sels {
+			for _, n := range p.nested() {
 				n.readsFrom(on, away, before, add)
 			}
 		}
@@ -866,13 +1118,23 @@ func (p *pseudo) reads() dom.State {
 	switch p.kind {
 	case pseudoState:
 		return p.state
-	case pseudoEnabled:
+	case pseudoEnabled, pseudoReadOnly, pseudoReadWrite:
 		return dom.Disabled
 	case pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink, pseudoVisited, pseudoIs,
 		pseudoWhere, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
-		pseudoNthOfType, pseudoNthLastOfType:
+		pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope, pseudoLang:
 	}
 	return 0
+}
+
+// nested are the selectors p holds that read the element p is on, or
+// elements round it: those of :not(), :is() and :where(), not :has()'s,
+// whose elements are below or after it.
+func (p *pseudo) nested() []Selector {
+	if p.kind == pseudoHas {
+		return nil
+	}
+	return p.sels
 }
 
 // beside reports whether the compound at i stands before a sibling
@@ -890,7 +1152,7 @@ func (s Selector) besideKeys(add func(string)) {
 			c.keys(add)
 		}
 		for _, p := range c.pseudos {
-			for _, n := range p.sels {
+			for _, n := range p.nested() {
 				n.besideKeys(add)
 				if s.beside(i) {
 					for _, nc := range n.Compounds {
@@ -909,7 +1171,7 @@ func (s Selector) siblings() bool {
 			return true
 		}
 		for _, p := range c.pseudos {
-			if slices.ContainsFunc(p.sels, Selector.siblings) {
+			if slices.ContainsFunc(p.nested(), Selector.siblings) {
 				return true
 			}
 		}
@@ -927,7 +1189,7 @@ func (s Selector) aboveKeys(add func(string)) {
 			c.keys(add)
 		}
 		for _, p := range c.pseudos {
-			for _, n := range p.sels {
+			for _, n := range p.nested() {
 				if above {
 					for _, nc := range n.Compounds {
 						nc.keys(add)
@@ -949,5 +1211,68 @@ func (c Compound) keys(add func(string)) {
 	}
 	for _, a := range c.Attrs {
 		add("[" + a.Name)
+	}
+	for _, p := range c.pseudos {
+		for _, k := range p.attrs() {
+			add(k)
+		}
+	}
+}
+
+// attrs are the attributes p reads, keyed as dom.Pipeline.Changed.
+func (p *pseudo) attrs() []string {
+	switch p.kind {
+	case pseudoLang:
+		return []string{"[lang"}
+	case pseudoReadOnly, pseudoReadWrite:
+		return []string{"[readonly", "[disabled", "[type", "[contenteditable"}
+	case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink,
+		pseudoVisited, pseudoIs, pseudoWhere, pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType,
+		pseudoLastOfType, pseudoOnlyOfType, pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope:
+	}
+	return nil
+}
+
+// walk calls fn for each compound of s and of the selectors its
+// pseudo-classes hold, :has()'s included.
+func (s Selector) walk(fn func(c *Compound)) {
+	for i := range s.Compounds {
+		c := &s.Compounds[i]
+		fn(c)
+		for _, p := range c.pseudos {
+			for _, n := range p.sels {
+				n.walk(fn)
+			}
+		}
+	}
+}
+
+// hasReads calls add for each :has() of s, and of the selectors its
+// pseudo-classes hold, with the compounds the element it is tested on
+// must name (as stateRead's on), and whether that element stands above
+// s's subject (away) or before it (away and beside).
+func (s Selector) hasReads(add func(on []*Compound, rels []Selector, away, beside bool)) {
+	s.hasFrom(nil, false, false, add)
+}
+
+// hasFrom is hasReads for a selector the compounds outer hold, as
+// readsFrom.
+func (s Selector) hasFrom(outer []*Compound, apart, beside bool,
+	add func(on []*Compound, rels []Selector, away, beside bool)) {
+	for i := range s.Compounds {
+		c := &s.Compounds[i]
+		on, away, before := append(slices.Clip(outer), c), apart, beside
+		if i < len(s.Combinators) {
+			on, away, before = on[len(outer):], true, s.Combinators[i].sibling()
+		}
+		for j := range c.pseudos {
+			p := &c.pseudos[j]
+			if p.kind == pseudoHas {
+				add(on, p.sels, away, before)
+			}
+			for _, n := range p.nested() {
+				n.hasFrom(on, away, before, add)
+			}
+		}
 	}
 }
