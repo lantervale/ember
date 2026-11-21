@@ -48,11 +48,11 @@ func shapesOf(i *icon, b *box.Box, opts ...Option) *recorder {
 	return paintOne(b, append([]Option{Images(func(string) *twod.Texture { return arrow }), Vectors(found)}, opts...)...)
 }
 
-func withIcon(w, h float32, edit func(s *style.Computed)) *box.Box {
-	return withImage(w, h, func(s *style.Computed) {
-		s.BackgroundImage = style.Image{Source: "icon.svg"}
+func withIcon(w, h float32, edit func(s *style.Computed, l *style.BackgroundLayer)) *box.Box {
+	return withImage(w, h, func(s *style.Computed, l *style.BackgroundLayer) {
+		l.Image = style.Image{Source: "icon.svg"}
 		if edit != nil {
-			edit(s)
+			edit(s, l)
 		}
 	})
 }
@@ -103,7 +103,9 @@ func TestABackgroundOfShapesIsSizedByWhatItAsksFor(t *testing.T) {
 
 func TestABackgroundOfShapesIsDrawnAtTheSizeItShowsInDevicePixels(t *testing.T) {
 	i := &icon{asks: asksShape}
-	b := withIcon(120, 30, func(s *style.Computed) { s.BackgroundSize = sized(style.Px(50), style.Length{}) })
+	b := withIcon(120, 30, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Px(50), style.Length{})
+	})
 	imgs := shapesOf(i, b, Scale(2)).of("image")
 	require.Len(t, imgs, 1)
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 50, H: 25}, imgs[0].Rect)
@@ -119,7 +121,9 @@ func TestABackgroundOfShapesIsDrawnAtTheSizeItShowsInDevicePixels(t *testing.T) 
 
 func TestARepeatedBackgroundOfShapesIsDrawnOnceForAllItsTiles(t *testing.T) {
 	i := &icon{asks: asksBoth}
-	imgs := shapesOf(i, withIcon(100, 40, func(s *style.Computed) { s.BackgroundNoRepeat = false })).of("image")
+	imgs := shapesOf(i, withIcon(100, 40, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Repeat = style.BackgroundRepeat{}
+	})).of("image")
 	require.Len(t, imgs, 6, "three across, two down")
 	assert.Equal(t, [][2]int{{40, 20}}, i.drawn, "one tile")
 	for _, o := range imgs {

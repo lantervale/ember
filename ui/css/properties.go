@@ -105,7 +105,7 @@ var properties = map[string]property{
 	"scrollbar-width": {initial: "auto"},
 
 	"background-color":    {initial: "transparent"},
-	"background-image":    {initial: "none"}, // one layer: url() or linear-gradient(), no repeating or radial ones
+	"background-image":    {initial: "none"}, // layers of url() or gradients, no repeating ones
 	"background-repeat":   {initial: "repeat"},
 	"background-size":     {initial: "auto"},
 	"background-position": {initial: "0% 0%"},

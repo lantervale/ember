@@ -16,7 +16,7 @@ func TestAMaskIsReadAsABackgroundImageIs(t *testing.T) {
 	if s.MaskSize.Width != style.Px(12) || s.MaskSize.Height.Percent != 50 {
 		t.Errorf("mask-size %v, want 12px 50%%", s.MaskSize)
 	}
-	if !s.MaskNoRepeat {
+	if s.MaskRepeat != style.NoRepeat {
 		t.Error("mask-repeat: no-repeat is not read")
 	}
 	if p := s.MaskPosition; p.X != style.Px(2) || !p.FromRight || p.Y.Percent != 50 || p.FromBottom {
@@ -24,10 +24,10 @@ func TestAMaskIsReadAsABackgroundImageIs(t *testing.T) {
 	}
 
 	s = gridOf(t, "mask-image: url(a.png); mask-repeat: repeat-y; mask-image: none")
-	if s.MaskImage.Source != "" || s.MaskNoRepeat || s.MaskRepeat != style.RepeatY {
-		t.Errorf("none, repeat-y: %q %v %v", s.MaskImage.Source, s.MaskNoRepeat, s.MaskRepeat)
+	if s.MaskImage.Source != "" || s.MaskRepeat != (style.BackgroundRepeat{X: style.TileNoRepeat}) {
+		t.Errorf("none, repeat-y: %q %v", s.MaskImage.Source, s.MaskRepeat)
 	}
-	if s.BackgroundImage.Source != "" || s.BackgroundRepeat != style.RepeatBoth {
+	if s.BackgroundLayer(0).Image.Source != "" || s.BackgroundLayer(0).Repeat != (style.BackgroundRepeat{}) {
 		t.Error("a mask is no background")
 	}
 }

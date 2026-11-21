@@ -25,15 +25,36 @@ func pictures(b *box.Box) *recorder {
 	return r
 }
 
-func withImage(w, h float32, edit func(s *style.Computed)) *box.Box {
+func withImage(w, h float32, edit func(s *style.Computed, l *style.BackgroundLayer)) *box.Box {
 	return el(10, 10, w, h, func(s *style.Computed) {
-		s.BackgroundImage = style.Image{Source: "arrow"}
-		s.BackgroundNoRepeat = true
+		l := style.BackgroundLayer{Image: style.Image{Source: "arrow"}, Repeat: style.NoRepeat, Position: style.TopLeft}
 		if edit != nil {
-			edit(s)
+			edit(s, &l)
 		}
+		stacked(s, l)
 	})
 }
+
+// stacked gives s's background these layers, the first on top.
+func stacked(s *style.Computed, layers ...style.BackgroundLayer) {
+	s.BackgroundImages, s.BackgroundSizes, s.BackgroundRepeats, s.BackgroundPositions = nil, nil, nil, nil
+	s.BackgroundAttachments, s.BackgroundOrigins, s.BackgroundClips = nil, nil, nil
+	for _, l := range layers {
+		s.BackgroundImages = append(s.BackgroundImages, l.Image)
+		s.BackgroundSizes = append(s.BackgroundSizes, l.Size)
+		s.BackgroundRepeats = append(s.BackgroundRepeats, l.Repeat)
+		s.BackgroundPositions = append(s.BackgroundPositions, l.Position)
+		s.BackgroundAttachments = append(s.BackgroundAttachments, l.Attachment)
+		s.BackgroundOrigins = append(s.BackgroundOrigins, l.Origin)
+		s.BackgroundClips = append(s.BackgroundClips, l.Clip)
+	}
+}
+
+//nolint:gochecknoglobals // the tests' fixed values
+var (
+	repeatX = style.BackgroundRepeat{X: style.TileRepeat, Y: style.TileNoRepeat}
+	repeatY = style.BackgroundRepeat{X: style.TileNoRepeat, Y: style.TileRepeat}
+)
 
 func TestABackgroundImageDrawsAtItsOwnSizeAtTheTopLeft(t *testing.T) {
 	r := pictures(withImage(120, 24, nil))
@@ -43,16 +64,16 @@ func TestABackgroundImageDrawsAtItsOwnSizeAtTheTopLeft(t *testing.T) {
 }
 
 func TestABackgroundImageIsPlacedFromTheRightAndCentred(t *testing.T) {
-	r := pictures(withImage(120, 24, func(s *style.Computed) {
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(6), Y: style.Percent(50), FromRight: true}
+	r := pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Position = style.BackgroundPosition{X: style.Px(6), Y: style.Percent(50), FromRight: true}
 	}))
 	assert.Equal(t, geom.Rect{X: 10 + 120 - 6 - 10, Y: 10 + (24-6)/2, W: 10, H: 6}, r.of("image")[0].Rect,
 		"right 6px center, the select's arrow")
 }
 
 func TestABackgroundImageIsPlacedInThePaddingBox(t *testing.T) {
-	b := withImage(120, 24, func(s *style.Computed) {
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(100), Y: style.Px(0), FromBottom: true}
+	b := withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Position = style.BackgroundPosition{X: style.Percent(100), Y: style.Px(0), FromBottom: true}
 	})
 	b.Border = box.Edges{Top: 2, Right: 2, Bottom: 2, Left: 2}
 	assert.Equal(t, geom.Rect{X: 10 + 2 + 116 - 10, Y: 10 + 2 + 20 - 6, W: 10, H: 6}, pictures(b).of("image")[0].Rect,
@@ -60,7 +81,7 @@ func TestABackgroundImageIsPlacedInThePaddingBox(t *testing.T) {
 }
 
 func TestARepeatedBackgroundImageTilesThePaddingBoxClipped(t *testing.T) {
-	b := withImage(25, 10, func(s *style.Computed) { s.BackgroundNoRepeat = false })
+	b := withImage(25, 10, func(_ *style.Computed, l *style.BackgroundLayer) { l.Repeat = style.BackgroundRepeat{} })
 	r := pictures(b)
 	imgs := r.of("image")
 	require.Len(t, imgs, 6, "three across, two down")
@@ -72,9 +93,9 @@ func TestARepeatedBackgroundImageTilesThePaddingBoxClipped(t *testing.T) {
 }
 
 func TestARepeatedImageTilesBothWaysFromItsPosition(t *testing.T) {
-	b := withImage(25, 10, func(s *style.Computed) {
-		s.BackgroundNoRepeat = false
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(4), Y: style.Px(0)}
+	b := withImage(25, 10, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Repeat = style.BackgroundRepeat{}
+		l.Position = style.BackgroundPosition{X: style.Px(4), Y: style.Px(0)}
 	})
 	xs := map[float32]bool{}
 	for _, o := range pictures(b).of("image") {
@@ -107,12 +128,18 @@ func sized(w, h style.Length) style.BackgroundSize { return style.BackgroundSize
 
 func TestABackgroundImageTakesItsBackgroundSize(t *testing.T) {
 	auto := style.Length{}
-	r := pictures(withImage(120, 24, func(s *style.Computed) { s.BackgroundSize = sized(style.Px(5), style.Px(3)) }))
+	r := pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Px(5), style.Px(3))
+	}))
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 5, H: 3}, r.of("image")[0].Rect, "a 2x picture drawn at its point size")
-	r = pictures(withImage(120, 24, func(s *style.Computed) { s.BackgroundSize = sized(style.Px(20), auto) }))
+	r = pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Px(20), auto)
+	}))
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 20, H: 12}, r.of("image")[0].Rect,
 		"one length keeps the picture's proportions")
-	r = pictures(withImage(120, 24, func(s *style.Computed) { s.BackgroundSize = sized(auto, style.Px(3)) }))
+	r = pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(auto, style.Px(3))
+	}))
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 5, H: 3}, r.of("image")[0].Rect, "and so does a height alone")
 }
 
@@ -158,39 +185,39 @@ func TestTileSize(t *testing.T) {
 }
 
 func TestAPicturePlacedInItsBoxStartsOnADevicePixel(t *testing.T) {
-	paint := func(w, h float32, edit func(s *style.Computed)) []op {
+	paint := func(w, h float32, edit func(s *style.Computed, l *style.BackgroundLayer)) []op {
 		r := newRecorder()
 		Paint(r, tree(el(0, 0, 400, 300, nil, withImage(w, h, edit))), Scale(2),
 			Images(func(string) *twod.Texture { return arrow }))
 		return r.of("image")
 	}
-	centred := paint(120, 70, func(s *style.Computed) {
-		s.BackgroundSize = sized(style.Px(8.25), style.Px(41.25))
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(50), Y: style.Percent(50)}
+	centred := paint(120, 70, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Px(8.25), style.Px(41.25))
+		l.Position = style.BackgroundPosition{X: style.Percent(50), Y: style.Percent(50)}
 	})
 	assert.Equal(t, geom.Rect{X: 66, Y: 24.5, W: 8.5, H: 41.5}, centred[0].Rect,
 		"from 65.875 and 24.375 to the pixels at 66 and 24.5, then 8.25 and 41.25 on, to those at 74.5 and 66")
 
-	cover := paint(120, 24, func(s *style.Computed) {
-		s.BackgroundSize = sized(style.Px(120), style.Px(24.5))
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(0), Y: style.Percent(50)}
+	cover := paint(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Px(120), style.Px(24.5))
+		l.Position = style.BackgroundPosition{X: style.Px(0), Y: style.Percent(50)}
 	})
 	assert.Equal(t, geom.Rect{X: 10, Y: 9.75, W: 120, H: 24.5}, cover[0].Rect,
 		"one starting before the box keeps its place")
 
-	across := paint(120, 70, func(s *style.Computed) {
-		s.BackgroundSize = sized(style.Px(36.25), style.Px(24.75))
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(0.25), Y: style.Percent(100)}
-		s.BackgroundNoRepeat, s.BackgroundRepeat = false, style.RepeatX
+	across := paint(120, 70, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Px(36.25), style.Px(24.75))
+		l.Position = style.BackgroundPosition{X: style.Px(0.25), Y: style.Percent(100)}
+		l.Repeat = repeatX
 	})
 	assert.Equal(t, geom.Rect{X: 10.25 - 36.25, Y: 55.5, W: 36.25, H: 24.75}, across[0].Rect,
 		"repeat-x: down it starts on a pixel, its size kept; across its tiles keep their place")
 }
 
 func TestACoverPictureIsPlacedByItsPositionAndCutToThePaddingBox(t *testing.T) {
-	b := withImage(120, 24, func(s *style.Computed) {
-		s.BackgroundSize = style.BackgroundSize{Scale: style.ScaleCover}
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(50), Y: style.Percent(50)}
+	b := withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = style.BackgroundSize{Scale: style.ScaleCover}
+		l.Position = style.BackgroundPosition{X: style.Percent(50), Y: style.Percent(50)}
 	})
 	imgs := pictures(b).of("image")
 	require.Len(t, imgs, 1)
@@ -199,18 +226,18 @@ func TestACoverPictureIsPlacedByItsPositionAndCutToThePaddingBox(t *testing.T) {
 }
 
 func TestAContainPictureIsPlacedFromTheRightAndTiles(t *testing.T) {
-	contain := func(s *style.Computed) {
-		s.BackgroundSize = style.BackgroundSize{Scale: style.ScaleContain}
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(0)}
+	contain := func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = style.BackgroundSize{Scale: style.ScaleContain}
+		l.Position = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(0)}
 	}
 	imgs := pictures(withImage(120, 24, contain)).of("image")
 	require.Len(t, imgs, 1)
 	assert.Equal(t, geom.Rect{X: 10 + 120 - 40, Y: 10, W: 40, H: 24}, imgs[0].Rect,
 		"100% puts its right edge on the box's")
 
-	imgs = pictures(withImage(120, 24, func(s *style.Computed) {
-		contain(s)
-		s.BackgroundNoRepeat = false
+	imgs = pictures(withImage(120, 24, func(s *style.Computed, l *style.BackgroundLayer) {
+		contain(s, l)
+		l.Repeat = style.BackgroundRepeat{}
 	})).of("image")
 	require.Len(t, imgs, 3, "three of the scaled picture fill the box")
 	for i, o := range imgs {
@@ -219,26 +246,26 @@ func TestAContainPictureIsPlacedFromTheRightAndTiles(t *testing.T) {
 }
 
 func TestTilesAreTheSizeBackgroundSizeGives(t *testing.T) {
-	half := func(repeat style.RepeatAxes) []op {
-		return pictures(withImage(120, 24, func(s *style.Computed) {
-			s.BackgroundSize = sized(style.Percent(50), style.Percent(50))
-			s.BackgroundNoRepeat, s.BackgroundRepeat = false, repeat
+	half := func(repeat style.BackgroundRepeat) []op {
+		return pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+			l.Size = sized(style.Percent(50), style.Percent(50))
+			l.Repeat = repeat
 		})).of("image")
 	}
-	both := half(style.RepeatBoth)
+	both := half(style.BackgroundRepeat{})
 	require.Len(t, both, 4, "two across, two down")
 	assert.Equal(t, geom.Rect{X: 70, Y: 22, W: 60, H: 12}, both[3].Rect)
-	across := half(style.RepeatX)
+	across := half(repeatX)
 	require.Len(t, across, 2, "repeat-x: one row")
 	assert.Equal(t, geom.Rect{X: 70, Y: 10, W: 60, H: 12}, across[1].Rect)
-	down := half(style.RepeatY)
+	down := half(repeatY)
 	require.Len(t, down, 2, "repeat-y: one column")
 	assert.Equal(t, geom.Rect{X: 10, Y: 22, W: 60, H: 12}, down[1].Rect)
 
-	placed := pictures(withImage(120, 24, func(s *style.Computed) {
-		s.BackgroundSize = sized(style.Percent(50), style.Length{})
-		s.BackgroundNoRepeat, s.BackgroundRepeat = false, style.RepeatX
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(30), Y: style.Percent(100)}
+	placed := pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Percent(50), style.Length{})
+		l.Repeat = repeatX
+		l.Position = style.BackgroundPosition{X: style.Px(30), Y: style.Percent(100)}
 	})).of("image")
 	require.Len(t, placed, 3, "60 by 36 tiles from 30 in: one before, the placed one, one after")
 	assert.Equal(t, geom.Rect{X: 10 + 30 - 60, Y: 10 + 24 - 36, W: 60, H: 36}, placed[0].Rect,
@@ -249,13 +276,17 @@ func TestABackgroundOfNoSizeDrawsNothing(t *testing.T) {
 	for _, size := range []style.BackgroundSize{
 		sized(style.Px(0), style.Length{}), sized(style.Length{}, style.Percent(0)), sized(style.Px(0), style.Px(4)),
 	} {
-		r := pictures(withImage(120, 24, func(s *style.Computed) { s.BackgroundSize, s.BackgroundNoRepeat = size, false }))
+		r := pictures(withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+			l.Size, l.Repeat = size, style.BackgroundRepeat{}
+		}))
 		assert.Empty(t, r.of("image", "push"), "%+v", size)
 	}
 }
 
 func TestAPictureFetchedLateIsSizedOnceItLands(t *testing.T) {
-	b := withImage(120, 24, func(s *style.Computed) { s.BackgroundSize = style.BackgroundSize{Scale: style.ScaleContain} })
+	b := withImage(120, 24, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = style.BackgroundSize{Scale: style.ScaleContain}
+	})
 	var landed *twod.Texture
 	paint := func() []op {
 		r := newRecorder()
@@ -270,36 +301,38 @@ func TestAPictureFetchedLateIsSizedOnceItLands(t *testing.T) {
 }
 
 func TestAPictureReachingARoundedCornerIsCutByIt(t *testing.T) {
-	cover := pictures(withImage(120, 24, func(s *style.Computed) {
+	cover := pictures(withImage(120, 24, func(s *style.Computed, l *style.BackgroundLayer) {
 		rounded(8)(s)
-		s.BackgroundSize = style.BackgroundSize{Scale: style.ScaleCover}
+		l.Size = style.BackgroundSize{Scale: style.ScaleCover}
 	}))
 	clip := cover.of("push-round")
 	require.Len(t, clip, 1)
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 24}, clip[0].Rect)
 	assert.Equal(t, [4]float32{8, 8, 8, 8}, clip[0].Radii)
 
-	tiled := pictures(withImage(120, 24, func(s *style.Computed) {
+	tiled := pictures(withImage(120, 24, func(s *style.Computed, l *style.BackgroundLayer) {
 		rounded(8)(s)
-		s.BackgroundNoRepeat = false
+		l.Repeat = style.BackgroundRepeat{}
 	}))
 	assert.Len(t, tiled.of("push-round"), 1, "tiles reach the corners")
 
-	arrowed := pictures(withImage(120, 24, func(s *style.Computed) {
+	arrowed := pictures(withImage(120, 24, func(s *style.Computed, l *style.BackgroundLayer) {
 		rounded(8)(s)
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(6), Y: style.Percent(50), FromRight: true}
+		l.Position = style.BackgroundPosition{X: style.Px(6), Y: style.Percent(50), FromRight: true}
 	}))
 	assert.Empty(t, arrowed.of("push-round"), "a picture clear of the corners needs no curve")
 	assert.Len(t, arrowed.of("image"), 1)
 }
 
 // withGradient is a box of 120×24 with a gradient behind it.
-func withGradient(edit func(s *style.Computed)) *box.Box {
+func withGradient(edit func(s *style.Computed, l *style.BackgroundLayer)) *box.Box {
 	return el(10, 10, 120, 24, func(s *style.Computed) {
-		s.BackgroundImage = style.Image{Gradient: &style.Gradient{Angle: 90, Stops: stops(red, blue)}}
+		l := style.BackgroundLayer{Image: style.Image{Gradient: &style.Gradient{Angle: 90, Stops: stops(red, blue)}},
+			Position: style.TopLeft}
 		if edit != nil {
-			edit(s)
+			edit(s, &l)
 		}
+		stacked(s, l)
 	})
 }
 
@@ -309,87 +342,87 @@ func TestAGradientTakesItsBackgroundSizePositionAndRepeat(t *testing.T) {
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 24}, whole[0].Rect, "auto is the padding box")
 
 	for _, scale := range []style.BackgroundScale{style.ScaleCover, style.ScaleContain} {
-		m := pictures(withGradient(func(s *style.Computed) { s.BackgroundSize.Scale = scale })).of("gradient")
+		m := pictures(withGradient(func(_ *style.Computed, l *style.BackgroundLayer) { l.Size.Scale = scale })).of("gradient")
 		require.Len(t, m, 1)
 		assert.Equal(t, whole[0].Rect, m[0].Rect, "cover and contain too")
 	}
 
-	one := pictures(withGradient(func(s *style.Computed) {
-		s.BackgroundSize = sized(style.Percent(25), style.Percent(50))
-		s.BackgroundNoRepeat = true
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(100)}
+	one := pictures(withGradient(func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Percent(25), style.Percent(50))
+		l.Repeat = style.NoRepeat
+		l.Position = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(100)}
 	})).of("gradient")
 	require.Len(t, one, 1)
 	assert.Equal(t, geom.Rect{X: 10 + 90, Y: 10 + 12, W: 30, H: 12}, one[0].Rect, "its box is sized, then placed")
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 24}, one[0].Clip)
 
-	tiled := pictures(withGradient(func(s *style.Computed) {
-		s.BackgroundSize = sized(style.Percent(25), style.Length{})
+	tiled := pictures(withGradient(func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Size = sized(style.Percent(25), style.Length{})
 	})).of("gradient")
 	require.Len(t, tiled, 4, "a quarter wide and the box high: four across")
 	assert.Equal(t, geom.Rect{X: 100, Y: 10, W: 30, H: 24}, tiled[3].Rect)
 
-	round := pictures(withGradient(func(s *style.Computed) {
+	round := pictures(withGradient(func(s *style.Computed, l *style.BackgroundLayer) {
 		rounded(8)(s)
-		s.BackgroundSize = sized(style.Percent(25), style.Length{})
+		l.Size = sized(style.Percent(25), style.Length{})
 	}))
 	require.Len(t, round.of("push-round"), 1, "one curve round all the tiles")
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 24}, round.of("push-round")[0].Rect)
 }
 
 func TestRepeatXAndRepeatYTileAlongOneAxisOnly(t *testing.T) {
-	across := pictures(withImage(25, 10, func(s *style.Computed) {
-		s.BackgroundNoRepeat, s.BackgroundRepeat = false, style.RepeatX
+	across := pictures(withImage(25, 10, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Repeat = repeatX
 	})).of("image")
 	require.Len(t, across, 3, "repeat-x: one row")
-	down := pictures(withImage(25, 10, func(s *style.Computed) {
-		s.BackgroundNoRepeat, s.BackgroundRepeat = false, style.RepeatY
+	down := pictures(withImage(25, 10, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Repeat = repeatY
 	})).of("image")
 	require.Len(t, down, 2, "repeat-y: one column")
 	assert.Equal(t, down[0].Rect.X, down[1].Rect.X)
 }
 
 func TestABackgroundFillsItsClipBoxAndStartsAtItsOrigin(t *testing.T) {
-	framed := func(edit func(s *style.Computed)) *box.Box {
-		b := withImage(120, 40, func(s *style.Computed) {
+	framed := func(edit func(s *style.Computed, l *style.BackgroundLayer)) *box.Box {
+		b := withImage(120, 40, func(s *style.Computed, l *style.BackgroundLayer) {
 			s.Background = red
-			edit(s)
+			edit(s, l)
 		})
 		b.Border = box.Edges{Top: 2, Right: 2, Bottom: 2, Left: 2}
 		b.Padding = box.Edges{Top: 3, Right: 3, Bottom: 3, Left: 3}
 		return b
 	}
-	r := pictures(framed(func(*style.Computed) {}))
+	r := pictures(framed(func(*style.Computed, *style.BackgroundLayer) {}))
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 40}, r.of("rect")[0].Rect, "the colour under the border")
 	assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 10, H: 6}, r.of("image")[0].Rect, "the picture from the padding box")
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 40}, r.of("image")[0].Clip, "and under the border where it tiles")
 
-	r = pictures(framed(func(s *style.Computed) {
-		s.BackgroundClip, s.BackgroundOrigin = style.UnderPadding, style.UnderBorder
+	r = pictures(framed(func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Clip, l.Origin = style.UnderPadding, style.UnderBorder
 	}))
 	assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 116, H: 36}, r.of("rect")[0].Rect)
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 10, H: 6}, r.of("image")[0].Rect)
 	assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 116, H: 36}, r.of("image")[0].Clip)
 
-	r = pictures(framed(func(s *style.Computed) {
-		s.BackgroundClip, s.BackgroundOrigin = style.UnderContent, style.UnderContent
+	r = pictures(framed(func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Clip, l.Origin = style.UnderContent, style.UnderContent
 	}))
 	assert.Equal(t, geom.Rect{X: 15, Y: 15, W: 110, H: 30}, r.of("rect")[0].Rect)
 	assert.Equal(t, geom.Rect{X: 15, Y: 15, W: 10, H: 6}, r.of("image")[0].Rect)
 }
 
 func TestAFixedBackgroundIsPlacedInTheViewportAndALocalOneScrolls(t *testing.T) {
-	fixed := withImage(120, 40, func(s *style.Computed) {
-		s.BackgroundAttachment = style.AttachFixed
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Px(20), Y: style.Px(15)}
+	fixed := withImage(120, 40, func(_ *style.Computed, l *style.BackgroundLayer) {
+		l.Attachment = style.AttachFixed
+		l.Position = style.BackgroundPosition{X: style.Px(20), Y: style.Px(15)}
 	})
 	img := pictures(fixed).of("image")[0]
 	assert.Equal(t, geom.Rect{X: 20, Y: 15, W: 10, H: 6}, img.Rect, "from the viewport's corner, wherever the box is")
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 120, H: 40}, img.Clip, "shown where the box is")
 
 	scroller := func(a style.BackgroundAttachment) *box.Box {
-		b := withImage(120, 40, func(s *style.Computed) {
-			s.BackgroundAttachment = a
+		b := withImage(120, 40, func(s *style.Computed, l *style.BackgroundLayer) {
+			l.Attachment = a
 			s.Overflow = style.Size[style.Overflow]{Width: style.Scroll, Height: style.Scroll}
 		})
 		b.Content, b.Scroll = geom.V2(120, 400), geom.V2(0, 4)
@@ -415,16 +448,16 @@ func TestAnInlineOverSeveralLinesShowsItsBackgroundAsOneBoxSliced(t *testing.T) 
 		}
 		return out
 	}
-	b := withImage(100, 20, func(s *style.Computed) {
+	b := withImage(100, 20, func(s *style.Computed, l *style.BackgroundLayer) {
 		s.Display = style.Inline
-		s.BackgroundPosition = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(50)}
+		l.Position = style.BackgroundPosition{X: style.Percent(100), Y: style.Percent(50)}
 	})
 	b.Padding = box.Edges{Right: 12}
 	b.Fragments = []geom.Rect{{X: 30, Y: 0, W: 70, H: 10}, {X: 0, Y: 10, W: 52, H: 10}}
 	assert.Equal(t, []geom.Rect{{X: 10 + 52 - 10, Y: 10 + 10 + 2, W: 10, H: 6}}, seen(b),
 		"a picture at the right shows at the end of the last line, not of each")
 
-	b = withImage(100, 20, func(s *style.Computed) { s.Display = style.Inline })
+	b = withImage(100, 20, func(s *style.Computed, _ *style.BackgroundLayer) { s.Display = style.Inline })
 	b.Fragments = []geom.Rect{{X: 30, Y: 0, W: 70, H: 10}, {X: 0, Y: 10, W: 52, H: 10}}
 	assert.Equal(t, []geom.Rect{{X: 10 + 30, Y: 10, W: 10, H: 6}}, seen(b), "one at the left at the start of the first")
 }

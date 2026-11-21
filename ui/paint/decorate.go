@@ -203,12 +203,19 @@ func partOf(b *box.Box) style.TablePart {
 }
 
 // background paints e's background colour, its row's for a table row,
-// then its image, over r rounded by radius with borders of edges: placed
-// in strip, r itself but for a line of an inline, whose box is its lines
-// end to end.
+// then its layers from the last to the first, over r rounded by radius
+// with borders of edges: placed in strip, r itself but for a line of an
+// inline, whose box is its lines end to end. A colour painted in the box
+// and the layers over it share one clip to r, so those showing in all of
+// it draw as one batch.
 func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radius radii, st *style.Computed,
 	alpha float32) {
 	b := e.b
+	n := st.BackgroundLayers()
+	if st.Background.A > 0 && !tracked(b) && !paintsCells(st) && st.HasBackgroundImage() {
+		p.s.PushClip(r)
+		defer p.s.PopClip()
+	}
 	if st.Background.A > 0 && !tracked(b) {
 		switch {
 		case st.TablePart == style.TableRow:
@@ -221,19 +228,39 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		case st.MaskImage.Source != "":
 			p.maskedFill(r, radius, st, alpha)
 		default:
-			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundClip, style.UnderBorder))
+			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundLayer(n-1).Clip, style.UnderBorder))
 			p.fill(clip, rounding, fade(st.Background, alpha))
 		}
 	}
-	if st.BackgroundImage.Source == "" && st.BackgroundImage.Gradient == nil {
-		return
+	for i := n - 1; i >= 0; i-- {
+		if l := st.BackgroundLayer(i); l.Image.Source != "" || l.Image.Gradient != nil {
+			p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha)
+		}
 	}
-	view, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundClip, style.UnderBorder))
-	area, _ := backgroundBox(b, strip, edges, radius, or(st.BackgroundOrigin, style.UnderPadding))
+}
+
+// paintsCells reports whether st's element paints its background colour
+// behind its cells, out of its own box: a table's row, row group, column
+// or column group.
+func paintsCells(st *style.Computed) bool {
+	switch st.TablePart {
+	case style.TableRow, style.TableRowGroup, style.TableHeaderGroup, style.TableFooterGroup, style.TableColumn,
+		style.TableColumnGroup:
+		return true
+	case style.NoTablePart, style.TableCell, style.TableCaption:
+	}
+	return false
+}
+
+// backgroundLayer paints l, a layer of b's background, as background does.
+func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edges, radius radii,
+	l *style.BackgroundLayer, st *style.Computed, alpha float32) {
+	view, rounding := backgroundBox(b, r, edges, radius, or(l.Clip, style.UnderBorder))
+	area, _ := backgroundBox(b, strip, edges, radius, or(l.Origin, style.UnderPadding))
 	if strip != r {
-		area, _ = backgroundBox(b, strip, b.Border, radius, or(st.BackgroundOrigin, style.UnderPadding))
+		area, _ = backgroundBox(b, strip, b.Border, radius, or(l.Origin, style.UnderPadding))
 	}
-	switch st.BackgroundAttachment {
+	switch l.Attachment {
 	case style.AttachFixed:
 		area = p.viewport
 	case style.AttachLocal:
@@ -243,7 +270,7 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		area.W, area.H = area.W+max(b.Content.X-pad.W, 0), area.H+max(b.Content.Y-pad.H, 0)
 	case style.AttachScroll:
 	}
-	p.backgroundImage(view, area, rounding, st, alpha)
+	p.backgroundImage(view, area, rounding, l, st, alpha)
 }
 
 func or(b, initial style.BackgroundBox) style.BackgroundBox {
@@ -428,14 +455,15 @@ func inside(r geom.Rect, e box.Edges) geom.Rect {
 // drawn, so a tiny image over a big box can't flood the draw list.
 const maxTiles = 4096
 
-// backgroundImage draws st's background image, a picture or a gradient,
-// at its background-size in area, the padding box rounded by radius:
-// placed by background-position, tiled from there along the axes
-// background-repeat names, clipped to view. view is area but for the
-// canvas of a viewport that scrolls, whose image is placed in the root
-// element's box and tiles over the canvas.
-func (p *painter) backgroundImage(view, area geom.Rect, radius radii, st *style.Computed, alpha float32) {
-	p.tiled(view, area, radius, st, alpha, fade(color.White, alpha), false)
+// backgroundImage draws l's picture, a picture or a gradient, at its
+// background-size in area, the padding box rounded by radius: placed by
+// background-position, tiled from there as background-repeat says,
+// clipped to view. view is area but for the canvas of a viewport that
+// scrolls, whose image is placed in the root element's box and tiles over
+// the canvas.
+func (p *painter) backgroundImage(view, area geom.Rect, radius radii, l *style.BackgroundLayer, st *style.Computed,
+	alpha float32) {
+	p.tiled(view, area, radius, l, st, alpha, fade(color.White, alpha), false)
 }
 
 // maskedFill paints st's background colour through its mask-image over
@@ -443,26 +471,24 @@ func (p *painter) backgroundImage(view, area geom.Rect, radius radii, st *style.
 // background image is, in the colour (decision 0093). Nothing is painted
 // until the picture is there.
 func (p *painter) maskedFill(r geom.Rect, radius radii, st *style.Computed, alpha float32) {
-	mask := *st
-	mask.BackgroundImage, mask.BackgroundSize, mask.BackgroundPosition = st.MaskImage, st.MaskSize, st.MaskPosition
-	mask.BackgroundNoRepeat, mask.BackgroundRepeat = st.MaskNoRepeat, st.MaskRepeat
-	p.tiled(r, r, radius, &mask, alpha, fade(st.Background, alpha), true)
+	mask := style.BackgroundLayer{Image: st.MaskImage, Size: st.MaskSize, Repeat: st.MaskRepeat, Position: st.MaskPosition}
+	p.tiled(r, r, radius, &mask, st, alpha, fade(st.Background, alpha), true)
 }
 
-// tiled draws st's background image tinted by tint, as its shape alone
-// when shape is set: its alpha, whatever its colours.
-func (p *painter) tiled(view, area geom.Rect, radius radii, st *style.Computed, alpha float32, tint color.Color,
-	shape bool) {
-	g := st.BackgroundImage.Gradient
+// tiled draws l's picture tinted by tint, as its shape alone when shape
+// is set: its alpha, whatever its colours. st is its element's style.
+func (p *painter) tiled(view, area geom.Rect, radius radii, l *style.BackgroundLayer, st *style.Computed,
+	alpha float32, tint color.Color, shape bool) {
+	g := l.Image.Gradient
 	var tex *twod.Texture
 	var natural box.Intrinsic
-	vec := p.shapes(st.BackgroundImage.Source)
+	vec := p.shapes(l.Image.Source)
 	switch {
 	case g != nil:
 	case vec != nil:
 		natural = vec.Intrinsic()
 	default:
-		if tex = p.find(st.BackgroundImage, st); tex == nil {
+		if tex = p.find(l.Image, st); tex == nil {
 			return
 		}
 		if natural = box.Sized(tex.Size()); natural.Ratio <= 0 {
@@ -472,16 +498,21 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, st *style.Computed, 
 	if area.W <= 0 || area.H <= 0 || view.W <= 0 || view.H <= 0 {
 		return
 	}
-	size := tileSize(st.BackgroundSize, natural, geom.V2(area.W, area.H), p.snapScale())
+	size := tileSize(l.Size, natural, geom.V2(area.W, area.H), p.snapScale())
 	if size.X <= 0 || size.Y <= 0 {
 		return
 	}
-	pos := st.BackgroundPosition
+	rep := l.Repeat
+	size = roundTile(size, rep, l.Size, area)
+	pos := l.Position
 	first := geom.Rect{
 		X: place(pos.X, pos.FromRight, area.X, area.W, size.X),
 		Y: place(pos.Y, pos.FromBottom, area.Y, area.H, size.Y),
 		W: size.X, H: size.Y,
 	}
+	var gap geom.Vec2
+	gap.X, rep.X, first.X = spaceTiles(rep.X, area.X, area.W, first.X, size.X)
+	gap.Y, rep.Y, first.Y = spaceTiles(rep.Y, area.Y, area.H, first.Y, size.Y)
 	if g != nil && first == area && view == area {
 		p.gradient(area, radius, g, alpha)
 		return
@@ -491,15 +522,16 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, st *style.Computed, 
 	// at all also ends on the pixel nearest its length from there. One
 	// starting before the area, or repeating, keeps its place.
 	at := p.snap(first)
-	if st.BackgroundNoRepeat {
+	alone := rep == style.NoRepeat
+	if alone {
 		at = p.snap(geom.Rect{X: at.X, Y: at.Y, W: first.W, H: first.H})
 	} else {
 		at.W, at.H = first.W, first.H
 	}
-	if (st.BackgroundNoRepeat || st.BackgroundRepeat == style.RepeatY) && first.X >= area.X {
+	if rep.X == style.TileNoRepeat && first.X >= area.X {
 		first.X, first.W = at.X, at.W
 	}
-	if (st.BackgroundNoRepeat || st.BackgroundRepeat == style.RepeatX) && first.Y >= area.Y {
+	if rep.Y == style.TileNoRepeat && first.Y >= area.Y {
 		first.Y, first.H = at.Y, at.H
 	}
 	if vec != nil {
@@ -507,7 +539,7 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, st *style.Computed, 
 			return
 		}
 	}
-	if radius.zero() || st.BackgroundNoRepeat && insideAll(corners(first), view, radius) {
+	if radius.zero() || alone && insideAll(corners(first), view, radius) {
 		p.s.PushClip(view)
 	} else {
 		p.s.PushClipRounded(view, radius)
@@ -516,13 +548,55 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, st *style.Computed, 
 	if shape {
 		tex = silhouette(tex)
 	}
-	backgroundTiles(view, first, st, func(tile geom.Rect) {
+	backgroundTiles(view, first, rep, gap, func(tile geom.Rect) {
 		if g != nil {
 			p.gradient(tile, radii{}, g, alpha)
 			return
 		}
 		p.s.Image(tile, tex, texels(tex), tint)
 	})
+}
+
+// roundTile is size made a whole number of copies of the area along each
+// axis rep rounds, the nearest; when one axis alone is, the other side
+// follows to keep the tile's proportions unless background-size bs gives
+// it.
+func roundTile(size geom.Vec2, rep style.BackgroundRepeat, bs style.BackgroundSize, area geom.Rect) geom.Vec2 {
+	whole := func(extent, tile float32) float32 {
+		return extent / max(float32(math.Round(float64(extent/tile))), 1)
+	}
+	out := size
+	if rep.X == style.TileRound {
+		out.X = whole(area.W, size.X)
+	}
+	if rep.Y == style.TileRound {
+		out.Y = whole(area.H, size.Y)
+	}
+	scaled := bs.Scale != style.ScaleNone
+	switch {
+	case rep.X == style.TileRound && rep.Y != style.TileRound && (scaled || bs.Height.Kind == style.Auto):
+		out.Y = size.Y * out.X / size.X
+	case rep.Y == style.TileRound && rep.X != style.TileRound && (scaled || bs.Width.Kind == style.Auto):
+		out.X = size.X * out.Y / size.Y
+	}
+	return out
+}
+
+// spaceTiles lays copies of a tile along an axis of an area from origin of
+// length extent as tiling t says, the first placed at start: for space,
+// as many as fit whole, the first and the last at its ends, and it
+// returns the room left between them, the tiling and the first's start;
+// with fewer than two the picture is placed alone, as by no-repeat. Any
+// other tiling is returned as it is.
+func spaceTiles(t style.Tiling, origin, extent, start, tile float32) (float32, style.Tiling, float32) {
+	if t != style.TileSpace {
+		return 0, t, start
+	}
+	n := float32(math.Floor(float64(extent / tile)))
+	if n < 2 {
+		return 0, style.TileNoRepeat, start
+	}
+	return (extent - n*tile) / (n - 1), style.TileSpace, origin
 }
 
 // tileSize is the size a background image is drawn at in a padding box
@@ -592,34 +666,39 @@ func corners(r geom.Rect) []geom.Vec2 {
 	return []geom.Vec2{{X: r.X, Y: r.Y}, {X: r.X + r.W, Y: r.Y}, {X: r.X + r.W, Y: r.Y + r.H}, {X: r.X, Y: r.Y + r.H}}
 }
 
-// backgroundTiles calls draw with each copy of a background image over view: first
-// alone when st doesn't repeat, else it and its copies before and after,
-// along the axes st repeats, up to maxTiles.
-func backgroundTiles(view, first geom.Rect, st *style.Computed, draw func(tile geom.Rect)) {
-	if st.BackgroundNoRepeat {
+// backgroundTiles calls draw with each copy of a background image over
+// view: first alone when rep doesn't repeat, else it and its copies
+// before and after, gap apart, along the axes rep repeats, up to
+// maxTiles.
+func backgroundTiles(view, first geom.Rect, rep style.BackgroundRepeat, gap geom.Vec2, draw func(tile geom.Rect)) {
+	if rep == style.NoRepeat {
 		draw(first)
 		return
 	}
-	x0 := first.X - float32(math.Ceil(float64((first.X-view.X)/first.W)))*first.W
-	y0 := first.Y - float32(math.Ceil(float64((first.Y-view.Y)/first.H)))*first.H
+	stepX, stepY := first.W+gap.X, first.H+gap.Y
+	x0 := first.X - float32(math.Ceil(float64((first.X-view.X-seam)/stepX)))*stepX
+	y0 := first.Y - float32(math.Ceil(float64((first.Y-view.Y-seam)/stepY)))*stepY
 	x1, y1 := view.X+view.W, view.Y+view.H
-	switch st.BackgroundRepeat {
-	case style.RepeatX:
-		y0, y1 = first.Y, first.Y+first.H
-	case style.RepeatY:
+	if rep.X == style.TileNoRepeat {
 		x0, x1 = first.X, first.X+first.W
-	case style.RepeatBoth:
+	}
+	if rep.Y == style.TileNoRepeat {
+		y0, y1 = first.Y, first.Y+first.H
 	}
 	n := 0
-	for ty := y0; ty < y1; ty += first.H {
-		for tx := x0; tx < x1; tx += first.W {
+	for j := float32(0); y0+j*stepY < y1-seam; j++ {
+		for i := float32(0); x0+i*stepX < x1-seam; i++ {
 			if n++; n > maxTiles {
 				return
 			}
-			draw(geom.Rect{X: tx, Y: ty, W: first.W, H: first.H})
+			draw(geom.Rect{X: x0 + i*stepX, Y: y0 + j*stepY, W: first.W, H: first.H})
 		}
 	}
 }
+
+// seam is how far short of a view's end a tile may start and not be
+// drawn: the rounding a tile size that divides its area leaves.
+const seam = 1e-3
 
 // place is where an image of length img starts along an area from origin
 // of length extent, at l from the start, or from the end when fromEnd: a

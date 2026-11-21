@@ -33,9 +33,8 @@ func scrolledPage(y float32, edit func(body *style.Computed)) (*box.Tree, *box.B
 
 func bottomRight(s *style.Computed) {
 	s.Background = blue
-	s.BackgroundImage = style.Image{Source: "arrow"}
-	s.BackgroundNoRepeat = true
-	s.BackgroundPosition = style.BackgroundPosition{FromRight: true, FromBottom: true}
+	stacked(s, style.BackgroundLayer{Image: style.Image{Source: "arrow"}, Repeat: style.NoRepeat,
+		Position: style.BackgroundPosition{FromRight: true, FromBottom: true}})
 }
 
 func paintPage(tr *box.Tree) *recorder {
@@ -60,7 +59,7 @@ func TestACanvasPictureIsPlacedInTheRootsBoxAndScrollsWithThePage(t *testing.T) 
 }
 
 func TestARepeatedCanvasPictureTilesOverTheViewportFromTheRootsBox(t *testing.T) {
-	tr, _ := scrolledPage(3, func(s *style.Computed) { s.BackgroundImage = style.Image{Source: "arrow"} })
+	tr, _ := scrolledPage(3, func(s *style.Computed) { s.BackgroundImages = []style.Image{{Source: "arrow"}} })
 	img := paintPage(tr).of("image")
 	require.NotEmpty(t, img)
 	assert.Equal(t, geom.Rect{X: 0, Y: 7 - 6 - 6, W: 10, H: 6}, img[0].Rect,
@@ -72,8 +71,8 @@ func TestARepeatedCanvasPictureTilesOverTheViewportFromTheRootsBox(t *testing.T)
 
 func TestACanvasGradientIsSizedByTheRootsBoxAndTilesOverTheViewport(t *testing.T) {
 	tr, _ := scrolledPage(0, func(s *style.Computed) {
-		s.BackgroundImage = style.Image{Gradient: &style.Gradient{Angle: 180, Stops: stops(red, blue)}}
-		s.BackgroundSize = style.BackgroundSize{Width: style.Percent(50), Height: style.Px(100)}
+		s.BackgroundImages = []style.Image{{Gradient: &style.Gradient{Angle: 180, Stops: stops(red, blue)}}}
+		s.BackgroundSizes = []style.BackgroundSize{{Width: style.Percent(50), Height: style.Px(100)}}
 	})
 	bands := paintPage(tr).of("gradient")
 	require.Len(t, bands, 16, "four across by four down: one before the padding box each way, cut by the viewport")

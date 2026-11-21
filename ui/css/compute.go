@@ -25,7 +25,7 @@ var (
 // initialStyle is style.Initial with the initial values it leaves out:
 // border widths are medium, used only under a border-style (finish),
 // outline-width is medium whatever outline-style says, as in Chrome,
-// corners are 0, and the transform origin and background position are
+// corners are 0, and the transform origin and mask position are
 // percentages.
 func initialStyle() style.Computed {
 	c := style.Initial()
@@ -38,9 +38,7 @@ func initialStyle() style.Computed {
 	half := style.Length{Kind: style.Fixed, Percent: 50, IsPercent: true}
 	c.TransformOrigin = style.Size[style.Length]{Width: half, Height: half}
 	c.AccentAuto, c.CaretAuto = true, true
-	none := style.Length{Kind: style.Fixed, IsPercent: true}
-	c.BackgroundPosition = style.BackgroundPosition{X: none, Y: none}
-	c.MaskPosition = c.BackgroundPosition
+	c.MaskPosition = style.TopLeft
 	c.ObjectPosition = style.BackgroundPosition{X: half, Y: half}
 	return c
 }
@@ -1464,33 +1462,31 @@ var props = func() map[string]prop {
 		}),
 
 		"background-color": colorField(func(c *style.Computed) *color.Color { return &c.Background }),
-		"background-image": field(func(c *style.Computed) *style.Image { return &c.BackgroundImage }, backgroundImage),
-		"background-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.BackgroundSize },
+		"background-image": layered(func(c *style.Computed) *[]style.Image { return &c.BackgroundImages },
+			backgroundImage),
+		"background-size": layered(func(c *style.Computed) *[]style.BackgroundSize { return &c.BackgroundSizes },
 			(*ctx).backgroundSize),
-		"background-repeat": tiling(func(c *style.Computed) (*bool, *style.RepeatAxes) {
-			return &c.BackgroundNoRepeat, &c.BackgroundRepeat
-		}),
-		"background-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.BackgroundPosition },
-			(*ctx).position),
-		"background-attachment": keyword(
-			func(c *style.Computed) *style.BackgroundAttachment { return &c.BackgroundAttachment },
-			map[string]style.BackgroundAttachment{
+		"background-repeat": layered(func(c *style.Computed) *[]style.BackgroundRepeat { return &c.BackgroundRepeats },
+			tiling),
+		"background-position": layered(
+			func(c *style.Computed) *[]style.BackgroundPosition { return &c.BackgroundPositions }, (*ctx).position),
+		"background-attachment": layered(
+			func(c *style.Computed) *[]style.BackgroundAttachment { return &c.BackgroundAttachments },
+			wordOf(map[string]style.BackgroundAttachment{
 				"scroll": style.AttachScroll, "fixed": style.AttachFixed, "local": style.AttachLocal,
-			}),
-		"background-origin": keyword(func(c *style.Computed) *style.BackgroundBox { return &c.BackgroundOrigin },
-			map[string]style.BackgroundBox{
+			})),
+		"background-origin": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundOrigins },
+			wordOf(map[string]style.BackgroundBox{
 				"padding-box": style.InitialBox, "border-box": style.UnderBorder, "content-box": style.UnderContent,
-			}),
-		"background-clip": keyword(func(c *style.Computed) *style.BackgroundBox { return &c.BackgroundClip },
-			map[string]style.BackgroundBox{
+			})),
+		"background-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundClips },
+			wordOf(map[string]style.BackgroundBox{
 				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
-			}),
+			})),
 		"mask-image": field(func(c *style.Computed) *style.Image { return &c.MaskImage },
 			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }),
-		"mask-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize }, (*ctx).backgroundSize),
-		"mask-repeat": tiling(func(c *style.Computed) (*bool, *style.RepeatAxes) {
-			return &c.MaskNoRepeat, &c.MaskRepeat
-		}),
+		"mask-size":   field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize }, (*ctx).backgroundSize),
+		"mask-repeat": field(func(c *style.Computed) *style.BackgroundRepeat { return &c.MaskRepeat }, tiling),
 		"mask-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.MaskPosition },
 			(*ctx).position),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows),
@@ -1553,7 +1549,7 @@ var props = func() map[string]prop {
 			func(_ *ctx, v []Component) [2]style.ImageRepeat {
 				of := func(c Component) style.ImageRepeat {
 					switch {
-					case isWord(c, "repeat"):
+					case isWord(c, kwRepeat):
 						return style.RepeatTile
 					case isWord(c, "round"):
 						return style.RepeatRound
@@ -1715,34 +1711,42 @@ func (x *ctx) backgroundSize(v []Component) style.BackgroundSize {
 	return size
 }
 
-// tiling is background-repeat, and mask-repeat: whether the picture
-// tiles, and along which axes.
-func tiling(get func(*style.Computed) (*bool, *style.RepeatAxes)) prop {
-	return prop{
-		set: func(x *ctx, v []Component) {
-			no, axes := get(x.c)
-			*no, *axes = isWord(v[0], "no-repeat"), style.RepeatBoth
-			switch {
-			case len(v) == 2:
-				across, down := isWord(v[0], "repeat"), isWord(v[1], "repeat")
-				*no = !across && !down
-				if across && !down {
-					*axes = style.RepeatX
-				} else if down && !across {
-					*axes = style.RepeatY
-				}
-			case isWord(v[0], "repeat-x"):
-				*axes = style.RepeatX
-			case isWord(v[0], "repeat-y"):
-				*axes = style.RepeatY
-			}
-		},
-		inherit: func(dst, src *style.Computed) {
-			no, axes := get(dst)
-			sno, saxes := get(src)
-			*no, *axes = *sno, *saxes
-		},
+// layered is a background longhand: the list of its layers' values, each
+// read by each from its part of the value.
+func layered[T any](get func(*style.Computed) *[]T, each func(x *ctx, v []Component) T) prop {
+	return field(get, func(x *ctx, v []Component) []T {
+		parts := splitOn(items(v), func(c Component) bool { return c.Kind == Comma })
+		out := make([]T, len(parts))
+		for i, part := range parts {
+			out[i] = each(x, part)
+		}
+		return out
+	})
+}
+
+func wordOf[T any](m map[string]T) func(*ctx, []Component) T {
+	return func(_ *ctx, v []Component) T { return m[strings.ToLower(v[0].Text)] }
+}
+
+//nolint:gochecknoglobals // lookup table
+var tilings = map[string]style.Tiling{
+	kwRepeat: style.TileRepeat, "no-repeat": style.TileNoRepeat, "space": style.TileSpace, "round": style.TileRound,
+}
+
+// tiling is a layer of background-repeat, or mask-repeat: how the
+// picture fills each axis.
+func tiling(_ *ctx, v []Component) style.BackgroundRepeat {
+	if len(v) == 2 {
+		return style.BackgroundRepeat{X: tilings[strings.ToLower(v[0].Text)], Y: tilings[strings.ToLower(v[1].Text)]}
 	}
+	switch strings.ToLower(v[0].Text) {
+	case "repeat-x":
+		return style.BackgroundRepeat{X: style.TileRepeat, Y: style.TileNoRepeat}
+	case "repeat-y":
+		return style.BackgroundRepeat{X: style.TileNoRepeat, Y: style.TileRepeat}
+	}
+	t := tilings[strings.ToLower(v[0].Text)]
+	return style.BackgroundRepeat{X: t, Y: t}
 }
 
 func gridLine(_ *ctx, v []Component) style.GridLine {
@@ -1839,7 +1843,7 @@ func (x *ctx) tracks(v []Component) []style.TrackRepeat {
 		case c.Kind == LBracket:
 			before = lineNames(c)
 			continue
-		case c.Kind != Function || !strings.EqualFold(c.Text, "repeat"):
+		case c.Kind != Function || !strings.EqualFold(c.Text, kwRepeat):
 			out = append(out, style.TrackRepeat{Count: 1, Tracks: []style.Track{x.track(c)}, Before: before})
 			before = nil
 			continue

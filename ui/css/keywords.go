@@ -24,6 +24,7 @@ const (
 	kwMiddle       = "middle"
 	kwInherit      = "inherit"
 	kwBaseline     = "baseline"
+	kwRepeat       = "repeat"
 
 	unitRem  = "rem"
 	nameVmin = "vmin"

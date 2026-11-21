@@ -345,12 +345,13 @@ func (p *painter) canvasBackground(root *box.Box) {
 	if st.Background.A > 0 {
 		p.s.Rect(p.viewport, st.Background)
 	}
-	p.backgroundImage(p.viewport, area, radii{}, st, 1)
+	for i := st.BackgroundLayers() - 1; i >= 0; i-- {
+		l := st.BackgroundLayer(i)
+		p.backgroundImage(p.viewport, area, radii{}, &l, st, 1)
+	}
 }
 
-func hasBackground(st *style.Computed) bool {
-	return st.Background.A > 0 || st.BackgroundImage.Source != "" || st.BackgroundImage.Gradient != nil
-}
+func hasBackground(st *style.Computed) bool { return st.Background.A > 0 || st.HasBackgroundImage() }
 
 // entry is a box to paint, its border box's top-left in the root's space
 // and the clips of its ancestors within its stacking context.

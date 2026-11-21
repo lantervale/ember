@@ -399,11 +399,11 @@ func expandTransition(v []Component, out map[string][]Component) error {
 // expandBackground splits the background shorthand: a colour, an image, a
 // repeat of one or two words, an attachment, one box for the origin and
 // the clip or two, and a position with a size after a slash, in any
-// order. Of several layers the colour is the last one's, which alone may
-// have one, and the rest the first with a picture's: ui draws one layer.
+// order, for each layer; the last layer alone may have the colour. Each
+// other longhand is the list of the layers' values, those a layer leaves
+// out initial.
 func expandBackground(v []Component, out map[string][]Component) error {
 	layers := splitOn(v, func(c Component) bool { return c.Kind == Comma })
-	var drawn map[string][]Component
 	for i, l := range layers {
 		layer := map[string][]Component{}
 		if len(l) == 0 {
@@ -417,15 +417,17 @@ func expandBackground(v []Component, out map[string][]Component) error {
 				return fmt.Errorf("background: only the last layer takes a colour")
 			}
 			out["background-color"] = c
-			delete(layer, "background-color")
 		}
-		img := layer["background-image"]
-		if drawn == nil && (i == len(layers)-1 || img != nil && !isWord(img[0], kwNone)) {
-			drawn = layer
+		for _, name := range shorthands[shortBackground][1:] {
+			value, ok := layer[name]
+			if !ok {
+				value = initialValue(name)
+			}
+			if i > 0 {
+				out[name] = append(out[name], Component{Token: Token{Kind: Comma}})
+			}
+			out[name] = append(out[name], value...)
 		}
-	}
-	for name, value := range drawn {
-		out[name] = value
 	}
 	return nil
 }

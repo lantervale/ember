@@ -394,7 +394,7 @@ func TestTransformsComposeInOrderWithPercentTranslation(t *testing.T) {
 
 func TestImagesAreDrawnByNameAndBorderImagesAsSlices(t *testing.T) {
 	b := el(0, 0, 64, 32, func(s *style.Computed) {
-		s.BackgroundImage = style.Image{Source: "bg.png"}
+		s.BackgroundImages = []style.Image{{Source: "bg.png"}}
 		s.BorderImage = style.Image{Source: "frame.png", Slice: style.All[float32](2)}
 		s.Border = style.All[float32](2)
 	})

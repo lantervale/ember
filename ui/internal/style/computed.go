@@ -629,34 +629,30 @@ type Transition struct {
 }
 
 type Look struct {
-	Background      color.Color
-	BackgroundImage Image
-	BackgroundSize  BackgroundSize
-	// BackgroundNoRepeat is background-repeat: no-repeat; the image tiles
-	// otherwise.
-	BackgroundNoRepeat bool
-	// BackgroundRepeat is the axis a repeated image tiles along: both, or
-	// one for repeat-x and repeat-y.
-	BackgroundRepeat RepeatAxes
-	// BackgroundPosition is where the image's top-left sits in the box
-	// BackgroundOrigin names.
-	BackgroundPosition BackgroundPosition
-	// BackgroundAttachment is background-attachment: what the image is
-	// placed in and moves with.
-	BackgroundAttachment BackgroundAttachment
-	// BackgroundOrigin is background-origin, the box the image is placed
-	// in (the padding box when InitialBox), and BackgroundClip
-	// background-clip, the box the background shows in (the border box
-	// when InitialBox).
-	BackgroundOrigin, BackgroundClip BackgroundBox
+	// Background is background-color, painted under the last layer in
+	// the box its clip names.
+	Background color.Color
+	// BackgroundImages are background-image's layers, the first on top,
+	// and the other lists their longhands' as written: layer i takes item
+	// i of each, a list shorter than the pictures starting again and a
+	// longer one cut; nil is the initial value alone (BackgroundLayer).
+	BackgroundImages      []Image
+	BackgroundSizes       []BackgroundSize
+	BackgroundRepeats     []BackgroundRepeat
+	BackgroundPositions   []BackgroundPosition
+	BackgroundAttachments []BackgroundAttachment
+	// BackgroundOrigins are background-origin's boxes, the box a picture
+	// is placed in (the padding box when InitialBox), and BackgroundClips
+	// background-clip's, the box it shows in (the border box when
+	// InitialBox).
+	BackgroundOrigins, BackgroundClips []BackgroundBox
 	// MaskImage is mask-image: the picture whose alpha is the shape the
 	// background colour is painted through (decision 0093), sized, tiled
-	// and placed in the border box by MaskSize, MaskNoRepeat, MaskRepeat
-	// and MaskPosition as a background image is by its own.
+	// and placed in the border box by MaskSize, MaskRepeat and
+	// MaskPosition as a background image is by its own.
 	MaskImage    Image
 	MaskSize     BackgroundSize
-	MaskNoRepeat bool
-	MaskRepeat   RepeatAxes
+	MaskRepeat   BackgroundRepeat
 	MaskPosition BackgroundPosition
 	// ObjectFit and ObjectPosition place a replaced element's picture
 	// (an img's) in its content box.
@@ -864,14 +860,80 @@ const (
 	FitScaleDown
 )
 
-// RepeatAxes are the axes a background image tiles along.
-type RepeatAxes uint8
+// BackgroundRepeat is background-repeat, or mask-repeat: how a picture
+// fills its area across and down.
+type BackgroundRepeat struct{ X, Y Tiling }
+
+// NoRepeat is background-repeat: no-repeat.
+//
+//nolint:gochecknoglobals // a constant Go can't declare
+var NoRepeat = BackgroundRepeat{X: TileNoRepeat, Y: TileNoRepeat}
+
+// Tiling is how a background picture fills one axis of its area.
+type Tiling uint8
 
 const (
-	RepeatBoth RepeatAxes = iota
-	RepeatX
-	RepeatY
+	// TileRepeat repeats it at its size from where it is placed.
+	TileRepeat Tiling = iota
+	// TileNoRepeat draws it once.
+	TileNoRepeat
+	// TileSpace repeats it as often as it fits whole, the first and the
+	// last at the area's edges and the room left shared between them.
+	TileSpace
+	// TileRound repeats it a whole number of times, scaled to fill the
+	// area.
+	TileRound
 )
+
+// BackgroundLayer is one layer of a background: its picture, sized,
+// tiled and placed in the box Origin names, shown in the one Clip names.
+type BackgroundLayer struct {
+	Image        Image
+	Size         BackgroundSize
+	Repeat       BackgroundRepeat
+	Position     BackgroundPosition
+	Attachment   BackgroundAttachment
+	Origin, Clip BackgroundBox
+}
+
+// BackgroundLayers is how many layers the background has: one a
+// picture, and one for background-image: none.
+func (l *Look) BackgroundLayers() int { return max(len(l.BackgroundImages), 1) }
+
+// BackgroundLayer is the background's layer i, 0 on top.
+func (l *Look) BackgroundLayer(i int) BackgroundLayer {
+	return BackgroundLayer{
+		Image:      layerItem(l.BackgroundImages, i, Image{}),
+		Size:       layerItem(l.BackgroundSizes, i, BackgroundSize{}),
+		Repeat:     layerItem(l.BackgroundRepeats, i, BackgroundRepeat{}),
+		Position:   layerItem(l.BackgroundPositions, i, TopLeft),
+		Attachment: layerItem(l.BackgroundAttachments, i, AttachScroll),
+		Origin:     layerItem(l.BackgroundOrigins, i, InitialBox),
+		Clip:       layerItem(l.BackgroundClips, i, InitialBox),
+	}
+}
+
+// HasBackgroundImage reports whether a layer has a picture.
+func (l *Look) HasBackgroundImage() bool {
+	for i := range l.BackgroundImages {
+		if img := &l.BackgroundImages[i]; img.Source != "" || img.Gradient != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func layerItem[T any](list []T, i int, initial T) T {
+	if len(list) == 0 {
+		return initial
+	}
+	return list[i%len(list)]
+}
+
+// TopLeft is background-position's initial value, 0% 0%.
+//
+//nolint:gochecknoglobals // a constant Go can't declare
+var TopLeft = BackgroundPosition{X: Length{Kind: Fixed, IsPercent: true}, Y: Length{Kind: Fixed, IsPercent: true}}
 
 // ImageRepeat is border-image-repeat along one axis: how a border image's
 // edges and centre fill their length.
