@@ -5,6 +5,7 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -78,9 +79,16 @@ func TestImportsCascadeAsChromes(t *testing.T) {
 	}
 	sheet := `@import url(css/site.css); body { margin: 0; }`
 	for _, size := range []geom.Vec2{geom.V2(800, 600), geom.V2(600, 600)} {
-		want, err := chrome.PageBoxes(`<base href="`+srv.URL+`/index.html"><style>`+sheet+`</style>`, body.String(),
-			size)
-		require.NoError(t, err)
+		// A loaded runner's Chrome can let a fetch from the local server
+		// fail, and lays the page out without the sheet: #order's 30px,
+		// which site.css always sets, says it came.
+		var want []geom.Rect
+		for try := 0; try < 3 && (len(want) == 0 || want[2+slices.Index(ids, "order")].W != 30); try++ {
+			var err error
+			want, err = chrome.PageBoxes(`<base href="`+srv.URL+`/index.html"><style>`+sheet+`</style>`, body.String(),
+				size)
+			require.NoError(t, err)
+		}
 
 		d := ui.NewDocument(ui.BrowserSheets(), ui.FetchSheets(web.Sheets(srv.URL+"/")),
 			ui.CSS(sheet, ui.From(srv.URL+"/index.html")))
