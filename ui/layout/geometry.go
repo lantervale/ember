@@ -134,6 +134,15 @@ func (s size) withAspectRatio(ratio float32) size {
 // oneSided reports a size with one side set and the other not, which a ratio fills in.
 func (s size) oneSided() bool { return some(s.w) != some(s.h) }
 
+// clampedOneSide is a one-sided size whose side is held to lo and hi, so that the
+// side a ratio fills in follows the one the box ends with.
+func (s size) clampedOneSide(ratio float32, lo, hi size) size {
+	if !some(ratio) || !s.oneSided() {
+		return s
+	}
+	return s.mClamp(lo, hi)
+}
+
 type rect struct{ l, r, t, b float32 }
 
 func (r rect) add(o rect) rect     { return rect{r.l + o.l, r.r + o.r, r.t + o.t, r.b + o.b} }

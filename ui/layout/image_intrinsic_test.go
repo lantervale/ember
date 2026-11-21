@@ -95,3 +95,22 @@ func TestALineIsAsHighAsThePictureThatFillsIt(t *testing.T) {
 	assert.Equal(t, geom.V2(400, 200), tr.Of[i].Size)
 	assert.GreaterOrEqual(t, tr.Of[p].Size.Y, float32(200))
 }
+
+func TestAPictureNarrowedByItsMaxWidthKeepsItsProportions(t *testing.T) {
+	lay := func(edit func(*style.Computed)) geom.Vec2 {
+		i := img("thumb.png", edit)
+		tr := Layout(el(dom.Div, width(300), i), geom.V2(600, 300), ahemFonts{},
+			Images(pictures{"thumb.png": geom.V2(1024, 576)}))
+		return tr.Of[i].Size
+	}
+	fit := func(st *style.Computed) {
+		st.Size.Width, st.MaxSize.Width = style.Px(800), style.Percent(100)
+	}
+	assert.Equal(t, geom.V2(300, 168.75), lay(fit), "its height from the width it ends with, as Chrome")
+	assert.Equal(t, geom.V2(160, 90), lay(func(st *style.Computed) {
+		st.Size.Height, st.MaxSize.Height = style.Px(400), style.Px(90)
+	}))
+	assert.Equal(t, geom.V2(80, 45), lay(func(st *style.Computed) {
+		st.Size.Width, st.MinSize.Width = style.Px(40), style.Px(80)
+	}))
+}
