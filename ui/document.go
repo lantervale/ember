@@ -80,6 +80,8 @@ type Document struct {
 	systemFonts bool
 	// rightDragSelects is whether a drag of the right button selects text.
 	rightDragSelects bool
+	// reducedMotion answers prefers-reduced-motion: reduce.
+	reducedMotion bool
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool
@@ -346,7 +348,7 @@ func (d *Document) Layout(size geom.Vec2) {
 	if d.relayout && d.trans.FontsChanged() {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
-	media := css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale()}
+	media := css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale(), ReducedMotion: d.reducedMotion}
 	if d.trans.SetMedia(media) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}

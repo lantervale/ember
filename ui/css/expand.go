@@ -85,16 +85,14 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandBorderImage(v, out)
 	case shortTransition:
 		err = expandTransition(v, out)
+	case shortAnimation:
+		err = expandAnimation(v, out)
 	case "text-decoration":
 		err = expandTextDecoration(v, out)
 	case shortFont:
 		err = expandFont(v, out)
 	case "list-style":
-		if len(v) != 1 || checks["list-style-type"](v) != nil {
-			err = fmt.Errorf("list-style takes one list-style-type, such as none")
-		} else {
-			out["list-style-type"] = v
-		}
+		err = expandListStyle(v, out)
 	default:
 		err = fmt.Errorf("%s can't be expanded", name)
 	}
@@ -394,6 +392,89 @@ func expandTransition(v []Component, out map[string][]Component) error {
 		out[l] = c
 	}
 	return nil
+}
+
+func expandListStyle(v []Component, out map[string][]Component) error {
+	if len(v) != 1 || checks["list-style-type"](v) != nil {
+		return fmt.Errorf("list-style takes one list-style-type, such as none")
+	}
+	out["list-style-type"] = v
+	return nil
+}
+
+// expandAnimation splits the animation shorthand item by item: the
+// first time is the duration and the second the delay, and an
+// identifier that is a keyword of a longhand not yet given is that
+// longhand's, as CSS has it, so the name is the one left over.
+func expandAnimation(v []Component, out map[string][]Component) error {
+	long := shorthands[shortAnimation]
+	lists := make(map[string][]Component, len(long))
+	for n, part := range splitOn(v, func(c Component) bool { return c.Kind == Comma }) {
+		if len(part) == 0 {
+			return fmt.Errorf("empty animation")
+		}
+		one := map[string]Component{}
+		for _, c := range part {
+			name, err := animationPart(c, func(l string) bool { return one[l].Kind == EOF })
+			if err != nil {
+				return err
+			}
+			one[name] = c
+		}
+		for _, l := range long {
+			c, ok := one[l]
+			if !ok {
+				c = initialValue(l)[0]
+			}
+			if n > 0 {
+				lists[l] = append(lists[l], Component{Token: Token{Kind: Comma}})
+			}
+			lists[l] = append(lists[l], c)
+		}
+	}
+	for l, c := range lists {
+		out[l] = c
+	}
+	return nil
+}
+
+// animationPart is the longhand c of an animation item stands for, given
+// which longhands are still free.
+func animationPart(c Component, free func(string) bool) (string, error) {
+	switch {
+	case c.Kind == Dimension && timeTerm(false)(c) == nil:
+		switch {
+		case free(propAnimationDuration):
+			if timeTerm(true)(c) != nil {
+				return "", fmt.Errorf("a duration can't be negative")
+			}
+			return propAnimationDuration, nil
+		case free(propAnimationDelay):
+			return propAnimationDelay, nil
+		}
+		return "", fmt.Errorf("an animation has at most two times")
+	case c.Kind == Number && free(propAnimationCount):
+		return propAnimationCount, iterationCount(c)
+	case timingFunction(c) == nil && free(propAnimationTiming):
+		return propAnimationTiming, nil
+	}
+	for _, k := range []struct {
+		name  string
+		words []string
+	}{
+		{propAnimationCount, []string{kwInfinite}},
+		{propAnimationDir, animationDirections},
+		{propAnimationFill, animationFills},
+		{propAnimationPlay, []string{kwRunning, kwPaused}},
+	} {
+		if isWord(c, k.words...) && free(k.name) {
+			return k.name, nil
+		}
+	}
+	if free(propAnimationName) && (isWord(c, kwNone) || keyframesName(c) == nil) {
+		return propAnimationName, nil
+	}
+	return "", fmt.Errorf("bad animation part %q", c.String())
 }
 
 // expandBackground splits the background shorthand: a colour, an image, a

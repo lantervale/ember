@@ -172,8 +172,8 @@ func plainRules(s *Sheet) string {
 
 func TestWebkitAtRules(t *testing.T) {
 	s, warns := asBrowser("@-webkit-keyframes spin { from { opacity: 0 } } p { color: #f00 }")
-	if warns != "t.css:1:1: @-webkit-keyframes is not supported" || len(s.Rules) != 1 {
-		t.Errorf("@-webkit-keyframes is @keyframes, which ui refuses: %q, %d rules", warns, len(s.Rules))
+	if warns != "" || len(s.Rules) != 1 || len(s.Keyframes) != 1 || s.Keyframes[0].Name != "spin" {
+		t.Errorf("@-webkit-keyframes is @keyframes: %q, %d rules, %+v", warns, len(s.Rules), s.Keyframes)
 	}
 	for _, src := range []string{"@-webkit-viewport { width: device-width }",
 		"@-webkit-region x { p { color: #f00 } }", "@-webkit-supports (display: flex) { p { color: #f00 } }"} {
@@ -357,7 +357,7 @@ func vendorGuide(v *vendor) string {
 		b.WriteString("| any other pseudo-class | its whole rule goes without a word, as Chrome drops it |\n")
 	}
 	if len(v.atRules) > 0 {
-		fmt.Fprintf(&b, "| at-rules read as the plain one, with the warning ui has for it | %s |\n",
+		fmt.Fprintf(&b, "| at-rules read as the plain one | %s |\n",
 			pairs(v.atRules, "@"+v.prefix, "@"))
 	}
 	fmt.Fprintf(&b, "| any %sat-rule | %s |\n", map[bool]string{true: "other "}[len(v.atRules) > 0],

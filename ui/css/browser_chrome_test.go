@@ -216,9 +216,9 @@ return {
 		}
 	}
 	for i, rule := range atRules {
-		_, warns := css.Parse("t.css", rule, css.Browser())
-		if got.AtRules[i] != (len(warns) > 0) {
-			t.Errorf("%s: Chrome keeps it %v, ui warns %v", rule, got.AtRules[i], warns)
+		s, warns := css.Parse("t.css", rule, css.Browser())
+		if kept := len(s.Keyframes) > 0; got.AtRules[i] != (kept || len(warns) > 0) || kept && len(warns) > 0 {
+			t.Errorf("%s: Chrome keeps it %v, ui keeps it %v, warns %v", rule, got.AtRules[i], kept, warns)
 		}
 	}
 	if want := []bool{true, false, true, true, false}; !slices.Equal(got.Features, want) {

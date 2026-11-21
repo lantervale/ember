@@ -40,6 +40,17 @@ type Transitions struct {
 	// env is what lengths are measured against: the fonts, and media's
 	// viewport.
 	env measures
+	// anims are the animations of the elements whose style has an
+	// animation list, events what they did since Events, and frames the
+	// @keyframes rules by name, worked out again once rekey is set.
+	anims  map[*dom.Node]*nodeAnims
+	events []AnimationEvent
+	frames map[string]*Keyframes
+	rekey  bool
+	// km and kpm match the elements whose keyframes are worked out,
+	// probed counting them.
+	km, kpm matcher
+	probed  int
 }
 
 // nodeAnim is one element's running transitions and the style it shows.
@@ -62,7 +73,7 @@ type run struct {
 }
 
 func NewTransitions() *Transitions {
-	return &Transitions{nodes: map[*dom.Node]*nodeAnim{}}
+	return &Transitions{nodes: map[*dom.Node]*nodeAnim{}, anims: map[*dom.Node]*nodeAnims{}}
 }
 
 // OverlayScrollbars has every box that shows scrollbars keep no gutter
@@ -97,7 +108,7 @@ func (t *Transitions) SetMedia(m Media) bool {
 		return false
 	}
 	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
-		t.off, t.stale = off, true
+		t.off, t.stale, t.rekey = off, true, true
 	} else if resized && t.env.used&viewportUnits != 0 {
 		t.stale = true
 	}
@@ -130,6 +141,7 @@ func (t *Transitions) SetSheets(sheets []*Sheet) {
 		return
 	}
 	t.stale = t.stale || t.all != nil
+	t.rekey = true
 	t.given = slices.Clone(sheets)
 	agent := userAgent()
 	if t.browser {
@@ -153,10 +165,13 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	if t.changed == nil {
 		t.changed = t.restyled
 	}
-	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm,
+	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides,
 		computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser, env: &t.env}
 	r.run(root, t.stale)
 	t.stale = false
+	if (len(t.anims) > 0 || t.rekey) && t.animate() {
+		r.run(root, false)
+	}
 	t.refresh()
 	return r.warns
 }
@@ -165,9 +180,26 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 // far: what a change cost, for tests and tools.
 func (t *Transitions) Restyled() int { return t.computed }
 
-// Step advances every transition by dt seconds and writes their values
-// into Shown. It reports whether any still runs.
+// Step advances every transition and animation by dt seconds and writes
+// their values into Shown. An animation that moves what Style holds, a
+// length or a value that can't interpolate, flags its element DirtyStyle
+// for the next Compute. It reports whether any still runs.
 func (t *Transitions) Step(dt float32) bool {
+	running := false
+	for n, a := range t.anims {
+		if !t.live(n) {
+			t.cancel(n, a.list)
+			delete(t.anims, n)
+			continue
+		}
+		for _, an := range a.list {
+			if !an.Paused {
+				an.elapsed += dt
+			}
+		}
+		t.update(n, a)
+		running = running || slices.ContainsFunc(a.list, (*animation).running)
+	}
 	for n, a := range t.nodes {
 		if !t.attached(n) {
 			delete(t.nodes, n)
@@ -181,7 +213,10 @@ func (t *Transitions) Step(dt float32) bool {
 		}
 	}
 	t.refresh()
-	return len(t.nodes) > 0
+	for _, a := range t.nodes {
+		running = running || len(a.runs) > 0
+	}
+	return running
 }
 
 // Running reports whether n shows a transition.
@@ -199,12 +234,20 @@ func (t *Transitions) attached(n *dom.Node) bool {
 // restyled starts, retargets or cancels n's transitions after its style
 // went from old to new.
 func (t *Transitions) restyled(n *dom.Node, old, next *style.Computed) {
+	t.watch(n, next)
+	if old == nil {
+		setShown(n, next)
+		return
+	}
 	a := t.nodes[n]
 	before := old
 	if a != nil {
 		before = &a.shown
 	}
-	for _, p := range animatable {
+	for i, p := range animatable {
+		if t.animated(n, i) {
+			continue
+		}
 		to := p.get(next)
 		var r *run
 		if a != nil {
@@ -256,29 +299,62 @@ func (t *Transitions) refresh() {
 	for _, a := range t.nodes {
 		a.touched = false
 	}
+	for n, a := range t.anims {
+		if len(a.paints) > 0 && t.nodes[n] == nil {
+			t.nodes[n] = &nodeAnim{runs: map[string]*run{}}
+		}
+	}
 	for n, a := range t.nodes {
-		if len(a.runs) > 0 {
+		if t.own(n, a) {
 			t.build(n, a)
 		}
 	}
 	for n, a := range t.nodes {
-		if _, ok := a.runs["color"]; ok && !a.follows {
+		if t.ownColor(n, a) && !a.follows {
 			t.carry(n, a.shown.Color)
 		}
 	}
 	for n, a := range t.nodes {
-		if !a.touched && (a.follows || len(a.runs) == 0) {
+		if !a.touched && (a.follows || !t.own(n, a)) {
 			delete(t.nodes, n)
 			setShown(n, dom.Data(n).Style)
 		}
 	}
 }
 
+// own reports whether n shows a transition or an animation of its own.
+func (t *Transitions) own(n *dom.Node, a *nodeAnim) bool {
+	return len(a.runs) > 0 || t.anims[n] != nil && len(t.anims[n].paints) > 0
+}
+
+// ownColor reports whether n shows a colour transition or animation of
+// its own.
+func (t *Transitions) ownColor(n *dom.Node, a *nodeAnim) bool {
+	_, ok := a.runs["color"]
+	return ok || t.animated(n, 0)
+}
+
+// build shows n's style with its animations' values over it, then its
+// transitions' over those, as CSS's cascade has them.
 func (t *Transitions) build(n *dom.Node, a *nodeAnim) {
 	a.shown = *dom.Data(n).Style
-	if _, ok := a.runs["color"]; ok {
-		a.runs["color"].apply(&a.shown)
+	var paints []paintValue
+	if an := t.anims[n]; an != nil {
+		paints = an.paints
+	}
+	if t.ownColor(n, a) {
+		for _, p := range paints {
+			if p.index == 0 {
+				a.shown.Color = p.v.c
+			}
+		}
+		if r, ok := a.runs["color"]; ok {
+			r.apply(&a.shown)
+		}
 		a.shown.FollowColor(a.shown.Color)
+	}
+	for _, p := range paints {
+		animatable[p.index].set(&a.shown, p.v)
 	}
 	for _, p := range animatable {
 		if r, ok := a.runs[p.name]; ok {
@@ -305,13 +381,13 @@ func (t *Transitions) carry(n *dom.Node, c color.Color) {
 			a = &nodeAnim{runs: map[string]*run{}}
 			t.nodes[k] = a
 		}
-		if _, own := a.runs["color"]; own {
+		if t.ownColor(k, a) {
 			continue
 		}
 		if !a.touched {
 			t.build(k, a)
 		}
-		a.follows = len(a.runs) == 0
+		a.follows = !t.own(k, a)
 		a.shown.Color = c
 		a.shown.FollowColor(c)
 		t.carry(k, c)

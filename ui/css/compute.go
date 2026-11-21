@@ -118,6 +118,11 @@ type restyler struct {
 	// changed, when set, is told of every element whose style changed
 	// from an earlier one, and sets its Shown.
 	changed func(n *dom.Node, old, next *style.Computed)
+	// over, when set, is what an element's animations set on its style;
+	// keyframe, when set, are a keyframe's declarations to compute over
+	// the cascade, under its !important declarations.
+	over     func(n *dom.Node) []override
+	keyframe []Declaration
 	// overlay has scrolling boxes keep no gutter for their bars
 	// (Transitions.OverlayScrollbars).
 	overlay bool
@@ -261,7 +266,7 @@ func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Comput
 		return false
 	}
 	data.Style = s
-	if r.changed != nil && old != nil {
+	if r.changed != nil {
 		r.changed(n, old, s)
 	} else {
 		data.Shown = s
@@ -355,6 +360,9 @@ type ctx struct {
 	resolving          map[string]bool
 	raw                map[string]*Declaration
 	trans              [4][]Component
+	anims              [8][]Component
+	// over is what the element's animations set on its style.
+	over []override
 	// base is where the sheet the declaration being applied came from is.
 	base     *origin
 	expanded map[*Declaration]map[string][]Component
@@ -431,6 +439,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	}
 	r.m.hints = hints(n)
 	casc := r.m.cascade(r.m.matched(n, r.sheets, inline))
+	r.overKeyframe(casc)
 	root := parent == nil
 	if root {
 		parent = &initial
@@ -439,6 +448,9 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
+	if r.over != nil {
+		x.over = r.over(n)
+	}
 	x.cascaded(casc, root)
 	if closedSlot(n) {
 		c.Display = style.DisplayNone
@@ -465,6 +477,19 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		r.counts = true
 	}
 	return &c
+}
+
+// overKeyframe puts the keyframe's declarations in casc where no
+// !important one won, as animations stand in the cascade.
+func (r *restyler) overKeyframe(casc cascaded) {
+	for i := range r.keyframe {
+		d := &r.keyframe[i]
+		for _, name := range longhandsOf(d.Name) {
+			if w := casc.longhands[orderIndex[name]]; w == nil || !w.Important {
+				casc.longhands[orderIndex[name]] = d
+			}
+		}
+	}
 }
 
 // selection gives x's style what n's own ::selection declares.
@@ -496,6 +521,9 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 		case "line-height":
 			x.lined = true
 		}
+	}
+	for _, o := range x.over {
+		o.apply(x.c)
 	}
 	x.finish(root)
 }
@@ -880,6 +908,7 @@ func (x *ctx) finish(root bool) {
 		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 	}
 	x.transitions()
+	x.animations()
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
@@ -912,6 +941,50 @@ func (x *ctx) transitions() {
 		return
 	}
 	x.c.Transitions = transitionList(x.trans)
+}
+
+// animations is the animation list from the animation longhands' values,
+// unset ones initial: one entry for each name, none where there is no
+// name, the other lists repeated or cut to its length.
+func (x *ctx) animations() {
+	names := x.anims[len(x.anims)-1]
+	if names == nil {
+		return
+	}
+	var lists [8][][]Component
+	for i, v := range x.anims {
+		if v == nil {
+			v = initialValue(shorthands[shortAnimation][i])
+		}
+		lists[i] = splitOn(v, func(c Component) bool { return c.Kind == Comma })
+	}
+	at := func(l, i int) Component { return lists[l][i%len(lists[l])][0] }
+	var out []style.Animation
+	for i, n := range lists[7] {
+		if isWord(n[0], kwNone) {
+			continue
+		}
+		a := style.Animation{Name: n[0].Text, Easing: at(1, i).String(), Iterations: float32(math.Inf(1))}
+		dur, _ := duration(at(0, i))
+		delay, _ := duration(at(2, i))
+		a.Duration, a.Delay = float32(dur), float32(delay)
+		if c := at(3, i); c.Kind == Number {
+			a.Iterations = float32(c.Num)
+		}
+		for d := style.AnimateNormal; d <= style.AnimateAlternateReverse; d++ {
+			if isWord(at(4, i), animationDirections[d]) {
+				a.Direction = d
+			}
+		}
+		for f := style.FillNone; f <= style.FillBoth; f++ {
+			if isWord(at(5, i), animationFills[f]) {
+				a.Fill = f
+			}
+		}
+		a.Paused = isWord(at(6, i), kwPaused)
+		out = append(out, a)
+	}
+	x.c.Animations = out
 }
 
 // transitionList is the transition list from the transition longhands'
@@ -1622,6 +1695,12 @@ var props = func() map[string]prop {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
 			inherit: func(dst, src *style.Computed) { dst.Transitions = src.Transitions },
+		}
+	}
+	for i, n := range shorthands[shortAnimation] {
+		m[n] = prop{
+			set:     func(x *ctx, v []Component) { x.anims[i] = v },
+			inherit: func(dst, src *style.Computed) { dst.Animations = src.Animations },
 		}
 	}
 	return m

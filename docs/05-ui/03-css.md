@@ -49,7 +49,7 @@ The presentational attributes of old pages style their element as Chrome reads t
 | columns | `column-count`, `column-width`, `columns`, `column-gap` (normal is 1em), `column-rule` and its `-width` `-style` `-color`, `column-fill` (balance, auto), `break-inside` (auto, avoid; `page-break-inside` is read as it), `break-before` `break-after` (auto, avoid, column), `orphans`, `widows` |
 | flex and grid | `flex` and its parts, `gap` `row-gap` `column-gap`, `align-*`, `justify-*`, `place-*`, `grid-template-columns` `-rows` `-areas` and the `grid-template` shorthand, with names of lines in brackets (`[full-start] 1fr [content-start]`, in `repeat()` too), `grid-column` `grid-row` and their `-start` `-end`, `grid-area` (an area's name, or its four lines), a line by number, by name (an area's `-start` or `-end` line, or the first of that name), by `name n` and by `span name n`, a name no line has standing for the lines after the grid, as in Chrome, `grid-auto-*` |
 | text | `font-family` `font-size` `font-weight` `font-style` and the `font` shorthand, `line-height`, `letter-spacing`, `word-spacing` (a length or a percentage of the font size, after each space and no-break space, as Chrome), `text-align`, `text-indent`, `text-transform` (in text fields too: drawn cased, the value kept as typed, the caret and selection following what's drawn), `white-space`, `text-overflow`, `overflow-wrap`, `text-shadow`, `text-decoration` and its `-line` `-style` `-color` `-thickness`, `vertical-align` (every value, below), `color`, `list-style-type` (disc, circle, square, decimal, none), `-webkit-font-smoothing: none` (glyphs unsmoothed on the pixel grid, for pixel fonts) and `antialiased` (glyphs at their exact coverage, without the stem darkening of the default: thinner, and a square glyph on whole pixels is those pixels alone, as in Chrome on macOS) |
-| look | `background-color` `-image` `-repeat` (repeat, no-repeat, repeat-x, repeat-y, space, round, or one of repeat, no-repeat, space and round for each axis) `-attachment` (scroll, fixed, local) `-origin` `-clip` (border-box, padding-box, content-box) `-size` (lengths, percentages, auto, cover, contain) `-position`, `border` and its parts (solid, dashed, dotted, inset, outset, groove, ridge), `border-radius`, `border-image` (nine-patches), `border-image-repeat` and `border-image-width`, `box-shadow`, `outline`, `opacity`, `transform` `transform-origin`, `transition` (colours, opacity, transforms), `cursor`, `pointer-events` (auto, none: the pointer passes through, inherited), `app-region` (drag, no-drag, none; inherited: a left press in a drag region moves the system's window and a double press is a double click on its title bar, for a header in a window with `platform.OwnTitleBar()`; what clicks is never part of the region), `image-rendering` (pixelated), `object-fit` `object-position`, `accent-color`, `caret-color`, `scrollbar-width`, `appearance`, `resize` |
+| look | `background-color` `-image` `-repeat` (repeat, no-repeat, repeat-x, repeat-y, space, round, or one of repeat, no-repeat, space and round for each axis) `-attachment` (scroll, fixed, local) `-origin` `-clip` (border-box, padding-box, content-box) `-size` (lengths, percentages, auto, cover, contain) `-position`, `border` and its parts (solid, dashed, dotted, inset, outset, groove, ridge), `border-radius`, `border-image` (nine-patches), `border-image-repeat` and `border-image-width`, `box-shadow`, `outline`, `opacity`, `transform` `transform-origin`, `transition` (colours, opacity, transforms), `animation` and `@keyframes` (below), `cursor`, `pointer-events` (auto, none: the pointer passes through, inherited), `app-region` (drag, no-drag, none; inherited: a left press in a drag region moves the system's window and a double press is a double click on its title bar, for a header in a window with `platform.OwnTitleBar()`; what clicks is never part of the region), `image-rendering` (pixelated), `object-fit` `object-position`, `accent-color`, `caret-color`, `scrollbar-width`, `appearance`, `resize` |
 | tables | `border-spacing`, `border-collapse` (separate, collapse; inherited), `caption-side` (top, bottom; inherited), `table-layout` (auto, fixed) |
 | selecting | `user-select` (auto, text, none, all; inherited), `::selection` ([below](#selecting-text)) |
 
@@ -140,16 +140,32 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | `word-wrap`, `grid-gap`, `grid-row-gap`, `grid-column-gap` | `overflow-wrap`, `gap`, `row-gap`, `column-gap` |
 | `zoom` | `transform: scale()` |
 | `clip` | `overflow: clip` |
-| `animation` | `transition` |
 | the `mask` shorthand, a gradient as a `mask-image`, several mask layers | `mask-image: url()` and its longhands |
 | repeating gradients, colour hints | a gradient's plain stops |
-| at-rules but `@import`, `@font-face` and `@media` | not supported |
+| at-rules but `@import`, `@font-face`, `@media` and `@keyframes` | not supported |
+
+## Animations
+
+Decision [0114](../99-decisions/0114-animations-run-on-transitions-clock-over-the-cascade.md).
+
+```css
+@keyframes in { from { opacity: 0; transform: translateY(8px) } }
+@keyframes spin { to { transform: rotate(360deg) } }
+.card { animation: in 250ms ease-out both; }
+.spinner::before { content: ""; animation: spin 1s linear infinite; }
+```
+
+An `@keyframes` rule (`@-webkit-keyframes` under `ui.BrowserSheets()`) names keyframes at `from`, `to` and percentages, a list of them sharing a block; the last rule of a name wins, one inside an `@media` while its query holds. An element runs it once its name is in `animation-name`, with every longhand and the `animation` shorthand: `animation-duration`, `-timing-function` (any easing `transition` takes, `steps()` included, and a keyframe's own for the interval it begins), `-delay` (a negative one starts partway), `-iteration-count` (a number or `infinite`), `-direction`, `-fill-mode` and `-play-state`. A later name wins a property over an earlier one.
+
+Each property runs on the keyframes that set it; a missing 0% or 100% is the element's own value. A keyframe is computed on its element as Chrome does, so `var()`, `em` and `currentColor` in it are the element's, and follow it when its style changes. Colours, `opacity`, `transform` and `box-shadow` interpolate as transitions do and only repaint; `width`, `height`, their `min-` and `max-`, `top`, `right`, `bottom`, `left`, margins and paddings interpolate between two lengths and lay the element out again; any other property flips halfway through the interval, and `visibility` shows all along while one end is visible. An `!important` declaration of the element wins over its animations, and one in a keyframe is dropped with a warning, as Chrome ignores it; `display`, custom properties and the animation and transition properties don't animate, with a warning.
+
+An animation starts when its name enters the element's list and keeps its time while the other longhands change; it stops when the name leaves, when the element or one above it is `display: none` or taken out, and starts over when the name comes back. It runs on the World's real time, as transitions do, so `RunFrames` steps it the same in a test and a capture, in a paused game too. Each one tells what it did as World events, `ui.AnimationStarted`, `AnimationIterated`, `AnimationEnded` and `AnimationCanceled`, and to the element's callbacks `ui.OnAnimationStart`, `OnAnimationIteration`, `OnAnimationEnd`, `OnAnimationCancel`, which don't bubble. A Document with `ui.ReducedMotion()` answers `prefers-reduced-motion: reduce`, where a page stops its motion itself, as in a browser. `TestAnimationsMatchChrome` compares ten animations with Chrome's paused at five times.
 
 ## Pseudo-elements
 
 A pseudo-element ends its selector, after any compound: `.card:hover::before`, `nav ul li:nth-child(2)::before`, `ol > li::marker`. It counts as a type selector in the specificity. `:before`, `:after` are read as the two-colon forms, as Chrome reads them ([decision 0089](../99-decisions/0089-a-generated-box-is-a-node-of-its-element.md)).
 
-`::before` and `::after` make a box inside their element, before its first child and after its last, once their `content` is something other than `none` or `normal`. The box takes any property an element takes: a display, a position, a float, a place in a flex or a grid, backgrounds, transforms, transitions. It inherits from its element. It is no element: no selector matches it, `ByID`, `Children()` and automation never see it, its text is not selected or translated, and a click on it is a click on its element. The elements Chrome gives none have none (`img`, `br`, `input`, `textarea`, `select`, `canvas`), and neither have `progress`, `meter`, `table` and a table's row groups and rows, which ui lays out whole. It is sized as the Document's elements are: by its border box, or by its content under `ui.BrowserSheets()`.
+`::before` and `::after` make a box inside their element, before its first child and after its last, once their `content` is something other than `none` or `normal`. The box takes any property an element takes: a display, a position, a float, a place in a flex or a grid, backgrounds, transforms, transitions, animations. It inherits from its element. It is no element: no selector matches it, `ByID`, `Children()` and automation never see it, its text is not selected or translated, and a click on it is a click on its element. The elements Chrome gives none have none (`img`, `br`, `input`, `textarea`, `select`, `canvas`), and neither have `progress`, `meter`, `table` and a table's row groups and rows, which ui lays out whole. It is sized as the Document's elements are: by its border box, or by its content under `ui.BrowserSheets()`.
 
 ![A journal's contents: chapters numbered I and II, their parts 1.1 to 2.2, a page count after the first title, an orange bar down the right side, a note with a plus for its marker and a quotation in guillemets](generated.png "ember · generated")
 
@@ -269,7 +285,8 @@ An `@media` rule applies while its query holds for the Document's viewport: the 
 | `orientation` | `portrait` when the viewport is as high as wide or higher |
 | `device-width`, `device-height`, `device-aspect-ratio` | the viewport's: ui knows no screen |
 | `hover`, `any-hover`, `pointer`, `any-pointer` | `hover` and `fine`: a mouse |
-| `prefers-color-scheme`, `prefers-reduced-motion`, `prefers-contrast`, `forced-colors` | `light`, `no-preference`, `no-preference`, `none` |
+| `prefers-color-scheme`, `prefers-contrast`, `forced-colors` | `light`, `no-preference`, `none` |
+| `prefers-reduced-motion` | `no-preference`; `reduce` in a Document with `ui.ReducedMotion()` (`doc.SetReducedMotion`) |
 | `color`, `monochrome`, `grid` | 8, 0, 0 |
 | `and`, `,`, `not`, `only`, `or` between conditions in parentheses, `@media` inside `@media` | as in Chrome |
 
@@ -365,7 +382,7 @@ A sheet written for browsers holds what a game's sheet never does: prefixes of f
 
 A prefixed name read as a plain one keeps its place in the cascade, so `-webkit-transform: rotate(3deg); transform: none` ends as `none` and the other order as the rotation. A warning about one names it as it was written.
 
-What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `animation`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@font-face` in a sheet given as text without `ui.FetchFonts`, `@import` without `ui.FetchSheets`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
+What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@font-face` in a sheet given as text without `ui.FetchFonts`, `@import` without `ui.FetchSheets`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
 
 ### Vendor prefixes
 
@@ -387,7 +404,7 @@ One table for each vendor, as `ui/css/vendors.go` has them. `-webkit-`'s lists a
 | pseudo-classes nothing in ui is ever in | `:-webkit-autofill` `:-webkit-drag` `:-webkit-full-page-media` `:-webkit-full-screen` `:-webkit-full-screen-ancestor`: the selector alone goes, without a word |
 | pseudo-classes Chrome reads and ui can't | `:-webkit-any`: the rule keeps its warning |
 | any other pseudo-class | its whole rule goes without a word, as Chrome drops it |
-| at-rules read as the plain one, with the warning ui has for it | `@-webkit-keyframes` as `@keyframes` |
+| at-rules read as the plain one | `@-webkit-keyframes` as `@keyframes` |
 | any other at-rule | goes without a word, as Chrome drops it |
 | media features read as the plain one, a bare number as dppx | `-webkit-device-pixel-ratio` as `resolution`, `-webkit-max-device-pixel-ratio` as `max-resolution`, `-webkit-min-device-pixel-ratio` as `min-resolution` |
 | media features Chrome answers and ui can't | `-webkit-transform-3d`: the query is false, with a warning |

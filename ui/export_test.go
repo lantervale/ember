@@ -32,6 +32,9 @@ func Restyled(d *Document) int { return d.trans.Restyled() }
 // ShownBackground is what paint draws as n's background now.
 func ShownBackground(n *Node) color.Color { return dom.Data(n).Shown.Background }
 
+// ShownOpacity is n's opacity as paint draws it now.
+func ShownOpacity(n *Node) float32 { return dom.Data(n).Shown.Opacity }
+
 // ShownAccent is n's accent-color now, what paint fills a range with.
 func ShownAccent(n *Node) color.Color { return dom.Data(n).Shown.AccentColor }
 

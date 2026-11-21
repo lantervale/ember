@@ -72,6 +72,20 @@ func (c *cursor) offset(pos Pos) int {
 // written.
 func (s *Sheet) Text() string { return s.text }
 
+// keyframesWithin is ks in a sheet that holds their media query lists
+// base places further on, each inside the lists outer too.
+func keyframesWithin(ks []Keyframes, outer []int, base int) []Keyframes {
+	out := make([]Keyframes, len(ks))
+	for i, k := range ks {
+		k.media = append(slices.Clone(outer), k.media...)
+		for j := len(outer); j < len(k.media); j++ {
+			k.media[j] += base
+		}
+		out[i] = k
+	}
+	return out
+}
+
 // Join is sheets as one sheet, the rules of each after those of the one
 // before, as if their texts followed each other in one file: a layer two
 // of them name is one layer. media, when it says something, is a media
@@ -141,6 +155,7 @@ func Join(name, media string, sheets []*Sheet) (*Sheet, []Warning) {
 			}
 			out.Rules = append(out.Rules, r)
 		}
+		out.Keyframes = append(out.Keyframes, keyframesWithin(s.Keyframes, within, base)...)
 		out.faces = append(out.faces, s.faces...)
 	}
 	return out, warns

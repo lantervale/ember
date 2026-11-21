@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -109,13 +110,35 @@ type Rule struct {
 	in *Sheet
 }
 
+// Keyframes is an @keyframes rule: what the animations naming it run
+// through, a keyframe for each offset its selectors give, in the order
+// written.
+type Keyframes struct {
+	Name   string
+	Frames []Keyframe
+	Pos    Pos
+	// media are the @media rules it stands in, as a Rule's, and written
+	// its name as written.
+	media   []int
+	written string
+}
+
+// Keyframe is the declarations of one offset of an @keyframes rule, from
+// 0 to 1, with the animation-timing-function of the interval it begins
+// among them.
+type Keyframe struct {
+	At    float32
+	Decls []Declaration
+}
+
 // Sheet is a parsed stylesheet. Name is the file it came from.
 type Sheet struct {
-	Name  string
-	Rules []Rule
-	faces []FontFace
-	once  sync.Once
-	index *index
+	Name      string
+	Rules     []Rule
+	Keyframes []Keyframes
+	faces     []FontFace
+	once      sync.Once
+	index     *index
 	// media are its @media rules' queries, in the order they open.
 	media []*mediaList
 	// layers are the full names of its cascade layers (theme.dark), in
@@ -198,6 +221,20 @@ func (s *Sheet) String() string {
 			b.WriteString(";")
 		}
 		b.WriteString(" }" + strings.Repeat(" }", len(r.media)) + "\n")
+	}
+	for _, k := range s.Keyframes {
+		for _, m := range k.media {
+			b.WriteString("@media " + s.media[m].text + " { ")
+		}
+		b.WriteString("@keyframes " + k.written + " {")
+		for _, f := range k.Frames {
+			b.WriteString(" " + strconv.FormatFloat(float64(f.At)*100, 'f', -1, 32) + "% {")
+			for _, d := range f.Decls {
+				b.WriteString(" " + d.String() + ";")
+			}
+			b.WriteString(" }")
+		}
+		b.WriteString(" }" + strings.Repeat(" }", len(k.media)) + "\n")
 	}
 	return b.String()
 }
@@ -376,6 +413,8 @@ func (p *parser) atRule(t Token, in scope) {
 		}
 	case name == "media":
 		p.media(t, in)
+	case name == atKeyframes:
+		p.keyframes(t, in)
 	case name == "supports" && p.browser:
 		p.supports(t, in)
 	case name == "layer" && p.browser:
@@ -433,6 +472,95 @@ func (p *parser) media(t Token, in scope) {
 	p.sheet.media = append(p.sheet.media, queries.list(prelude))
 	in.media = append(slices.Clip(in.media), len(p.sheet.media)-1)
 	p.block(in)
+}
+
+// keyframes reads an @keyframes rule: its name, then keyframes of a
+// selector list and a block of declarations each.
+func (p *parser) keyframes(t Token, in scope) {
+	prelude, block := p.prelude()
+	if !block {
+		p.warnf(t.Pos, "@keyframes has no { block }")
+		return
+	}
+	name := items(prelude)
+	if len(name) != 1 || keyframesName(name[0]) != nil {
+		p.warnf(t.Pos, "@keyframes: %q is no keyframes name", strings.TrimSpace(join(prelude)))
+		p.skipBlock()
+		return
+	}
+	k := Keyframes{Name: name[0].Text, Pos: t.Pos, media: in.media, written: name[0].String()}
+	var sel []Component
+	for kind := p.peek().Kind; kind != EOF; kind = p.peek().Kind {
+		switch kind {
+		case RBrace:
+			p.next()
+			p.sheet.Keyframes = append(p.sheet.Keyframes, k)
+			return
+		case LBrace:
+			k.Frames = append(k.Frames, p.keyframe(sel, p.component().Args)...)
+			sel = nil
+			continue
+		case EOF, Ident, Function, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension,
+			Whitespace, CDO, CDC, Colon, Semicolon, Comma, LBracket, RBracket, LParen, RParen:
+			// part of the next keyframe's selectors
+		}
+		sel = append(sel, p.component())
+	}
+	p.sheet.Keyframes = append(p.sheet.Keyframes, k)
+}
+
+// keyframe reads one keyframe: a keyframe for each offset sel gives,
+// none when one of them is no offset. Its declarations leave out what
+// a keyframe can't set: !important, which Chrome ignores there, and the
+// properties that don't animate.
+func (p *parser) keyframe(sel, block []Component) []Keyframe {
+	var at []float32
+	for _, part := range splitOn(sel, func(c Component) bool { return c.Kind == Comma }) {
+		cs := items(part)
+		switch {
+		case len(cs) == 1 && isWord(cs[0], "from"):
+			at = append(at, 0)
+		case len(cs) == 1 && isWord(cs[0], "to"):
+			at = append(at, 1)
+		case len(cs) == 1 && cs[0].Kind == Percentage && cs[0].Num >= 0 && cs[0].Num <= 100:
+			at = append(at, float32(cs[0].Num/100))
+		default:
+			pos := Pos{}
+			if len(sel) > 0 {
+				pos = sel[0].Pos
+			}
+			p.warnf(pos, "@keyframes: %q is no keyframe selector; keyframe dropped", strings.TrimSpace(join(part)))
+			return nil
+		}
+	}
+	var decls []Declaration
+	for _, d := range p.declarations(block) {
+		switch {
+		case d.Important:
+			p.warnf(d.Pos, "!important in a keyframe is ignored, as in Chrome: %s dropped", d.Name)
+		case !animates(d.Name):
+			p.warnf(d.Pos, "%s does not animate in a keyframe", d.Name)
+		default:
+			decls = append(decls, d)
+		}
+	}
+	out := make([]Keyframe, len(at))
+	for i, a := range at {
+		out[i] = Keyframe{At: a, Decls: decls}
+	}
+	return out
+}
+
+// animates reports whether a keyframe may set the property name.
+func animates(name string) bool {
+	switch {
+	case name == propAnimationTiming:
+		return true
+	case strings.HasPrefix(name, "--"), name == propDisplay, name == shortAnimation, name == shortTransition,
+		strings.HasPrefix(name, "animation-"), strings.HasPrefix(name, "transition-"):
+		return false
+	}
+	return true
 }
 
 // supports reads an @supports rule's block where ui supports what it

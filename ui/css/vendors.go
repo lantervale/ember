@@ -173,8 +173,8 @@ var webkit = vendor{
 	ownClasses:   []string{"any"},
 	otherClasses: dropped,
 
-	// @keyframes itself is refused, so its warning stays.
-	atRules:      map[string]string{"keyframes": "keyframes"},
+	// @-webkit-keyframes is @keyframes, as Chrome reads it.
+	atRules:      map[string]string{atKeyframes: atKeyframes},
 	otherAtRules: dropped,
 
 	features: map[string]string{

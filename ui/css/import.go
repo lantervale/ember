@@ -65,8 +65,9 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 			as[k] = out.declared(prefix + strings.ReplaceAll(full, anonymous, fmt.Sprint(anonymous, "import", i, "-")))
 		}
 		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), as: as})
+		out.faces, out.Keyframes = append(out.faces, in.faces...),
+			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...)
 		out.media = append(out.media, in.media...)
-		out.faces = append(out.faces, in.faces...)
 	}
 	nameOwn(len(s.layers))
 	ownRule := func(r Rule) Rule {
@@ -103,7 +104,7 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 	for ; read < len(s.Rules); read++ {
 		out.Rules = append(out.Rules, ownRule(s.Rules[read]))
 	}
-	out.faces = append(out.faces, s.faces...)
+	out.faces, out.Keyframes = append(out.faces, s.faces...), append(out.Keyframes, s.Keyframes...)
 	return out
 }
 
