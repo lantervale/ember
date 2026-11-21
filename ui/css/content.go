@@ -250,7 +250,7 @@ func contentProps() map[string]prop {
 func generates(tag dom.Tag) bool {
 	switch tag {
 	case dom.Img, dom.Svg, dom.Br, dom.Input, dom.Textarea, dom.Select, dom.Canvas, dom.Iframe, dom.Progress,
-		dom.Meter, dom.Col, dom.Colgroup, dom.TextTag:
+		dom.Meter, dom.Col, dom.Colgroup, dom.Source, dom.TextTag:
 		return false
 	case dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
@@ -259,7 +259,7 @@ func generates(tag dom.Tag) bool {
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.Table, dom.Thead, dom.Tbody, dom.Tfoot, dom.Tr:
+		dom.Table, dom.Thead, dom.Tbody, dom.Tfoot, dom.Tr, dom.PictureElement:
 	}
 	return true
 }

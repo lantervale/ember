@@ -134,6 +134,15 @@ func Meter(args ...Arg) *Node    { return element(dom.Meter, args) }
 func Img(args ...Arg) *Node      { return element(dom.Img, args) }
 func Hr(args ...Arg) *Node       { return element(dom.Hr, args) }
 
+// Picture holds the sources an img chooses its picture from, then the
+// img: the first Source whose media holds and whose type ui reads gives
+// its srcset and sizes, else the img's own.
+func Picture(args ...Arg) *Node { return element(dom.PictureElement, args) }
+
+// Source is a picture's offer of pictures: its srcset, sizes, media
+// and type.
+func Source(args ...Arg) *Node { return element(dom.Source, args) }
+
 // Svg is an svg element showing markup, the SVG inside it: a picture
 // drawn at the size the element takes, by its width and height
 // attributes, its viewBox and the rules that name it, with currentColor
@@ -145,8 +154,10 @@ func Svg(markup string, args ...Arg) *Node {
 	return n
 }
 
-// PictureOf is the address of the picture n shows: an img's src, an svg
-// element's markup as a data URL. ok is false for an element with none.
+// PictureOf is the address of the picture n shows: an img's src, or the
+// candidate its srcset or its picture's sources gave it as Chrome's
+// currentSrc, an svg element's markup as a data URL. ok is false for an
+// element with none.
 func PictureOf(n *Node) (string, bool) { return dom.Picture(n) }
 
 // Option is an option element of a select.

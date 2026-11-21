@@ -82,6 +82,11 @@ type Pipeline struct {
 	Markup   string
 	picture  string
 	pictured color.Color
+	// chosen is the picture an img shows in place of its src while
+	// choosing, of density device pixels a point (Choose).
+	chosen   string
+	density  float32
+	choosing bool
 	// Canvas is a canvas element's machine, made with it since it holds
 	// the game's drawing, for the Document to take as the element's.
 	Canvas any

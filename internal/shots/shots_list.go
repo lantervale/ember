@@ -93,6 +93,7 @@ var Shots = []Shot{ //nolint:gochecknoglobals // the guide's list of pictures
 	{Out: "05-ui/02-elements/i.png", Run: htmlElements, Args: []string{element, "i"}},
 	{Out: "05-ui/02-elements/iframe.png", Run: htmlElements, Args: []string{element, "iframe"}},
 	{Out: "05-ui/02-elements/img.png", Run: htmlElements, Args: []string{element, "img"}},
+	{Out: "05-ui/02-elements/picture.png", Run: htmlElements, Args: []string{element, "picture"}},
 	{Out: "05-ui/02-elements/svg.png", Run: htmlElements, Args: []string{element, "svg"}},
 	{Out: "05-ui/02-elements/input.png", Run: htmlElements, Args: []string{element, "input"}},
 	{Out: "05-ui/02-elements/ins.png", Run: htmlElements, Args: []string{element, "ins"}},

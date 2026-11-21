@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 
@@ -58,6 +59,14 @@ func RegisterVectorFormat(
 	vectorFormatsMu.Lock()
 	defer vectorFormatsMu.Unlock()
 	vectorFormats = append(vectorFormats, vectorFormat{mime, is, parse})
+}
+
+// vectorType reports whether a registered format of shapes is of the
+// media type mime.
+func vectorType(mime string) bool {
+	vectorFormatsMu.RLock()
+	defer vectorFormatsMu.RUnlock()
+	return slices.ContainsFunc(vectorFormats, func(f vectorFormat) bool { return f.mime == mime })
 }
 
 // vectorFormatOf is the registered format the file name with these bytes

@@ -148,7 +148,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | AVIF | no picture, and a warning; `web.Images` does not ask for it |
 | a run-length encoded BMP (or such a bitmap in an ICO), a `.cur` cursor file | no picture, and a warning |
 | the picture of an ICO nearest the size it shows at | the largest of the file is shown, scaled, then the one of the most bits a pixel |
-| `srcset` and `sizes` on an `img`, `picture` with its `source`s | not read: the `img`'s `src` is the picture |
+| a `source` of AVIF (`type="image/avif"`) | passed over, where Chrome takes it: the next source, or the `img`'s own pictures |
+| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where Chrome waits for it to near the viewport |
+| the `width` and `height` attributes of a `source` | not read, where Chrome sizes the `img` by those of the source it chose |
 | the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
 | an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |
 | an `svg` element whose markup changes every frame | each state is one more picture the Document keeps |
@@ -171,6 +173,8 @@ Things built and tested, with a part no test against Chrome covers yet.
 - Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press, a double click and Shift with a key reach are tested in ember alone; the copied text, the rectangles and the picture are compared with Chrome's.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
 - `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone.
+- The picture `sizes="auto"` chooses: Chrome chooses it once the page is laid out, and takes a denser one already in its cache, so what it shows changes from run to run; the box is compared with Chrome's, the choice is tested in ember alone.
+- Choosing a picture again as the viewport or the pixels a point change, the one shown kept until the one chosen lands: headless Chrome is neither resized nor moved to another screen, so it is tested in ember alone.
 - A selection inside a transformed box other than a translation, and under a Document `Zoom`.
 - A float low in a column, at narrow widths.
 - A percentage `top` on a relative child inside columns.

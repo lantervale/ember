@@ -65,6 +65,7 @@ type Document struct {
 	// are those on their way.
 	fetch    ImageFetcher
 	fetching fetches
+	choices  choices
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -342,10 +343,12 @@ func (d *Document) Layout(size geom.Vec2) {
 	if d.relayout && d.trans.FontsChanged() {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
-	if d.trans.SetMedia(css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale()}) {
+	media := css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale()}
+	if d.trans.SetMedia(media) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
 	d.style()
+	d.choosePictures(media, false)
 	if d.relayout {
 		d.kept, d.relayout = layout.Retained{}, false
 	} else if d.tree != nil && size == d.laidAt && d.fonts.Scale() == d.laidScale &&
@@ -365,6 +368,7 @@ func (d *Document) Layout(size geom.Vec2) {
 		d.style()
 		d.lay(size)
 	}
+	d.choosePictures(media, true)
 }
 
 // lay lays the tree out at size, points each node at its box, a node the
@@ -420,6 +424,7 @@ func (d *Document) style() {
 		d.syncControls()
 	} else {
 		d.controls = d.controls[:0]
+		d.choices.imgs, d.choices.stale = d.choices.imgs[:0], true
 		d.html.Walk(func(n *Node) bool {
 			if dom.Data(n).Dirty&dom.DirtyTree != 0 {
 				d.restructure = true
@@ -427,6 +432,13 @@ func (d *Document) style() {
 			if m := d.machine(n); m != nil {
 				d.controls = append(d.controls, n)
 				d.sync(n, m)
+			}
+			switch {
+			case n.Tag() != dom.Img:
+			case choosesPicture(n):
+				d.choices.imgs = append(d.choices.imgs, n)
+			default:
+				dom.Unchoose(n)
 			}
 			return !n.IsText()
 		})

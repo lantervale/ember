@@ -625,6 +625,13 @@ addEventListener("load", () => document.fonts.ready.then(() => {
 
 var evalJSON = regexp.MustCompile(`<script type="application/json" id="ember-eval">(.*?)</script>`)
 
+// EvalScaled is Eval on a display of scale device pixels per point.
+func EvalScaled(d *ui.Document, size geom.Vec2, scale float32, expr string) ([]byte, error) {
+	deviceScale = scale
+	defer func() { deviceScale = 1 }()
+	return Eval(d, size, expr)
+}
+
 // Eval lays d out in Chrome in a viewport of size points, evaluates the
 // JavaScript expression expr once the fonts are ready, and returns its
 // value as JSON.

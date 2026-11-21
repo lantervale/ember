@@ -7,8 +7,9 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
-// img draws an img element's picture, its src found through Images, in
-// its content box by object-fit and object-position, cut to the box where
+// img draws an img element's picture, its src or the candidate it chose
+// found through Images, at its pixels over the density it was chosen
+// for, in its content box by object-fit and object-position, cut to the box where
 // it overflows; a src Images doesn't find draws as a broken image. The box
 // and the picture snap to device pixels as Chrome's do, so a pixelated
 // picture's texels fall on whole pixels as a background's do.
@@ -26,7 +27,7 @@ func (p *painter) img(e entry, alpha float32) {
 		}
 		return
 	}
-	size := tex.Size()
+	size := tex.Size().Scale(1 / dom.Density(e.b.Node))
 	if size.X <= 0 || size.Y <= 0 {
 		return
 	}
@@ -48,7 +49,9 @@ func (p *painter) shapesImg(e entry, v Vector, st *style.Computed, alpha float32
 	if area.W <= 0 || area.H <= 0 {
 		return
 	}
-	at, overflows := objectFit(st.ObjectFit, area, v.Intrinsic().Natural(geom.V2(area.W, area.H)), st.ObjectPosition)
+	in, density := v.Intrinsic(), dom.Density(e.b.Node)
+	in.Width, in.Height = in.Width/density, in.Height/density
+	at, overflows := objectFit(st.ObjectFit, area, in.Natural(geom.V2(area.W, area.H)), st.ObjectPosition)
 	if at = p.snap(at); at.W <= 0 || at.H <= 0 {
 		return
 	}
