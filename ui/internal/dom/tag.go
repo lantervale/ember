@@ -96,6 +96,10 @@ const (
 	Iframe
 	Col
 	Colgroup
+	// PictureElement is the picture element, Picture being the picture an
+	// element shows.
+	PictureElement
+	Source
 	tagCount
 )
 
@@ -109,7 +113,7 @@ var tagNames = [tagCount]string{ //nolint:gochecknoglobals // a lookup table by 
 	"hgroup", "menu", "search", "a", "b", "i", "u", "s", "small", "abbr", "cite", "mark", "time", "var", "del",
 	"ins", "dfn", "bdi", "bdo", "data", "br",
 	"center", "big", "font", "sub", "sup", "q", "fieldset", "legend", "svg", "iframe",
-	"col", "colgroup",
+	"col", "colgroup", "picture", "source",
 }
 
 // String is the tag's HTML name, "#text" for text nodes.
@@ -132,5 +136,5 @@ func TagNamed(name string) (Tag, bool) {
 
 // Void reports whether the element never has children in HTML.
 func (t Tag) Void() bool {
-	return t == Input || t == Img || t == Hr || t == Br || t == Col
+	return t == Input || t == Img || t == Hr || t == Br || t == Col || t == Source
 }

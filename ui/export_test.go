@@ -14,6 +14,18 @@ import (
 	"github.com/lantervale/ember/ui/internal/dom"
 )
 
+// LandImages waits for the pictures d is fetching, then lays it out at
+// size to take them, until none is on its way.
+func LandImages(d *Document, size geom.Vec2) {
+	for {
+		d.fetching.Wait()
+		d.Layout(size)
+		if len(d.fetching.onWay) == 0 {
+			return
+		}
+	}
+}
+
 // Restyled is how many elements d has worked the style of out so far.
 func Restyled(d *Document) int { return d.trans.Restyled() }
 

@@ -116,6 +116,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0110 | [A Document scales what the wheel scrolls](0110-a-document-scales-what-the-wheel-scrolls.md) | api |
 | 0111 | [A program scrolls a Document by an element](0111-a-program-scrolls-a-document-by-an-element.md) | api |
 | 0113 | [:has() flags its anchors before the cascade](0113-has-flags-its-anchors-before-the-cascade.md) | api |
+| 0115 | [An img chooses its picture as Chrome does](0115-an-img-chooses-its-picture-as-chrome-does.md) | api |
 
 ## Writing one
 

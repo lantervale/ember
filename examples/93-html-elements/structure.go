@@ -25,6 +25,8 @@ func structure() map[string]element {
 		"caption": {scores, 224},
 		"tfoot":   {scores, 224},
 		"img":     {img, 136},
+		"picture": {picture, 136},
+		"source":  {picture, 136},
 		"svg":     {svg, 96},
 		"hr":      {hr, 152},
 		"canvas":  {canvas, 232},
@@ -110,6 +112,16 @@ func img(*ui.Document) *ui.Node {
 		ui.Img(ui.Attr("src", "panel.png"), ui.Attr("alt", "A panel")),
 		ui.Text(" "),
 		ui.Img(ui.Attr("src", "panel.png"), ui.Style("width: 72px; image-rendering: pixelated")),
+	)
+}
+
+// picture is the panel its window's width chooses: through a source
+// offering it at half a pixel a point where the window is wide, so
+// drawn twice its size, else the img's own.
+func picture(*ui.Document) *ui.Node {
+	return ui.Picture(
+		ui.Source(ui.Attr("media", "(min-width: 100px)"), ui.Attr("srcset", "panel.png 0.5x")),
+		ui.Img(ui.Attr("src", "panel.png"), ui.Attr("alt", "A panel"), ui.Style("image-rendering: pixelated")),
 	)
 }
 

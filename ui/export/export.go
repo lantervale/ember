@@ -21,6 +21,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/assets"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/fonts"
+	"github.com/lantervale/ember/ui/internal/srcset"
 	"github.com/lantervale/ember/ui/internal/style"
 	"github.com/lantervale/ember/ui/layout"
 )
@@ -124,6 +125,15 @@ func tr(d *ui.Document) func(string) string {
 		return t.Tr
 	}
 	return nil
+}
+
+// dataURL is the picture url names in d's files as a data URL, url
+// itself for one they don't hold.
+func dataURL(d *ui.Document, url string) string {
+	if data, ok := assets.Of(d, url); ok {
+		return "data:" + assets.MediaType(url, data) + ";base64," + base64.StdEncoding.EncodeToString(data)
+	}
+	return url
 }
 
 func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
@@ -244,10 +254,12 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 			continue
 		}
 		if n.Tag() == dom.Img && a.Name == "src" {
-			if data, ok := assets.Of(d, a.Value); ok {
-				write("src", "data:"+assets.MediaType(a.Value, data)+";base64,"+base64.StdEncoding.EncodeToString(data))
-				continue
-			}
+			write("src", dataURL(d, a.Value))
+			continue
+		}
+		if (n.Tag() == dom.Img || n.Tag() == dom.Source) && a.Name == "srcset" {
+			write("srcset", srcset.Replace(a.Value, func(url string) string { return dataURL(d, url) }))
+			continue
 		}
 		if a.Name == "placeholder" {
 			write(a.Name, layout.TranslatedAt(n, a.Value, tr(d)))

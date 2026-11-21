@@ -61,7 +61,7 @@ doc.Body().Append(ui.Div(ui.ID("banner")), ui.Img(ui.Attr("src", "today.png")))
 | `ui.ImageFetcher` | `func(url string) ([]byte, error)`: the picture's bytes for the name as it is written in the sheet or the `src` |
 | `web.Images(base)` (package `ui/web`) | a fetcher over HTTP: an `http` or `https` address as it is, anything else from `base`, as a browser resolves an `img`'s `src` from its page |
 
-- A picture is asked for once, when its element is first laid out (an `img`) or painted (a background), never for an element that doesn't show.
+- A picture is asked for once, when its element is first laid out (an `img`) or painted (a background), never for an element that doesn't show. An `img` with a `srcset`, or in a `picture`, asks for the one it chooses, by the name its candidate is written with ([picture and source](02-elements/87-picture.md)).
 - The fetcher runs off the frame, six pictures at a time, so it may take as long as it needs; it is called from several goroutines.
 - Until a picture lands its element shows as one without a picture; then the Document paints again, and lays out again only what the picture's size moves: an `img` with a width and a height of its own, a background, a mask or a border picture move nothing. Nothing is shown while it loads: a placeholder is the game's, a background colour under the picture.
 - A fetch that fails, or bytes that are no picture, are in `doc.Warnings()`, once.

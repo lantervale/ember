@@ -71,6 +71,9 @@ type fetches struct {
 	// layout.
 	drawn []drawnVector
 	slots chan struct{}
+	// onWay are the urls asked for that have not landed, read and
+	// written on the frame.
+	onWay map[string]bool
 }
 
 // fetchImage asks the fetcher for url off the frame.
@@ -79,6 +82,10 @@ func (d *Document) fetchImage(url string) {
 	if f.slots == nil {
 		f.slots = make(chan struct{}, fetchesAtOnce)
 	}
+	if f.onWay == nil {
+		f.onWay = map[string]bool{}
+	}
+	f.onWay[url] = true
 	fetch := d.fetch
 	f.Add(1)
 	go func() {
@@ -123,6 +130,7 @@ func (d *Document) landImages() {
 	f.mu.Unlock()
 	var shown map[string]bool
 	for _, got := range landed {
+		delete(f.onWay, got.url)
 		switch {
 		case got.err != nil:
 			d.warn(fmt.Errorf("ui: image %s: %w", got.url, got.err))

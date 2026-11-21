@@ -145,6 +145,19 @@ func TestAnImgSourceTravelsAsADataURL(t *testing.T) {
 	assert.Contains(t, got, `src="missing.png"`, "an unknown source is kept as written")
 }
 
+func TestTheCandidatesOfASrcsetTravelAsDataURLs(t *testing.T) {
+	png := css.DefaultImages()["ember:select-arrow"]
+	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"s.css": {Data: []byte("")}, "tile.png": {Data: png}}, "s.css"))
+	d.Body().Append(ui.Picture(
+		ui.Source(ui.Attr("srcset", "tile.png 2x, missing.png"), ui.Attr("media", "(min-width: 1px)")),
+		ui.Img(ui.Attr("srcset", "missing.png 100w, tile.png 200w"), ui.Attr("sizes", "50vw")),
+	))
+	got := written(t, d)
+	data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	assert.Contains(t, got, `<picture><source srcset="`+data+` 2x, missing.png" media="(min-width: 1px)">`)
+	assert.Contains(t, got, `<img srcset="missing.png 100w, `+data+` 200w" sizes="50vw">`)
+}
+
 func TestAModalDialogOpensModalInChrome(t *testing.T) {
 	d := ui.NewDocument()
 	modal, plain, over := ui.Dialog(ui.Text("Delete?")), ui.Dialog(ui.Text("Note")), ui.Dialog(ui.Text("Sure?"))

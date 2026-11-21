@@ -25,19 +25,26 @@ func (t *tree) buildImage(n *node, e *dom.Node) {
 	n.natural, n.shape, n.sized = pictureOf(e, n.st, t.images, t.fonts)
 }
 
-// pictureOf is what the picture of the img e gives its box: its natural size, and for a
-// picture that doesn't ask for a size of pixels what it asks for, sized being whether e
-// has one.
+// pictureOf is what the picture of the img e gives its box: its natural size at the
+// density it was chosen for, and for a picture that doesn't ask for a size of pixels
+// what it asks for, sized being whether e has one. An img whose sizes start with auto is
+// 300 by 150 without proportions whatever its picture, as Chrome's sheet has it
+// (contain: size; contain-intrinsic-size: 300px 150px).
 func pictureOf(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fonts) (size, box.Intrinsic, bool) {
 	if images == nil {
 		return size{}, box.Intrinsic{}, false
+	}
+	if e.Tag() == dom.Img && dom.AutoSizes(e) {
+		return size{defaultWidth, defaultHeight}, box.Intrinsic{Width: defaultWidth, Height: defaultHeight}, true
 	}
 	src, ok := dom.Picture(e)
 	if !ok {
 		return size{}, box.Intrinsic{}, false
 	}
+	density := dom.Density(e)
 	if shapes, has := images.(box.IntrinsicImages); has {
 		if in, found := shapes.ImageIntrinsic(src); found {
+			in.Width, in.Height = in.Width/density, in.Height/density
 			if fillsRoom(in) {
 				return size{}, in, true
 			}
@@ -46,7 +53,7 @@ func pictureOf(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fon
 		}
 	}
 	if s, found := images.ImageSize(src); found {
-		return size{s.X, s.Y}, box.Intrinsic{}, false
+		return size{s.X / density, s.Y / density}, box.Intrinsic{}, false
 	}
 	alt, hasAlt := e.Attr("alt")
 	switch {

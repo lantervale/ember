@@ -80,7 +80,8 @@ func hints(n *dom.Node) []Declaration {
 		dom.Caption, dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.Blockquote, dom.Figure, dom.Figcaption,
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small, dom.Abbr,
 		dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement, dom.Br,
-		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend:
+		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
+		dom.PictureElement, dom.Source:
 		return nil
 	}
 	if src.Len() == 0 {
