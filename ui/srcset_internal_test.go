@@ -52,6 +52,14 @@ func TestAnImgShowsTheCandidateOfItsSrcsetForTheScreensDensity(t *testing.T) {
 	assert.Equal(t, geom.V2(100, 50), size)
 }
 
+func TestAPictureOfShapesShowsAtTheSizeItAsksForOverItsDensity(t *testing.T) {
+	img := Img(Attr("srcset", "star.shapes 2x"))
+	d := NewDocument(Images(fstest.MapFS{"star.shapes": {Data: []byte("SHAPES w=80 h=40")}}))
+	d.Body().Append(img)
+	d.Layout(geom.V2(800, 600))
+	assert.Equal(t, geom.V2(40, 20), geom.V2(img.Box().W, img.Box().H), "as Chrome shows an SVG at 2x")
+}
+
 func TestWidthDescriptorsAreChosenForTheSlotSizesGivesInTheViewport(t *testing.T) {
 	img := Img(Attr("srcset", "p100.png 100w, p200.png 200w, p400.png 400w"),
 		Attr("sizes", "(max-width: 500px) 100px, 50vw"))

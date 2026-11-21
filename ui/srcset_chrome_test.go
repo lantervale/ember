@@ -22,7 +22,6 @@ import (
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
 	"github.com/lantervale/ember/ui/internal/fonts"
-	_ "github.com/lantervale/ember/ui/svg"
 )
 
 // candidates are the pictures an img offers, each its own, so that no
@@ -96,8 +95,6 @@ func TestAnImgChoosesThePictureChromeChoosesAndShowsItAtItsDensity(t *testing.T)
 				}
 				return strings.Join(s, ", ")
 			}
-			svg := c.file("svg-80.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">`+
-				`<rect width="80" height="40" fill="teal"/></svg>`))
 			d := ui.NewDocument(ui.FetchImages(c.fetch))
 			d.Body().Append(
 				img("x", "srcset", set("x", "100 1x", "200 2x", "400 4x")),
@@ -117,7 +114,6 @@ func TestAnImgChoosesThePictureChromeChoosesAndShowsItAtItsDensity(t *testing.T)
 				img("apart", "srcset", set("apart", "100 1x", "300 3x")),
 				img("between", "srcset", set("between", "100 1.2x", "300 2.5x")),
 				img("over", "srcset", set("over", "150 1.5x", "400 4x")),
-				img("svg", "srcset", svg+" 2x"),
 				img("held", "srcset", c.inline("held", 100)+" 1x, "+c.inline("held", 200)+" 2x, "+c.inline("held", 300)+" 3x"),
 				ui.Picture(
 					ui.Source(ui.Attr("srcset", c.png("pic", 400)), ui.Attr("media", "(max-width: 10px)")),
@@ -147,7 +143,7 @@ func TestAnImgChoosesThePictureChromeChoosesAndShowsItAtItsDensity(t *testing.T)
 			var want map[string]string
 			require.NoError(t, json.Unmarshal(out, &want))
 			delete(want, "auto")
-			require.Len(t, want, 20)
+			require.Len(t, want, 19)
 			d.HTML().Walk(func(n *ui.Node) bool {
 				if w, ok := want[n.ID()]; ok {
 					got, _ := ui.PictureOf(n)
