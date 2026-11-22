@@ -62,19 +62,10 @@ const (
 	after
 )
 
-type trackKind uint8
-
-const (
-	paintTrack trackKind = iota
-	lengthTrack
-	discreteTrack
-)
-
-// track is one longhand an animation moves, with the keyframes that set
-// it, an implicit one at 0 and 1 where none does.
+// track is one longhand an animation moves, by its place in longhands,
+// with the keyframes that set it, an implicit one at 0 and 1 where none
+// does.
 type track struct {
-	name  string
-	kind  trackKind
 	index int
 	keys  []key
 }
@@ -88,62 +79,62 @@ type key struct {
 	s      *style.Computed
 }
 
-// paintValue is an animatable property's value now, v, between the
-// styles of two keyframes.
+// paintValue is a painted longhand's value now, at e between the styles
+// of two keyframes.
 type paintValue struct {
 	index    int
 	from, to *style.Computed
 	e        float32
-	v        value
 }
 
-// override is a value an animation gives Style: src's value of the
-// longhand name, or for a length, src's and to's at t between.
+// on writes p's value into dst: the colours of the ends given as
+// currentColor are current, when set, the animated colour, as in Chrome.
+func (p paintValue) on(dst *style.Computed, current *color.Color) {
+	l := &longhands[p.index].prop
+	from, to := p.from, p.to
+	if f := l.anim.current; current != nil && f != 0 {
+		from, to = following(from, f, *current), following(to, f, *current)
+	}
+	if !l.anim.lerp(dst, from, to, p.e) {
+		src := from
+		if p.e >= 0.5 {
+			src = to
+		}
+		l.inherit(dst, src)
+	}
+}
+
+// following is s with c for its colour f, when that is currentColor.
+func following(s *style.Computed, f style.CurrentColorFields, c color.Color) *style.Computed {
+	if s.CurrentColor&f == 0 {
+		return s
+	}
+	o := *s
+	o.FollowColor(c)
+	return &o
+}
+
+// override is a value an animation or a transition gives Style: the
+// longhand's value at t between src's and to's, or src's alone without
+// to; one that doesn't interpolate flips halfway.
 type override struct {
-	name    string
+	index   int
 	src, to *style.Computed
 	t       float32
-	length  int
 }
 
 func (o override) apply(c *style.Computed) {
-	if o.length >= 0 {
-		get := lengthProps[o.length].get
-		*get(c) = lerpLength(*get(o.src), *get(o.to), o.t)
+	p := &longhands[o.index].prop
+	switch {
+	case o.to == nil:
+	case p.anim.lerp != nil && p.anim.lerp(c, o.src, o.to, o.t):
+		return
+	case o.t >= 0.5:
+		p.inherit(c, o.to)
 		return
 	}
-	props[o.name].inherit(c, o.src)
+	p.inherit(c, o.src)
 }
-
-type lengthProp struct {
-	name string
-	get  func(*style.Computed) *style.Length
-}
-
-// lengthProps are the longhands of a length that animations interpolate
-// on Style, where layout reads them: between two lengths, as calc() of
-// px and %, and as discrete between an auto or a none and a length.
-//
-//nolint:gochecknoglobals,goconst // the interpolated lengths' table
-var lengthProps = func() []lengthProp {
-	out := []lengthProp{
-		{propWidth, func(c *style.Computed) *style.Length { return &c.Size.Width }},
-		{propHeight, func(c *style.Computed) *style.Length { return &c.Size.Height }},
-		{"min-width", func(c *style.Computed) *style.Length { return &c.MinSize.Width }},
-		{"min-height", func(c *style.Computed) *style.Length { return &c.MinSize.Height }},
-		{"max-width", func(c *style.Computed) *style.Length { return &c.MaxSize.Width }},
-		{"max-height", func(c *style.Computed) *style.Length { return &c.MaxSize.Height }},
-	}
-	sides := func(prefix string, get func(*style.Computed) *style.Sides[style.Length]) {
-		for i, side := range []string{kwTop, kwRight, kwBottom, kwLeft} {
-			out = append(out, lengthProp{prefix + side, func(c *style.Computed) *style.Length { return sideOf(get(c), i) }})
-		}
-	}
-	sides("", func(c *style.Computed) *style.Sides[style.Length] { return &c.Inset })
-	sides("margin-", func(c *style.Computed) *style.Sides[style.Length] { return &c.Margin })
-	sides("padding-", func(c *style.Computed) *style.Sides[style.Length] { return &c.Padding })
-	return out
-}()
 
 // Events drains the animation events since the last call, in the order
 // they happened.
@@ -178,11 +169,12 @@ func (t *Transitions) watch(n *dom.Node, next *style.Computed) {
 	a.restyled = true
 }
 
-// animated reports whether an animation of n shows the animatable
-// property at index i.
+// animated reports whether an animation of n moves the longhand at
+// place i of longhands.
 func (t *Transitions) animated(n *dom.Node, i int) bool {
 	if a := t.anims[n]; a != nil {
-		return slices.ContainsFunc(a.paints, func(p paintValue) bool { return p.index == i })
+		return slices.ContainsFunc(a.paints, func(p paintValue) bool { return p.index == i }) ||
+			slices.ContainsFunc(a.over, func(o override) bool { return o.index == i })
 	}
 	return false
 }
@@ -338,15 +330,13 @@ func longhandsOf(name string) []string {
 // add puts k on the track of the longhand name, over a key of the same
 // offset, as a later keyframe of it wins.
 func (an *animation) add(name string, k key) {
-	i := slices.IndexFunc(an.tracks, func(tr track) bool { return tr.name == name })
+	index, ok := orderIndex[name]
+	if !ok || longhands[index].prop.anim.kind == still {
+		return
+	}
+	i := slices.IndexFunc(an.tracks, func(tr track) bool { return tr.index == index })
 	if i < 0 {
-		tr := track{name: name, kind: discreteTrack, index: -1}
-		if p := slices.IndexFunc(animatable, func(p animProp) bool { return p.name == name }); p >= 0 {
-			tr.kind, tr.index = paintTrack, p
-		} else if l := slices.IndexFunc(lengthProps, func(l lengthProp) bool { return l.name == name }); l >= 0 {
-			tr.kind, tr.index = lengthTrack, l
-		}
-		an.tracks = append(an.tracks, tr)
+		an.tracks = append(an.tracks, track{index: index})
 		i = len(an.tracks) - 1
 	}
 	tr := &an.tracks[i]
@@ -393,64 +383,19 @@ func (t *Transitions) update(n *dom.Node, a *nodeAnims) bool {
 		for i := range an.tracks {
 			tr := &an.tracks[i]
 			from, to, e := tr.at(p)
-			switch tr.kind {
-			case paintTrack:
+			if longhands[tr.index].prop.anim.kind == painted {
 				a.paints = setPaint(a.paints, paintValue{index: tr.index, from: from.s, to: to.s, e: e})
-			case lengthTrack:
-				get := lengthProps[tr.index].get
-				if f, g := get(from.s), get(to.s); f.Kind == style.Fixed && g.Kind == style.Fixed {
-					over = setOverride(over, override{name: tr.name, src: from.s, to: to.s, t: e, length: tr.index})
-					continue
-				}
-				over = setOverride(over, discrete(tr.name, from.s, to.s, e))
-			case discreteTrack:
-				over = setOverride(over, discrete(tr.name, from.s, to.s, e))
+				continue
 			}
+			over = setOverride(over, override{index: tr.index, src: from.s, to: to.s, t: e})
 		}
 	}
-	a.paint()
 	if slices.Equal(over, a.over) {
 		return false
 	}
 	a.over = over
 	restyle(n)
 	return true
-}
-
-// paint works out the paints' values, colour first: a colour a keyframe
-// gives as currentColor, its own or the element's, is the animated
-// colour, as in Chrome.
-func (a *nodeAnims) paint() {
-	var current *color.Color
-	if i := slices.IndexFunc(a.paints, func(p paintValue) bool { return p.index == 0 }); i >= 0 {
-		p := &a.paints[i]
-		p.v = animatable[0].get(p.from).lerp(animatable[0].get(p.to), p.e)
-		current = &p.v.c
-	}
-	for i := range a.paints {
-		p := &a.paints[i]
-		if p.index == 0 {
-			continue
-		}
-		prop := animatable[p.index]
-		f, g := prop.get(p.from), prop.get(p.to)
-		if flag := currentFlags[prop.name]; current != nil && flag != 0 {
-			if p.from.CurrentColor&flag != 0 {
-				f.c = *current
-			}
-			if p.to.CurrentColor&flag != 0 {
-				g.c = *current
-			}
-		}
-		p.v = f.lerp(g, p.e)
-	}
-}
-
-//nolint:gochecknoglobals,goconst // the colours that can be currentColor's
-var currentFlags = map[string]style.CurrentColorFields{
-	"border-top-color": style.BorderTopCurrent, "border-right-color": style.BorderRightCurrent,
-	"border-bottom-color": style.BorderBottomCurrent, "border-left-color": style.BorderLeftCurrent,
-	"outline-color": style.OutlineCurrent,
 }
 
 func setPaint(list []paintValue, p paintValue) []paintValue {
@@ -462,28 +407,11 @@ func setPaint(list []paintValue, p paintValue) []paintValue {
 }
 
 func setOverride(list []override, o override) []override {
-	if i := slices.IndexFunc(list, func(q override) bool { return q.name == o.name }); i >= 0 {
+	if i := slices.IndexFunc(list, func(q override) bool { return q.index == o.index }); i >= 0 {
 		list[i] = o
 		return list
 	}
 	return append(list, o)
-}
-
-// discrete is a value that can't interpolate: from's before half the
-// interval, to's from there; visibility is visible all along when one end
-// is.
-func discrete(name string, from, to *style.Computed, e float32) override {
-	src := from
-	if e >= 0.5 {
-		src = to
-	}
-	if name == propVisibility && from.Visible != to.Visible && e > 0 && e < 1 {
-		src = from
-		if to.Visible {
-			src = to
-		}
-	}
-	return override{name: name, src: src, length: -1}
 }
 
 // at is the keyframes of the interval p falls in and how far along it,

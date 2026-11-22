@@ -125,6 +125,11 @@ type restyler struct {
 	// the cascade, under its !important declarations.
 	over     func(n *dom.Node) []override
 	keyframe []Declaration
+	// transit, when set, is told of the style worked out with its
+	// animations of every element that declares transitions or runs some
+	// (transits), and returns what its transitions set on it.
+	transit  func(n *dom.Node, next *style.Computed) []override
+	transits func(n *dom.Node) bool
 	// overlay has scrolling boxes keep no gutter for their bars
 	// (Transitions.OverlayScrollbars).
 	overlay bool
@@ -372,8 +377,13 @@ type ctx struct {
 	raw                map[string]*Declaration
 	trans              [4][]Component
 	anims              [8][]Component
-	// over is what the element's animations set on its style.
-	over []override
+	// over is what the element's animations set on its style; transit is
+	// the restyler's, for moving, which runs transitions when transits is
+	// set.
+	over     []override
+	transit  func(n *dom.Node, next *style.Computed) []override
+	moving   *dom.Node
+	transits bool
 	// base is where the sheet the declaration being applied came from is.
 	base     *origin
 	expanded map[*Declaration]map[string][]Component
@@ -481,6 +491,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	if r.over != nil {
 		x.over = r.over(n)
 	}
+	r.transitOf(x, n)
 	x.cascaded(casc, root)
 	if closedSlot(n) {
 		c.Display = style.DisplayNone
@@ -507,6 +518,13 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		r.counts = true
 	}
 	return &c
+}
+
+// transitOf has x tell r's transit of n's style.
+func (r *restyler) transitOf(x *ctx, n *dom.Node) {
+	if r.transit != nil {
+		x.transit, x.moving, x.transits = r.transit, n, r.transits(n)
+	}
 }
 
 // overKeyframe puts the keyframe's declarations in casc where no
@@ -539,9 +557,50 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 // cascaded applies every longhand's winner, then what depends on several.
 func (x *ctx) cascaded(casc cascaded, root bool) {
 	x.customs(casc.custom)
+	if !x.transitioning(casc) {
+		x.longhands(casc, root, x.over)
+		x.finish(root)
+		return
+	}
+	start, c := *x, *x.c
+	x.longhands(casc, root, x.over)
+	x.finish(root)
+	if over := x.transit(x.moving, x.c); len(over) > 0 {
+		*x, *x.c = start, c
+		x.longhands(casc, root, append(slices.Clip(x.over), over...))
+		x.finish(root)
+	}
+}
+
+// transitioning reports whether x's element declares transitions or
+// runs some.
+func (x *ctx) transitioning(casc cascaded) bool {
+	return x.transit != nil && (x.transits || slices.ContainsFunc(transitionLonghands, func(i int) bool {
+		return casc.longhands[i] != nil
+	}))
+}
+
+//nolint:gochecknoglobals // derived from the properties
+var transitionLonghands = func() []int {
+	var out []int
+	for _, name := range shorthands[shortTransition] {
+		out = append(out, orderIndex[name])
+	}
+	return out
+}()
+
+// longhands applies every longhand's winner, each with what over sets on
+// it after it, so the units of the font and currentColor read the
+// animated font and colour.
+func (x *ctx) longhands(casc cascaded, root bool, over []override) {
 	for i := range longhands {
 		l := &longhands[i]
 		x.apply(l, casc.longhands[i])
+		for _, o := range over {
+			if o.index == i {
+				o.apply(x.c)
+			}
+		}
 		switch l.name {
 		case propFontSize:
 			x.em, x.sized = x.c.Font.Size, true
@@ -557,10 +616,6 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 			}
 		}
 	}
-	for _, o := range x.over {
-		o.apply(x.c)
-	}
-	x.finish(root)
 }
 
 func fadeColor(c color.Color, opacity float32) color.Color {
@@ -1074,35 +1129,44 @@ var initialTransitions = sync.OnceValue(func() []style.Transition {
 	return transitionList([4][]Component{})
 })
 
-// prop is how one longhand is set from its value and copied when
-// inherited.
+// prop is how one longhand is set from its value, copied when inherited,
+// and animated.
 type prop struct {
 	set     func(x *ctx, v []Component)
 	inherit func(dst, src *style.Computed)
+	anim    anim
 }
 
-func field[T any](get func(*style.Computed) *T, set func(x *ctx, v []Component) T) prop {
+// painted has p interpolate in Shown alone.
+func (p prop) painted() prop {
+	p.anim.kind = painted
+	return p
+}
+
+func field[T any](get func(*style.Computed) *T, set func(x *ctx, v []Component) T, how interp[T]) prop {
 	return prop{
 		set:     func(x *ctx, v []Component) { *get(x.c) = set(x, v) },
 		inherit: func(dst, src *style.Computed) { *get(dst) = *get(src) },
+		anim:    how.on(get),
 	}
 }
 
 func keyword[T any](get func(*style.Computed) *T, m map[string]T) prop {
-	return field(get, func(_ *ctx, v []Component) T { return m[strings.ToLower(v[0].Text)] })
+	return field(get, func(_ *ctx, v []Component) T { return m[strings.ToLower(v[0].Text)] }, flips[T]())
 }
 
-func lengthField(get func(*style.Computed) *style.Length) prop {
-	return field(get, func(x *ctx, v []Component) style.Length { return x.length(v[0]) })
+func lengthField(get func(*style.Computed) *style.Length, how interp[style.Length]) prop {
+	return field(get, func(x *ctx, v []Component) style.Length { return x.length(v[0]) }, how)
 }
 
-func colorField(get func(*style.Computed) *color.Color) prop {
-	return field(get, func(x *ctx, v []Component) color.Color { return x.color(v[0]) })
+func colorField(get func(*style.Computed) *color.Color, how interp[color.Color]) prop {
+	return field(get, func(x *ctx, v []Component) color.Color { return x.color(v[0]) }, how)
 }
 
-// currentField is a colour that may be currentColor, marked by f.
+// currentField is a colour that may be currentColor, marked by f: two
+// currentColors are the same value, whatever colour each stands for.
 func currentField(f style.CurrentColorFields, get func(*style.Computed) *color.Color) prop {
-	p := colorField(get)
+	p := colorField(get, colors)
 	return prop{
 		set: func(x *ctx, v []Component) {
 			p.set(x, v)
@@ -1114,6 +1178,17 @@ func currentField(f style.CurrentColorFields, get func(*style.Computed) *color.C
 		inherit: func(dst, src *style.Computed) {
 			p.inherit(dst, src)
 			dst.CurrentColor = dst.CurrentColor&^f | src.CurrentColor&f
+		},
+		anim: anim{kind: interpolated, current: f,
+			lerp: func(dst, a, b *style.Computed, t float32) bool {
+				*get(dst) = lerpColor(*get(a), *get(b), t)
+				dst.CurrentColor &^= f
+				return true
+			},
+			equal: func(a, b *style.Computed) bool {
+				ca, cb := a.CurrentColor&f != 0, b.CurrentColor&f != 0
+				return ca == cb && (ca || *get(a) == *get(b))
+			},
 		},
 	}
 }
@@ -1319,13 +1394,13 @@ func cornerOf(x *ctx, v []Component) style.Size[style.Length] {
 	return style.Size[style.Length]{Width: l, Height: l}
 }
 
-func sideProps(prefix, suffix string, mk func(get func(*style.Computed) *style.Length) prop,
+func sideProps(prefix, suffix string, how interp[style.Length],
 	get func(*style.Computed) *style.Sides[style.Length]) map[string]prop {
 	return map[string]prop{
-		prefix + kwTop + suffix:    mk(func(c *style.Computed) *style.Length { return &get(c).Top }),
-		prefix + kwRight + suffix:  mk(func(c *style.Computed) *style.Length { return &get(c).Right }),
-		prefix + kwBottom + suffix: mk(func(c *style.Computed) *style.Length { return &get(c).Bottom }),
-		prefix + kwLeft + suffix:   mk(func(c *style.Computed) *style.Length { return &get(c).Left }),
+		prefix + kwTop + suffix:    lengthField(func(c *style.Computed) *style.Length { return &get(c).Top }, how),
+		prefix + kwRight + suffix:  lengthField(func(c *style.Computed) *style.Length { return &get(c).Right }, how),
+		prefix + kwBottom + suffix: lengthField(func(c *style.Computed) *style.Length { return &get(c).Bottom }, how),
+		prefix + kwLeft + suffix:   lengthField(func(c *style.Computed) *style.Length { return &get(c).Left }, how),
 	}
 }
 
@@ -1344,6 +1419,7 @@ var props = func() map[string]prop {
 				dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
 				dst.TablePart = src.TablePart
 			},
+			anim: anim{kind: still},
 		},
 		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
 			"none": style.FloatNone, "left": style.FloatLeft, "right": style.FloatRight,
@@ -1360,6 +1436,21 @@ var props = func() map[string]prop {
 			},
 			inherit: func(dst, src *style.Computed) {
 				dst.VerticalAlign, dst.VerticalShift = src.VerticalAlign, src.VerticalShift
+			},
+			anim: anim{kind: interpolated,
+				lerp: func(dst, a, b *style.Computed, t float32) bool {
+					if a.VerticalAlign != style.AlignLength || b.VerticalAlign != style.AlignLength {
+						return false
+					}
+					l, ok := lerpLength(a.VerticalShift, b.VerticalShift, t, false)
+					if ok {
+						dst.VerticalAlign, dst.VerticalShift = style.AlignLength, l
+					}
+					return ok
+				},
+				equal: func(a, b *style.Computed) bool {
+					return a.VerticalAlign == b.VerticalAlign && a.VerticalShift == b.VerticalShift
+				},
 			},
 		},
 		"clear": keyword(func(c *style.Computed) *style.Clear { return &c.Clear }, map[string]style.Clear{
@@ -1379,19 +1470,19 @@ var props = func() map[string]prop {
 					names[i] = c.Text
 				}
 				return names
-			}),
+			}, flips[[]string]()),
 		"box-sizing": keyword(func(c *style.Computed) *style.BoxSizing { return &c.BoxSizing },
 			map[string]style.BoxSizing{"border-box": style.BorderBox, "content-box": style.ContentBox}),
 		"position": keyword(func(c *style.Computed) *style.Position { return &c.Position }, map[string]style.Position{
 			"static": style.Static, "relative": style.Relative, "absolute": style.Absolute,
 			"fixed": style.FixedPosition, "sticky": style.Sticky,
 		}),
-		"width":      lengthField(func(c *style.Computed) *style.Length { return &c.Size.Width }),
-		"height":     lengthField(func(c *style.Computed) *style.Length { return &c.Size.Height }),
-		"min-width":  lengthField(func(c *style.Computed) *style.Length { return &c.MinSize.Width }),
-		"min-height": lengthField(func(c *style.Computed) *style.Length { return &c.MinSize.Height }),
-		"max-width":  lengthField(func(c *style.Computed) *style.Length { return &c.MaxSize.Width }),
-		"max-height": lengthField(func(c *style.Computed) *style.Length { return &c.MaxSize.Height }),
+		"width":      lengthField(func(c *style.Computed) *style.Length { return &c.Size.Width }, sizeLength),
+		"height":     lengthField(func(c *style.Computed) *style.Length { return &c.Size.Height }, sizeLength),
+		"min-width":  lengthField(func(c *style.Computed) *style.Length { return &c.MinSize.Width }, sizeLength),
+		"min-height": lengthField(func(c *style.Computed) *style.Length { return &c.MinSize.Height }, sizeLength),
+		"max-width":  lengthField(func(c *style.Computed) *style.Length { return &c.MaxSize.Width }, sizeLength),
+		"max-height": lengthField(func(c *style.Computed) *style.Length { return &c.MaxSize.Height }, sizeLength),
 		"aspect-ratio": field(
 			func(c *style.Computed) *float32 { return &c.AspectRatio },
 			func(_ *ctx, v []Component) float32 {
@@ -1402,7 +1493,7 @@ var props = func() map[string]prop {
 					return float32(v[0].Num)
 				}
 				return 0
-			},
+			}, ratios,
 		),
 		"overflow-x": keyword(func(c *style.Computed) *style.Overflow { return &c.Overflow.Width }, overflows),
 		"overflow-y": keyword(func(c *style.Computed) *style.Overflow { return &c.Overflow.Height }, overflows),
@@ -1415,6 +1506,17 @@ var props = func() map[string]prop {
 				}
 			},
 			inherit: func(dst, src *style.Computed) { dst.ZIndex, dst.ZAuto = src.ZIndex, src.ZAuto },
+			anim: anim{kind: interpolated,
+				lerp: func(dst, a, b *style.Computed, t float32) bool {
+					if a.ZAuto || b.ZAuto {
+						return false
+					}
+					dst.ZIndex, _ = integers(math.MinInt, math.MaxInt).lerp(a.ZIndex, b.ZIndex, t)
+					dst.ZAuto = false
+					return true
+				},
+				equal: func(a, b *style.Computed) bool { return a.ZIndex == b.ZIndex && a.ZAuto == b.ZAuto },
+			},
 		},
 
 		"flex-direction": keyword(func(c *style.Computed) *style.FlexDirection { return &c.Direction },
@@ -1424,12 +1526,12 @@ var props = func() map[string]prop {
 			"nowrap": style.NoWrap, "wrap": style.Wrap, "wrap-reverse": style.WrapReverse,
 		}),
 		"flex-grow": field(func(c *style.Computed) *float32 { return &c.Grow },
-			func(x *ctx, v []Component) float32 { return x.num(v[0]) }),
+			func(x *ctx, v []Component) float32 { return x.num(v[0]) }, numbers(0, math.MaxFloat32)),
 		"flex-shrink": field(func(c *style.Computed) *float32 { return &c.Shrink },
-			func(x *ctx, v []Component) float32 { return x.num(v[0]) }),
-		"flex-basis":      lengthField(func(c *style.Computed) *style.Length { return &c.Basis }),
-		"row-gap":         lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Height }),
-		"column-gap":      lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Width }),
+			func(x *ctx, v []Component) float32 { return x.num(v[0]) }, numbers(0, math.MaxFloat32)),
+		"flex-basis":      lengthField(func(c *style.Computed) *style.Length { return &c.Basis }, sizeLength),
+		"row-gap":         lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Height }, sizeLength),
+		"column-gap":      lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Width }, sizeLength),
 		"align-items":     keyword(func(c *style.Computed) *style.Align { return &c.AlignItems }, alignWords4),
 		"align-self":      keyword(func(c *style.Computed) *style.Align { return &c.AlignSelf }, alignWords4),
 		"align-content":   keyword(func(c *style.Computed) *style.Align { return &c.AlignContent }, alignWords4),
@@ -1437,26 +1539,27 @@ var props = func() map[string]prop {
 		"justify-items":   keyword(func(c *style.Computed) *style.Align { return &c.JustifyItems }, alignWords4),
 		"justify-self":    keyword(func(c *style.Computed) *style.Align { return &c.JustifySelf }, alignWords4),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(math.MinInt, math.MaxInt)),
 
 		"column-count": field(func(c *style.Computed) *int { return &c.ColumnCount },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
-		"column-width": lengthField(func(c *style.Computed) *style.Length { return &c.ColumnWidth }),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, counts),
+		"column-width": lengthField(func(c *style.Computed) *style.Length { return &c.ColumnWidth }, sizeLength),
 		"column-fill": field(func(c *style.Computed) *bool { return &c.ColumnFillAuto },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "auto") }),
-		"column-span":       {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}},
-		"column-rule-width": field(func(c *style.Computed) *float32 { return &c.ColumnRuleWidth }, borderWidthOf),
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "auto") }, flips[bool]()),
+		"column-span": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {},
+			anim: anim{kind: discrete}},
+		"column-rule-width": field(func(c *style.Computed) *float32 { return &c.ColumnRuleWidth }, borderWidthOf, widths),
 		"column-rule-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.ColumnRuleStyle }, borderStyles),
 		"column-rule-color": currentField(style.ColumnRuleCurrent,
 			func(c *style.Computed) *color.Color { return &c.ColumnRuleColor }),
 		"break-inside": field(func(c *style.Computed) *bool { return &c.BreakInsideAvoid },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }),
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }, flips[bool]()),
 		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
 		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
 		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1, math.MaxInt)),
 		"widows": field(func(c *style.Computed) *int { return &c.Widows },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1, math.MaxInt)),
 
 		"grid-template-columns": templateTracks(func(c *style.Computed) (*[]style.TrackRepeat, *bool) {
 			return &c.Columns, &c.Subgrid.Width
@@ -1464,9 +1567,12 @@ var props = func() map[string]prop {
 		"grid-template-rows": templateTracks(func(c *style.Computed) (*[]style.TrackRepeat, *bool) {
 			return &c.Rows, &c.Subgrid.Height
 		}),
-		"grid-template-areas": field(func(c *style.Computed) *[]style.GridArea { return &c.Areas }, templateAreas),
-		"grid-auto-columns":   field(func(c *style.Computed) *[]style.Track { return &c.AutoColumns }, (*ctx).autoTracks),
-		"grid-auto-rows":      field(func(c *style.Computed) *[]style.Track { return &c.AutoRows }, (*ctx).autoTracks),
+		"grid-template-areas": field(func(c *style.Computed) *[]style.GridArea { return &c.Areas },
+			templateAreas, flips[[]style.GridArea]()),
+		"grid-auto-columns": field(func(c *style.Computed) *[]style.Track { return &c.AutoColumns },
+			(*ctx).autoTracks, flips[[]style.Track]()),
+		"grid-auto-rows": field(func(c *style.Computed) *[]style.Track { return &c.AutoRows },
+			(*ctx).autoTracks, flips[[]style.Track]()),
 		"grid-auto-flow": field(
 			func(c *style.Computed) *style.GridFlow { return &c.Flow },
 			func(_ *ctx, v []Component) style.GridFlow {
@@ -1484,12 +1590,16 @@ var props = func() map[string]prop {
 					return style.FlowRowDense
 				}
 				return style.FlowRow
-			},
+			}, flips[style.GridFlow](),
 		),
-		"grid-column-start": field(func(c *style.Computed) *style.GridLine { return &c.Column[0] }, gridLine),
-		"grid-column-end":   field(func(c *style.Computed) *style.GridLine { return &c.Column[1] }, gridLine),
-		"grid-row-start":    field(func(c *style.Computed) *style.GridLine { return &c.Row[0] }, gridLine),
-		"grid-row-end":      field(func(c *style.Computed) *style.GridLine { return &c.Row[1] }, gridLine),
+		"grid-column-start": field(func(c *style.Computed) *style.GridLine { return &c.Column[0] },
+			gridLine, flips[style.GridLine]()),
+		"grid-column-end": field(func(c *style.Computed) *style.GridLine { return &c.Column[1] },
+			gridLine, flips[style.GridLine]()),
+		"grid-row-start": field(func(c *style.Computed) *style.GridLine { return &c.Row[0] },
+			gridLine, flips[style.GridLine]()),
+		"grid-row-end": field(func(c *style.Computed) *style.GridLine { return &c.Row[1] },
+			gridLine, flips[style.GridLine]()),
 
 		"font-family": field(
 			func(c *style.Computed) *[]string { return &c.Font.Family },
@@ -1503,13 +1613,14 @@ var props = func() map[string]prop {
 					out = append(out, strings.Join(names, " "))
 				}
 				return out
-			},
+			}, flips[[]string](),
 		),
-		"font-size":   field(func(c *style.Computed) *float32 { return &c.Font.Size }, (*ctx).fontSize),
-		"font-weight": field(func(c *style.Computed) *int { return &c.Font.Weight }, (*ctx).fontWeight),
+		"font-size": field(func(c *style.Computed) *float32 { return &c.Font.Size },
+			(*ctx).fontSize, numbers(0, math.MaxFloat32)),
+		"font-weight": field(func(c *style.Computed) *int { return &c.Font.Weight }, (*ctx).fontWeight, integers(1, 1000)),
 		"font-style": field(func(c *style.Computed) *bool { return &c.Font.Italic }, func(_ *ctx, v []Component) bool {
 			return !isWord(v[0], "normal")
-		}),
+		}, flips[bool]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {
@@ -1525,10 +1636,10 @@ var props = func() map[string]prop {
 				}
 				l := x.length(v[0])
 				return style.LineHeight{Px: l.At(x.em)}
-			},
+			}, lineHeights,
 		),
 		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
-			func(x *ctx, v []Component) float32 { return x.px(v[0]) }),
+			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, numbers(-math.MaxFloat32, math.MaxFloat32)),
 		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
 			func(x *ctx, v []Component) style.WordSpacing {
 				l := x.length(v[0])
@@ -1536,7 +1647,7 @@ var props = func() map[string]prop {
 					return style.WordSpacing{Px: l.At(x.em)}
 				}
 				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
-			}),
+			}, wordSpacings),
 		"color": field(
 			func(c *style.Computed) *color.Color { return &c.Color },
 			func(x *ctx, v []Component) color.Color {
@@ -1544,16 +1655,17 @@ var props = func() map[string]prop {
 					return x.parent.Color
 				}
 				return linear(v[0])
-			},
-		),
+			}, colors,
+		).painted(),
 		propColorScheme: field(func(c *style.Computed) *style.ColorScheme { return &c.ColorScheme },
-			func(_ *ctx, v []Component) style.ColorScheme { return colorScheme(v) }),
+			func(_ *ctx, v []Component) style.ColorScheme { return colorScheme(v) }, flips[style.ColorScheme]()),
 		"-webkit-font-smoothing": {
 			set: func(x *ctx, v []Component) {
 				kw := strings.ToLower(v[0].Text)
 				x.c.PixelText, x.c.ExactText = kw == kwNone, kw == "antialiased"
 			},
 			inherit: func(dst, src *style.Computed) { dst.PixelText, dst.ExactText = src.PixelText, src.ExactText },
+			anim:    anim{kind: discrete},
 		},
 		"text-transform": keyword(func(c *style.Computed) *style.TextTransform { return &c.TextTransform },
 			map[string]style.TextTransform{"none": style.NoTransform, "uppercase": style.Uppercase,
@@ -1562,11 +1674,11 @@ var props = func() map[string]prop {
 			map[string]style.TextAlign{"start": style.Start, "end": style.End, "left": style.Left, "right": style.Right,
 				"center": style.Center, "justify": style.Justify, "-webkit-left": style.BlockLeft,
 				"-webkit-right": style.BlockRight, "-webkit-center": style.BlockCenter}),
-		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }),
+		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }, anyLength),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
 		"border-collapse": field(func(c *style.Computed) *bool { return &c.BorderCollapse },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }),
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }, flips[bool]()),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
 			map[string]style.TableLayout{"auto": style.TableAuto, "fixed": style.TableFixed}),
 		"white-space": keyword(func(c *style.Computed) *style.WhiteSpace { return &c.WhiteSpace },
@@ -1582,6 +1694,7 @@ var props = func() map[string]prop {
 				}
 			},
 			inherit: func(dst, src *style.Computed) { dst.BorderSpacing = src.BorderSpacing },
+			anim:    spacings.on(func(c *style.Computed) *[2]float32 { return &c.BorderSpacing }),
 		},
 		"overflow-wrap": {
 			set: func(x *ctx, v []Component) {
@@ -1589,20 +1702,21 @@ var props = func() map[string]prop {
 				x.c.BreakAnywhere = isWord(v[0], "anywhere")
 			},
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
+			anim:    anim{kind: discrete},
 		},
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }),
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
-		}),
+		}, flips[bool]()),
 		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle }, listStyles),
 		"visibility": field(func(c *style.Computed) *bool { return &c.Visible }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "visible")
-		}),
+		}, visibility),
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }),
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "drag") }),
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "drag") }, flips[bool]()),
 		"user-select": field(func(c *style.Computed) *style.UserSelect { return &c.UserSelect },
 			func(_ *ctx, v []Component) style.UserSelect {
 				switch strings.ToLower(v[0].Text) {
@@ -1615,62 +1729,67 @@ var props = func() map[string]prop {
 				}
 				// auto set on an element is text in Chrome, whatever its parent
 				return style.SelectText
-			}),
+			}, flips[style.UserSelect]()),
 		"cursor": field(func(c *style.Computed) *string { return &c.Cursor }, func(_ *ctx, v []Component) string {
 			if isWord(v[0], "auto") {
 				return ""
 			}
 			return strings.ToLower(v[0].Text)
-		}),
+		}, flips[string]()),
 
-		"background-color": colorField(func(c *style.Computed) *color.Color { return &c.Background }),
+		"background-color": colorField(func(c *style.Computed) *color.Color { return &c.Background }, colors).painted(),
 		"background-image": layered(func(c *style.Computed) *[]style.Image { return &c.BackgroundImages },
-			backgroundImage),
+			backgroundImage, flips[[]style.Image]()),
 		"background-size": layered(func(c *style.Computed) *[]style.BackgroundSize { return &c.BackgroundSizes },
-			(*ctx).backgroundSize),
+			(*ctx).backgroundSize, repeatable(backgroundSizes, style.BackgroundSize{})),
 		"background-repeat": layered(func(c *style.Computed) *[]style.BackgroundRepeat { return &c.BackgroundRepeats },
-			tiling),
+			tiling, flips[[]style.BackgroundRepeat]()),
 		"background-position": layered(
-			func(c *style.Computed) *[]style.BackgroundPosition { return &c.BackgroundPositions }, (*ctx).position),
+			func(c *style.Computed) *[]style.BackgroundPosition { return &c.BackgroundPositions }, (*ctx).position,
+			repeatable(positions, style.TopLeft)),
 		"background-attachment": layered(
 			func(c *style.Computed) *[]style.BackgroundAttachment { return &c.BackgroundAttachments },
 			wordOf(map[string]style.BackgroundAttachment{
 				"scroll": style.AttachScroll, "fixed": style.AttachFixed, "local": style.AttachLocal,
-			})),
+			}), flips[[]style.BackgroundAttachment]()),
 		"background-origin": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundOrigins },
 			wordOf(map[string]style.BackgroundBox{
 				"padding-box": style.InitialBox, "border-box": style.UnderBorder, "content-box": style.UnderContent,
-			})),
+			}), flips[[]style.BackgroundBox]()),
 		"background-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundClips },
 			wordOf(map[string]style.BackgroundBox{
 				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
-			})),
+			}), flips[[]style.BackgroundBox]()),
 		"mask-image": field(func(c *style.Computed) *style.Image { return &c.MaskImage },
-			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }),
-		"mask-size":   field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize }, (*ctx).backgroundSize),
-		"mask-repeat": field(func(c *style.Computed) *style.BackgroundRepeat { return &c.MaskRepeat }, tiling),
+			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }, flips[style.Image]()),
+		"mask-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize },
+			(*ctx).backgroundSize, backgroundSizes),
+		"mask-repeat": field(func(c *style.Computed) *style.BackgroundRepeat { return &c.MaskRepeat },
+			tiling, flips[style.BackgroundRepeat]()),
 		"mask-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.MaskPosition },
-			(*ctx).position),
-		"clip-path":   field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath),
-		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows),
+			(*ctx).position, positions),
+		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
+			clipPaths).painted(),
+		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),
 		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
-			decorationLine),
+			decorationLine, flips[style.DecorationLine]()),
 		"text-decoration-style": keyword(func(c *style.Computed) *style.DecorationStyle { return &c.TextDecoration.Style },
 			decorationStyles),
 		"text-decoration-color": currentField(style.DecorationCurrent,
 			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
 		"text-decoration-thickness": lengthField(
-			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }),
+			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }, anyLength),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
 		"caret-color":  autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.CaretColor, &c.CaretAuto }),
 		"object-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.ObjectPosition },
-			(*ctx).position),
+			(*ctx).position, positions),
 		"object-fit": keyword(func(c *style.Computed) *style.ObjectFit { return &c.ObjectFit },
 			map[string]style.ObjectFit{"fill": style.FitFill, "contain": style.FitContain, "cover": style.FitCover,
 				"none": style.FitNone, "scale-down": style.FitScaleDown}),
-		"border-image-source": field(func(c *style.Computed) *string { return &c.BorderImage.Source }, imageSource),
+		"border-image-source": field(func(c *style.Computed) *string { return &c.BorderImage.Source },
+			imageSource, flips[string]()),
 		"border-image-slice": field(
 			func(c *style.Computed) *style.Sides[float32] { return &c.BorderImage.Slice },
 			func(_ *ctx, v []Component) style.Sides[float32] {
@@ -1685,7 +1804,7 @@ var props = func() map[string]prop {
 				}
 				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(n)-1]
 				return style.Sides[float32]{Top: n[pick[0]], Right: n[pick[1]], Bottom: n[pick[2]], Left: n[pick[3]]}
-			},
+			}, imageSlices,
 		),
 		"border-image-width": field(
 			func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.BorderImageWidth },
@@ -1705,7 +1824,7 @@ var props = func() map[string]prop {
 				}
 				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(w)-1]
 				return style.Sides[style.ImageWidth]{Top: w[pick[0]], Right: w[pick[1]], Bottom: w[pick[2]], Left: w[pick[3]]}
-			},
+			}, imageWidths,
 		),
 		"border-image-repeat": field(
 			func(c *style.Computed) *[2]style.ImageRepeat { return &c.BorderImageRepeat },
@@ -1727,45 +1846,51 @@ var props = func() map[string]prop {
 					down = of(v[1])
 				}
 				return [2]style.ImageRepeat{across, down}
-			},
+			}, flips[[2]style.ImageRepeat](),
 		),
-		"box-shadow":    field(func(c *style.Computed) *[]style.Shadow { return &c.Shadows }, (*ctx).shadows),
-		"outline-width": field(func(c *style.Computed) *float32 { return &c.OutlineWidth }, borderWidthOf),
+		"box-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.Shadows },
+			(*ctx).shadows, shadows).painted(),
+		"outline-width": field(func(c *style.Computed) *float32 { return &c.OutlineWidth }, borderWidthOf, widths),
 		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, borderStyles),
-		"outline-color": currentField(style.OutlineCurrent, func(c *style.Computed) *color.Color { return &c.OutlineColor }),
+		"outline-color": currentField(style.OutlineCurrent,
+			func(c *style.Computed) *color.Color { return &c.OutlineColor }).painted(),
 		"outline-offset": field(func(c *style.Computed) *float32 { return &c.OutlineOffset },
-			func(x *ctx, v []Component) float32 { return x.px(v[0]) }),
+			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, offsets),
 		"opacity": field(func(c *style.Computed) *float32 { return &c.Opacity }, func(x *ctx, v []Component) float32 {
 			return float32(clamp01(float64(x.num(v[0]))))
-		}),
-		"transform": field(func(c *style.Computed) *[]style.TransformOp { return &c.Transform }, (*ctx).transform),
-		"filter":    field(func(c *style.Computed) *[]style.Filter { return &c.Filters }, (*ctx).filters),
+		}, numbers(0, 1)).painted(),
+		"transform": field(func(c *style.Computed) *[]style.TransformOp { return &c.Transform },
+			(*ctx).transform, transforms).painted(),
+		"filter": field(func(c *style.Computed) *[]style.Filter { return &c.Filters }, (*ctx).filters,
+			filters).painted(),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
-			(*ctx).origin),
-		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}},
-		"resize":     {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}},
+			(*ctx).origin, pairs(anyLength)),
+		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
+		"resize":     {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
-			cornerOf),
+			cornerOf, pairs(sizeLength)),
 		"border-top-right-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopRight },
-			cornerOf),
+			cornerOf, pairs(sizeLength)),
 		"border-bottom-right-radius": field(
 			func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.BottomRight },
-			cornerOf,
+			cornerOf, pairs(sizeLength),
 		),
 		"border-bottom-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.BottomLeft },
-			cornerOf),
+			cornerOf, pairs(sizeLength)),
 	}
 	boxes := map[string]func(c *style.Computed) *style.Sides[style.Length]{
 		"margin-":  func(c *style.Computed) *style.Sides[style.Length] { return &c.Margin },
 		"padding-": func(c *style.Computed) *style.Sides[style.Length] { return &c.Padding },
 		"":         func(c *style.Computed) *style.Sides[style.Length] { return &c.Inset },
 	}
+	how := map[string]interp[style.Length]{"margin-": anyLength, "padding-": sizeLength, "": anyLength}
 	for prefix, get := range boxes {
-		maps.Copy(m, sideProps(prefix, "", lengthField, get))
+		maps.Copy(m, sideProps(prefix, "", how[prefix], get))
 	}
 	for i, side := range []string{"top", "right", "bottom", "left"} {
-		m["border-"+side+"-width"] = field(func(c *style.Computed) *float32 { return sideOf(&c.Border, i) }, borderWidthOf)
+		m["border-"+side+"-width"] = field(func(c *style.Computed) *float32 { return sideOf(&c.Border, i) }, borderWidthOf,
+			widths)
 		m["border-"+side+"-style"] = prop{
 			set: func(x *ctx, v []Component) {
 				*sideOf(&x.c.BorderStyle, i) = borderStyles[strings.ToLower(v[0].Text)]
@@ -1775,23 +1900,26 @@ var props = func() map[string]prop {
 				*sideOf(&dst.BorderStyle, i) = *sideOf(&src.BorderStyle, i)
 				*sideOf(&dst.BorderHidden, i) = *sideOf(&src.BorderHidden, i)
 			},
+			anim: anim{kind: discrete},
 		}
 		m["border-"+side+"-color"] = currentField(style.BorderTopCurrent<<i,
-			func(c *style.Computed) *color.Color { return sideOf(&c.BorderColor, i) })
+			func(c *style.Computed) *color.Color { return sideOf(&c.BorderColor, i) }).painted()
 	}
-	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}}
+	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}}
 	m["border-image-outset"] = noop
 	maps.Copy(m, contentProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
 			inherit: func(dst, src *style.Computed) { dst.Transitions = src.Transitions },
+			anim:    anim{kind: still},
 		}
 	}
 	for i, n := range shorthands[shortAnimation] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.anims[i] = v },
 			inherit: func(dst, src *style.Computed) { dst.Animations = src.Animations },
+			anim:    anim{kind: still},
 		}
 	}
 	return m
@@ -1849,6 +1977,23 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 			sc, sa := get(src)
 			*dc, *da = *sc, *sa
 		},
+		anim: anim{kind: interpolated,
+			lerp: func(dst, a, b *style.Computed, t float32) bool {
+				ca, aa := get(a)
+				cb, ab := get(b)
+				if *aa || *ab {
+					return false
+				}
+				dc, da := get(dst)
+				*dc, *da = lerpColor(*ca, *cb, t), false
+				return true
+			},
+			equal: func(a, b *style.Computed) bool {
+				ca, aa := get(a)
+				cb, ab := get(b)
+				return *aa == *ab && (*aa || *ca == *cb)
+			},
+		},
 	}
 }
 
@@ -1901,7 +2046,7 @@ func (x *ctx) backgroundSize(v []Component) style.BackgroundSize {
 
 // layered is a background longhand: the list of its layers' values, each
 // read by each from its part of the value.
-func layered[T any](get func(*style.Computed) *[]T, each func(x *ctx, v []Component) T) prop {
+func layered[T any](get func(*style.Computed) *[]T, each func(x *ctx, v []Component) T, how interp[[]T]) prop {
 	return field(get, func(x *ctx, v []Component) []T {
 		parts := splitOn(items(v), func(c Component) bool { return c.Kind == Comma })
 		out := make([]T, len(parts))
@@ -1909,7 +2054,7 @@ func layered[T any](get func(*style.Computed) *[]T, each func(x *ctx, v []Compon
 			out[i] = each(x, part)
 		}
 		return out
-	})
+	}, how)
 }
 
 func wordOf[T any](m map[string]T) func(*ctx, []Component) T {
@@ -2021,7 +2166,8 @@ func (x *ctx) track(c Component) style.Track {
 }
 
 // templateTracks is grid-template-columns or -rows, whether subgrid
-// beside its tracks.
+// beside its tracks: two track lists interpolate as trackLists, a
+// subgrid flips.
 func templateTracks(get func(*style.Computed) (*[]style.TrackRepeat, *bool)) prop {
 	return prop{
 		set: func(x *ctx, v []Component) {
@@ -2037,6 +2183,26 @@ func templateTracks(get func(*style.Computed) (*[]style.TrackRepeat, *bool)) pro
 			dt, ds := get(dst)
 			st, ss := get(src)
 			*dt, *ds = *st, *ss
+		},
+		anim: anim{kind: interpolated,
+			lerp: func(dst, a, b *style.Computed, t float32) bool {
+				at, as := get(a)
+				bt, bs := get(b)
+				if *as || *bs {
+					return false
+				}
+				v, ok := trackLists.lerp(*at, *bt, t)
+				if ok {
+					dt, ds := get(dst)
+					*dt, *ds = v, false
+				}
+				return ok
+			},
+			equal: func(a, b *style.Computed) bool {
+				at, as := get(a)
+				bt, bs := get(b)
+				return *as == *bs && trackLists.equal(*at, *bt)
+			},
 		},
 	}
 }

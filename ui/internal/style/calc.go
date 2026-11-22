@@ -269,6 +269,14 @@ func (l Length) Less(o Length) Length {
 	return Length{Kind: Fixed, Px: c.At(0), IsPercent: true, Calc: unique.Make(c)}
 }
 
+// Mix is l·(1−t) + o·t, as an animation between them is, a Calc when
+// either holds one.
+func (l Length) Mix(o Length, t float32) Length {
+	scale := func(k float32) string { return NewCalc([]CalcStep{{Op: CalcScale, Px: float64(k)}}).code }
+	c := Calc{code: l.code() + scale(1-t) + o.code() + scale(t) + NewCalc([]CalcStep{{Op: CalcSum, N: 2}}).code}
+	return Length{Kind: Fixed, Px: c.At(0), IsPercent: true, Calc: unique.Make(c)}
+}
+
 // code is the steps that leave l on a Calc's stack.
 func (l Length) code() string {
 	if l.Calc != (unique.Handle[Calc]{}) {

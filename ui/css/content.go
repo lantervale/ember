@@ -222,11 +222,13 @@ func counters(v []Component, missing int) []style.Counter {
 
 func contentProps() map[string]prop {
 	list := func(get func(*style.Computed) *[]style.Counter, missing int) prop {
-		return field(get, func(_ *ctx, v []Component) []style.Counter { return counters(v, missing) })
+		return field(get, func(_ *ctx, v []Component) []style.Counter { return counters(v, missing) },
+			flips[[]style.Counter]())
 	}
 	//nolint:goconst // the content properties' table
 	return map[string]prop{
-		"content":           field(func(c *style.Computed) *style.Content { return &c.Content }, (*ctx).content),
+		"content": field(func(c *style.Computed) *style.Content { return &c.Content }, (*ctx).content,
+			flips[style.Content]()),
 		"counter-reset":     list(func(c *style.Computed) *[]style.Counter { return &c.CounterReset }, 0),
 		"counter-increment": list(func(c *style.Computed) *[]style.Counter { return &c.CounterIncrement }, 1),
 		"counter-set":       list(func(c *style.Computed) *[]style.Counter { return &c.CounterSet }, 0),
@@ -240,6 +242,7 @@ func contentProps() map[string]prop {
 				}
 			},
 			inherit: func(dst, src *style.Computed) { dst.Quotes, dst.QuotesNone = src.Quotes, src.QuotesNone },
+			anim:    anim{kind: discrete},
 		},
 	}
 }

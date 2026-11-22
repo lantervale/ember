@@ -354,18 +354,14 @@ func (r shapeReader) path(c *style.ClipPath, args []Component) error {
 	return nil
 }
 
-// lerpClip is t of the way from a to b, two shapes of a kind side by
-// side; any others swap half way, as CSS swaps what does not
-// interpolate.
+// lerpClip is t of the way from a to b, two shapes alike (shapesAlike)
+// side by side.
 func lerpClip(a, b *style.ClipPath, t float32) style.ClipPath {
-	if !(value{kind: clipValue, clip: *a}).interpolates(value{kind: clipValue, clip: *b}) || a.Shape == style.ShapeNone ||
-		a.Shape == style.ShapePath {
-		if t < 0.5 {
-			return *a
-		}
-		return *b
-	}
 	out := *b
+	lerpLength := func(x, y style.Length, t float32) style.Length {
+		l, _ := lerpLength(x, y, t, false)
+		return l
+	}
 	sides := func(x, y style.Sides[style.Length]) style.Sides[style.Length] {
 		return style.Sides[style.Length]{Top: lerpLength(x.Top, y.Top, t), Right: lerpLength(x.Right, y.Right, t),
 			Bottom: lerpLength(x.Bottom, y.Bottom, t), Left: lerpLength(x.Left, y.Left, t)}

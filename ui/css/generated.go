@@ -46,6 +46,9 @@ func (r *restyler) generated(n *dom.Node, parent *style.Computed, rem float32, n
 	if g != nil && r.over != nil {
 		x.over = r.over(g)
 	}
+	if g != nil {
+		r.transitOf(x, g)
+	}
 	x.cascaded(casc, false)
 	if r.browser && casc.longhands[orderIndex["box-sizing"]] == nil {
 		// The browser sheet's * rule, which sizes elements by their content,

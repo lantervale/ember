@@ -141,7 +141,7 @@ func TestValidate(t *testing.T) {
 		"grid-column":   {"0", "1 / 2 / 3", "span 0"},
 		"box-shadow":    {"2px", "2px 2px #000 #fff", "1px #000 1px"},
 		"transform":     {"rotate(10px)", "translate3d(1px, 1px, 1px)", "scale(1 2)"},
-		"transition":    {"width 1s", "opacity 1s 2s 3s"},
+		"transition":    {"widths 1s", "opacity 1s 2s 3s"},
 		"flex":          {"1 2 3", "-1", "1 auto 2"},
 		"border-style":  {"double"},
 		"color":         {"reddish", "#12"},

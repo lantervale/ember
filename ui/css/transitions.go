@@ -55,25 +55,28 @@ type Transitions struct {
 	// probed counting them.
 	km, kpm matcher
 	probed  int
+	// scratch is where a transition's ends are tried for interpolating.
+	scratch style.Computed
 }
 
 // nodeAnim is one element's running transitions and the style it shows.
 type nodeAnim struct {
 	shown style.Computed
-	runs  map[string]*run
+	// runs are the transitions by their longhand's place in longhands.
+	runs map[int]*run
 	// follows is set while the element shows an ancestor's colour
-	// transition through inheritance.
-	follows bool
-	touched bool
+	// transition through inheritance, built once shown is.
+	follows, touched, built bool
 }
 
+// run is one transition, between the values of its longhand in two
+// styles.
 type run struct {
-	from, to      value
-	reverseStart  value
-	factor        float32
-	elapsed       float32
-	delay, length float32
-	easing        ease.Func
+	from, to, reverseStart *style.Computed
+	factor                 float32
+	elapsed                float32
+	delay, length          float32
+	easing                 ease.Func
 }
 
 func NewTransitions() *Transitions {
@@ -170,8 +173,8 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	if t.changed == nil {
 		t.changed = t.restyled
 	}
-	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides,
-		computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser, env: &t.env}
+	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides, transit: t.transition,
+		transits: t.Running, computed: &t.computed, overlay: t.overlay, viewport: t.viewport, browser: t.browser, env: &t.env}
 	r.run(root, t.stale)
 	t.stale = false
 	if (len(t.anims) > 0 || t.rekey) && t.animate() {
@@ -186,9 +189,9 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 func (t *Transitions) Restyled() int { return t.computed }
 
 // Step advances every transition and animation by dt seconds and writes
-// their values into Shown. An animation that moves what Style holds, a
-// length or a value that can't interpolate, flags its element DirtyStyle
-// for the next Compute. It reports whether any still runs.
+// their painted values into Shown. One that moves what Style holds flags
+// its element DirtyStyle for the next Compute. It reports whether any
+// still runs.
 func (t *Transitions) Step(dt float32) bool {
 	running := false
 	for n, a := range t.anims {
@@ -210,10 +213,13 @@ func (t *Transitions) Step(dt float32) bool {
 			delete(t.nodes, n)
 			continue
 		}
-		for name, r := range a.runs {
+		for i, r := range a.runs {
 			r.elapsed += dt
-			if r.elapsed >= r.delay+r.length {
-				delete(a.runs, name)
+			switch {
+			case longhands[i].prop.anim.kind == interpolated:
+				restyle(n)
+			case r.over():
+				delete(a.runs, i)
 			}
 		}
 	}
@@ -236,66 +242,113 @@ func (t *Transitions) attached(n *dom.Node) bool {
 	return false
 }
 
-// restyled starts, retargets or cancels n's transitions after its style
-// went from old to new.
+// restyled watches n's animation list, and shows next while nothing runs
+// on n.
 func (t *Transitions) restyled(n *dom.Node, old, next *style.Computed) {
 	t.watch(n, next)
-	if old == nil {
+	if old == nil || t.nodes[n] == nil {
 		setShown(n, next)
-		return
 	}
+}
+
+// transition starts, retargets or cancels n's transitions as its style
+// goes to next, worked out with its animations and without its
+// transitions, and returns what those running on Style set on it now.
+func (t *Transitions) transition(n *dom.Node, next *style.Computed) []override {
+	old := dom.Data(n).Style
 	a := t.nodes[n]
-	before := old
-	if a != nil {
-		before = &a.shown
+	if old == nil || a == nil && !anyTransition(next.Transitions) {
+		return nil
 	}
-	for i, p := range animatable {
+	shown := old
+	if a != nil && a.built {
+		shown = &a.shown
+	}
+	var to *style.Computed
+	for _, i := range moving {
 		if t.animated(n, i) {
 			continue
 		}
-		to := p.get(next)
 		var r *run
 		if a != nil {
-			r = a.runs[p.name]
+			r = a.runs[i]
 		}
-		tr, ok := transitionFor(next.Transitions, p.name)
+		nr, keep := t.retarget(i, r, shown, next, &to)
 		switch {
-		case r != nil && r.to.equal(to):
-			continue
-		case !ok || !p.get(before).interpolates(to):
-			if r != nil {
-				delete(a.runs, p.name)
+		case keep:
+		case nr == nil:
+			delete(a.runs, i)
+		default:
+			if a == nil {
+				a = &nodeAnim{runs: map[int]*run{}}
+				t.nodes[n] = a
 			}
-			continue
-		case r == nil && p.get(before).equal(to):
-			continue
+			a.runs[i] = nr
 		}
-		from := p.get(before)
-		next := &run{from: from, to: to, reverseStart: from, factor: 1,
-			delay: tr.Delay, length: tr.Duration, easing: easing(tr.Easing)}
-		if r != nil && r.reverseStart.equal(to) {
-			next.reverseStart = r.to
-			next.factor = clamp01f(r.easing(r.progress())*r.factor + 1 - r.factor)
-			next.length *= next.factor
-			if next.delay < 0 {
-				next.delay *= next.factor
-			}
-		}
-		if next.delay+next.length <= 0 {
-			if r != nil {
-				delete(a.runs, p.name)
-			}
-			continue
-		}
-		if a == nil {
-			a = &nodeAnim{runs: map[string]*run{}}
-			t.nodes[n] = a
-		}
-		a.runs[p.name] = next
 	}
-	if t.nodes[n] == nil {
-		setShown(n, next)
+	if a == nil {
+		return nil
 	}
+	var over []override
+	for _, i := range moving {
+		r := a.runs[i]
+		if r == nil || longhands[i].prop.anim.kind != interpolated {
+			continue
+		}
+		over = append(over, r.override(i))
+		if r.over() {
+			delete(a.runs, i)
+		}
+	}
+	return over
+}
+
+// retarget is the transition of the longhand at place i of longhands as
+// the style goes to next from shown, r running on it: keep when r runs
+// on, or none starts or stops; else the one that starts, nil when r stops.
+// to is next's copy the transitions that start end at, made by the first.
+func (t *Transitions) retarget(i int, r *run, shown, next *style.Computed, to **style.Computed) (*run, bool) {
+	l := &longhands[i]
+	an := &l.prop.anim
+	tr, ok := transitionFor(next.Transitions, l.name)
+	switch {
+	case r != nil && an.equal(r.to, next):
+		return r, true
+	case !ok:
+		return nil, r == nil
+	case r == nil && an.equal(shown, next):
+		return nil, true
+	}
+	from := shown
+	if r != nil {
+		from = r.now(i, shown)
+	}
+	if !an.lerp(&t.scratch, from, next, 0.5) {
+		return nil, r == nil
+	}
+	if *to == nil {
+		copied := *next
+		*to = &copied
+	}
+	nr := &run{from: from, to: *to, reverseStart: from, factor: 1,
+		delay: tr.Delay, length: tr.Duration, easing: easing(tr.Easing)}
+	if r != nil && an.equal(r.reverseStart, next) {
+		nr.reverseStart = r.to
+		nr.factor = clamp01f(r.easing(r.progress())*r.factor + 1 - r.factor)
+		nr.length *= nr.factor
+		if nr.delay < 0 {
+			nr.delay *= nr.factor
+		}
+	}
+	if nr.delay+nr.length <= 0 {
+		return nil, r == nil
+	}
+	return nr, false
+}
+
+// anyTransition reports whether list runs a transition on some property.
+func anyTransition(list []style.Transition) bool {
+	return slices.ContainsFunc(list, func(t style.Transition) bool { return t.Duration+t.Delay > 0 })
 }
 
 // refresh rebuilds every animated element's Shown, then carries colour
@@ -306,7 +359,7 @@ func (t *Transitions) refresh() {
 	}
 	for n, a := range t.anims {
 		if len(a.paints) > 0 && t.nodes[n] == nil {
-			t.nodes[n] = &nodeAnim{runs: map[string]*run{}}
+			t.nodes[n] = &nodeAnim{runs: map[int]*run{}}
 		}
 	}
 	for n, a := range t.nodes {
@@ -335,38 +388,43 @@ func (t *Transitions) own(n *dom.Node, a *nodeAnim) bool {
 // ownColor reports whether n shows a colour transition or animation of
 // its own.
 func (t *Transitions) ownColor(n *dom.Node, a *nodeAnim) bool {
-	_, ok := a.runs["color"]
-	return ok || t.animated(n, 0)
+	_, ok := a.runs[colorIndex]
+	return ok || t.animated(n, colorIndex)
 }
 
-// build shows n's style with its animations' values over it, then its
-// transitions' over those, as CSS's cascade has them.
+// build shows n's style with its animations' painted values over it,
+// then its transitions' over those, as CSS's cascade has them: a colour
+// first, which the others given as currentColor follow.
 func (t *Transitions) build(n *dom.Node, a *nodeAnim) {
 	a.shown = *dom.Data(n).Style
 	var paints []paintValue
 	if an := t.anims[n]; an != nil {
 		paints = an.paints
 	}
+	var current *color.Color
 	if t.ownColor(n, a) {
 		for _, p := range paints {
-			if p.index == 0 {
-				a.shown.Color = p.v.c
+			if p.index == colorIndex {
+				p.on(&a.shown, nil)
+				current = &a.shown.Color
 			}
 		}
-		if r, ok := a.runs["color"]; ok {
-			r.apply(&a.shown)
+		if r, ok := a.runs[colorIndex]; ok {
+			r.on(&a.shown, colorIndex)
 		}
 		a.shown.FollowColor(a.shown.Color)
 	}
 	for _, p := range paints {
-		animatable[p.index].set(&a.shown, p.v)
-	}
-	for _, p := range animatable {
-		if r, ok := a.runs[p.name]; ok {
-			p.set(&a.shown, r.at())
+		if p.index != colorIndex {
+			p.on(&a.shown, current)
 		}
 	}
-	a.touched = true
+	for i, r := range a.runs {
+		if i != colorIndex && longhands[i].prop.anim.kind == painted {
+			r.on(&a.shown, i)
+		}
+	}
+	a.touched, a.built = true, true
 	setShown(n, &a.shown)
 }
 
@@ -383,7 +441,7 @@ func (t *Transitions) carry(n *dom.Node, c color.Color) {
 		}
 		a := t.nodes[k]
 		if a == nil {
-			a = &nodeAnim{runs: map[string]*run{}}
+			a = &nodeAnim{runs: map[int]*run{}}
 			t.nodes[k] = a
 		}
 		if t.ownColor(k, a) {
@@ -409,6 +467,11 @@ func setShown(n *dom.Node, s *style.Computed) {
 	}
 }
 
+// over reports whether r has run its course. One on Style ends at the
+// restyle after, which sets its last value: the value the next change
+// starts from.
+func (r *run) over() bool { return r.elapsed >= r.delay+r.length }
+
 func (r *run) progress() float32 {
 	if r.length <= 0 {
 		if r.elapsed >= r.delay {
@@ -419,14 +482,28 @@ func (r *run) progress() float32 {
 	return clamp01f((r.elapsed - r.delay) / r.length)
 }
 
-// apply writes color's value into s.
-func (r *run) apply(s *style.Computed) { s.Color = r.at().c }
-
-func (r *run) at() value {
-	if r.elapsed < r.delay {
-		return r.from
+// on writes the value r gives the longhand i now into dst: its start
+// while it waits out its delay.
+func (r *run) on(dst *style.Computed, i int) {
+	p := &longhands[i].prop
+	if r.elapsed < r.delay || !p.anim.lerp(dst, r.from, r.to, r.easing(r.progress())) {
+		p.inherit(dst, r.from)
 	}
-	return r.from.lerp(r.to, r.easing(r.progress()))
+}
+
+// now is under with the value r gives the longhand i now.
+func (r *run) now(i int, under *style.Computed) *style.Computed {
+	s := *under
+	r.on(&s, i)
+	return &s
+}
+
+// override is what r sets on Style now.
+func (r *run) override(i int) override {
+	if r.elapsed < r.delay {
+		return override{index: i, src: r.from}
+	}
+	return override{index: i, src: r.from, to: r.to, t: r.easing(r.progress())}
 }
 
 func clamp01f(v float32) float32 { return min(max(v, 0), 1) }
@@ -436,248 +513,29 @@ func clamp01f(v float32) float32 { return min(max(v, 0), 1) }
 func transitionFor(list []style.Transition, name string) (style.Transition, bool) {
 	for i := len(list) - 1; i >= 0; i-- {
 		p := list[i].Property
-		if p == name || p == kwAll || p == propBorderColor && strings.HasPrefix(name, "border-") {
+		if p == name || p == kwAll || slices.Contains(shorthands[p], name) {
 			return list[i], list[i].Duration+list[i].Delay > 0
 		}
 	}
 	return style.Transition{}, false
 }
 
-// value is one animatable property's value.
-type value struct {
-	kind    valueKind
-	c       color.Color
-	f       float32
-	ops     []style.TransformOp
-	shadows []style.Shadow
-	clip    style.ClipPath
-	filters []style.Filter
-}
-
-type valueKind uint8
-
-const (
-	colorValue valueKind = iota
-	numberValue
-	transformValue
-	shadowValue
-	clipValue
-	filterValue
+//nolint:gochecknoglobals // derived from the longhands
+var (
+	// colorIndex is color's place in longhands.
+	colorIndex = orderIndex["color"]
+	// moving are the places in longhands of those that interpolate, in
+	// their order.
+	moving = func() []int {
+		var out []int
+		for i, l := range longhands {
+			if l.prop.anim.moves() {
+				out = append(out, i)
+			}
+		}
+		return out
+	}()
 )
-
-type animProp struct {
-	name string
-	get  func(*style.Computed) value
-	set  func(*style.Computed, value)
-}
-
-func colorProp(name string, f func(*style.Computed) *color.Color) animProp {
-	return animProp{name,
-		func(s *style.Computed) value { return value{kind: colorValue, c: *f(s)} },
-		func(s *style.Computed, v value) { *f(s) = v.c },
-	}
-}
-
-//nolint:gochecknoglobals,goconst // the animatable properties' table
-var animatable = []animProp{
-	colorProp("color", func(s *style.Computed) *color.Color { return &s.Color }),
-	colorProp("background-color", func(s *style.Computed) *color.Color { return &s.Background }),
-	colorProp("border-top-color", func(s *style.Computed) *color.Color { return &s.BorderColor.Top }),
-	colorProp("border-right-color", func(s *style.Computed) *color.Color { return &s.BorderColor.Right }),
-	colorProp("border-bottom-color", func(s *style.Computed) *color.Color { return &s.BorderColor.Bottom }),
-	colorProp("border-left-color", func(s *style.Computed) *color.Color { return &s.BorderColor.Left }),
-	colorProp("outline-color", func(s *style.Computed) *color.Color { return &s.OutlineColor }),
-	{"opacity",
-		func(s *style.Computed) value { return value{kind: numberValue, f: s.Opacity} },
-		func(s *style.Computed, v value) { s.Opacity = v.f }},
-	{"transform",
-		func(s *style.Computed) value { return value{kind: transformValue, ops: s.Transform} },
-		func(s *style.Computed, v value) { s.Transform = v.ops }},
-	{"box-shadow",
-		func(s *style.Computed) value { return value{kind: shadowValue, shadows: s.Shadows} },
-		func(s *style.Computed, v value) { s.Shadows = v.shadows }},
-	{"clip-path",
-		func(s *style.Computed) value { return value{kind: clipValue, clip: s.ClipPath} },
-		func(s *style.Computed, v value) { s.ClipPath = v.clip }},
-	{"filter",
-		func(s *style.Computed) value { return value{kind: filterValue, filters: s.Filters} },
-		func(s *style.Computed, v value) { s.Filters = v.filters }},
-}
-
-// interpolates reports whether v and o have values between them: two
-// basic shapes alike (decision 0119), where any two of the other kinds do.
-func (v value) interpolates(o value) bool {
-	if v.kind != clipValue {
-		return true
-	}
-	a, b := &v.clip, &o.clip
-	if a.Shape != b.Shape || a.Box != b.Box || a.EvenOdd != b.EvenOdd {
-		return false
-	}
-	switch a.Shape {
-	case style.ShapeCircle, style.ShapeEllipse:
-		for i := range a.Radius {
-			if a.Radius[i].Side != b.Radius[i].Side {
-				return false
-			}
-		}
-	case style.ShapePolygon:
-		return len(a.Points) == len(b.Points)
-	case style.ShapeNone, style.ShapePath:
-		return a.Equal(b)
-	case style.ShapeInset:
-	}
-	return true
-}
-
-func (v value) equal(o value) bool {
-	switch v.kind {
-	case clipValue:
-		return v.clip.Equal(&o.clip)
-	case colorValue:
-		return v.c == o.c
-	case numberValue:
-		return v.f == o.f
-	case transformValue:
-		if len(v.ops) != len(o.ops) {
-			return false
-		}
-		for i := range v.ops {
-			if v.ops[i] != o.ops[i] {
-				return false
-			}
-		}
-		return true
-	case filterValue:
-		return slices.Equal(v.filters, o.filters)
-	case shadowValue:
-		// shadow by shadow, as below
-	}
-	if len(v.shadows) != len(o.shadows) {
-		return false
-	}
-	for i := range v.shadows {
-		if v.shadows[i] != o.shadows[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func lerpf(a, b, t float32) float32 { return a + (b-a)*t }
-
-func (v value) lerp(o value, t float32) value {
-	switch v.kind {
-	case colorValue:
-		return value{kind: colorValue, c: lerpColor(v.c, o.c, t)}
-	case numberValue:
-		return value{kind: numberValue, f: lerpf(v.f, o.f, t)}
-	case transformValue:
-		return value{kind: transformValue, ops: lerpTransform(v.ops, o.ops, t)}
-	case clipValue:
-		return value{kind: clipValue, clip: lerpClip(&v.clip, &o.clip, t)}
-	case filterValue:
-		return value{kind: filterValue, filters: lerpFilters(v.filters, o.filters, t)}
-	case shadowValue:
-		// shadow by shadow, as below
-	}
-	return value{kind: shadowValue, shadows: lerpShadows(v.shadows, o.shadows, t)}
-}
-
-// lerpColor interpolates in premultiplied sRGB, as Chrome does for
-// colours given as hex, rgb() or names.
-func lerpColor(a, b color.Color, t float32) color.Color {
-	sa, sb := a.SRGB(), b.SRGB()
-	alpha := lerpf(a.A, b.A, t)
-	var out [3]float32
-	if alpha > 0 {
-		for i := range out {
-			out[i] = clamp01f(lerpf(sa[i]*a.A, sb[i]*b.A, t) / alpha)
-		}
-	}
-	c := color.FromSRGB(out)
-	c.A = alpha
-	return c
-}
-
-func lerpShadows(a, b []style.Shadow, t float32) []style.Shadow {
-	n := max(len(a), len(b))
-	out := make([]style.Shadow, n)
-	for i := range n {
-		var x, y style.Shadow
-		switch {
-		case i < len(a) && i < len(b):
-			x, y = a[i], b[i]
-		case i < len(a):
-			x, y = a[i], style.Shadow{Inset: a[i].Inset}
-		default:
-			x, y = style.Shadow{Inset: b[i].Inset}, b[i]
-		}
-		if x.Inset != y.Inset {
-			if t < 1 {
-				return a
-			}
-			return b
-		}
-		out[i] = style.Shadow{
-			X: lerpf(x.X, y.X, t), Y: lerpf(x.Y, y.Y, t),
-			Blur: lerpf(x.Blur, y.Blur, t), Spread: lerpf(x.Spread, y.Spread, t),
-			Color: lerpColor(x.Color, y.Color, t), Inset: x.Inset,
-		}
-	}
-	return out
-}
-
-// lerpFilters interpolates function by function when one list starts
-// with the other's functions, the shorter, or none, taking the neutral
-// value of each it lacks; other lists switch halfway.
-func lerpFilters(a, b []style.Filter, t float32) []style.Filter {
-	n := max(len(a), len(b))
-	if n == 0 {
-		return nil
-	}
-	out := make([]style.Filter, n)
-	for i := range n {
-		var x, y style.Filter
-		switch {
-		case i < len(a) && i < len(b):
-			x, y = a[i], b[i]
-		case i < len(a):
-			x, y = a[i], neutralFilter(a[i].Kind)
-		default:
-			x, y = neutralFilter(b[i].Kind), b[i]
-		}
-		if x.Kind != y.Kind {
-			if t < 0.5 {
-				return a
-			}
-			return b
-		}
-		out[i] = style.Filter{Kind: x.Kind, Amount: lerpf(x.Amount, y.Amount, t)}
-		if x.Kind == style.DropShadow {
-			out[i].Shadow = style.Shadow{
-				X: lerpf(x.Shadow.X, y.Shadow.X, t), Y: lerpf(x.Shadow.Y, y.Shadow.Y, t),
-				Blur: lerpf(x.Shadow.Blur, y.Shadow.Blur, t), Color: lerpColor(x.Shadow.Color, y.Shadow.Color, t),
-			}
-		}
-	}
-	return out
-}
-
-// neutralFilter is the function of kind that changes nothing.
-func neutralFilter(kind style.FilterKind) style.Filter {
-	switch kind {
-	case style.Brightness, style.Contrast, style.OpacityFilter, style.Saturate:
-		return style.Filter{Kind: kind, Amount: 1}
-	case style.Blur, style.Grayscale, style.HueRotate, style.Invert, style.Sepia, style.DropShadow:
-	}
-	return style.Filter{Kind: kind}
-}
-
-func lerpLength(a, b style.Length, t float32) style.Length {
-	return style.Length{Kind: style.Fixed, Px: lerpf(a.Px, b.Px, t),
-		Percent: lerpf(a.Percent, b.Percent, t), IsPercent: a.IsPercent || b.IsPercent}
-}
 
 // identity is the neutral function of op's kind.
 func identity(op style.TransformOp) style.TransformOp {
@@ -750,7 +608,9 @@ func sameKinds(a, b []style.TransformOp) bool {
 func lerpOp(a, b style.TransformOp, t float32) style.TransformOp {
 	switch a.Kind {
 	case style.Translate:
-		return style.TransformOp{Kind: style.Translate, X: lerpLength(a.X, b.X, t), Y: lerpLength(a.Y, b.Y, t)}
+		x, _ := lerpLength(a.X, b.X, t, false)
+		y, _ := lerpLength(a.Y, b.Y, t, false)
+		return style.TransformOp{Kind: style.Translate, X: x, Y: y}
 	case style.Matrix:
 		return style.TransformOp{Kind: style.Matrix, A: recompose(decompose(a.A).lerp(decompose(b.A), t))}
 	case style.ScaleOp, style.Rotate, style.Skew:
