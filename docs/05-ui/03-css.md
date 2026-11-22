@@ -35,7 +35,7 @@ The presentational attributes of old pages style their element as Chrome reads t
 | `:not()`, `:is()`, `:where()` | a list of selectors: `:is()` and `:not()` weigh as their most specific one, `:where()` nothing; a selector `:is()` or `:where()` cannot read is left out of its list, as in Chrome |
 | `:has()` | relative selectors from the element: `.card:has(img)`, `li:has(> a)`, `h2:has(+ p)`, `:has(~ .x)`, weighing as their most specific one. As in Chrome, a `:has()` in another, a pseudo-element or an empty one drops the rule; a change below or after an element restyles it where its `:has()` reads what changed (decision [0113](../99-decisions/0113-has-flags-its-anchors-before-the-cascade.md)) |
 | `:link`, `:any-link`, `:visited` | an element with an `href`; nothing is visited, ui keeping no history, so a `:visited` rule is kept and matches nothing |
-| `::before`, `::after`, `::marker`, `::placeholder`, `::selection`, `::backdrop` | pseudo-elements, last in their selector: `li:nth-child(2)::before`, `a:hover::after` ([below](#pseudo-elements)) |
+| `::before`, `::after`, `::marker`, `::first-line`, `::first-letter`, `::placeholder`, `::selection`, `::backdrop` | pseudo-elements, last in their selector: `li:nth-child(2)::before`, `a:hover::after` ([below](#pseudo-elements)) |
 
 | Values | |
 |---|---|
@@ -236,6 +236,17 @@ A list numbers its items with the same counters: `ol`, `ul` and `menu` reset `li
 
 `::marker` styles a list item's marker: `color`, the font properties, `letter-spacing`, `word-spacing`, `text-transform`, and `content`, a string, a counter or an `attr()` that replaces the bullet or the number. The other properties Chrome's `::marker` takes that ui has (`cursor`, `line-height`, `overflow-wrap`, `quotes`, `text-shadow`, `white-space`, the transition properties) are read without a warning and change nothing yet. Any other property is refused with a warning, as Chrome ignores it.
 
+### `::first-line` and `::first-letter`
+
+`::first-line` styles what a block container (a block, a list item, an inline block, a table cell or caption) shows on its first line: `color`, the font properties and `line-height`, `letter-spacing`, `word-spacing`, `text-transform`, `text-decoration`, `text-shadow`, `-webkit-font-smoothing` and the backgrounds, drawn behind the line's text. The line is broken in those styles, so a larger font puts fewer words on it. The inline elements on the line inherit from it, so `span { font-size: 0.75em }` there is three quarters of the first line's size, and a block's first child block, when nothing comes before it, has its first line styled too. `opacity`, `box-shadow`, `visibility` and `vertical-align` are read and change nothing.
+
+`::first-letter` is a box round the first letter of a block's first line, with the punctuation before and after it (`"W` of `"Well,"`), wherever that letter is: in an inline element, in `::before`'s text, in the first child block. It takes what `::first-line` takes, and margins, padding, borders, their radii and `float`: a floated letter is a drop cap, the lines going round it. It inherits from the element its letter is in. A picture, a control, an inline block or a `br` before any text leaves the block none, as in Chrome.
+
+```css
+article p:first-of-type::first-letter { float: left; font-size: 3.2em; line-height: 1; margin: 2px 6px 0 0; }
+article p:first-of-type::first-line { font-weight: 700; letter-spacing: 1px; }
+```
+
 ### Every pseudo-element
 
 Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTheTable` asks Chrome). A refused one drops its rule with a warning in `doc.Warnings()`. One that matches nothing is read, so its rule is valid and says nothing, and styles nothing: ui has no such part.
@@ -244,10 +255,10 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 |---|---|
 | `::before`, `::after` | a generated box, every property |
 | `::marker` | the list item's marker (above) |
+| `::first-line`, `::first-letter` (and `:first-line`, `:first-letter`) | a block's first line and letter (above) |
 | `::placeholder` | an empty field's placeholder: `color`, `opacity` |
 | `::selection` | selected text, in a page and in a field: `background-color`, and in a page `color` ([Selecting text](#selecting-text)) |
 | `::backdrop` | behind a modal dialog: `background-color`, `opacity` |
-| `::first-line`, `::first-letter` (and `:first-line`, `:first-letter`) | refused: ui styles no line or letter of a block apart |
 | `::file-selector-button` | refused: ui has no file input |
 | `::details-content` | refused: a details' content has no box of its own |
 | `::part()`, `::slotted()` | matches nothing: no shadow trees |

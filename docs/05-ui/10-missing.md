@@ -16,7 +16,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
+| a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
+| `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
+| `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
+| a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
+| a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
 | `text-decoration-skip-ink`, a decoration's shadow | a line is drawn through descenders, and `text-shadow` leaves it out |
 | text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time, 27 of the 47 pixel pages with text measured further from Chrome at that scale and none nearer, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
 | `-webkit-font-smoothing` on the options of an open `select` and on a picture's alt text | not read: drawn with the default smoothing |

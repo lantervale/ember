@@ -48,6 +48,10 @@ type Fragment struct {
 	Start int32
 	// Ellipsis is set when Text was cut and ends with "…".
 	Ellipsis bool
+	// Style is the text's style on a first line a ::first-line styles,
+	// nil where the run's own draws it. Only a run's first fragments
+	// have one.
+	Style *style.Computed
 }
 
 // Box is one box. Positions are relative to the parent box's border box,
