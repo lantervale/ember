@@ -70,10 +70,10 @@ var widthProps = map[string]func(*style.Computed) string{
 
 // TestWidthsSnapToDevicePixelsAsChromes compares border, outline and
 // column-rule widths, outline-offset and border-spacing, given and
-// moving, on displays of one and two pixels a point.
+// moving, on displays of one, one and a half and two pixels a point.
 func TestWidthsSnapToDevicePixelsAsChromes(t *testing.T) {
-	src := `div { border: 4.7px solid; border-left-width: 0.2px; border-right-width: 1px; outline: 0.3px solid; outline-offset: -3.7px;
-  column-rule: 2.3px solid; border-spacing: 3.7px 0.3px; display: table }
+	src := `div { border: 4.7px solid; border-left-width: 0.2px; border-right-width: 1px;
+  outline: 0.3px solid; outline-offset: -3.7px; column-rule: 2.3px solid; border-spacing: 3.7px 0.3px; display: table }
 .t0 { border-top-width: 1px; outline-width: 0px; outline-offset: 0px; border-spacing: 0px; column-rule-width: 1px;
   transition: all 1s linear }
 .t0.on { border-top-width: 11px; outline-width: 10px; outline-offset: -10px; border-spacing: 10px 20px;
