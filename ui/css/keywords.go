@@ -29,6 +29,10 @@ const (
 	kwInfinite     = "infinite"
 	kwRunning      = "running"
 	kwPaused       = "paused"
+	kwCircle       = "circle"
+	kwBorderBox    = "border-box"
+	kwContentBox   = "content-box"
+	kwPaddingBox   = "padding-box"
 
 	unitRem  = "rem"
 	nameVmin = "vmin"

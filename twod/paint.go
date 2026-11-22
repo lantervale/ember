@@ -101,6 +101,19 @@ func (u *Canvas) PushClip(r geom.Rect) { u.list.PushClip(r) }
 // r's bounds, square (decision 0058).
 func (u *Canvas) PushClipRounded(r geom.Rect, radii [4]float32) { u.list.PushClipRounded(r, radii) }
 
+// PushClipMask bounds drawing to r, within the current clip, and shows it
+// only where mask, stretched over r, is opaque, fading where it fades,
+// until PopClip; it follows any transform, a rotation too. Only the
+// innermost mask cuts; one around it then clips as its rect, and a
+// rounded clip around it still rounds (decision 0119).
+func (u *Canvas) PushClipMask(r geom.Rect, mask *Texture) {
+	if mask == nil {
+		u.list.PushClip(r)
+		return
+	}
+	u.list.PushClipMask(r, &mask.Texture)
+}
+
 func (u *Canvas) PopClip() { u.list.PopClip() }
 
 // Transform is the space drawing happens in, from the canvas's origin.

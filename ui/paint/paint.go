@@ -40,6 +40,7 @@ type Surface interface {
 	NinePatch(r geom.Rect, tex *twod.Texture, left, top, right, bottom float32, tint color.Color)
 	PushClip(r geom.Rect)
 	PushClipRounded(r geom.Rect, radii [4]float32)
+	PushClipMask(r geom.Rect, mask *twod.Texture)
 	PopClip()
 	Transform() geom.Transform2D
 	SetTransform(t geom.Transform2D)
@@ -238,7 +239,8 @@ func (p *painter) newClip(c clip) *clip {
 // transform of the stacking context it was met in. round and radii, when
 // radii aren't all zero, are the curve it also cuts to (decision 0058):
 // the padding box rounded by its inner radii, while rect stops at the
-// scrollbars' gutter. by is the box whose overflow it is.
+// scrollbars' gutter. by is the box whose overflow it is. A clip-path's
+// clip has its shape instead, and rect its bounds (decision 0119).
 type clip struct {
 	rect   geom.Rect
 	round  geom.Rect
@@ -246,6 +248,7 @@ type clip struct {
 	xf     geom.Transform2D
 	parent *clip
 	by     *box.Box
+	shape  *clipShape
 }
 
 // Paint draws t onto s.
@@ -476,9 +479,16 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 			p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 		}
 	}
-	saved := p.s.Transform()
+	saved, around := p.s.Transform(), e.clip
 	if b.Kind == box.Element && len(st.Transform) > 0 {
 		p.s.SetTransform(saved.Mul(transform(st, e.at, b.Size)))
+	}
+	if s, ok := clipShapeOf(b, e.at, st); ok {
+		if s.bounds.W <= 0 || s.bounds.H <= 0 {
+			p.s.SetTransform(saved)
+			return
+		}
+		e.clip = p.newClip(clip{rect: s.bounds, xf: p.s.Transform(), parent: e.clip, shape: &s})
 	}
 	p.use(e.clip)
 	p.decorate(e, alpha)
@@ -507,7 +517,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		p.use(c.clip)
 		BarsOf(c.b, c.at).paint(p.s, alpha)
 	}
-	p.use(e.clip)
+	p.use(around)
 	p.s.SetTransform(saved)
 }
 
@@ -646,9 +656,10 @@ func inkReach(st *style.Computed) float32 {
 }
 
 // startsContext reports whether a box paints as a stacking context: a
-// positioned one with a z-index, or one less than opaque or transformed.
+// positioned one with a z-index, or one less than opaque, transformed or
+// clipped by a clip-path.
 func startsContext(st *style.Computed) bool {
-	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0
+	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 || !st.ClipPath.None()
 }
 
 func sortZ(es []entry) []entry {
@@ -672,6 +683,15 @@ func (p *painter) use(c *clip) {
 	xf := p.s.Transform()
 	for i := len(p.chain) - 1; i >= 0; i-- {
 		p.s.SetTransform(p.chain[i].xf)
+		if k := p.chain[i]; k.shape != nil {
+			if s, ok := p.s.(shaped); ok {
+				s.pushShape(k.shape)
+			} else {
+				p.s.PushClipMask(k.rect, masks.mask(k.shape, p.maskScale()))
+			}
+			p.held++
+			continue
+		}
 		if k := p.chain[i]; k.radii != (radii{}) {
 			p.s.PushClipRounded(k.round, k.radii)
 			p.held++

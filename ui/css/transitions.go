@@ -261,7 +261,7 @@ func (t *Transitions) restyled(n *dom.Node, old, next *style.Computed) {
 		switch {
 		case r != nil && r.to.equal(to):
 			continue
-		case !ok:
+		case !ok || !p.get(before).interpolates(to):
 			if r != nil {
 				delete(a.runs, p.name)
 			}
@@ -449,6 +449,7 @@ type value struct {
 	f       float32
 	ops     []style.TransformOp
 	shadows []style.Shadow
+	clip    style.ClipPath
 }
 
 type valueKind uint8
@@ -458,6 +459,7 @@ const (
 	numberValue
 	transformValue
 	shadowValue
+	clipValue
 )
 
 type animProp struct {
@@ -491,10 +493,41 @@ var animatable = []animProp{
 	{"box-shadow",
 		func(s *style.Computed) value { return value{kind: shadowValue, shadows: s.Shadows} },
 		func(s *style.Computed, v value) { s.Shadows = v.shadows }},
+	{"clip-path",
+		func(s *style.Computed) value { return value{kind: clipValue, clip: s.ClipPath} },
+		func(s *style.Computed, v value) { s.ClipPath = v.clip }},
+}
+
+// interpolates reports whether v and o have values between them: two
+// basic shapes alike (decision 0119), where any two of the other kinds do.
+func (v value) interpolates(o value) bool {
+	if v.kind != clipValue {
+		return true
+	}
+	a, b := &v.clip, &o.clip
+	if a.Shape != b.Shape || a.Box != b.Box || a.EvenOdd != b.EvenOdd {
+		return false
+	}
+	switch a.Shape {
+	case style.ShapeCircle, style.ShapeEllipse:
+		for i := range a.Radius {
+			if a.Radius[i].Side != b.Radius[i].Side {
+				return false
+			}
+		}
+	case style.ShapePolygon:
+		return len(a.Points) == len(b.Points)
+	case style.ShapeNone, style.ShapePath:
+		return a.Equal(b)
+	case style.ShapeInset:
+	}
+	return true
 }
 
 func (v value) equal(o value) bool {
 	switch v.kind {
+	case clipValue:
+		return v.clip.Equal(&o.clip)
 	case colorValue:
 		return v.c == o.c
 	case numberValue:
@@ -533,6 +566,8 @@ func (v value) lerp(o value, t float32) value {
 		return value{kind: numberValue, f: lerpf(v.f, o.f, t)}
 	case transformValue:
 		return value{kind: transformValue, ops: lerpTransform(v.ops, o.ops, t)}
+	case clipValue:
+		return value{kind: clipValue, clip: lerpClip(&v.clip, &o.clip, t)}
 	case shadowValue:
 		// shadow by shadow, as below
 	}

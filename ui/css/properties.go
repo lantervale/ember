@@ -118,6 +118,7 @@ var properties = map[string]property{
 	"mask-repeat":           {initial: "repeat"},
 	"mask-size":             {initial: "auto"},
 	"mask-position":         {initial: "0% 0%"},
+	"clip-path":             {initial: "none"},
 	"object-fit":            {initial: "fill"},
 	"object-position":       {initial: "50% 50%"},
 	"box-shadow":            {initial: "none"},

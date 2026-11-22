@@ -93,7 +93,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `prefers-reduced-motion` from the system | the program sets it: `ui.ReducedMotion()` |
 | viewport units in a media query's length | refused |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
-| `filter`, `clip-path` | refused |
+| `filter` | refused |
+| a `clip-path` inside another's (one on an element held by one) | the inner shape cuts, the outer one only by its bounds ([decision 0119](../99-decisions/0119-a-clip-path-is-a-mask-the-gpu-cuts-by-and-an-outline-the-pointer-is-tested-against.md)) |
+| `clip-path` on an inline element over several lines | placed in the box round all its lines; not compared with Chrome |
+| `path()` transitioning to another `path()` with the same commands | flips half way; Chrome moves each point |
+| a pointer in the corner a rounded border cuts off | hits the box, where Chrome lets it through to what is under it |
 | a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
 | the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
 | a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |

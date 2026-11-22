@@ -64,11 +64,15 @@ type probeClip struct {
 	rect  geom.Rect
 	radii [4]float32
 	back  geom.Transform2D
+	shape *clipShape
 }
 
 // holds reports whether q, in the clip's space, is inside it: its rect,
-// and with radii, its rounded corners.
+// and with radii, its rounded corners, or with a shape, that shape.
 func (c probeClip) holds(q geom.Vec2) bool {
+	if c.shape != nil {
+		return c.shape.holds(q)
+	}
 	if !hits(c.rect, q) {
 		return false
 	}
@@ -123,6 +127,14 @@ func (s *probe) PushClipRounded(r geom.Rect, radii [4]float32) {
 		radii = [4]float32{}
 	}
 	s.clips = append(s.clips, probeClip{rect: r, radii: radii, back: s.xf.Inverse()})
+}
+
+// PushClipMask is a picture's clip, hit as its rect: paint's own masks
+// come through pushShape, whose outline is hit exactly.
+func (s *probe) PushClipMask(r geom.Rect, _ *twod.Texture) { s.PushClip(r) }
+
+func (s *probe) pushShape(c *clipShape) {
+	s.clips = append(s.clips, probeClip{rect: c.bounds, back: s.xf.Inverse(), shape: c})
 }
 func (s *probe) PopClip()                                               { s.clips = s.clips[:len(s.clips)-1] }
 func (s *probe) Transform() geom.Transform2D                            { return s.xf }
