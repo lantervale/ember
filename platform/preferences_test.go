@@ -69,3 +69,30 @@ func TestLanguagesAreToldOncePerChange(t *testing.T) {
 		t.Fatalf("no language known any more is a change: %v %v", l, changed)
 	}
 }
+
+func TestReducedMotionIsToldOncePerChange(t *testing.T) {
+	p := NewPreferences()
+	if p.Motion() != MotionUnknown {
+		t.Fatalf("with no backend: %v", p.Motion())
+	}
+	if _, changed := p.TakeMotion(); changed {
+		t.Fatal("nothing changed yet")
+	}
+	p.SyncMotion(MotionReduced)
+	if m, changed := p.TakeMotion(); !changed || m != MotionReduced || p.Motion() != MotionReduced {
+		t.Fatalf("the first one known is a change: %v %v", m, changed)
+	}
+	p.SyncMotion(MotionReduced)
+	if _, changed := p.TakeMotion(); changed {
+		t.Fatal("the same answer again is no change")
+	}
+	p.SyncMotion(MotionFull)
+	if m, changed := p.TakeMotion(); !changed || m != MotionFull {
+		t.Fatalf("a change is told: %v %v", m, changed)
+	}
+	for m, word := range map[Motion]string{MotionUnknown: "unknown", MotionFull: "full", MotionReduced: "reduced"} {
+		if m.String() != word {
+			t.Fatalf("a motion prints as its word: %q, want %q", m.String(), word)
+		}
+	}
+}

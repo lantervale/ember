@@ -18,7 +18,7 @@ func (d *driver) syncPreferences() {
 		return
 	}
 	if systemChanged(&d.asked) {
-		d.appearance, d.languages = systemAppearance(), systemLanguages()
+		d.appearance, d.motion, d.languages = systemAppearance(), systemMotion(), systemLanguages()
 	}
 	d.tellPreferences()
 }
@@ -27,6 +27,7 @@ func (d *driver) tellPreferences() {
 	for e := range d.preferences.All() {
 		p := e.GetPreferences()
 		p.SyncAppearance(d.appearance)
+		p.SyncMotion(d.motion)
 		p.SyncLanguages(d.languages...)
 	}
 }

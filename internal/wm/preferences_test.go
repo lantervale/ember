@@ -54,3 +54,28 @@ func TestTheWorldTellsEachChangeOfThePreferencesOnce(t *testing.T) {
 		t.Fatal("preferences out of the World tell it nothing")
 	}
 }
+
+func TestTheWorldTellsEachChangeOfReducedMotionOnce(t *testing.T) {
+	w := world.New().AddPlugins(Plugin{})
+	prefs := platform.NewPreferences()
+	w.AddEntities(prefs)
+	var motions world.Reader[platform.MotionChanged]
+	w.RunFrames(1)
+	if motions.Count(w) != 0 {
+		t.Fatal("with no backend nothing is known, and nothing changes")
+	}
+	prefs.SyncMotion(platform.MotionReduced)
+	w.RunFrames(1)
+	if got := slices.Collect(motions.Read(w)); len(got) != 1 || got[0].Motion != platform.MotionReduced {
+		t.Fatalf("the answer now known is told once: %v", got)
+	}
+	w.RunFrames(2)
+	if motions.Count(w) != 0 {
+		t.Fatal("the same answer tells nothing")
+	}
+	prefs.SyncMotion(platform.MotionFull)
+	w.RunFrames(1)
+	if got := slices.Collect(motions.Read(w)); len(got) != 1 || got[0].Motion != platform.MotionFull {
+		t.Fatalf("a change is told once: %v", got)
+	}
+}

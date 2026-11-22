@@ -35,6 +35,37 @@ type AppearanceChanged struct {
 	Appearance Appearance
 }
 
+// Motion is whether the user asked their system for less motion on
+// screen.
+type Motion int
+
+const (
+	// MotionUnknown is the answer of a system that has not said, or
+	// cannot, as AppearanceUnknown.
+	MotionUnknown Motion = iota
+	// MotionFull is a system that animates as it likes.
+	MotionFull
+	// MotionReduced is a system asked to reduce motion.
+	MotionReduced
+)
+
+func (m Motion) String() string {
+	switch m {
+	case MotionFull:
+		return "full"
+	case MotionReduced:
+		return "reduced"
+	case MotionUnknown:
+	}
+	return "unknown"
+}
+
+// MotionChanged is emitted when the system's reduced motion setting
+// changes, the first time it is known included.
+type MotionChanged struct {
+	Motion Motion
+}
+
 // LanguagesChanged is emitted when the user's languages change, the first
 // time they are known included.
 type LanguagesChanged struct {
@@ -49,10 +80,12 @@ type LanguagesChanged struct {
 //	w.AddEntity(prefs)
 //
 // Nothing is known until the program runs, nor in a test, a hidden run or
-// a server: SyncAppearance and SyncLanguages then stand for the system.
+// a server: SyncAppearance, SyncMotion and SyncLanguages then stand for
+// the system.
 type Preferences struct {
 	*world.BasicEntity
 	appearance, toldAppearance Appearance
+	motion, toldMotion         Motion
 	languages, toldLanguages   []string
 }
 
@@ -70,6 +103,10 @@ func (p *Preferences) GetPreferences() *Preferences { return p }
 // AppearanceUnknown when it has not said.
 func (p *Preferences) Appearance() Appearance { return p.appearance }
 
+// Motion is whether the system asks programs to reduce motion,
+// MotionUnknown when it has not said.
+func (p *Preferences) Motion() Motion { return p.motion }
+
 // Languages is the user's languages, the one they prefer first, as BCP 47
 // tags such as fr-FR or en; empty when the system has not said.
 func (p *Preferences) Languages() []string { return slices.Clone(p.languages) }
@@ -77,6 +114,10 @@ func (p *Preferences) Languages() []string { return slices.Clone(p.languages) }
 // SyncAppearance records the system's appearance. Called by platform
 // implementations, and by tests in their place.
 func (p *Preferences) SyncAppearance(a Appearance) { p.appearance = a }
+
+// SyncMotion records whether the system asks to reduce motion. Called
+// by platform implementations, and by tests in their place.
+func (p *Preferences) SyncMotion(m Motion) { p.motion = m }
 
 // SyncLanguages records the user's languages, the preferred one first.
 // Called by platform implementations, and by tests in their place.
@@ -92,6 +133,14 @@ func (p *Preferences) TakeAppearance() (Appearance, bool) {
 	changed := p.appearance != p.toldAppearance
 	p.toldAppearance = p.appearance
 	return p.appearance, changed
+}
+
+// TakeMotion returns the motion answer and whether it changed since it
+// was last taken. Called by the World's windows.
+func (p *Preferences) TakeMotion() (Motion, bool) {
+	changed := p.motion != p.toldMotion
+	p.toldMotion = p.motion
+	return p.motion, changed
 }
 
 // TakeLanguages returns the languages and whether they changed since they
