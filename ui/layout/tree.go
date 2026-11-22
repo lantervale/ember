@@ -209,6 +209,8 @@ type node struct {
 	hoisted   []*node
 	parent    *node
 	grid      *gridInfo
+	// subgrid is what its grid hands it in each axis it is a subgrid in.
+	subgrid [2]*subgridAxis
 	// row is a table row's cells' widths and heights, kept with the row;
 	// captionRoom a table's captions' room above and below its grid.
 	row         *tableRow

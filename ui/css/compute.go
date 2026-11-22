@@ -1418,11 +1418,15 @@ var props = func() map[string]prop {
 		"widows": field(func(c *style.Computed) *int { return &c.Widows },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }),
 
-		"grid-template-columns": field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Columns }, (*ctx).tracks),
-		"grid-template-rows":    field(func(c *style.Computed) *[]style.TrackRepeat { return &c.Rows }, (*ctx).tracks),
-		"grid-template-areas":   field(func(c *style.Computed) *[]style.GridArea { return &c.Areas }, templateAreas),
-		"grid-auto-columns":     field(func(c *style.Computed) *[]style.Track { return &c.AutoColumns }, (*ctx).autoTracks),
-		"grid-auto-rows":        field(func(c *style.Computed) *[]style.Track { return &c.AutoRows }, (*ctx).autoTracks),
+		"grid-template-columns": templateTracks(func(c *style.Computed) (*[]style.TrackRepeat, *bool) {
+			return &c.Columns, &c.Subgrid.Width
+		}),
+		"grid-template-rows": templateTracks(func(c *style.Computed) (*[]style.TrackRepeat, *bool) {
+			return &c.Rows, &c.Subgrid.Height
+		}),
+		"grid-template-areas": field(func(c *style.Computed) *[]style.GridArea { return &c.Areas }, templateAreas),
+		"grid-auto-columns":   field(func(c *style.Computed) *[]style.Track { return &c.AutoColumns }, (*ctx).autoTracks),
+		"grid-auto-rows":      field(func(c *style.Computed) *[]style.Track { return &c.AutoRows }, (*ctx).autoTracks),
 		"grid-auto-flow": field(
 			func(c *style.Computed) *style.GridFlow { return &c.Flow },
 			func(_ *ctx, v []Component) style.GridFlow {
@@ -1953,6 +1957,49 @@ func (x *ctx) track(c Component) style.Track {
 	}
 	l := x.length(c)
 	return style.Track{Min: l, Max: l}
+}
+
+// templateTracks is grid-template-columns or -rows, whether subgrid
+// beside its tracks.
+func templateTracks(get func(*style.Computed) (*[]style.TrackRepeat, *bool)) prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			tracks, sub := get(x.c)
+			*sub = isWord(v[0], kwSubgrid)
+			if *sub {
+				*tracks = subgridNames(v[1:])
+				return
+			}
+			*tracks = x.tracks(v)
+		},
+		inherit: func(dst, src *style.Computed) {
+			dt, ds := get(dst)
+			st, ss := get(src)
+			*dt, *ds = *st, *ss
+		},
+	}
+}
+
+// subgridNames are a subgrid's names of its lines, an entry a bracket or a
+// repeat() of them.
+func subgridNames(v []Component) []style.TrackRepeat {
+	var out []style.TrackRepeat
+	for _, c := range v {
+		if c.Kind == LBracket {
+			out = append(out, style.TrackRepeat{Count: 1, Names: [][]string{lineNames(c)}})
+			continue
+		}
+		args := items(c.Args)
+		r := style.TrackRepeat{Count: int(args[0].Num)}
+		if isWord(args[0], "auto-fill") {
+			r.Count = style.AutoFill
+		}
+		for _, n := range args[2:] {
+			r.Names = append(r.Names, lineNames(n))
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 func (x *ctx) tracks(v []Component) []style.TrackRepeat {

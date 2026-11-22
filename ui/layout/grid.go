@@ -1,10 +1,6 @@
 package layout
 
-import (
-	"sort"
-
-	"github.com/lantervale/ember/ui/internal/style"
-)
+import "github.com/lantervale/ember/ui/internal/style"
 
 func gridAlignContent(a style.Align) alignment {
 	if a == style.AlignNormal {
@@ -37,15 +33,36 @@ func (t *tree) grid(n *node, in input) output {
 	justifyContent := gridAlignContent(st.JustifyContent)
 	alignItems, justifyItems := st.AlignItems, st.JustifyItems
 
+	sub := n.handed()
+	floor := pbSize
+	for a, s := range sub {
+		if s == nil {
+			continue
+		}
+		floor.set(axis(a), 0)
+		minSize.set(axis(a), none)
+		maxSize.set(axis(a), none)
+		preferred.set(axis(a), none)
+		if len(s.tracks) > 0 {
+			margin := edgesAlong(edges(st.Margin, in.parent.w), axis(a))
+			preferred.set(axis(a), s.tracks[len(s.tracks)-1].end-margin.start-margin.end)
+		}
+	}
+	if sub[horizontal] != nil {
+		justifyContent = align(style.AlignStart)
+	}
+	if sub[vertical] != nil {
+		alignContent = align(style.AlignStart)
+	}
 	known := in.known.or(preferred)
 	constrained := spaces{spaceOr(known.w, in.avail.w), spaceOr(known.h, in.avail.h)}
-	constrained = spaces{constrained.w.mClamp(minSize.w, maxSize.w).mMax(pbSize.w),
-		constrained.h.mClamp(minSize.h, maxSize.h).mMax(pbSize.h)}
+	constrained = spaces{constrained.w.mClamp(minSize.w, maxSize.w).mMax(floor.w),
+		constrained.h.mClamp(minSize.h, maxSize.h).mMax(floor.h)}
 	availGrid := spaces{
 		w: constrained.w.mapDefinite(func(v float32) float32 { return v - inset.horizontal() }),
 		h: constrained.h.mapDefinite(func(v float32) float32 { return v - inset.vertical() }),
 	}
-	outer := known.mClamp(minSize, maxSize).mMax(pbSize)
+	outer := known.mClamp(minSize, maxSize).mMax(floor)
 	innerMin := minSize.mSub(inset.sum())
 	innerMax := maxSize.mSub(inset.sum())
 	inner := size{mSub(outer.w, inset.horizontal()), mSub(outer.h, inset.vertical())}
@@ -59,53 +76,22 @@ func (t *tree) grid(n *node, in input) output {
 		}
 	}
 
-	autoFit := outer.or(maxSize).or(minSize).mClamp(minSize, maxSize).mMax(pbSize).mSub(inset.sum())
-	strategy := func(v float32) autoRepeatStrategy {
-		if some(v) {
-			return maxRepetitionsThatDoNotOverflow
-		}
-		return minRepetitionsThatDoOverflow
-	}
-	strategies := outer.or(maxSize)
-	colReps, colCount := explicitGridSize(st, autoFit.w, strategy(strategies.w), horizontal)
-	rowReps, rowCount := explicitGridSize(st, autoFit.h, strategy(strategies.h), vertical)
-	colCount = max(colCount, templateAreaTracks(st.Areas, horizontal))
-	rowCount = max(rowCount, templateAreaTracks(st.Areas, vertical))
-	colLines := newGridLines(st, horizontal, colReps, colCount)
-	rowLines := newGridLines(st, vertical, rowReps, rowCount)
-
-	var items []*gridItem
-	var placements []itemPlacement
-	for i, k := range n.kids {
-		if k.st.Display == style.DisplayNone || outOfFlow(k.st.Position) {
-			continue
-		}
-		placements = append(placements, itemPlacement{
-			h: colLines.placement(k.st.Column),
-			v: rowLines.placement(k.st.Row),
-		})
-		items = append(items, newGridItem(k, alignItems, justifyItems, i))
-	}
-	estCols, estRows := gridSizeEstimate(colCount, rowCount, placements)
-	occupancy := newCellOccupancy(estCols, estRows)
-	byOrder := make([]int, len(items))
-	for i := range byOrder {
-		byOrder[i] = i
-	}
-	sort.SliceStable(byOrder, func(i, j int) bool { return items[byOrder[i]].st.Order < items[byOrder[j]].st.Order })
-	orderedItems := make([]*gridItem, len(items))
-	orderedPlacements := make([]itemPlacement, len(items))
-	for i, j := range byOrder {
-		orderedItems[i], orderedPlacements[i] = items[j], placements[j]
-	}
-	placeGridItems(occupancy, orderedItems, orderedPlacements, st.Flow)
-	finalCols, finalRows := occupancy.columns, occupancy.rows
-	columns := initializeGridTracks(finalCols, st, horizontal, colReps,
-		func(i int) bool { return occupancy.occupied(horizontal, i) })
-	rows := initializeGridTracks(finalRows, st, vertical, rowReps,
-		func(i int) bool { return occupancy.occupied(vertical, i) })
-
+	autoFit := outer.or(maxSize).or(minSize).mClamp(minSize, maxSize).mMax(floor).mSub(inset.sum())
+	p := t.planGrid(n, autoFit, outer.or(maxSize))
+	items := p.items
+	colLines, rowLines := p.lines[horizontal], p.lines[vertical]
+	finalCols, finalRows := p.counts[horizontal], p.counts[vertical]
+	basis := or(inner.w, 0)
+	gaps := [2]float32{usedGap(n, horizontal, basis), usedGap(n, vertical, basis)}
+	columns := p.tracks(n, horizontal, gaps[horizontal], in.parent.w)
+	rows := p.tracks(n, vertical, gaps[vertical], in.parent.w)
+	colItems := t.sizingItems(items, horizontal, gaps[horizontal], basis)
+	rowItems := t.sizingItems(items, vertical, gaps[vertical], basis)
 	resolveItemTrackIndexes(items, finalCols, finalRows)
+	resolveItemTrackIndexes(colItems, finalCols, finalRows)
+	resolveItemTrackIndexes(rowItems, finalCols, finalRows)
+	markCrossings(colItems, columns, rows)
+	markCrossings(rowItems, columns, rows)
 	markCrossings(items, columns, rows)
 	hasBaseline := false
 	for _, it := range items {
@@ -116,22 +102,25 @@ func (t *tree) grid(n *node, in input) output {
 	byMax := func(tr *gridTrack, parent float32) float32 { return definiteValue(tr.max, parent) }
 	byBase := func(tr *gridTrack, _ float32) float32 { return tr.baseSize }
 	t.trackSizing(horizontal, innerMin.w, innerMax.w, justifyContent,
-		alignContent, availGrid, inner, columns, rows, items, byMax, hasBaseline)
+		alignContent, availGrid, inner, columns, rows, colItems, byMax, hasBaseline)
+	handTracks(items, horizontal, columns, gaps[horizontal], false)
 	colSum := sumBaseSizes(columns)
 	inner.w = or(inner.w, colSum)
 	if in.run == computeSize && in.axis == axisHorizontal {
-		w := fmax(mClamp(colSum+inset.horizontal(), minSize.w, maxSize.w), pbSize.w)
+		w := fmax(mClamp(colSum+inset.horizontal(), minSize.w, maxSize.w), floor.w)
 		return sizeOutput(size{w, 0})
 	}
-	for _, it := range items {
+	t.layOutOwners(items, rowItems, columns, rows, inner, byBase)
+	for _, it := range rowItems {
 		it.areaCache = nil
 	}
 	t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-		justifyContent, availGrid, inner, rows, columns, items, byBase, false)
+		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
+	handTracks(items, vertical, rows, gaps[vertical], false)
 	rowSum := sumBaseSizes(rows)
 	borderBox := size{
-		w: fmax(mClamp(or(known.w, colSum+inset.horizontal()), minSize.w, maxSize.w), pbSize.w),
-		h: fmax(mClamp(or(known.h, rowSum+inset.vertical()), minSize.h, maxSize.h), pbSize.h),
+		w: fmax(mClamp(or(known.w, colSum+inset.horizontal()), minSize.w, maxSize.w), floor.w),
+		h: fmax(mClamp(or(known.h, rowSum+inset.vertical()), minSize.h, maxSize.h), floor.h),
 	}
 	contentBox := size{fmax(0, borderBox.w-inset.horizontal()), fmax(0, borderBox.h-inset.vertical())}
 	if in.run == computeSize {
@@ -149,7 +138,7 @@ func (t *tree) grid(n *node, in input) output {
 	rerunColumns := !some(outer.w) && hasPercentColumn
 	columnChanged := false
 	if !rerunColumns {
-		for _, it := range items {
+		for _, it := range colItems {
 			if !it.crossesIntrinsicColumn {
 				continue
 			}
@@ -165,7 +154,7 @@ func (t *tree) grid(n *node, in input) output {
 		}
 		rerunColumns = columnChanged
 	} else {
-		for _, it := range items {
+		for _, it := range colItems {
 			it.areaCache = nil
 			it.minContentCache.w, it.maxContentCache.w, it.minimumCache.w = none, none, none
 		}
@@ -173,16 +162,18 @@ func (t *tree) grid(n *node, in input) output {
 	rerunRows := !some(outer.h) && hasPercentRow
 	rowChanged := false
 	if rerunRows {
-		for _, it := range items {
+		for _, it := range rowItems {
 			it.areaCache = nil
 			it.minContentCache.h, it.maxContentCache.h, it.minimumCache.h = none, none, none
 		}
 	}
 	if rerunColumns {
 		t.trackSizing(horizontal, innerMin.w, innerMax.w, justifyContent,
-			alignContent, availGrid, inner, columns, rows, items, byBase, hasBaseline)
+			alignContent, availGrid, inner, columns, rows, colItems, byBase, hasBaseline)
+		handTracks(items, horizontal, columns, gaps[horizontal], false)
+		t.layOutOwners(items, rowItems, columns, rows, inner, byBase)
 		if !rerunRows {
-			for _, it := range items {
+			for _, it := range rowItems {
 				if !it.crossesIntrinsicRow {
 					continue
 				}
@@ -201,14 +192,15 @@ func (t *tree) grid(n *node, in input) output {
 	}
 	if rerunRows {
 		t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-			justifyContent, availGrid, inner, rows, columns, items, byBase, false)
+			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
+		handTracks(items, vertical, rows, gaps[vertical], false)
 	}
 	if columnChanged && !hasPercentColumn {
-		borderBox.w = fmax(mClamp(or(known.w, sumBaseSizes(columns)+inset.horizontal()), minSize.w, maxSize.w), pbSize.w)
+		borderBox.w = fmax(mClamp(or(known.w, sumBaseSizes(columns)+inset.horizontal()), minSize.w, maxSize.w), floor.w)
 		contentBox.w = fmax(0, borderBox.w-inset.horizontal())
 	}
 	if rowChanged && !hasPercentRow {
-		borderBox.h = fmax(mClamp(or(known.h, sumBaseSizes(rows)+inset.vertical()), minSize.h, maxSize.h), pbSize.h)
+		borderBox.h = fmax(mClamp(or(known.h, sumBaseSizes(rows)+inset.vertical()), minSize.h, maxSize.h), floor.h)
 		contentBox.h = fmax(0, borderBox.h-inset.vertical())
 	}
 
@@ -216,6 +208,8 @@ func (t *tree) grid(n *node, in input) output {
 	inlineGutter := fmin(g.x, inlineWithoutScrollbar)
 	alignTracks(contentBox.w, span{padding.l, padding.r + inlineGutter}, span{border.l, border.r}, columns, justifyContent)
 	alignTracks(contentBox.h, span{padding.t, padding.b}, span{border.t, border.b}, rows, alignContent)
+	handTracks(items, horizontal, columns, gaps[horizontal], true)
+	handTracks(items, vertical, rows, gaps[vertical], true)
 
 	paddingBoxInset := border.add(rect{r: g.x, b: g.y})
 	container := overflowContainer{
@@ -367,7 +361,7 @@ func alignTracks(contentBox float32, padding, border span, tracks []gridTrack, a
 // alignAndPositionItem sizes a grid item in its area and aligns it, Taffy's
 // align_and_position_item.
 //
-//nolint:cyclop,funlen,gocyclo // Taffy's align_and_position_item, kept in its shape
+//nolint:cyclop,funlen,gocognit,gocyclo // Taffy's align_and_position_item, kept in its shape
 func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb size, _, _ style.Align,
 	paddingBoxInset rect, container overflowContainer) (rect, float32, float32, float32) {
 	n := it.node
@@ -385,6 +379,12 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	inherent := resolveSize(st.Size, cb).withAspectRatio(ratio).mAdd(adj)
 	minSize := resolveSize(st.MinSize, cb).mAdd(adj).or(pbSize).mMax(pbSize).withAspectRatio(ratio)
 	maxSize := resolveMax(st.MaxSize, cb).withAspectRatio(ratio).mAdd(adj)
+	if it.subgrid[horizontal] {
+		justify, inherent.w, minSize.w, maxSize.w = style.AlignStretch, none, none, none
+	}
+	if it.subgrid[vertical] {
+		self, inherent.h, minSize.h, maxSize.h = style.AlignStretch, none, none, none
+	}
 	hAlign := justify
 	if hAlign == style.AlignNormal {
 		if some(inherent.w) || isSizingKeyword(st.Size.Width) {
@@ -407,11 +407,11 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		h: fmax(mSub(mSub(areaSize.h, margin.t), margin.b)-it.baselineShim, 0),
 	}
 	kw, kwSpace := keywordNone, space{}
-	if !some(inherent.w) {
+	if !some(inherent.w) && !it.subgrid[horizontal] {
 		kw, kwSpace = resolveSizingKeyword(st.Size.Width, inner.w, cb.w)
 	}
 	kh, khSpace := keywordNone, space{}
-	if !some(inherent.h) {
+	if !some(inherent.h) && !it.subgrid[vertical] {
 		kh, khSpace = resolveSizingKeyword(st.Size.Height, inner.h, cb.h)
 	}
 	keywordMeasured := noSize
@@ -428,6 +428,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 			if !some(w) {
 				w = t.measureChildSize(n, noSize, cb, spaces{kwSpace, def(inner.h)}, inherentSize, horizontal, [2]bool{})
 			}
+		case it.subgrid[horizontal]:
+			w = inner.w
 		case some(margin.l) && some(margin.r) && hAlign == style.AlignStretch && !outOfFlow(pos):
 			w = inner.w
 		}
@@ -446,6 +448,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 				}
 				s.h = t.measureChildSize(n, size{s.w, none}, cb, spaces{wSpace, khSpace}, inherentSize, vertical, [2]bool{})
 			}
+		case it.subgrid[vertical]:
+			s.h = inner.h
 		case some(margin.t) && some(margin.b) && vAlign == style.AlignStretch && !outOfFlow(pos):
 			s.h = inner.h
 		}
@@ -620,6 +624,23 @@ func newGridInfo(colLines gridLines, colCounts trackCounts, columns []gridTrack,
 		columns: newGridAxisInfo(colLines, colCounts, columns),
 		rows:    newGridAxisInfo(rowLines, rowCounts, rows),
 	}
+}
+
+func (g *gridInfo) axis(a axis) *gridAxisInfo {
+	if a == horizontal {
+		return &g.columns
+	}
+	return &g.rows
+}
+
+// extent is how far the tracks between lines l reach, none where the grid has no such tracks.
+func (g *gridAxisInfo) extent(l lineSpan) float32 {
+	s, okS := g.counts.trackVecIndex(l.start)
+	e, okE := g.counts.trackVecIndex(l.end)
+	if !okS || !okE || s >= e || e/2 > len(g.positions) {
+		return none
+	}
+	return g.positions[e/2-1].end - g.positions[s/2].start
 }
 
 func (g *gridAxisInfo) trackEdge(index int, isStart bool) float32 {

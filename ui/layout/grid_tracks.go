@@ -170,7 +170,13 @@ const (
 
 func templateOf(st *style.Computed, a axis) ([]style.TrackRepeat, []style.Track, style.Length) {
 	if a == horizontal {
+		if st.Subgrid.Width {
+			return nil, st.AutoColumns, st.Gap.Width
+		}
 		return st.Columns, st.AutoColumns, st.Gap.Width
+	}
+	if st.Subgrid.Height {
+		return nil, st.AutoRows, st.Gap.Height
 	}
 	return st.Rows, st.AutoRows, st.Gap.Height
 }
