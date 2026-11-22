@@ -3,6 +3,7 @@ package style
 import (
 	"encoding/binary"
 	"math"
+	"unique"
 )
 
 // MaxLength is the length an infinite calc() stands for, the largest
@@ -256,4 +257,22 @@ func mod(a, b float64) float64 {
 		return math.Copysign(0, b)
 	}
 	return r
+}
+
+// Less is l less o, a Calc when either holds one.
+func (l Length) Less(o Length) Length {
+	none := unique.Handle[Calc]{}
+	if l.Calc == none && o.Calc == none {
+		return Length{Kind: Fixed, Px: l.Px - o.Px, Percent: l.Percent - o.Percent, IsPercent: l.IsPercent || o.IsPercent}
+	}
+	c := Calc{code: l.code() + o.code() + NewCalc([]CalcStep{{Op: CalcScale, Px: -1}, {Op: CalcSum, N: 2}}).code}
+	return Length{Kind: Fixed, Px: c.At(0), IsPercent: true, Calc: unique.Make(c)}
+}
+
+// code is the steps that leave l on a Calc's stack.
+func (l Length) code() string {
+	if l.Calc != (unique.Handle[Calc]{}) {
+		return l.Calc.Value().code
+	}
+	return NewCalc([]CalcStep{{Op: CalcPush, Px: float64(l.Px), Percent: float64(l.Percent)}}).code
 }

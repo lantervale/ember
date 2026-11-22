@@ -182,7 +182,7 @@ func (r shapeReader) inset(c *style.ClipPath, args []Component) error {
 func rest(ls ...style.Length) style.Length {
 	l := style.Length{Kind: style.Fixed, Percent: 100, IsPercent: true}
 	for _, o := range ls {
-		l.Px, l.Percent = l.Px-o.Px, l.Percent-o.Percent
+		l = l.Less(o)
 	}
 	return l
 }

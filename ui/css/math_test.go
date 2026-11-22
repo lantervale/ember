@@ -222,6 +222,24 @@ width: calc(NaN * 1px); min-width: min(NaN * 1%, 5px); opacity: calc(infinity); 
 	assert.Zero(t, s.Padding.Top.Px)
 }
 
+func TestMathFunctionsInBasicShapesWaitForTheReferenceBox(t *testing.T) {
+	s := gridOf(t, "font-size: 10px; clip-path: inset(min(10%, 5px) round(up, 20%, 3px) 0 clamp(1px, 50%, 2em))")
+	in := s.ClipPath.Inset
+	assert.InDelta(t, 5, in.Top.At(100), 1e-4)
+	assert.InDelta(t, 2, in.Top.At(20), 1e-4)
+	assert.InDelta(t, 21, in.Right.At(100), 1e-4)
+	assert.InDelta(t, 20, in.Left.At(100), 1e-4)
+	s = gridOf(t, "clip-path: xywh(min(10%, 5px) 0 max(50%, 30px) 10px)")
+	assert.InDelta(t, 100-5-50, s.ClipPath.Inset.Right.At(100), 1e-4, "xywh()'s right is what x and the width leave")
+	assert.InDelta(t, 40-4-30, s.ClipPath.Inset.Right.At(40), 1e-4)
+	s = gridOf(t, "clip-path: polygon(min(50%, 20px) 0, 100% abs(-50%), 0 calc(100% * sign(50% - 10px)))")
+	assert.InDelta(t, 20, s.ClipPath.Points[0][0].At(100), 1e-4)
+	assert.InDelta(t, 50, s.ClipPath.Points[1][1].At(100), 1e-4)
+	assert.InDelta(t, -10, s.ClipPath.Points[2][1].At(10), 1e-4)
+	s = gridOf(t, "clip-path: circle(hypot(30%, 40px) at round(50%, 8px) 50%)")
+	assert.InDelta(t, 104, s.ClipPath.At[0].At(200), 1e-4, "halfway rounds up")
+}
+
 func TestMathFunctionsReadContainerUnits(t *testing.T) {
 	d, err := parseDim(valueOf(t, "round(up, calc(50cqw + 1em * sign(10cqh - 5px)), 7px)"))
 	require.NoError(t, err)

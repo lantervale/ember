@@ -1,7 +1,8 @@
 // Math functions where only paint reads them: gradient stops of min(),
 // round() and clamp() over the gradient line's percentages, conic stops
 // of angles and percentages added, gradient angles of atan2() and
-// asin(), and boxes turned by trigonometry.
+// asin(), boxes turned by trigonometry, and basic shapes of math over
+// the reference box.
 package main
 
 import (
@@ -42,6 +43,15 @@ func main() {
 			box("t", "transform: skew(atan(0.5), 0) translateX(round(1.3em, 4px))"),
 			box("t", "opacity: calc(1em / 20px)"),
 		),
+		ui.Div(ui.Class("row"),
+			box("g", "background-color: #e63946; clip-path: inset(min(10%, 4px) round(up, 20%, 7px) 0 "+
+				"clamp(1px, 30%, 2em) round 4px)"),
+			box("g", "background-color: #1d3557; clip-path: xywh(min(10%, 5px) 4px max(50%, 30px) calc(100% - 8px))"),
+			box("g", "background-color: #16a085; clip-path: circle(hypot(30%, 10px) at round(50%, 8px) 50%)"),
+			box("g", "background-color: #8e44ad; clip-path: polygon(min(50%, 20px) 0, 100% abs(-50%), "+
+				"0 calc(100% * sign(50% - 10px)))"),
+			box("g", "background-color: #f39c12; clip-path: ellipse(mod(70%, 30px) rem(80%, 20px))"),
+		),
 	)
-	pages.Run(d, 520, 260)
+	pages.Run(d, 520, 330)
 }

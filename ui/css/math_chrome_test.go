@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -43,5 +44,24 @@ func TestMathFunctionsComputeAsInChrome(t *testing.T) {
 		"line-height": compared["line-height"],
 		"transform":   func(s *style.Computed) string { return matrixCSS(s.Transform) },
 		"flex-grow":   func(s *style.Computed) string { return num(s.Grow) },
+	}, 2)
+}
+
+// TestMathFunctionsInShapesComputeAsInChrome compares basic shapes whose
+// math is known at compute time, written as Chrome writes them.
+func TestMathFunctionsInShapesComputeAsInChrome(t *testing.T) {
+	shapes := []string{"circle(round(13px, 5px))", "inset(abs(-4px) mod(-7px, 5px) hypot(3px, 4px) 1em)",
+		"circle(calc(1em * sign(-1px) * -2) at calc(20px * sin(30deg)) 30%)", "ellipse(clamp(none, 50px, 20px) 2em)",
+		"polygon(calc(10px / 1px * 3px) 0, 50% round(up, 1em, 3px), 0 calc(20px * cos(0.5turn) + 30px))",
+		"inset(10px round calc(2px * pow(2, 3)))"}
+	sheet := "body { font-size: 10px; } div { width: 100px; height: 50px; }\n"
+	d := ui.NewDocument()
+	for i, s := range shapes {
+		sheet += ".s" + strconv.Itoa(i) + " { clip-path: " + s + "; }\n"
+		d.Body().Append(ui.Div(ui.Class("s" + strconv.Itoa(i))))
+	}
+	d.AddSheet(sheet)
+	matchChromeProps(t, d, map[string]func(*style.Computed) string{
+		"clip-path": func(s *style.Computed) string { return css.ClipPathCSS(s.ClipPath) },
 	}, 2)
 }
