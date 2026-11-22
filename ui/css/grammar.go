@@ -434,6 +434,7 @@ var checks = map[string]check{
 	"outline-offset":        single(length),
 	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),
 	"transform":             checkTransform,
+	"filter":                checkFilter,
 	"transform-origin":      checkTransformOrigin,
 	"appearance":            single(words("none", "auto", "textfield")),
 	"resize":                single(words("none", "both", "horizontal", "vertical")),
@@ -481,14 +482,14 @@ func timeTerm(nonNeg bool) term {
 var animated = map[string]bool{
 	"color": true, "background-color": true, "border-color": true, "outline-color": true,
 	"border-top-color": true, "border-right-color": true, "border-bottom-color": true, "border-left-color": true,
-	"opacity": true, "transform": true, "box-shadow": true, "clip-path": true,
+	"opacity": true, "transform": true, "box-shadow": true, "clip-path": true, "filter": true,
 }
 
 func transitionTarget(c Component) error {
 	if c.Kind == Ident && animated[strings.ToLower(c.Text)] {
 		return nil
 	}
-	return fmt.Errorf("transitions run only on colours, opacity, transform, box-shadow and clip-path, not %q",
+	return fmt.Errorf("transitions run only on colours, opacity, transform, box-shadow, clip-path and filter, not %q",
 		c.String())
 }
 
@@ -851,6 +852,93 @@ func checkBoxShadow(v []Component) error {
 		}
 		return nil
 	})(v)
+}
+
+// filterAmounts are the filter functions of one number or percentage.
+//
+//nolint:gochecknoglobals // lookup table
+var filterAmounts = map[string]bool{
+	"brightness": true, "contrast": true, "grayscale": true, "invert": true, "opacity": true, "saturate": true,
+	"sepia": true,
+}
+
+// checkFilter takes none or filter functions; a url() to an SVG filter is
+// refused, as nothing reads one.
+func checkFilter(v []Component) error {
+	if len(v) == 1 && isWord(v[0], kwNone) {
+		return nil
+	}
+	for _, c := range v {
+		if c.Kind == URL || c.Kind == Function && strings.EqualFold(c.Text, "url") {
+			return fmt.Errorf("url() filters are not read")
+		}
+		if c.Kind != Function {
+			return fmt.Errorf("expected a filter function, found %q", c.String())
+		}
+		if err := checkFilterFunction(strings.ToLower(c.Text), items(c.Args)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkFilterFunction(name string, args []Component) error {
+	switch {
+	case filterAmounts[name]:
+		if len(args) > 1 {
+			return fmt.Errorf("%s() takes one amount", name)
+		}
+		if len(args) == 1 {
+			return dimTerm(allowNumber | allowPercent | noLength | nonNegative)(args[0])
+		}
+	case name == "blur":
+		if len(args) > 1 {
+			return fmt.Errorf("blur() takes one length")
+		}
+		if len(args) == 1 {
+			return dimTerm(nonNegative)(args[0])
+		}
+	case name == "hue-rotate":
+		if len(args) > 1 {
+			return fmt.Errorf("hue-rotate() takes one angle")
+		}
+		if len(args) == 1 {
+			_, err := angle(args[0])
+			return err
+		}
+	case name == "drop-shadow":
+		return checkDropShadow(args)
+	default:
+		return fmt.Errorf("%s() is not a filter function", name)
+	}
+	return nil
+}
+
+// checkDropShadow takes a colour and two or three lengths, the third a
+// radius, so not negative.
+func checkDropShadow(args []Component) error {
+	lengths, colors, lastLength := 0, 0, -1
+	for i, c := range args {
+		switch {
+		case length(c) == nil:
+			if lastLength >= 0 && lastLength != i-1 {
+				return fmt.Errorf("a drop shadow's lengths go together")
+			}
+			if lengths == 2 && c.Num < 0 {
+				return fmt.Errorf("a drop shadow's blur can't be negative")
+			}
+			lastLength = i
+			lengths++
+		case colorTerm(c) == nil:
+			colors++
+		default:
+			return fmt.Errorf("bad drop shadow part %q", c.String())
+		}
+	}
+	if lengths < 2 || lengths > 3 || colors > 1 {
+		return fmt.Errorf("drop-shadow() takes <colour>? <x> <y> <blur>?")
+	}
+	return nil
 }
 
 //nolint:gochecknoglobals // lookup table

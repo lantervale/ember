@@ -34,6 +34,9 @@ func bound(b *box.Box) {
 			r = union(r, geom.Rect{X: c.Ink.X + c.Pos.X, Y: c.Ink.Y + c.Pos.Y, W: c.Ink.W, H: c.Ink.H})
 		}
 	}
+	if b.Kind == box.Element && len(st.Filters) > 0 {
+		r = filterInk(r, st.Filters)
+	}
 	if s, ok := clipShapeOf(b, geom.Vec2{}, st); ok {
 		r = intersect(r, s.bounds)
 	}

@@ -50,6 +50,9 @@ func (p *painter) view(c *clip) (geom.Rect, bool) {
 		}
 		view = intersect(view, c.rect)
 	}
+	if bounded && p.spread > 0 {
+		view = grow(view, p.spread)
+	}
 	return view, bounded
 }
 

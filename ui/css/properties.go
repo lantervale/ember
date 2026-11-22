@@ -122,6 +122,7 @@ var properties = map[string]property{
 	"object-fit":            {initial: "fill"},
 	"object-position":       {initial: "50% 50%"},
 	"box-shadow":            {initial: "none"},
+	"filter":                {initial: "none"},
 	"outline-width":         {initial: "medium"}, "outline-style": {initial: "none"},
 	"outline-color": {initial: "currentcolor"}, "outline-offset": {initial: "0"},
 	"opacity":          {initial: "1"},
