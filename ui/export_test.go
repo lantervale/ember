@@ -32,6 +32,13 @@ func Restyled(d *Document) int { return d.trans.Restyled() }
 // ShownBackground is what paint draws as n's background now.
 func ShownBackground(n *Node) color.Color { return dom.Data(n).Shown.Background }
 
+// ShownInks are n's color, background-color and border-top-color as
+// paint draws them now.
+func ShownInks(n *Node) [3]color.Color {
+	s := dom.Data(n).Shown
+	return [3]color.Color{s.Color, s.Background, s.BorderColor.Top}
+}
+
 // ShownOpacity is n's opacity as paint draws it now.
 func ShownOpacity(n *Node) float32 { return dom.Data(n).Shown.Opacity }
 

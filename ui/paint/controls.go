@@ -23,6 +23,8 @@ import (
 //nolint:gochecknoglobals // fixed values every paint reads; Go has no constant colours, tables or shapes
 var (
 	selectionColor = color.Hex("#3390ff66")
+	// darkCanvas is Chrome's Canvas in the dark scheme.
+	darkCanvas = color.Hex("#121212")
 	// pageSelection is the colour behind text selected outside a field
 	// with no ::selection rule: Chrome's on macOS with the blue accent,
 	// #b3d7fe over white, measured over black and white.

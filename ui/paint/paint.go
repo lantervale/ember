@@ -323,7 +323,9 @@ func (p *painter) start(root *box.Box) {
 
 // canvasBackground paints the root's background over the whole viewport,
 // or body's when the root has none, as CSS's canvas does; that box then
-// leaves it out of its own decoration. In a viewport that scrolls, its
+// leaves it out of its own decoration. Without either, a root drawn in
+// the dark scheme has the canvas Chrome's dark Canvas colour, where a
+// light one leaves the window's own showing. In a viewport that scrolls, its
 // picture is placed in the root element's padding box, as Chrome places
 // it, so it scrolls with the page; otherwise in the viewport.
 func (p *painter) canvasBackground(root *box.Box) {
@@ -347,6 +349,9 @@ func (p *painter) canvasBackground(root *box.Box) {
 		}
 	}
 	if src == nil || !hasBackground(shown(src)) {
+		if st := shown(root); st != nil && st.Dark {
+			p.s.Rect(p.viewport, darkCanvas)
+		}
 		return
 	}
 	p.canvas = src

@@ -115,6 +115,8 @@ func (t *Text) equal(o *Text) bool {
 		t.TextDecoration == o.TextDecoration &&
 		sameSliceFunc(t.Decorations, o.Decorations, (*Decoration).equal) &&
 		t.AccentColor == o.AccentColor &&
+		t.ColorScheme == o.ColorScheme &&
+		t.Dark == o.Dark &&
 		t.CaretColor == o.CaretColor &&
 		t.AccentAuto == o.AccentAuto &&
 		t.CaretAuto == o.CaretAuto &&

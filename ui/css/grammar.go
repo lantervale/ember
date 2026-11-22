@@ -393,6 +393,7 @@ var checks = map[string]check{
 	"white-space":            single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
 	"overflow-wrap":          single(words("normal", "break-word", "anywhere")),
 	"color":                  single(colorTerm),
+	"color-scheme":           checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
 	"text-overflow":     single(words("clip", "ellipsis")),

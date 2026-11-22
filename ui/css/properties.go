@@ -85,6 +85,7 @@ var properties = map[string]property{
 	"white-space":            {inherited: true, initial: "normal"},
 	"overflow-wrap":          {inherited: true, initial: "normal"},
 	"color":                  {inherited: true, initial: "canvastext"},
+	"color-scheme":           {inherited: true, initial: "normal"},
 	"cursor":                 {inherited: true, initial: "auto"},
 	"list-style-type":        {inherited: true, initial: "disc"},
 	"quotes":                 {inherited: true, initial: "auto"},

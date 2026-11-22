@@ -21,10 +21,14 @@ func DefaultImages() map[string][]byte {
 // (TestChromeAlignsTheTextOfControlsAsABrowsersSheetDoes), where a
 // game's takes its parent's; so do a control's letter and word spacing,
 // its case and its text shadow start from none
-// (TestChromeSpacesTheTextOfControlsAsABrowsersSheetDoes).
+// (TestChromeSpacesTheTextOfControlsAsABrowsersSheetDoes). A control's
+// text is its scheme's, as Chrome's, where a game's takes its parent's
+// colour.
 const BrowserDefault = `* { box-sizing: content-box; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
+input, select, textarea { color: FieldText; }
+button, input[type="button"], input[type="submit"], input[type="reset"], input[type="color"] { color: ButtonText; }
 html { user-select: auto; }
 input, select, textarea { text-align: start; }
 input[type="button"], input[type="submit"], input[type="reset"] { text-align: center; }
@@ -37,7 +41,7 @@ button, input, select, textarea {
 // the game's sheets. Export writes the same text into every page, so
 // Chrome starts from it too.
 const Default = `* { box-sizing: border-box; }
-html { font-family: "Go", sans-serif; font-size: 16px; line-height: normal; color: #000; }
+html { font-family: "Go", sans-serif; font-size: 16px; line-height: normal; color: CanvasText; }
 html, body, div, section, header, footer, nav, main, aside, article, p, h1, h2, h3, h4,
 details, summary, dialog, hr, pre, ul, ol, menu, dl, dt, dd, h5, h6, blockquote, figure, figcaption, form, address,
 hgroup, search, center, fieldset, legend { display: block; }
@@ -94,16 +98,16 @@ q::before { content: open-quote; }
 q::after { content: close-quote; }
 big { font-size: larger; }
 center { text-align: -webkit-center; }
-fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove #efefef; min-width: min-content; }
+fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove ThreeDFace; min-width: min-content; }
 fieldset { display: flow-root; }
 fieldset > legend { width: fit-content; }
 legend { padding: 0 2px; }
-mark { background-color: #ff0; color: #000; }
-a:link { color: #0000ee; cursor: pointer; text-decoration: underline; }
+mark { background-color: Mark; color: MarkText; }
+a:link { color: LinkText; cursor: pointer; text-decoration: underline; }
 u, ins { text-decoration: underline; }
 s, del { text-decoration: line-through; }
 abbr[title] { text-decoration: underline dotted; }
-a:link:active { color: #ff0000; }
+a:link:active { color: ActiveText; }
 code, kbd, samp, pre { font-family: "Go Mono", monospace; font-size: 0.8125em; }
 pre { margin: 1em 0; white-space: pre; }
 button, input, select, textarea {
@@ -118,26 +122,37 @@ iframe[frameborder="0"], iframe[frameborder="no" i] { border-width: 0; }
 button, select, input[type="checkbox"], input[type="range"] { cursor: default; }
 input, textarea { cursor: text; }
 button {
-  padding: 1px 6px; border: 1px solid #767676; border-radius: 3px; background-color: #efefef; text-align: center;
+  padding: 1px 6px; border: 1px solid light-dark(#767676, #6b6b6b); border-radius: 3px; background-color: ButtonFace;
+  text-align: center;
 }
-button:hover { background-color: #e5e5e5; }
-button:active { background-color: #f5f5f5; }
-input, select, textarea { padding: 1px 2px; border: 1px solid #767676; border-radius: 2px; background-color: #fff; }
+button:hover { background-color: light-dark(#e5e5e5, ButtonFace); }
+button:active { background-color: light-dark(#f5f5f5, ButtonFace); }
+input, select, textarea {
+  padding: 1px 2px; border: 1px solid light-dark(#767676, #858585); border-radius: 2px; background-color: Field;
+}
 input[type="button"], input[type="submit"], input[type="reset"] {
-  padding: 1px 6px; border-radius: 3px; background-color: #efefef; text-align: center; cursor: default;
+  padding: 1px 6px; border-color: light-dark(#767676, #6b6b6b); border-radius: 3px; background-color: ButtonFace;
+  text-align: center; cursor: default;
 }
-input[type="button"]:hover, input[type="submit"]:hover, input[type="reset"]:hover { background-color: #e5e5e5; }
-input[type="button"]:active, input[type="submit"]:active, input[type="reset"]:active { background-color: #f5f5f5; }
+input[type="button"]:hover, input[type="submit"]:hover, input[type="reset"]:hover {
+  background-color: light-dark(#e5e5e5, ButtonFace);
+}
+input[type="button"]:active, input[type="submit"]:active, input[type="reset"]:active {
+  background-color: light-dark(#f5f5f5, ButtonFace);
+}
 ::placeholder { color: #757575; }
 button:disabled, input[type="button"]:disabled, input[type="submit"]:disabled, input[type="reset"]:disabled {
-  color: rgba(16, 16, 16, 0.3); background-color: rgba(239, 239, 239, 0.3); border-color: rgba(118, 118, 118, 0.3);
+  color: light-dark(rgba(16, 16, 16, 0.3), rgba(255, 255, 255, 0.3));
+  background-color: light-dark(rgba(239, 239, 239, 0.3), rgba(19, 1, 1, 0.3));
+  border-color: light-dark(rgba(118, 118, 118, 0.3), rgba(195, 195, 195, 0.3));
 }
 input:disabled, textarea:disabled {
-  color: #545454; background-color: rgba(239, 239, 239, 0.3); border-color: rgba(118, 118, 118, 0.3);
+  color: light-dark(#545454, #aaa); background-color: light-dark(rgba(239, 239, 239, 0.3), rgba(59, 59, 59, 0.3));
+  border-color: rgba(118, 118, 118, 0.3);
 }
-select:disabled { color: gray; border-color: rgba(118, 118, 118, 0.3); opacity: 0.7; }
+select:disabled { color: light-dark(gray, #aaa); border-color: rgba(118, 118, 118, 0.3); opacity: 0.7; }
 option { display: block; padding: 0 2px 1px; }
-option:disabled { color: gray; }
+option:disabled { color: light-dark(gray, #aaa); }
 input, select { white-space: nowrap; }
 input { overflow: hidden; }
 select { overflow: clip; }
@@ -147,33 +162,53 @@ select {
   background-position: right 6px center;
 }
 input[type="checkbox"] { width: 13px; height: 13px; padding: 0; border-radius: 2px; }
-input[type="checkbox"]:checked { background-color: #0075ff; border-color: #0075ff; color: #fff; }
+input[type="checkbox"]:checked {
+  background-color: light-dark(#0075ff, #99c8ff); border-color: light-dark(#0075ff, #99c8ff);
+  color: light-dark(#fff, #3b3b3b);
+}
 input[type="radio"] { width: 13px; height: 13px; padding: 0; border-radius: 50%; }
-input[type="radio"]:checked { border-color: #0075ff; color: #0075ff; }
+input[type="radio"]:checked { border-color: light-dark(#0075ff, #99c8ff); color: light-dark(#0075ff, #99c8ff); }
 /* Disabled controls and the switch in native Chrome's colours, measured from its own controls at 2x (headless Chrome
-   through chrome.ScreenshotScaled, 2026-11-03); its switch, unrendered there, follows the checkbox's. */
-input[type="checkbox"]:disabled { background-color: #f8f8f8; }
-input[type="checkbox"]:checked:disabled { background-color: #d1d1d1; border-color: #d1d1d1; color: #ededed; }
-input[type="range"]:disabled { color: #cbcbcb; }
-input[type="radio"]:disabled { background-color: #f8f8f8; }
-input[type="radio"]:checked:disabled { border-color: #d1d1d1; color: #d1d1d1; }
+   through chrome.ScreenshotScaled, 2026-11-03, the dark ones 2026-11-22); its switch, unrendered there, follows the
+   checkbox's. */
+input[type="checkbox"]:disabled, input[type="radio"]:disabled {
+  background-color: light-dark(#f8f8f8, #3b3b3b); border-color: light-dark(rgba(118, 118, 118, 0.3), #626262);
+}
+input[type="checkbox"]:checked:disabled {
+  background-color: light-dark(#d1d1d1, #757575); border-color: light-dark(#d1d1d1, #757575);
+  color: light-dark(#ededed, #3b3b3b);
+}
+input[type="range"]:disabled { color: light-dark(#cbcbcb, #757575); }
+input[type="radio"]:checked:disabled {
+  border-color: light-dark(#d1d1d1, #757575); color: light-dark(#d1d1d1, #757575);
+}
 input[type="checkbox"][switch] {
-  width: 32px; height: 18px; border: 1px solid #767676; border-radius: 9px; background-color: #efefef; color: #767676;
+  width: 32px; height: 18px; border: 1px solid light-dark(#767676, #858585); border-radius: 9px;
+  background-color: light-dark(#efefef, #3b3b3b); color: light-dark(#767676, #858585);
 }
-input[type="checkbox"][switch]:checked { background-color: #0075ff; border-color: #0075ff; color: #fff; }
+input[type="checkbox"][switch]:checked {
+  background-color: light-dark(#0075ff, #99c8ff); border-color: light-dark(#0075ff, #99c8ff);
+  color: light-dark(#fff, #3b3b3b);
+}
 input[type="checkbox"][switch]:disabled {
-  background-color: #f8f8f8; border-color: rgba(118, 118, 118, 0.3); color: #d1d1d1;
+  background-color: light-dark(#f8f8f8, #3b3b3b); border-color: light-dark(rgba(118, 118, 118, 0.3), #626262);
+  color: light-dark(#d1d1d1, #626262);
 }
-input[type="checkbox"][switch]:checked:disabled { background-color: #d1d1d1; border-color: #d1d1d1; color: #f8f8f8; }
-input[type="range"] { width: 129px; height: 16px; padding: 0; border: 0; background: none; color: #0075ff; }
-progress { width: 160px; height: 16px; color: #0075ff; }
+input[type="checkbox"][switch]:checked:disabled {
+  background-color: light-dark(#d1d1d1, #757575); border-color: light-dark(#d1d1d1, #757575);
+  color: light-dark(#f8f8f8, #3b3b3b);
+}
+input[type="range"] {
+  width: 129px; height: 16px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff);
+}
+progress { width: 160px; height: 16px; color: light-dark(#0075ff, #99c8ff); }
 meter { width: 80px; height: 16px; }
 summary { display: list-item; }
 details > summary { list-style-type: disclosure-closed; }
 details[open] > summary { list-style-type: disclosure-open; }
 details:open > summary { list-style-type: disclosure-open; }
 dialog { position: absolute; left: 0; right: 0; margin: auto; width: fit-content; height: fit-content; padding: 1em;
-  border: solid; background-color: #fff; color: #000; }
+  border: solid; background-color: Canvas; color: CanvasText; }
 dialog:modal {
   position: fixed; overflow: auto; top: 0; bottom: 0; max-width: calc(100% - 6px - 2em);
   max-height: calc(100% - 6px - 2em);
