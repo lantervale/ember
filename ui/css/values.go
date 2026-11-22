@@ -5,35 +5,82 @@ import (
 	"math"
 	"slices"
 	"strings"
+
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
-// Dim is a length, percentage or number as a sum of parts, the form calc()
-// resolves to before layout: calc(100% - 2rem + 4px) is Pct 100, Rem -2,
-// Px 4. A plain value has one part. Rel are the parts in the units a font
-// or the viewport measures, and terms the min(), max() and clamp() no sum
-// of parts says.
+// Dim is a length, percentage, number, angle or flex value as a sum of
+// parts, the form a math function resolves to before layout:
+// calc(100% - 2rem + 4px) is Pct 100, Rem -2, Px 4. A plain value has
+// one part. Rel are the parts in the units a font or the viewport
+// measures, and terms the math functions no sum of parts says, as min()
+// or round() over a percentage. Angles are in degrees.
 type Dim struct {
-	Num, Px, Pct, Em, Rem, Fr float64
-	Rel                       [relUnits]float64
-	terms                     []boundTerm
-	rel                       uint32
-	kind                      dimKind
+	Num, Px, Pct, Em, Rem, Fr, Deg float64
+	Rel                            [relUnits]float64
+	terms                          []mathTerm
+	rel                            uint32
+	typ                            dimType
+	pct                            bool
 }
 
-type dimKind uint8
+// dimType is the type of a value as CSS Values 4 types math: the powers
+// of its length, angle and percentage, all 0 for a number, or a flex
+// value. A percentage added to a length or an angle takes its type.
+type dimType struct {
+	length, angle, percent int8
+	flex                   bool
+}
 
-const (
-	dimNumber dimKind = 1 << iota
-	dimLength
-	dimPercent
-	dimFlex
+//nolint:gochecknoglobals // the types of the values a Dim may end as
+var (
+	typeNumber  = dimType{}
+	typeLength  = dimType{length: 1}
+	typeAngle   = dimType{angle: 1}
+	typePercent = dimType{percent: 1}
+	typeFlex    = dimType{flex: true}
 )
 
-// boundTerm is factor times the least of args, or the greatest when most:
-// clamp(a, b, c) is max(a, min(b, c)).
-type boundTerm struct {
+func (t dimType) times(o dimType, sign int8) dimType {
+	return dimType{length: t.length + sign*o.length, angle: t.angle + sign*o.angle,
+		percent: t.percent + sign*o.percent}
+}
+
+// unify is the type of a sum of t and o, false when they can't be added.
+func unify(t, o dimType) (dimType, bool) {
+	switch {
+	case t.flex || o.flex:
+		return dimType{}, false
+	case t == o:
+		return t, true
+	case t == typePercent && (o == typeLength || o == typeAngle):
+		return o, true
+	case o == typePercent && (t == typeLength || t == typeAngle):
+		return t, true
+	}
+	return dimType{}, false
+}
+
+func (t dimType) String() string {
+	switch t {
+	case typeNumber:
+		return "a number"
+	case typeLength:
+		return "a length"
+	case typeAngle:
+		return "an angle"
+	case typePercent:
+		return "a percentage"
+	case typeFlex:
+		return "a flex value"
+	}
+	return "a product of units"
+}
+
+// mathTerm is factor times what op makes of args.
+type mathTerm struct {
 	factor float64
-	most   bool
+	op     style.CalcOp
 	args   []Dim
 }
 
@@ -95,26 +142,71 @@ type Units struct {
 	Rel     [relUnits]float64
 }
 
-// IsNumber reports whether d is a plain number.
-func (d Dim) IsNumber() bool { return d.kind == dimNumber }
+// IsNumber reports whether d is a number no percentage is in.
+func (d Dim) IsNumber() bool { return d.typ == typeNumber && !d.pct }
 
 // HasPercent reports whether d depends on a percentage.
-func (d Dim) HasPercent() bool { return d.kind&dimPercent != 0 }
+func (d Dim) HasPercent() bool { return d.pct }
 
 // IsFlex reports whether d is a fr value.
-func (d Dim) IsFlex() bool { return d.kind == dimFlex }
+func (d Dim) IsFlex() bool { return d.typ.flex }
+
+// IsAngle reports whether d is an angle, a percentage in it or not.
+func (d Dim) IsAngle() bool { return d.typ == typeAngle }
+
+// value is d's part in the unit of its type: Px of a length, Deg of an
+// angle, Num of the rest.
+func (d Dim) value() float64 {
+	switch d.typ {
+	case typeLength:
+		return d.Px
+	case typeAngle:
+		return d.Deg
+	}
+	return d.Num
+}
+
+func (d *Dim) addValue(v float64) {
+	switch d.typ {
+	case typeLength:
+		d.Px += v
+	case typeAngle:
+		d.Deg += v
+	default:
+		d.Num += v
+	}
+}
+
+// constant is d's value when nothing is left to resolve.
+func (d Dim) constant() (float64, bool) {
+	if d.pct || d.typ.flex || d.Em != 0 || d.Rem != 0 || d.rel != 0 || len(d.terms) > 0 {
+		return 0, false
+	}
+	return d.value(), true
+}
+
+func dimValue(typ dimType, v float64) Dim {
+	switch typ {
+	case typeLength:
+		return Dim{Px: v, typ: typ}
+	case typeAngle:
+		return Dim{Deg: v, typ: typ}
+	}
+	return Dim{Num: v, typ: typ}
+}
 
 func (d Dim) add(o Dim, sign float64) (Dim, error) {
-	if (d.kind == dimNumber) != (o.kind == dimNumber) {
-		return Dim{}, fmt.Errorf("calc() can't add a number to a length")
-	}
-	if (d.kind|o.kind)&dimFlex != 0 {
-		return Dim{}, fmt.Errorf("fr can't be used in calc()")
+	typ, ok := unify(d.typ, o.typ)
+	if !ok {
+		if d.typ.flex || o.typ.flex {
+			return Dim{}, fmt.Errorf("fr can't be used in calc()")
+		}
+		return Dim{}, fmt.Errorf("calc() can't add %s to %s", o.typ, d.typ)
 	}
 	sum := Dim{
 		Num: d.Num + sign*o.Num, Px: d.Px + sign*o.Px, Pct: d.Pct + sign*o.Pct,
-		Em: d.Em + sign*o.Em, Rem: d.Rem + sign*o.Rem,
-		rel: d.rel | o.rel, kind: d.kind | o.kind,
+		Em: d.Em + sign*o.Em, Rem: d.Rem + sign*o.Rem, Deg: d.Deg + sign*o.Deg,
+		rel: d.rel | o.rel, typ: typ, pct: d.pct || o.pct,
 	}
 	if sum.rel != 0 {
 		for i := range sum.Rel {
@@ -127,12 +219,20 @@ func (d Dim) add(o Dim, sign float64) (Dim, error) {
 	return sum, nil
 }
 
+// scale is d times f. A part d doesn't have stays 0 when f is infinite.
 func (d Dim) scale(f float64) Dim {
-	out := Dim{Num: d.Num * f, Px: d.Px * f, Pct: d.Pct * f, Em: d.Em * f, Rem: d.Rem * f, Fr: d.Fr * f,
-		rel: d.rel, kind: d.kind}
+	finite := !math.IsInf(f, 0) && !math.IsNaN(f)
+	mul := func(v float64) float64 {
+		if v == 0 && !finite {
+			return v
+		}
+		return v * f
+	}
+	out := Dim{Num: mul(d.Num), Px: mul(d.Px), Pct: mul(d.Pct), Em: mul(d.Em), Rem: mul(d.Rem), Fr: mul(d.Fr),
+		Deg: mul(d.Deg), rel: d.rel, typ: d.typ, pct: d.pct}
 	if d.rel != 0 {
 		for i := range d.Rel {
-			out.Rel[i] = d.Rel[i] * f
+			out.Rel[i] = mul(d.Rel[i])
 		}
 	}
 	if len(d.terms) > 0 {
@@ -144,17 +244,64 @@ func (d Dim) scale(f float64) Dim {
 	return out
 }
 
-// Absolute resolves the relative units against u, leaving Px and Pct,
-// and works out each min(), max() and clamp() no percentage is in.
-func (d Dim) Absolute(u *Units) Dim {
-	if d.kind == dimNumber {
-		return d
+// multiply is d times o, or divided by o, worked out at once when it can
+// be.
+func (d Dim) multiply(o Dim, divide bool) (Dim, error) {
+	if d.typ.flex || o.typ.flex {
+		return Dim{}, fmt.Errorf("fr can't be used in calc()")
 	}
-	d.Px += d.Em*u.Em + d.Rem*u.Rem
-	d.Em, d.Rem = 0, 0
+	sign, op := int8(1), style.CalcMul
+	if divide {
+		sign, op = -1, style.CalcDiv
+	}
+	typ := d.typ.times(o.typ, sign)
+	ov, oc := o.constant()
+	switch {
+	case oc && o.typ == typeNumber && divide:
+		return d.scale(1 / ov), nil
+	case oc && o.typ == typeNumber:
+		return d.scale(ov), nil
+	}
+	if dv, dc := d.constant(); dc && d.typ == typeNumber && !divide {
+		return o.scale(dv), nil
+	}
+	return node(op, typ, d, o), nil
+}
+
+// node is op over args, of type typ: worked out at once when every
+// argument is known, a term otherwise.
+func node(op style.CalcOp, typ dimType, args ...Dim) Dim {
+	vals := make([]float64, len(args))
+	known := true
+	for i, a := range args {
+		vals[i], known = a.constant()
+		if !known {
+			break
+		}
+	}
+	if known {
+		return dimValue(typ, op.Apply(vals))
+	}
+	out := Dim{terms: []mathTerm{{factor: 1, op: op, args: args}}, typ: typ}
+	for _, a := range args {
+		out.rel |= a.rel
+		out.pct = out.pct || a.pct
+	}
+	return out
+}
+
+// Absolute resolves the relative units against u, leaving Px and Pct,
+// and works out each math function no percentage is in.
+func (d Dim) Absolute(u *Units) Dim {
+	if d.Em != 0 || d.Rem != 0 {
+		d.Px += d.Em*u.Em + d.Rem*u.Rem
+		d.Em, d.Rem = 0, 0
+	}
 	if d.rel != 0 {
 		for i, n := range d.Rel {
-			d.Px += n * u.Rel[i]
+			if n != 0 {
+				d.Px += n * u.Rel[i]
+			}
 		}
 		d.Rel, d.rel = [relUnits]float64{}, 0
 	}
@@ -165,42 +312,37 @@ func (d Dim) Absolute(u *Units) Dim {
 	d.terms = nil
 	for _, t := range terms {
 		args := make([]Dim, len(t.args))
+		vals := make([]float64, len(t.args))
 		known := true
 		for i, a := range t.args {
 			args[i] = a.Absolute(u)
-			known = known && args[i].Pct == 0 && len(args[i].terms) == 0
+			var ok bool
+			vals[i], ok = args[i].constant()
+			known = known && ok
 		}
 		if !known {
-			d.terms = append(d.terms, boundTerm{factor: t.factor, most: t.most, args: args})
+			d.terms = append(d.terms, mathTerm{factor: t.factor, op: t.op, args: args})
 			continue
 		}
-		v := args[0].Px
-		for _, a := range args[1:] {
-			if t.most {
-				v = max(v, a.Px)
-			} else {
-				v = min(v, a.Px)
-			}
-		}
-		d.Px += t.factor * v
+		d.addValue(t.factor * t.op.Apply(vals))
 	}
 	return d
 }
 
-// Resolve returns d in points against basis, the length 100% stands for.
-// The relative units must be resolved first (Absolute).
+// Resolve returns d against basis, what 100% stands for, NaN and
+// infinities left as they are. The relative units must be resolved
+// first (Absolute).
 func (d Dim) Resolve(basis float64) float64 {
-	v := d.Px + d.Pct*basis/100
+	v := d.value()
+	if d.Pct != 0 {
+		v += d.Pct * basis / 100
+	}
 	for _, t := range d.terms {
-		best := t.args[0].Resolve(basis)
-		for _, a := range t.args[1:] {
-			if t.most {
-				best = max(best, a.Resolve(basis))
-			} else {
-				best = min(best, a.Resolve(basis))
-			}
+		vals := make([]float64, len(t.args))
+		for i, a := range t.args {
+			vals[i] = a.Resolve(basis)
 		}
-		v += t.factor * best
+		v += t.factor * t.op.Apply(vals)
 	}
 	return v
 }
@@ -211,91 +353,57 @@ func (d Dim) Resolve(basis float64) float64 {
 var absoluteUnits = map[string]float64{"px": 1, "in": 96, "cm": 96 / 2.54, "mm": 96 / 25.4, "q": 96 / 101.6,
 	"pt": 96.0 / 72, "pc": 16}
 
-// parseDim reads one component as a length, percentage, number or flex
-// value, calc(), min(), max() and clamp() included.
+// parseDim reads one component as a length, percentage, number, angle or
+// flex value, math functions included.
 func parseDim(c Component) (Dim, error) {
+	d, err := dimOf(c)
+	if err != nil {
+		return Dim{}, err
+	}
+	switch d.typ {
+	case typeNumber, typeLength, typeAngle, typePercent, typeFlex:
+		return d, nil
+	}
+	return Dim{}, fmt.Errorf("%s() makes %s", c.Text, d.typ)
+}
+
+// dimOf is parseDim without the check that the value ends as one type, a
+// part of a math function.
+func dimOf(c Component) (Dim, error) {
 	switch c.Kind {
 	case Number:
-		return Dim{Num: c.Num, kind: dimNumber}, nil
+		return Dim{Num: c.Num}, nil
 	case Percentage:
-		return Dim{Pct: c.Num, kind: dimPercent}, nil
+		return Dim{Pct: c.Num, typ: typePercent, pct: true}, nil
 	case Dimension:
 		unit := strings.ToLower(c.Unit)
 		if px, ok := absoluteUnits[unit]; ok {
-			return Dim{Px: c.Num * px, kind: dimLength}, nil
+			return Dim{Px: c.Num * px, typ: typeLength}, nil
+		}
+		if deg, ok := angleUnits[unit]; ok {
+			return Dim{Deg: c.Num * deg, typ: typeAngle}, nil
 		}
 		switch unit {
 		case "em":
-			return Dim{Em: c.Num, kind: dimLength}, nil
+			return Dim{Em: c.Num, typ: typeLength}, nil
 		case unitRem:
-			return Dim{Rem: c.Num, kind: dimLength}, nil
+			return Dim{Rem: c.Num, typ: typeLength}, nil
 		case "fr":
-			return Dim{Fr: c.Num, kind: dimFlex}, nil
+			return Dim{Fr: c.Num, typ: typeFlex}, nil
 		}
 		if u, ok := relativeUnits[unit]; ok {
-			d := Dim{rel: 1 << u, kind: dimLength}
+			d := Dim{rel: 1 << u, typ: typeLength}
 			d.Rel[u] = c.Num
 			return d, nil
 		}
 		return Dim{}, fmt.Errorf("unit %q is not supported", c.Unit)
 	case Function:
-		switch strings.ToLower(c.Text) {
-		case fnCalc:
-			return parseCalc(c.Args)
-		case "min", "max", "clamp":
-			return parseBound(strings.ToLower(c.Text), c.Args)
-		}
-		return Dim{}, fmt.Errorf("%s() is not supported here", c.Text)
+		return parseMath(strings.ToLower(c.Text), c.Args)
 	case EOF, Ident, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Whitespace, CDO, CDC, Colon, Semicolon,
 		Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
 		// nothing special for these tokens
 	}
 	return Dim{}, fmt.Errorf("expected a length, found %q", c.String())
-}
-
-// parseBound reads min(), max() or clamp(): each argument a calc() sum,
-// all numbers or all lengths and percentages.
-func parseBound(name string, args []Component) (Dim, error) {
-	var of []Dim
-	for _, arg := range splitOn(args, func(c Component) bool { return c.Kind == Comma }) {
-		d, err := parseCalc(arg)
-		if err != nil {
-			return Dim{}, fmt.Errorf("%s(): %w", name, err)
-		}
-		if d.IsFlex() || len(of) > 0 && d.IsNumber() != of[0].IsNumber() {
-			return Dim{}, fmt.Errorf("%s() takes numbers, or lengths and percentages", name)
-		}
-		of = append(of, d)
-	}
-	if name == "clamp" {
-		if len(of) != 3 {
-			return Dim{}, fmt.Errorf("clamp() takes a minimum, a value and a maximum")
-		}
-		return bound(true, of[0], bound(false, of[1], of[2])), nil
-	}
-	return bound(name == "max", of...), nil
-}
-
-// bound is the least of args, or the greatest when most, worked out at
-// once when they are numbers.
-func bound(most bool, args ...Dim) Dim {
-	out := Dim{terms: []boundTerm{{factor: 1, most: most, args: args}}}
-	for _, a := range args {
-		out.kind |= a.kind
-		out.rel |= a.rel
-	}
-	if out.kind != dimNumber {
-		return out
-	}
-	v := args[0].Num
-	for _, a := range args[1:] {
-		if most {
-			v = max(v, a.Num)
-		} else {
-			v = min(v, a.Num)
-		}
-	}
-	return Dim{Num: v, kind: dimNumber}
 }
 
 func parseCalc(args []Component) (Dim, error) {
@@ -377,19 +485,8 @@ func (p *calcParser) product() (Dim, error) {
 		if o, err = p.value(); err != nil {
 			return Dim{}, err
 		}
-		switch {
-		case op == "/" && !o.IsNumber():
-			return Dim{}, fmt.Errorf("calc() can only divide by a number")
-		case op == "/" && o.Num == 0:
-			return Dim{}, fmt.Errorf("calc() divides by zero")
-		case op == "/":
-			d = d.scale(1 / o.Num)
-		case o.IsNumber():
-			d = d.scale(o.Num)
-		case d.IsNumber():
-			d = o.scale(d.Num)
-		default:
-			return Dim{}, fmt.Errorf("calc() can't multiply two lengths")
+		if d, err = d.multiply(o, op == "/"); err != nil {
+			return Dim{}, err
 		}
 	}
 }
@@ -403,7 +500,14 @@ func (p *calcParser) value() (Dim, error) {
 	if c.Kind == LParen {
 		return parseCalc(c.Args)
 	}
-	return parseDim(c)
+	if v, ok := mathConstants[strings.ToLower(c.Text)]; ok && c.Kind == Ident {
+		return Dim{Num: v}, nil
+	}
+	d, err := dimOf(c)
+	if err == nil && d.IsFlex() {
+		return Dim{}, fmt.Errorf("fr can't be used in calc()")
+	}
+	return d, err
 }
 
 // Color is a colour in sRGB, each channel 0–1, alpha not premultiplied.
@@ -654,24 +758,17 @@ func hue(c Component) (float64, error) {
 	return 0, fmt.Errorf("bad hue %q", c.String())
 }
 
-// angle reads an angle in degrees.
+// angle reads an angle in degrees: 0, an angle or a math function of
+// angles, its relative units, if any, of nothing.
 func angle(c Component) (float64, error) {
 	if c.Kind == Number && c.Num == 0 {
 		return 0, nil
 	}
-	if c.Kind == Dimension {
-		switch strings.ToLower(c.Unit) {
-		case "deg":
-			return c.Num, nil
-		case "rad":
-			return c.Num * 180 / math.Pi, nil
-		case "grad":
-			return c.Num * 0.9, nil
-		case "turn":
-			return c.Num * 360, nil
-		}
+	d, err := parseDim(c)
+	if err != nil || d.typ != typeAngle || d.pct {
+		return 0, fmt.Errorf("expected an angle, found %q", c.String())
 	}
-	return 0, fmt.Errorf("expected an angle, found %q", c.String())
+	return float64(style.Finite(d.Absolute(&Units{}).Resolve(0), math.MaxFloat32)), nil
 }
 
 // duration reads a time in seconds.

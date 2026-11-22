@@ -33,72 +33,10 @@ type Length struct {
 	// IsPercent is set when the value had a percentage, 0% included:
 	// 0% and 0px differ where the reference size is indefinite.
 	IsPercent bool
-	// Calc is set for a min(), max() or clamp() over percentages, which
-	// no Px and Percent say: Px is then its value against nothing.
+	// Calc is set for a math function over percentages, min() or round()
+	// say, which no Px and Percent say: Px is then its value against
+	// nothing.
 	Calc unique.Handle[Calc]
-}
-
-// CalcSteps is how many steps a Calc holds.
-const CalcSteps = 16
-
-// Calc is a length-percentage with the least or the greatest of others
-// in it, as the N steps that work it out on a stack. One value is one
-// Handle, so lengths compare as their fields.
-type Calc struct {
-	Steps [CalcSteps]CalcStep
-	N     int
-}
-
-// CalcStep is one step of a Calc: CalcPush puts Px and Percent of the
-// reference on the stack, CalcMin, CalcMax and CalcSum replace its top N
-// values by their least, greatest or sum, and CalcScale multiplies its
-// top by Px.
-type CalcStep struct {
-	Op          CalcOp
-	N           int
-	Px, Percent float32
-}
-
-type CalcOp uint8
-
-const (
-	CalcPush CalcOp = iota
-	CalcMin
-	CalcMax
-	CalcSum
-	CalcScale
-)
-
-// At is the value against ref, the length 100% stands for.
-func (c *Calc) At(ref float32) float32 {
-	var fixed [CalcSteps]float32
-	stack := fixed[:0]
-	for _, s := range c.Steps[:c.N] {
-		switch s.Op {
-		case CalcPush:
-			stack = append(stack, s.Px+s.Percent*ref/100)
-			continue
-		case CalcScale:
-			stack[len(stack)-1] *= s.Px
-			continue
-		case CalcMin, CalcMax, CalcSum:
-		}
-		of := stack[len(stack)-s.N:]
-		v := of[0]
-		for _, o := range of[1:] {
-			switch s.Op {
-			case CalcMin:
-				v = min(v, o)
-			case CalcMax:
-				v = max(v, o)
-			case CalcSum:
-				v += o
-			case CalcPush, CalcScale:
-			}
-		}
-		stack = append(stack[:len(stack)-s.N], v)
-	}
-	return stack[0]
 }
 
 func Px(v float32) Length      { return Length{Kind: Fixed, Px: v} }

@@ -121,7 +121,7 @@ func filled(t *testing.T) style.Computed {
 func fill(t *testing.T, v reflect.Value, styles int) {
 	t.Helper()
 	if v.Type() == reflect.TypeFor[unique.Handle[style.Calc]]() {
-		v.Set(reflect.ValueOf(unique.Make(style.Calc{N: 1, Steps: [style.CalcSteps]style.CalcStep{{Px: 1.5}}})))
+		v.Set(reflect.ValueOf(unique.Make(style.NewCalc([]style.CalcStep{{Px: 1.5}}))))
 		return
 	}
 	require.True(t, v.CanSet(), "an unexported field of %s", v.Type())
@@ -187,7 +187,7 @@ func change(t *testing.T, v reflect.Value, path string, changed func(path string
 		v.Set(old)
 	}
 	if v.Type() == reflect.TypeFor[unique.Handle[style.Calc]]() {
-		try(" another", reflect.ValueOf(unique.Make(style.Calc{N: 1, Steps: [style.CalcSteps]style.CalcStep{{Px: 7}}})))
+		try(" another", reflect.ValueOf(unique.Make(style.NewCalc([]style.CalcStep{{Px: 7}}))))
 		return
 	}
 	switch v.Kind() {

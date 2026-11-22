@@ -667,7 +667,7 @@ func mediaLengthOf(v []Component) (mediaValue, bool) {
 		return mediaValue{}, true
 	case v[0].Kind == Dimension || v[0].Kind == Function:
 		d, err := parseDim(v[0])
-		if err != nil || d.kind != dimLength || d.rel&fontUnits != 0 {
+		if err != nil || d.typ != typeLength || d.pct || d.rel&fontUnits != 0 {
 			break
 		}
 		if d.rel == 0 && len(d.terms) == 0 {

@@ -111,7 +111,7 @@ func gradientSamples(g *style.Gradient, span float32) []sample {
 	for i, s := range g.Stops {
 		switch {
 		case s.Placed:
-			at[i], placed[i] = s.At.Px+s.At.Percent*span/100, true
+			at[i], placed[i] = s.At.At(span), true
 		case i == 0:
 			at[i], placed[i] = 0, true
 		case i == n-1:

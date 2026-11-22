@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unique"
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -1101,12 +1102,30 @@ func (x *ctx) length(c Component) style.Length {
 		return style.Length{Kind: style.Fr, Px: float32(d.Fr)}
 	}
 	d = d.Absolute(x.units(&d))
-	l := style.Length{Kind: style.Fixed, Px: float32(d.Px), Percent: float32(d.Pct), IsPercent: d.HasPercent()}
 	if len(d.terms) > 0 {
-		l.Px, l.Percent = float32(d.Resolve(0)), 0
-		l.Calc, l.IsPercent = calcOf(d)
+		return style.Length{Kind: style.Fixed, Px: style.Finite(d.Resolve(0), style.MaxLength), IsPercent: true,
+			Calc: calcOf(d)}
 	}
-	return l
+	return style.Length{Kind: style.Fixed, Px: style.Finite(d.value(), style.MaxLength),
+		Percent: style.Finite(d.Pct, style.MaxLength), IsPercent: d.HasPercent()}
+}
+
+// number is c as a number on the element, a percentage of 1, against
+// basis when what is a number depends on a percentage.
+func (x *ctx) number(c Component, basis float64) float32 {
+	d, _ := parseDim(c)
+	return style.Finite(d.Absolute(x.units(&d)).Resolve(basis), math.MaxFloat32)
+}
+
+func (x *ctx) num(c Component) float32 { return x.number(c, 1) }
+
+// angle is c in degrees on the element.
+func (x *ctx) angle(c Component) float64 {
+	if c.Kind == Number {
+		return 0
+	}
+	d, _ := parseDim(c)
+	return float64(style.Finite(d.Absolute(x.units(&d)).Resolve(0), math.MaxFloat32))
 }
 
 // units are what d's relative units stand for on the element.
@@ -1188,14 +1207,6 @@ func linear(c Component) color.Color {
 	l := color.FromSRGB([3]float32{float32(s.R), float32(s.G), float32(s.B)})
 	l.A = float32(s.A)
 	return l
-}
-
-func num(c Component) float32 {
-	d, _ := parseDim(c)
-	if d.HasPercent() {
-		return float32(d.Pct / 100)
-	}
-	return float32(d.Num)
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -1373,9 +1384,9 @@ var props = func() map[string]prop {
 			"nowrap": style.NoWrap, "wrap": style.Wrap, "wrap-reverse": style.WrapReverse,
 		}),
 		"flex-grow": field(func(c *style.Computed) *float32 { return &c.Grow },
-			func(_ *ctx, v []Component) float32 { return num(v[0]) }),
+			func(x *ctx, v []Component) float32 { return x.num(v[0]) }),
 		"flex-shrink": field(func(c *style.Computed) *float32 { return &c.Shrink },
-			func(_ *ctx, v []Component) float32 { return num(v[0]) }),
+			func(x *ctx, v []Component) float32 { return x.num(v[0]) }),
 		"flex-basis":      lengthField(func(c *style.Computed) *style.Length { return &c.Basis }),
 		"row-gap":         lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Height }),
 		"column-gap":      lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Width }),
@@ -1464,12 +1475,12 @@ var props = func() map[string]prop {
 				case v[0].Kind == Number:
 					return style.LineHeight{Factor: float32(v[0].Num)}
 				case v[0].Kind == Function:
-					if d, _ := parseDim(v[0]); d.IsNumber() {
-						return style.LineHeight{Factor: float32(d.Num)}
+					if d, _ := parseDim(v[0]); d.typ == typeNumber {
+						return style.LineHeight{Factor: x.number(v[0], float64(x.em))}
 					}
 				}
 				l := x.length(v[0])
-				return style.LineHeight{Px: l.Px + l.Percent*x.em/100}
+				return style.LineHeight{Px: l.At(x.em)}
 			},
 		),
 		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
@@ -1477,6 +1488,9 @@ var props = func() map[string]prop {
 		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
 			func(x *ctx, v []Component) style.WordSpacing {
 				l := x.length(v[0])
+				if l.Calc != (unique.Handle[style.Calc]{}) {
+					return style.WordSpacing{Px: l.At(x.em)}
+				}
 				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
 			}),
 		"color": field(
@@ -1675,8 +1689,8 @@ var props = func() map[string]prop {
 		"outline-color": currentField(style.OutlineCurrent, func(c *style.Computed) *color.Color { return &c.OutlineColor }),
 		"outline-offset": field(func(c *style.Computed) *float32 { return &c.OutlineOffset },
 			func(x *ctx, v []Component) float32 { return x.px(v[0]) }),
-		"opacity": field(func(c *style.Computed) *float32 { return &c.Opacity }, func(_ *ctx, v []Component) float32 {
-			return float32(clamp01(float64(num(v[0]))))
+		"opacity": field(func(c *style.Computed) *float32 { return &c.Opacity }, func(x *ctx, v []Component) float32 {
+			return float32(clamp01(float64(x.num(v[0]))))
 		}),
 		"transform": field(func(c *style.Computed) *[]style.TransformOp { return &c.Transform }, (*ctx).transform),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
@@ -2049,7 +2063,7 @@ func (x *ctx) transform(v []Component) []style.TransformOp {
 
 // transformOp is the transform function name with its arguments a.
 func (x *ctx) transformOp(name string, a []Component) style.TransformOp {
-	rad := func(i int) float32 { d, _ := angle(a[i]); return float32(d * math.Pi / 180) }
+	rad := func(i int) float32 { return float32(x.angle(a[i]) * math.Pi / 180) }
 	var op style.TransformOp
 	switch name {
 	case fnTranslate, fnTranslateX, fnTranslateY:
@@ -2068,13 +2082,13 @@ func (x *ctx) transformOp(name string, a []Component) style.TransformOp {
 		op.A[0], op.A[1] = 1, 1
 		switch name {
 		case fnScaleX:
-			op.A[0] = num(a[0])
+			op.A[0] = x.num(a[0])
 		case fnScaleY:
-			op.A[1] = num(a[0])
+			op.A[1] = x.num(a[0])
 		default:
-			op.A[0], op.A[1] = num(a[0]), num(a[0])
+			op.A[0], op.A[1] = x.num(a[0]), x.num(a[0])
 			if len(a) > 1 {
-				op.A[1] = num(a[1])
+				op.A[1] = x.num(a[1])
 			}
 		}
 	case fnRotate:

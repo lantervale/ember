@@ -52,38 +52,25 @@ func (m *measures) rootStyle() *style.Computed {
 	return dom.Data(m.root).Style
 }
 
-// calcOf is d, absolute and with terms left, as layout reads it; false
-// when it takes more steps than a Calc holds.
-func calcOf(d Dim) (unique.Handle[style.Calc], bool) {
-	steps := calcSteps(nil, d)
-	if len(steps) > style.CalcSteps {
-		return unique.Handle[style.Calc]{}, false
-	}
-	c := style.Calc{N: len(steps)}
-	copy(c.Steps[:], steps)
-	return unique.Make(c), true
+// calcOf is d, absolute and with terms left, as layout reads it.
+func calcOf(d Dim) unique.Handle[style.Calc] {
+	return unique.Make(style.NewCalc(calcSteps(nil, d)))
 }
 
 // calcSteps adds to steps those that leave d's value on the stack.
 func calcSteps(steps []style.CalcStep, d Dim) []style.CalcStep {
 	summed := 0
-	if d.Px != 0 || d.Pct != 0 || len(d.terms) == 0 {
-		steps = append(steps, style.CalcStep{Op: style.CalcPush, Px: float32(d.Px), Percent: float32(d.Pct)})
+	if v := d.value(); v != 0 || d.Pct != 0 || len(d.terms) == 0 {
+		steps = append(steps, style.CalcStep{Op: style.CalcPush, Px: v, Percent: d.Pct})
 		summed++
 	}
 	for _, t := range d.terms {
 		for _, a := range t.args {
 			steps = calcSteps(steps, a)
 		}
-		op := style.CalcMin
-		if t.most {
-			op = style.CalcMax
-		}
-		if len(t.args) > 1 {
-			steps = append(steps, style.CalcStep{Op: op, N: len(t.args)})
-		}
+		steps = append(steps, style.CalcStep{Op: t.op, N: len(t.args)})
 		if t.factor != 1 {
-			steps = append(steps, style.CalcStep{Op: style.CalcScale, Px: float32(t.factor)})
+			steps = append(steps, style.CalcStep{Op: style.CalcScale, Px: t.factor})
 		}
 		summed++
 	}
