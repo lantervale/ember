@@ -1,6 +1,7 @@
 package css //nolint:testpackage // reads a sheet's media lists and the package's unexported test helpers
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -32,33 +33,61 @@ func TestMediaQueriesAreAnsweredAsChromeAnswers(t *testing.T) {
 	}
 }
 
-// TestWhatChromeAsksTheMachineHasAFixedAnswer holds ui's answers where
-// Chrome's change with the machine it runs on, its pointing devices and
-// its user's preferences: a mouse, a light scheme, no preference
-// (decision 0086). The chrome suite only checks Chrome reads each query.
-func TestWhatChromeAsksTheMachineHasAFixedAnswer(t *testing.T) {
-	for _, c := range machineMediaCases {
-		got, warns := holds(c.query, chromeViewport)
-		if got != c.want || warns != "" {
-			t.Errorf("@media %s: %v, want %v %s", c.query, got, c.want, warns)
+// TestWhatChromeAsksTheMachineFollowsTheMedium holds ui's answers where
+// Chrome's are the machine's, its pointing devices and its user's
+// preferences, for each medium the chrome suite has Chrome emulate
+// (TestChromeAnswersTheMachinesQueriesTheSame).
+func TestWhatChromeAsksTheMachineFollowsTheMedium(t *testing.T) {
+	for _, medium := range machineMedia {
+		m := medium.m
+		m.Width, m.Height = chromeViewport.Width, chromeViewport.Height
+		for _, q := range machineQueries {
+			got, warns := holds(q, m)
+			if want := slices.Contains(medium.holding, q); got != want || warns != "" {
+				t.Errorf("@media %s for %+v: %v, want %v %s", q, medium.m, got, want, warns)
+			}
 		}
 	}
 }
 
 //nolint:gochecknoglobals // a test's table
-var machineMediaCases = []struct {
-	query string
-	want  bool
+var machineQueries = []string{
+	"(hover: hover)", "(hover: none)", "(hover)", "(any-hover: hover)", "(any-hover: none)", "(any-hover)",
+	"(pointer: fine)", "(pointer: coarse)", "(pointer: none)", "(pointer)",
+	"(any-pointer: fine)", "(any-pointer: coarse)", "(any-pointer: none)", "(any-pointer)",
+	"(prefers-reduced-motion: reduce)", "(prefers-reduced-motion: no-preference)", "(prefers-reduced-motion)",
+	"(prefers-contrast: no-preference)", "(prefers-contrast: more)", "(prefers-contrast)",
+	"(forced-colors: none)", "(forced-colors: active)", "(forced-colors)",
+	"(prefers-color-scheme: light)", "(prefers-color-scheme: dark)", "(prefers-color-scheme)",
+	"not (prefers-color-scheme: dark)", "(prefers-color-scheme: dark) and (prefers-reduced-motion)",
+}
+
+// machineMedia are the media the machine's queries are answered for,
+// each with the queries that hold.
+//
+//nolint:gochecknoglobals // a test's table
+var machineMedia = []struct {
+	m       Media
+	holding []string
 }{
-	{"(hover: hover)", true}, {"(hover: none)", false}, {"(hover)", true}, {"(any-hover: hover)", true},
-	{"(any-hover: none)", false},
-	{"(pointer: fine)", true}, {"(pointer: coarse)", false}, {"(pointer: none)", false}, {"(pointer)", true},
-	{"(any-pointer: fine)", true}, {"(any-pointer: coarse)", false},
-	{"(prefers-reduced-motion: reduce)", false}, {"(prefers-reduced-motion: no-preference)", true},
-	{"(prefers-reduced-motion)", false},
-	{"(prefers-contrast: no-preference)", true}, {"(prefers-contrast: more)", false}, {"(prefers-contrast)", false},
-	{"(forced-colors: none)", true}, {"(forced-colors: active)", false}, {"(forced-colors)", false},
-	{"(prefers-color-scheme: light)", true}, {"(prefers-color-scheme: dark)", false}, {"(prefers-color-scheme)", true},
+	{Media{}, []string{
+		"(hover: hover)", "(hover)", "(any-hover: hover)", "(any-hover)", "(pointer: fine)", "(pointer)",
+		"(any-pointer: fine)", "(any-pointer)", "(prefers-reduced-motion: no-preference)",
+		"(prefers-contrast: no-preference)", "(forced-colors: none)", "(prefers-color-scheme: light)",
+		"(prefers-color-scheme)", "not (prefers-color-scheme: dark)",
+	}},
+	{Media{Dark: true, ReducedMotion: true}, []string{
+		"(hover: hover)", "(hover)", "(any-hover: hover)", "(any-hover)", "(pointer: fine)", "(pointer)",
+		"(any-pointer: fine)", "(any-pointer)", "(prefers-reduced-motion: reduce)", "(prefers-reduced-motion)",
+		"(prefers-contrast: no-preference)", "(forced-colors: none)", "(prefers-color-scheme: dark)",
+		"(prefers-color-scheme)", "(prefers-color-scheme: dark) and (prefers-reduced-motion)",
+	}},
+	{Media{Touch: true}, []string{
+		"(hover: none)", "(any-hover: hover)", "(any-hover)", "(pointer: coarse)", "(pointer)",
+		"(any-pointer: fine)", "(any-pointer: coarse)", "(any-pointer)", "(prefers-reduced-motion: no-preference)",
+		"(prefers-contrast: no-preference)", "(forced-colors: none)", "(prefers-color-scheme: light)",
+		"(prefers-color-scheme)", "not (prefers-color-scheme: dark)",
+	}},
 }
 
 //nolint:gochecknoglobals // a test's table
@@ -87,6 +116,12 @@ var mediaCases = []struct {
 	{"(700px < width < 900px)", true}, {"(900px > width > 700px)", true}, {"(700px < width > 900px)", false},
 	{"(width: 800px)", true}, {"(min-width: 800px)", true}, {"(max-width: 800px)", true},
 	{"(max-width: 799.9px)", false}, {"(min-width: 100vw)", true}, {"(min-width: 1e2px)", true},
+	{"(min-width: 50vw)", true}, {"(max-width: 99vw)", false}, {"(min-height: 100vh)", true}, {"(width >= 155vh)", true},
+	{"(width >= 156vh)", false}, {"(max-width: 100vmax)", true}, {"(min-width: 155vmin)", true},
+	{"(min-width: 156vmin)", false}, {"(400px < width < 101vw)", true}, {"(min-width: calc(50vw + 1px))", true},
+	{"(min-width: calc(100vw + 1px))", false}, {"(min-height: 10dvh)", true}, {"(min-height: 10svh)", true},
+	{"(min-width: 10lvw)", true}, {"(min-aspect-ratio: 1vw)", false}, {"(min-width: min(50vw, 1000px))", true},
+	{"(min-width: max(101vw, 10px))", false}, {"(min-width: clamp(10px, 99vw, 2000px))", true},
 	{"(width < 800.5px)", true}, {"(MIN-WIDTH: 800PX)", true},
 	{"(min-aspect-ratio: 4/3)", true}, {"(aspect-ratio: 4/3)", false}, {"(max-aspect-ratio: 1/1)", false},
 	{"(min-aspect-ratio: 1)", true}, {"(aspect-ratio > 1.3)", true},

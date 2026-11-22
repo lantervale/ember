@@ -163,7 +163,7 @@ An `@keyframes` rule (`@-webkit-keyframes` under `ui.BrowserSheets()`) names key
 
 Each property runs on the keyframes that set it; a missing 0% or 100% is the element's own value. A keyframe is computed on its element as Chrome does, so `var()`, `em` and `currentColor` in it are the element's, and follow it when its style changes. Colours, `opacity`, `transform`, `box-shadow` and `clip-path` interpolate as transitions do and only repaint; `width`, `height`, their `min-` and `max-`, `top`, `right`, `bottom`, `left`, margins and paddings interpolate between two lengths and lay the element out again; any other property flips halfway through the interval, and `visibility` shows all along while one end is visible. An `!important` declaration of the element wins over its animations, and one in a keyframe is dropped with a warning, as Chrome ignores it; `display`, custom properties and the animation and transition properties don't animate, with a warning.
 
-An animation starts when its name enters the element's list and keeps its time while the other longhands change; it stops when the name leaves, when the element or one above it is `display: none` or taken out, and starts over when the name comes back. It runs on the World's real time, as transitions do, so `RunFrames` steps it the same in a test and a capture, in a paused game too. Each one tells what it did as World events, `ui.AnimationStarted`, `AnimationIterated`, `AnimationEnded` and `AnimationCanceled`, and to the element's callbacks `ui.OnAnimationStart`, `OnAnimationIteration`, `OnAnimationEnd`, `OnAnimationCancel`, which don't bubble. A Document with `ui.ReducedMotion()` answers `prefers-reduced-motion: reduce`, where a page stops its motion itself, as in a browser. `TestAnimationsMatchChrome` compares ten animations with Chrome's paused at five times.
+An animation starts when its name enters the element's list and keeps its time while the other longhands change; it stops when the name leaves, when the element or one above it is `display: none` or taken out, and starts over when the name comes back. It runs on the World's real time, as transitions do, so `RunFrames` steps it the same in a test and a capture, in a paused game too. Each one tells what it did as World events, `ui.AnimationStarted`, `AnimationIterated`, `AnimationEnded` and `AnimationCanceled`, and to the element's callbacks `ui.OnAnimationStart`, `OnAnimationIteration`, `OnAnimationEnd`, `OnAnimationCancel`, which don't bubble. A Document with `ui.ReducedMotion()`, or given the system's [preferences](#the-users-preferences) where the user asked to reduce motion, answers `prefers-reduced-motion: reduce`, where a page stops its motion itself, as in a browser. `TestAnimationsMatchChrome` compares ten animations with Chrome's paused at five times.
 
 ## Pseudo-elements
 
@@ -285,16 +285,38 @@ An `@media` rule applies while its query holds for the Document's viewport: the 
 | Media queries | |
 |---|---|
 | `all`, `screen` | hold; `print` and any other type never do |
-| `width`, `height`, `aspect-ratio`, `resolution`, each with `min-` and `max-` | the viewport and the window's pixel ratio; lengths in `px`, `em` and `rem` (16px), the other absolute units too, and a `calc()` of them, as `(max-width: calc(1120px - 1px))`; ranges as `(width >= 600px)` and `(400px <= width < 900px)` |
+| `width`, `height`, `aspect-ratio`, `resolution`, each with `min-` and `max-` | the viewport and the window's pixel ratio; lengths in `px`, `em` and `rem` (16px), the other absolute units too, the viewport's (`vw`, `vh`, `vmin`, `vmax`, and their `s`, `l` and `d` forms), and a `calc()`, `min()`, `max()` or `clamp()` of them, as `(max-width: calc(1120px - 1px))` or `(min-width: calc(50vh + 100px))`; ranges as `(width >= 600px)` and `(400px <= width < 900px)` |
 | `orientation` | `portrait` when the viewport is as high as wide or higher |
 | `device-width`, `device-height`, `device-aspect-ratio` | the viewport's: ui knows no screen |
-| `hover`, `any-hover`, `pointer`, `any-pointer` | `hover` and `fine`: a mouse |
-| `prefers-color-scheme`, `prefers-contrast`, `forced-colors` | `light`, `no-preference`, `none` |
-| `prefers-reduced-motion` | `no-preference`; `reduce` in a Document with `ui.ReducedMotion()` (`doc.SetReducedMotion`) |
+| `hover`, `pointer` | `hover` and `fine`: a mouse; `none` and `coarse` while the pointer last used is a finger on a touchscreen, until the mouse moves (a trackpad's fingers are the mouse's) |
+| `any-hover`, `any-pointer` | `hover` and `fine`, and `coarse` too after a finger on a touchscreen |
+| `prefers-color-scheme` | `light`; [the program's or the system's](#the-users-preferences) |
+| `prefers-reduced-motion` | `no-preference`; [the program's or the system's](#the-users-preferences) |
+| `prefers-contrast`, `forced-colors` | `no-preference`, `none` |
 | `color`, `monochrome`, `grid` | 8, 0, 0 |
 | `and`, `,`, `not`, `only`, `or` between conditions in parentheses, `@media` inside `@media` | as in Chrome |
 
-A feature ui doesn't know makes its query false, as in Chrome, with a warning; the other queries of the list still count. Every answer is Chrome's for the same viewport (`TestChromeAnswersMediaQueriesTheSame`).
+A feature ui doesn't know makes its query false, as in Chrome, with a warning; the other queries of the list still count. Every answer is Chrome's for the same viewport and the same medium (`TestChromeAnswersMediaQueriesTheSame`, `TestChromeAnswersTheMachinesQueriesTheSame`).
+
+### The user's preferences
+
+Decision [0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md).
+
+A Document answers light and no preference, the same on every machine, until the program says otherwise. Given the system's [preferences](../03-windows/README.md#the-systems-appearance-and-languages), it answers as the user set their system, and restyles where a rule asks when they change it:
+
+```go
+prefs := platform.NewPreferences()
+doc := ui.NewDocument(ui.Stylesheet(files, "ui/menu.css"), ui.Preferences(prefs))
+win.Add(doc)
+w := ember.New().AddEntities(win, prefs)
+```
+
+```css
+@media (prefers-color-scheme: dark) { :root { --page: #1e1f24; --ink: #e8e8ea; } }
+@media (prefers-reduced-motion: reduce) { .card { animation: none; } }
+```
+
+The program's own answer wins: `ui.ColorScheme(platform.AppearanceDark)` (`doc.SetColorScheme`, `platform.AppearanceUnknown` to follow the system again) for a game with a theme switch of its own, and `ui.ReducedMotion()` (`doc.SetReducedMotion`). `doc.ColorScheme()` and `doc.ReducedMotion()` read the answer; a Document in an iframe answers as its host unless it has its own. A test sets the system with `prefs.SyncAppearance` and `prefs.SyncMotion`. The `color-scheme` property and `light-dark()` are not read: a dark scheme changes only what the sheets' rules say.
 
 ## Container queries
 

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/css"
 )
 
 // TestMain lets the test binary stand for Chrome when fakeChrome asks it
@@ -74,19 +75,20 @@ func fakeChrome(t *testing.T, broken bool) {
 
 func TestAChromeKilledAtTeardownAfterItsWorkStillCounts(t *testing.T) {
 	fakeChrome(t, false)
-	out, err := runRaw([]byte("<html></html>"), geom.V2(100, 100), "--dump-dom")
+	out, err := runRaw([]byte("<html></html>"), geom.V2(100, 100), "--dump-dom", css.Media{})
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "done")
 
 	shot := filepath.Join(t.TempDir(), "page.png")
-	_, err = runRaw([]byte("<html></html>"), geom.V2(4, 4), "--screenshot="+shot)
+	_, err = runRaw([]byte("<html></html>"), geom.V2(4, 4), "--screenshot="+shot, css.Media{})
 	require.NoError(t, err, "the picture was written before teardown")
 }
 
 func TestAChromeThatFailsBeforeItsWorkIsAnError(t *testing.T) {
 	fakeChrome(t, true)
-	_, err := runRaw([]byte("<html></html>"), geom.V2(100, 100), "--dump-dom")
+	_, err := runRaw([]byte("<html></html>"), geom.V2(100, 100), "--dump-dom", css.Media{})
 	assert.Error(t, err)
-	_, err = runRaw([]byte("<html></html>"), geom.V2(4, 4), "--screenshot="+filepath.Join(t.TempDir(), "page.png"))
+	shot := filepath.Join(t.TempDir(), "page.png")
+	_, err = runRaw([]byte("<html></html>"), geom.V2(4, 4), "--screenshot="+shot, css.Media{})
 	assert.Error(t, err)
 }
