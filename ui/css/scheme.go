@@ -124,7 +124,7 @@ func parseLightDark(args []Component) (Color, error) {
 func inScheme(v []Component, dark bool) []Component {
 	var out []Component
 	for i, c := range v {
-		r, ok := resolved(c, dark)
+		r, ok := schemeResolved(c, dark)
 		if !ok {
 			continue
 		}
@@ -140,9 +140,9 @@ func inScheme(v []Component, dark bool) []Component {
 	return out
 }
 
-// resolved is c resolved in a scheme, false when the scheme changes
+// schemeResolved is c resolved in a scheme, false when the scheme changes
 // nothing of it.
-func resolved(c Component, dark bool) (Component, bool) {
+func schemeResolved(c Component, dark bool) (Component, bool) {
 	switch {
 	case c.Kind == Function && strings.EqualFold(c.Text, "light-dark"):
 		light, d, ok := lightDark(c.Args)
@@ -153,7 +153,7 @@ func resolved(c Component, dark bool) (Component, bool) {
 		if dark {
 			pick = d
 		}
-		if r, deeper := resolved(pick, dark); deeper {
+		if r, deeper := schemeResolved(pick, dark); deeper {
 			return r, true
 		}
 		return pick, true
