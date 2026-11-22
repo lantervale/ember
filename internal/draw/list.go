@@ -308,6 +308,14 @@ func (c *List) SetModulate(m color.Color) {
 	c.modulated = m != color.White && m != (color.Color{})
 }
 
+// Modulate is what the colors of what is drawn next are multiplied by.
+func (c *List) Modulate() color.Color {
+	if !c.modulated {
+		return color.White
+	}
+	return c.modulate
+}
+
 func (c *List) emit(vs ...Vertex) {
 	key := int(c.left) + int(c.class)<<OccluderGroups
 	k := float32(key)

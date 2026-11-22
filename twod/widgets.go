@@ -66,6 +66,12 @@ type Canvas struct {
 	// classes are the window's light classes this frame, from 1: the
 	// layers some light Affects that each is under, the innermost first.
 	classes [][]any
+	// kept are the passes of pictures, used of them this frame, and open
+	// the pictures begun and not ended; effects are kept by shader.
+	kept     []*kept
+	keptUsed int
+	open     []*Picture
+	effects  map[string]*effects
 }
 
 // ShowCursor asks for the pointer's look this frame, such as
@@ -315,6 +321,7 @@ func (ws *windows) reset(time float32) {
 		}
 		c.scope = c.scope[:0]
 		c.passes = c.passes[:0]
+		c.resetPictures()
 		c.classes = c.classes[:0]
 		c.cursor = platform.CursorArrow
 	}
