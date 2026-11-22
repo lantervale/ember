@@ -14,6 +14,7 @@ import (
 func TestMacOSSaysItsAppearanceAndLanguagesAndWhenTheAppearanceChanges(t *testing.T) {
 	var failed error
 	var first, forced, back platform.Appearance
+	var motion platform.Motion
 	var languages []string
 	var told, quiet, again bool
 	main(func() {
@@ -24,7 +25,7 @@ func TestMacOSSaysItsAppearanceAndLanguagesAndWhenTheAppearanceChanges(t *testin
 		watchPreferences()
 		var asked time.Time
 		told = systemChanged(&asked)
-		first, languages = systemAppearance(), systemLanguages()
+		first, motion, languages = systemAppearance(), systemMotion(), systemLanguages()
 		quiet = !systemChanged(&asked)
 		other := platform.AppearanceDark
 		if first == platform.AppearanceDark {
@@ -44,6 +45,9 @@ func TestMacOSSaysItsAppearanceAndLanguagesAndWhenTheAppearanceChanges(t *testin
 	}
 	if first == platform.AppearanceUnknown {
 		t.Fatal("macOS knows whether it is light or dark")
+	}
+	if motion == platform.MotionUnknown {
+		t.Fatal("macOS knows whether it reduces motion")
 	}
 	if len(languages) == 0 {
 		t.Fatal("macOS has at least one preferred language")

@@ -14,3 +14,7 @@ func Languages() []string { return FromEnv(os.Getenv) }
 // Appearance is unknown: a Linux desktop says whether it is dark through
 // its settings portal, over D-Bus, which ember does not speak.
 func Appearance() platform.Appearance { return platform.AppearanceUnknown }
+
+// Motion is unknown: GNOME's gtk-enable-animations is read through the
+// same portal.
+func Motion() platform.Motion { return platform.MotionUnknown }

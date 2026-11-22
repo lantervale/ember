@@ -89,9 +89,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an animated property outside colours, `opacity`, `transform`, `box-shadow` and the box's lengths (`font-size`, `letter-spacing`, `border-radius`, `background-position`, `border-width`…) | flips halfway, where Chrome interpolates |
 | `animation-composition`, `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
 | `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
-| `prefers-color-scheme`, `hover`, `pointer` | fixed answers: light, a mouse |
-| `prefers-reduced-motion` from the system | the program sets it: `ui.ReducedMotion()` |
-| viewport units in a media query's length | refused |
+| `prefers-color-scheme` and `prefers-reduced-motion` on Linux and the web | no preference: neither says its scheme or its reduced motion yet, so a Document given `ui.Preferences` answers light and no preference there ([decision 0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)) |
+| the `color-scheme` property, `light-dark()` | refused: a dark scheme changes only what `@media (prefers-color-scheme: dark)` rules say, never the browser sheet's colours or the controls' look |
+| `prefers-contrast`, `forced-colors`, `any-hover: none` on a touch-only device | fixed: no preference, none, and a mouse that hovers is always there |
+| `ex`, `ch` and the font's other units in a media query's length | refused: Chrome measures them in the initial font, ui would take CSS's fallbacks |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
 | `filter` | refused |
 | a `clip-path` inside another's (one on an element held by one) | the inner shape cuts, the outer one only by its bounds ([decision 0119](../99-decisions/0119-a-clip-path-is-a-mask-the-gpu-cuts-by-and-an-outline-the-pointer-is-tested-against.md)) |

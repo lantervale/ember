@@ -20,7 +20,13 @@ import (
 // ask evaluates expr in a bare Chrome page and reads its value into v.
 func ask(t *testing.T, size geom.Vec2, expr string, v any) {
 	t.Helper()
-	raw, err := chrome.Eval(ui.NewDocument(), size, expr)
+	askIn(t, css.Media{}, size, expr, v)
+}
+
+// askIn is ask with Chrome answering the media features as m does.
+func askIn(t *testing.T, m css.Media, size geom.Vec2, expr string, v any) {
+	t.Helper()
+	raw, err := chrome.EvalIn(m, ui.NewDocument(), size, expr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,21 +260,20 @@ func TestChromeAnswersMediaQueriesTheSame(t *testing.T) {
 	t.Logf("%d queries answered as Chrome answers them at %g by %g", len(cases), m.Width, m.Height)
 }
 
-// TestChromeReadsTheQueriesItAsksTheMachine asks Chrome whether it reads
-// the queries ui gives a fixed answer: Chrome's own answer is the
-// machine's, its pointing devices and its user's preferences, so only
-// the reading is compared (decision 0086). A query Chrome reads holds
-// or its negation does; one it doesn't read is false both ways.
-func TestChromeReadsTheQueriesItAsksTheMachine(t *testing.T) {
-	const unknown = "(unknown-thing)"
-	queries := append(css.MachineMediaQueries(), unknown)
+// TestChromeAnswersTheMachinesQueriesTheSame has Chrome emulate each
+// medium of TestWhatChromeAsksTheMachineFollowsTheMedium, its scheme,
+// reduced motion and pointer, in place of the machine's, and asks its
+// matchMedia the queries ui answers for it (decision 0121).
+func TestChromeAnswersTheMachinesQueriesTheSame(t *testing.T) {
+	queries := css.MachineMediaQueries()
 	list, _ := json.Marshal(queries)
-	var read []bool
-	ask(t, geom.V2(800, 513),
-		`return `+string(list)+`.map(q => matchMedia(q).matches !== matchMedia("not " + q).matches);`, &read)
-	for i, q := range queries {
-		if read[i] == (q == unknown) {
-			t.Errorf("@media %s: Chrome reads it %v", q, read[i])
+	for _, medium := range css.MachineMedia() {
+		var got []bool
+		askIn(t, medium.Media, geom.V2(800, 513), `return `+string(list)+`.map(q => matchMedia(q).matches);`, &got)
+		for i, q := range queries {
+			if want := slices.Contains(medium.Holding, q); got[i] != want {
+				t.Errorf("@media %s for %+v: Chrome %v, ui %v", q, medium.Media, got[i], want)
+			}
 		}
 	}
 }

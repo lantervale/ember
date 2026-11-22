@@ -42,6 +42,16 @@ static void emberWatchPreferences(void) {
 		NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 		[center addObserverForName:NSCurrentLocaleDidChangeNotification object:nil queue:nil usingBlock:changed];
 		[center addObserverForName:NSApplicationDidBecomeActiveNotification object:nil queue:nil usingBlock:changed];
+		[[[NSWorkspace sharedWorkspace] notificationCenter]
+			addObserverForName:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil queue:nil
+			usingBlock:changed];
+	}
+}
+
+// 1 full, 2 reduced, as platform.Motion: Accessibility's Reduce motion.
+static int emberMotion(void) {
+	@autoreleasepool {
+		return [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion] ? 2 : 1;
 	}
 }
 
@@ -87,8 +97,8 @@ import (
 	"github.com/lantervale/ember/platform"
 )
 
-// watchPreferences has AppKit note when the appearance or the languages
-// may have changed.
+// watchPreferences has AppKit note when the appearance, the reduced
+// motion setting or the languages may have changed.
 func watchPreferences() { C.emberWatchPreferences() }
 
 // systemChanged reports, once, that the preferences are to read again: at
@@ -98,6 +108,9 @@ func systemChanged(*time.Time) bool { return C.emberTakePrefsChanged() != 0 }
 // systemAppearance is the app's effective appearance, the system's unless
 // the program gave the app one of its own.
 func systemAppearance() platform.Appearance { return platform.Appearance(C.emberAppearance()) }
+
+// systemMotion is whether Accessibility's Display asks to reduce motion.
+func systemMotion() platform.Motion { return platform.Motion(C.emberMotion()) }
 
 // systemLanguages is the user's preferred languages, which macOS names as
 // BCP 47 does.

@@ -50,11 +50,23 @@ func MediaCases() []MediaCase {
 }
 
 // MachineMediaQueries are the queries of
-// TestWhatChromeAsksTheMachineHasAFixedAnswer.
-func MachineMediaQueries() []string {
-	var out []string
-	for _, c := range machineMediaCases {
-		out = append(out, c.query)
+// TestWhatChromeAsksTheMachineFollowsTheMedium.
+func MachineMediaQueries() []string { return machineQueries }
+
+// MachineMedium is a medium of
+// TestWhatChromeAsksTheMachineFollowsTheMedium and the queries that hold
+// for it.
+type MachineMedium struct {
+	Media   Media
+	Holding []string
+}
+
+// MachineMedia are the media of
+// TestWhatChromeAsksTheMachineFollowsTheMedium.
+func MachineMedia() []MachineMedium {
+	var out []MachineMedium
+	for _, m := range machineMedia {
+		out = append(out, MachineMedium{m.m, m.holding})
 	}
 	return out
 }

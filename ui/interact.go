@@ -446,6 +446,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 	d.acts(c)
 	if in := c.Input(); in != nil {
 		dom.SetSelectorAttr(d.html, "data-input-device", in.LastDevice().String())
+		d.notePointer(in)
 		if d.shield {
 			d.pointer(c, d.idleInput())
 		} else {

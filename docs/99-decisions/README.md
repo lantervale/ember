@@ -122,6 +122,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0117 | [A background keeps each longhand's list and paints its layers one by one](0117-a-background-keeps-each-longhands-list-and-paints-its-layers-one-by-one.md) | rendering |
 | 0119 | [A clip-path is a mask the GPU cuts by, and an outline the pointer is tested against](0119-a-clip-path-is-a-mask-the-gpu-cuts-by-and-an-outline-the-pointer-is-tested-against.md) | rendering |
 | 0120 | [Container queries restyle after layout until their answers hold](0120-container-queries-restyle-after-layout-until-their-answers-hold.md) | api |
+| 0121 | [A Document answers media features from the preferences it is given](0121-a-document-answers-media-features-from-the-preferences-it-is-given.md) | api |
 
 ## Writing one
 

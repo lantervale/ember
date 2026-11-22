@@ -377,10 +377,11 @@ type driver struct {
 	// input device.
 	scripted bool
 	windows  world.Group[platform.Windowed]
-	// preferences are the World's, kept as the system's: appearance and
-	// languages as last read, asked the time it was last polled.
+	// preferences are the World's, kept as the system's: appearance,
+	// motion and languages as last read, asked the time it was last polled.
 	preferences world.Group[platform.Preferred]
 	appearance  platform.Appearance
+	motion      platform.Motion
 	languages   []string
 	asked       time.Time
 	natives     map[*platform.Window]*native

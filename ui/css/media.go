@@ -9,15 +9,22 @@ import (
 )
 
 // Media is what @media rules are answered for: the viewport's size in
-// CSS pixels and the device pixels per CSS pixel, 1 when 0. The rest is
-// fixed: a colour screen in a light scheme with a mouse, and no
-// preference for more contrast. ui knows no screen, so the device-*
-// features are the viewport's. ReducedMotion answers
-// prefers-reduced-motion: reduce.
+// CSS pixels and the device pixels per CSS pixel, 1 when 0, and what the
+// user prefers and points with. ui knows no screen, so the device-*
+// features are the viewport's, and the rest is fixed: a colour screen,
+// no preference for more contrast, no forced colours.
 type Media struct {
 	Width, Height float32
 	Resolution    float32
+	// ReducedMotion answers prefers-reduced-motion: reduce, Dark
+	// prefers-color-scheme: dark.
 	ReducedMotion bool
+	Dark          bool
+	// Touch is a pointer that is a finger on the screen: pointer is
+	// coarse and hover none. Else it is a mouse, fine and hovering, which
+	// any-pointer and any-hover always find, any-pointer a coarse one
+	// beside it under Touch.
+	Touch bool
 }
 
 func (m Media) dppx() float64 {
@@ -96,29 +103,17 @@ type mediaBound struct {
 	value   mediaValue
 }
 
-// mediaValue is a number in the feature's own unit, a share of the
-// viewport (vw, vh, vmin, vmax), or a container query's length in units
-// its container measures.
+// mediaValue is a number in the feature's own unit, or a length in units
+// its subject measures: the viewport's, a calc() of them included, or a
+// query container's.
 type mediaValue struct {
-	num  float64
-	unit string
-	dim  *Dim
+	num float64
+	dim *Dim
 }
 
 func (v mediaValue) at(s *subject) float64 {
 	if v.dim != nil {
-		return v.dim.Absolute(s.lengthUnits()).Px
-	}
-	w, h := float64(s.m.Width), float64(s.m.Height)
-	switch v.unit {
-	case "vw":
-		return v.num * w / 100
-	case "vh":
-		return v.num * h / 100
-	case nameVmin:
-		return v.num * min(w, h) / 100
-	case nameVmax:
-		return v.num * max(w, h) / 100
+		return v.dim.Absolute(s.lengthUnits()).Resolve(0)
 	}
 	return v.num
 }
@@ -143,10 +138,27 @@ type mediaSpec struct {
 	word  func(m Media) string
 	words []string
 	off   string
+	// also is a word that holds beside word's, "" for none: an any-
+	// feature's second device.
+	also func(m Media) string
 }
 
 func fixedNumber(n float64) func(Media) float64 { return func(Media) float64 { return n } }
 func fixedWord(w string) func(Media) string     { return func(Media) string { return w } }
+
+// wordIf is a feature's word: yes where on holds for m, else no.
+func wordIf(on func(Media) bool, yes, no string) func(Media) string {
+	return func(m Media) string {
+		if on(m) {
+			return yes
+		}
+		return no
+	}
+}
+
+func (m Media) reduced() bool { return m.ReducedMotion }
+func (m Media) dark() bool    { return m.Dark }
+func (m Media) touch() bool   { return m.Touch }
 
 func viewportRatio(m Media) float64 {
 	if m.Height <= 0 {
@@ -180,24 +192,20 @@ var mediaSpecs = map[string]*mediaSpec{
 		}
 		return "landscape"
 	}},
-	"prefers-color-scheme": {kind: mediaWord, words: []string{"light", "dark"}, word: fixedWord("light")},
+	"prefers-color-scheme": {kind: mediaWord, words: []string{"light", "dark"}, word: wordIf(Media.dark, "dark", "light")},
 	"prefers-reduced-motion": {kind: mediaWord, words: []string{mediaNoPreference, "reduce"},
-		word: func(m Media) string {
-			if m.ReducedMotion {
-				return "reduce"
-			}
-			return mediaNoPreference
-		}, off: mediaNoPreference},
+		word: wordIf(Media.reduced, "reduce", mediaNoPreference), off: mediaNoPreference},
 	"prefers-contrast": {kind: mediaWord, words: []string{mediaNoPreference, "more", "less", "custom"},
 		word: fixedWord(mediaNoPreference), off: mediaNoPreference},
 	"forced-colors": {kind: mediaWord, words: []string{mediaNone, "active"}, word: fixedWord(mediaNone),
 		off: mediaNone},
-	"hover":     {kind: mediaWord, words: []string{mediaNone, "hover"}, word: fixedWord("hover"), off: mediaNone},
+	"hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: wordIf(Media.touch, mediaNone, "hover"),
+		off: mediaNone},
 	"any-hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: fixedWord("hover"), off: mediaNone},
-	"pointer": {kind: mediaWord, words: []string{mediaNone, "coarse", "fine"}, word: fixedWord("fine"),
-		off: mediaNone},
+	"pointer": {kind: mediaWord, words: []string{mediaNone, "coarse", "fine"},
+		word: wordIf(Media.touch, "coarse", "fine"), off: mediaNone},
 	"any-pointer": {kind: mediaWord, words: []string{mediaNone, "coarse", "fine"}, word: fixedWord("fine"),
-		off: mediaNone},
+		also: wordIf(Media.touch, "coarse", ""), off: mediaNone},
 }
 
 // subject is what a condition is answered for: the viewport, or a query
@@ -214,7 +222,9 @@ type subject struct {
 	units *Units
 }
 
-func viewportSubject(m Media) *subject { return &subject{m: m, sized: bothAxes} }
+func viewportSubject(m Media) *subject {
+	return &subject{m: m, sized: bothAxes, units: initialUnits(m)}
+}
 
 func (s *subject) lengthUnits() *Units {
 	if s.units == nil {
@@ -275,11 +285,14 @@ func (c *mediaCond) eval(s *subject) tri {
 	}
 	m := s.m
 	if c.spec.kind == mediaWord {
-		is := c.spec.word(m)
+		is, also := c.spec.word(m), ""
+		if c.spec.also != nil {
+			also = c.spec.also(m)
+		}
 		if c.word == "" {
 			return triOf(is != c.spec.off)
 		}
-		return triOf(is == c.word)
+		return triOf(is == c.word || also == c.word)
 	}
 	is := c.spec.of(m)
 	if len(c.bounds) == 0 {
@@ -595,13 +608,6 @@ func (p *mediaParser) rangeFeature(at Component, toks []Component, isCmp func(Co
 	return c
 }
 
-// lengthUnits are the lengths a media query measures in CSS pixels; an
-// em is 16 of them whatever the page's font.
-//
-//nolint:gochecknoglobals // lookup table
-var lengthUnits = map[string]float64{"px": 1, "em": 16, "rem": 16, "in": 96, "cm": 96 / 2.54, "mm": 96 / 25.4,
-	"q": 96 / 101.6, "pt": 96.0 / 72, "pc": 16}
-
 //nolint:gochecknoglobals // lookup table
 var resolutionUnits = map[string]float64{"dppx": 1, "x": 1, "dpi": 1.0 / 96, "dpcm": 2.54 / 96}
 
@@ -623,7 +629,7 @@ func mediaValueOf(kind mediaValueKind, v []Component, bare bool) (mediaValue, bo
 	unit := strings.ToLower(v[0].Unit)
 	switch kind {
 	case mediaLength:
-		return mediaLengthOf(v, unit)
+		return mediaLengthOf(v)
 	case mediaRatio:
 		switch {
 		case len(v) == 1 && v[0].Kind == Number && v[0].Num >= 0:
@@ -649,22 +655,25 @@ func mediaValueOf(kind mediaValueKind, v []Component, bare bool) (mediaValue, bo
 	return mediaValue{}, false
 }
 
-// mediaLengthOf reads a length feature's value, v[0] in unit: a zero, a
-// calc(), a length of the viewport or one in CSS pixels.
-func mediaLengthOf(v []Component, unit string) (mediaValue, bool) {
+// mediaLengthOf reads a length feature's value: a zero, or a length in
+// absolute units, em and rem of 16 pixels, and the viewport's units, the
+// small, large and dynamic viewports being the one, alone or in a
+// calc(), min(), max() or clamp(). The font's other units are refused:
+// the initial font's ex and ch are its own, not CSS's fallbacks.
+func mediaLengthOf(v []Component) (mediaValue, bool) {
 	switch {
 	case len(v) != 1:
 	case v[0].Kind == Number && v[0].Num == 0:
 		return mediaValue{}, true
-	case v[0].Kind == Function && strings.EqualFold(v[0].Text, fnCalc):
-		if d, err := parseCalc(v[0].Args); err == nil && d.kind == dimLength {
+	case v[0].Kind == Dimension || v[0].Kind == Function:
+		d, err := parseDim(v[0])
+		if err != nil || d.kind != dimLength || d.rel&fontUnits != 0 {
+			break
+		}
+		if d.rel == 0 && len(d.terms) == 0 {
 			return mediaValue{num: d.Px + 16*(d.Em+d.Rem)}, true
 		}
-	case v[0].Kind != Dimension:
-	case slices.Contains([]string{"vw", "vh", nameVmin, nameVmax}, unit):
-		return mediaValue{num: v[0].Num, unit: unit}, true
-	case lengthUnits[unit] != 0:
-		return mediaValue{num: v[0].Num * lengthUnits[unit]}, true
+		return mediaValue{dim: &d}, true
 	}
 	return mediaValue{}, false
 }

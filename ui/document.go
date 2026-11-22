@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/css"
@@ -80,8 +81,13 @@ type Document struct {
 	systemFonts bool
 	// rightDragSelects is whether a drag of the right button selects text.
 	rightDragSelects bool
-	// reducedMotion answers prefers-reduced-motion: reduce.
-	reducedMotion bool
+	// prefs are the system's preferences the Document follows, scheme and
+	// motion the program's answers over them, unknown for none, and touch
+	// whether the pointer last used is a finger on the screen (media.go).
+	prefs  *platform.Preferences
+	scheme platform.Appearance
+	motion platform.Motion
+	touch  bool
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool
@@ -348,7 +354,8 @@ func (d *Document) Layout(size geom.Vec2) {
 	if d.relayout && d.trans.FontsChanged() {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
-	media := css.Media{Width: size.X, Height: size.Y, Resolution: d.fonts.Scale(), ReducedMotion: d.reducedMotion}
+	media := d.medium()
+	media.Width, media.Height, media.Resolution = size.X, size.Y, d.fonts.Scale()
 	if d.trans.SetMedia(media) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
@@ -527,6 +534,7 @@ func init() {
 	}
 	assets.Tree = func(d any) *box.Tree { return docOf(d).tree }
 	assets.Viewport = func(d any) geom.Vec2 { return docOf(d).laidAt }
+	assets.Medium = func(d any) css.Media { return docOf(d).medium() }
 	assets.Path = func(doc any, n *dom.Node) string {
 		leaf := docOf(doc).leaf(n)
 		if leaf == "" {

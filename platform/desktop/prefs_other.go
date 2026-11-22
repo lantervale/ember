@@ -25,4 +25,6 @@ func systemChanged(asked *time.Time) bool {
 
 func systemAppearance() platform.Appearance { return sysprefs.Appearance() }
 
+func systemMotion() platform.Motion { return sysprefs.Motion() }
+
 func systemLanguages() []string { return sysprefs.Languages() }

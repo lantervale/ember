@@ -36,19 +36,6 @@ type AnimationCanceled struct {
 	Elapsed float32
 }
 
-// ReducedMotion has the Document's sheets answer
-// prefers-reduced-motion: reduce, where a page that asks stops or
-// shortens its animations (decision 0114).
-func ReducedMotion() DocumentOption { return func(d *Document) { d.reducedMotion = true } }
-
-// ReducedMotion reports whether the Document answers
-// prefers-reduced-motion: reduce.
-func (d *Document) ReducedMotion() bool { return d.reducedMotion }
-
-// SetReducedMotion changes the answer from the next layout, which styles
-// the tree again where a rule asks.
-func (d *Document) SetReducedMotion(on bool) { d.reducedMotion = on }
-
 // animationEvents queues what the animations did since the last frame,
 // to be emitted and dispatched with the Document's other events.
 func (d *Document) animationEvents() {

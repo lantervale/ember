@@ -4,6 +4,7 @@ package assets
 
 import (
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 )
@@ -40,3 +41,8 @@ var Viewport func(doc any) geom.Vec2 //nolint:gochecknoglobals // a hook ui sets
 // Path is a node's automation path in a ui.Document, "" for one
 // automation doesn't record, for tests to name what they report.
 var Path func(doc any, n *dom.Node) string //nolint:gochecknoglobals // a hook ui sets
+
+// Medium is what a ui.Document answers the media features that aren't
+// its viewport's with: the colour scheme, reduced motion and the pointer,
+// for Chrome to answer them the same.
+var Medium func(doc any) css.Media //nolint:gochecknoglobals // a hook ui sets

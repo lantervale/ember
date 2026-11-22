@@ -169,6 +169,9 @@ func (s *inputFrames) Update(f world.Frame) {
 		if a, changed := p.TakeAppearance(); changed {
 			world.Emit(f.World, platform.AppearanceChanged{Appearance: a})
 		}
+		if m, changed := p.TakeMotion(); changed {
+			world.Emit(f.World, platform.MotionChanged{Motion: m})
+		}
 		if l, changed := p.TakeLanguages(); changed {
 			world.Emit(f.World, platform.LanguagesChanged{Languages: l})
 		}

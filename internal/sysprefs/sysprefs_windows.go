@@ -67,3 +67,22 @@ func Appearance() platform.Appearance {
 	}
 	return platform.AppearanceLight
 }
+
+// Motion is reduced where the user turned Windows' animation effects
+// off, as SPI_GETCLIENTAREAANIMATION reads them; unknown where it can't
+// be asked.
+func Motion() platform.Motion {
+	const clientAreaAnimation = 0x1042 // SPI_GETCLIENTAREAANIMATION
+	ask := syscall.NewLazyDLL("user32.dll").NewProc("SystemParametersInfoW")
+	if ask.Find() != nil {
+		return platform.MotionUnknown
+	}
+	var animate int32
+	if ok, _, _ := ask.Call(clientAreaAnimation, 0, uintptr(unsafe.Pointer(&animate)), 0); ok == 0 {
+		return platform.MotionUnknown
+	}
+	if animate == 0 {
+		return platform.MotionReduced
+	}
+	return platform.MotionFull
+}

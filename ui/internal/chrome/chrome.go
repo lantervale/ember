@@ -27,7 +27,9 @@ import (
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/export"
+	"github.com/lantervale/ember/ui/internal/assets"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/fonts"
@@ -109,7 +111,7 @@ func browser() string {
 // Screenshot writes Chrome's picture of page in a viewport of size
 // points to png, to set beside ember's drawing of the same document.
 func Screenshot(page []byte, size geom.Vec2, out string) error {
-	if _, err := run(page, size, "--screenshot="+out); err != nil {
+	if _, err := run(page, size, "--screenshot="+out, css.Media{}); err != nil {
 		return err
 	}
 	return crop(out, int(size.X*deviceScale+0.5), int(size.Y*deviceScale+0.5))
@@ -151,7 +153,7 @@ func crop(path string, w, h int) error {
 // Boxes lays page out in a viewport of size points, and returns the
 // border boxes of html, body and body's elements in document order.
 func Boxes(page []byte, size geom.Vec2) ([]geom.Rect, error) {
-	rects, _, _, err := boxes(page, size)
+	rects, _, _, err := boxes(page, size, css.Media{})
 	return rects, err
 }
 
@@ -167,8 +169,8 @@ func PageBoxes(head, body string, size geom.Vec2) ([]geom.Rect, error) {
 // columns, its getClientRects: none for a block in one piece, or for an
 // inline element, whose rects are its lines'; and with the ::before and
 // ::after boxes Chrome generated.
-func boxes(page []byte, size geom.Vec2) ([]geom.Rect, [][]geom.Rect, []generatedBox, error) {
-	out, err := run(page, size, dumpDOM)
+func boxes(page []byte, size geom.Vec2, medium css.Media) ([]geom.Rect, [][]geom.Rect, []generatedBox, error) {
+	out, err := run(page, size, dumpDOM, medium)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -208,15 +210,15 @@ func boxes(page []byte, size geom.Vec2) ([]geom.Rect, [][]geom.Rect, []generated
 // run runs one Chrome at a time across test processes: two headless
 // Chromes started together on macOS can fail at teardown. A failed run is
 // tried once more.
-func run(page []byte, size geom.Vec2, action string) ([]byte, error) {
+func run(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, error) {
 	unlock, err := lockChrome()
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	out, err := runOnce(page, size, action)
+	out, err := runOnce(page, size, action, m)
 	if err != nil {
-		out, err = runOnce(page, size, action)
+		out, err = runOnce(page, size, action, m)
 	}
 	return out, err
 }
@@ -364,7 +366,7 @@ func measureMargin() {
 });</script></head><body></body></html>`,
 	)
 	want := geom.V2(800, 600)
-	out, err := runRaw(page, want, dumpDOM)
+	out, err := runRaw(page, want, dumpDOM, css.Media{})
 	if err != nil {
 		return
 	}
@@ -378,17 +380,17 @@ func measureMargin() {
 	}
 }
 
-func runOnce(page []byte, size geom.Vec2, action string) ([]byte, error) {
+func runOnce(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, error) {
 	page, size = fit(page, size, action != dumpDOM)
 	if action == dumpDOM {
 		marginOnce.Do(measureMargin)
 		size = size.Add(margin)
 	}
-	return runRaw(page, size, action)
+	return runRaw(page, size, action, m)
 }
 
 // runRaw runs Chrome once on page with a window of size.
-func runRaw(page []byte, size geom.Vec2, action string) ([]byte, error) {
+func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "ember-chrome-")
 	if err != nil {
 		return nil, err
@@ -415,6 +417,7 @@ func runRaw(page []byte, size geom.Vec2, action string) ([]byte, error) {
 		"--disable-extensions",
 		"--user-data-dir="+filepath.Join(dir, "profile"),
 		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)),
+		blinkSettings(m),
 		"--virtual-time-budget=10000",
 		action,
 		"file://"+file,
@@ -429,6 +432,23 @@ func runRaw(page []byte, size geom.Vec2, action string) ([]byte, error) {
 		return nil, fmt.Errorf("chrome: %w: %s", err, stderr.String())
 	}
 	return out, nil
+}
+
+// blinkSettings has Chrome answer the media features as m does, whatever
+// the machine prefers and points with: headless Chrome reads the
+// system's appearance and devices. The pointer and hover types are
+// Chrome's flags, none 1, coarse 2 and fine 4, none 1 and hover 2.
+func blinkSettings(m css.Media) string {
+	scheme, pointer, hover, pointers := 1, 4, 2, 4
+	if m.Dark {
+		scheme = 0
+	}
+	if m.Touch {
+		pointer, hover, pointers = 2, 1, 6
+	}
+	return fmt.Sprintf("--blink-settings=preferredColorScheme=%d,prefersReducedMotion=%t,primaryPointerType=%d,"+
+		"availablePointerTypes=%d,primaryHoverType=%d,availableHoverTypes=2",
+		scheme, m.ReducedMotion, pointer, pointers, hover)
 }
 
 // done reports whether Chrome finished action before it exited: a whole
@@ -482,7 +502,7 @@ func Match(t testing.TB, d *ui.Document, size geom.Vec2) Report {
 	if err := export.Write(&page, d, export.Head(script)); err != nil {
 		t.Fatal(err)
 	}
-	want, wantParts, wantGenerated, err := boxes(page.Bytes(), size)
+	want, wantParts, wantGenerated, err := boxes(page.Bytes(), size, assets.Medium(d))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,7 +636,7 @@ addEventListener("load", () => document.fonts.ready.then(() => {
 	if err = export.Write(&page, d, export.Head(head)); err != nil {
 		return nil, err
 	}
-	out, err := run(page.Bytes(), size, dumpDOM)
+	out, err := run(page.Bytes(), size, dumpDOM, assets.Medium(d))
 	if err != nil {
 		return nil, err
 	}
@@ -642,8 +662,14 @@ func EvalScaled(d *ui.Document, size geom.Vec2, scale float32, expr string) ([]b
 
 // Eval lays d out in Chrome in a viewport of size points, evaluates the
 // JavaScript expression expr once the fonts are ready, and returns its
-// value as JSON.
+// value as JSON. Chrome answers the media features as d does.
 func Eval(d *ui.Document, size geom.Vec2, expr string) ([]byte, error) {
+	return EvalIn(assets.Medium(d), d, size, expr)
+}
+
+// EvalIn is Eval with Chrome answering the media features as m does: its
+// colour scheme, reduced motion and pointer.
+func EvalIn(m css.Media, d *ui.Document, size geom.Vec2, expr string) ([]byte, error) {
 	head := `<script>
 addEventListener("load", () => document.fonts.ready.then(() => {
 	const out = document.createElement("script");
@@ -657,13 +683,13 @@ addEventListener("load", () => document.fonts.ready.then(() => {
 	if err := export.Write(&page, d, export.Head(head)); err != nil {
 		return nil, err
 	}
-	out, err := run(page.Bytes(), size, dumpDOM)
+	out, err := run(page.Bytes(), size, dumpDOM, m)
 	if err != nil {
 		return nil, err
 	}
-	m := evalJSON.FindSubmatch(out)
-	if m == nil {
+	res := evalJSON.FindSubmatch(out)
+	if res == nil {
 		return nil, fmt.Errorf("chrome: no result in the page:\n%s", out)
 	}
-	return m[1], nil
+	return res[1], nil
 }
