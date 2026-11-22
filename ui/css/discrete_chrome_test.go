@@ -59,26 +59,27 @@ func divs(classes ...string) func(*dom.Node) {
 
 //nolint:gochecknoglobals // a test table
 var widthProps = map[string]func(*style.Computed) string{
-	"border-top-width":  compared["border-top-width"],
-	"border-left-width": func(s *style.Computed) string { return px(s.Border.Left) },
-	"outline-width":     compared["outline-width"],
-	"outline-offset":    compared["outline-offset"],
-	"column-rule-width": func(s *style.Computed) string { return px(s.ColumnRuleWidth) },
-	"border-spacing":    func(s *style.Computed) string { return moved["border-spacing"](s) },
+	"border-top-width":   compared["border-top-width"],
+	"border-left-width":  func(s *style.Computed) string { return px(s.Border.Left) },
+	"border-right-width": func(s *style.Computed) string { return px(s.Border.Right) },
+	"outline-width":      compared["outline-width"],
+	"outline-offset":     compared["outline-offset"],
+	"column-rule-width":  func(s *style.Computed) string { return px(s.ColumnRuleWidth) },
+	"border-spacing":     func(s *style.Computed) string { return moved["border-spacing"](s) },
 }
 
 // TestWidthsSnapToDevicePixelsAsChromes compares border, outline and
 // column-rule widths, outline-offset and border-spacing, given and
 // moving, on displays of one and two pixels a point.
 func TestWidthsSnapToDevicePixelsAsChromes(t *testing.T) {
-	src := `div { border: 4.7px solid; border-left-width: 0.2px; outline: 0.3px solid; outline-offset: -3.7px;
+	src := `div { border: 4.7px solid; border-left-width: 0.2px; border-right-width: 1px; outline: 0.3px solid; outline-offset: -3.7px;
   column-rule: 2.3px solid; border-spacing: 3.7px 0.3px; display: table }
 .t0 { border-top-width: 1px; outline-width: 0px; outline-offset: 0px; border-spacing: 0px; column-rule-width: 1px;
   transition: all 1s linear }
 .t0.on { border-top-width: 11px; outline-width: 10px; outline-offset: -10px; border-spacing: 10px 20px;
   column-rule-width: 6px }
 .s1 { outline-offset: 3.7px; border-spacing: 3.2px }`
-	for _, scale := range []float32{1, 2} {
+	for _, scale := range []float32{1, 1.5, 2} {
 		for _, at := range []float32{0.1, 0.35, 0.65} {
 			t.Run(fmt.Sprint(scale, "x/", at), func(t *testing.T) {
 				matchMovedAt(t, src, divs("s0", "s1", "t0"), widthProps, at, scale)
