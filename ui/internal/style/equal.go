@@ -161,6 +161,7 @@ func (l *Look) equal(o *Look) bool {
 		l.MaskSize == o.MaskSize &&
 		l.MaskRepeat == o.MaskRepeat &&
 		l.MaskPosition == o.MaskPosition &&
+		l.ClipPath.Equal(&o.ClipPath) &&
 		l.ImageRendering == o.ImageRendering &&
 		l.ObjectFit == o.ObjectFit &&
 		l.ObjectPosition == o.ObjectPosition &&

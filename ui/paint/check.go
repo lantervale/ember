@@ -119,18 +119,30 @@ func pictured(kind string, tex *twod.Texture) string {
 	return kind
 }
 
-func (t *tally) push(r geom.Rect, radii [4]float32) {
+func (t *tally) push(kind string, r geom.Rect, values ...float32) {
 	mark := &tally{xf: t.xf}
-	mark.add("clip", r, radii[:]...)
+	mark.add(kind, r, values...)
 	t.clips = append(t.clips, mark.drawn[0].sum)
 }
 
-func (t *tally) PushClip(r geom.Rect)                          { t.push(r, [4]float32{}) }
-func (t *tally) PushClipRounded(r geom.Rect, radii [4]float32) { t.push(r, radii) }
-func (t *tally) PopClip()                                      { t.clips = t.clips[:len(t.clips)-1] }
-func (t *tally) Transform() geom.Transform2D                   { return t.xf }
-func (t *tally) SetTransform(xf geom.Transform2D)              { t.xf = xf }
-func (t *tally) Rect(r geom.Rect, c color.Color)               { t.add("rect", r, rgba(c)...) }
+func (t *tally) PushClip(r geom.Rect)                          { t.push("clip", r) }
+func (t *tally) PushClipRounded(r geom.Rect, radii [4]float32) { t.push("clip", r, radii[:]...) }
+func (t *tally) PushClipMask(r geom.Rect, mask *twod.Texture)  { t.push(pictured("mask", mask), r) }
+
+func (t *tally) pushShape(c *clipShape) {
+	var values []float32
+	for _, contour := range c.path.Contours {
+		values = append(flat(contour), values...)
+	}
+	if c.evenOdd {
+		values = append(values, 1)
+	}
+	t.push("shape", c.bounds, values...)
+}
+func (t *tally) PopClip()                         { t.clips = t.clips[:len(t.clips)-1] }
+func (t *tally) Transform() geom.Transform2D      { return t.xf }
+func (t *tally) SetTransform(xf geom.Transform2D) { t.xf = xf }
+func (t *tally) Rect(r geom.Rect, c color.Color)  { t.add("rect", r, rgba(c)...) }
 func (t *tally) RoundRect(r geom.Rect, k float32, c color.Color) {
 	t.add("round", r, append(rgba(c), k)...)
 }

@@ -21,6 +21,7 @@ type state struct {
 	clip        geom.Rect
 	clipped     bool
 	round       Rounded
+	cut         Cut
 }
 
 func (c *List) state() state {
@@ -38,6 +39,7 @@ func (c *List) state() state {
 		clip,
 		clipped,
 		c.round(),
+		c.cut(),
 	}
 }
 
@@ -171,5 +173,6 @@ func (c *List) merges(b Batch) bool {
 		open.ImageCount == b.ImageCount && slices.Equal(open.Images[:open.ImageCount], b.Images[:b.ImageCount])
 	return !open.alone && open.Mask == nil && open.First+open.Count == b.First &&
 		(open.Atlas == nil || b.Atlas == nil || open.Atlas == b.Atlas) && images &&
-		open.Blend == b.Blend && open.Clipped == b.Clipped && open.Clip == b.Clip && open.Round == b.Round
+		open.Blend == b.Blend && open.Clipped == b.Clipped && open.Clip == b.Clip && open.Round == b.Round &&
+		open.Cut == b.Cut
 }

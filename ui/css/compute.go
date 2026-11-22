@@ -1591,6 +1591,7 @@ var props = func() map[string]prop {
 		"mask-repeat": field(func(c *style.Computed) *style.BackgroundRepeat { return &c.MaskRepeat }, tiling),
 		"mask-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.MaskPosition },
 			(*ctx).position),
+		"clip-path":   field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows),
 		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
 			decorationLine),

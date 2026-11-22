@@ -83,6 +83,11 @@ struct Draw {
 	// bottom-right, bottom-left (decision 0058).
 	round: vec4f,
 	radii: vec4f,
+	// cutU and cutV take a point to the UV of the batch's cut, a mask
+	// whose alpha it shows through, bound as mask; cutU.w is 0 for none
+	// (decision 0119).
+	cutU: vec4f,
+	cutV: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> u: Draw;
@@ -187,6 +192,18 @@ fn roundedClip(pos: vec2f) -> f32 {
 	return cover(roundRect(q, h, r));
 }
 
+// cut is how much of the pixel at pos the batch's mask leaves: none
+// outside it.
+fn cut(pos: vec2f) -> f32 {
+	let p = vec3f(pos / u.scale, 1.0);
+	let uv = vec2f(dot(u.cutU.xyz, p), dot(u.cutV.xyz, p));
+	let a = textureSampleLevel(mask, maskSampler, uv, 0.0).a;
+	if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) {
+		return 0.0;
+	}
+	return a;
+}
+
 fn orb(p: vec2f, R: f32, fill: f32, liquid: vec3f) -> vec4f {
 	let d = length(p) - R;
 	let a = cover(d);
@@ -258,6 +275,9 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 	}
 	if (u.round.z > 0.0) {
 		c.a *= roundedClip(in.pos.xy);
+	}
+	if (u.cutU.w > 0.5) {
+		c.a *= cut(in.pos.xy);
 	}
 {{light}}	if (spread.x != 0.0) {
 		c = vec4f(c.rgb * min(light * exposure.x, vec3f(1.0)), c.a);

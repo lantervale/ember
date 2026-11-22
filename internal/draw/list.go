@@ -142,8 +142,12 @@ type Batch struct {
 	// Round, when set, also cuts what the batch draws to a rounded rect
 	// (decision 0058): the innermost rounded clip over it.
 	Round Rounded
+	// Cut, when set, also cuts what the batch draws to a picture's alpha:
+	// the innermost PushClipMask over it.
+	Cut   Cut
 	Blend Blend
-	// Mask, when set, is a pass whose alpha the batch shows through.
+	// Mask, when set, is a pass whose alpha the batch shows through. A
+	// batch with a Mask has no Cut.
 	Mask *render.Texture
 	// alone keeps the batch to itself: a pass's picture or a render
 	// texture, which the presenter must draw apart.
@@ -437,24 +441,52 @@ type Rounded struct {
 // IsZero reports whether r cuts nothing.
 func (r Rounded) IsZero() bool { return r == Rounded{} }
 
+// Cut is a picture whose alpha a batch is cut by: Mask, stretched over
+// what ToMask takes from the List's space to 0–1 on both axes; nothing
+// shows outside it. The zero Cut cuts nothing.
+type Cut struct {
+	Mask   *render.Texture
+	ToMask geom.Transform2D
+}
+
+// IsZero reports whether c cuts nothing.
+func (c Cut) IsZero() bool { return c.Mask == nil }
+
 // clipState is one clip of the stack: the rect bounding what is drawn,
-// and the innermost rounded rect cutting it.
+// and the innermost rounded rect and picture cutting it.
 type clipState struct {
 	rect  geom.Rect
 	round Rounded
+	cut   Cut
 }
 
 // PushClip bounds drawing to r, within the current clip, until PopClip.
-// A rounded clip around it still rounds what is drawn.
+// A rounded clip or a mask around it still cuts what is drawn.
 func (c *List) PushClip(r geom.Rect) {
 	if c.transformed {
 		r = Bounds(c.transform, r)
 	}
 	s := clipState{rect: r}
 	if n := len(c.clips); n > 0 {
-		s.rect, s.round = Intersect(r, c.clips[n-1].rect), c.clips[n-1].round
+		s.rect, s.round, s.cut = Intersect(r, c.clips[n-1].rect), c.clips[n-1].round, c.clips[n-1].cut
 	}
 	c.clips = append(c.clips, s)
+}
+
+// PushClipMask bounds drawing to r, within the current clip, and cuts it
+// to mask's alpha stretched over r, under any transform, until PopClip.
+// It replaces a mask around it, which then clips as its rect; a rounded
+// clip around it still rounds.
+func (c *List) PushClipMask(r geom.Rect, mask *render.Texture) {
+	c.PushClip(r)
+	if mask == nil || r.W <= 0 || r.H <= 0 {
+		return
+	}
+	toUnit := geom.Transform2D{X: geom.V2(1/r.W, 0), Y: geom.V2(0, 1/r.H), Origin: geom.V2(-r.X/r.W, -r.Y/r.H)}
+	if c.transformed {
+		toUnit = toUnit.Mul(c.transform.Inverse())
+	}
+	c.clips[len(c.clips)-1].cut = Cut{Mask: mask, ToMask: toUnit}
 }
 
 // PushClipRounded bounds drawing to r with its corners rounded by radii
@@ -534,6 +566,14 @@ func (c *List) round() Rounded {
 	return Rounded{}
 }
 
+// cut is the picture the current clip cuts to, zero for none.
+func (c *List) cut() Cut {
+	if n := len(c.clips); n > 0 {
+		return c.clips[n-1].cut
+	}
+	return Cut{}
+}
+
 // Time is the elapsed time, handy for animated widgets.
 func (c *List) Time() float32 { return c.time }
 
@@ -558,6 +598,7 @@ func (c *List) batchImage(atlas *Font, img *render.Texture, verts, n int) {
 		Clip:    clip,
 		Clipped: clipped,
 		Round:   round,
+		Cut:     c.cut(),
 		Blend:   c.blend,
 		alone:   alone,
 	}
@@ -581,7 +622,7 @@ func (c *List) joinLast(
 	fonts := atlas == nil || b.Atlas == atlas || b.Atlas == nil
 	slot := b.slot(img)
 	if b.alone || !fonts || slot < 0 || b.Blend != c.blend || b.Clipped != clipped || b.Clip != clip ||
-		b.Round != round {
+		b.Round != round || b.Cut != c.cut() {
 		return false
 	}
 	if atlas != nil {
@@ -1146,6 +1187,9 @@ func (c *List) Shift(d geom.Vec2) {
 		if !c.Batches[i].Round.IsZero() {
 			c.Batches[i].Round.Rect.X += d.X
 			c.Batches[i].Round.Rect.Y += d.Y
+		}
+		if cut := &c.Batches[i].Cut; !cut.IsZero() {
+			cut.ToMask = cut.ToMask.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: d.Scale(-1)})
 		}
 	}
 }

@@ -40,6 +40,8 @@ func (c *List) Picture(r geom.Rect, p *Pass, m Blend, mask *Pass) {
 	b.Round = c.round()
 	if mask != nil {
 		b.Mask = mask.Target
+	} else {
+		b.Cut = c.cut()
 	}
 	c.Batches = append(c.Batches, b)
 }

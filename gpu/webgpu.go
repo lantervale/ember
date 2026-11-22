@@ -80,6 +80,9 @@ type drawUniforms struct {
 	// rect in points as x, y, w, h, zero w for none, and its top-left,
 	// top-right, bottom-right and bottom-left radii.
 	Round, Radii [4]float32
+	// CutU and CutV are the rows of the batch's Cut: what takes a point to
+	// its mask's UV, CutU's w set when there is one (decision 0119).
+	CutU, CutV [4]float32
 }
 
 type gpuTexture struct {
@@ -415,8 +418,11 @@ func (r *webgpu2D) group(b draw.Batch) (*wgpu.BindGroup, uint32) {
 	var k groupKey
 	k.views[0], k.samplers[0] = r.atlas(b.Atlas).View(), r.samplers[0][0]
 	k.views[1], k.samplers[1] = r.blank.View(), r.samplers[0][0]
-	if b.Mask != nil {
+	switch {
+	case b.Mask != nil:
 		k.views[1], k.samplers[1] = r.image(b.Mask).View(), r.sampler(b.Mask)
+	case !b.Cut.IsZero():
+		k.views[1], k.samplers[1] = r.image(b.Cut.Mask).View(), r.sampler(b.Cut.Mask)
 	}
 	for i := range draw.MaxImages {
 		k.views[2+i], k.samplers[2+i] = r.blank.View(), r.samplers[0][0]
@@ -624,6 +630,11 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 	if t.linear {
 		hdr = 2
 	}
+	var cutU, cutV [4]float32
+	if !b.Cut.IsZero() {
+		m := b.Cut.ToMask
+		cutU, cutV = [4]float32{m.X.X, m.Y.X, m.Origin.X, 1}, [4]float32{m.X.Y, m.Y.Y, m.Origin.Y, 0}
+	}
 	return drawUniforms{
 		Screen:   [2]float32{max(size.X, 1), max(size.Y, 1)},
 		Scale:    sx,
@@ -635,6 +646,8 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 		Targets:  targets,
 		Round:    [4]float32{b.Round.Rect.X, b.Round.Rect.Y, b.Round.Rect.W, b.Round.Rect.H},
 		Radii:    b.Round.Radii,
+		CutU:     cutU,
+		CutV:     cutV,
 	}
 }
 

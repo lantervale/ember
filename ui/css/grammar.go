@@ -414,6 +414,7 @@ var checks = map[string]check{
 	"mask-repeat":           single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
 	"mask-size":             checkBackgroundSize,
 	"mask-position":         checkMaskPosition,
+	"clip-path":             checkClipPath,
 	"text-shadow":           checkTextShadow,
 	"image-rendering":       single(words("auto", "pixelated")),
 	"accent-color":          single(either(words("auto"), colorTerm)),
@@ -467,20 +468,22 @@ func timeTerm(nonNeg bool) term {
 	}
 }
 
-// animated lists what transitions run on: colours, opacity and transforms.
+// animated lists what transitions run on: colours, opacity, transforms,
+// shadows and clip-paths.
 //
 //nolint:gochecknoglobals // lookup table
 var animated = map[string]bool{
 	"color": true, "background-color": true, "border-color": true, "outline-color": true,
 	"border-top-color": true, "border-right-color": true, "border-bottom-color": true, "border-left-color": true,
-	"opacity": true, "transform": true, "box-shadow": true,
+	"opacity": true, "transform": true, "box-shadow": true, "clip-path": true,
 }
 
 func transitionTarget(c Component) error {
 	if c.Kind == Ident && animated[strings.ToLower(c.Text)] {
 		return nil
 	}
-	return fmt.Errorf("transitions run only on colours, opacity, transform and box-shadow, not %q", c.String())
+	return fmt.Errorf("transitions run only on colours, opacity, transform, box-shadow and clip-path, not %q",
+		c.String())
 }
 
 // keyframesName is an @keyframes name: an identifier other than none,

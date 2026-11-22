@@ -133,6 +133,10 @@ func (r *recorder) PushClipRounded(b geom.Rect, radii [4]float32) {
 	r.clips = append(r.clips, b)
 	r.add(op{Kind: "push-round", Rect: b, Radii: radii})
 }
+func (r *recorder) PushClipMask(b geom.Rect, mask *twod.Texture) {
+	r.clips = append(r.clips, b)
+	r.add(op{Kind: "push-mask", Rect: b, Tex: mask})
+}
 func (r *recorder) PopClip() {
 	r.add(op{Kind: "pop"})
 	r.clips = r.clips[:len(r.clips)-1]
