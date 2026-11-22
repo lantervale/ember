@@ -32,7 +32,7 @@ func TestGridShorthandLaysOutAsInChrome(t *testing.T) {
 	cases := map[string]*ui.Document{
 		"rows / columns": styled(page+`.g { grid: 30px 1fr / 100px repeat(2, 1fr) }`,
 			gridOf(labelled("a", "b", "c", "d", "e", "f", "g", "h")...)),
-		"areas": styled(page+`.g { grid: [top] 'h h' 30px [mid] 's m' auto / 120px 1fr
+		"areas": styled(page+`.g { grid: [top] 'h h' 30px [mid] 's m' auto / 120px 1fr }
 .a { grid-area: h } .b { grid-row: mid }`,
 			gridOf(labelled("a", "b", "c", "d")...)),
 		"rows / auto-flow": styled(page+`.g { grid: 20px 40px / auto-flow 60px 1fr }`,
