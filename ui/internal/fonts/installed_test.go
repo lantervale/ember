@@ -126,7 +126,7 @@ func TestAnInstalledFamilyIsFoundInAnyCaseByWeightAndStyle(t *testing.T) {
 		{"gO", 700, true, gobolditalic.TTF},
 		{"go", 600, false, gobold.TTF},
 	} {
-		f := s.Face(style.Font{Family: []string{c.family}, Weight: c.weight, Italic: c.italic})
+		f := s.Face(style.Font{Family: []string{c.family}, Weight: float32(c.weight), Italic: c.italic})
 		require.NotNil(t, f)
 		assert.Equal(t, "Go", f.Family)
 		assert.Equal(t, c.italic, f.Italic)

@@ -269,6 +269,16 @@ func (l Length) Less(o Length) Length {
 	return Length{Kind: Fixed, Px: c.At(0), IsPercent: true, Calc: unique.Make(c)}
 }
 
+// Plus is l and o summed, a Calc when either holds one.
+func (l Length) Plus(o Length) Length {
+	none := unique.Handle[Calc]{}
+	if l.Calc == none && o.Calc == none {
+		return Length{Kind: Fixed, Px: l.Px + o.Px, Percent: l.Percent + o.Percent, IsPercent: l.IsPercent || o.IsPercent}
+	}
+	c := Calc{code: l.code() + o.code() + NewCalc([]CalcStep{{Op: CalcSum, N: 2}}).code}
+	return Length{Kind: Fixed, Px: c.At(0), IsPercent: true, Calc: unique.Make(c)}
+}
+
 // Mix is l·(1−t) + o·t, as an animation between them is, a Calc when
 // either holds one.
 func (l Length) Mix(o Length, t float32) Length {

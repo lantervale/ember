@@ -445,6 +445,7 @@ var checks = map[string]check{
 	"transition-duration":        commaList(single(timeTerm(true))),
 	"transition-delay":           commaList(single(timeTerm(false))),
 	"transition-timing-function": commaList(single(timingFunction)),
+	"transition-behavior":        commaList(single(words(kwNormal, kwAllowDiscrete))),
 	"animation-name":             commaList(single(either(words(kwNone), keyframesName))),
 	"animation-duration":         commaList(single(timeTerm(true))),
 	"animation-delay":            commaList(single(timeTerm(false))),
@@ -453,6 +454,7 @@ var checks = map[string]check{
 	"animation-direction":        commaList(single(words(animationDirections...))),
 	"animation-fill-mode":        commaList(single(words(animationFills...))),
 	"animation-play-state":       commaList(single(words(kwRunning, kwPaused))),
+	"animation-composition":      commaList(single(words("replace", "add", "accumulate"))),
 
 	"text-decoration-line":      checkDecorationLine,
 	"text-decoration-style":     single(decorationStyle),

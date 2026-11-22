@@ -130,6 +130,9 @@ type restyler struct {
 	// (transits), and returns what its transitions set on it.
 	transit  func(n *dom.Node, next *style.Computed) []override
 	transits func(n *dom.Node) bool
+	// afterChange, when set, is the style an element's transitions on Style run
+	// to, nil while none runs: what its children's transitions read.
+	afterChange func(n *dom.Node) *style.Computed
 	// overlay has scrolling boxes keep no gutter for their bars
 	// (Transitions.OverlayScrollbars).
 	overlay bool
@@ -375,8 +378,9 @@ type ctx struct {
 	vars               map[string][]Component
 	resolving          map[string]bool
 	raw                map[string]*Declaration
-	trans              [4][]Component
+	trans              [5][]Component
 	anims              [8][]Component
+	composite          []Component
 	// over is what the element's animations set on its style; transit is
 	// the restyler's, for moving, which runs transitions when transits is
 	// set.
@@ -384,6 +388,10 @@ type ctx struct {
 	transit  func(n *dom.Node, next *style.Computed) []override
 	moving   *dom.Node
 	transits bool
+	// afterParent is the style the parent's transitions run to, while
+	// some run on what its children inherit: their own transitions start
+	// from the style worked out under it.
+	afterParent *style.Computed
 	// base is where the sheet the declaration being applied came from is.
 	base     *origin
 	expanded map[*Declaration]map[string][]Component
@@ -524,6 +532,9 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 func (r *restyler) transitOf(x *ctx, n *dom.Node) {
 	if r.transit != nil {
 		x.transit, x.moving, x.transits = r.transit, n, r.transits(n)
+		if p := n.Parent(); p != nil && r.afterChange != nil {
+			x.afterParent = r.afterChange(p)
+		}
 	}
 }
 
@@ -565,7 +576,16 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 	start, c := *x, *x.c
 	x.longhands(casc, root, x.over)
 	x.finish(root)
-	if over := x.transit(x.moving, x.c); len(over) > 0 {
+	next := x.c
+	if x.afterParent != nil {
+		y, yc := start, c
+		y.c, y.parent, y.em = &yc, x.afterParent, x.afterParent.Font.Size
+		y.customs(casc.custom)
+		y.longhands(casc, root, y.over)
+		y.finish(root)
+		next = y.c
+	}
+	if over := x.transit(x.moving, next); len(over) > 0 {
 		*x, *x.c = start, c
 		x.longhands(casc, root, append(slices.Clip(x.over), over...))
 		x.finish(root)
@@ -973,6 +993,7 @@ func (x *ctx) finish(root bool) {
 	if none(c.BorderStyle.Left) {
 		c.Border.Left = 0
 	}
+	x.snapWidths()
 	ox, oy := c.Overflow.Width, c.Overflow.Height
 	scrolls := func(o style.Overflow) bool {
 		return o == style.Hidden || o == style.Scroll || o == style.OverflowAuto
@@ -1028,6 +1049,20 @@ func (x *ctx) finish(root bool) {
 	}
 }
 
+// snapWidths snaps the widths of borders, the outline and column rules,
+// outline-offset and border-spacing to device pixels, as Chrome does.
+func (x *ctx) snapWidths() {
+	c := x.c
+	for i := range 4 {
+		w := sideOf(&c.Border, i)
+		*w = x.env.snap(*w, true)
+	}
+	c.OutlineWidth = x.env.snap(c.OutlineWidth, true)
+	c.ColumnRuleWidth = x.env.snap(c.ColumnRuleWidth, true)
+	c.OutlineOffset = x.env.snap(c.OutlineOffset, false)
+	c.BorderSpacing = [2]float32{x.env.snap(c.BorderSpacing[0], false), x.env.snap(c.BorderSpacing[1], false)}
+}
+
 func blockified(d style.Display) style.Display {
 	switch d {
 	case style.Inline, style.InlineBlock:
@@ -1043,7 +1078,7 @@ func blockified(d style.Display) style.Display {
 }
 
 func (x *ctx) transitions() {
-	if x.trans[0] == nil && x.trans[1] == nil && x.trans[2] == nil && x.trans[3] == nil {
+	if !slices.ContainsFunc(x.trans[:], func(v []Component) bool { return v != nil }) {
 		x.c.Transitions = initialTransitions()
 		return
 	}
@@ -1066,6 +1101,10 @@ func (x *ctx) animations() {
 		lists[i] = splitOn(v, func(c Component) bool { return c.Kind == Comma })
 	}
 	at := func(l, i int) Component { return lists[l][i%len(lists[l])][0] }
+	var composites [][]Component
+	if x.composite != nil {
+		composites = splitOn(x.composite, func(c Component) bool { return c.Kind == Comma })
+	}
 	var out []style.Animation
 	for i, n := range lists[7] {
 		if isWord(n[0], kwNone) {
@@ -1089,15 +1128,29 @@ func (x *ctx) animations() {
 			}
 		}
 		a.Paused = isWord(at(6, i), kwPaused)
+		if len(composites) > 0 {
+			a.Composite = compositeOf(composites[i%len(composites)][0])
+		}
 		out = append(out, a)
 	}
 	x.c.Animations = out
 }
 
+// compositeOf reads an animation-composition keyword.
+func compositeOf(c Component) style.Composite {
+	switch {
+	case isWord(c, "add"):
+		return style.CompositeAdd
+	case isWord(c, "accumulate"):
+		return style.CompositeAccumulate
+	}
+	return style.CompositeReplace
+}
+
 // transitionList is the transition list from the transition longhands'
 // values, unset ones initial.
-func transitionList(trans [4][]Component) []style.Transition {
-	lists := make([][][]Component, 4)
+func transitionList(trans [5][]Component) []style.Transition {
+	lists := make([][][]Component, len(trans))
 	for i, v := range trans {
 		if v == nil {
 			v = initialValue(shorthands["transition"][i])
@@ -1116,6 +1169,7 @@ func transitionList(trans [4][]Component) []style.Transition {
 		t.Easing = lists[2][i%len(lists[2])][0].String()
 		delay, _ := duration(lists[3][i%len(lists[3])][0])
 		t.Delay = float32(delay)
+		t.Discrete = isWord(lists[4][i%len(lists[4])][0], kwAllowDiscrete)
 		out = append(out, t)
 	}
 	return out
@@ -1126,7 +1180,7 @@ func transitionList(trans [4][]Component) []style.Transition {
 //
 //nolint:gochecknoglobals // worked out once
 var initialTransitions = sync.OnceValue(func() []style.Transition {
-	return transitionList([4][]Component{})
+	return transitionList([5][]Component{})
 })
 
 // prop is how one longhand is set from its value, copied when inherited,
@@ -1188,6 +1242,11 @@ func currentField(f style.CurrentColorFields, get func(*style.Computed) *color.C
 			equal: func(a, b *style.Computed) bool {
 				ca, cb := a.CurrentColor&f != 0, b.CurrentColor&f != 0
 				return ca == cb && (ca || *get(a) == *get(b))
+			},
+			add: func(dst, a, b *style.Computed, _ bool) bool {
+				*get(dst) = addColor(*get(a), *get(b))
+				dst.CurrentColor &^= f
+				return true
 			},
 		},
 	}
@@ -1394,6 +1453,29 @@ func cornerOf(x *ctx, v []Component) style.Size[style.Length] {
 	return style.Size[style.Length]{Width: l, Height: l}
 }
 
+func inheritDisplay(dst, src *style.Computed) {
+	dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
+	dst.TablePart = src.TablePart
+}
+
+// boxed reports whether display at t between a's and b's is b's: as
+// any discrete value from halfway, but all inside the interval when a's is
+// none and b's is not, and none of it when b's is none and a's is not, so
+// the element shows a box all along.
+func boxed(a, b *style.Computed, t float32) bool {
+	switch none := style.DisplayNone; {
+	case t <= 0:
+		return false
+	case t >= 1:
+		return true
+	case a.Display == none && b.Display != none:
+		return true
+	case b.Display == none && a.Display != none:
+		return false
+	}
+	return t >= 0.5
+}
+
 func sideProps(prefix, suffix string, how interp[style.Length],
 	get func(*style.Computed) *style.Sides[style.Length]) map[string]prop {
 	return map[string]prop{
@@ -1415,11 +1497,15 @@ var props = func() map[string]prop {
 				x.c.Table = isWord(v[0], "table") || isWord(v[0], "inline-table")
 				x.c.TablePart = tableParts[strings.ToLower(v[0].Text)]
 			},
-			inherit: func(dst, src *style.Computed) {
-				dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
-				dst.TablePart = src.TablePart
-			},
-			anim: anim{kind: still},
+			inherit: inheritDisplay,
+			anim: anim{kind: discrete, lerp: func(dst, a, b *style.Computed, t float32) bool {
+				src := a
+				if boxed(a, b, t) {
+					src = b
+				}
+				inheritDisplay(dst, src)
+				return true
+			}},
 		},
 		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
 			"none": style.FloatNone, "left": style.FloatLeft, "right": style.FloatRight,
@@ -1511,7 +1597,7 @@ var props = func() map[string]prop {
 					if a.ZAuto || b.ZAuto {
 						return false
 					}
-					dst.ZIndex, _ = integers(math.MinInt, math.MaxInt).lerp(a.ZIndex, b.ZIndex, t)
+					dst.ZIndex, _ = integers(math.MinInt).lerp(a.ZIndex, b.ZIndex, t)
 					dst.ZAuto = false
 					return true
 				},
@@ -1539,7 +1625,7 @@ var props = func() map[string]prop {
 		"justify-items":   keyword(func(c *style.Computed) *style.Align { return &c.JustifyItems }, alignWords4),
 		"justify-self":    keyword(func(c *style.Computed) *style.Align { return &c.JustifySelf }, alignWords4),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(math.MinInt, math.MaxInt)),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(math.MinInt)),
 
 		"column-count": field(func(c *style.Computed) *int { return &c.ColumnCount },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }, counts),
@@ -1557,9 +1643,9 @@ var props = func() map[string]prop {
 		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
 		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
 		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1, math.MaxInt)),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 		"widows": field(func(c *style.Computed) *int { return &c.Widows },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1, math.MaxInt)),
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 
 		"grid-template-columns": templateTracks(func(c *style.Computed) (*[]style.TrackRepeat, *bool) {
 			return &c.Columns, &c.Subgrid.Width
@@ -1617,7 +1703,7 @@ var props = func() map[string]prop {
 		),
 		"font-size": field(func(c *style.Computed) *float32 { return &c.Font.Size },
 			(*ctx).fontSize, numbers(0, math.MaxFloat32)),
-		"font-weight": field(func(c *style.Computed) *int { return &c.Font.Weight }, (*ctx).fontWeight, integers(1, 1000)),
+		"font-weight": field(func(c *style.Computed) *float32 { return &c.Font.Weight }, (*ctx).fontWeight, weights),
 		"font-style": field(func(c *style.Computed) *bool { return &c.Font.Italic }, func(_ *ctx, v []Component) bool {
 			return !isWord(v[0], "normal")
 		}, flips[bool]()),
@@ -1855,7 +1941,7 @@ var props = func() map[string]prop {
 		"outline-color": currentField(style.OutlineCurrent,
 			func(c *style.Computed) *color.Color { return &c.OutlineColor }).painted(),
 		"outline-offset": field(func(c *style.Computed) *float32 { return &c.OutlineOffset },
-			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, offsets),
+			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, numbers(-math.MaxFloat32, math.MaxFloat32)),
 		"opacity": field(func(c *style.Computed) *float32 { return &c.Opacity }, func(x *ctx, v []Component) float32 {
 			return float32(clamp01(float64(x.num(v[0]))))
 		}, numbers(0, 1)).painted(),
@@ -1921,6 +2007,11 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.Animations = src.Animations },
 			anim:    anim{kind: still},
 		}
+	}
+	m[propAnimationComposition] = prop{
+		set:     func(x *ctx, v []Component) { x.composite = v },
+		inherit: func(dst, src *style.Computed) { dst.Animations = src.Animations },
+		anim:    anim{kind: still},
 	}
 	return m
 }()
@@ -2125,7 +2216,7 @@ func (x *ctx) fontSize(v []Component) float32 {
 	return l.Px + l.Percent*x.parent.Font.Size/100
 }
 
-func (x *ctx) fontWeight(v []Component) int {
+func (x *ctx) fontWeight(v []Component) float32 {
 	p := x.parent.Font.Weight
 	switch {
 	case isWord(v[0], "normal"):
@@ -2153,7 +2244,7 @@ func (x *ctx) fontWeight(v []Component) int {
 		}
 		return 700
 	}
-	return int(math.Round(v[0].Num))
+	return float32(math.Round(v[0].Num))
 }
 
 func (x *ctx) track(c Component) style.Track {
