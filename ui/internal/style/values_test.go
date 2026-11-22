@@ -28,3 +28,12 @@ func TestInitialIsCSSs(t *testing.T) {
 	assert.True(t, c.ZAuto)
 	assert.Equal(t, style.Static, c.Position)
 }
+
+func TestMixIsASumOfTheTwoScaled(t *testing.T) {
+	m := style.Px(100).Mix(style.Percent(50), 0.35)
+	c := m.Calc.Value()
+	for ref, want := range map[float32]float32{0: 65, 200: 65 + 35} {
+		assert.InDelta(t, want, c.At(ref), 1e-4, "against %v", ref)
+	}
+	assert.True(t, m.IsPercent)
+}

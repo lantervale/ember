@@ -89,7 +89,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | an `@import` inserted with `InsertRule` after other rules | followed, where Chrome refuses the insertion |
-| an animated property outside colours, `opacity`, `transform`, `box-shadow`, `filter` and the box's lengths (`font-size`, `letter-spacing`, `border-radius`, `background-position`, `border-width`…) | flips halfway, where Chrome interpolates |
+| an animated or transitioned `font-weight` | moves in whole numbers, where Chrome keeps quarters |
+| an animated border, outline or column-rule width, `outline-offset`, `border-spacing` | snapped to whole points, where Chrome snaps to device pixels: steps of half a point on a dense screen |
+| an animated `border-image-slice` from a percentage to a number, `border-image-width` from a length to a percentage | interpolates the numbers and flips, where Chrome flips and makes a `calc()` |
+| an animated `background-image`, `mask-image` or `border-image-source` between two pictures | flips halfway, where Chrome cross-fades them |
+| `display` in a keyframe, `transition-behavior: allow-discrete` | dropped with a warning, and not read |
+| an element's own transition of a property it inherits, while an ancestor's transition moves it | follows the ancestor's moving value, where Chrome runs it on to the end value |
 | `animation-composition`, `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
 | `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
 | `prefers-color-scheme` and `prefers-reduced-motion` on Linux and the web | no preference: neither says its scheme or its reduced motion yet, so a Document given `ui.Preferences` answers light and no preference there ([decision 0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)) |

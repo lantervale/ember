@@ -476,22 +476,14 @@ func timeTerm(nonNeg bool) term {
 	}
 }
 
-// animated lists what transitions run on: colours, opacity, transforms,
-// shadows and clip-paths.
-//
-//nolint:gochecknoglobals // lookup table
-var animated = map[string]bool{
-	"color": true, "background-color": true, "border-color": true, "outline-color": true,
-	"border-top-color": true, "border-right-color": true, "border-bottom-color": true, "border-left-color": true,
-	"opacity": true, "transform": true, "box-shadow": true, "clip-path": true, "filter": true,
-}
-
+// transitionTarget is a property transition-property names: any ui
+// knows, as Chrome keeps any; one that doesn't interpolate runs none.
 func transitionTarget(c Component) error {
-	if c.Kind == Ident && animated[strings.ToLower(c.Text)] {
+	name := strings.ToLower(c.Text)
+	if _, long := properties[name]; c.Kind == Ident && (long || shorthands[name] != nil) {
 		return nil
 	}
-	return fmt.Errorf("transitions run only on colours, opacity, transform, box-shadow, clip-path and filter, not %q",
-		c.String())
+	return fmt.Errorf("transition-property: unknown property %q", c.String())
 }
 
 // keyframesName is an @keyframes name: an identifier other than none,

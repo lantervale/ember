@@ -581,16 +581,19 @@ func (p *parser) keyframe(sel, block []Component) []Keyframe {
 	return out
 }
 
-// animates reports whether a keyframe may set the property name.
+// animates reports whether a keyframe may set the property name: one of
+// its longhands takes part in animations.
 func animates(name string) bool {
-	switch {
-	case name == propAnimationTiming:
+	if name == propAnimationTiming {
 		return true
-	case strings.HasPrefix(name, "--"), name == propDisplay, name == shortAnimation, name == shortTransition,
-		strings.HasPrefix(name, "animation-"), strings.HasPrefix(name, "transition-"):
+	}
+	if strings.HasPrefix(name, "--") {
 		return false
 	}
-	return true
+	return slices.ContainsFunc(longhandsOf(name), func(l string) bool {
+		p, ok := props[l]
+		return !ok || p.anim.kind != still
+	})
 }
 
 // supports reads an @supports rule's block where ui supports what it
