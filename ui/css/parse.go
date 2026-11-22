@@ -913,6 +913,7 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		}
 		if as != "" {
 			d.Name = as
+			v.plainWords(plain, d.Value)
 		}
 	}
 	if as, ok := logical[d.Name]; ok {

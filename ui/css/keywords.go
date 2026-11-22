@@ -80,6 +80,7 @@ const (
 	propTextDecorationThickness = "text-decoration-thickness"
 
 	shortBackground  = "background"
+	shortMask        = "mask"
 	shortGrid        = "grid"
 	shortBorderImage = "border-image"
 	shortTransition  = "transition"

@@ -2,6 +2,7 @@ package css //nolint:testpackage // reads the vendors' tables and the package's 
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -31,12 +32,15 @@ func read(decl string, opts ...ParseOption) string {
 }
 
 func TestWebkitPropertiesAreReadAsTheirPlainOnes(t *testing.T) {
-	if len(webkit.same) != 73 || len(webkit.renamed) != 30 || len(webkit.own) != 48 {
-		t.Errorf("-webkit-: %d of the same name, %d renamed, %d its own", len(webkit.same), len(webkit.renamed),
-			len(webkit.own))
+	if len(webkit.same) != 74 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 2 {
+		t.Errorf("-webkit-: %d of the same name, %d renamed, %d its own, %d its own read as plain ones",
+			len(webkit.same), len(webkit.renamed), len(webkit.own), len(webkit.legacy))
 	}
 	plain := map[string]string{}
 	for _, name := range webkit.same {
+		plain[name] = name
+	}
+	for name := range webkit.legacy {
 		plain[name] = name
 	}
 	for name, as := range webkit.renamed {
@@ -329,6 +333,22 @@ func vendorGuide(v *vendor) string {
 		}
 		fmt.Fprintf(&b, "| properties left as written (%d), so each keeps its warning unless ui reads it | %s |\n",
 			len(v.own), strings.Join(rows, "; "))
+	}
+	if len(v.legacy) > 0 {
+		var rows []string
+		for _, name := range keys(v.legacy) {
+			rows = append(rows, "`"+v.prefix+name+"` as `"+name+"`, "+v.legacy[name])
+		}
+		fmt.Fprintf(&b, "| Chrome's own properties read as the plain one (%d) | %s |\n", len(v.legacy),
+			strings.Join(rows, "; "))
+	}
+	if len(v.words) > 0 {
+		var rows []string
+		for _, name := range slices.Sorted(maps.Keys(v.words)) {
+			rows = append(rows, "`"+v.prefix+name+"`: "+pairs(v.words[name], "", ""))
+		}
+		fmt.Fprintf(&b, "| words read as the plain property's | %s; its other words keep their warning |\n",
+			strings.Join(rows, "; "))
 	}
 	fmt.Fprintf(&b, "| any %sproperty | %s |\n", map[bool]string{true: "other "}[len(v.same) > 0],
 		others[v.properties])

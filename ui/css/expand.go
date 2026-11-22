@@ -86,6 +86,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandContainer(v, out)
 	case shortBackground:
 		err = expandBackground(v, out)
+	case shortMask:
+		err = expandMask(v, out)
 	case "border":
 		err = expandBorder(long, v, out)
 	case "border-inline", "border-block":
@@ -587,6 +589,101 @@ func backgroundLayer(v []Component, out map[string][]Component) error {
 	}
 	if len(boxes) > 0 {
 		out["background-origin"], out["background-clip"] = boxes[:1], boxes[len(boxes)-1:]
+	}
+	return nil
+}
+
+// expandMask splits the mask shorthand: an image, a position with a size
+// after a slash, a repeat of one or two words, one box for the origin and
+// the clip or two, the second of which may be no-clip, a compositing word
+// and a mode, in any order, for each layer. Each longhand is the list of
+// the layers' values, those a layer leaves out initial.
+func expandMask(v []Component, out map[string][]Component) error {
+	for i, l := range splitOn(v, func(c Component) bool { return c.Kind == Comma }) {
+		layer := map[string][]Component{}
+		if len(l) == 0 {
+			return fmt.Errorf("mask: an empty layer")
+		}
+		if err := maskLayer(l, layer); err != nil {
+			return err
+		}
+		for _, name := range shorthands[shortMask] {
+			value, ok := layer[name]
+			if !ok {
+				value = initialValue(name)
+			}
+			if i > 0 {
+				out[name] = append(out[name], Component{Token: Token{Kind: Comma}})
+			}
+			out[name] = append(out[name], value...)
+		}
+	}
+	return nil
+}
+
+func maskLayer(v []Component, out map[string][]Component) error {
+	var pos, boxes []Component
+	posEnd := -1
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		one := []Component{c}
+		switch {
+		case isSlash(c):
+			if posEnd != i || out["mask-size"] != nil {
+				return fmt.Errorf("mask: a size follows a position, as in center / contain")
+			}
+			n := 0
+			for n < 2 && i+1+n < len(v) && checkBackgroundSize(v[i+1:i+2+n]) == nil {
+				n++
+			}
+			if n == 0 {
+				return fmt.Errorf("mask: expected a size after /")
+			}
+			out["mask-size"] = v[i+1 : i+1+n]
+			i += n
+		case out["mask-image"] == nil && (isWord(c, kwNone) || imageTerm(c) == nil):
+			out["mask-image"] = one
+		case out["mask-repeat"] == nil && checkTiling(one) == nil:
+			out["mask-repeat"] = one
+			if i+1 < len(v) && checkTiling(v[i:i+2]) == nil {
+				out["mask-repeat"] = v[i : i+2]
+				i++
+			}
+		case out["mask-composite"] == nil && checks["mask-composite"](one) == nil:
+			out["mask-composite"] = one
+		case out["mask-mode"] == nil && checks["mask-mode"](one) == nil:
+			out["mask-mode"] = one
+		case len(boxes) < 2 && maskBox(c) == nil, len(boxes) < 2 && isWord(c, "no-clip"):
+			boxes = append(boxes, c)
+		case out["mask-size"] != nil && posEnd >= 0:
+			return fmt.Errorf("mask: %s after the size", c.String())
+		case posEnd >= 0 && posEnd != i:
+			return fmt.Errorf("mask: %s is not part of a mask", c.String())
+		default:
+			pos, posEnd = append(pos, c), i+1
+		}
+	}
+	if len(pos) > 0 {
+		if err := checkMaskPosition(pos); err != nil {
+			return err
+		}
+		out["mask-position"] = pos
+	}
+	return maskOriginAndClip(boxes, out)
+}
+
+// maskOriginAndClip sets a mask layer's origin and clip from the boxes it names:
+// one is both, of two the first is the origin, and no-clip is a clip.
+func maskOriginAndClip(boxes []Component, out map[string][]Component) error {
+	switch {
+	case len(boxes) == 0:
+	case isWord(boxes[0], "no-clip"):
+		if len(boxes) > 1 {
+			return fmt.Errorf("mask: no-clip is the clip alone")
+		}
+		out["mask-clip"] = boxes
+	default:
+		out["mask-origin"], out["mask-clip"] = boxes[:1], boxes[len(boxes)-1:]
 	}
 	return nil
 }
