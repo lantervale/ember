@@ -529,8 +529,9 @@ func trimFloat(v float64) string {
 	return strings.TrimSuffix(s, ".")
 }
 
-// parseColor reads a colour: hex, rgb(), rgba(), oklch(), a named colour
-// or transparent.
+// parseColor reads a colour: hex, rgb(), rgba(), oklch(), a named colour,
+// transparent, or a system colour or light-dark(), both as in the light
+// scheme: the cascade resolves them in the element's first (inScheme).
 // currentcolor is the caller's to handle.
 func parseColor(c Component) (Color, error) {
 	switch c.Kind {
@@ -543,6 +544,9 @@ func parseColor(c Component) (Color, error) {
 		if v, ok := named[strings.ToLower(c.Text)]; ok {
 			return Color{float64(v>>16) / 255, float64(v>>8&0xff) / 255, float64(v&0xff) / 255, 1}, nil
 		}
+		if sys, ok := systemColor(c, false); ok {
+			return sys, nil
+		}
 		return Color{}, fmt.Errorf("unknown colour %q", c.Text)
 	case Function:
 		switch strings.ToLower(c.Text) {
@@ -550,6 +554,8 @@ func parseColor(c Component) (Color, error) {
 			return parseRGB(c.Args)
 		case "oklch":
 			return parseOKLCH(c.Args)
+		case "light-dark":
+			return parseLightDark(c.Args)
 		}
 		return Color{}, fmt.Errorf("%s() colours are not supported; use hex, rgb(), oklch() or a name", c.Text)
 	case EOF, AtKeyword, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Whitespace, CDO, CDC,

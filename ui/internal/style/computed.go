@@ -513,6 +513,11 @@ type Text struct {
 	// or currentColor, kept as such when inherited).
 	AccentColor, CaretColor color.Color
 	AccentAuto, CaretAuto   bool
+	// ColorScheme is color-scheme, and Dark the scheme the element is
+	// drawn in: its system colours and light-dark() resolved, and the
+	// canvas behind a dark root.
+	ColorScheme ColorScheme
+	Dark        bool
 	// Content is the content property: what a ::before, ::after or
 	// ::marker box holds.
 	Content Content
@@ -1063,3 +1068,24 @@ const (
 	// RenderPixelated scales it by its nearest pixels.
 	RenderPixelated
 )
+
+// ColorScheme is a color-scheme value: the schemes an element can be
+// drawn in, none for normal, and only, which keeps a browser from
+// darkening it by force.
+type ColorScheme uint8
+
+const (
+	SchemeLight ColorScheme = 1 << iota
+	SchemeDark
+	SchemeOnly
+)
+
+// Dark reports whether an element of scheme s is drawn dark: in the one
+// the Document prefers where s has both, else in the one s has, light
+// for normal.
+func (s ColorScheme) Dark(prefersDark bool) bool {
+	if s&SchemeLight != 0 && s&SchemeDark != 0 {
+		return prefersDark
+	}
+	return s&SchemeDark != 0
+}

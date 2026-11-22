@@ -62,6 +62,7 @@ const (
 	propWidth             = "width"
 	propHeight            = "height"
 	propFontSize          = "font-size"
+	propColorScheme       = "color-scheme"
 	propAnimationTiming   = "animation-timing-function"
 	propAnimationName     = "animation-name"
 	propAnimationDuration = "animation-duration"

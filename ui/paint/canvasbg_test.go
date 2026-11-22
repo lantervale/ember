@@ -61,6 +61,24 @@ func TestWithoutAViewportTheCanvasIsTheRootsBox(t *testing.T) {
 	assert.Equal(t, geom.Rect{W: 400, H: 50}, f[0].Rect)
 }
 
+func TestADarkRootWithoutABackgroundHasADarkCanvas(t *testing.T) {
+	page := rootPage(color.Color{}, color.Color{})
+	r := newRecorder()
+	Paint(r, page, Viewport(geom.Rect{W: 400, H: 300}))
+	assert.Empty(t, fills(r), "a light root leaves the window's colour showing")
+	page.Root.Style.Dark = true
+	r = newRecorder()
+	Paint(r, page, Viewport(geom.Rect{W: 400, H: 300}))
+	f := fills(r)
+	require.Len(t, f, 1)
+	assert.Equal(t, geom.Rect{W: 400, H: 300}, f[0].Rect)
+	assert.Equal(t, color.Hex("#121212"), f[0].Color)
+	page.Root.Children[0].Style.Background = blue
+	r = newRecorder()
+	Paint(r, page, Viewport(geom.Rect{W: 400, H: 300}))
+	assert.Equal(t, blue, fills(r)[0].Color, "body's background wins, as any canvas background")
+}
+
 func TestAHostedCanvasIsTheHostsArea(t *testing.T) {
 	r := newRecorder()
 	Paint(r, rootPage(red, color.Color{}), Viewport(geom.Rect{X: 30, Y: 40, W: 200, H: 100}))

@@ -359,6 +359,8 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 			out[name] = cascadedValue{text: properties[name].initial}
 		case name == propFontSize:
 			out[name] = cascadedValue{text: pixels(float64(c.Font.Size)), declared: true}
+		case colored[name]:
+			out[name] = cascadedValue{text: x.written(inScheme(v, c.Dark)), declared: true}
 		default:
 			out[name] = cascadedValue{text: x.written(v), declared: true}
 		}

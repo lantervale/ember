@@ -164,7 +164,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	}
 	r.env.root = root
 	if stale {
-		r.env.used = 0
+		r.env.used, r.env.prefersRead = 0, false
 	} else if r.anchors && dom.Data(root).Style != nil {
 		r.anchor(root)
 	}
@@ -308,6 +308,7 @@ func paintOnly(c *style.Computed) {
 	c.SelectionText, c.HasSelectionText, c.UserSelect = zero, false, 0
 	c.TextShadows, c.CurrentColor, c.Vars, c.Backdrop = nil, 0, nil, color.Color{}
 	c.TextDecoration, c.Decorations = style.TextDecoration{}, nil
+	c.ColorScheme, c.Dark = 0, false
 }
 
 // inheritedChanged reports whether a and b differ in what an element's
@@ -388,12 +389,28 @@ type ctx struct {
 }
 
 // leading are the longhands the others read, in the order they are
-// applied before them: the font's family, style and weight, which its
-// own units measure, then font-size (em), line-height (lh) and color
-// (currentcolor).
+// applied before them: color-scheme, which resolves the colours, the
+// font's family, style and weight, which its own units measure, then
+// font-size (em), line-height (lh) and color (currentcolor).
 //
 //nolint:gochecknoglobals,goconst // a fixed list
-var leading = []string{"font-family", "font-style", "font-weight", propFontSize, "line-height", "color"}
+var leading = []string{
+	propColorScheme, "font-family", "font-style", "font-weight", propFontSize, "line-height", "color",
+}
+
+// colored are the longhands whose values take colours, where a system
+// colour's name and light-dark() are resolved in the element's scheme.
+//
+//nolint:gochecknoglobals,goconst // a fixed set
+var colored = map[string]bool{
+	"color": true, "background-color": true, "background-image": true, "border-top-color": true,
+	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
+	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
+	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true,
+}
+
+//nolint:gochecknoglobals // a fixed value every element shares
+var canvasText = []Component{word("canvastext")}
 
 // order puts the leading longhands first, then the rest.
 //
@@ -418,9 +435,9 @@ var order, orderIndex = func() ([]string, map[string]int) {
 // computation reads of it, looked up once: how it is set and inherited,
 // whether it is inherited, and whether its initial value is currentcolor.
 type longhand struct {
-	name               string
-	prop               prop
-	inherited, current bool
+	name                        string
+	prop                        prop
+	inherited, current, colored bool
 }
 
 // longhands are order's, in its order.
@@ -430,7 +447,8 @@ var longhands = func() []longhand {
 	out := make([]longhand, len(order))
 	for i, name := range order {
 		p := properties[name]
-		out[i] = longhand{name: name, prop: props[name], inherited: p.inherited, current: p.initial == kwCurrentColor}
+		out[i] = longhand{name: name, prop: props[name], inherited: p.inherited, current: p.initial == kwCurrentColor,
+			colored: colored[name]}
 	}
 	return out
 }()
@@ -532,6 +550,11 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 			}
 		case "line-height":
 			x.lined = true
+		case propColorScheme:
+			x.c.Dark = x.c.ColorScheme.Dark(x.env.dark)
+			if x.c.ColorScheme&(style.SchemeLight|style.SchemeDark) == style.SchemeLight|style.SchemeDark {
+				x.env.prefersRead = true
+			}
 		}
 	}
 	for _, o := range x.over {
@@ -734,7 +757,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	name, p := l.name, l.prop
 	if d == nil {
 		if l.inherited {
-			p.inherit(x.c, x.parent)
+			x.inherit(l)
 			x.c.ColorInherited = x.c.ColorInherited || name == "color"
 		} else {
 			x.reset(l)
@@ -785,28 +808,44 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	}
 	switch kw {
 	case kwInherit:
-		p.inherit(x.c, x.parent)
+		x.inherit(l)
 	case "initial":
 		x.reset(l)
 	case kwUnset:
 		if l.inherited {
-			p.inherit(x.c, x.parent)
+			x.inherit(l)
 		} else {
 			x.reset(l)
 		}
 	default:
+		if l.colored {
+			v = inScheme(v, x.c.Dark)
+		}
 		p.set(x, v)
 	}
 }
 
-// reset gives a longhand its initial value; currentcolor is the
-// element's colour.
-func (x *ctx) reset(l *longhand) {
-	if l.current {
-		l.prop.set(x, currentColor)
+// inherit gives a longhand its parent's value; the root's is its initial
+// value.
+func (x *ctx) inherit(l *longhand) {
+	if x.root {
+		x.reset(l)
 		return
 	}
-	l.prop.inherit(x.c, &initial)
+	l.prop.inherit(x.c, x.parent)
+}
+
+// reset gives a longhand its initial value; currentcolor is the
+// element's colour, and canvastext is its scheme's.
+func (x *ctx) reset(l *longhand) {
+	switch {
+	case l.current:
+		l.prop.set(x, currentColor)
+	case l.name == "color":
+		l.prop.set(x, inScheme(canvasText, x.c.Dark))
+	default:
+		l.prop.inherit(x.c, &initial)
+	}
 }
 
 // rootBody reports whether n is the root's first body element, whose
@@ -1507,6 +1546,8 @@ var props = func() map[string]prop {
 				return linear(v[0])
 			},
 		),
+		propColorScheme: field(func(c *style.Computed) *style.ColorScheme { return &c.ColorScheme },
+			func(_ *ctx, v []Component) style.ColorScheme { return colorScheme(v) }),
 		"-webkit-font-smoothing": {
 			set: func(x *ctx, v []Component) {
 				kw := strings.ToLower(v[0].Text)

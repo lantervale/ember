@@ -326,7 +326,20 @@ w := ember.New().AddEntities(win, prefs)
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } }
 ```
 
-The program's own answer wins: `ui.ColorScheme(platform.AppearanceDark)` (`doc.SetColorScheme`, `platform.AppearanceUnknown` to follow the system again) for a game with a theme switch of its own, and `ui.ReducedMotion()` (`doc.SetReducedMotion`). `doc.ColorScheme()` and `doc.ReducedMotion()` read the answer; a Document in an iframe answers as its host unless it has its own. A test sets the system with `prefs.SyncAppearance` and `prefs.SyncMotion`. The `color-scheme` property and `light-dark()` are not read: a dark scheme changes only what the sheets' rules say.
+The program's own answer wins: `ui.ColorScheme(platform.AppearanceDark)` (`doc.SetColorScheme`, `platform.AppearanceUnknown` to follow the system again) for a game with a theme switch of its own, and `ui.ReducedMotion()` (`doc.SetReducedMotion`). `doc.ColorScheme()` and `doc.ReducedMotion()` read the answer; a Document in an iframe answers as its host unless it has its own. A test sets the system with `prefs.SyncAppearance` and `prefs.SyncMotion`.
+
+### Colour schemes
+
+Decision [0122](../99-decisions/0122-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md).
+
+`color-scheme` (`normal`, `light`, `dark`, `light dark`, names of the page's own, `only`) says which schemes an element can be drawn in, and its children inherit it. An element is drawn in the scheme the Document prefers where it names both, in the one it names otherwise, and light under `normal`, so a page that names no scheme stays light whatever the system says:
+
+```css
+:root { color-scheme: light dark; }
+.card { background: light-dark(#ffffff, #1e1e2e); border: 1px solid light-dark(#d0d0d0, #3a3a4a); color: CanvasText; }
+```
+
+In that scheme the system colours (`Canvas`, `CanvasText`, `Field`, `FieldText`, `ButtonFace`, `ButtonText`, `ButtonBorder`, `LinkText`, `GrayText`, `Highlight`, `Mark`, `AccentColor`… and the old names that stand for them) take Chrome's values, and `light-dark(a, b)` its first colour or its second, in any property that takes colours: gradients, shadows and a variable's value where it is used included. Both are resolved where they are declared, as Chrome does, so a child of another scheme inherits the colour its parent shows. When the scheme an element follows flips, its colours are styled again and run their transitions. The root's text is `CanvasText`, and a dark root with no background has the canvas Chrome's dark `Canvas` (`#121212`) where a light one leaves the window's colour showing. The user agent sheet draws its controls, links, marks, dialogs and fieldsets in Chrome's dark colours under a dark scheme; under `ui.BrowserSheets()` a control's text is `FieldText` or `ButtonText`, where a game's takes its parent's colour. kit's theme sets its own colours and doesn't change.
 
 ## Container queries
 

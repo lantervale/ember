@@ -124,6 +124,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0119 | [A clip-path is a mask the GPU cuts by, and an outline the pointer is tested against](0119-a-clip-path-is-a-mask-the-gpu-cuts-by-and-an-outline-the-pointer-is-tested-against.md) | rendering |
 | 0120 | [Container queries restyle after layout until their answers hold](0120-container-queries-restyle-after-layout-until-their-answers-hold.md) | api |
 | 0121 | [A Document answers media features from the preferences it is given](0121-a-document-answers-media-features-from-the-preferences-it-is-given.md) | api |
+| 0122 | [An element is drawn in the scheme its color-scheme allows](0122-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md) | api |
 | 0123 | [Math functions over percentages are a program layout runs](0123-math-functions-over-percentages-are-a-program-layout-runs.md) | api |
 | 0124 | [A field's validity is a state ui keeps](0124-a-fields-validity-is-a-state-ui-keeps.md) | api |
 | 0125 | [A subgrid's items size its grid's tracks, hoisted to its lines](0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md) | rendering |
