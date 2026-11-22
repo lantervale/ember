@@ -577,6 +577,9 @@ const (
 	// outer one as inset and inner one as outset, ridge's the other way.
 	BorderGroove
 	BorderRidge
+	// BorderDouble draws a side as two solid lines, each about a third of
+	// its width, and solid where it is too thin to show the gap.
+	BorderDouble
 )
 
 // Shadow is one box-shadow.

@@ -1364,7 +1364,7 @@ var (
 		"none": style.BorderNone, "hidden": style.BorderNone, "solid": style.BorderSolid,
 		"dashed": style.BorderDashed, "dotted": style.BorderDotted,
 		"inset": style.BorderInset, "outset": style.BorderOutset,
-		"groove": style.BorderGroove, "ridge": style.BorderRidge,
+		"groove": style.BorderGroove, "ridge": style.BorderRidge, "double": style.BorderDouble,
 	}
 	overflows = map[string]style.Overflow{
 		"visible": style.Visible, "hidden": style.Hidden, "clip": style.Clip,

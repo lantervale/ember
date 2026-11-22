@@ -49,7 +49,7 @@ func TestInsetDarkensTopAndLeftAndOutsetTheOthers(t *testing.T) {
 		b.Border = box.Edges{Top: 4, Right: 4, Bottom: 4, Left: 4}
 		r := newRecorder()
 		Paint(r, tree(b))
-		sides := r.of("triangles")
+		sides := r.sides()
 		if !assert.Len(t, sides, 4, "%s: four mitered sides", c.name) {
 			continue
 		}
@@ -81,7 +81,7 @@ func TestGrooveIsAnInsetHalfRoundAnOutsetHalfAndRidgeTheOtherWay(t *testing.T) {
 		b.Border = box.Edges{Top: 4, Right: 4, Bottom: 4, Left: 4}
 		r := newRecorder()
 		Paint(r, tree(b))
-		sides := r.of("triangles")
+		sides := r.sides()
 		if !assert.Len(t, sides, 8, "%s: an outer and an inner half per side", c.name) {
 			continue
 		}

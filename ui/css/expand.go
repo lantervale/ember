@@ -63,7 +63,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius":
 		err = expandBox(long, v, out)
 	case "gap", "overflow", "place-items", "place-content", "place-self", "margin-inline", "margin-block",
-		"padding-inline", "padding-block", "inset-inline", "inset-block":
+		"padding-inline", "padding-block", "inset-inline", "inset-block", "border-inline-width", "border-inline-style",
+		"border-inline-color", "border-block-width", "border-block-style", "border-block-color":
 		err = expandPair(long, v, out)
 	case kwFlex:
 		err = expandFlex(v, out)
@@ -87,6 +88,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandBackground(v, out)
 	case "border":
 		err = expandBorder(long, v, out)
+	case "border-inline", "border-block":
+		err = expandSides(long, v, out)
 	case shortBorderImage:
 		err = expandBorderImage(v, out)
 	case shortTransition:
@@ -131,6 +134,21 @@ func expandBorder(long []string, v []Component, out map[string][]Component) erro
 	}
 	for _, l := range long[12:] {
 		out[l] = initialValue(l)
+	}
+	return nil
+}
+
+// expandSides gives two sides, three longhands each, one side's width,
+// style and colour.
+func expandSides(long []string, v []Component, out map[string][]Component) error {
+	one := map[string][]Component{}
+	if err := expandAnyOrder(long[:3], v, one); err != nil {
+		return err
+	}
+	for i, l := range long {
+		if c := one[long[i%3]]; c != nil {
+			out[l] = c
+		}
 	}
 	return nil
 }

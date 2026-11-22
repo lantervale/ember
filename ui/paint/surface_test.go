@@ -157,6 +157,26 @@ func (r *recorder) of(kinds ...string) []op {
 	return out
 }
 
+// sides are the mitered pieces of borders: each solid piece with the
+// smoothed ends drawn before it, as one op of its colour over them all.
+func (r *recorder) sides() []op {
+	var out []op
+	var ends []geom.Rect
+	for _, o := range r.ops {
+		switch o.Kind {
+		case "gradient":
+			ends = append(ends, o.Rect)
+		case "triangles":
+			for _, e := range ends {
+				o.Rect = union(o.Rect, e)
+			}
+			ends = ends[:0]
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 // order is the colours of the fills, as names, in the order drawn.
 func (r *recorder) order(names map[color.Color]string) string {
 	var out []string

@@ -143,7 +143,7 @@ func TestValidate(t *testing.T) {
 		"transform":     {"rotate(10px)", "translate3d(1px, 1px, 1px)", "scale(1 2)"},
 		"transition":    {"widths 1s", "opacity 1s 2s 3s"},
 		"flex":          {"1 2 3", "-1", "1 auto 2"},
-		"border-style":  {"double"},
+		"border-style":  {"wavy", "solid solid solid solid solid"},
 		"color":         {"reddish", "#12"},
 		"font-weight":   {"1001", "heavy"},
 		"font-family":   {"12px"},

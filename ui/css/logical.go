@@ -14,6 +14,7 @@ var logical = func() map[string]string {
 		"max-inline-size": "max-width", "max-block-size": "max-height",
 		"inset-block-start": "top", "inset-block-end": "bottom",
 		"inset-inline-start": "left", "inset-inline-end": "right",
+		"overflow-inline": "overflow-x", "overflow-block": "overflow-y",
 		"border-start-start-radius": "border-top-left-radius", "border-start-end-radius": "border-top-right-radius",
 		"border-end-start-radius": "border-bottom-left-radius", "border-end-end-radius": "border-bottom-right-radius",
 	}

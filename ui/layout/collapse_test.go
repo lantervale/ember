@@ -44,7 +44,7 @@ func TestTheBorderThatWinsAnEdge(t *testing.T) {
 	assert.Equal(t, solid(2, blue), resolved(solid(2, blue), solid(2, red)),
 		"as good, the first offered: the nearer the cell")
 	order := []style.BorderStyle{
-		style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderRidge, style.BorderOutset,
+		style.BorderDouble, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderRidge, style.BorderOutset,
 		style.BorderGroove, style.BorderInset,
 	}
 	for i, s := range order[1:] {
@@ -68,6 +68,17 @@ func TestCollapsedBordersAreSharedHalfEach(t *testing.T) {
 	require.Len(t, tr.Of[tb].Collapsed, 12, "the edges of the grid, for the table to draw")
 	assert.Equal(t, box.Edge{Rect: geom.Rect{X: 0, Y: 4, W: 4, H: 12}, Style: style.BorderSolid, Color: black},
 		tr.Of[tb].Collapsed[0], "over the middle of the edge, stopping where the border across goes through")
+}
+
+func TestADoubleEdgeGoesThroughABorderAsWideAcrossIt(t *testing.T) {
+	black := color.RGB(0, 0, 0)
+	edit := collapsing(bordered(4, style.BorderDouble, black))
+	a, b := cell("H", edit), cell("H", edit)
+	tb := collapsed(nil, row(a, b))
+	tr := lay(el(dom.Div, block, tb), 400)
+	require.NotEmpty(t, tr.Of[tb].Collapsed)
+	assert.Equal(t, box.Edge{Rect: geom.Rect{X: 0, Y: 0, W: 4, H: 20}, Style: style.BorderDouble, Color: black},
+		tr.Of[tb].Collapsed[0], "its two lines cross the edge across, as Chrome draws them")
 }
 
 func TestAWiderBorderWinsItsEdgesAndWidensTheTable(t *testing.T) {

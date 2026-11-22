@@ -27,3 +27,20 @@ margin-inline: auto; padding-block: 1px 2px; inset-inline: 0 }`)
 	_, warns = css.Parse("", `p { margin-inline: 1px 2px 3px; inset-block: red }`)
 	assert.Len(t, warns, 2)
 }
+
+func TestTheBordersOfTwoSidesAndTheLogicalOverflowsAreRead(t *testing.T) {
+	sheet, warns := css.Parse("", `p { border-inline: 2px double red; border-block: thick dashed;
+border-inline-width: 1px 3px; border-block-style: solid dotted; border-block-color: red blue;
+overflow-inline: hidden; overflow-block: scroll }`)
+	assert.Empty(t, warns)
+	require.Len(t, sheet.Rules, 1)
+	var names []string
+	for _, d := range sheet.Rules[0].Decls {
+		names = append(names, d.Name)
+	}
+	assert.Equal(t, []string{"border-inline", "border-block", "border-inline-width", "border-block-style",
+		"border-block-color", "overflow-x", "overflow-y"}, names)
+
+	_, warns = css.Parse("", `p { border-inline: 1px 2px; border-block-width: 1px 2px 3px; border-inline-style: wavy }`)
+	assert.Len(t, warns, 3)
+}

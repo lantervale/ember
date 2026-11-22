@@ -51,10 +51,12 @@ func styleBorder(st *style.Computed, s side) shared {
 	return shared{st.BorderStyle.Left, st.Border.Left, st.BorderColor.Left, st.BorderHidden.Left}
 }
 
-// rank orders the border styles where two borders are as wide: solid over dashed over
-// dotted over ridge, outset, groove and inset (CSS 2.1 §17.6.2.1).
+// rank orders the border styles where two borders are as wide: double over solid over
+// dashed over dotted over ridge, outset, groove and inset (CSS 2.1 §17.6.2.1).
 func rank(s style.BorderStyle) int {
 	switch s {
+	case style.BorderDouble:
+		return 8
 	case style.BorderSolid:
 		return 7
 	case style.BorderDashed:
@@ -328,7 +330,8 @@ func (n *node) borders() rect {
 
 // edges lists the grid's borders as the table draws them, in its box: colX and rowY
 // are where the columns and the rows start, one more for the end. Where borders cross,
-// the wider way goes through and the other stops at its sides; as wide, the one across.
+// the wider way goes through and the other stops at its sides; as wide, the one across,
+// and a double down too, so that their lines cross as Chrome draws them.
 func (g *borderGrid) edges(colX, rowY []float32) []box.Edge {
 	if g.rows == 0 || g.cols == 0 {
 		return nil
@@ -353,8 +356,9 @@ func (g *borderGrid) edges(colX, rowY []float32) []box.Edge {
 			if e.width <= 0 {
 				continue
 			}
-			top := reach(down(r, k) > across(r, k), across(r, k))
-			bottom := reach(down(r+1, k) > across(r+1, k), across(r+1, k))
+			double := e.style == style.BorderDouble
+			top := reach(down(r, k) > across(r, k) || double && e.width >= across(r, k), across(r, k))
+			bottom := reach(down(r+1, k) > across(r+1, k) || double && e.width >= across(r+1, k), across(r+1, k))
 			out = append(out, box.Edge{
 				Rect: geom.Rect{
 					X: colX[k] - e.width/2, Y: rowY[r] - top, W: e.width, H: rowY[r+1] - rowY[r] + top + bottom,
