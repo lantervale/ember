@@ -4,6 +4,8 @@ import (
 	"math"
 	"slices"
 	"strings"
+
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // Media is what @media rules are answered for: the viewport's size in
@@ -68,6 +70,8 @@ const (
 	mediaOr
 	// mediaUnknown is a feature, a value or a form ui doesn't read.
 	mediaUnknown
+	// mediaStyle is a container's custom property, asked in style().
+	mediaStyle
 )
 
 type mediaCond struct {
@@ -77,8 +81,11 @@ type mediaCond struct {
 	// whether the feature is on at all.
 	spec   *mediaSpec
 	bounds []mediaBound
-	// word is the value asked of a feature that has words.
-	word string
+	// word is the value asked of a feature that has words, or of the
+	// custom property name names in style(), valued then.
+	word   string
+	name   string
+	valued bool
 }
 
 // mediaBound is one side of a range: the feature compared with a value.
@@ -89,15 +96,20 @@ type mediaBound struct {
 	value   mediaValue
 }
 
-// mediaValue is a number in the feature's own unit, or a share of the
-// viewport (vw, vh, vmin, vmax).
+// mediaValue is a number in the feature's own unit, a share of the
+// viewport (vw, vh, vmin, vmax), or a container query's length in units
+// its container measures.
 type mediaValue struct {
 	num  float64
 	unit string
+	dim  *Dim
 }
 
-func (v mediaValue) at(m Media) float64 {
-	w, h := float64(m.Width), float64(m.Height)
+func (v mediaValue) at(s *subject) float64 {
+	if v.dim != nil {
+		return v.dim.Absolute(s.lengthUnits()).Px
+	}
+	w, h := float64(s.m.Width), float64(s.m.Height)
 	switch v.unit {
 	case "vw":
 		return v.num * w / 100
@@ -122,8 +134,10 @@ const (
 )
 
 // mediaSpec is a feature ui answers: a number of its kind, or one of its
-// words, none of them the one that means off.
+// words, none of them the one that means off. A container's reads its
+// sizes on axes, unknown where it is no size container.
 type mediaSpec struct {
+	axes  sizeAxes
 	kind  mediaValueKind
 	of    func(m Media) float64
 	word  func(m Media) string
@@ -186,6 +200,29 @@ var mediaSpecs = map[string]*mediaSpec{
 		off: mediaNone},
 }
 
+// subject is what a condition is answered for: the viewport, or a query
+// container's content box, whose sizes are known on its sized axes.
+type subject struct {
+	m     Media
+	sized sizeAxes
+	// vars are the container's custom properties, and units what a
+	// container query's lengths stand for there, worked out from of the
+	// first time a length is read.
+	vars  map[string]string
+	of    *dom.Node
+	env   *measures
+	units *Units
+}
+
+func viewportSubject(m Media) *subject { return &subject{m: m, sized: bothAxes} }
+
+func (s *subject) lengthUnits() *Units {
+	if s.units == nil {
+		s.units = s.env.unitsAt(s.of)
+	}
+	return s.units
+}
+
 // matches reports whether one of l's queries holds for m; a list with
 // none always does.
 func (l *mediaList) matches(m Media) bool {
@@ -201,7 +238,7 @@ func (q mediaQuery) matches(m Media) bool {
 	}
 	result := triOf(q.kind == "" || q.kind == kwAll || q.kind == "screen")
 	if q.cond != nil {
-		result = min(result, q.cond.eval(m))
+		result = min(result, q.cond.eval(viewportSubject(m)))
 	}
 	if q.not {
 		result = -result
@@ -209,27 +246,34 @@ func (q mediaQuery) matches(m Media) bool {
 	return result == yes
 }
 
-func (c *mediaCond) eval(m Media) tri {
+func (c *mediaCond) eval(s *subject) tri {
 	switch c.op {
 	case mediaNot:
-		return -c.kids[0].eval(m)
+		return -c.kids[0].eval(s)
 	case mediaAnd:
 		result := yes
 		for i := range c.kids {
-			result = min(result, c.kids[i].eval(m))
+			result = min(result, c.kids[i].eval(s))
 		}
 		return result
 	case mediaOr:
 		result := no
 		for i := range c.kids {
-			result = max(result, c.kids[i].eval(m))
+			result = max(result, c.kids[i].eval(s))
 		}
 		return result
 	case mediaUnknown:
 		return unknown
+	case mediaStyle:
+		v, has := s.vars[c.name]
+		return triOf(has && (!c.valued || v == c.word))
 	case mediaFeature:
 		// below
 	}
+	if c.spec.axes&^s.sized != 0 {
+		return unknown
+	}
+	m := s.m
 	if c.spec.kind == mediaWord {
 		is := c.spec.word(m)
 		if c.word == "" {
@@ -242,7 +286,7 @@ func (c *mediaCond) eval(m Media) tri {
 		return triOf(is != 0)
 	}
 	for _, b := range c.bounds {
-		v := b.value.at(m)
+		v := b.value.at(s)
 		holds := b.orEqual && is == v
 		switch b.cmp {
 		case '<':
@@ -259,12 +303,33 @@ func (c *mediaCond) eval(m Media) tri {
 	return yes
 }
 
-// mediaParser reads media queries, telling warn of what makes one
-// unknown or malformed. browser reads the vendors' features as a sheet
-// read as a browser's does.
+// mediaParser reads media queries, or container queries when container
+// is set, telling warn of what makes one unknown or malformed. browser
+// reads the vendors' features as a sheet read as a browser's does;
+// inStyle is set inside style().
 type mediaParser struct {
-	browser bool
-	warn    func(pos Pos, format string, args ...any)
+	browser   bool
+	container bool
+	inStyle   bool
+	warn      func(pos Pos, format string, args ...any)
+}
+
+// rule is the at-rule the queries stand in, as warnings name it, and
+// kind what its features are.
+func (p *mediaParser) rule() string { return "@" + p.kind() }
+
+func (p *mediaParser) kind() string {
+	if p.container {
+		return kwContainer
+	}
+	return "media"
+}
+
+func (p *mediaParser) specs() map[string]*mediaSpec {
+	if p.container {
+		return containerSpecs
+	}
+	return mediaSpecs
 }
 
 // list reads an @media rule's prelude.
@@ -367,8 +432,10 @@ func (p *mediaParser) condition(toks []Component, orOK bool) (*mediaCond, bool) 
 
 func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 	switch {
+	case c.Kind == Function && p.container && !p.inStyle && strings.EqualFold(c.Text, "style"):
+		return p.styleQuery(c), true
 	case c.Kind == Function:
-		p.warn(c.Pos, "@media: %s() is not supported; its query never holds", c.Text)
+		p.warn(c.Pos, "%s: %s() is not supported; its query never holds", p.rule(), c.Text)
 		return mediaCond{op: mediaUnknown}, true
 	case c.Kind != LParen:
 		return mediaCond{}, false
@@ -382,6 +449,9 @@ func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 			return mediaCond{}, false
 		}
 		return *cond, true
+	}
+	if p.inStyle {
+		return p.styleFeature(c, c.Args), true
 	}
 	return p.feature(c, inner), true
 }
@@ -403,7 +473,7 @@ func (p *mediaParser) feature(at Component, toks []Component) mediaCond {
 	case slices.ContainsFunc(toks, isCmp):
 		return p.rangeFeature(at, toks, isCmp)
 	default:
-		p.warn(at.Pos, "@media: %s is no media feature; its query never holds", at.String())
+		p.warn(at.Pos, "%s: %s is no %s feature; its query never holds", p.rule(), at.String(), p.kind())
 		return unknownFeature
 	}
 	plain, bare, known := p.vendorFeature(name)
@@ -411,14 +481,15 @@ func (p *mediaParser) feature(at Component, toks []Component) mediaCond {
 		return unknownFeature
 	}
 	bound := byte(0)
-	spec := mediaSpecs[plain]
+	specs := p.specs()
+	spec := specs[plain]
 	if rest, ok := strings.CutPrefix(plain, "min-"); ok && spec == nil {
-		bound, spec = '>', mediaSpecs[rest]
+		bound, spec = '>', specs[rest]
 	} else if rest, ok = strings.CutPrefix(plain, "max-"); ok && spec == nil {
-		bound, spec = '<', mediaSpecs[rest]
+		bound, spec = '<', specs[rest]
 	}
 	if spec == nil || bound != 0 && (spec.kind == mediaWord || len(toks) == 1) {
-		p.warn(at.Pos, "@media: the %s feature is not supported; its query never holds", name)
+		p.warn(at.Pos, "%s: the %s feature is not supported; its query never holds", p.rule(), name)
 		return unknownFeature
 	}
 	c.spec = spec
@@ -428,15 +499,16 @@ func (p *mediaParser) feature(at Component, toks []Component) mediaCond {
 	value := toks[2:]
 	if spec.kind == mediaWord {
 		if len(value) != 1 || !isWord(value[0], spec.words...) {
-			p.warn(value[0].Pos, "@media: %s takes %s; its query never holds", name, strings.Join(spec.words, ", "))
+			p.warn(value[0].Pos, "%s: %s takes %s; its query never holds", p.rule(), name,
+				strings.Join(spec.words, ", "))
 			return unknownFeature
 		}
 		c.word = strings.ToLower(value[0].Text)
 		return c
 	}
-	v, ok := mediaValueOf(spec.kind, value, bare)
+	v, ok := p.valueOf(spec.kind, value, bare)
 	if !ok {
-		p.warn(value[0].Pos, "@media: %s can't take %s; its query never holds", name, join(value))
+		p.warn(value[0].Pos, "%s: %s can't take %s; its query never holds", p.rule(), name, join(value))
 		return unknownFeature
 	}
 	if bound == 0 {
@@ -452,7 +524,7 @@ func (p *mediaParser) feature(at Component, toks []Component) mediaCond {
 // a word.
 func (p *mediaParser) vendorFeature(name string) (string, bool, bool) {
 	v, rest := vendorOf(name)
-	if v == nil || !p.browser {
+	if v == nil || !p.browser || p.container {
 		return name, false, true
 	}
 	if as, read := v.feature(rest); as != "" {
@@ -491,13 +563,13 @@ func (p *mediaParser) rangeFeature(at Component, toks []Component, isCmp func(Co
 	named := slices.IndexFunc(operands, func(o []Component) bool { return len(o) == 1 && o[0].Kind == Ident })
 	bad := named < 0 || len(ops) > 2 || len(ops) == 2 && (named != 1 || ops[0].cmp != ops[1].cmp || ops[0].cmp == '=')
 	if bad || len(ops) == 1 && named > 1 {
-		p.warn(at.Pos, "@media: %s is no media feature; its query never holds", at.String())
+		p.warn(at.Pos, "%s: %s is no %s feature; its query never holds", p.rule(), at.String(), p.kind())
 		return unknownFeature
 	}
 	name := strings.ToLower(operands[named][0].Text)
-	spec := mediaSpecs[name]
+	spec := p.specs()[name]
 	if spec == nil || spec.kind == mediaWord {
-		p.warn(at.Pos, "@media: the %s feature is not supported in a range; its query never holds", name)
+		p.warn(at.Pos, "%s: the %s feature is not supported in a range; its query never holds", p.rule(), name)
 		return unknownFeature
 	}
 	c := mediaCond{spec: spec}
@@ -513,9 +585,9 @@ func (p *mediaParser) rangeFeature(at Component, toks []Component, isCmp func(Co
 				op.cmp = '<'
 			}
 		}
-		v, ok := mediaValueOf(spec.kind, side, false)
+		v, ok := p.valueOf(spec.kind, side, false)
 		if !ok {
-			p.warn(at.Pos, "@media: %s can't take %s; its query never holds", name, join(side))
+			p.warn(at.Pos, "%s: %s can't take %s; its query never holds", p.rule(), name, join(side))
 			return unknownFeature
 		}
 		c.bounds = append(c.bounds, mediaBound{cmp: op.cmp, orEqual: op.orEqual || op.cmp == '=', value: v})
@@ -532,6 +604,15 @@ var lengthUnits = map[string]float64{"px": 1, "em": 16, "rem": 16, "in": 96, "cm
 
 //nolint:gochecknoglobals // lookup table
 var resolutionUnits = map[string]float64{"dppx": 1, "x": 1, "dpi": 1.0 / 96, "dpcm": 2.54 / 96}
+
+// valueOf reads a feature's value: a container query's lengths are in
+// any unit its container measures.
+func (p *mediaParser) valueOf(kind mediaValueKind, v []Component, bare bool) (mediaValue, bool) {
+	if p.container && kind == mediaLength {
+		return containerLengthOf(v)
+	}
+	return mediaValueOf(kind, v, bare)
+}
 
 // mediaValueOf reads a feature's value; bare takes a resolution as a
 // bare number of dppx.

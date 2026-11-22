@@ -120,6 +120,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0114 | [Animations run on transitions' clock, over the cascade](0114-animations-run-on-transitions-clock-over-the-cascade.md) | rendering |
 | 0115 | [An img chooses its picture as Chrome does](0115-an-img-chooses-its-picture-as-chrome-does.md) | api |
 | 0117 | [A background keeps each longhand's list and paints its layers one by one](0117-a-background-keeps-each-longhands-list-and-paints-its-layers-one-by-one.md) | rendering |
+| 0120 | [Container queries restyle after layout until their answers hold](0120-container-queries-restyle-after-layout-until-their-answers-hold.md) | api |
 
 ## Writing one
 

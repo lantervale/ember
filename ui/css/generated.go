@@ -37,7 +37,8 @@ func (r *restyler) generated(n *dom.Node, parent *style.Computed, rem float32, n
 	}
 	r.overKeyframe(casc)
 	c := initial
-	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, overlay: r.overlay, node: n}
+	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, overlay: r.overlay, node: n,
+		self: true}
 	g := dom.Data(n).Before
 	if name == "after" {
 		g = dom.Data(n).After

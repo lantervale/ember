@@ -32,7 +32,8 @@ type blockItem struct {
 }
 
 func blockEstablishesBFC(st *style.Computed) bool {
-	return isScrollContainer(st) || st.AlignContent != style.AlignNormal || st.FlowRoot || st.Table || st.Multicol()
+	return isScrollContainer(st) || st.AlignContent != style.AlignNormal || st.FlowRoot || st.Table || st.Multicol() ||
+		st.ContainerType != style.ContainerNormal
 }
 
 // standsBesideFloats reports a block-level box the floats never overlap though it is no

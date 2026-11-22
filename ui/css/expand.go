@@ -47,6 +47,8 @@ func validate(name string, value []Component) error {
 
 // expand splits a shorthand's value, given without whitespace, into its
 // longhands; a longhand the value leaves out gets its initial value.
+//
+//nolint:funlen // one case a shorthand
 func expand(name string, v []Component) (map[string][]Component, error) {
 	long := shorthands[name]
 	out := make(map[string][]Component, len(long))
@@ -77,6 +79,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandAnyOrder(long, v, out)
 	case "columns":
 		err = expandColumns(v, out)
+	case kwContainer:
+		err = expandContainer(v, out)
 	case shortBackground:
 		err = expandBackground(v, out)
 	case "border":
@@ -609,5 +613,25 @@ size:
 		return err
 	}
 	out["font-family"] = v[i:]
+	return nil
+}
+
+// expandContainer splits container: a name list, then a type after a
+// slash.
+func expandContainer(v []Component, out map[string][]Component) error {
+	parts := splitOn(v, isSlash)
+	if len(parts) > 2 || len(parts[0]) == 0 {
+		return fmt.Errorf("container takes names, then a type after a slash")
+	}
+	if err := checkContainerName(parts[0]); err != nil {
+		return err
+	}
+	out["container-name"] = parts[0]
+	if len(parts) == 2 {
+		if err := checkContainerType(parts[1]); err != nil {
+			return err
+		}
+		out["container-type"] = parts[1]
+	}
 	return nil
 }

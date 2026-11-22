@@ -216,6 +216,29 @@ func checkColumnSpan(v []Component) error {
 	return single(words("none"))(v)
 }
 
+// checkContainerType takes normal, size or inline-size: a container of
+// its scroll state is not supported.
+func checkContainerType(v []Component) error {
+	if slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "scroll-state") }) {
+		return fmt.Errorf("container-type: scroll-state is not supported")
+	}
+	return single(words("normal", "size", "inline-size"))(v)
+}
+
+// checkContainerName takes none, or names none of which is a word a
+// container query reserves.
+func checkContainerName(v []Component) error {
+	if len(v) == 1 && isWord(v[0], kwNone) {
+		return nil
+	}
+	for _, c := range v {
+		if c.Kind != Ident || isWord(c, kwNone, "and", "or", "not", "default") || globalKeyword([]Component{c}) != "" {
+			return fmt.Errorf("container-name takes none or names, found %q", c.String())
+		}
+	}
+	return nil
+}
+
 // commaList checks each comma-separated part of v with each.
 func commaList(each check) check {
 	return func(v []Component) error {
@@ -245,6 +268,8 @@ func splitOn(v []Component, sep func(Component) bool) [][]Component {
 
 //nolint:gochecknoglobals,goconst // the properties' grammar
 var checks = map[string]check{
+	"container-type": checkContainerType,
+	"container-name": checkContainerName,
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
 		"contents", "list-item", "flow-root", "table", "inline-table", "table-row", "table-cell", "table-row-group",
 		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption")),

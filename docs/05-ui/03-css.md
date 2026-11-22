@@ -35,6 +35,7 @@ The presentational attributes of old pages style their element as Chrome reads t
 | `px` (a point), `%`, `em`, `rem`, `fr`, and the absolute `pt`, `pc`, `in`, `cm`, `mm`, `Q` at 96 `px` an inch | units |
 | `ex`, `ch`, `cap`, `ic`, `lh`, and the root's `rex`, `rch`, `rcap`, `ric`, `rlh` | the element's font: its x-height, the advance of its `0`, the height of its capitals, the advance of its `水`, its line height; half an em, half an em, the ascent and an em where the face says nothing, as Chrome. In `font-size` they read the parent's font, and `lh` in `line-height` the parent's line. A font that lands styles again the lengths written in them |
 | `vw`, `vh`, `vmin`, `vmax`, `vi`, `vb`, and each with `s`, `l` or `d` before it (`dvh`, `svw`…) | hundredths of the Document's viewport, an iframe's being its own box; the small, large and dynamic viewports are the one there is. A viewport that changes styles again the lengths written in them, and nothing where none is |
+| `cqw`, `cqh`, `cqi`, `cqb`, `cqmin`, `cqmax` | hundredths of the nearest [container](#container-queries)'s content box on their axis, the small viewport's where there is none |
 | `auto`, `min-content`, `max-content`, `fit-content`, `minmax()`, `repeat()`, `calc()`, `var()` | sizes and functions |
 | `min()`, `max()`, `clamp()` | the least, the greatest, a value between two, of lengths and percentages or of numbers, in each other and in `calc()`; over a percentage they are worked out by layout against what the percentage is of, as `width: min(100%, 500px)` |
 | hex, `rgb()`, `oklch()`, named colours, `transparent`, `currentColor` | colours |
@@ -45,7 +46,7 @@ The presentational attributes of old pages style their element as Chrome reads t
 
 | Properties | |
 |---|---|
-| layout | `display` (block, inline, inline-block, flex, inline-flex, grid, flow-root, table, inline-table, table-row-group, table-header-group, table-footer-group, table-row, table-cell, table-column, table-column-group, table-caption, none, contents), `position` (static, relative, absolute, fixed, sticky), `float` (left, right, none), `clear` (left, right, both, none), `top` `right` `bottom` `left` `inset`, the logical names of the sides and sizes ([below](#logical-properties)), `z-index`, `box-sizing` (border-box by default; content-box under [browser sheets](#browser-sheets)), `width` `height` and their `min-` `max-`, `aspect-ratio`, `margin`, `padding`, `overflow` (visible, hidden, clip, auto, scroll) and its axes (clipping on both with a `border-radius` clips to the rounded inner border, the padding box's curve, and a pointer in a cut corner reaches what's under it; nested rounded clips round only the innermost; under rotation or skew the clip is its bounding rectangle, [decision 0058](../99-decisions/0058-rounded-clips-through-a-per-batch-rounded-rect.md)), `visibility`, `order` |
+| layout | `display` (block, inline, inline-block, flex, inline-flex, grid, flow-root, table, inline-table, table-row-group, table-header-group, table-footer-group, table-row, table-cell, table-column, table-column-group, table-caption, none, contents), `position` (static, relative, absolute, fixed, sticky), `float` (left, right, none), `clear` (left, right, both, none), `top` `right` `bottom` `left` `inset`, the logical names of the sides and sizes ([below](#logical-properties)), `z-index`, `box-sizing` (border-box by default; content-box under [browser sheets](#browser-sheets)), `container-type`, `container-name` and `container` ([below](#container-queries)), `width` `height` and their `min-` `max-`, `aspect-ratio`, `margin`, `padding`, `overflow` (visible, hidden, clip, auto, scroll) and its axes (clipping on both with a `border-radius` clips to the rounded inner border, the padding box's curve, and a pointer in a cut corner reaches what's under it; nested rounded clips round only the innermost; under rotation or skew the clip is its bounding rectangle, [decision 0058](../99-decisions/0058-rounded-clips-through-a-per-batch-rounded-rect.md)), `visibility`, `order` |
 | columns | `column-count`, `column-width`, `columns`, `column-gap` (normal is 1em), `column-rule` and its `-width` `-style` `-color`, `column-fill` (balance, auto), `break-inside` (auto, avoid; `page-break-inside` is read as it), `break-before` `break-after` (auto, avoid, column), `orphans`, `widows` |
 | flex and grid | `flex` and its parts, `gap` `row-gap` `column-gap`, `align-*`, `justify-*`, `place-*`, `grid-template-columns` `-rows` `-areas` and the `grid-template` shorthand, with names of lines in brackets (`[full-start] 1fr [content-start]`, in `repeat()` too), `grid-column` `grid-row` and their `-start` `-end`, `grid-area` (an area's name, or its four lines), a line by number, by name (an area's `-start` or `-end` line, or the first of that name), by `name n` and by `span name n`, a name no line has standing for the lines after the grid, as in Chrome, `grid-auto-*` |
 | text | `font-family` `font-size` `font-weight` `font-style` and the `font` shorthand, `line-height`, `letter-spacing`, `word-spacing` (a length or a percentage of the font size, after each space and no-break space, as Chrome), `text-align`, `text-indent`, `text-transform` (in text fields too: drawn cased, the value kept as typed, the caret and selection following what's drawn), `white-space`, `text-overflow`, `overflow-wrap`, `text-shadow`, `text-decoration` and its `-line` `-style` `-color` `-thickness`, `vertical-align` (every value, below), `color`, `list-style-type` (disc, circle, square, decimal, none), `-webkit-font-smoothing: none` (glyphs unsmoothed on the pixel grid, for pixel fonts) and `antialiased` (glyphs at their exact coverage, without the stem darkening of the default: thinner, and a square glyph on whole pixels is those pixels alone, as in Chrome on macOS) |
@@ -142,7 +143,7 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | `clip` | `overflow: clip` |
 | the `mask` shorthand, a gradient as a `mask-image`, several mask layers | `mask-image: url()` and its longhands |
 | repeating gradients, colour hints | a gradient's plain stops |
-| at-rules but `@import`, `@font-face`, `@media` and `@keyframes` | not supported |
+| at-rules but `@import`, `@font-face`, `@media`, `@container` and `@keyframes` | not supported |
 
 ## Animations
 
@@ -291,6 +292,30 @@ An `@media` rule applies while its query holds for the Document's viewport: the 
 | `and`, `,`, `not`, `only`, `or` between conditions in parentheses, `@media` inside `@media` | as in Chrome |
 
 A feature ui doesn't know makes its query false, as in Chrome, with a warning; the other queries of the list still count. Every answer is Chrome's for the same viewport (`TestChromeAnswersMediaQueriesTheSame`).
+
+## Container queries
+
+Decision [0120](../99-decisions/0120-container-queries-restyle-after-layout-until-their-answers-hold.md).
+
+```css
+.panel { container: panel / inline-size; }
+.stats { display: flex; flex-direction: column; }
+@container panel (width > 420px) { .stats { flex-direction: row; } .stat { width: 30cqw; } }
+```
+
+An element with `container-type: inline-size` or `size` is a container: an `@container` rule applies to an element while its condition holds for the nearest container above it, so a component follows the room its panel leaves it, not the window's. `container-name` gives a container names a rule can ask for (`@container panel (…)`), and `container` sets both, the type after a slash. The query is answered for the container's content box, the same frame it is laid out: `Document.Layout` lays the tree out, answers the containers, and styles and lays out again what an answer moved, until none moves. A resize that crosses no container's boundary restyles nothing.
+
+A container's size doesn't come from what it holds, as in Chrome: an `inline-size` container shrinking to fit (an inline block, a float, a flex or grid item, an absolutely placed box) is as wide as its padding and border, within its `min-width`, its text wrapping inside; a `size` container is as high as nothing too, unless its `height` says. Every container holds its floats and its children's margins, as a `flow-root` does. An inline box, a table or a part of one is no size container: a size query never holds there.
+
+| Container queries | |
+|---|---|
+| `@container [name] condition`, a list of them | a condition asks the nearest container above the element (the element itself for its `::before` and `::after`) with that name whose type answers every size feature it reads: an `inline-size` container answers the width only. A name alone holds wherever an element above has it |
+| `width`, `height`, `inline-size`, `block-size`, `aspect-ratio`, `orientation`, each size with `min-` and `max-` | the container's content box; ranges as `(400px <= width < 900px)`; lengths in any unit, a font's as the container's font measures it, `calc()` too |
+| `and`, `or`, `not`, `@container` inside `@container` or `@media` | as in Chrome; a container nobody has, or a size not laid out yet, is unknown, false under `not` too |
+| `style(--name: value)`, `style(--name)`, and `and`, `or`, `not` inside `style()` | the container's custom property, its text compared; every element is a container for these |
+| `scroll-state()`, `style()` on a standard property, `container-type: scroll-state` | refused with a warning |
+
+A malformed condition (`@container none (…)`, a name after the query) drops the rule, as Chrome drops it. `doc.MatchedRules(n)` names the `@container` rules a match stands in.
 
 ## Where a sheet came from
 

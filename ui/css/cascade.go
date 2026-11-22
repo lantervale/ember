@@ -255,6 +255,11 @@ type matcher struct {
 	// both nil when no sheet has any.
 	off   [][]bool
 	ranks [][]int32
+	// env holds the containers' sizes @container rules are answered
+	// for, and self is set while a pseudo-element is matched, whose
+	// container may be its element.
+	env  *measures
+	self bool
 	// hints are the declarations the element's own attributes stand for,
 	// an img's width and height: the author's, under every rule of the
 	// sheets.
@@ -276,7 +281,7 @@ func (m *matcher) matchedFor(e *dom.Node, sheets []*Sheet, inline []Declaration,
 	if m.best == nil {
 		m.best = map[int]Specificity{}
 	}
-	m.out = m.out[:0]
+	m.out, m.self = m.out[:0], pseudo != ""
 	order := 0
 	if pseudo == "" {
 		for i := range m.hints {
@@ -342,17 +347,28 @@ func (m *matcher) matchedFor(e *dom.Node, sheets []*Sheet, inline []Declaration,
 }
 
 // try keeps, for each rule of s with a selector among es matching e, its
-// most specific matching selector; the rules off are left out.
+// most specific matching selector; the rules off are left out, and those
+// whose @container rules don't all hold for e.
 func (m *matcher) try(s *Sheet, es []entry, e *dom.Node, off []bool) {
 	for _, en := range es {
-		sel := s.Rules[en.rule].Selectors[en.sel]
-		if off != nil && off[en.rule] || !sel.Matches(e) {
+		r := &s.Rules[en.rule]
+		sel := r.Selectors[en.sel]
+		if off != nil && off[en.rule] || !sel.Matches(e) || len(r.containers) > 0 && !m.contained(r, e) {
 			continue
 		}
 		if sp, ok := m.best[en.rule]; !ok || sp.Less(sel.Specificity) {
 			m.best[en.rule] = sel.Specificity
 		}
 	}
+}
+
+func (m *matcher) contained(r *Rule, e *dom.Node) bool {
+	for _, c := range r.containers {
+		if !c.holds(e, m.self, m.env) {
+			return false
+		}
+	}
+	return true
 }
 
 func levelOf(agent, important bool) level {

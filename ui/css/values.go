@@ -16,7 +16,7 @@ type Dim struct {
 	Num, Px, Pct, Em, Rem, Fr float64
 	Rel                       [relUnits]float64
 	terms                     []boundTerm
-	rel                       uint16
+	rel                       uint32
 	kind                      dimKind
 }
 
@@ -55,17 +55,22 @@ const (
 	unitVh
 	unitVmin
 	unitVmax
+	unitCqw
+	unitCqh
+	unitCqmin
+	unitCqmax
 	relUnits
 )
 
 const (
-	fontUnits     = 1<<(unitRlh+1) - 1
-	viewportUnits = (1<<relUnits - 1) &^ fontUnits
+	fontUnits      = 1<<(unitRlh+1) - 1
+	viewportUnits  = 1<<unitVw | 1<<unitVh | 1<<unitVmin | 1<<unitVmax
+	containerUnits = 1<<unitCqw | 1<<unitCqh | 1<<unitCqmin | 1<<unitCqmax
 )
 
 // relativeUnits are the units of Rel by name: the small, large and
 // dynamic viewports are the one viewport, and the inline and block axes
-// the horizontal and the vertical.
+// the horizontal and the vertical, a container's as the viewport's.
 //
 //nolint:gochecknoglobals // lookup table
 var relativeUnits = func() map[string]relUnit {
@@ -76,6 +81,10 @@ var relativeUnits = func() map[string]relUnit {
 		for _, size := range []string{"", "s", "l", "d"} {
 			units[size+name] = u
 		}
+	}
+	for name, u := range map[string]relUnit{"cqw": unitCqw, "cqh": unitCqh, "cqi": unitCqw, "cqb": unitCqh,
+		"cqmin": unitCqmin, "cqmax": unitCqmax} {
+		units[name] = u
 	}
 	return units
 }()

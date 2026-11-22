@@ -20,7 +20,13 @@ type measures struct {
 	width, height float32
 	root          *dom.Node
 	// used are the relative units read since the tree was last styled whole.
-	used uint16
+	used uint32
+	// containers are the elements styled as size containers, sizes the
+	// content boxes of those laid out, read those a container unit
+	// measured, and requery those whose descendants the next Compute
+	// restyles (Transitions.Requery).
+	containers, read, requery map[*dom.Node]bool
+	sizes                     map[*dom.Node][2]float32
 }
 
 // fontUnits are f's, or what CSS has for a font that says nothing: half

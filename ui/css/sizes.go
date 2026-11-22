@@ -69,7 +69,7 @@ func sourceSizeValue(c Component) (Dim, bool) {
 // none holds. Font units are those of the initial font, 16 pixels.
 func (s Sizes) Width(m Media, auto float32) float32 {
 	for _, e := range s.entries {
-		if e.auto && auto < 0 || e.cond != nil && e.cond.eval(m) != yes {
+		if e.auto && auto < 0 || e.cond != nil && e.cond.eval(viewportSubject(m)) != yes {
 			continue
 		}
 		if e.auto {
@@ -92,6 +92,7 @@ func initialUnits(m Media) *Units {
 	}
 	w, h := float64(m.Width), float64(m.Height)
 	u.Rel[unitVw], u.Rel[unitVh], u.Rel[unitVmin], u.Rel[unitVmax] = w/100, h/100, min(w, h)/100, max(w, h)/100
+	copy(u.Rel[unitCqw:], u.Rel[unitVw:unitCqw])
 	return u
 }
 
