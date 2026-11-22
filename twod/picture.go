@@ -101,6 +101,42 @@ func (u *Canvas) EndPicture(margin float32) *Picture {
 // in the clip in place. Drawn again, it shows again over itself, through
 // other effects: a shadow first, then the picture over it.
 func (u *Canvas) DrawPicture(pic *Picture, effects ...*render.Effect) {
+	u.showPicture(pic, draw.Alpha, effects)
+}
+
+// SumPicture shows pic as DrawPicture does, its colours and alpha added
+// to what is drawn: two pictures cut apart join without a seam.
+func (u *Canvas) SumPicture(pic *Picture, effects ...*render.Effect) {
+	u.showPicture(pic, draw.Plus, effects)
+}
+
+// PushClipPicture cuts what is drawn next to pic's alpha where it lies,
+// nothing showing outside it, until PopClip; Inverted cuts it where pic
+// is opaque, all showing outside it. Only the innermost picture or mask
+// cuts, as PushClipMask says. pic must be drawn in the frame.
+func (u *Canvas) PushClipPicture(pic *Picture, opts ...MaskOption) {
+	var m maskSpec
+	for _, o := range opts {
+		o.mask(&m)
+	}
+	xf := u.list.Transform()
+	u.list.SetTransform(geom.Identity2D())
+	defer u.list.SetTransform(xf)
+	if pic == nil {
+		pic = &Picture{}
+	}
+	var mask *render.Texture
+	if pic.pass != nil {
+		mask = pic.pass.Target
+	}
+	if m.inverted {
+		u.list.PushClipMaskInverted(pic.rect, mask)
+		return
+	}
+	u.list.PushClipMask(pic.rect, mask)
+}
+
+func (u *Canvas) showPicture(pic *Picture, blend draw.Blend, effects []*render.Effect) {
 	if pic == nil || pic.rect.W <= 0 || pic.rect.H <= 0 {
 		return
 	}
@@ -116,7 +152,7 @@ func (u *Canvas) DrawPicture(pic *Picture, effects ...*render.Effect) {
 	pic.shown++
 	p.Effects = append(p.Effects[:0], effects...)
 	xf, mod := u.list.Transform(), u.list.Modulate()
-	u.list.Picture(pic.rect, p, draw.Alpha, nil)
+	u.list.Picture(pic.rect, p, blend, nil)
 	u.list.SetTransform(xf)
 	u.list.SetModulate(mod)
 }

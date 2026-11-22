@@ -99,6 +99,65 @@ func TestANestedPictureIsDrawnBeforeTheOneItIsIn(t *testing.T) {
 	assert.Equal(t, passes[0].Target, passes[1].List.Batches[1].Image(), "the inner one first, shown in the outer")
 }
 
+// cutByPicture draws a picture, then a picture and a square cut by it,
+// inverted when inverted, the second picture summed with what is there.
+type cutByPicture struct {
+	Item
+	inverted bool
+	mask     *Picture
+}
+
+func (p *cutByPicture) Draw(c *Canvas) {
+	c.SetTransform(c.Transform().Mul(geom.Transform2DFrom(geom.V2(100, 50), 0, 0, geom.V2(1, 1))))
+	c.BeginPicture()
+	c.Rect(geom.Rect{W: 20, H: 10}, color.White)
+	p.mask = c.EndPicture(0)
+	c.BeginPicture()
+	c.Rect(geom.Rect{W: 4, H: 4}, color.White)
+	shown := c.EndPicture(0)
+	var opts []MaskOption
+	if p.inverted {
+		opts = append(opts, Inverted())
+	}
+	c.PushClipPicture(p.mask, opts...)
+	c.Rect(geom.Rect{X: 1, W: 5, H: 5}, color.White)
+	c.SumPicture(shown)
+	c.PopClip()
+	c.Rect(geom.Rect{X: 30, W: 2, H: 2}, color.White)
+}
+
+func TestWhatIsDrawnIsCutByAPicturesAlpha(t *testing.T) {
+	w, win, front := app()
+	p := &cutByPicture{Item: Base()}
+	win.Add(Build(p, "cut"))
+	w.RunFrames(1)
+
+	passes := draw.PassesFor(w, win)
+	require.Len(t, passes, 2)
+	require.Len(t, front.Batches, 3)
+	square, sum, after := front.Batches[0], front.Batches[1], front.Batches[2]
+	assert.Equal(t, p.mask.pass.Target, square.Cut.Mask, "the square is cut by the picture's alpha")
+	assert.False(t, square.Cut.Inverted)
+	r := p.mask.Rect()
+	assert.Equal(t, geom.V2(1, 1), square.Cut.ToMask.Xform(geom.V2(r.X+r.W, r.Y+r.H)), "stretched over where it lies")
+	assert.Equal(t, r, square.Clip, "and nothing shows outside it")
+	assert.Equal(t, draw.Plus, sum.Blend, "the second picture adds up")
+	assert.Equal(t, square.Cut, sum.Cut, "cut too")
+	assert.True(t, after.Cut.IsZero(), "until the clip is popped")
+}
+
+func TestAnInvertedPictureCutsWhereItIsOpaque(t *testing.T) {
+	w, win, front := app()
+	p := &cutByPicture{Item: Base(), inverted: true}
+	win.Add(Build(p, "cut"))
+	w.RunFrames(1)
+
+	square := front.Batches[0]
+	assert.Equal(t, p.mask.pass.Target, square.Cut.Mask)
+	assert.True(t, square.Cut.Inverted)
+	assert.False(t, contains(p.mask.Rect(), square.Clip), "what lies outside it shows")
+}
+
 func TestAPicturesPassesAndEffectsAreKeptFromFrameToFrame(t *testing.T) {
 	w, win, _ := app()
 	p := &pictured{Item: Base(), twice: true}
