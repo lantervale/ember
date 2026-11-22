@@ -1,4 +1,4 @@
-# 0122. An element is drawn in the scheme its color-scheme allows
+# 0126. An element is drawn in the scheme its color-scheme allows
 
 - Status: Accepted
 - Date: 2026-11-22

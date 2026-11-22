@@ -330,7 +330,7 @@ The program's own answer wins: `ui.ColorScheme(platform.AppearanceDark)` (`doc.S
 
 ### Colour schemes
 
-Decision [0122](../99-decisions/0122-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md).
+Decision [0126](../99-decisions/0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md).
 
 `color-scheme` (`normal`, `light`, `dark`, `light dark`, names of the page's own, `only`) says which schemes an element can be drawn in, and its children inherit it. An element is drawn in the scheme the Document prefers where it names both, in the one it names otherwise, and light under `normal`, so a page that names no scheme stays light whatever the system says:
 

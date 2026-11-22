@@ -33,7 +33,7 @@ func ColorScheme(a platform.Appearance) DocumentOption { return func(d *Document
 // ColorScheme is the scheme the Document answers prefers-color-scheme
 // with: the program's, else the Preferences', else its host's in an
 // iframe, else light. An element whose color-scheme names both light and
-// dark is drawn in it (decision 0122).
+// dark is drawn in it (decision 0126).
 func (d *Document) ColorScheme() platform.Appearance {
 	switch {
 	case d.scheme != platform.AppearanceUnknown:
