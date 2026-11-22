@@ -17,6 +17,22 @@ const (
 	typeReset = "reset"
 )
 
+// The types of input ui's code tells apart.
+const (
+	typeText     = "text"
+	typeSearch   = "search"
+	typePassword = "password"
+	typeEmail    = "email"
+	typeURL      = "url"
+	typeNumber   = "number"
+	typeCheckbox = "checkbox"
+	typeRadio    = "radio"
+	typeHidden   = "hidden"
+	typeButton   = "button"
+	typeSubmit   = "submit"
+	typeImage    = "image"
+)
+
 // A tooltip's or a suggestion list's side of its anchor.
 const (
 	sideAbove = "above"

@@ -117,7 +117,7 @@ func (d *Document) setRadio(n *Node, on bool) {
 // checkRadio checks n and unchecks the rest of its group, emitting Edited
 // and Changed when it wasn't checked.
 func (d *Document) checkRadio(n *Node) {
-	if has(n, "disabled") || d.radioChecked(n) {
+	if disabledField(n) || d.radioChecked(n) {
 		return
 	}
 	for _, o := range d.radioGroup(n) {
@@ -153,7 +153,7 @@ func (d *Document) radioArrow(n *Node, i control.Intent) bool {
 	}
 	for k := 1; k < len(group); k++ {
 		next := group[(at+step*k+len(group)*k)%len(group)]
-		if has(next, "disabled") || next.Box().W == 0 {
+		if disabledField(next) || next.Box().W == 0 {
 			continue
 		}
 		d.moveFocus(func() bool { return d.focus.Set(next, true) })
@@ -176,7 +176,7 @@ func (d *Document) radioTabIndex(n *Node, group []*Node, i int) int {
 		}
 	}
 	for _, o := range group {
-		if !has(o, "disabled") {
+		if !disabledField(o) {
 			if o == n {
 				return i
 			}

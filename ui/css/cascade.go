@@ -111,7 +111,7 @@ func (r *hasRead) names(e *dom.Node) bool {
 // them read them above their subject.
 //
 //nolint:gochecknoglobals // lookup table
-var inheritedAttrs = map[string]bool{"[lang": true, "[contenteditable": true}
+var inheritedAttrs = map[string]bool{"[lang": true, "[contenteditable": true, "[dir": true}
 
 // indexHas notes in x what the :has() pseudo-classes of sel, a selector of
 // the rule ri, read, and what its other pseudo-classes read away from the

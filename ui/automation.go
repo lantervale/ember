@@ -130,7 +130,7 @@ func (d *Document) recorded(n *Node) recorded {
 	if n.IsText() {
 		return recorded{}
 	}
-	enabled := !has(n, "disabled")
+	enabled := !disabledField(n)
 	if isMenuItem(n) {
 		var value any
 		if r := roleOf(n); r == roleMenuItemCheckbox || r == roleMenuItemRadio {
