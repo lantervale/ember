@@ -5,6 +5,8 @@ package ui_test
 import (
 	"fmt"
 	"math"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,14 +18,31 @@ import (
 	"github.com/lantervale/ember/ui/internal/chrome"
 )
 
+// systemColourNames are the system colours compared with Chrome's. ui's
+// are Chrome's on macOS, the same on every system; Highlight,
+// HighlightText, SelectedItem and SelectedItemText are each system's own
+// in Chrome, and lightOwn are Windows' in its light scheme.
+//
 //nolint:gochecknoglobals // a test's table
-var systemColourNames = []string{
-	"Canvas", "CanvasText", "Field", "FieldText", "ButtonFace", "ButtonText", "ButtonBorder", "LinkText",
-	"VisitedText", "ActiveText", "GrayText", "Highlight", "HighlightText", "Mark", "MarkText", "SelectedItem",
-	"SelectedItemText", "AccentColor", "AccentColorText", "ActiveBorder", "ActiveCaption", "AppWorkspace",
-	"Background", "ButtonHighlight", "ButtonShadow", "CaptionText", "InactiveBorder", "InactiveCaption",
-	"InactiveCaptionText", "InfoBackground", "InfoText", "Menu", "MenuText", "Scrollbar", "ThreeDDarkShadow",
-	"ThreeDFace", "ThreeDHighlight", "ThreeDLightShadow", "ThreeDShadow", "Window", "WindowFrame", "WindowText",
+var (
+	systemColourNames = []string{
+		"Canvas", "CanvasText", "Field", "FieldText", "ButtonFace", "ButtonText", "ButtonBorder", "LinkText",
+		"VisitedText", "ActiveText", "GrayText", "Mark", "MarkText", "AccentColor", "AccentColorText", "ActiveBorder",
+		"ActiveCaption", "AppWorkspace", "Background", "ButtonHighlight", "ButtonShadow", "CaptionText",
+		"InactiveBorder", "InactiveCaption", "InactiveCaptionText", "InfoBackground", "InfoText", "Menu", "MenuText",
+		"Scrollbar", "ThreeDDarkShadow", "ThreeDFace", "ThreeDHighlight", "ThreeDLightShadow", "ThreeDShadow",
+		"Window", "WindowFrame", "WindowText",
+	}
+	lightOwn = []string{
+		"ButtonFace", "LinkText", "VisitedText", "ActiveText", "GrayText", "ButtonHighlight", "ButtonShadow",
+		"ThreeDFace",
+	}
+)
+
+// sharedColours reports whether Chrome answers the system colour name in
+// scheme as on macOS here.
+func sharedColours(scheme, name string) bool {
+	return runtime.GOOS == "darwin" || scheme == "dark" || !slices.Contains(lightOwn, name)
 }
 
 // schemePage holds elements whose colours differ by scheme: every
@@ -34,6 +53,9 @@ func schemePage(doc *ui.Document) {
 	body := doc.Body()
 	for _, scheme := range []string{"light", "dark"} {
 		for _, name := range systemColourNames {
+			if !sharedColours(scheme, name) {
+				continue
+			}
 			body.Append(ui.Div(ui.Style(fmt.Sprintf("color-scheme: %s; color: %s; background-color: %s",
 				scheme, name, name))))
 		}
@@ -49,7 +71,7 @@ func schemePage(doc *ui.Document) {
 			ui.Span(ui.Style("color-scheme: light"))),
 		ui.Div(ui.Style("color-scheme: dark; --ink: light-dark(red, blue)"),
 			ui.Span(ui.Style("color-scheme: light; color: var(--ink)")),
-			ui.Span(ui.Style("color: var(--ink); background-color: light-dark(rgb(1 2 3 / 50%), Highlight)"))),
+			ui.Span(ui.Style("color: var(--ink); background-color: light-dark(rgb(1 2 3 / 50%), Mark)"))),
 		ui.Div(ui.Style("color-scheme: dark"), ui.Span(ui.Style("color: initial"))),
 	)
 }
@@ -138,6 +160,9 @@ func TestChromeResolvesSystemColoursInEachScheme(t *testing.T) {
 func TestChromeColoursABrowsersControlsInTheirScheme(t *testing.T) {
 	for _, scheme := range []string{"light", "dark"} {
 		t.Run(scheme, func(t *testing.T) {
+			if !sharedColours(scheme, "ButtonFace") {
+				t.Skip("Chrome's light controls take the system's colours here")
+			}
 			doc := ui.NewDocument(ui.BrowserSheets(), ui.CSS(":root { color-scheme: "+scheme+" } body { color: #c00 }"))
 			off := ui.Attr("disabled", "")
 			doc.Body().Append(

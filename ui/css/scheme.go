@@ -10,7 +10,9 @@ import (
 
 // systemColors are CSS's system colours and the deprecated ones that
 // stand for them, in the light and the dark scheme, as Chrome resolves
-// them (TestChromeResolvesSystemColoursInEachScheme): 0xRRGGBBAA.
+// them (TestChromeResolvesSystemColoursInEachScheme), Highlight,
+// SelectedItem and their texts as on macOS, where each system has its
+// own: 0xRRGGBBAA.
 //
 //nolint:gochecknoglobals,goconst // the system colours' table
 var systemColors = map[string][2]uint32{
