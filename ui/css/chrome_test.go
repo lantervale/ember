@@ -94,8 +94,13 @@ var compared = map[string]func(s *style.Computed) string{
 	"flex-shrink": func(s *style.Computed) string { return num(s.Shrink) },
 	"order":       func(s *style.Computed) string { return strconv.Itoa(s.Order) },
 	"visibility": func(s *style.Computed) string {
+		if s.Collapse {
+			return "collapse"
+		}
 		return map[bool]string{true: "visible", false: "hidden"}[s.Visible]
 	},
+	"empty-cells": func(s *style.Computed) string { return map[bool]string{true: "hide", false: "show"}[s.EmptyCellsHide] },
+	"column-span": func(s *style.Computed) string { return map[bool]string{true: "all", false: "none"}[s.ColumnSpanAll] },
 	"pointer-events": func(s *style.Computed) string {
 		return map[bool]string{true: "none", false: "auto"}[s.PointerNone]
 	},
@@ -296,6 +301,7 @@ span { font-size: 1.5em; padding-left: 1rem; border-left-color: currentcolor; }
 }
 .cycle { --a: var(--b); --b: var(--a); color: var(--a, #123456); }
 .hidden { visibility: hidden; }
+.folded { visibility: collapse; empty-cells: hide; column-span: all; }
 input[type="checkbox"] { background-color: tomato; }
 input[type=range][title] { background-color: RebeccaPurple; border-top: 2px solid currentColor; color: darkslategray; }
 [title="tip"] { outline-color: currentColor; outline-style: dotted; }
@@ -315,6 +321,7 @@ input[type=range][title] { background-color: RebeccaPurple; border-top: 2px soli
 			ui.Button(ui.Text("button inherits")),
 		),
 		ui.Div(ui.Class("vars", "cycle"), ui.Span(ui.Class("hidden"), ui.Text("vars"))),
+		ui.Div(ui.Class("folded"), ui.Span(ui.Text("inherits collapse and hide, not the span"))),
 		ui.Div(ui.Style("font-size: 20px; --ink: #0ff"), ui.P(ui.Style("color: var(--ink)"), ui.Text("inline var"))),
 		ui.Div(
 			ui.Input(ui.Type("checkbox")),

@@ -1546,8 +1546,8 @@ var props = func() map[string]prop {
 		"column-width": lengthField(func(c *style.Computed) *style.Length { return &c.ColumnWidth }, sizeLength),
 		"column-fill": field(func(c *style.Computed) *bool { return &c.ColumnFillAuto },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "auto") }, flips[bool]()),
-		"column-span": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {},
-			anim: anim{kind: discrete}},
+		"column-span": field(func(c *style.Computed) *bool { return &c.ColumnSpanAll },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], kwAll) }, flips[bool]()),
 		"column-rule-width": field(func(c *style.Computed) *float32 { return &c.ColumnRuleWidth }, borderWidthOf, widths),
 		"column-rule-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.ColumnRuleStyle }, borderStyles),
 		"column-rule-color": currentField(style.ColumnRuleCurrent,
@@ -1677,6 +1677,8 @@ var props = func() map[string]prop {
 		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }, anyLength),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
+		"empty-cells": field(func(c *style.Computed) *bool { return &c.EmptyCellsHide },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "hide") }, flips[bool]()),
 		"border-collapse": field(func(c *style.Computed) *bool { return &c.BorderCollapse },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }, flips[bool]()),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
@@ -1710,9 +1712,13 @@ var props = func() map[string]prop {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
 		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle }, listStyles),
-		"visibility": field(func(c *style.Computed) *bool { return &c.Visible }, func(_ *ctx, v []Component) bool {
-			return isWord(v[0], "visible")
-		}, visibility),
+		"visibility": {
+			set: func(x *ctx, v []Component) {
+				x.c.Visible, x.c.Collapse = isWord(v[0], "visible"), isWord(v[0], "collapse")
+			},
+			inherit: func(dst, src *style.Computed) { dst.Visible, dst.Collapse = src.Visible, src.Collapse },
+			anim:    visibility.on(func(c *style.Computed) *bool { return &c.Visible }),
+		},
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },

@@ -77,6 +77,7 @@ var properties = map[string]property{
 	"border-spacing":         {inherited: true, initial: "0"},
 	"border-collapse":        {inherited: true, initial: "separate"},
 	"caption-side":           {inherited: true, initial: "top"},
+	"empty-cells":            {inherited: true, initial: "show"},
 	"table-layout":           {initial: "auto"},
 	"text-align":             {inherited: true, initial: "start"},
 	"text-indent":            {inherited: true, initial: "0"},

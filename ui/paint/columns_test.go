@@ -69,7 +69,7 @@ func ruled(count int, edit func(*style.Computed)) *box.Box {
 		}
 	})
 	b.Padding = box.Edges{Top: 5, Right: 5, Bottom: 5, Left: 5}
-	b.Columns = &box.Columns{Count: count, Width: 80, Gap: 20, Height: 60}
+	b.Columns = &box.Columns{Width: 80, Gap: 20, Rows: []box.ColumnRow{{Count: count, Height: 60}}}
 	return b
 }
 
@@ -88,6 +88,13 @@ func TestARuleOfStyleNoneOrNoWidthDrawsNothing(t *testing.T) {
 	assert.Empty(t, coloured(paintOne(none), green))
 	thin := ruled(3, func(s *style.Computed) { s.ColumnRuleWidth = 0 })
 	assert.Empty(t, coloured(paintOne(thin), green))
+}
+
+func TestEachRowOfColumnsHasItsRules(t *testing.T) {
+	b := ruled(0, nil)
+	b.Columns.Rows = []box.ColumnRow{{Count: 2, Height: 20}, {Count: 3, Top: 40, Height: 10}}
+	assert.Equal(t, []geom.Rect{{X: 103, Y: 15, W: 4, H: 20}, {X: 103, Y: 55, W: 4, H: 10}, {X: 203, Y: 55, W: 4, H: 10}},
+		coloured(paintOne(b), green), "none across what spans the columns between them")
 }
 
 func TestRulesGoOnBetweenTheColumnsThatOverflow(t *testing.T) {

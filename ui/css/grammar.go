@@ -215,14 +215,6 @@ func checkMaskPosition(v []Component) error {
 	return checkPosition(v)
 }
 
-// checkColumnSpan takes none: an element spanning every column is not laid out.
-func checkColumnSpan(v []Component) error {
-	if len(v) == 1 && isWord(v[0], kwAll) {
-		return fmt.Errorf("column-span: all is not supported; put the element before the columns")
-	}
-	return single(words("none"))(v)
-}
-
 // checkContainerType takes normal, size or inline-size: a container of
 // its scroll state is not supported.
 func checkContainerType(v []Component) error {
@@ -349,7 +341,7 @@ var checks = map[string]check{
 	"column-count":          single(either(positiveInteger, words("auto"))),
 	"column-width":          single(either(dimTerm(nonNegative), words("auto"))),
 	"column-fill":           single(words("balance", "auto")),
-	"column-span":           checkColumnSpan,
+	"column-span":           single(words("none", kwAll)),
 	"column-rule-width":     single(borderWidth),
 	"column-rule-style":     single(borderStyle),
 	"column-rule-color":     single(colorTerm),
@@ -386,6 +378,7 @@ var checks = map[string]check{
 	"border-spacing":         repeated(length, 2),
 	"border-collapse":        single(words("separate", "collapse")),
 	"caption-side":           single(words("top", "bottom")),
+	"empty-cells":            single(words("show", "hide")),
 	"table-layout":           single(words("auto", "fixed")),
 	"text-align":             single(textAlign),
 	"text-indent":            single(lengthPercent),

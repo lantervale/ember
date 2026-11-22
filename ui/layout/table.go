@@ -343,7 +343,7 @@ func (t *tree) table(n *node, in input) output {
 	inset := padding.add(border)
 	rows := n.rows()
 	if fixedLayout(st, in) || len(n.tracks()) > 0 || st.BorderCollapse ||
-		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general }) {
+		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general || r.st.Collapse }) {
 		return t.spanned(n, in, rows)
 	}
 	sx, sy := st.BorderSpacing[0], st.BorderSpacing[1]
@@ -422,6 +422,7 @@ func (t *tree) table(n *node, in input) output {
 		from := len(candidates)
 		x := float32(0)
 		for i, c := range r.kids {
+			c.cut = false
 			out := t.performChildLayout(c, size{widths[i], h}, size{content, none},
 				spaces{def(widths[i]), def(h)}, inherentSize)
 			c.unrounded = placed{
@@ -902,6 +903,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 				percent[k] = max(percent[k], pc)
 			}
 		}
+		spannedPercents(cells, percent, colMax)
 		percent = heldPercents(percent)
 	}
 	sumMin, sumMax := float32(0), float32(0)
@@ -955,22 +957,25 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 		rows := heights[c.row : c.row+c.rs]
 		share(rows, slices.Clone(rows), measure(i)-sy*float32(c.rs-1))
 	}
+	colGone, rowGone := collapsedTracks(tracks, cols), collapsedRows(rows)
+	shownX, colAt := shownLines(widths, colGone, nil, sx, 0)
+	w -= colX[cols] - shownX[cols]
 	above, below := t.captionHeights(n, w)
 	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
+	fullY, _ := shownLines(heights, nil, nil, sy, 0)
+	rowY, rowAt := shownLines(heights, rowGone, rowSections(n, len(rows)), sy, above+inset.t+sy)
+	hgt -= fullY[len(rows)] - (rowY[len(rows)] - rowY[0])
 	s := size{w, hgt}
 	if in.run == computeSize {
 		return sizeOutput(s)
 	}
 
-	rowW := max(colX[cols]-sx, 0)
-	rowY := make([]float32, len(rows)+1)
-	rowY[0] = above + inset.t + sy
-	for ri, h := range heights {
-		rowY[ri+1] = rowY[ri] + h + sy
-	}
+	cellH := func(c slot) float32 { return fullY[c.row+c.rs] - fullY[c.row] - sy }
+	rowW := max(shownX[cols]-sx, 0)
+	rowH := func(ri int) float32 { return max(rowY[ri+1]-rowAt[ri]-sy, 0) }
 	at := 0
 	place := func(r *node, origin point) {
-		r.unrounded = placed{location: point{inset.l + sx - origin.x, rowY[at] - origin.y}, size: size{rowW, heights[at]}}
+		r.unrounded = placed{location: point{inset.l + sx - origin.x, rowAt[at] - origin.y}, size: size{rowW, rowH(at)}}
 		at++
 	}
 	for _, k := range n.kids {
@@ -990,13 +995,25 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 		case roleNone, roleTable, roleCaption, roleColumn, roleColumnGroup:
 		}
 	}
-	gridH := max(rowY[len(rows)]-sy-rowY[0], 0)
+	gridTop := rowY[0]
+	if i := slices.Index(rowGone, false); i > 0 {
+		gridTop = rowAt[i]
+	}
+	gridH := max(rowY[len(rows)]-sy-gridTop, 0)
 	for _, tr := range tracks {
-		at := point{inset.l + sx + colX[tr.first], rowY[0]}
-		tr.col.unrounded = placed{location: at, size: size{max(colX[tr.first+tr.span]-colX[tr.first]-sx, 0), gridH}}
+		at := point{inset.l + sx + colAt[tr.first], gridTop}
+		colH := gridH
+		if tr.col.st.Collapse {
+			colH = 0
+		}
+		tr.col.unrounded = placed{location: at, size: size{max(shownX[tr.first+tr.span]-colAt[tr.first]-sx, 0), colH}}
 		if g := tr.group; g != nil {
 			if tr.col == g.kids[0] {
 				g.unrounded = placed{location: at, size: size{0, gridH}}
+				if g.st.Collapse {
+					// Chrome leaves a collapsed column group at the table's top.
+					g.unrounded = placed{location: point{at.x, 0}}
+				}
 			}
 			tr.col.unrounded.location = point{at.x - g.unrounded.location.x, 0}
 			g.unrounded.size.w = at.x + tr.col.unrounded.size.w - g.unrounded.location.x
@@ -1004,18 +1021,23 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	}
 	var candidates []oofCandidate
 	for i, c := range cells {
-		cw, ch := cellW(c), rowY[c.row+c.rs]-rowY[c.row]-sy
+		cw, ch := cellW(c), cellH(c)
 		c.cell.lower(lowered[i])
 		out := t.performChildLayout(c.cell, size{cw, ch}, size{content, none},
 			spaces{def(cw), def(ch)}, inherentSize)
+		shown := size{max(shownX[c.col+c.cs]-colAt[c.col]-sx, 0), max(rowY[c.row+c.rs]-rowAt[c.row]-sy, 0)}
+		// Narrowed by a collapsed row or column, the cell keeps its content laid out at
+		// the size it would have, clipped to its box.
+		c.cell.cut = shown != out.size
+		out.size = shown
 		c.cell.unrounded = placed{
-			location: point{colX[c.col], 0},
+			location: point{colAt[c.col], 0},
 			size:     out.size,
 			overflow: out.overflow,
 			padding:  edges(c.cell.st.Padding, content),
 			border:   c.cell.borders(),
 		}
-		candidates = append(candidates, translateCandidates(out.oof, point{inset.l + sx + colX[c.col], rowY[c.row]})...)
+		candidates = append(candidates, translateCandidates(out.oof, point{inset.l + sx + colAt[c.col], rowAt[c.row]})...)
 	}
 	if n.shared != nil {
 		at := func(lines []float32, origin float32) []float32 {
@@ -1025,17 +1047,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 			}
 			return out
 		}
-		n.box.Collapsed = n.shared.edges(at(colX, inset.l), rowY)
-	}
-	if n.shared != nil {
-		at := func(lines []float32, origin float32) []float32 {
-			out := make([]float32, len(lines))
-			for i, l := range lines {
-				out[i] = origin + l
-			}
-			return out
-		}
-		n.box.Collapsed = n.shared.edges(at(colX, inset.l), rowY)
+		n.box.Collapsed = n.shared.edges(at(shownX, inset.l), rowY)
 	}
 	t.placeCaptions(n, w, hgt-below)
 	n.captionRoom = [2]float32{above, below}
@@ -1091,6 +1103,88 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 	return lowered, rowBase
 }
 
+// collapsedTracks marks the columns of a table with cols of them that tracks collapse,
+// nil when none does.
+func collapsedTracks(tracks []track, cols int) []bool {
+	var gone []bool
+	for _, tr := range tracks {
+		if !tr.col.st.Collapse {
+			continue
+		}
+		if gone == nil {
+			gone = make([]bool, cols)
+		}
+		for k := tr.first; k < tr.first+tr.span; k++ {
+			gone[k] = true
+		}
+	}
+	return gone
+}
+
+// collapsedRows marks the rows with visibility: collapse, nil when none has it.
+func collapsedRows(rows []*node) []bool {
+	var gone []bool
+	for ri, r := range rows {
+		if !r.st.Collapse {
+			continue
+		}
+		if gone == nil {
+			gone = make([]bool, len(rows))
+		}
+		gone[ri] = true
+	}
+	return gone
+}
+
+// rowSections marks the first row of each of the table's sections: a row group, or a
+// run of rows outside one.
+func rowSections(n *node, count int) []bool {
+	firsts := make([]bool, count)
+	at, loose := 0, false
+	for _, k := range n.kids {
+		switch k.role {
+		case roleRow:
+			firsts[at] = !loose
+			at, loose = at+1, true
+		case roleGroup:
+			if len(k.kids) > 0 {
+				firsts[at] = true
+			}
+			at, loose = at+len(k.kids), false
+		case roleNone, roleTable, roleCaption, roleColumn, roleColumnGroup:
+		}
+	}
+	return firsts
+}
+
+// shownLines are where the tracks of sizes start, spacing apart from origin, once those
+// gone marks are taken out with a spacing each, as Chrome takes collapsed rows and
+// columns out: lines[k] is where track k starts after the spacing before it, at[k]
+// where its box stands, at the end of the shown track before it in its section, which
+// firsts starts (one for all when nil). A section of tracks all gone keeps one spacing.
+func shownLines(sizes []float32, gone, firsts []bool, spacing, origin float32) ([]float32, []float32) {
+	lines, at := make([]float32, len(sizes)+1), make([]float32, len(sizes))
+	lines[0] = origin
+	shown := false
+	for k, sz := range sizes {
+		if firsts != nil && firsts[k] {
+			shown = false
+		}
+		at[k], lines[k+1] = lines[k], lines[k]+sz+spacing
+		switch {
+		case gone == nil || !gone[k]:
+			shown = true
+		case shown:
+			at[k], lines[k+1] = lines[k]-spacing, lines[k]
+		case k+1 < len(sizes) && (firsts == nil || !firsts[k+1]):
+			lines[k+1] = lines[k]
+		default:
+			lines[k+1] = lines[k] + spacing
+		}
+	}
+	return lines, at
+}
+
 // autoTableWidth is a table's width with none given: its columns' min-content or
 // max-content widths and extra, or the room there is between the two.
 func autoTableWidth(a space, sumMin, sumMax, extra float32) float32 {
@@ -1137,6 +1231,39 @@ func spannedColumns(cells []slot, colMin, colMax []float32, fixed []bool, inner 
 		share(colMax[c.col:c.col+c.cs], colMax[c.col:c.col+c.cs], tr.hi[c.ci]-inner(c.cs))
 		for k := c.col; k < c.col+c.cs; k++ {
 			colMax[k] = max(colMax[k], colMin[k])
+		}
+	}
+}
+
+// spannedPercents shares the percentage width of each cell spanning columns, narrowest
+// spans first, out to its columns, as Chrome does: what it asks beyond the percentages
+// they have goes to those with none, in proportion to their max-content widths, evenly
+// where those are none.
+func spannedPercents(cells []slot, percent, colMax []float32) {
+	wide := slices.DeleteFunc(slices.Clone(cells), func(c slot) bool {
+		return c.cs == 1 || c.cell.parent.row.percent[c.ci] == 0
+	})
+	slices.SortStableFunc(wide, func(a, b slot) int { return cmp.Compare(a.cs, b.cs) })
+	for _, c := range wide {
+		need, free, weight := c.cell.parent.row.percent[c.ci], 0, float32(0)
+		for k := c.col; k < c.col+c.cs; k++ {
+			need -= percent[k]
+			if percent[k] == 0 {
+				free++
+				weight += colMax[k]
+			}
+		}
+		if need <= 0 || free == 0 {
+			continue
+		}
+		for k := c.col; k < c.col+c.cs; k++ {
+			switch {
+			case percent[k] > 0:
+			case weight > 0:
+				percent[k] = need * colMax[k] / weight
+			default:
+				percent[k] = need / float32(free)
+			}
 		}
 	}
 }

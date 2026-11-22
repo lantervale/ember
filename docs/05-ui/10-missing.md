@@ -46,11 +46,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `column-span: all` | refused: put the element before the columns |
+| `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
 | columns right to left | left to right only |
-| `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
+| a table's background round a collapsed column | drawn over the table's box, where Chrome draws it as wide as before the column was taken out |
 | a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
 | a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
@@ -69,7 +69,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
 | `bdo`, a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
-| a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |
+| an absolutely positioned element right in a block after its text (`<div>text<span style="position: absolute">`) | at the start of the line, where Chrome puts it after the text; inside an inline element it stands after the text |
 
 ## Backgrounds and borders
 
