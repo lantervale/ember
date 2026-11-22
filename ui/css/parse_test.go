@@ -90,12 +90,11 @@ func TestParseWarnings(t *testing.T) {
 		{"p::part { color: #f00 }", `t.css:1:4: ::part takes an argument in ( ); rule dropped`},
 		{"p::before(x) { color: #f00 }", `t.css:1:4: ::before takes no ( ); rule dropped`},
 		{"p::marker { margin: 0 }", `t.css:1:13: ::marker does not take margin`},
-		{"p::before { content: counter(c, lower-greek) }",
-			`t.css:1:22: content: counter(): the counter style: expected none, disc, circle, square, decimal, ` +
-				`decimal-leading-zero, lower-alpha, upper-alpha, lower-roman, upper-roman, disclosure-open or ` +
-				`disclosure-closed, found "lower-greek"`},
+		{"p::before { content: counter(c, \"x\") }",
+			`t.css:1:22: content: counter(): the counter style: expected a counter style's name`},
 		{"p { counter-reset: reversed(c) }",
-			`t.css:1:20: counter-reset: reversed() is not supported; an ol counts down with its reversed attribute`},
+			`t.css:1:20: counter-reset: reversed() is not supported, as in Chrome; an ol counts down with its ` +
+				`reversed attribute`},
 		{"p { quotes: \"a\" }", `t.css:1:13: quotes: quotes takes auto, none or pairs of strings`},
 		{"p::before { content: \"a\" / }", `t.css:1:22: content: content ends with /`},
 		{"p:nth-of-type(x) { color: #f00 }", `t.css:1:3: :nth-of-type() takes odd, even or An+B; rule dropped`},

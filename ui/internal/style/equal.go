@@ -127,6 +127,8 @@ func (t *Text) equal(o *Text) bool {
 		sameSlice(t.Quotes, o.Quotes) &&
 		t.QuotesNone == o.QuotesNone &&
 		t.ListStyle == o.ListStyle &&
+		t.ListName == o.ListName &&
+		t.ListImage == o.ListImage &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
 		t.CaptionSide == o.CaptionSide &&

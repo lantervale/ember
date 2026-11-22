@@ -528,9 +528,13 @@ type Text struct {
 	// per depth; none when QuotesNone, the language's own when empty.
 	Quotes     []string
 	QuotesNone bool
-	// ListStyle is list-style-type: a summary's disclosure triangle, or
-	// none.
+	// ListStyle is list-style-type: a bullet, a summary's disclosure
+	// triangle, none, or the counter style or the string ListName names.
 	ListStyle ListStyle
+	ListName  string
+	// ListImage is list-style-image: the address of the picture a list
+	// item's marker shows in place of its list-style-type, "" for none.
+	ListImage string
 	// BorderSpacing is a table's border-spacing, across and down, in points.
 	BorderSpacing [2]float32
 	// BorderCollapse is border-collapse: collapse: a table's cells share
@@ -858,9 +862,9 @@ const (
 	AlignLength
 )
 
-// ListStyle is a list-style-type: a list item's bullet or number, drawn
-// outside its box, or a summary's disclosure triangle, first on its line.
-// ListDisc is CSS's initial value.
+// ListStyle is a list-style-type: a list item's bullet or marker string,
+// drawn outside its box, or a summary's disclosure triangle, first on its
+// line. ListDisc is CSS's initial value.
 type ListStyle uint8
 
 const (
@@ -870,12 +874,11 @@ const (
 	ListDisclosureOpen
 	ListCircle
 	ListSquare
-	ListDecimal
-	ListDecimalLeadingZero
-	ListLowerAlpha
-	ListUpperAlpha
-	ListLowerRoman
-	ListUpperRoman
+	// ListCounter writes the list item's number in the counter style
+	// ListName names, decimal among them.
+	ListCounter
+	// ListString is the string ListName.
+	ListString
 )
 
 // BackgroundAttachment is background-attachment.

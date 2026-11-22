@@ -142,6 +142,9 @@ type restyler struct {
 	// before, after and marker are set when some sheet has a rule for the
 	// pseudo-element: only then is one looked for.
 	before, after, marker bool
+	// styles are the sheets' counter styles, worked out when first asked
+	// for (counterStyles).
+	styles *counterStyles
 	// counts is set once an element counts: a numbered list item, a
 	// counter property, or generated content of counters or quotes; and
 	// recount when what the counters read may have changed.
@@ -150,6 +153,14 @@ type restyler struct {
 
 // run restyles the tree under root, all of it when stale, then counts
 // its counters again where they may have moved.
+// counterStyles are the counter styles of r's sheets.
+func (r *restyler) counterStyles() *counterStyles {
+	if r.styles == nil {
+		r.styles = authorStyles(r.sheets, Media{})
+	}
+	return r.styles
+}
+
 func (r *restyler) run(root *dom.Node, stale bool) {
 	for _, s := range r.sheets {
 		x := s.indexed()
@@ -174,6 +185,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.anchor(root)
 	}
 	r.visit(root, nil, 0, stale, stale)
+	r.recount = r.recount || stale
 	r.count(root)
 }
 
@@ -514,7 +526,8 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
-	if c.ListItem && c.ListStyle.Numeric() || len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
+	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
+		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
 		r.counts = true
 	}
 	return &c
@@ -1709,7 +1722,18 @@ var props = func() map[string]prop {
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
-		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle }, listStyles),
+		"list-style-image": field(func(c *style.Computed) *string { return &c.ListImage },
+			func(x *ctx, v []Component) string {
+				if isWord(v[0], kwNone) {
+					return ""
+				}
+				return imageSource(x, v)
+			}, flips[string]()),
+		"list-style-type": {
+			set:     listStyle,
+			inherit: func(dst, src *style.Computed) { dst.ListStyle, dst.ListName = src.ListStyle, src.ListName },
+			anim:    anim{kind: discrete},
+		},
 		"visibility": field(func(c *style.Computed) *bool { return &c.Visible }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "visible")
 		}, visibility),

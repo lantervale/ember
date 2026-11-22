@@ -35,12 +35,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `::before`, `::after` on `progress`, `meter`, and checkbox, radio and range inputs | no box, where Chrome makes one |
+| `::before`, `::after` on `progress`, `meter` and range inputs | no box, where Chrome lays one out among the control's own parts |
+| a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
 | `::marker` with `line-height`, `text-shadow`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
-| `::before::marker`, `::after::marker` | refused, where Chrome reads them |
-| `content: url()` on an element itself | read, and the element is not replaced |
-| `counter-reset: reversed(name)` | refused |
-| `ol type` | not read: `list-style-type` says the numbering |
+| `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
+| the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
+| a `list-style-image` gradient, `list-style-position: inside` | refused |
+| a `list-style-image` fetched off the frame (`ui.FetchImages`) | the marker is laid out once the picture is found by another layout, not when it lands |
 
 ## Layout
 
@@ -128,7 +129,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 | math functions in a colour's channels and in times (`calc(1s + 100ms)`) | refused |
 | a percentage inside `sign()` in a `line-height` | of the font size, where Chrome measures it against something else |
-| `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `@counter-style`, `revert` | refused |
+| `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `revert` | refused |
 
 ## Windows
 

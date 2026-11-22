@@ -47,8 +47,8 @@ func TestChromeReadsThePseudoElementsOfTheTable(t *testing.T) {
 }
 
 // Where a pseudo-element may stand in a selector, as Chrome has it. The
-// forms Chrome reads that ui refuses are the last ones: a ::marker of a
-// generated box, and the few pseudo-classes of a pseudo-element.
+// form Chrome reads that ui refuses is the last one: a pseudo-class of a
+// pseudo-element.
 func TestPseudoElementsStandWhereChromeTakesThem(t *testing.T) {
 	sels := []string{"div::before", "div:before", "div:after", "div::BEFORE", "::before", "*::after",
 		"div:hover::before", "ul li:nth-child(2)::before", "div > p::after", "li::marker", "div.a#b::before",
@@ -57,7 +57,7 @@ func TestPseudoElementsStandWhereChromeTakesThem(t *testing.T) {
 		"div:placeholder", "div:selection", "div:backdrop", "div::before::before", "input::placeholder:hover",
 		"div::marker:hover", "div::before:active",
 		"div::before::marker", "div::after::marker", "div::selection:window-inactive"}
-	const onlyChrome = 3
+	const onlyChrome = 1
 	names, _ := json.Marshal(sels)
 	var got map[string]bool
 	ask(t, geom.V2(400, 300), fmt.Sprintf(

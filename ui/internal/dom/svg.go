@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // Markup is what an svg element holds: the SVG inside it, as text.
@@ -24,9 +25,13 @@ func (n *Node) SetMarkup(markup string) {
 
 // Picture is the address of the picture an element shows: an img's
 // src, or the one Choose gave it, and for an svg element its markup as
-// a data URL, drawn in the colour of the element's text. ok is false
-// for an element that names none.
+// a data URL, drawn in the colour of the element's text; the picture its
+// content property names in place of all of these (ContentPicture). ok
+// is false for an element that names none.
 func Picture(n *Node) (string, bool) {
+	if src, ok := ContentPicture(n); ok {
+		return src, true
+	}
 	if n.tag != Svg {
 		if n.pipe.choosing {
 			return n.pipe.chosen, n.pipe.chosen != ""
@@ -42,6 +47,23 @@ func Picture(n *Node) (string, bool) {
 		p.picture, p.pictured = "data:image/svg+xml,"+url.PathEscape(n.svg(ink)), ink
 	}
 	return p.picture, true
+}
+
+// ContentPicture is the picture an element's content property replaces
+// it by, as Chrome replaces it: a content of one url() alone on an
+// element that isn't a form control, a frame or a canvas. ok is false
+// for any other element, and for a pseudo-element's box.
+func ContentPicture(n *Node) (string, bool) {
+	st := n.pipe.Style
+	if st == nil || st.Content.Kind != style.ContentItems || len(st.Content.Items) != 1 ||
+		st.Content.Items[0].Kind != style.ContentImage || n.gen != NoPseudo {
+		return "", false
+	}
+	switch n.tag { //nolint:exhaustive // the elements ui draws whole
+	case Input, Textarea, Select, Progress, Meter, Canvas, Iframe, Svg, TextTag, HTML:
+		return "", false
+	}
+	return st.Content.Items[0].Text, true
 }
 
 // Choose has the img n show url in place of its src, "" for no

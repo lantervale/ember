@@ -58,7 +58,7 @@ The presentational attributes of old pages style their element as Chrome reads t
 | layout | `display` (block, inline, inline-block, flex, inline-flex, grid, flow-root, table, inline-table, table-row-group, table-header-group, table-footer-group, table-row, table-cell, table-column, table-column-group, table-caption, none, contents), `position` (static, relative, absolute, fixed, sticky), `float` (left, right, none), `clear` (left, right, both, none), `top` `right` `bottom` `left` `inset`, the logical names of the sides and sizes ([below](#logical-properties)), `z-index`, `box-sizing` (border-box by default; content-box under [browser sheets](#browser-sheets)), `container-type`, `container-name` and `container` ([below](#container-queries)), `width` `height` and their `min-` `max-`, `aspect-ratio`, `margin`, `padding`, `overflow` (visible, hidden, clip, auto, scroll) and its axes (clipping on both with a `border-radius` clips to the rounded inner border, the padding box's curve, and a pointer in a cut corner reaches what's under it; nested rounded clips round only the innermost; under rotation or skew the clip is its bounding rectangle, [decision 0058](../99-decisions/0058-rounded-clips-through-a-per-batch-rounded-rect.md)), `visibility`, `order` |
 | columns | `column-count`, `column-width`, `columns`, `column-gap` (normal is 1em), `column-rule` and its `-width` `-style` `-color`, `column-fill` (balance, auto), `break-inside` (auto, avoid; `page-break-inside` is read as it), `break-before` `break-after` (auto, avoid, column), `orphans`, `widows` |
 | flex and grid | `flex` and its parts, `gap` `row-gap` `column-gap`, `align-*`, `justify-*`, `place-*`, `grid-template-columns` `-rows` `-areas`, the `grid-template` shorthand and `grid` (a template, `rows / auto-flow [dense] columns-sizes` or `auto-flow [dense] row-sizes / columns`, resetting the implicit tracks and the flow but not the gaps, as Chrome), `subgrid` for either template with the names of its lines (`subgrid [a] repeat(2, [b]) repeat(auto-fill, [c])`: its tracks are those it spans of its grid, its items size them with its margin, border and padding at its edges and half what its own gap differs from the grid's beside a gutter, it inherits the grid's names of those lines, and it is stretched over them, [decision 0125](../99-decisions/0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md)), with names of lines in brackets (`[full-start] 1fr [content-start]`, in `repeat()` too), `grid-column` `grid-row` and their `-start` `-end`, `grid-area` (an area's name, or its four lines), a line by number, by name (an area's `-start` or `-end` line, or the first of that name), by `name n` and by `span name n`, a name no line has standing for the lines after the grid, as in Chrome, `grid-auto-*` |
-| text | `font-family` `font-size` `font-weight` `font-style` and the `font` shorthand, `line-height`, `letter-spacing`, `word-spacing` (a length or a percentage of the font size, after each space and no-break space, as Chrome), `text-align`, `text-indent`, `text-transform` (in text fields too: drawn cased, the value kept as typed, the caret and selection following what's drawn), `white-space`, `text-overflow`, `overflow-wrap`, `text-shadow`, `text-decoration` and its `-line` `-style` `-color` `-thickness`, `vertical-align` (every value, below), `color`, `list-style-type` (disc, circle, square, decimal, none), `-webkit-font-smoothing: none` (glyphs unsmoothed on the pixel grid, for pixel fonts) and `antialiased` (glyphs at their exact coverage, without the stem darkening of the default: thinner, and a square glyph on whole pixels is those pixels alone, as in Chrome on macOS) |
+| text | `font-family` `font-size` `font-weight` `font-style` and the `font` shorthand, `line-height`, `letter-spacing`, `word-spacing` (a length or a percentage of the font size, after each space and no-break space, as Chrome), `text-align`, `text-indent`, `text-transform` (in text fields too: drawn cased, the value kept as typed, the caret and selection following what's drawn), `white-space`, `text-overflow`, `overflow-wrap`, `text-shadow`, `text-decoration` and its `-line` `-style` `-color` `-thickness`, `vertical-align` (every value, below), `color`, `list-style-type` and `list-style-image` ([lists](#lists-and-counter-styles)), `-webkit-font-smoothing: none` (glyphs unsmoothed on the pixel grid, for pixel fonts) and `antialiased` (glyphs at their exact coverage, without the stem darkening of the default: thinner, and a square glyph on whole pixels is those pixels alone, as in Chrome on macOS) |
 | look | `background-color` `-image` `-repeat` (repeat, no-repeat, repeat-x, repeat-y, space, round, or one of repeat, no-repeat, space and round for each axis) `-attachment` (scroll, fixed, local) `-origin` `-clip` (border-box, padding-box, content-box) `-size` (lengths, percentages, auto, cover, contain) `-position`, `border` and its parts (solid, dashed, dotted, double, inset, outset, groove, ridge; sides of other colours meet on a smoothed diagonal, round corners too, decision [0132](../99-decisions/0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md)), `border-radius`, `border-image` (nine-patches), `border-image-repeat` and `border-image-width`, `box-shadow`, `outline` (solid, and double as two rings), `opacity`, `transform` `transform-origin`, `filter` (`blur()`, `brightness()`, `contrast()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, `sepia()`, `drop-shadow()`, in any list: the element and its content filtered as one picture, a stacking context holding its absolute and fixed descendants; `url()` filters are refused, decision 0118), `clip-path` (basic shapes and reference boxes, below), `transition` (every property that interpolates, below), `animation` and `@keyframes` (below), `cursor`, `pointer-events` (auto, none: the pointer passes through, inherited), `app-region` (drag, no-drag, none; inherited: a left press in a drag region moves the system's window and a double press is a double click on its title bar, for a header in a window with `platform.OwnTitleBar()`; what clicks is never part of the region), `image-rendering` (pixelated), `object-fit` `object-position`, `accent-color`, `caret-color`, `scrollbar-width`, `appearance`, `resize` |
 | tables | `border-spacing`, `border-collapse` (separate, collapse; inherited), `caption-side` (top, bottom; inherited), `table-layout` (auto, fixed) |
 | selecting | `user-select` (auto, text, none, all; inherited), `::selection` ([below](#selecting-text)) |
@@ -117,7 +117,7 @@ The `font` shorthand is `[style] [weight] size[/line-height] family, …`, as CS
 
 `vertical-align` places an inline box, an inline-block or a picture on its line (decision 0104): `baseline`, `sub` (a fifth of its parent's font size and a pixel down), `super` (a third and a pixel up), a length or a percentage of its own line height (up), `middle` (its middle half an x-height above the baseline), `text-top` and `text-bottom` (on its parent's text), `top` and `bottom` (on the line, sized by the rest first), the line growing to hold each, as in Chrome. An inline-block stands on the baseline of its last line, or on its bottom margin edge when it has none or scrolls. On a table cell it places the content: `top`, `middle` (the default) or `bottom`, the other values as `top`.
 
-A list item (`display: list-item`, an `li`) has its marker outside its box, beside its first line: `disc`, `circle`, `square`, or its number in its list as `decimal`, `decimal-leading-zero`, `lower-alpha` (`lower-latin`), `upper-alpha` (`upper-latin`), `lower-roman` or `upper-roman` writes it. The number is the `list-item` counter ([counters](#counters)), which `ol`'s `start` and `reversed` and `li`'s `value` set; `::marker` styles the marker. `list-style-position` and `list-style-image` are not in the subset.
+A list item (`display: list-item`, an `li`, a `::before` or an `::after`) has its marker outside its box, beside its first line: a `disc`, `circle` or `square` bullet, its number in its list written in a counter style, a string, or a picture ([below](#lists-and-counter-styles)). The number is the `list-item` counter ([counters](#counters)), which `ol`'s `start` and `reversed` and `li`'s `value` set, and `ol`'s and `li`'s `type` attribute (`1`, `a`, `A`, `i`, `I`) and `ul`'s (`disc`, `circle`, `square`, `none`) pick the style, as in Chrome; `::marker` styles the marker. `list-style-position` is not in the subset: `list-style` takes `outside` and refuses `inside`.
 
 Solid sides of more than one colour, or seen through, meet on the diagonal of their corner, as Chrome draws them: a box of no size with one coloured side and its neighbours transparent is a triangle, the arrow of a menu or a tooltip. Dashed and dotted sides run corner to corner.
 
@@ -209,11 +209,40 @@ go run ./examples/92-ui-kit -element generated
 | `<values> / "alternative text"` | the values; the alternative text is read and not used |
 | `none`, `normal` | no box |
 
-On an element itself `content` is read and does nothing; Chrome replaces the element by a `url()` there, ui does not.
+On an element itself, `content: url(picture.png)` alone replaces the element by the picture, sized as an `img` (its children are not shown), as Chrome does; any other `content` there is read and does nothing. A form control, a frame and a canvas keep their own look.
+
+A checkbox and a radio take `::before` and `::after`, laid out in their box and past it as in Chrome; a range, a progress bar and a meter take none yet, nor do text fields, as in Chrome.
+
+### Lists and counter styles
+
+`list-style-type` is `none`, `disc`, `circle`, `square`, a string (`"→ "`, written as it is) or a counter style's name; `list-style-image: url(dot.png)` shows the picture at its own size in place of the type, its bottom on the first line's baseline and its right edge 7 points before the item's content, unless `::marker`'s `content` says otherwise. The `list-style` shorthand takes a type, a picture and `outside`, in any order.
+
+A counter style writes a number for markers and for `counter()` and `counters()`. Every style CSS Counter Styles predefines is there, the complex ones aside: `decimal`, `decimal-leading-zero`, `lower-roman`, `upper-roman`, `lower-alpha` and `lower-latin`, `upper-alpha` and `upper-latin`, `lower-greek`, `armenian` and its two cases, `georgian`, `hebrew`, the digits of `arabic-indic`, `bengali`, `cambodian`, `khmer`, `devanagari`, `gujarati`, `gurmukhi`, `kannada`, `lao`, `malayalam`, `mongolian`, `myanmar`, `oriya`, `persian`, `tamil`, `telugu`, `thai` and `tibetan`, `cjk-decimal`, `cjk-earthly-branch`, `cjk-heavenly-stem`, `hiragana`, `hiragana-iroha`, `katakana`, `katakana-iroha`, and the bullets. A name nothing defines writes as `decimal`. A list item's marker is the style's prefix, the number written, then its suffix (`". "` for decimal); `counter()` writes the number alone.
+
+`@counter-style name { … }` defines one, or redefines a predefined one but `decimal`, `disc`, `circle`, `square` and the disclosure triangles, which are dropped with a warning, as in Chrome:
+
+| Descriptor | |
+|---|---|
+| `system` | `cyclic`, `numeric`, `alphabetic`, `symbolic` (the default), `additive`, `fixed [first]`, or `extends name`, every descriptor not given taken from that style |
+| `symbols` | strings or names; `alphabetic` and `numeric` take two at least. No pictures |
+| `additive-symbols` | `weight symbol` pairs, the weights going down |
+| `prefix`, `suffix` | around a marker's number (`""` and `". "`) |
+| `negative` | the sign before and after a number below 0 (`"-"`) |
+| `range` | `auto`, or pairs of bounds, `infinite` for none; out of it the fallback writes the number |
+| `pad` | `3 "0"`: as many symbols before a shorter number |
+| `fallback` | the style a number it can't write goes to (`decimal`) |
+| `speak-as` | read, and nothing is spoken |
+
+```css
+@counter-style paren { system: extends lower-alpha; prefix: "("; suffix: ") "; }
+@counter-style tally { system: additive; additive-symbols: 5 "V", 1 "I"; suffix: ": "; }
+ol.steps { list-style: paren; }
+ul.todo { list-style: url(box.png); }
+```
 
 ### Counters
 
-`counter-reset: name [value]` makes a counter on an element (0 by default), for its siblings after it and their descendants, `counter-increment: name [value]` adds to the nearest one (1 by default) and `counter-set: name [value]` sets it; each takes several, or `none`. A counter of the same name made deeper nests inside the outer one, which `counters()` writes whole. A counter used where none was made is made there, at 0. `counter-reset: reversed(name)` is refused.
+`counter-reset: name [value]` makes a counter on an element (0 by default), for its siblings after it and their descendants, `counter-increment: name [value]` adds to the nearest one (1 by default) and `counter-set: name [value]` sets it; each takes several, or `none`. A counter of the same name made deeper nests inside the outer one, which `counters()` writes whole. A counter used where none was made is made there, at 0. `counter-reset: reversed(name)` is refused, as Chrome 157 refuses it; a reversed `ol` counts down all the same.
 
 ```css
 body { counter-reset: chapter; }
@@ -234,7 +263,7 @@ A list numbers its items with the same counters: `ol`, `ul` and `menu` reset `li
 
 ### `::marker`
 
-`::marker` styles a list item's marker: `color`, the font properties, `letter-spacing`, `word-spacing`, `text-transform`, and `content`, a string, a counter or an `attr()` that replaces the bullet or the number. The other properties Chrome's `::marker` takes that ui has (`cursor`, `line-height`, `overflow-wrap`, `quotes`, `text-shadow`, `white-space`, the transition properties) are read without a warning and change nothing yet. Any other property is refused with a warning, as Chrome ignores it.
+`::marker` styles a list item's marker, and `::before::marker` and `::after::marker` those of a generated box that is a list item: `color`, the font properties, `letter-spacing`, `word-spacing`, `text-transform`, and `content`, a string, a counter or an `attr()` that replaces the bullet or the number. The other properties Chrome's `::marker` takes that ui has (`cursor`, `line-height`, `overflow-wrap`, `quotes`, `text-shadow`, `white-space`, the transition properties) are read without a warning and change nothing yet. Any other property is refused with a warning, as Chrome ignores it.
 
 ### Every pseudo-element
 
@@ -260,7 +289,7 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 | a vendor's (`::-webkit-scrollbar`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
 | any other name | refused: unknown, as Chrome drops the rule |
 
-A pseudo-element's rule that sets a property it does not take keeps its other declarations and warns of that one. Nothing may follow a pseudo-element in a selector: `::before:hover` and `li::marker::before` are refused as Chrome refuses them; `::before::marker` and `::selection:window-inactive`, which Chrome reads, are refused too.
+A pseudo-element's rule that sets a property it does not take keeps its other declarations and warns of that one. Nothing may follow a pseudo-element in a selector: `::before:hover` and `li::marker::before` are refused as Chrome refuses them; `::before::marker` and `::after::marker` are read as Chrome reads them, and `::selection:window-inactive` is refused.
 
 ## Selecting text
 

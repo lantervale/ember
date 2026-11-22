@@ -418,11 +418,47 @@ func expandTransition(v []Component, out map[string][]Component) error {
 	return nil
 }
 
+// expandListStyle splits list-style into its type and its image, in
+// either order; outside, the one position ui lays a marker at, may stand
+// among them. A none goes to the one of the two not given, to both when
+// neither is.
 func expandListStyle(v []Component, out map[string][]Component) error {
-	if len(v) != 1 || checks["list-style-type"](v) != nil {
-		return fmt.Errorf("list-style takes one list-style-type, such as none")
+	var typ, image []Component
+	nones, outside := 0, false
+	for _, c := range v {
+		switch {
+		case isWord(c, kwNone):
+			nones++
+		case isWord(c, "outside") && !outside:
+			outside = true
+		case isWord(c, "inside"):
+			return fmt.Errorf("list-style-position: inside is not supported; a marker stands outside its item")
+		case checkListImage([]Component{c}) == nil && image == nil:
+			image = []Component{c}
+		case checkListStyle([]Component{c}) == nil && typ == nil:
+			typ = []Component{c}
+		default:
+			return fmt.Errorf("list-style takes a list-style-type, a list-style-image and outside, found %q", c.String())
+		}
 	}
-	out["list-style-type"] = v
+	none := []Component{{Token: Token{Kind: Ident, Text: kwNone}}}
+	switch {
+	case nones > 2, nones == 2 && (typ != nil || image != nil), nones == 1 && typ != nil && image != nil:
+		return fmt.Errorf("list-style takes none for its type and its image at most")
+	case nones == 2, nones == 1 && typ == nil && image == nil:
+		typ, image = none, none
+	case nones == 1 && typ == nil:
+		typ = none
+	case nones == 1:
+		image = none
+	}
+	if typ == nil {
+		typ = []Component{{Token: Token{Kind: Ident, Text: kwDisc}}}
+	}
+	if image == nil {
+		image = none
+	}
+	out["list-style-type"], out["list-style-image"] = typ, image
 	return nil
 }
 

@@ -400,6 +400,7 @@ var checks = map[string]check{
 	"text-overflow":     single(words("clip", "ellipsis")),
 	"scrollbar-width":   single(words("auto", "thin", "none")),
 	"list-style-type":   checkListStyle,
+	"list-style-image":  checkListImage,
 	"content":           checkContent,
 	"counter-reset":     checkCounters,
 	"counter-increment": checkCounters,

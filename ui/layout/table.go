@@ -47,6 +47,9 @@ func partOf(e *dom.Node) style.TablePart {
 	case dom.Img, dom.Svg, dom.Canvas, dom.Iframe:
 		return style.NoTablePart
 	}
+	if pictured(e) {
+		return style.NoTablePart
+	}
 	return st.TablePart
 }
 

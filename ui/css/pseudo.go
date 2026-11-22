@@ -101,7 +101,7 @@ var pseudoElements = map[string]pseudoElement{
 // takesProperty reports whether the pseudo-element name takes the
 // property, a longhand or a shorthand.
 func takesProperty(name, property string) bool {
-	pe := pseudoElements[name]
+	pe := pseudoElements[tableName(name)]
 	if pe.takes == nil || strings.HasPrefix(property, "--") {
 		return true
 	}
@@ -112,6 +112,22 @@ func takesProperty(name, property string) bool {
 	}
 	return false
 }
+
+// tableName is the name pseudoElements has name under: marker for a
+// generated box's ::marker.
+func tableName(name string) string {
+	if name == beforeMarker || name == afterMarker {
+		return kwMarker
+	}
+	return name
+}
+
+// beforeMarker and afterMarker name the ::marker of a ::before or an
+// ::after that is a list item, as a selector's PseudoElement.
+const (
+	beforeMarker = "before::marker"
+	afterMarker  = "after::marker"
+)
 
 // takesDeclared is takesProperty for a declaration's name, a shorthand
 // being taken when one of its longhands is.
@@ -153,6 +169,10 @@ func pseudoElementAt(cs []Component) (string, int, *SelectorError) {
 		return "", 0, selErr(last, "::%s takes an argument in ( )", name)
 	case last.Kind == Function && len(trim(last.Args)) == 0:
 		return "", 0, selErr(last, "::%s() is empty", name)
+	}
+	if name == kwMarker && colons == 3 && n >= 6 && cs[n-4].Kind == Ident && cs[n-5].Kind == Colon &&
+		cs[n-6].Kind == Colon && isWord(cs[n-4], "before", "after") {
+		return strings.ToLower(cs[n-4].Text) + "::marker", 6, nil
 	}
 	return name, colons, nil
 }

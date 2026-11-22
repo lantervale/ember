@@ -17,7 +17,7 @@ var hintedBelow = map[string]bool{"[cellpadding": true, "[valign": true}
 // stand for, as HTML maps them and Chrome reads them: the width and
 // height of a picture, a table or a cell, bgcolor, align, a cell's
 // valign and nowrap, a table's cellspacing and its cellpadding on its
-// cells, body's text. What an attribute says that the subset has no
+// cells, body's text, the type of a list and a list item. What an attribute says that the subset has no
 // declaration for hints nothing.
 //
 //nolint:funlen // one case per kind of element
@@ -74,10 +74,16 @@ func hints(n *dom.Node) []Declaration {
 		add("padding", hintedCellPadding(n))
 	case dom.Div, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.H5, dom.H6:
 		add("text-align", hintedAlign(attr("align")))
+	case dom.Ol:
+		add("list-style-type", hintedListType(attr("type"), true, false))
+	case dom.Ul:
+		add("list-style-type", hintedListType(attr("type"), false, true))
+	case dom.Li:
+		add("list-style-type", hintedListType(attr("type"), true, true))
 	case dom.TextTag, dom.HTML, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside, dom.Article,
 		dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button, dom.Input, dom.Select, dom.Option, dom.Textarea,
 		dom.Details, dom.Summary, dom.Dialog, dom.Progress, dom.Meter, dom.Hr, dom.Canvas, dom.Kbd, dom.Samp, dom.Pre,
-		dom.Caption, dom.Ul, dom.Ol, dom.Li, dom.Dl, dom.Dt, dom.Dd, dom.Blockquote, dom.Figure, dom.Figcaption,
+		dom.Caption, dom.Dl, dom.Dt, dom.Dd, dom.Blockquote, dom.Figure, dom.Figcaption,
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small, dom.Abbr,
 		dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement, dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
@@ -89,6 +95,24 @@ func hints(n *dom.Node) []Declaration {
 	}
 	decls, _ := ParseInline(src.String())
 	return decls
+}
+
+// hintedListType is a list's or a list item's type attribute as the
+// list-style-type it stands for: an ol's numbering, its case kept apart,
+// a ul's bullet whatever its case, either for an li.
+func hintedListType(v string, numbers, bullets bool) string {
+	numbering := map[string]string{"1": kwDecimal, "a": "lower-alpha", "A": "upper-alpha", "i": "lower-roman",
+		"I": "upper-roman"}
+	if t, ok := numbering[v]; ok && numbers {
+		return t
+	}
+	switch l := strings.ToLower(v); l {
+	case kwDisc, kwCircle, kwSquare, kwNone:
+		if bullets {
+			return l
+		}
+	}
+	return ""
 }
 
 // hintedSize is a dimension attribute as a length: a number of pixels or
