@@ -1,8 +1,11 @@
 package css
 
-// logical names the physical property each logical one is: ui lays text
-// out left to right in horizontal lines only, where a block's start is
-// its top and an inline start its left. A logical declaration takes its
+import "strings"
+
+// logical names the physical property each logical one is under
+// direction ltr: ui lays text out in horizontal lines only, where a
+// block's start is its top, and an inline start is its left, its right
+// under rtl (Declaration.inline). A logical declaration takes its
 // physical one's place in the cascade, as in a browser. The shorthands
 // of two sides (margin-inline…) are in shorthands.
 //
@@ -27,6 +30,39 @@ var logical = func() map[string]string {
 		for _, part := range []string{"width", "style", "color"} {
 			m["border-"+side+"-"+part] = "border-" + physical + "-" + part
 		}
+	}
+	return m
+}()
+
+// inlineShorthands are the shorthands of both inline sides, written as
+// left then right.
+//
+//nolint:gochecknoglobals // a fixed set
+var inlineShorthands = func() map[string]bool {
+	m := map[string]bool{shortPaddingInline: true, shortMarginInline: true, shortInsetInline: true}
+	for name := range shorthands {
+		if strings.HasPrefix(name, "border-inline") {
+			m[name] = true
+		}
+	}
+	return m
+}()
+
+// horizontal reports whether the physical property name is of a left or
+// a right side or corner.
+func horizontal(name string) bool {
+	return strings.Contains(name, "left") || strings.Contains(name, "right")
+}
+
+// mirrored is the longhand name of the other horizontal side.
+func mirrored(name string) string { return mirrors[name] }
+
+//nolint:gochecknoglobals // derived from the properties
+var mirrors = func() map[string]string {
+	swap := strings.NewReplacer("left", "right", "right", "left")
+	m := make(map[string]string, len(properties))
+	for name := range properties {
+		m[name] = swap.Replace(name)
 	}
 	return m
 }()

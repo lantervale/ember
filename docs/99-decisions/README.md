@@ -129,6 +129,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0124 | [A field's validity is a state ui keeps](0124-a-fields-validity-is-a-state-ui-keeps.md) | api |
 | 0125 | [A subgrid's items size its grid's tracks, hoisted to its lines](0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md) | rendering |
 | 0126 | [An element is drawn in the scheme its color-scheme allows](0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md) | api |
+| 0128 | [Right to left is a mirror of the layout, and bidi orders each line](0128-right-to-left-is-a-mirror-of-the-layout-and-bidi-orders-each-line.md) | api |
 | 0132 | [Border sides are mitered pieces smoothed by their own geometry](0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md) | rendering |
 
 ## Writing one

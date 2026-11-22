@@ -396,16 +396,19 @@ type ctx struct {
 	// pseudo-element, whose container may be the element itself.
 	node *dom.Node
 	self bool
+	// rtl is the cascade's: the element's inline sides are mirrored.
+	rtl bool
 }
 
 // leading are the longhands the others read, in the order they are
-// applied before them: color-scheme, which resolves the colours, the
+// applied before them: direction, the side inline-start and inline-end
+// stand on, color-scheme, which resolves the colours, the
 // font's family, style and weight, which its own units measure, then
 // font-size (em), line-height (lh) and color (currentcolor).
 //
 //nolint:gochecknoglobals,goconst // a fixed list
 var leading = []string{
-	propColorScheme, "font-family", "font-style", "font-weight", propFontSize, "line-height", "color",
+	propDirection, propColorScheme, "font-family", "font-style", "font-weight", propFontSize, "line-height", "color",
 }
 
 // colored are the longhands whose values take colours, where a system
@@ -478,13 +481,13 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		}
 	}
 	r.m.hints = hints(n)
-	casc := r.m.cascade(r.m.matched(n, r.sheets, inline))
-	r.overKeyframe(casc)
 	root := parent == nil
 	if root {
 		parent = &initial
 		rem = initial.Font.Size
 	}
+	casc := r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
+	r.overKeyframe(casc)
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
@@ -556,6 +559,7 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 
 // cascaded applies every longhand's winner, then what depends on several.
 func (x *ctx) cascaded(casc cascaded, root bool) {
+	x.rtl = casc.rtl
 	x.customs(casc.custom)
 	if !x.transitioning(casc) {
 		x.longhands(casc, root, x.over)
@@ -640,13 +644,13 @@ func (r *restyler) may(n *dom.Node, name string) bool {
 // pseudo-element takes set by its rules, inheriting from the element;
 // false when no rule sets any.
 func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*style.Computed, bool) {
-	casc := m.cascadeFor(m.matchedFor(n, sheets, nil, name), name)
+	casc := m.cascadeFor(m.matchedFor(n, sheets, nil, name), name, x.c.Dir)
 	if !slices.ContainsFunc(casc.longhands, func(d *Declaration) bool { return d != nil }) && len(casc.custom) == 0 {
 		return nil, false
 	}
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
-	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n}
+	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, rtl: casc.rtl}
 	px.customs(casc.custom)
 	for i := range longhands {
 		l := &longhands[i]
@@ -820,28 +824,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 		return
 	}
 	x.base = d.base
-	var v []Component
-	ok := true
-	switch {
-	case d.longhands != nil:
-		v = d.longhands[name]
-	case d.Name != name:
-		long, done := x.expanded[d]
-		if !done {
-			if sub, subOK := x.substitute(d.Value); subOK {
-				long, _ = expand(d.Name, items(sub))
-			}
-			if x.expanded == nil {
-				x.expanded = map[*Declaration]map[string][]Component{}
-			}
-			x.expanded[d] = long
-		}
-		v, ok = long[name], long != nil
-	case d.vals != nil:
-		v = d.vals
-	default:
-		v, ok = x.substitute(d.Value)
-	}
+	v, ok := x.valueOf(name, d)
 	if ok {
 		v = items(v)
 		ok = len(v) > 0
@@ -878,6 +861,41 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 		}
 		p.set(x, v)
 	}
+}
+
+// valueOf is the value d gives the longhand name, its var()s substituted;
+// false when they leave none.
+func (x *ctx) valueOf(name string, d *Declaration) ([]Component, bool) {
+	key := x.keyOf(name, d)
+	switch {
+	case d.longhands != nil:
+		return d.longhands[key], true
+	case d.Name != key:
+		long, done := x.expanded[d]
+		if !done {
+			if sub, subOK := x.substitute(d.Value); subOK {
+				long, _ = expand(d.Name, items(sub))
+			}
+			if x.expanded == nil {
+				x.expanded = map[*Declaration]map[string][]Component{}
+			}
+			x.expanded[d] = long
+		}
+		return long[key], long != nil
+	case d.vals != nil:
+		return d.vals, true
+	default:
+		return x.substitute(d.Value)
+	}
+}
+
+// keyOf is the longhand d gives name the value of: the other side's
+// when d is of an inline side and the element's direction rtl.
+func (x *ctx) keyOf(name string, d *Declaration) string {
+	if x.rtl && d.inline {
+		return mirrored(name)
+	}
+	return name
 }
 
 // inherit gives a longhand its parent's value; the root's is its initial
@@ -1377,6 +1395,32 @@ var breaks = map[string]style.Break{
 	"avoid": style.BreakAvoid, "avoid-column": style.BreakAvoid, "column": style.BreakColumn,
 }
 
+//nolint:gochecknoglobals // lookup tables
+var (
+	directions   = map[string]style.Direction{dirLTR: style.LTR, dirRTL: style.RTL}
+	unicodeBidis = map[string]style.UnicodeBidi{"normal": style.BidiNormal, "embed": style.BidiEmbed,
+		"isolate": style.BidiIsolate, "bidi-override": style.BidiOverride, "isolate-override": style.BidiIsolateOverride,
+		"plaintext": style.BidiPlaintext}
+)
+
+// sided is the keyword c of m, inline-start and inline-end the left or
+// the right side as the element's direction has them.
+func sided[T any](x *ctx, c Component, m map[string]T, left, right T) T {
+	switch strings.ToLower(c.Text) {
+	case "inline-start":
+		if x.c.Dir == style.RTL {
+			return right
+		}
+		return left
+	case "inline-end":
+		if x.c.Dir == style.RTL {
+			return left
+		}
+		return right
+	}
+	return m[strings.ToLower(c.Text)]
+}
+
 func borderWidthOf(x *ctx, v []Component) float32 {
 	switch {
 	case isWord(v[0], "thin"):
@@ -1421,10 +1465,21 @@ var props = func() map[string]prop {
 			},
 			anim: anim{kind: still},
 		},
-		"float": keyword(func(c *style.Computed) *style.Float { return &c.Float }, map[string]style.Float{
-			"none": style.FloatNone, "left": style.FloatLeft, "right": style.FloatRight,
-			"inline-start": style.FloatLeft, "inline-end": style.FloatRight,
-		}),
+		"float": field(func(c *style.Computed) *style.Float { return &c.Float },
+			func(x *ctx, v []Component) style.Float {
+				return sided(x, v[0], map[string]style.Float{"none": style.FloatNone, "left": style.FloatLeft,
+					"right": style.FloatRight}, style.FloatLeft, style.FloatRight)
+			}, flips[style.Float]()),
+		"direction": {
+			set:     func(x *ctx, v []Component) { x.c.Dir = directions[strings.ToLower(v[0].Text)] },
+			inherit: func(dst, src *style.Computed) { dst.Dir = src.Dir },
+			anim:    anim{kind: still},
+		},
+		"unicode-bidi": {
+			set:     func(x *ctx, v []Component) { x.c.Bidi = unicodeBidis[strings.ToLower(v[0].Text)] },
+			inherit: func(dst, src *style.Computed) { dst.Bidi = src.Bidi },
+			anim:    anim{kind: still},
+		},
 		"vertical-align": {
 			set: func(x *ctx, v []Component) {
 				x.c.VerticalShift = style.Length{}
@@ -1453,10 +1508,11 @@ var props = func() map[string]prop {
 				},
 			},
 		},
-		"clear": keyword(func(c *style.Computed) *style.Clear { return &c.Clear }, map[string]style.Clear{
-			"none": style.ClearNone, "left": style.ClearLeft, "right": style.ClearRight, "both": style.ClearBoth,
-			"inline-start": style.ClearLeft, "inline-end": style.ClearRight,
-		}),
+		"clear": field(func(c *style.Computed) *style.Clear { return &c.Clear },
+			func(x *ctx, v []Component) style.Clear {
+				return sided(x, v[0], map[string]style.Clear{"none": style.ClearNone, "left": style.ClearLeft,
+					"right": style.ClearRight, "both": style.ClearBoth}, style.ClearLeft, style.ClearRight)
+			}, flips[style.Clear]()),
 		"container-type": keyword(func(c *style.Computed) *style.ContainerType { return &c.ContainerType },
 			map[string]style.ContainerType{"normal": style.ContainerNormal, "size": style.ContainerSize,
 				"inline-size": style.ContainerInlineSize}),

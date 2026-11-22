@@ -79,6 +79,8 @@ var properties = map[string]property{
 	"caption-side":           {inherited: true, initial: "top"},
 	"table-layout":           {initial: "auto"},
 	"text-align":             {inherited: true, initial: "start"},
+	"direction":              {inherited: true, initial: "ltr"},
+	"unicode-bidi":           {initial: "normal"},
 	"text-indent":            {inherited: true, initial: "0"},
 	"text-transform":         {inherited: true, initial: "none"},
 	"-webkit-font-smoothing": {inherited: true, initial: "auto"},
