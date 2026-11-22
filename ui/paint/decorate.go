@@ -1617,10 +1617,49 @@ func (r radii) grown(d float32) radii {
 	return r
 }
 
-// text paints a text run's fragments.
+// text paints a text run's fragments: those of a first line a ::first-line
+// styles in its style, the others in the run's.
 func (p *painter) text(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	if b.Kind != box.TextRun || !st.Visible || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+		return
+	}
+	var parts []Selected
+	if p.sel != nil {
+		parts = p.sel.Parts(b)
+	}
+	first := 0
+	for first < len(b.Lines) && b.Lines[first].Style != nil {
+		first++
+	}
+	if first == 0 {
+		p.textLines(e, st, parts, alpha)
+		return
+	}
+	head, rest := *b, *b
+	head.Lines, rest.Lines = b.Lines[:first], b.Lines[first:]
+	var headParts, restParts []Selected
+	for _, s := range parts {
+		if s.Line < first {
+			headParts = append(headParts, s)
+		} else {
+			s.Line -= first
+			restParts = append(restParts, s)
+		}
+	}
+	at := e
+	at.b = &head
+	p.textLines(at, b.Lines[0].Style, headParts, alpha)
+	if len(rest.Lines) > 0 {
+		at.b = &rest
+		p.textLines(at, st, restParts, alpha)
+	}
+}
+
+// textLines paints the fragments of e's box in st, parts of them selected.
+func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha float32) {
+	b := e.b
+	if !st.Visible {
 		return
 	}
 	c := fade(st.Color, alpha)
@@ -1630,12 +1669,9 @@ func (p *painter) text(e entry, alpha float32) {
 			c = fade(st.PlaceholderColor, alpha)
 		}
 	}
-	var parts []Selected
 	ink := c
-	if p.sel != nil {
-		if parts = p.sel.Parts(b); len(parts) > 0 {
-			ink = p.highlight(e, st, parts, c, alpha)
-		}
+	if len(parts) > 0 {
+		ink = p.highlight(e, st, parts, c, alpha)
 	}
 	p.decorations(e, st, style.Underline|style.Overline, alpha)
 	if c.A <= 0 && ink == c {

@@ -139,9 +139,9 @@ type restyler struct {
 	// browser reads style attributes as a browser does
 	// (Transitions.BrowserSheets).
 	browser bool
-	// before, after and marker are set when some sheet has a rule for the
-	// pseudo-element: only then is one looked for.
-	before, after, marker bool
+	// before, after, marker, firstLine and firstLetter are set when some
+	// sheet has a rule for the pseudo-element: only then is one looked for.
+	before, after, marker, firstLine, firstLetter bool
 	// counts is set once an element counts: a numbered list item, a
 	// counter property, or generated content of counters or quotes; and
 	// recount when what the counters read may have changed.
@@ -156,6 +156,8 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.before = r.before || x.pseudos["before"] != nil
 		r.after = r.after || x.pseudos["after"] != nil
 		r.marker = r.marker || x.pseudos["marker"] != nil
+		r.firstLine = r.firstLine || x.pseudos["first-line"] != nil
+		r.firstLetter = r.firstLetter || x.pseudos["first-letter"] != nil
 		r.siblings = r.siblings || x.siblings
 		r.treeStates |= x.aboveStates
 		r.besideStates |= x.besideStates
@@ -175,6 +177,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	}
 	r.visit(root, nil, 0, stale, stale)
 	r.count(root)
+	r.firsts(root)
 }
 
 // countsOn reports a change of an element, as dom.Pipeline.Changed names
