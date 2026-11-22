@@ -48,8 +48,8 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/border-image-width", 460, 170, 0.0007},
 		{"./internal/pages/flex-negative-margin", 640, 220, 0.0004},
 		{"./internal/pages/img-crisp", 160, 104, 0.0002},
-		{"./internal/pages/bevels", 480, 120, 0.0003},
-		{"./internal/pages/mitres", 560, 90, 0.0008},
+		{"./internal/pages/bevels", 480, 120, 0.0001},
+		{"./internal/pages/mitres", 560, 90, 0.0002},
 		{"./internal/pages/disabled", 480, 110, 0.0024},
 		{"./internal/pages/gradients", 520, 240, 0.0009},
 		{"./internal/pages/conic", 360, 180, 0.0009},
@@ -78,6 +78,9 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/ico-bmp", 492, 204, 0.0002},
 		{"./internal/pages/math-functions", 520, 330, 0.0006},
 		{"./internal/pages/color-scheme", 560, 160, 0.0018},
+		{"./internal/pages/doubles", 560, 230, 0.0003},
+		{"./internal/pages/collapsed-styles", 520, 160, 0.0015},
+		{"./internal/pages/rounded-colours", 480, 90, 0.0008},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			if strings.HasSuffix(c.pkg, "/mitres") && os.Getenv("CI") != "" && runtime.GOOS != "windows" {

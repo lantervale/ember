@@ -88,7 +88,7 @@ func TestSquareBordersAreOneMiteredSidePerColour(t *testing.T) {
 	})
 	r := newRecorder()
 	Paint(r, tree(b))
-	sides := r.of("triangles")
+	sides := r.sides()
 	require.Len(t, sides, 4)
 	for i, want := range []color.Color{red, green, blue, black} {
 		assert.Equal(t, want, sides[i].Color)

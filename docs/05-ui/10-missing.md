@@ -50,13 +50,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
 | columns right to left | left to right only |
-| `border-style: double`, and a collapsed border's `inset` and `outset` as Chrome shades them | `double` is refused; the two are drawn as a groove and a ridge |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
-| a table's collapsed borders where they meet at a corner, borders of different widths | the wider way goes through and the other stops beside it; Chrome's joins differ by a few pixels there |
+| a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
 | a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
-| `border-inline`, `border-block` and their `-width`, `-style`, `-color`, `overflow-inline`, `overflow-block` | refused; the logical names of one side are [read](03-css.md#logical-properties) |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
-| the diagonal where two solid border sides of other colours meet | not smoothed, where Chrome blends the two colours along it |
 | a picture with a ratio and no size (an SVG with only a `viewBox`) as an unsized flex item or absolutely positioned | no width, where Chrome gives it one: give it a width |
 | a replaced grid item | stretched to its cell |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
@@ -78,6 +75,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
+| a rounded border whose sides differ in width or in style, or that is `inset`, `outset`, `groove` or `ridge`; a rounded `dashed` or `dotted` one | drawn square; the dashed or dotted one drawn solid |
+| a rounded border of three or four colours | each meets the next on Chrome's line, with a trace of the first colour through the blend where two later ones meet |
+| `outline-style` but `solid` and `double` (`dashed`, `dotted`, `inset`, `outset`, `groove`, `ridge`, `auto`) | drawn solid |
 | `background-clip: text` | refused |
 | `background-attachment: fixed` on an element under a transform | placed in the viewport, where Chrome places it in the element |
 | a scaled picture's tile seams, the gaps of `background-repeat: space` | each tile keeps its own edge, where Chrome blends across: about a pixel row; a gap of a fraction of a pixel is a whole pixel or none, where Chrome blends it |

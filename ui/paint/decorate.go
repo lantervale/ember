@@ -158,7 +158,8 @@ func sharesBorders(b *box.Box) bool {
 
 // collapsedBorders draws the borders of a table that collapses them (CSS 2.1 §17.6.2):
 // each edge of its grid once, in the style that won it. A groove or an outset is dark
-// then light across its width, a ridge or an inset light then dark.
+// then light across its width, a ridge or an inset light then dark, a double two lines
+// as a box's.
 func (p *painter) collapsedBorders(e entry, alpha float32) {
 	if len(e.b.Collapsed) == 0 || p.probing || !shown(e.b).Visible {
 		return
@@ -172,6 +173,24 @@ func (p *painter) collapsedBorders(e entry, alpha float32) {
 		switch ed.Style {
 		case style.BorderDashed, style.BorderDotted:
 			p.dashes(r, ed.Across, ed.Style == style.BorderDotted, c)
+		case style.BorderDouble:
+			w := r.W
+			if ed.Across {
+				w = r.H
+			}
+			outer, inner, ok := doubleCut(w, p.maskScale())
+			if !ok {
+				p.s.Rect(r, c)
+				continue
+			}
+			a, b := r, r
+			if ed.Across {
+				a.H, b.Y, b.H = outer, r.Y+inner, r.H-inner
+			} else {
+				a.W, b.X, b.W = outer, r.X+inner, r.W-inner
+			}
+			p.s.Rect(a, c)
+			p.s.Rect(b, c)
 		case style.BorderGroove, style.BorderOutset, style.BorderRidge, style.BorderInset:
 			first, second := shades(c)
 			if ed.Style == style.BorderRidge || ed.Style == style.BorderInset {
@@ -386,7 +405,7 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	case style.BorderOutset:
 		rule.BorderStyle.Left = style.BorderGroove
 	case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
-		style.BorderRidge:
+		style.BorderRidge, style.BorderDouble:
 	}
 	b := e.b
 	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
@@ -1310,6 +1329,9 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 	rw, rc := side(w.Right, st.BorderStyle.Right, st.BorderColor.Right)
 	bw, bc := side(w.Bottom, st.BorderStyle.Bottom, st.BorderColor.Bottom)
 	lw, lc := side(w.Left, st.BorderStyle.Left, st.BorderColor.Left)
+	if p.doubleBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, radius, st.BorderStyle) {
+		return
+	}
 	if beveled(st.BorderStyle) {
 		// A groove or a ridge is two bevels, each half the width: the outer one, then
 		// the inner one the other way.
@@ -1331,14 +1353,9 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		p.bevel(in, rest, [4]color.Color{tc, rc, bc, lc}, inner)
 		return
 	}
-	if tw == rw && rw == bw && bw == lw && tc == rc && rc == bc && bc == lc && !radius.zero() {
-		switch {
-		case tw <= 0 || tc.A <= 0:
-		case radius.uniform():
-			p.s.Border(r, radius[0], tw, tc)
-		default:
-			p.s.BorderCorners(r, radius, tw, tc)
-		}
+	if tw == rw && rw == bw && bw == lw && !radius.zero() &&
+		(tc == rc && rc == bc && bc == lc || solidAround(st.BorderStyle)) {
+		p.roundedSides(r, tw, [4]color.Color{tc, rc, bc, lc}, radius)
 		return
 	}
 	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
@@ -1363,10 +1380,16 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		case style.BorderDashed, style.BorderDotted:
 			p.dashes(s.rect, s.across, s.style == style.BorderDotted, s.c)
 		case style.BorderNone, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
-			style.BorderRidge:
+			style.BorderRidge, style.BorderDouble:
 			p.s.Rect(s.rect, s.c)
 		}
 	}
+}
+
+// solidAround reports a border solid on every side.
+func solidAround(s style.Sides[style.BorderStyle]) bool {
+	return s.Top == style.BorderSolid && s.Right == style.BorderSolid && s.Bottom == style.BorderSolid &&
+		s.Left == style.BorderSolid
 }
 
 // mitered reports solid sides that must not lie over each other's
@@ -1414,7 +1437,7 @@ func halves(s style.Sides[style.BorderStyle]) (style.Sides[style.BorderStyle], s
 			split = true
 			return style.BorderOutset, style.BorderInset
 		case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
-			style.BorderOutset:
+			style.BorderOutset, style.BorderDouble:
 		}
 		return x, x
 	}
@@ -1425,39 +1448,24 @@ func halves(s style.Sides[style.BorderStyle]) (style.Sides[style.BorderStyle], s
 	return outer, inner, split
 }
 
-// trapezoid is a side's two triangles.
-//
-//nolint:gochecknoglobals // fixed values every paint reads; Go has no constant colours, tables or shapes
-var trapezoid = []int{0, 1, 2, 0, 2, 3}
-
 // bevel paints the sides as Chrome does when one is inset or outset: each
 // side a trapezoid mitered into its neighbours, an inset's top and left
 // and an outset's bottom and right in their colour's darker shade, its
 // other sides in the lighter one; any other style is drawn solid for now.
 func (p *painter) bevel(r geom.Rect, w [4]float32, c [4]color.Color, st style.Sides[style.BorderStyle]) {
-	x0, y0, x1, y1 := r.X, r.Y, r.X+r.W, r.Y+r.H
-	t, rt, b, l := w[0], w[1], w[2], w[3]
-	sides := [4][4]geom.Vec2{
-		{{X: x0, Y: y0}, {X: x1, Y: y0}, {X: x1 - rt, Y: y0 + t}, {X: x0 + l, Y: y0 + t}},
-		{{X: x1, Y: y0}, {X: x1, Y: y1}, {X: x1 - rt, Y: y1 - b}, {X: x1 - rt, Y: y0 + t}},
-		{{X: x1, Y: y1}, {X: x0, Y: y1}, {X: x0 + l, Y: y1 - b}, {X: x1 - rt, Y: y1 - b}},
-		{{X: x0, Y: y1}, {X: x0, Y: y0}, {X: x0 + l, Y: y0 + t}, {X: x0 + l, Y: y1 - b}},
-	}
 	styles := [4]style.BorderStyle{st.Top, st.Right, st.Bottom, st.Left}
+	var whole [4][]stripe
 	for i := range 4 {
-		if w[i] <= 0 || c[i].A <= 0 {
-			continue
-		}
-		col := c[i]
+		whole[i] = []stripe{{0, w[i]}}
 		if styles[i] == style.BorderInset || styles[i] == style.BorderOutset {
-			darker, lighter := shades(col)
-			col = lighter
+			darker, lighter := shades(c[i])
+			c[i] = lighter
 			if (styles[i] == style.BorderInset) == (i == 0 || i == 3) {
-				col = darker
+				c[i] = darker
 			}
 		}
-		p.s.Triangles(sides[i][:], trapezoid, col)
 	}
+	p.mitres(r, w, c, whole)
 }
 
 // shades are the colours Chromium gives an inset or outset side of colour
@@ -1537,11 +1545,21 @@ func (p *painter) outline(e entry, alpha float32) {
 	for _, pc := range ps {
 		r := p.snap(pc.rect)
 		out := geom.Rect{X: r.X - grow, Y: r.Y - grow, W: r.W + 2*grow, H: r.H + 2*grow}
-		if radius.uniform() {
-			p.s.Border(out, radius[0], st.OutlineWidth, c)
-		} else {
-			p.s.BorderCorners(out, radius, st.OutlineWidth, c)
+		ring := func(r geom.Rect, radius radii, w float32) {
+			if radius.uniform() {
+				p.s.Border(r, radius[0], w, c)
+			} else {
+				p.s.BorderCorners(r, radius, w, c)
+			}
 		}
+		w := st.OutlineWidth
+		if outer, inner, ok := doubleCut(w, p.maskScale()); ok && st.OutlineStyle == style.BorderDouble {
+			ring(out, radius, outer)
+			gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
+			ring(inside(out, gap), radius.inside(gap), w-inner)
+			continue
+		}
+		ring(out, radius, w)
 	}
 }
 

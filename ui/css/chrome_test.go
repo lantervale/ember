@@ -650,7 +650,36 @@ func image(src string) string {
 }
 
 func borderStyle(b style.BorderStyle) string {
-	return []string{"none", "solid", "dashed", "dotted", "inset", "outset"}[b]
+	return []string{"none", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge", "double"}[b]
+}
+
+// TestTheBordersOfTwoSidesMatchChrome compares border-inline, border-block,
+// their parts and the logical overflows with the physical sides Chrome
+// gives them, the last declared winning between logical and physical.
+func TestTheBordersOfTwoSidesMatchChrome(t *testing.T) {
+	fsys := fstest.MapFS{"sides.css": {Data: []byte(`
+.a { border-inline: 3px double #c03; border-block: thick dashed; overflow-inline: hidden; overflow-block: auto; }
+.b { border: 1px solid; border-inline-width: 2px 5px; border-block-style: groove ridge;
+  border-block-color: red blue; border-inline-color: lime; }
+.c { border-inline-style: inset outset; border-left: 4px double; overflow: scroll; overflow-block: clip; }
+.d { border-block: 6px double green; border-top-width: 1px; border-inline: medium; }
+`)}}
+	d := ui.NewDocument(ui.Stylesheet(fsys, "sides.css"))
+	d.Body().Append(ui.Div(ui.Class("a")), ui.Div(ui.Class("b")), ui.Div(ui.Class("c")), ui.Div(ui.Class("d")))
+	props := map[string]func(s *style.Computed) string{}
+	for _, name := range []string{"overflow-x", "overflow-y"} {
+		props[name] = compared[name]
+	}
+	for _, side := range []string{"top", "right", "bottom", "left"} {
+		for _, part := range []string{"width", "style", "color"} {
+			name := "border-" + side + "-" + part
+			if props[name] = everything[name]; props[name] == nil {
+				props[name] = compared[name]
+			}
+		}
+	}
+	props["border-bottom-style"] = func(s *style.Computed) string { return borderStyle(s.BorderStyle.Bottom) }
+	matchChromeProps(t, d, props, 2)
 }
 
 func TestComputedValuesMatchChrome(t *testing.T) {

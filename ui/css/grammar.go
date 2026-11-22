@@ -153,8 +153,9 @@ var (
 	// act, between columns.
 	breakWords  = []string{"auto", "avoid", "avoid-column", "avoid-page", "column", "page", "left", "right", "always"}
 	borderWidth = either(dimTerm(nonNegative), words("thin", "medium", "thick"))
-	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge")
-	alignWords  = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
+	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge",
+		"double")
+	alignWords = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
 		"self-start", "self-end"}
 	// textAlign has Chrome's -webkit- values, which place blocks as well as lines.
 	textAlign = words("start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",

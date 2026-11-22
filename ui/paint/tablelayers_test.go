@@ -84,3 +84,18 @@ func TestATableDrawsItsCollapsedBordersOverItsCellsAndTheyDrawNone(t *testing.T)
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 30, W: 42, H: 2}}, rectsOf(r, dark), "a groove dark, then light")
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 32, W: 42, H: 2}}, rectsOf(r, light))
 }
+
+func TestACollapsedDoubleEdgeIsTwoLines(t *testing.T) {
+	table := el(10, 10, 42, 22, func(st *style.Computed) { st.Table = true })
+	table.Collapsed = []box.Edge{
+		{Rect: geom.Rect{X: 0, Y: 0, W: 42, H: 6}, Style: style.BorderDouble, Color: green, Across: true},
+		{Rect: geom.Rect{X: 0, Y: 0, W: 5, H: 22}, Style: style.BorderDouble, Color: blue},
+		{Rect: geom.Rect{X: 37, Y: 0, W: 2, H: 22}, Style: style.BorderDouble, Color: red},
+	}
+	r := newRecorder()
+	Paint(r, tree(table), Scale(1))
+	assert.Equal(t, []geom.Rect{{X: 10, Y: 10, W: 42, H: 2}, {X: 10, Y: 14, W: 42, H: 2}}, rectsOf(r, green),
+		"a third of its width each, across")
+	assert.Equal(t, []geom.Rect{{X: 10, Y: 10, W: 2, H: 22}, {X: 13, Y: 10, W: 2, H: 22}}, rectsOf(r, blue), "down")
+	assert.Equal(t, []geom.Rect{{X: 47, Y: 10, W: 2, H: 22}}, rectsOf(r, red), "solid, too thin for a gap")
+}
