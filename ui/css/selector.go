@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/dom"
+	"golang.org/x/text/unicode/bidi"
 )
 
 //nolint:gochecknoglobals,goconst // lookup table
@@ -14,6 +15,8 @@ var stateNames = map[string]dom.State{
 	"hover": dom.Hover, "focus": dom.Focus, "focus-visible": dom.FocusVisible, "active": dom.Active,
 	"disabled": dom.Disabled, "checked": dom.Checked, "open": dom.Open, "modal": dom.Modal,
 	"focus-within": dom.FocusWithin, "target": dom.Target, "empty": dom.Empty,
+	"placeholder-shown": dom.PlaceholderShown, "default": dom.Default, "valid": dom.Valid, "invalid": dom.Invalid,
+	"user-valid": dom.UserValid, "user-invalid": dom.UserInvalid, "in-range": dom.InRange, "out-of-range": dom.OutOfRange,
 }
 
 // Specificity is a selector's (ids, classes, types) weight, compared in
@@ -58,7 +61,8 @@ const (
 	pseudoNot
 	pseudoNthChild
 	// pseudoLink is :link and :any-link, an element with an href, and
-	// pseudoVisited :visited, which nothing is: ui keeps no history.
+	// pseudoVisited :visited, which nothing is: ui keeps no history, nor
+	// fills fields itself (:autofill).
 	pseudoLink
 	pseudoVisited
 	// pseudoIs is :is(), and pseudoWhere :where(), which weighs nothing.
@@ -80,6 +84,13 @@ const (
 	pseudoLang
 	pseudoReadOnly
 	pseudoReadWrite
+	// pseudoIndeterminate is a control in that state, or a progress with
+	// no value; pseudoRequired and pseudoOptional a control by its
+	// required attribute; pseudoDir an element by its direction.
+	pseudoIndeterminate
+	pseudoRequired
+	pseudoOptional
+	pseudoDir
 )
 
 type pseudo struct {
@@ -90,8 +101,9 @@ type pseudo struct {
 	sels []Selector
 	// a and b are :nth-child(An+B)'s, and the other :nth-'s.
 	a, b int
-	// lang is the range :lang() was given.
-	lang string
+	// lang is the range :lang() was given, dir the direction :dir()
+	// was, in lower case.
+	lang, dir string
 }
 
 // Attr is an attribute selector: [Name], or [Name="Value"] when HasValue.
@@ -103,14 +115,19 @@ type Attr struct {
 	HasValue    bool
 	Op          byte
 	Fold        bool
+	// caseless is set for the attributes whose values HTML compares
+	// whatever the case on its elements.
+	caseless bool
 }
 
-func (a Attr) matches(v string) bool {
+// matches reports whether the value v matches a, letters of either case
+// when fold.
+func (a Attr) matches(v string, fold bool) bool {
 	if !a.HasValue {
 		return true
 	}
 	want := a.Value
-	if a.Fold {
+	if fold {
 		v, want = strings.ToLower(v), strings.ToLower(want)
 	}
 	switch a.Op {
@@ -317,13 +334,14 @@ func (c *Compound) names(e *dom.Node) bool {
 	}
 	for _, a := range c.Attrs {
 		v, ok := e.Attr(a.Name)
-		if !ok || !a.matches(v) {
+		if !ok || !a.matches(v, a.Fold || a.caseless && e.Tag() != dom.Svg) {
 			return false
 		}
 	}
 	return true
 }
 
+//nolint:gocyclo,cyclop,funlen // one case per pseudo-class
 func (p *pseudo) matches(e *dom.Node) bool {
 	switch p.kind {
 	case pseudoState:
@@ -369,9 +387,109 @@ func (p *pseudo) matches(e *dom.Node) bool {
 		return !editable(e)
 	case pseudoReadWrite:
 		return editable(e)
+	case pseudoIndeterminate:
+		return e.State().Has(dom.Indeterminate) || e.Tag() == dom.Progress && !hasAttr(e, "value")
+	case pseudoRequired:
+		return required(e)
+	case pseudoOptional:
+		return slices.Contains(fields, e.Tag()) && !required(e)
+	case pseudoDir:
+		return directionOf(e) == p.dir
 	case pseudoScope:
 	}
 	return true
+}
+
+func hasAttr(e *dom.Node, name string) bool { _, ok := e.Attr(name); return ok }
+
+// fields are the elements :optional is about.
+//
+//nolint:gochecknoglobals // lookup table
+var fields = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea}
+
+// required reports whether e is :required: a select, a textarea, or an
+// input of a type a value is asked of, with the required attribute.
+func required(e *dom.Node) bool {
+	if !hasAttr(e, "required") {
+		return false
+	}
+	if e.Tag() == dom.Input {
+		kind, _ := e.Attr("type")
+		return !slices.Contains(unrequired, strings.ToLower(kind))
+	}
+	return e.Tag() == dom.Select || e.Tag() == dom.Textarea
+}
+
+// unrequired are the types of input required does not apply to.
+//
+//nolint:gochecknoglobals // lookup table
+var unrequired = strings.Fields("hidden range color submit image reset button")
+
+const (
+	dirLTR = "ltr"
+	dirRTL = "rtl"
+)
+
+// directionOf is e's direction, ltr or rtl: its dir attribute's or that
+// of the nearest element above it with one, auto (and a bdi without one)
+// read from its text.
+func directionOf(e *dom.Node) string {
+	for p := e; p != nil; p = p.Parent() {
+		v, _ := p.Attr("dir")
+		switch v = strings.ToLower(v); {
+		case v == dirLTR || v == dirRTL:
+			return v
+		case v == kwAuto || p.Tag() == dom.Bdi:
+			if dir := textDirection(p); dir != "" {
+				return dir
+			}
+			return dirLTR
+		}
+	}
+	return dirLTR
+}
+
+// textDirection is the direction of the first strong letter in e's text,
+// leaving out the elements that set their own (a bdi, a field, a valid
+// dir), a field's that of its value; "" without one.
+func textDirection(e *dom.Node) string {
+	if e.Tag() == dom.Input || e.Tag() == dom.Textarea {
+		if data := dom.Data(e); data.Shadow != nil && !data.Placeholder {
+			return strongDirection(data.Shadow.Text())
+		}
+		return ""
+	}
+	for _, c := range e.Children() {
+		if c.IsText() {
+			if dir := strongDirection(c.Text()); dir != "" {
+				return dir
+			}
+			continue
+		}
+		v, _ := c.Attr("dir")
+		if v = strings.ToLower(v); c.Tag() == dom.Bdi || c.Tag() == dom.Textarea || c.Tag() == dom.Input ||
+			v == dirLTR || v == dirRTL || v == kwAuto {
+			continue
+		}
+		if dir := textDirection(c); dir != "" {
+			return dir
+		}
+	}
+	return ""
+}
+
+// strongDirection is the direction of the first letter of s that has
+// one, "" for none.
+func strongDirection(s string) string {
+	for _, r := range s {
+		p, _ := bidi.LookupRune(r)
+		if c := p.Class(); c == bidi.L {
+			return dirLTR
+		} else if c == bidi.R || c == bidi.AL {
+			return dirRTL
+		}
+	}
+	return ""
 }
 
 // language is e's language: the lang attribute of e or of the nearest
@@ -756,7 +874,8 @@ func (c *Compound) specificity() Specificity {
 			sp = sp.add(most)
 		case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 			pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
-			pseudoNthOfType, pseudoNthLastOfType, pseudoLang, pseudoReadOnly, pseudoReadWrite:
+			pseudoNthOfType, pseudoNthLastOfType, pseudoLang, pseudoReadOnly, pseudoReadWrite, pseudoIndeterminate,
+			pseudoRequired, pseudoOptional, pseudoDir:
 			sp[1]++
 		}
 	}
@@ -883,6 +1002,14 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoReadOnly}, 2, nil
 	case "read-write":
 		return pseudo{kind: pseudoReadWrite}, 2, nil
+	case "indeterminate":
+		return pseudo{kind: pseudoIndeterminate}, 2, nil
+	case "required":
+		return pseudo{kind: pseudoRequired}, 2, nil
+	case "optional":
+		return pseudo{kind: pseudoOptional}, 2, nil
+	case "autofill", "-webkit-autofill":
+		return pseudo{kind: pseudoVisited}, 2, nil
 	}
 	return pseudo{}, 0, selErr(t, "the :%s pseudo-class is not supported", name)
 }
@@ -910,6 +1037,11 @@ func pseudoFunction(t Component) (pseudo, int, *SelectorError) {
 			return pseudo{kind: pseudoLang, lang: v[0].Text}, 2, nil
 		}
 		return pseudo{}, 0, selErr(t, ":lang() takes one language range, as an identifier")
+	case "dir":
+		if v := trim(t.Args); len(v) == 1 && v[0].Kind == Ident {
+			return pseudo{kind: pseudoDir, dir: strings.ToLower(v[0].Text)}, 2, nil
+		}
+		return pseudo{}, 0, selErr(t, ":dir() takes ltr or rtl")
 	case "not":
 	default:
 		return pseudo{}, 0, selErr(t, "the :%s() pseudo-class is not supported", name)
@@ -995,12 +1127,28 @@ func dropHas(s Selector, at Component) *SelectorError {
 				}
 			case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 				pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
-				pseudoNthOfType, pseudoNthLastOfType, pseudoScope, pseudoLang, pseudoReadOnly, pseudoReadWrite:
+				pseudoNthOfType, pseudoNthLastOfType, pseudoScope, pseudoLang, pseudoReadOnly, pseudoReadWrite,
+				pseudoIndeterminate, pseudoRequired, pseudoOptional, pseudoDir:
 			}
 		}
 	}
 	return nil
 }
+
+// caselessAttrs are the attributes whose values a selector compares
+// whatever the case on an HTML element: Chrome's list, HTML 4's.
+//
+//nolint:gochecknoglobals // lookup table
+var caselessAttrs = func() map[string]bool {
+	set := map[string]bool{}
+	for _, name := range strings.Fields(`accept accept-charset align alink axis bgcolor charset checked clear codetype
+		color compact declare defer dir direction disabled enctype face frame hreflang http-equiv lang language link
+		media method multiple nohref noresize noshade nowrap readonly rel rev rules scope scrolling selected shape
+		target text type valign valuetype vlink`) {
+		set[name] = true
+	}
+	return set
+}()
 
 //nolint:gochecknoglobals // lookup table
 var nthKinds = map[string]pseudoKind{
@@ -1032,6 +1180,7 @@ func parseAttr(b Component) (Attr, *SelectorError) {
 		return Attr{}, selErr(b, "expected an attribute name in [ ]")
 	}
 	a := Attr{Name: strings.ToLower(v[0].Text), Op: '='}
+	a.caseless = caselessAttrs[a.Name]
 	if len(v) == 1 {
 		return a, nil
 	}
@@ -1120,9 +1269,12 @@ func (p *pseudo) reads() dom.State {
 		return p.state
 	case pseudoEnabled, pseudoReadOnly, pseudoReadWrite:
 		return dom.Disabled
+	case pseudoIndeterminate:
+		return dom.Indeterminate
 	case pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink, pseudoVisited, pseudoIs,
 		pseudoWhere, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
-		pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope, pseudoLang:
+		pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope, pseudoLang, pseudoRequired, pseudoOptional,
+		pseudoDir:
 	}
 	return 0
 }
@@ -1226,6 +1378,12 @@ func (p *pseudo) attrs() []string {
 		return []string{"[lang"}
 	case pseudoReadOnly, pseudoReadWrite:
 		return []string{"[readonly", "[disabled", "[type", "[contenteditable"}
+	case pseudoIndeterminate:
+		return []string{"[value"}
+	case pseudoRequired, pseudoOptional:
+		return []string{"[required", "[type"}
+	case pseudoDir:
+		return []string{"[dir"}
 	case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink,
 		pseudoVisited, pseudoIs, pseudoWhere, pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType,
 		pseudoLastOfType, pseudoOnlyOfType, pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope:

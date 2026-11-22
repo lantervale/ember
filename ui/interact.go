@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
@@ -287,7 +288,7 @@ func (d *Document) inDocument(n *Node) bool {
 
 // focusable reports whether n takes the focus, and its tabindex.
 func focusable(n *Node) (int, bool) {
-	if n.IsText() || has(n, "disabled") {
+	if n.IsText() || disabledField(n) {
 		return 0, false
 	}
 	if s, ok := n.Attr("tabindex"); ok {
@@ -535,12 +536,18 @@ func (d *Document) fire(n *Node, e control.Events) {
 	if e.Has(control.Input) {
 		d.events = append(d.events, Edited{n})
 		d.typing = n
+		d.used(n, edited)
+		if v, _ := n.Attr("dir"); strings.EqualFold(v, "auto") {
+			dom.Invalidate(n, "[dir")
+		}
 	}
 	if e.Has(control.Changed) {
 		d.events = append(d.events, Changed{n})
+		d.used(n, changed)
 	}
 	if e.Has(control.Submitted) {
 		d.events = append(d.events, Submitted{n})
+		d.used(n, changed)
 	}
 	if e.Has(control.Changed) || e.Has(control.Submitted) {
 		d.typing = nil

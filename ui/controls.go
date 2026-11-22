@@ -78,12 +78,12 @@ func newMachine(n *Node) any {
 		s.Disabled = disabled
 		return s
 	case dom.Input:
-		typ, _ := n.Attr("type")
+		typ := inputType(n)
 		var t *control.Text
 		switch typ {
-		case "checkbox":
+		case typeCheckbox:
 			return &control.Checkbox{Checked: has(n, "checked"), Disabled: disabled}
-		case "radio":
+		case typeRadio:
 			return &control.Radio{Checked: has(n, "checked"), Disabled: disabled}
 		case "range":
 			r := &control.Range{
@@ -91,7 +91,7 @@ func newMachine(n *Node) any {
 			}
 			r.SetValue(number(n, "value", r.Min+(r.Max-r.Min)/2))
 			return r
-		case "number":
+		case typeNumber:
 			num := control.NewNumber(value)
 			num.Min, num.Max, num.Step = number(n, "min", math.NaN()), number(n, "max", math.NaN()), number(n, "step", 1)
 			if v, _ := n.Attr("step"); v == "any" {
@@ -99,11 +99,11 @@ func newMachine(n *Node) any {
 			}
 			num.SetReadOnly(has(n, "readonly"))
 			return num
-		case "button", "submit", typeReset:
+		case typeButton, typeSubmit, typeReset:
 			return &control.Button{Disabled: disabled}
-		case "search":
+		case typeSearch:
 			t = control.NewSearch(value)
-		case "password":
+		case typePassword:
 			t = control.NewPassword(value)
 		default:
 			t = control.NewText(value)
@@ -132,7 +132,7 @@ func buttonLabel(n *Node) string {
 		return v
 	}
 	switch t, _ := n.Attr("type"); t {
-	case "submit":
+	case typeSubmit:
 		return "Submit"
 	case typeReset:
 		return "Reset"
@@ -153,7 +153,7 @@ func textOf(m any) *control.Text {
 
 // sync shows n's machine in its state, attributes and shadow text.
 func (d *Document) sync(n *Node, m any) {
-	disabled := has(n, "disabled")
+	disabled := disabledField(n)
 	n.SetState(dom.Disabled, disabled)
 	switch m := m.(type) {
 	case *control.Button:
@@ -265,6 +265,9 @@ func (d *Document) SetValue(n *Node, v string) {
 	default:
 		if t := textOf(m); t != nil && (d.focused() != n || d.typing != n) {
 			t.SetValue(v)
+			if d.uses[n]&edited != 0 {
+				d.uses[n] &^= edited
+			}
 		}
 	}
 	d.sync(n, d.machine(n))
@@ -389,6 +392,9 @@ func (d *Document) showOptions(n *Node, m *control.Select) {
 		if d.translator != nil {
 			m.Options[i].Shown = say(c, d.shown)
 		}
+		c.SetState(dom.Checked, i == m.Selected)
+		c.SetState(dom.Default, has(c, "selected"))
+		c.SetState(dom.Disabled, has(c, "disabled"))
 		i++
 	}
 }

@@ -30,7 +30,7 @@ func TestSupportsAppliesWhereUISupportsWhatItAsks(t *testing.T) {
 		"(display: grid) and (not (display: inline-grid))": false,
 		"selector(a > b)":                                  true,
 		"selector(a:has(b))":                               true,
-		"selector(a:dir(rtl))":                             false,
+		"selector(a:state(open))":                          false,
 		"selector(::-moz-x)":                               false,
 		"selector(::-webkit-foo)":                          false,
 		"font-tech(color-COLRv1)":                          false,

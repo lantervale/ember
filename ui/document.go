@@ -108,6 +108,7 @@ type Document struct {
 	// kept carries layout's nodes between layouts, so a change lays out only its path.
 	kept layout.Retained
 	interaction
+	validity
 	replay replay
 	// placed counts the nodes Layout pointed at their boxes, for tests.
 	placed int
@@ -471,7 +472,7 @@ func (d *Document) style() {
 		// have moved, so sync those and leave the rest of the tree.
 		d.syncControls()
 	} else {
-		d.controls = d.controls[:0]
+		d.controls, d.forms = d.controls[:0], d.forms[:0]
 		d.choices.imgs, d.choices.stale = d.choices.imgs[:0], true
 		d.html.Walk(func(n *Node) bool {
 			if dom.Data(n).Dirty&dom.DirtyTree != 0 {
@@ -480,6 +481,9 @@ func (d *Document) style() {
 			if m := d.machine(n); m != nil {
 				d.controls = append(d.controls, n)
 				d.sync(n, m)
+			}
+			if n.Tag() == dom.Form || n.Tag() == dom.Fieldset {
+				d.forms = append(d.forms, n)
 			}
 			switch {
 			case n.Tag() != dom.Img:
@@ -491,6 +495,7 @@ func (d *Document) style() {
 			return !n.IsText()
 		})
 	}
+	d.validate()
 	if dom.Data(d.html).Dirty == 0 {
 		return
 	}

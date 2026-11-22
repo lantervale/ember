@@ -43,7 +43,8 @@ func main() {
 				pages.Pin(d, kit.SwitchTrack(c), s.state)
 			// States this page pins on the switch itself.
 			case dom.Focus, dom.FocusVisible, dom.Active, dom.Disabled, dom.Checked, dom.Open, dom.Modal, dom.FocusWithin,
-				dom.Target, dom.Empty:
+				dom.Target, dom.Empty, dom.Indeterminate, dom.PlaceholderShown, dom.Default, dom.Valid, dom.Invalid,
+				dom.UserValid, dom.UserInvalid, dom.InRange, dom.OutOfRange:
 			}
 		}
 	}

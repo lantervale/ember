@@ -67,7 +67,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `position: relative`, `opacity` on an inline element holding blocks | its lines move and fade, the blocks inside it do not |
 | an empty inline element after a `br` that ends its block | its box of no size stands on the `br`'s line, where Chrome puts it a line lower |
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
-| `disabled` on a `form` or a `fieldset`, `bdo`, a `font` element's attributes | read, and they do nothing |
+| `bdo`, a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
 | a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |
 
@@ -102,8 +102,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
 | the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
 | a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |
-| the values of `type`, `lang`, `rel` and HTML's other enumerated attributes compared whatever the case (`[type=TEXT]` matching `type="text"`), as Chrome does | compared as written |
-| `:dir()`, `:indeterminate`, `:placeholder-shown`, `:default`, `:valid`, `:invalid`, `:required`, `:optional`, `:in-range`, `:out-of-range` | refused: the rule is dropped |
+| `:dir()` on an element of `dir="auto"` whose text changes below it (a field typed in excepted) | answered from the text as it stood when the element was last restyled |
+| a `pattern` Go's `regexp` cannot read (a lookahead, a backreference) | constrains nothing, where Chrome reads it as JavaScript does |
+| an email address whose domain is not in ASCII letters | invalid, where Chrome turns the domain to punycode first |
+| `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
+| a radio group by its form | grouped by name across the Document, where Chrome groups by name within each form |
 | `min()`, `max()`, `clamp()` over a percentage in `line-height`, `word-spacing`, `vertical-align`, a gradient's stop, or longer than 16 steps | worked out as if the percentage were of nothing |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `clamp()` with `none`, `round()`, `mod()`, `rem()`, `abs()`, `sign()` and the other math functions | refused |
@@ -181,6 +184,7 @@ Things built and tested, with a part no test against Chrome covers yet.
 - Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press, a double click and Shift with a key reach are tested in ember alone; the copied text, the rectangles and the picture are compared with Chrome's.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
 - `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone.
+- `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so they are tested in ember alone; Chrome is asked only that nothing matches them before.
 - The picture `sizes="auto"` chooses: Chrome chooses it once the page is laid out, and takes a denser one already in its cache, so what it shows changes from run to run; the box is compared with Chrome's, the choice is tested in ember alone.
 - Choosing a picture again as the viewport or the pixels a point change, the one shown kept until the one chosen lands: headless Chrome is neither resized nor moved to another screen, so it is tested in ember alone.
 - A selection inside a transformed box other than a translation, and under a Document `Zoom`.
