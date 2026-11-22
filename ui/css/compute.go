@@ -925,6 +925,7 @@ func (x *ctx) finish(root bool) {
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
+	c.Filters = followFilterColor(c.Filters, c.Color)
 	if c.AccentAuto {
 		c.AccentColor = c.Color
 	}
@@ -1697,6 +1698,7 @@ var props = func() map[string]prop {
 			return float32(clamp01(float64(x.num(v[0]))))
 		}),
 		"transform": field(func(c *style.Computed) *[]style.TransformOp { return &c.Transform }, (*ctx).transform),
+		"filter":    field(func(c *style.Computed) *[]style.Filter { return &c.Filters }, (*ctx).filters),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin),
 		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}},
@@ -1768,6 +1770,24 @@ func followColor(shadows []style.Shadow, c color.Color) []style.Shadow {
 	}
 	if out == nil {
 		return shadows
+	}
+	return out
+}
+
+// followFilterColor gives the drop shadows given as currentColor the
+// element's colour c, in a copy when one changes.
+func followFilterColor(filters []style.Filter, c color.Color) []style.Filter {
+	var out []style.Filter
+	for i, f := range filters {
+		if f.Kind == style.DropShadow && f.Shadow.CurrentColor && f.Shadow.Color != c {
+			if out == nil {
+				out = slices.Clone(filters)
+			}
+			out[i].Shadow.Color = c
+		}
+	}
+	if out == nil {
+		return filters
 	}
 	return out
 }
@@ -2086,6 +2106,59 @@ func (x *ctx) shadows(v []Component) []style.Shadow {
 		ls = append(ls, 0, 0)
 		s.X, s.Y, s.Blur, s.Spread = ls[0], ls[1], ls[2], ls[3]
 		out = append(out, s)
+	}
+	return out
+}
+
+//nolint:gochecknoglobals // lookup table
+var filterKinds = map[string]style.FilterKind{
+	"blur": style.Blur, "brightness": style.Brightness, "contrast": style.Contrast, "grayscale": style.Grayscale,
+	"hue-rotate": style.HueRotate, "invert": style.Invert, "opacity": style.OpacityFilter, "saturate": style.Saturate,
+	"sepia": style.Sepia, "drop-shadow": style.DropShadow,
+}
+
+// filters are filter's functions; grayscale, invert, opacity and sepia
+// past 100% are 100%, as Chrome computes them.
+func (x *ctx) filters(v []Component) []style.Filter {
+	if isWord(v[0], kwNone) {
+		return nil
+	}
+	out := make([]style.Filter, 0, len(v))
+	for _, c := range v {
+		f := style.Filter{Kind: filterKinds[strings.ToLower(c.Text)], Amount: 1}
+		args := items(c.Args)
+		switch f.Kind {
+		case style.Blur, style.HueRotate:
+			f.Amount = 0
+			if len(args) > 0 && f.Kind == style.Blur {
+				f.Amount = x.px(args[0])
+			} else if len(args) > 0 {
+				d, _ := angle(args[0])
+				f.Amount = float32(d)
+			}
+		case style.DropShadow:
+			f.Amount = 0
+			f.Shadow = style.Shadow{Color: x.c.Color, CurrentColor: true}
+			var ls []float32
+			for _, a := range args {
+				if length(a) == nil {
+					ls = append(ls, x.px(a))
+				} else {
+					f.Shadow.Color, f.Shadow.CurrentColor = x.color(a), isWord(a, kwCurrentColor)
+				}
+			}
+			ls = append(ls, 0)
+			f.Shadow.X, f.Shadow.Y, f.Shadow.Blur = ls[0], ls[1], ls[2]
+		case style.Grayscale, style.Invert, style.OpacityFilter, style.Sepia:
+			if len(args) > 0 {
+				f.Amount = min(x.num(args[0]), 1)
+			}
+		case style.Brightness, style.Contrast, style.Saturate:
+			if len(args) > 0 {
+				f.Amount = x.num(args[0])
+			}
+		}
+		out = append(out, f)
 	}
 	return out
 }

@@ -191,9 +191,15 @@ type painter struct {
 	// are taken.
 	slabs [][]clip
 	used  int
-	// clip is the clip chain pushed on the surface now.
-	clip *clip
-	held int
+	// clip is the clip chain pushed on the surface now, held of them,
+	// those of floor's chain left out: the clips a filtered element's
+	// picture is shown in, not drawn in.
+	clip  *clip
+	held  int
+	floor *clip
+	// spread is how far the filters of the elements painted round what
+	// is painted now draw it past where it is: so much more of it shows.
+	spread float32
 	// scratch holds pieces' parts.
 	scratch []piece
 	// base is the surface's transform as painting starts: the root's
@@ -490,6 +496,10 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		}
 		e.clip = p.newClip(clip{rect: s.bounds, xf: p.s.Transform(), parent: e.clip, shape: &s})
 	}
+	var filters *filtering
+	if b.Kind == box.Element {
+		filters = p.beginFilters(e, st)
+	}
 	p.use(e.clip)
 	p.decorate(e, alpha)
 	l, hoisted := newLayers(), newLayers()
@@ -517,6 +527,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		p.use(c.clip)
 		BarsOf(c.b, c.at).paint(p.s, alpha)
 	}
+	p.endFilters(filters, e.clip)
 	p.use(around)
 	p.s.SetTransform(saved)
 }
@@ -591,7 +602,7 @@ func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
 		return inner
 	}
 	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
-		if st.Position == style.Absolute && shown(a).Position != style.Static {
+		if as := shown(a); len(as.Filters) > 0 || st.Position == style.Absolute && as.Position != style.Static {
 			break
 		}
 		if inner.by == a {
@@ -624,7 +635,7 @@ func (p *painter) reachable(b *box.Box, origin geom.Vec2, c *clip) ([]*box.Box, 
 		prev = k.Pos.Y + k.Size.Y
 		reach = max(reach, inkReach(st))
 	}
-	reach = max(reach, inkMargin)
+	reach = max(reach, inkMargin) + p.spread
 	top, bottom := c.rect.Y-origin.Y-reach, c.rect.Y+c.rect.H-origin.Y+reach
 	from := sort.Search(len(kids), func(i int) bool { return kids[i].Pos.Y+kids[i].Size.Y > top })
 	to := max(from, sort.Search(len(kids), func(i int) bool { return kids[i].Pos.Y >= bottom }))
@@ -648,7 +659,7 @@ const inkMargin = 48
 // inkReach is how far what a box of style st draws may reach past it: its
 // shadows, its outline, and its text's glyphs and shadows.
 func inkReach(st *style.Computed) float32 {
-	r := max(shadowReach(st.Shadows), st.Font.Size+shadowReach(st.TextShadows))
+	r := max(shadowReach(st.Shadows), st.Font.Size+shadowReach(st.TextShadows)) + filterReach(st.Filters)
 	if st.OutlineStyle != style.BorderNone {
 		r = max(r, st.OutlineWidth+max(st.OutlineOffset, 0))
 	}
@@ -657,9 +668,10 @@ func inkReach(st *style.Computed) float32 {
 
 // startsContext reports whether a box paints as a stacking context: a
 // positioned one with a z-index, or one less than opaque, transformed or
-// clipped by a clip-path.
+// clipped by a clip-path or filtered.
 func startsContext(st *style.Computed) bool {
-	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 || !st.ClipPath.None()
+	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 ||
+		!st.ClipPath.None() || len(st.Filters) > 0
 }
 
 func sortZ(es []entry) []entry {
@@ -677,7 +689,7 @@ func (p *painter) use(c *clip) {
 	}
 	p.clip, p.held = c, 0
 	p.chain = p.chain[:0]
-	for k := c; k != nil; k = k.parent {
+	for k := c; k != nil && k != p.floor; k = k.parent {
 		p.chain = append(p.chain, k)
 	}
 	xf := p.s.Transform()

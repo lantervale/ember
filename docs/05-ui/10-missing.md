@@ -89,7 +89,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | an `@import` inserted with `InsertRule` after other rules | followed, where Chrome refuses the insertion |
-| an animated property outside colours, `opacity`, `transform`, `box-shadow` and the box's lengths (`font-size`, `letter-spacing`, `border-radius`, `background-position`, `border-width`…) | flips halfway, where Chrome interpolates |
+| an animated property outside colours, `opacity`, `transform`, `box-shadow`, `filter` and the box's lengths (`font-size`, `letter-spacing`, `border-radius`, `background-position`, `border-width`…) | flips halfway, where Chrome interpolates |
 | `animation-composition`, `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
 | `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
 | `prefers-color-scheme` and `prefers-reduced-motion` on Linux and the web | no preference: neither says its scheme or its reduced motion yet, so a Document given `ui.Preferences` answers light and no preference there ([decision 0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)) |
@@ -97,11 +97,15 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `prefers-contrast`, `forced-colors`, `any-hover: none` on a touch-only device | fixed: no preference, none, and a mouse that hovers is always there |
 | `ex`, `ch` and the font's other units in a media query's length | refused: Chrome measures them in the initial font, ui would take CSS's fallbacks |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
-| `filter` | refused |
+| `backdrop-filter`, a `url()` filter | refused |
 | a `clip-path` inside another's (one on an element held by one) | the inner shape cuts, the outer one only by its bounds ([decision 0119](../99-decisions/0119-a-clip-path-is-a-mask-the-gpu-cuts-by-and-an-outline-the-pointer-is-tested-against.md)) |
 | `clip-path` on an inline element over several lines | placed in the box round all its lines; not compared with Chrome |
 | `path()` transitioning to another `path()` with the same commands | flips half way; Chrome moves each point |
 | a pointer in the corner a rounded border cuts off | hits the box, where Chrome lets it through to what is under it |
+| a filtered element's live parts (a caret, a canvas element) when its Document draws them apart, and a filtered inline element holding absolute boxes | drawn unfiltered over it, placed by the nearest positioned block ([decision 0118](../99-decisions/0118-a-filtered-element-is-a-picture-drawn-through-wgsl-effects.md)) |
+| a `transform` holding fixed descendants | placed in the viewport, where Chrome places them in the transformed element, as it does under a `filter` |
+| `opacity` with a filter on one element | its children's colours faded inside the picture, where Chrome fades the filtered picture once |
+| a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
 | the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
 | a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |

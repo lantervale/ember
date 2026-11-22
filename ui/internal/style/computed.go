@@ -755,8 +755,10 @@ type Look struct {
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
 	TransformOrigin Size[Length]
-	Transitions     []Transition
-	Animations      []Animation
+	// Filters is filter's functions in order, none when empty.
+	Filters     []Filter
+	Transitions []Transition
+	Animations  []Animation
 }
 
 type TransformKind uint8
@@ -776,6 +778,30 @@ type TransformOp struct {
 	Kind TransformKind
 	X, Y Length
 	A    [6]float32
+}
+
+type FilterKind uint8
+
+const (
+	Blur FilterKind = iota
+	Brightness
+	Contrast
+	Grayscale
+	HueRotate
+	Invert
+	OpacityFilter
+	Saturate
+	Sepia
+	DropShadow
+)
+
+// Filter is one filter function: blur(Amount px), hue-rotate(Amount
+// degrees), drop-shadow(Shadow, its Blur the radius and Spread unused),
+// or the others' Amount, 1 for 100%.
+type Filter struct {
+	Kind   FilterKind
+	Amount float32
+	Shadow Shadow
 }
 
 // CurrentColorFields is a set of colours given as currentColor.

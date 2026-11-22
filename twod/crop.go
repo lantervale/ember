@@ -37,7 +37,7 @@ func cropPictures(pictures []picture) {
 		}
 		r, ok := cropped[drawn]
 		if !ok {
-			if r, ok = cropRect(drawn); !ok {
+			if r, ok = cropRect(drawn, 0); !ok {
 				continue
 			}
 			crop(drawn, r)
@@ -57,9 +57,10 @@ func cropPictures(pictures []picture) {
 }
 
 // cropRect is the rectangle of pass, in points, around what was drawn in
-// it, on whole pixels of the pass with a margin, its size rounded up to
-// cropStep pixels so a picture moving in its layer keeps its target.
-func cropRect(pass *draw.Pass) (geom.Rect, bool) {
+// it and margin points more, on whole pixels of the pass with a margin,
+// its size rounded up to cropStep pixels so a picture moving in its layer
+// keeps its target.
+func cropRect(pass *draw.Pass, margin float32) (geom.Rect, bool) {
 	if pass.Screen.X <= 0 || pass.Screen.Y <= 0 {
 		return geom.Rect{}, false
 	}
@@ -68,6 +69,7 @@ func cropRect(pass *draw.Pass) (geom.Rect, bool) {
 	if !ok {
 		return geom.Rect{W: 1 / kx, H: 1 / ky}, true
 	}
+	e = geom.Rect{X: e.X - margin, Y: e.Y - margin, W: e.W + 2*margin, H: e.H + 2*margin}
 	x0, x1 := span(e.X*kx, (e.X+e.W)*kx, pass.Width)
 	y0, y1 := span(e.Y*ky, (e.Y+e.H)*ky, pass.Height)
 	return geom.Rect{X: float32(x0) / kx, Y: float32(y0) / ky, W: float32(x1-x0) / kx, H: float32(y1-y0) / ky}, true

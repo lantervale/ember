@@ -450,6 +450,7 @@ type value struct {
 	ops     []style.TransformOp
 	shadows []style.Shadow
 	clip    style.ClipPath
+	filters []style.Filter
 }
 
 type valueKind uint8
@@ -460,6 +461,7 @@ const (
 	transformValue
 	shadowValue
 	clipValue
+	filterValue
 )
 
 type animProp struct {
@@ -496,6 +498,9 @@ var animatable = []animProp{
 	{"clip-path",
 		func(s *style.Computed) value { return value{kind: clipValue, clip: s.ClipPath} },
 		func(s *style.Computed, v value) { s.ClipPath = v.clip }},
+	{"filter",
+		func(s *style.Computed) value { return value{kind: filterValue, filters: s.Filters} },
+		func(s *style.Computed, v value) { s.Filters = v.filters }},
 }
 
 // interpolates reports whether v and o have values between them: two
@@ -542,6 +547,8 @@ func (v value) equal(o value) bool {
 			}
 		}
 		return true
+	case filterValue:
+		return slices.Equal(v.filters, o.filters)
 	case shadowValue:
 		// shadow by shadow, as below
 	}
@@ -568,6 +575,8 @@ func (v value) lerp(o value, t float32) value {
 		return value{kind: transformValue, ops: lerpTransform(v.ops, o.ops, t)}
 	case clipValue:
 		return value{kind: clipValue, clip: lerpClip(&v.clip, &o.clip, t)}
+	case filterValue:
+		return value{kind: filterValue, filters: lerpFilters(v.filters, o.filters, t)}
 	case shadowValue:
 		// shadow by shadow, as below
 	}
@@ -616,6 +625,52 @@ func lerpShadows(a, b []style.Shadow, t float32) []style.Shadow {
 		}
 	}
 	return out
+}
+
+// lerpFilters interpolates function by function when one list starts
+// with the other's functions, the shorter, or none, taking the neutral
+// value of each it lacks; other lists switch halfway.
+func lerpFilters(a, b []style.Filter, t float32) []style.Filter {
+	n := max(len(a), len(b))
+	if n == 0 {
+		return nil
+	}
+	out := make([]style.Filter, n)
+	for i := range n {
+		var x, y style.Filter
+		switch {
+		case i < len(a) && i < len(b):
+			x, y = a[i], b[i]
+		case i < len(a):
+			x, y = a[i], neutralFilter(a[i].Kind)
+		default:
+			x, y = neutralFilter(b[i].Kind), b[i]
+		}
+		if x.Kind != y.Kind {
+			if t < 0.5 {
+				return a
+			}
+			return b
+		}
+		out[i] = style.Filter{Kind: x.Kind, Amount: lerpf(x.Amount, y.Amount, t)}
+		if x.Kind == style.DropShadow {
+			out[i].Shadow = style.Shadow{
+				X: lerpf(x.Shadow.X, y.Shadow.X, t), Y: lerpf(x.Shadow.Y, y.Shadow.Y, t),
+				Blur: lerpf(x.Shadow.Blur, y.Shadow.Blur, t), Color: lerpColor(x.Shadow.Color, y.Shadow.Color, t),
+			}
+		}
+	}
+	return out
+}
+
+// neutralFilter is the function of kind that changes nothing.
+func neutralFilter(kind style.FilterKind) style.Filter {
+	switch kind {
+	case style.Brightness, style.Contrast, style.OpacityFilter, style.Saturate:
+		return style.Filter{Kind: kind, Amount: 1}
+	case style.Blur, style.Grayscale, style.HueRotate, style.Invert, style.Sepia, style.DropShadow:
+	}
+	return style.Filter{Kind: kind}
 }
 
 func lerpLength(a, b style.Length, t float32) style.Length {

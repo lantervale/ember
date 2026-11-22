@@ -8,6 +8,7 @@ import (
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/cull"
@@ -194,3 +195,20 @@ func (t *tally) Image(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.C
 func (t *tally) NinePatch(r geom.Rect, tex *twod.Texture, left, top, right, bottom float32, tint color.Color) {
 	t.add(pictured("nine-patch", tex), r, append(rgba(tint), left, top, right, bottom)...)
 }
+
+func (t *tally) BeginPicture() { t.add("picture", geom.Rect{}) }
+
+func (t *tally) EndPicture(margin float32) *twod.Picture {
+	t.add("picture's end", geom.Rect{}, margin)
+	return &twod.Picture{}
+}
+
+func (t *tally) DrawPicture(_ *twod.Picture, effects ...*render.Effect) {
+	values := make([]float32, 0, len(effects))
+	for _, e := range effects {
+		values = append(values, float32(len(e.Shader())))
+	}
+	t.add("picture shown", geom.Rect{}, values...)
+}
+
+func (t *tally) Effect(shader string) *render.Effect { return render.NewEffect(shader) }
