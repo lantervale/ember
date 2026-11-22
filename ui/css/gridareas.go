@@ -146,6 +146,71 @@ func expandGridTemplate(v []Component, out map[string][]Component) error {
 	return nil
 }
 
+// expandGrid reads grid into its longhands (template rows, columns and
+// areas, auto rows and columns, auto flow): a grid-template, or rows /
+// auto-flow and the implicit columns' sizes, or auto-flow and the implicit
+// rows' sizes / columns, dense beside auto-flow either way.
+func expandGrid(long []string, v []Component, out map[string][]Component) error {
+	parts := splitOn(v, isSlash)
+	if len(parts) != 2 {
+		return expandGridTemplate(v, out)
+	}
+	for i := range 2 {
+		if flow, sizes, ok := autoFlow(parts[i]); ok {
+			return expandAutoFlow(long, i == 1, flow, sizes, parts[1-i], out)
+		}
+	}
+	return expandGridTemplate(v, out)
+}
+
+// expandAutoFlow sets grid's longhands for auto-flow on the side of the
+// columns or of the rows: the other's template, the implicit sizes, the flow.
+func expandAutoFlow(long []string, columns bool, flow, sizes, template []Component,
+	out map[string][]Component) error {
+	if err := checkTracks(template); err != nil {
+		return err
+	}
+	templateAt, autoAt := 1, 3
+	if columns {
+		templateAt, autoAt = 0, 4
+		flow[0] = word("column")
+	}
+	if len(sizes) > 0 {
+		if err := repeated(trackSize, 64)(sizes); err != nil {
+			return err
+		}
+		out[long[autoAt]] = sizes
+	}
+	out[long[templateAt]] = template
+	out[long[5]] = flow
+	return nil
+}
+
+// autoFlow reads auto-flow and dense, in either order, at the start of v:
+// grid-auto-flow's value, and the sizes after them.
+func autoFlow(v []Component) ([]Component, []Component, bool) {
+	flow, dense, i := false, false, 0
+scan:
+	for ; i < len(v); i++ {
+		switch {
+		case isWord(v[i], "auto-flow") && !flow:
+			flow = true
+		case isWord(v[i], "dense") && !dense:
+			dense = true
+		default:
+			break scan
+		}
+	}
+	if !flow {
+		return nil, nil, false
+	}
+	value := []Component{word("row")}
+	if dense {
+		value = append(value, word("dense"))
+	}
+	return value, v[i:], true
+}
+
 // templateRows cuts the rows of a grid-template written as strings into
 // its areas and its row tracks: each row's height, auto for a string no
 // height follows, between the names of their lines, those after a row and

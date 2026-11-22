@@ -26,6 +26,7 @@ const (
 	kwInherit      = "inherit"
 	kwBaseline     = "baseline"
 	kwRepeat       = "repeat"
+	kwSubgrid      = "subgrid"
 	kwInfinite     = "infinite"
 	kwRunning      = "running"
 	kwPaused       = "paused"
@@ -78,6 +79,7 @@ const (
 	propTextDecorationThickness = "text-decoration-thickness"
 
 	shortBackground  = "background"
+	shortGrid        = "grid"
 	shortBorderImage = "border-image"
 	shortTransition  = "transition"
 	shortAnimation   = "animation"

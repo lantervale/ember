@@ -364,7 +364,25 @@ func trackCSS(t style.Track) string {
 	return "minmax(" + lengthCSS(t.Min) + ", " + lengthCSS(t.Max) + ")"
 }
 
-func tracksCSS(rs []style.TrackRepeat) string {
+func tracksCSS(rs []style.TrackRepeat, subgrid bool) string {
+	if subgrid {
+		parts := []string{"subgrid"}
+		for _, r := range rs {
+			var names []string
+			for _, n := range r.Names {
+				names = append(names, "["+strings.Join(n, " ")+"]")
+			}
+			switch r.Count {
+			case 1:
+				parts = append(parts, names...)
+			case style.AutoFill:
+				parts = append(parts, "repeat(auto-fill, "+strings.Join(names, " ")+")")
+			default:
+				parts = append(parts, "repeat("+strconv.Itoa(r.Count)+", "+strings.Join(names, " ")+")")
+			}
+		}
+		return strings.Join(parts, " ")
+	}
 	if len(rs) == 0 {
 		return "none"
 	}
@@ -474,12 +492,12 @@ var everything = func() map[string]func(s *style.Computed) string {
 		"justify-content":       func(s *style.Computed) string { return alignName(s.JustifyContent) },
 		"justify-items":         func(s *style.Computed) string { return alignName(s.JustifyItems) },
 		"justify-self":          func(s *style.Computed) string { return alignName(s.JustifySelf) },
-		"grid-template-columns": func(s *style.Computed) string { return tracksCSS(s.Columns) },
-		"grid-template-rows":    func(s *style.Computed) string { return tracksCSS(s.Rows) },
+		"grid-template-columns": func(s *style.Computed) string { return tracksCSS(s.Columns, s.Subgrid.Width) },
+		"grid-template-rows":    func(s *style.Computed) string { return tracksCSS(s.Rows, s.Subgrid.Height) },
 		"grid-auto-columns":     func(s *style.Computed) string { return autoTracksCSS(s.AutoColumns) },
 		"grid-auto-rows":        func(s *style.Computed) string { return autoTracksCSS(s.AutoRows) },
 		"grid-auto-flow": func(s *style.Computed) string {
-			return []string{"row", "column", "row dense", "column dense"}[s.Flow]
+			return []string{"row", "column", "dense", "column dense"}[s.Flow]
 		},
 		"grid-column-start": func(s *style.Computed) string { return lineCSS(s.Column[0]) },
 		"grid-column-end":   func(s *style.Computed) string { return lineCSS(s.Column[1]) },
@@ -652,6 +670,8 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   grid-auto-rows: min-content max-content; grid-auto-flow: column dense; grid-column: 2 / span 3; grid-row: -1;
   z-index: -3; overflow: clip auto;
 }
+.g2 { grid-auto-columns: 9px; grid: auto-flow dense 40px / 1fr 2fr; }
+.g3 { grid: subgrid [a] [b c] repeat(2, [d]) / auto-flow 20px; grid-template-columns: subgrid; }
 .t {
   font-family: "Go Mono", monospace; font-size: larger; font-weight: 300; font-style: italic;
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
@@ -681,7 +701,7 @@ func TestComputedValuesMatchChrome(t *testing.T) {
 	d.Body().Append(
 		ui.Div(ui.Style("display: none"),
 			ui.Div(ui.Class("a"), ui.Span(ui.Class("i"))),
-			ui.Div(ui.Class("g")),
+			ui.Div(ui.Class("g")), ui.Div(ui.Class("g2")), ui.Div(ui.Class("g3")),
 			ui.P(ui.Class("t"), ui.Span()),
 			ui.Div(ui.Class("l"), ui.Span(ui.Class("i"))),
 			ui.Div(ui.Class("l2")),

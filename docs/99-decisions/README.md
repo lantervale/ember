@@ -125,6 +125,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0121 | [A Document answers media features from the preferences it is given](0121-a-document-answers-media-features-from-the-preferences-it-is-given.md) | api |
 | 0123 | [Math functions over percentages are a program layout runs](0123-math-functions-over-percentages-are-a-program-layout-runs.md) | api |
 | 0124 | [A field's validity is a state ui keeps](0124-a-fields-validity-is-a-state-ui-keeps.md) | api |
+| 0125 | [A subgrid's items size its grid's tracks, hoisted to its lines](0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md) | rendering |
 
 ## Writing one
 

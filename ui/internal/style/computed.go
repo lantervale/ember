@@ -343,6 +343,11 @@ type Grid struct {
 	AutoColumns []Track
 	AutoRows    []Track
 	Flow        GridFlow
+	// Subgrid is grid-template-columns (Width) and grid-template-rows
+	// (Height) being subgrid: that axis's entries are then the names of its
+	// lines, each a bracket or a repeat() of them (Count, AutoFill), Names
+	// its brackets and no Tracks.
+	Subgrid Size[bool]
 	// Column and Row are grid-column and grid-row, Start/End.
 	Column [2]GridLine
 	Row    [2]GridLine

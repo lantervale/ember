@@ -183,6 +183,8 @@ var shorthands = map[string][]string{
 	"columns":       {"column-width", "column-count"},
 	"container":     {"container-name", "container-type"},
 	"column-rule":   {"column-rule-width", "column-rule-style", "column-rule-color"},
+	"grid": {"grid-template-rows", "grid-template-columns", "grid-template-areas", "grid-auto-rows", "grid-auto-columns",
+		"grid-auto-flow"},
 	"background": {"background-color", "background-image", "background-repeat", "background-position",
 		"background-size", "background-attachment", "background-origin", "background-clip"},
 	"list-style": {"list-style-type"},

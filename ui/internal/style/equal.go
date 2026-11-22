@@ -74,6 +74,7 @@ func (g *Grid) equal(o *Grid) bool {
 		sameSlice(g.AutoColumns, o.AutoColumns) &&
 		sameSlice(g.AutoRows, o.AutoRows) &&
 		g.Flow == o.Flow &&
+		g.Subgrid == o.Subgrid &&
 		g.Column == o.Column &&
 		g.Row == o.Row
 }

@@ -664,6 +664,9 @@ func checkTracks(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
 	}
+	if isWord(v[0], kwSubgrid) {
+		return checkLineNameList(v[1:])
+	}
 	if err := checkAutoRepeat(v); err != nil {
 		return err
 	}
@@ -692,14 +695,60 @@ func trackList(v []Component, track func(Component) error) error {
 			return fmt.Errorf("a line's names go in one bracket")
 		}
 		named = true
-		for _, n := range items(c.Args) {
-			if !gridIdent(n) {
-				return fmt.Errorf("a line's name is a word other than span and auto, found %q", n.String())
-			}
+		if err := checkLineNames(c); err != nil {
+			return err
 		}
 	}
 	if tracks == 0 {
 		return fmt.Errorf("expected tracks")
+	}
+	return nil
+}
+
+// checkLineNameList checks a subgrid's names of its lines: brackets, and
+// repeat() of brackets, one of them repeat(auto-fill, …) at most.
+func checkLineNameList(v []Component) error {
+	autos := 0
+	for _, c := range v {
+		if c.Kind == LBracket {
+			if err := checkLineNames(c); err != nil {
+				return err
+			}
+			continue
+		}
+		if c.Kind != Function || !strings.EqualFold(c.Text, kwRepeat) {
+			return fmt.Errorf("subgrid takes the names of its lines in brackets, found %q", c.String())
+		}
+		args := items(c.Args)
+		if len(args) < 3 || args[1].Kind != Comma {
+			return fmt.Errorf("repeat() takes a count, a comma and names in brackets")
+		}
+		switch {
+		case isWord(args[0], "auto-fill"):
+			autos++
+		case integer(args[0]) != nil || args[0].Num < 1:
+			return fmt.Errorf("a subgrid's repeat() counts a positive integer or auto-fill")
+		}
+		for _, n := range args[2:] {
+			if n.Kind != LBracket {
+				return fmt.Errorf("a subgrid's repeat() holds names in brackets, found %q", n.String())
+			}
+			if err := checkLineNames(n); err != nil {
+				return err
+			}
+		}
+	}
+	if autos > 1 {
+		return fmt.Errorf("only one repeat(auto-fill) per subgrid")
+	}
+	return nil
+}
+
+func checkLineNames(c Component) error {
+	for _, n := range items(c.Args) {
+		if !gridIdent(n) {
+			return fmt.Errorf("a line's name is a word other than span and auto, found %q", n.String())
+		}
 	}
 	return nil
 }

@@ -73,6 +73,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandGridLines(long, v, out)
 	case "grid-area":
 		err = expandGridArea(long, v, out)
+	case shortGrid:
+		err = expandGrid(long, v, out)
 	case "grid-template":
 		err = expandGridTemplate(v, out)
 	case "border-top", "border-right", "border-bottom", "border-left", "outline", "column-rule":

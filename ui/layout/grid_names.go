@@ -13,19 +13,91 @@ type gridLines struct {
 	named    map[string][]int
 }
 
-func newGridLines(st *style.Computed, a axis, autoRepetitions, explicit int) gridLines {
-	g := gridLines{explicit: explicit}
-	add := func(line int, names []string) {
-		if line > explicit {
-			return
+func (g *gridLines) add(line int, names []string) {
+	if line > g.explicit {
+		return
+	}
+	for _, n := range names {
+		if g.named == nil {
+			g.named = map[string][]int{}
 		}
-		for _, n := range names {
-			if g.named == nil {
-				g.named = map[string][]int{}
-			}
-			g.named[n] = append(g.named[n], line)
+		g.named[n] = append(g.named[n], line)
+	}
+}
+
+// finish names the edges of st's areas, and sorts each name's lines.
+func (g *gridLines) finish(st *style.Computed, a axis) {
+	for _, area := range st.Areas {
+		edges := area.Row
+		if a == horizontal {
+			edges = area.Column
+		}
+		g.add(edges[0]-1, []string{area.Name + "-start"})
+		g.add(edges[1]-1, []string{area.Name + "-end"})
+	}
+	for n, lines := range g.named {
+		slices.Sort(lines)
+		g.named[n] = slices.Compact(lines)
+	}
+}
+
+// subgridLines are the lines of a subgrid in an axis it takes its grid's tracks in: the names
+// its grid gives them, those of its own list, its repeat(auto-fill) as many times as its lines
+// hold, and those of its areas' edges.
+func subgridLines(st *style.Computed, a axis, sub *subgridAxis) gridLines {
+	g := gridLines{explicit: sub.span}
+	for n, lines := range sub.names {
+		for _, l := range lines {
+			g.add(l, []string{n})
 		}
 	}
+	list := st.Columns
+	if a == vertical {
+		list = st.Rows
+	}
+	fixed := 0
+	for _, r := range list {
+		if r.Count != style.AutoFill {
+			fixed += r.Count * len(r.Names)
+		}
+	}
+	line := 0
+	for _, r := range list {
+		count := r.Count
+		if count == style.AutoFill {
+			count = max(sub.span+1-fixed, 0) / len(r.Names)
+		}
+		for range min(count, maxGridTracks) {
+			for _, names := range r.Names {
+				g.add(line, names)
+				line++
+			}
+		}
+	}
+	g.finish(st, a)
+	return g
+}
+
+// within are the names of the lines from s.start to s.end, from s.start.
+func (g gridLines) within(s lineSpan) map[string][]int {
+	var out map[string][]int
+	for n, lines := range g.named {
+		for _, l := range lines {
+			if l < s.start || l > s.end {
+				continue
+			}
+			if out == nil {
+				out = map[string][]int{}
+			}
+			out[n] = append(out[n], l-s.start)
+		}
+	}
+	return out
+}
+
+func newGridLines(st *style.Computed, a axis, autoRepetitions, explicit int) gridLines {
+	g := gridLines{explicit: explicit}
+	add := g.add
 	template, _, _ := templateOf(st, a)
 	line := 0
 	for _, r := range template {
@@ -50,18 +122,7 @@ func newGridLines(st *style.Computed, a axis, autoRepetitions, explicit int) gri
 		}
 		add(line, r.After)
 	}
-	for _, area := range st.Areas {
-		edges := area.Row
-		if a == horizontal {
-			edges = area.Column
-		}
-		add(edges[0]-1, []string{area.Name + "-start"})
-		add(edges[1]-1, []string{area.Name + "-end"})
-	}
-	for n, lines := range g.named {
-		slices.Sort(lines)
-		g.named[n] = slices.Compact(lines)
-	}
+	g.finish(st, a)
 	return g
 }
 

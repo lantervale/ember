@@ -25,6 +25,15 @@ type gridItem struct {
 
 	yPosition, height float32
 	oof               []oofCandidate
+
+	// subgrid is the axes the item takes its grid's tracks in. Sizing a grid's tracks, extra is
+	// the more margin an item of a subgrid takes on each side, and loose an axis where its
+	// lines are only its subgrid's: local on the tracks of owner, once laid out.
+	subgrid [2]bool
+	extra   [2]span
+	loose   [2]bool
+	owner   *node
+	local   lineSpan
 }
 
 func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *gridItem {
@@ -56,6 +65,14 @@ func (it *gridItem) placement(a axis) lineSpan {
 		return it.column
 	}
 	return it.row
+}
+
+func (it *gridItem) setPlacement(a axis, l lineSpan) {
+	if a == horizontal {
+		it.column = l
+	} else {
+		it.row = l
+	}
 }
 
 func (it *gridItem) indexes(a axis) lineSpan {
@@ -112,6 +129,9 @@ func (it *gridItem) spannedLimit(a axis, tracks []gridTrack,
 }
 
 func (it *gridItem) paddingBorderSize(basis float32) size {
+	if it.node == nil {
+		return size{}
+	}
 	return edges(it.st.Padding, basis).add(it.node.borders()).sum()
 }
 
@@ -157,7 +177,13 @@ func (it *gridItem) computeKnownDimensions(area size) size {
 			s.h = inner.h
 		}
 	}
-	return s.withAspectRatio(ratio).mClamp(minSize, maxSize)
+	s = s.withAspectRatio(ratio).mClamp(minSize, maxSize)
+	for a, on := range it.subgrid {
+		if on {
+			s.set(axis(a), inner.get(axis(a)))
+		}
+	}
+	return s
 }
 
 // gridAreaSize is the size of the item's grid area where its tracks are known.
@@ -176,6 +202,12 @@ func (it *gridItem) gridAreaSize(a axis, tracks, other []gridTrack,
 		sum += t.baseSize
 	}
 	s.set(a, sum)
+	if it.loose[a.other()] {
+		if it.owner != nil && it.owner.grid != nil {
+			s.set(a.other(), it.owner.grid.axis(a.other()).extent(it.local))
+		}
+		return s
+	}
 	from, to = it.trackRange(a.other())
 	sum = 0
 	for i := from; i < to; i++ {
@@ -203,8 +235,9 @@ func (it *gridItem) gridAreaSizeCached(a axis, tracks, other []gridTrack,
 func (it *gridItem) marginSums(innerWidth float32) size {
 	m := it.st.Margin
 	return size{
-		w: resolveOrZero(m.Left, 0) + resolveOrZero(m.Right, 0),
-		h: resolveOrZero(m.Top, innerWidth) + it.baselineShim + resolveOrZero(m.Bottom, innerWidth),
+		w: resolveOrZero(m.Left, 0) + resolveOrZero(m.Right, 0) + it.extra[horizontal].start + it.extra[horizontal].end,
+		h: resolveOrZero(m.Top, innerWidth) + it.baselineShim + resolveOrZero(m.Bottom, innerWidth) +
+			it.extra[vertical].start + it.extra[vertical].end,
 	}
 }
 
@@ -212,7 +245,10 @@ func (it *gridItem) availMinusMargins(area, avail size) size {
 	if !some(avail.w) && !some(avail.h) {
 		return avail
 	}
-	margin := edges(it.st.Margin, area.w)
+	margin := edges(it.st.Margin, area.w).add(rect{
+		l: it.extra[horizontal].start, r: it.extra[horizontal].end,
+		t: it.extra[vertical].start, b: it.extra[vertical].end,
+	})
 	return size{
 		w: mMax(mSub(avail.w, margin.horizontal()), 0),
 		h: mMax(mSub(mSub(avail.h, margin.vertical()), it.baselineShim), 0),
@@ -242,6 +278,9 @@ func (it *gridItem) keywordAdjustedSpace(area size, avail spaces) spaces {
 }
 
 func (t *tree) gridContribution(it *gridItem, a axis, area, avail size, fallback space) float32 {
+	if it.node == nil {
+		return 0
+	}
 	known := it.knownDimensions(area)
 	if v := known.get(a); some(v) {
 		return v
