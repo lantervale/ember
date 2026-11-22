@@ -51,13 +51,13 @@ func ParseSizes(text string) Sizes {
 // not below 0, a function only of CSS's maths.
 func sourceSizeValue(c Component) (Dim, bool) {
 	if c.Kind == Number && c.Num == 0 {
-		return Dim{kind: dimLength}, true
+		return Dim{typ: typeLength}, true
 	}
 	if c.Kind != Dimension && c.Kind != Function {
 		return Dim{}, false
 	}
 	d, err := parseDim(c)
-	if err != nil || d.kind != dimLength || c.Kind == Dimension && c.Num < 0 {
+	if err != nil || d.typ != typeLength || d.pct || c.Kind == Dimension && c.Num < 0 {
 		return Dim{}, false
 	}
 	return d, true

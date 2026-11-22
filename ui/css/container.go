@@ -164,7 +164,7 @@ func containerLengthOf(v []Component) (mediaValue, bool) {
 		return mediaValue{}, true
 	}
 	d, err := parseDim(v[0])
-	if err != nil || d.kind != dimLength {
+	if err != nil || d.typ != typeLength || d.pct {
 		return mediaValue{}, false
 	}
 	if d.Em == 0 && d.Rem == 0 && d.rel == 0 && len(d.terms) == 0 {

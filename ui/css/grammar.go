@@ -88,9 +88,11 @@ const (
 	allowPercent
 	allowNumber
 	allowFlex
+	noLength
 )
 
-// dimTerm accepts a length (0 included), and what flags allow.
+// dimTerm accepts a length (0 included) unless flags say noLength, and
+// what flags allow.
 func dimTerm(flags int) term {
 	return func(c Component) error {
 		d, err := parseDim(c)
@@ -98,7 +100,11 @@ func dimTerm(flags int) term {
 			return err
 		}
 		switch {
-		case d.IsNumber() && flags&allowNumber == 0 && !(c.Kind == Number && c.Num == 0):
+		case d.IsAngle():
+			return fmt.Errorf("expected a length, found %q", c.String())
+		case d.typ == typeLength && flags&noLength != 0:
+			return fmt.Errorf("expected a number, found %q", c.String())
+		case d.typ == typeNumber && flags&allowNumber == 0 && !(c.Kind == Number && c.Num == 0):
 			return fmt.Errorf("%q needs a unit", c.String())
 		case d.IsFlex() && flags&allowFlex == 0:
 			return fmt.Errorf("fr is only for grid tracks")
@@ -116,7 +122,7 @@ var (
 	length        = dimTerm(0)
 	lengthPercent = dimTerm(allowPercent)
 	sizeLP        = dimTerm(allowPercent | nonNegative)
-	number        = dimTerm(allowNumber | nonNegative)
+	number        = dimTerm(allowNumber | nonNegative | noLength)
 	intrinsic     = words("min-content", "max-content", "fit-content")
 	colorTerm     = term(func(c Component) error {
 		if isWord(c, "currentcolor") {
@@ -426,7 +432,7 @@ var checks = map[string]check{
 	"outline-style":         single(borderStyle),
 	"outline-color":         single(colorTerm),
 	"outline-offset":        single(length),
-	"opacity":               single(dimTerm(allowNumber | allowPercent)),
+	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),
 	"transform":             checkTransform,
 	"transform-origin":      checkTransformOrigin,
 	"appearance":            single(words("none", "auto", "textfield")),
@@ -828,9 +834,9 @@ func checkTransform(v []Component) error {
 		case strings.HasPrefix(name, "translate"):
 			arg = lengthPercent
 		case strings.HasPrefix(name, "scale"):
-			arg = dimTerm(allowNumber | allowPercent)
+			arg = dimTerm(allowNumber | allowPercent | noLength)
 		case name == fnMatrix:
-			arg = dimTerm(allowNumber)
+			arg = dimTerm(allowNumber | noLength)
 		default:
 			arg = func(c Component) error { _, err := angle(c); return err }
 		}

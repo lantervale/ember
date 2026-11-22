@@ -1367,7 +1367,7 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 		return -(parent.Font.Size/3 + 1), true
 	case style.AlignLength:
 		h, _ := t.lineHeight(c, st)
-		return -(st.VerticalShift.Px + st.VerticalShift.Percent*h/100), true
+		return -st.VerticalShift.At(h), true
 	case style.AlignMiddle:
 		return (e.above-e.below)/2 - t.metricsOf(c, parent).XHeight/2, true
 	case style.AlignTextTop, style.AlignTextBottom, style.AlignTop, style.AlignBottom:

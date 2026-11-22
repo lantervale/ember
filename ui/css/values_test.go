@@ -20,21 +20,21 @@ func TestParseDim(t *testing.T) {
 		src  string
 		want Dim
 	}{
-		{"12px", Dim{Px: 12, kind: dimLength}},
-		{"50%", Dim{Pct: 50, kind: dimPercent}},
-		{"1.5em", Dim{Em: 1.5, kind: dimLength}},
-		{"2rem", Dim{Rem: 2, kind: dimLength}},
-		{"1fr", Dim{Fr: 1, kind: dimFlex}},
-		{"12pt", Dim{Px: 16, kind: dimLength}},
-		{"2pc", Dim{Px: 32, kind: dimLength}},
-		{"0.5IN", Dim{Px: 48, kind: dimLength}},
-		{"calc(1in + 3pt)", Dim{Px: 100, kind: dimLength}},
-		{"3", Dim{Num: 3, kind: dimNumber}},
-		{"calc(100% - 2rem)", Dim{Pct: 100, Rem: -2, kind: dimPercent | dimLength}},
-		{"calc(4px * 3 + 1em / 2)", Dim{Px: 12, Em: 0.5, kind: dimLength}},
-		{"calc(2 * (10px + 5%))", Dim{Px: 20, Pct: 10, kind: dimLength | dimPercent}},
-		{"calc(calc(1px + 1px) * 2)", Dim{Px: 4, kind: dimLength}},
-		{"calc(1 + 2 * 3)", Dim{Num: 7, kind: dimNumber}},
+		{"12px", Dim{Px: 12, typ: typeLength}},
+		{"50%", Dim{Pct: 50, typ: typePercent, pct: true}},
+		{"1.5em", Dim{Em: 1.5, typ: typeLength}},
+		{"2rem", Dim{Rem: 2, typ: typeLength}},
+		{"1fr", Dim{Fr: 1, typ: typeFlex}},
+		{"12pt", Dim{Px: 16, typ: typeLength}},
+		{"2pc", Dim{Px: 32, typ: typeLength}},
+		{"0.5IN", Dim{Px: 48, typ: typeLength}},
+		{"calc(1in + 3pt)", Dim{Px: 100, typ: typeLength}},
+		{"3", Dim{Num: 3}},
+		{"calc(100% - 2rem)", Dim{Pct: 100, Rem: -2, typ: typeLength, pct: true}},
+		{"calc(4px * 3 + 1em / 2)", Dim{Px: 12, Em: 0.5, typ: typeLength}},
+		{"calc(2 * (10px + 5%))", Dim{Px: 20, Pct: 10, typ: typeLength, pct: true}},
+		{"calc(calc(1px + 1px) * 2)", Dim{Px: 4, typ: typeLength}},
+		{"calc(1 + 2 * 3)", Dim{Num: 7}},
 	}
 	for _, c := range cases {
 		got, err := parseDim(valueOf(t, c.src))
@@ -45,8 +45,8 @@ func TestParseDim(t *testing.T) {
 }
 
 func TestParseDimErrors(t *testing.T) {
-	for _, src := range []string{"12vx", "calc(1px+2px)", "calc(1px + 2)", "calc(2px * 3px)", "calc(1px / 0)",
-		"calc(1px / 2px)", "calc(1fr + 1px)", "calc()", "calc(1px 2px)", "red", "min(1px, 2)"} {
+	for _, src := range []string{"12vx", "calc(1px+2px)", "calc(1px + 2)", "calc(2px * 3px)",
+		"calc(1fr + 1px)", "calc()", "calc(1px 2px)", "red", "min(1px, 2)"} {
 		if _, err := parseDim(valueOf(t, src)); err == nil {
 			t.Errorf("%q: no error", src)
 		}

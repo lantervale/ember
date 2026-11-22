@@ -65,10 +65,8 @@ var gradientTerm = term(func(c Component) error {
 // percentage, another's length or percentage.
 func stopPosition(kind style.GradientKind, c Component) error {
 	if kind == style.ConicGradient {
-		if _, err := angle(c); err == nil {
-			return nil
-		}
-		if c.Kind == Percentage {
+		if d, err := parseDim(c); err == nil && (d.typ == typeAngle || d.typ == typePercent) ||
+			c.Kind == Number && c.Num == 0 {
 			return nil
 		}
 		return fmt.Errorf("expected an angle or a percentage, found %q", c.String())
@@ -204,16 +202,14 @@ func (x *ctx) prelude(g *style.Gradient, d []Component) {
 	switch g.Kind {
 	case style.LinearGradient:
 		if len(d) == 1 {
-			a, _ := angle(d[0])
-			g.Angle = float32(a)
+			g.Angle = float32(x.angle(d[0]))
 		} else {
 			g.Corner, g.Angle = toward(d[1:])
 		}
 		return
 	case style.ConicGradient:
 		if isWord(d[0], "from") {
-			a, _ := angle(d[1])
-			g.Angle = float32(a)
+			g.Angle = float32(x.angle(d[1]))
 			d = d[2:]
 		}
 	case style.RadialGradient:
@@ -240,9 +236,9 @@ func (x *ctx) prelude(g *style.Gradient, d []Component) {
 // of a turn.
 func (x *ctx) stopAt(kind style.GradientKind, c Component) style.Length {
 	if kind == style.ConicGradient {
-		if a, err := angle(c); err == nil {
-			return style.Length{Kind: style.Fixed, Percent: float32(a / 3.6), IsPercent: true}
-		}
+		d, _ := parseDim(c)
+		turn := d.Absolute(x.units(&d)).Resolve(360)
+		return style.Length{Kind: style.Fixed, Percent: style.Finite(turn/3.6, style.MaxLength), IsPercent: true}
 	}
 	return x.length(c)
 }
