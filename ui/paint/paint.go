@@ -197,6 +197,8 @@ type painter struct {
 	clip  *clip
 	held  int
 	floor *clip
+	// pictures is how many pictures paint has begun and not ended.
+	pictures int
 	// spread is how far the filters of the elements painted round what
 	// is painted now draw it past where it is: so much more of it shows.
 	spread float32
@@ -284,9 +286,18 @@ func paintOn(s Surface, t *box.Tree, opts []Option, whole bool) int {
 		o(p)
 	}
 	p.start(t.Root)
+	on, grouped := p.s.(Pictures)
+	if grouped = grouped && t.Grouped; grouped {
+		on.BeginPicture()
+		p.pictures++
+	}
 	p.canvasBackground(t.Root)
 	p.page(t.Root)
 	p.use(nil)
+	if grouped {
+		p.pictures--
+		on.DrawPicture(on.EndPicture(0))
+	}
 	p.drawPopups()
 	return p.reached
 }
@@ -356,12 +367,14 @@ func (p *painter) canvasBackground(root *box.Box) {
 	}
 	p.canvas = src
 	st := shown(src)
+	mixing := p.beginLayers(st)
+	defer mixing.end()
 	if st.Background.A > 0 {
 		p.s.Rect(p.viewport, st.Background)
 	}
 	for i := st.BackgroundLayers() - 1; i >= 0; i-- {
 		l := st.BackgroundLayer(i)
-		p.backgroundImage(p.viewport, area, radii{}, &l, st, 1)
+		mixing.layer(l.Blend, func() { p.backgroundImage(p.viewport, area, radii{}, &l, st, 1) })
 	}
 }
 
@@ -501,6 +514,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		}
 		e.clip = p.newClip(clip{rect: s.bounds, xf: p.s.Transform(), parent: e.clip, shape: &s})
 	}
+	group := p.beginGroup(e, st, &alpha)
 	var filters *filtering
 	if b.Kind == box.Element {
 		filters = p.beginFilters(e, st)
@@ -533,6 +547,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		BarsOf(c.b, c.at).paint(p.s, alpha)
 	}
 	p.endFilters(filters, e.clip)
+	p.endGroup(group, e.clip)
 	p.use(around)
 	p.s.SetTransform(saved)
 }
@@ -607,7 +622,7 @@ func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
 		return inner
 	}
 	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
-		if as := shown(a); len(as.Filters) > 0 || st.Position == style.Absolute && as.Position != style.Static {
+		if as := shown(a); as.Filtered() || st.Position == style.Absolute && as.Position != style.Static {
 			break
 		}
 		if inner.by == a {
@@ -672,11 +687,12 @@ func inkReach(st *style.Computed) float32 {
 }
 
 // startsContext reports whether a box paints as a stacking context: a
-// positioned one with a z-index, or one less than opaque, transformed or
-// clipped by a clip-path or filtered.
+// positioned one with a z-index, or one less than opaque, transformed,
+// clipped by a clip-path, filtered, mixed or isolated.
 func startsContext(st *style.Computed) bool {
 	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 ||
-		!st.ClipPath.None() || len(st.Filters) > 0
+		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 ||
+		st.BlendMode != style.BlendNormal || st.Isolate
 }
 
 func sortZ(es []entry) []entry {

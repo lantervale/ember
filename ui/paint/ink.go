@@ -10,7 +10,8 @@ import (
 // inked works t's boxes' Ink and Loose out unless they stand (Inked).
 func inked(t *box.Tree) {
 	if !t.Inked {
-		bound(t.Root)
+		blends, backdrops := bound(t.Root)
+		t.Grouped = blends || backdrops
 		t.Inked = true
 	}
 }
@@ -19,14 +20,18 @@ func inked(t *box.Tree) {
 // first: b's own ink, every rectangle paint culls a part of it by, and
 // its children's where b's overflow doesn't cut them on both axes, in
 // which case nothing under b shows outside it. A box with a loose child
-// is loose, so the walk reaches the child.
-func bound(b *box.Box) {
+// is loose, so the walk reaches the child. It reports whether an element
+// under b mixes, or filters its backdrop, in a group above b; b is a group
+// (Group) when it is the one.
+func bound(b *box.Box) (bool, bool) {
+	var blends, backdrops bool
 	st := shown(b)
 	r, loose := ownInk(b, st), looseItself(b, st)
 	cuts := st.Overflow.Width != style.Visible && st.Overflow.Height != style.Visible &&
 		(b.Kind == box.Element || b.Kind == box.Viewport)
 	for _, c := range b.Children {
-		bound(c)
+		bl, bd := bound(c)
+		blends, backdrops = blends || bl, backdrops || bd
 		switch {
 		case c.Loose:
 			loose = true
@@ -40,7 +45,16 @@ func bound(b *box.Box) {
 	if s, ok := clipShapeOf(b, geom.Vec2{}, st); ok {
 		r = intersect(r, s.bounds)
 	}
-	b.Ink, b.Loose = r, loose
+	b.Ink, b.Loose, b.Group = r, loose, false
+	if b.Kind != box.Element {
+		return blends, backdrops
+	}
+	if blends && isolates(st) || backdrops && backdropRoot(st) {
+		b.Group = true
+	}
+	blends = blends && !isolates(st) || st.BlendMode != style.BlendNormal
+	backdrops = backdrops && !backdropRoot(st) || len(st.BackdropFilters) > 0
+	return blends, backdrops
 }
 
 // ownInk is what b itself draws and is hit at, in its own space: an

@@ -235,6 +235,8 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		p.s.PushClip(r)
 		defer p.s.PopClip()
 	}
+	mixing := p.beginLayers(st)
+	defer mixing.end()
 	if st.Background.A > 0 && !tracked(b) {
 		switch {
 		case st.TablePart == style.TableRow:
@@ -253,7 +255,7 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 	}
 	for i := n - 1; i >= 0; i-- {
 		if l := st.BackgroundLayer(i); l.Image.Source != "" || l.Image.Gradient != nil {
-			p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha)
+			mixing.layer(l.Blend, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
 		}
 	}
 }

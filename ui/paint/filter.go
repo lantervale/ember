@@ -16,6 +16,7 @@ type Pictures interface {
 	BeginPicture()
 	EndPicture(margin float32) *twod.Picture
 	DrawPicture(p *twod.Picture, effects ...*render.Effect)
+	DrawPictureOver(p, backdrop *twod.Picture, m twod.Mix, effects ...*render.Effect)
 	Effect(shader string) *render.Effect
 }
 
@@ -98,6 +99,7 @@ func (p *painter) beginFilters(e entry, st *style.Computed) *filtering {
 	for range f.open + 1 {
 		on.BeginPicture()
 	}
+	p.pictures += f.open + 1
 	p.floor, p.spread = e.clip, p.spread+filterReach(st.Filters)
 	return f
 }
@@ -111,6 +113,7 @@ func (p *painter) endFilters(f *filtering, c *clip) {
 	}
 	p.use(nil)
 	p.floor, p.spread = f.floor, f.spread
+	p.pictures -= f.open + 1
 	xf := p.s.Transform()
 	scale := float32(math.Sqrt(math.Abs(float64(xf.X.X*xf.Y.Y - xf.X.Y*xf.Y.X))))
 	from := 0

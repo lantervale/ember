@@ -93,6 +93,11 @@ type Box struct {
 	// not Loose where its Ink is out of view or misses the pointer.
 	Ink   geom.Rect
 	Loose bool
+	// Group is set with Ink on an element paint draws, with all it holds,
+	// as one picture its descendants read: one an element under it mixes
+	// with (mix-blend-mode), or the backdrop root an element under it
+	// filters what lies behind it up to (backdrop-filter).
+	Group bool
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Fragments is an inline element's border box on each line it spans,
@@ -172,6 +177,9 @@ type Tree struct {
 	// else changes a box's size, its place or the style it is shown with,
 	// but a scroll, clears it.
 	Inked bool
+	// Grouped is set with Inked when the page itself is such a group: an
+	// element mixes with, or filters, what the page drew under it.
+	Grouped bool
 }
 
 // Metrics are a font's vertical metrics at a size, in points: CSS's

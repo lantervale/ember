@@ -417,6 +417,7 @@ var colored = map[string]bool{
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
 	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
+	"backdrop-filter": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -1020,6 +1021,7 @@ func (x *ctx) finish(root bool) {
 	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	c.Filters = followFilterColor(c.Filters, c.Color)
+	c.BackdropFilters = followFilterColor(c.BackdropFilters, c.Color)
 	if c.AccentAuto {
 		c.AccentColor = c.Color
 	}
@@ -1863,6 +1865,13 @@ var props = func() map[string]prop {
 			(*ctx).transform, transforms).painted(),
 		"filter": field(func(c *style.Computed) *[]style.Filter { return &c.Filters }, (*ctx).filters,
 			filters).painted(),
+		"backdrop-filter": field(func(c *style.Computed) *[]style.Filter { return &c.BackdropFilters }, (*ctx).filters,
+			filters).painted(),
+		"mix-blend-mode": keyword(func(c *style.Computed) *style.BlendMode { return &c.BlendMode }, blendModes),
+		"isolation": keyword(func(c *style.Computed) *bool { return &c.Isolate },
+			map[string]bool{"auto": false, "isolate": true}),
+		"background-blend-mode": layered(func(c *style.Computed) *[]style.BlendMode { return &c.BackgroundBlends },
+			wordOf(blendModes), flips[[]style.BlendMode]()),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
 		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
@@ -2315,6 +2324,16 @@ func (x *ctx) shadows(v []Component) []style.Shadow {
 		out = append(out, s)
 	}
 	return out
+}
+
+//nolint:gochecknoglobals // lookup table
+var blendModes = map[string]style.BlendMode{
+	"normal": style.BlendNormal, "multiply": style.BlendMultiply, "screen": style.BlendScreen,
+	"overlay": style.BlendOverlay, "darken": style.BlendDarken, "lighten": style.BlendLighten,
+	"color-dodge": style.BlendColorDodge, "color-burn": style.BlendColorBurn, "hard-light": style.BlendHardLight,
+	"soft-light": style.BlendSoftLight, "difference": style.BlendDifference, "exclusion": style.BlendExclusion,
+	"hue": style.BlendHue, "saturation": style.BlendSaturation, "color": style.BlendColor,
+	"luminosity": style.BlendLuminosity,
 }
 
 //nolint:gochecknoglobals // lookup table
