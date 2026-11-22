@@ -406,7 +406,7 @@ var colored = map[string]bool{
 	"color": true, "background-color": true, "background-image": true, "border-top-color": true,
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
-	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true,
+	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares

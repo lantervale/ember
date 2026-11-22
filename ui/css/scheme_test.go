@@ -111,6 +111,13 @@ func TestLightDarkPicksByTheElementsScheme(t *testing.T) {
 	assert.Equal(t, hex("#200"), styleOf(d).Shadows[0].Color)
 }
 
+func TestLightDarkInADropShadowFilter(t *testing.T) {
+	p := el(dom.P, "p")
+	schemeOf(t, `#p { color-scheme: dark; filter: drop-shadow(1px 1px light-dark(#100, #200)) }`, false, p)
+	require.Len(t, styleOf(p).Filters, 1)
+	assert.Equal(t, hex("#200"), styleOf(p).Filters[0].Shadow.Color)
+}
+
 func TestLightDarkInAGradientAndThroughAVariable(t *testing.T) {
 	src := `:root { --ink: light-dark(#f00, #00f) }
 p { color: var(--ink); background-image: linear-gradient(light-dark(#100, #200), #300) }
