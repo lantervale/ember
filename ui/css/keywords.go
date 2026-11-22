@@ -7,6 +7,7 @@ const (
 	kwUnset        = "unset"
 	kwCurrentColor = "currentcolor"
 	kwFlex         = "flex"
+	kwContainer    = "container"
 	kwLeft         = "left"
 	kwRight        = "right"
 	kwTop          = "top"

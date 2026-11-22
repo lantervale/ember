@@ -77,9 +77,10 @@ func browserAgent() *Sheet {
 // answered for its own, through Transitions.
 func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
-	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all)}
-	pm := &matcher{off: m.off, ranks: m.ranks}
-	r := restyler{sheets: all, m: m, pm: pm, computed: new(int), env: &measures{}}
+	env := &measures{}
+	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all), env: env}
+	pm := &matcher{off: m.off, ranks: m.ranks, env: env}
+	r := restyler{sheets: all, m: m, pm: pm, computed: new(int), env: env}
 	r.run(root, false)
 	return r.warns
 }
@@ -210,7 +211,12 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 		r.recount = true
 	}
 	kidsChanged := tree && slices.Contains(data.Changed, dom.Children)
-	kidsDeep := deep || tree && r.readAbove(data.Changed) || kidsChanged && r.siblings
+	// A container Requery found resized restyles what it holds.
+	requeried := r.env.requery[n]
+	if requeried {
+		delete(r.env.requery, n)
+	}
+	kidsDeep := deep || tree && r.readAbove(data.Changed) || kidsChanged && r.siblings || requeried
 	// A details' content shows by its state (closedSlot), whatever the sheets read.
 	slotted := moved&dom.Open != 0 && n.Tag() == dom.Details
 	kidsForce := inherits || kidsDeep || kidsChanged || slotted
@@ -260,6 +266,9 @@ func (r *restyler) children(n *dom.Node, parent *style.Computed, rem float32, fo
 func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Computed, rem float32) bool {
 	s := r.compute(n, parent, rem)
 	*r.computed++
+	if s.ContainerType != style.ContainerNormal {
+		r.env.contain(n)
+	}
 	old := data.Style
 	if old != nil && old.Equal(s) {
 		r.generate(n, data, rem)
@@ -371,8 +380,10 @@ type ctx struct {
 	// toViewport is set for the root and for its body where the viewport
 	// scrolls: the two whose overflow it may take.
 	toViewport bool
-	// node is the element, which attr() reads.
+	// node is the element, which attr() reads, and self is set for its
+	// pseudo-element, whose container may be the element itself.
 	node *dom.Node
+	self bool
 }
 
 // leading are the longhands the others read, in the order they are
@@ -1121,6 +1132,9 @@ func (x *ctx) units(d *Dim) *Units {
 // (lh its parent's line height while its line-height is), a root unit in
 // the root's, a viewport unit in the viewport.
 func (x *ctx) unit(u relUnit) float32 {
+	if u >= unitCqw {
+		return x.env.containerUnit(x.node, x.self, u) / 100
+	}
 	if u >= unitVw {
 		w, h := x.env.viewport()
 		return [...]float32{w, h, min(w, h), max(w, h)}[u-unitVw] / 100
@@ -1145,7 +1159,8 @@ func (x *ctx) unit(u relUnit) float32 {
 		return in.Cap
 	case unitIc:
 		return in.Ic
-	case unitLh, unitRex, unitRch, unitRcap, unitRic, unitRlh, unitVw, unitVh, unitVmin, unitVmax, relUnits:
+	case unitLh, unitRex, unitRch, unitRcap, unitRic, unitRlh, unitVw, unitVh, unitVmin, unitVmax, unitCqw, unitCqh,
+		unitCqmin, unitCqmax, relUnits:
 	}
 	switch lh := st.LineHeight; {
 	case lh.Normal:
@@ -1300,6 +1315,20 @@ var props = func() map[string]prop {
 			"none": style.ClearNone, "left": style.ClearLeft, "right": style.ClearRight, "both": style.ClearBoth,
 			"inline-start": style.ClearLeft, "inline-end": style.ClearRight,
 		}),
+		"container-type": keyword(func(c *style.Computed) *style.ContainerType { return &c.ContainerType },
+			map[string]style.ContainerType{"normal": style.ContainerNormal, "size": style.ContainerSize,
+				"inline-size": style.ContainerInlineSize}),
+		"container-name": field(func(c *style.Computed) *[]string { return &c.ContainerNames },
+			func(_ *ctx, v []Component) []string {
+				if isWord(v[0], kwNone) {
+					return nil
+				}
+				names := make([]string, len(v))
+				for i, c := range v {
+					names[i] = c.Text
+				}
+				return names
+			}),
 		"box-sizing": keyword(func(c *style.Computed) *style.BoxSizing { return &c.BoxSizing },
 			map[string]style.BoxSizing{"border-box": style.BorderBox, "content-box": style.ContentBox}),
 		"position": keyword(func(c *style.Computed) *style.Position { return &c.Position }, map[string]style.Position{

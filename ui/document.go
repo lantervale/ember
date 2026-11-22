@@ -369,9 +369,11 @@ func (d *Document) Layout(size geom.Vec2) {
 	d.replay.repaint = true
 	d.scrolled = false
 	d.lay(size)
+	d.requery(size)
 	if tips, lists := d.placeTips(), d.placeSuggestions(); tips || lists {
 		d.style()
 		d.lay(size)
+		d.requery(size)
 	}
 	d.choosePictures(media, true)
 }
@@ -408,6 +410,40 @@ func (d *Document) lay(size geom.Vec2) {
 	}
 	d.findFollowers()
 	d.placed += len(d.tree.Of)
+}
+
+// maxRequeries bounds the layouts one Layout runs again for its @container
+// rules: one a level of containers nested whose answers moved.
+const maxRequeries = 8
+
+// requery answers the @container rules and container units for the
+// containers' boxes just laid out, and styles and lays out again while
+// that changes an answer (decision 0120).
+func (d *Document) requery(size geom.Vec2) {
+	for range maxRequeries {
+		if !d.trans.Requery(contentBox) {
+			return
+		}
+		d.style()
+		d.lay(size)
+	}
+}
+
+// contentBox is the size of n's content box, as a container query reads
+// it: none for an inline box, a table or a part of one, which size
+// containment skips, nor for an element with no box.
+func contentBox(n *Node) (float32, float32, bool) {
+	b, placed := dom.Data(n).Placed.(*box.Box)
+	if !placed || b == nil || b.Style == nil {
+		return 0, 0, false
+	}
+	if st := b.Style; st.Display == style.Inline || st.Display == style.Contents || st.Display == style.DisplayNone ||
+		st.Table || st.TablePart != style.NoTablePart {
+		return 0, 0, false
+	}
+	w := b.Size.X - b.Border.Horizontal() - b.Padding.Horizontal() - b.Scrollbar.X
+	h := b.Size.Y - b.Border.Vertical() - b.Padding.Vertical() - b.Scrollbar.Y
+	return max(w, 0), max(h, 0), true
 }
 
 // dropNode is s less n.

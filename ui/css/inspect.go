@@ -40,6 +40,9 @@ type Match struct {
 	// one without a name.
 	Media []string
 	Layer string
+	// Containers are the @container rules it stands in, the outermost
+	// first, as written.
+	Containers []string
 	// Declarations are what it declares, in the order written.
 	Declarations []MatchedDeclaration
 }
@@ -91,7 +94,7 @@ func (t *Transitions) ready(n *dom.Node) bool {
 }
 
 func (t *Transitions) inspect(n *dom.Node) *inspection {
-	in := &inspection{t: t, m: matcher{off: t.off, ranks: t.ranks, best: map[int]Specificity{}}}
+	in := &inspection{t: t, m: matcher{off: t.off, ranks: t.ranks, env: &t.env, best: map[int]Specificity{}}}
 	if src := n.Style(); src != "" {
 		p := parser{toks: Tokenize(src), browser: t.browser}
 		in.inline, _ = p.inline()
@@ -254,6 +257,9 @@ func (t *Transitions) match(f found) Match {
 	m.Selector = strings.Join(selectors, ", ")
 	for _, i := range r.media {
 		m.Media = append(m.Media, s.media[i].text)
+	}
+	for _, c := range r.containers {
+		m.Containers = append(m.Containers, c.text)
 	}
 	if r.layer > 0 && !strings.Contains(s.layers[r.layer-1], anonymous) {
 		m.Layer = s.layers[r.layer-1]

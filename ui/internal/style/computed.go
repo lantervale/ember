@@ -199,7 +199,22 @@ type Box struct {
 	// are break-before and break-after between columns.
 	BreakInsideAvoid        bool
 	BreakBefore, BreakAfter Break
+	// ContainerType is container-type, and ContainerNames container-name,
+	// nil for none: the names an @container rule picks the element by.
+	ContainerType  ContainerType
+	ContainerNames []string
 }
+
+// ContainerType is container-type: whether an element is a query
+// container for its size, and on which axes. A size container's size
+// doesn't depend on its content on those axes.
+type ContainerType uint8
+
+const (
+	ContainerNormal ContainerType = iota
+	ContainerInlineSize
+	ContainerSize
+)
 
 // Multicol reports a multi-column container.
 func (b *Box) Multicol() bool { return b.ColumnCount > 0 || b.ColumnWidth.Kind != Auto }

@@ -360,7 +360,7 @@ func (an *animation) add(name string, k key) {
 // probe is n's style with decls over its cascade, under its !important
 // declarations, as an animation's are; its own style with none.
 func (t *Transitions) probe(n *dom.Node, decls []Declaration) *style.Computed {
-	t.km.off, t.kpm.off, t.km.ranks, t.kpm.ranks = t.off, t.off, t.ranks, t.ranks
+	t.km.off, t.kpm.off, t.km.ranks, t.kpm.ranks, t.km.env, t.kpm.env = t.off, t.off, t.ranks, t.ranks, &t.env, &t.env
 	r := restyler{sheets: t.all, m: &t.km, pm: &t.kpm, computed: &t.probed, overlay: t.overlay,
 		viewport: t.viewport, browser: t.browser, env: &t.env, keyframe: decls}
 	if p := n.Pseudo(); p != dom.NoPseudo {

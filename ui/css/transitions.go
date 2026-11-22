@@ -38,8 +38,12 @@ type Transitions struct {
 	// whole tree.
 	stale bool
 	// env is what lengths are measured against: the fonts, and media's
-	// viewport.
+	// viewport, and the containers' boxes.
 	env measures
+	// queries are the sheets' @container rules, and queried the
+	// viewport Requery last answered them in.
+	queries []*containerRule
+	queried [2]float32
 	// anims are the animations of the elements whose style has an
 	// animation list, events what they did since Events, and frames the
 	// @keyframes rules by name, worked out again once rekey is set.
@@ -148,7 +152,7 @@ func (t *Transitions) SetSheets(sheets []*Sheet) {
 		agent = browserAgent()
 	}
 	t.all = append([]*Sheet{agent}, sheets...)
-	t.off, t.ranks = mediaOff(t.all, t.media), layerRanks(t.all)
+	t.off, t.ranks, t.queries = mediaOff(t.all, t.media), layerRanks(t.all), containerQueries(t.all)
 }
 
 // Compute restyles root as css.Compute does, starting a transition for
@@ -161,7 +165,7 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 		return nil
 	}
 	t.SetSheets(sheets)
-	t.m.off, t.pm.off, t.m.ranks, t.pm.ranks = t.off, t.off, t.ranks, t.ranks
+	t.m.off, t.pm.off, t.m.ranks, t.pm.ranks, t.m.env, t.pm.env = t.off, t.off, t.ranks, t.ranks, &t.env, &t.env
 	if t.changed == nil {
 		t.changed = t.restyled
 	}

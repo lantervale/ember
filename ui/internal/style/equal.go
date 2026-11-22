@@ -62,7 +62,9 @@ func (b *Box) equal(o *Box) bool {
 		b.ColumnFillAuto == o.ColumnFillAuto &&
 		b.BreakInsideAvoid == o.BreakInsideAvoid &&
 		b.BreakBefore == o.BreakBefore &&
-		b.BreakAfter == o.BreakAfter
+		b.BreakAfter == o.BreakAfter &&
+		b.ContainerType == o.ContainerType &&
+		sameSlice(b.ContainerNames, o.ContainerNames)
 }
 
 func (g *Grid) equal(o *Grid) bool {

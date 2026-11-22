@@ -101,7 +101,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `:dir()`, `:indeterminate`, `:placeholder-shown`, `:default`, `:valid`, `:invalid`, `:required`, `:optional`, `:in-range`, `:out-of-range` | refused: the rule is dropped |
 | `min()`, `max()`, `clamp()` over a percentage in `line-height`, `word-spacing`, `vertical-align`, a gradient's stop, or longer than 16 steps | worked out as if the percentage were of nothing |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
-| `clamp()` with `none`, `round()`, `mod()`, `rem()`, `abs()`, `sign()` and the other math functions, `cqw` and the container units | refused |
+| `clamp()` with `none`, `round()`, `mod()`, `rem()`, `abs()`, `sign()` and the other math functions | refused |
+| `scroll-state()` container queries and `container-type: scroll-state`; `style()` on a standard property | refused, with a warning: the condition never holds |
+| a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
+| `@keyframes` inside `@container` | applies whatever the container |
+| container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 | `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `@counter-style`, `revert` | refused |
 
 ## Windows

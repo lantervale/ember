@@ -64,7 +64,8 @@ var properties = map[string]property{
 	"vertical-align": {initial: "baseline"},
 	"top":            {initial: "auto"}, "right": {initial: "auto"},
 	"bottom": {initial: "auto"}, "left": {initial: "auto"},
-	"z-index": {initial: "auto"},
+	"z-index":        {initial: "auto"},
+	"container-type": {initial: "normal"}, "container-name": {initial: "none"},
 
 	"font-family":            {inherited: true, initial: "sans-serif"},
 	"font-size":              {inherited: true, initial: "medium"},
@@ -179,6 +180,7 @@ var shorthands = map[string][]string{
 	"overflow":      {"overflow-x", "overflow-y"},
 	"outline":       {"outline-color", "outline-style", "outline-width"},
 	"columns":       {"column-width", "column-count"},
+	"container":     {"container-name", "container-type"},
 	"column-rule":   {"column-rule-width", "column-rule-style", "column-rule-color"},
 	"background": {"background-color", "background-image", "background-repeat", "background-position",
 		"background-size", "background-attachment", "background-origin", "background-clip"},

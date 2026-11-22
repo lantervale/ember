@@ -102,6 +102,9 @@ type Rule struct {
 	// media are the @media rules it stands in, the outermost first, as
 	// places in its sheet's list: it applies while they all hold.
 	media []int
+	// containers are the @container rules it stands in, the outermost
+	// first: it applies to an element while they all hold for it.
+	containers []*containerRule
 	// layer is the @layer it stands in, as a place from 1 in its sheet's
 	// list; 0 in none.
 	layer int
@@ -208,6 +211,9 @@ func (s *Sheet) String() string {
 		for _, m := range r.media {
 			b.WriteString("@media " + s.media[m].text + " { ")
 		}
+		for _, c := range r.containers {
+			b.WriteString("@container " + c.text + " { ")
+		}
 		for i, sel := range r.Selectors {
 			if i > 0 {
 				b.WriteString(", ")
@@ -220,7 +226,7 @@ func (s *Sheet) String() string {
 			b.WriteString(d.String())
 			b.WriteString(";")
 		}
-		b.WriteString(" }" + strings.Repeat(" }", len(r.media)) + "\n")
+		b.WriteString(" }" + strings.Repeat(" }", len(r.media)+len(r.containers)) + "\n")
 	}
 	for _, k := range s.Keyframes {
 		for _, m := range k.media {
@@ -342,10 +348,12 @@ type parser struct {
 	begun bool
 }
 
-// scope is the @media rules and the @layer a rule stands in.
+// scope is the @media and @container rules and the @layer a rule stands
+// in.
 type scope struct {
-	media []int
-	layer int
+	media      []int
+	containers []*containerRule
+	layer      int
 }
 
 // rules reads rules up to the end of the sheet, or of the block they
@@ -384,7 +392,7 @@ func (p *parser) item(in scope) bool {
 func (p *parser) styleRule(in scope) {
 	if r, ok := p.rule(); ok {
 		p.begun = true
-		r.media, r.layer = in.media, in.layer
+		r.media, r.containers, r.layer = in.media, in.containers, in.layer
 		p.sheet.Rules = append(p.sheet.Rules, r)
 	}
 }
@@ -413,6 +421,8 @@ func (p *parser) atRule(t Token, in scope) {
 		}
 	case name == "media":
 		p.media(t, in)
+	case name == kwContainer:
+		p.container(t, in)
 	case name == atKeyframes:
 		p.keyframes(t, in)
 	case name == "supports" && p.browser:
@@ -471,6 +481,26 @@ func (p *parser) media(t Token, in scope) {
 	queries := mediaParser{browser: p.browser, warn: p.warnf}
 	p.sheet.media = append(p.sheet.media, queries.list(prelude))
 	in.media = append(slices.Clip(in.media), len(p.sheet.media)-1)
+	p.block(in)
+}
+
+// container reads an @container rule, dropped whole when its prelude is
+// malformed, as Chrome drops it.
+func (p *parser) container(t Token, in scope) {
+	prelude, block := p.prelude()
+	if !block {
+		p.warnf(t.Pos, "@container has no { block }")
+		return
+	}
+	queries := mediaParser{container: true, warn: p.warnf}
+	r, ok := queries.containerRule(prelude)
+	if !ok {
+		p.warnf(t.Pos, "@container: %q is no container condition; the rule is dropped",
+			strings.TrimSpace(join(prelude)))
+		p.skipBlock()
+		return
+	}
+	in.containers = append(slices.Clip(in.containers), r)
 	p.block(in)
 }
 
