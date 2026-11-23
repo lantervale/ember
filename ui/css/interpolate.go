@@ -30,23 +30,42 @@ const (
 // anim is how a longhand animates. lerp writes its value at t between a's
 // and b's into dst, and reports false where the two don't interpolate:
 // it then flips halfway, and no transition runs between them. equal
-// compares the two values. current is the CurrentColorFields bit of a
-// colour that may be currentColor.
+// compares the two values. add writes into dst a's value with b's added
+// to it, or accumulated, as animation-composition has them, and reports
+// false where they don't add up: b's then replaces a's. current is the
+// CurrentColorFields bit of a colour that may be currentColor.
 type anim struct {
 	kind    animKind
 	lerp    func(dst, a, b *style.Computed, t float32) bool
 	equal   func(a, b *style.Computed) bool
+	add     func(dst, a, b *style.Computed, accumulate bool) bool
 	current style.CurrentColorFields
 }
 
 // moves reports whether the longhand interpolates.
 func (a anim) moves() bool { return a.kind == interpolated || a.kind == painted }
 
+// blend writes into dst the longhand's value at t between a's and b's:
+// interpolated where they interpolate, else a's before halfway and b's
+// from there on.
+func (p *prop) blend(dst, a, b *style.Computed, t float32) {
+	if p.anim.lerp != nil && p.anim.lerp(dst, a, b, t) {
+		return
+	}
+	if t >= 0.5 {
+		p.inherit(dst, b)
+		return
+	}
+	p.inherit(dst, a)
+}
+
 // interp is how two values of one type interpolate: lerp's false where
-// they don't. A nil lerp flips halfway.
+// they don't. A nil lerp flips halfway. add sums or accumulates two,
+// false where they don't add up; nil where none do.
 type interp[T any] struct {
 	lerp  func(a, b T, t float32) (T, bool)
 	equal func(a, b T) bool
+	add   func(a, b T, accumulate bool) (T, bool)
 }
 
 // flips is the interpolation of a value that flips halfway.
@@ -67,6 +86,20 @@ func (h interp[T]) on(get func(*style.Computed) *T) anim {
 			return ok
 		},
 		equal: func(a, b *style.Computed) bool { return h.equal(*get(a), *get(b)) },
+		add:   h.adds(get),
+	}
+}
+
+func (h interp[T]) adds(get func(*style.Computed) *T) func(dst, a, b *style.Computed, accumulate bool) bool {
+	if h.add == nil {
+		return nil
+	}
+	return func(dst, a, b *style.Computed, accumulate bool) bool {
+		v, ok := h.add(*get(a), *get(b), accumulate)
+		if ok {
+			*get(dst) = v
+		}
+		return ok
 	}
 }
 
@@ -82,18 +115,32 @@ func numbers(lo, hi float32) interp[float32] {
 	return interp[float32]{
 		lerp:  func(a, b, t float32) (float32, bool) { return clampf(lerpf(a, b, t), lo, hi), true },
 		equal: same[float32],
+		add:   func(a, b float32, _ bool) (float32, bool) { return clampf(a+b, lo, hi), true },
 	}
 }
 
-// integers interpolates as numbers rounded to the nearest, halves up.
-func integers(lo, hi int) interp[int] {
+// integers interpolates as numbers rounded to the nearest, halves up,
+// from lo.
+func integers(lo int) interp[int] {
 	return interp[int]{
 		lerp: func(a, b int, t float32) (int, bool) {
 			v := int(math.Floor(float64(lerpf(float32(a), float32(b), t)) + 0.5))
-			return min(max(v, lo), hi), true
+			return max(v, lo), true
 		},
 		equal: same[int],
+		add:   func(a, b int, _ bool) (int, bool) { return max(a+b, lo), true },
 	}
+}
+
+// weights is font-weight, in quarters towards zero as Chrome keeps it.
+//
+//nolint:gochecknoglobals // an interpolation, fixed
+var weights = interp[float32]{
+	lerp: func(a, b, t float32) (float32, bool) {
+		return float32(math.Trunc(float64(clampf(lerpf(a, b, t), 1, 1000))*4) / 4), true
+	},
+	equal: same[float32],
+	add:   func(a, b float32, _ bool) (float32, bool) { return clampf(a+b, 1, 1000), true },
 }
 
 // counts is column-count: integers from 1, auto (0) flipping.
@@ -104,39 +151,39 @@ var counts = interp[int]{
 		if a == 0 || b == 0 {
 			return a, a == b
 		}
-		return integers(1, math.MaxInt).lerp(a, b, t)
+		return integers(1).lerp(a, b, t)
 	},
 	equal: same[int],
 }
 
-// widths are border, outline and column-rule widths, in whole points as
-// Chrome snaps them: a width under one point and above none is one.
+// widths are border, outline and column-rule widths and border-spacing,
+// never below none; the computed value snaps them to device pixels
+// (finish), as Chrome does.
 //
 //nolint:gochecknoglobals // an interpolation, fixed
-var widths = interp[float32]{
-	lerp: func(a, b, t float32) (float32, bool) {
-		v := max(lerpf(a, b, t), 0)
-		if v > 0 && v < 1 {
-			return 1, true
-		}
-		return float32(math.Floor(float64(v))), true
-	},
-	equal: same[float32],
-}
-
-// offsets is outline-offset, in whole points towards zero, as Chrome
-// keeps it.
-//
-//nolint:gochecknoglobals // an interpolation, fixed
-var offsets = interp[float32]{
-	lerp:  func(a, b, t float32) (float32, bool) { return float32(math.Trunc(float64(lerpf(a, b, t)))), true },
-	equal: same[float32],
-}
+var widths = numbers(0, math.MaxFloat32)
 
 //nolint:gochecknoglobals // an interpolation, fixed
 var colors = interp[color.Color]{
 	lerp:  func(a, b color.Color, t float32) (color.Color, bool) { return lerpColor(a, b, t), true },
 	equal: same[color.Color],
+	add:   func(a, b color.Color, _ bool) (color.Color, bool) { return addColor(a, b), true },
+}
+
+// addColor sums two colours in premultiplied sRGB, alpha too, each
+// channel kept to its range.
+func addColor(a, b color.Color) color.Color {
+	sa, sb := a.SRGB(), b.SRGB()
+	alpha := clampf(a.A+b.A, 0, 1)
+	var out [3]float32
+	if alpha > 0 {
+		for i := range out {
+			out[i] = clampf((sa[i]*a.A+sb[i]*b.A)/alpha, 0, 1)
+		}
+	}
+	c := color.FromSRGB(out)
+	c.A = alpha
+	return c
 }
 
 // lerpColor interpolates in premultiplied sRGB, as Chrome does for
@@ -163,7 +210,21 @@ func lengths(nonNegative bool) interp[style.Length] {
 	return interp[style.Length]{
 		lerp:  func(a, b style.Length, t float32) (style.Length, bool) { return lerpLength(a, b, t, nonNegative) },
 		equal: same[style.Length],
+		add:   func(a, b style.Length, _ bool) (style.Length, bool) { return addLength(a, b) },
 	}
+}
+
+// addLength sums two lengths of one kind; keywords don't add up.
+func addLength(a, b style.Length) (style.Length, bool) {
+	switch {
+	case a.Kind != b.Kind:
+		return a, false
+	case a.Kind == style.Fr:
+		return style.Length{Kind: style.Fr, Px: a.Px + b.Px}, true
+	case a.Kind != style.Fixed:
+		return a, false
+	}
+	return a.Plus(b), true
 }
 
 //nolint:gochecknoglobals // interpolations, fixed
@@ -209,6 +270,14 @@ func pairs[T any](each interp[T]) interp[style.Size[T]] {
 			return style.Size[T]{Width: w, Height: h}, okW && okH
 		},
 		equal: func(a, b style.Size[T]) bool { return each.equal(a.Width, b.Width) && each.equal(a.Height, b.Height) },
+		add: func(a, b style.Size[T], accumulate bool) (style.Size[T], bool) {
+			if each.add == nil {
+				return a, false
+			}
+			w, okW := each.add(a.Width, b.Width, accumulate)
+			h, okH := each.add(a.Height, b.Height, accumulate)
+			return style.Size[T]{Width: w, Height: h}, okW && okH
+		},
 	}
 }
 
@@ -231,6 +300,14 @@ func sides[T any](each interp[T]) interp[style.Sides[T]] {
 				}
 			}
 			return true
+		},
+		add: func(a, b style.Sides[T], accumulate bool) (style.Sides[T], bool) {
+			var out style.Sides[T]
+			ok := each.add != nil
+			for i := 0; ok && i < 4; i++ {
+				*sideOf(&out, i), ok = each.add(*sideOf(&a, i), *sideOf(&b, i), accumulate)
+			}
+			return out, ok
 		},
 	}
 }
@@ -316,7 +393,34 @@ func lcm(a, b int) int {
 // with transparent ones; an inset against an outer one flips.
 //
 //nolint:gochecknoglobals // an interpolation, fixed
-var shadows = interp[[]style.Shadow]{lerp: lerpShadows, equal: slices.Equal[[]style.Shadow]}
+var shadows = interp[[]style.Shadow]{lerp: lerpShadows, equal: slices.Equal[[]style.Shadow], add: addShadows}
+
+// addShadows puts b's shadows after a's; accumulated, it sums them shadow
+// by shadow, the shorter list padded with transparent ones, an inset
+// against an outer one putting them after.
+func addShadows(a, b []style.Shadow, accumulate bool) ([]style.Shadow, bool) {
+	if !accumulate {
+		return slices.Concat(a, b), true
+	}
+	out := make([]style.Shadow, max(len(a), len(b)))
+	for i := range out {
+		var x, y style.Shadow
+		switch {
+		case i < len(a) && i < len(b):
+			x, y = a[i], b[i]
+		case i < len(a):
+			x, y = a[i], style.Shadow{Inset: a[i].Inset}
+		default:
+			x, y = style.Shadow{Inset: b[i].Inset}, b[i]
+		}
+		if x.Inset != y.Inset {
+			return slices.Concat(a, b), true
+		}
+		out[i] = style.Shadow{X: x.X + y.X, Y: x.Y + y.Y, Blur: x.Blur + y.Blur, Spread: x.Spread + y.Spread,
+			Color: addColor(x.Color, y.Color), Inset: x.Inset}
+	}
+	return out, true
+}
 
 func lerpShadows(a, b []style.Shadow, t float32) ([]style.Shadow, bool) {
 	if len(a) == 0 && len(b) == 0 {
@@ -351,6 +455,43 @@ var transforms = interp[[]style.TransformOp]{
 		return lerpTransform(a, b, t), true
 	},
 	equal: slices.Equal[[]style.TransformOp],
+	add:   addTransforms,
+}
+
+// addTransforms puts b's functions after a's; accumulated, two lists of
+// the same functions sum function by function (scales by how far each is
+// from one), as Chrome does, and others are put after too.
+func addTransforms(a, b []style.TransformOp, accumulate bool) ([]style.TransformOp, bool) {
+	if !accumulate || !sameKinds(a, b) {
+		return slices.Concat(a, b), true
+	}
+	out := make([]style.TransformOp, len(a))
+	for i := range a {
+		out[i] = accumulateOp(a[i], b[i])
+	}
+	return out, true
+}
+
+func accumulateOp(a, b style.TransformOp) style.TransformOp {
+	switch a.Kind {
+	case style.Translate:
+		return style.TransformOp{Kind: style.Translate, X: a.X.Plus(b.X), Y: a.Y.Plus(b.Y)}
+	case style.ScaleOp:
+		return style.TransformOp{Kind: style.ScaleOp, A: [6]float32{a.A[0] + b.A[0] - 1, a.A[1] + b.A[1] - 1}}
+	case style.Matrix:
+		x, y := decompose(a.A), decompose(b.A)
+		return style.TransformOp{Kind: style.Matrix, A: recompose(decomposed{
+			tx: x.tx + y.tx, ty: x.ty + y.ty, angle: x.angle + y.angle, sx: x.sx + y.sx - 1, sy: x.sy + y.sy - 1,
+			k: x.k + y.k,
+		})}
+	case style.Rotate, style.Skew:
+		// angle by angle, as below
+	}
+	out := style.TransformOp{Kind: a.Kind}
+	for i := range out.A {
+		out.A[i] = a.A[i] + b.A[i]
+	}
+	return out
 }
 
 // lineHeights interpolates a number with a number and a length with a
@@ -394,16 +535,14 @@ var ratios = interp[float32]{
 	equal: same[float32],
 }
 
-// spacings is border-spacing, in whole points as Chrome keeps it.
+// spacings is border-spacing.
 //
 //nolint:gochecknoglobals // an interpolation, fixed
 var spacings = interp[[2]float32]{
 	lerp: func(a, b [2]float32, t float32) ([2]float32, bool) {
-		var out [2]float32
-		for i := range out {
-			out[i] = float32(math.Floor(float64(max(lerpf(a[i], b[i], t), 0))))
-		}
-		return out, true
+		x, _ := widths.lerp(a[0], b[0], t)
+		y, _ := widths.lerp(a[1], b[1], t)
+		return [2]float32{x, y}, true
 	},
 	equal: same[[2]float32],
 }
@@ -541,7 +680,30 @@ func shapesAlike(a, b *style.ClipPath) bool {
 // neutral value of each it lacks (decision 0118); other lists flip.
 //
 //nolint:gochecknoglobals // an interpolation, fixed
-var filters = interp[[]style.Filter]{lerp: lerpFilters, equal: slices.Equal[[]style.Filter]}
+var filters = interp[[]style.Filter]{lerp: lerpFilters, equal: slices.Equal[[]style.Filter], add: addFilters}
+
+// addFilters puts b's functions after a's; accumulated, two lists of the
+// same functions sum function by function (from each's neutral value),
+// and others are put after too.
+func addFilters(a, b []style.Filter, accumulate bool) ([]style.Filter, bool) {
+	if !accumulate || !sameFilterKinds(a, b) {
+		return slices.Concat(a, b), true
+	}
+	out := make([]style.Filter, len(a))
+	for i := range a {
+		x, y := a[i], b[i]
+		out[i] = style.Filter{Kind: x.Kind, Amount: x.Amount + y.Amount - neutralFilter(x.Kind).Amount}
+		if x.Kind == style.DropShadow {
+			out[i].Shadow = style.Shadow{X: x.Shadow.X + y.Shadow.X, Y: x.Shadow.Y + y.Shadow.Y,
+				Blur: x.Shadow.Blur + y.Shadow.Blur, Color: addColor(x.Shadow.Color, y.Shadow.Color)}
+		}
+	}
+	return out, true
+}
+
+func sameFilterKinds(a, b []style.Filter) bool {
+	return slices.EqualFunc(a, b, func(x, y style.Filter) bool { return x.Kind == y.Kind })
+}
 
 func lerpFilters(a, b []style.Filter, t float32) ([]style.Filter, bool) {
 	n := max(len(a), len(b))

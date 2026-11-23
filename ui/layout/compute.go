@@ -303,11 +303,11 @@ func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
 	case contextNone:
 		return t.hidden(n)
 	case contextFlex:
-		return t.flex(n, in)
+		return t.mirrored(n, in, func() output { return t.flex(n, in) })
 	case contextGrid:
-		return t.grid(n, in)
+		return t.mirrored(n, in, func() output { return t.grid(n, in) })
 	case contextTable:
-		return t.table(n, in)
+		return t.mirroredTable(n, in)
 	case contextBlock:
 		return t.block(n, in, ctx)
 	case contextLeaf:

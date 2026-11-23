@@ -54,7 +54,7 @@ func TestListMarkersDrawTheirShapeInTheItemsColour(t *testing.T) {
 	}
 	assert.Len(t, marker(style.ListSquare, "").of("rect"), 1)
 	assert.Len(t, marker(style.ListCircle, "").of("border"), 1, "a ring")
-	num := marker(style.ListDecimal, "3. ").of("text")
+	num := marker(style.ListCounter, "3. ").of("text")
 	if assert.Len(t, num, 1) {
 		assert.Equal(t, "3. ", num[0].Text)
 	}

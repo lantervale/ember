@@ -28,11 +28,12 @@ func markerOfBox(b *box.Box) *box.Box {
 func TestAListItemsMarkerStandsOutsideItBesideItsFirstLine(t *testing.T) {
 	list := func(st *style.Computed) { st.Display = style.Block; st.Padding.Left = style.Px(40) }
 	a := el(dom.Li, listItem(style.ListDisc), text("HH HH"))
-	b := el(dom.Li, listItem(style.ListDecimal), text("HH"))
-	c := el(dom.Li, listItem(style.ListDecimal), el(dom.P, block, text("HH")))
+	b := el(dom.Li, listItem(style.ListCounter), text("HH"))
+	c := el(dom.Li, listItem(style.ListCounter), el(dom.P, block, text("HH")))
 	none := el(dom.Li, listItem(style.ListNone), text("HH"))
 	ol := el(dom.Ol, list, a, b, c, none)
-	dom.Data(b).Ordinal, dom.Data(c).Ordinal = 8, 9
+	dom.Data(b).MarkerText, dom.Data(c).MarkerText = "8. ", "9. "
+	dom.Data(b).HasMarkerText, dom.Data(c).HasMarkerText = true, true
 	tr := lay(el(dom.Div, width(100), ol), 200)
 
 	assert.Equal(t, geom.Rect{X: 40, W: 60, H: 10}, tr.Of[a].Rect(), "the marker takes no room in the item")

@@ -329,7 +329,6 @@ type cascadedValue struct {
 // declaration of n gives one, its parent's where it inherits.
 func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedValue {
 	in := t.inspect(n)
-	casc := in.m.cascade(in.m.matched(n, t.all, in.inline))
 	parent := &initial
 	above := n.Parent()
 	if above != nil && dom.Data(above).Style != nil {
@@ -337,13 +336,14 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 	} else {
 		above = nil
 	}
+	casc := in.m.cascade(in.m.matched(n, t.all, in.inline), parent.Dir)
 	root := n
 	for root.Parent() != nil && dom.Data(root.Parent()).Style != nil {
 		root = root.Parent()
 	}
 	c := *dom.Data(n).Style
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: dom.Data(root).Style.Font.Size, env: &t.env,
-		root: root == n, node: n}
+		root: root == n, node: n, rtl: casc.rtl}
 	x.customs(casc.custom)
 	x.em, x.sized, x.lined = c.Font.Size, true, true
 
@@ -389,15 +389,16 @@ func (x *ctx) declaredValue(name string, d *Declaration) ([]Component, string) {
 	}
 	var v []Component
 	ok := true
+	key := x.keyOf(name, d)
 	switch {
 	case d.longhands != nil:
-		v = d.longhands[name]
-	case d.Name != name:
+		v = d.longhands[key]
+	case d.Name != key:
 		var long map[string][]Component
 		if sub, subOK := x.substitute(d.Value); subOK {
 			long, _ = expand(d.Name, items(sub))
 		}
-		v, ok = long[name], long != nil
+		v, ok = long[key], long != nil
 	case d.vals != nil:
 		v = d.vals
 	default:

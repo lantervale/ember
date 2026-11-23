@@ -140,8 +140,8 @@ type groupKey struct {
 }
 
 // blendOf is the blend state of mode m: the target's alpha accumulating as with Alpha, and the shader writing
-// Multiply's colour mixed towards white and Screen's and Lighten's
-// premultiplied.
+// Multiply's colour mixed towards white and Screen's, Lighten's and
+// Plus's premultiplied; Plus adds alpha too.
 func blendOf(m draw.Blend) wgpu.Blend {
 	alpha := wgpu.BlendComponent{Op: wgpu.Add, Src: wgpu.One, Dst: wgpu.OneMinusSrcAlpha}
 	switch m {
@@ -150,6 +150,9 @@ func blendOf(m draw.Blend) wgpu.Blend {
 	case draw.Occlude:
 		maxed := wgpu.BlendComponent{Op: wgpu.Max, Src: wgpu.One, Dst: wgpu.One}
 		return wgpu.Blend{Color: maxed, Alpha: maxed}
+	case draw.Plus:
+		sum := wgpu.BlendComponent{Op: wgpu.Add, Src: wgpu.One, Dst: wgpu.One}
+		return wgpu.Blend{Color: sum, Alpha: sum}
 	case draw.Add:
 		return wgpu.Blend{Color: wgpu.BlendComponent{Op: wgpu.Add, Src: wgpu.SrcAlpha, Dst: wgpu.One}, Alpha: alpha}
 	case draw.Multiply:
@@ -637,6 +640,9 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 	if !b.Cut.IsZero() {
 		m := b.Cut.ToMask
 		cutU, cutV = [4]float32{m.X.X, m.Y.X, m.Origin.X, 1}, [4]float32{m.X.Y, m.Y.Y, m.Origin.Y, 0}
+		if b.Cut.Inverted {
+			cutV[3] = 1
+		}
 	}
 	var backU, backV [4]float32
 	if b.Mix != 0 {

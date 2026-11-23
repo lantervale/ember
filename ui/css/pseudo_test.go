@@ -313,8 +313,8 @@ li, li::marker { padding-left: 4px; }
 		// the copy keeps the item's own padding, which no marker reads
 		t.Errorf("padding: %v", m.Padding.Left)
 	}
-	if d := dom.Data(a); d.HasMarkerText || d.Ordinal != 1 {
-		t.Errorf("#a keeps its number: %+v", d.Ordinal)
+	if d := dom.Data(a); d.MarkerText != "1. " || d.Ordinal != 1 {
+		t.Errorf("#a keeps its number: %d %q", d.Ordinal, d.MarkerText)
 	}
 	if d := dom.Data(b); !d.HasMarkerText || d.MarkerText != "(B) " {
 		t.Errorf("#b's content: %q", d.MarkerText)

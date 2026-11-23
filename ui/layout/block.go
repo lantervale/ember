@@ -86,6 +86,10 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	border := n.borders()
 	g := n.ownGutter()
 	gutter := rect{r: g.x, b: g.y}
+	if st.Dir == style.RTL {
+		// the vertical scrollbar stands on the start side, as Chrome's
+		gutter.l, gutter.r = gutter.r, 0
+	}
 	pb := padding.add(border)
 	pbSize := pb.sum()
 	inset := pb.add(gutter)
@@ -240,7 +244,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 				node:     it.node,
 				order:    it.order,
 				position: it.position,
-				x:        staticFromAlignment(align(justify), inlineArea),
+				x:        startOf(staticFromAlignment(align(justify), inlineArea), st),
 				y:        staticFromAlignment(align(self), blockArea),
 			})
 		} else if len(it.oof) > 0 && it.final != nil {
@@ -603,14 +607,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			// sharing the room left; its top is estimated, the margins it collapses
 			// through not known yet.
 			width := fmax(known.w, it.pbSum.w)
-			left := nonAuto.l
-			if !some(margin.l) {
-				left = fmax(0, stretchW-width)
-				if !some(margin.r) {
-					left /= 2
-				}
-			}
-			left += insetL
+			left := estimatedLeft(st, margin, nonAuto.l, fmax(0, stretchW-width)) + insetL
 			estimated := committed + active.collapseWithMargin(nonAuto.t).resolve()
 			child := ctx.sub(fmax(estimated, clearPos), [2]float32{left, outerW - width - left})
 			lo = t.computeChildIn(it.node, in, child)
@@ -638,7 +635,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		resolved := rect{l: or(margin.l, autoSize), r: or(margin.r, autoSize), t: or(margin.t, 0), b: or(margin.b, 0)}
 		if autoCount == 0 {
-			resolved.l += blockAlignOffset(st.TextAlign, freeX)
+			resolved.l += blockAlignOffset(st, freeX)
 		}
 		insetOffset := relativeOffset(it, parent)
 		if it.inSameBFC && (!collapsingWithFirst || !ownCollapse[0]) {
@@ -698,7 +695,10 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
 				style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround, style.AlignSpaceEvenly:
 			}
-			loc.x = start + resolved.l + insetOffset.x + off
+			if st.Dir == style.RTL && justify != style.AlignCenter {
+				off = free - off
+			}
+			loc.x = start + nonAuto.l + insetOffset.x + off
 		}
 		if !some(firstBaseline) {
 			if b := childFirstBaseline(lo.firstBaseline, finalSize.h, it.overflow.Height); some(b) {
@@ -779,16 +779,36 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	}
 }
 
+// estimatedLeft is how far right of its room a block with margins margin (left the
+// resolved left one) stands in a container of style st, free being the room it leaves.
+func estimatedLeft(st *style.Computed, margin rect, left, free float32) float32 {
+	switch {
+	case !some(margin.l) && !some(margin.r):
+		return free / 2
+	case !some(margin.l):
+		return free
+	case some(margin.r):
+		return left + blockAlignOffset(st, free)
+	}
+	return left
+}
+
 // blockAlignOffset is how far right of its place a block with free room beside it and
-// no auto margin stands in a container whose text-align places blocks (-webkit-center,
-// -webkit-right).
-func blockAlignOffset(a style.TextAlign, free float32) float32 {
-	switch a {
+// no auto margin stands in the container of style st: at its end under direction rtl,
+// where the left margin gives way, unless the container's text-align places blocks
+// (-webkit-left, -webkit-center, -webkit-right).
+func blockAlignOffset(st *style.Computed, free float32) float32 {
+	switch st.TextAlign {
 	case style.BlockCenter:
 		return free / 2
 	case style.BlockRight:
 		return free
-	case style.Start, style.End, style.Left, style.Right, style.Center, style.Justify, style.BlockLeft:
+	case style.BlockLeft:
+		return 0
+	case style.Start, style.End, style.Left, style.Right, style.Center, style.Justify:
+	}
+	if st.Dir == style.RTL {
+		return free
 	}
 	return 0
 }

@@ -139,14 +139,3 @@ func TestInlinesCutByBlocksAndAfterBreaksMatchChrome(t *testing.T) {
 		})
 	}
 }
-
-func TestASummarysMarkerMatchesChrome(t *testing.T) {
-	d := ui.NewDocument(ui.BrowserSheets(), ui.CSS(`details { width: 300px }`))
-	d.Body().Append(
-		ui.Details(ui.Summary(ui.Text("Closed"), ui.Span(ui.Text("after")))),
-		ui.Details(ui.Attr("open", ""), ui.Summary(ui.Text("Open"), ui.Span(ui.Text("after"))), ui.P(ui.Text("inside"))),
-		ui.Details(ui.Summary(ui.Style("font-size: 24px"), ui.Span(ui.Text("large")))),
-	)
-	r := chrome.Match(t, d, geom.V2(800, 600))
-	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
-}

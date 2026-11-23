@@ -34,6 +34,8 @@ type rule struct {
 	steps       []compound // the last is the element's own
 	specificity int
 	decl        map[string]string
+	// important names the declarations marked !important.
+	important map[string]bool
 }
 
 func (r *rule) matches(n *node) bool {
@@ -158,7 +160,7 @@ func parseSheet(css string, rules []rule, limit int, dropped func(what string)) 
 		if end < 0 {
 			break
 		}
-		decl := declarations(css[open+1 : open+end])
+		decl, important := declarations(css[open+1 : open+end])
 		css = css[open+end+1:]
 		if len(decl) == 0 {
 			continue
@@ -171,7 +173,7 @@ func parseSheet(css string, rules []rule, limit int, dropped func(what string)) 
 				}
 				continue
 			}
-			r.decl = decl
+			r.decl, r.important = decl, important
 			rules = append(rules, r)
 		}
 	}
@@ -179,19 +181,29 @@ func parseSheet(css string, rules []rule, limit int, dropped func(what string)) 
 	return rules
 }
 
-func declarations(s string) map[string]string {
+// declarations are the properties a block declares, and those of them
+// marked !important.
+func declarations(s string) (map[string]string, map[string]bool) {
 	if !strings.Contains(s, ":") {
-		return nil
+		return nil, nil
 	}
 	out := map[string]string{}
+	var important map[string]bool
 	for _, d := range strings.Split(s, ";") {
 		if k, v, ok := strings.Cut(d, ":"); ok {
+			k = strings.ToLower(strings.TrimSpace(k))
 			v = strings.TrimSpace(v)
 			if i := strings.LastIndexByte(v, '!'); i >= 0 && strings.EqualFold(strings.TrimSpace(v[i+1:]), "important") {
 				v = strings.TrimSpace(v[:i])
+				if important == nil {
+					important = map[string]bool{}
+				}
+				important[k] = true
+			} else if important[k] {
+				continue
 			}
-			out[strings.ToLower(strings.TrimSpace(k))] = v
+			out[k] = v
 		}
 	}
-	return out
+	return out, important
 }

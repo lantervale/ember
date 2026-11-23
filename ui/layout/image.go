@@ -22,6 +22,13 @@ const brokenIcon = 16
 // its attributes: its icon and alt text give it a size, never proportions, as Chrome's.
 const noRatio = -1
 
+// pictured reports an element laid out as a picture: an img, an svg, or
+// one its content property replaces by a picture.
+func pictured(e *dom.Node) bool {
+	_, replaced := dom.ContentPicture(e)
+	return e.Tag() == dom.Img || e.Tag() == dom.Svg || replaced
+}
+
 // buildImage makes an img a replaced box, sized by its picture. One whose picture
 // Images doesn't find is sized as Chrome sizes a broken image: its icon and its alt
 // text on a line, the icon alone without alt text, nothing with an empty one.
@@ -112,7 +119,7 @@ func attrNumber(e *dom.Node, name string) float32 {
 // picture's size for the layouts to come.
 func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts box.Fonts) {
 	for e, n := range r.nodes {
-		if !n.replaced || e.Tag() != dom.Img && e.Tag() != dom.Svg {
+		if !n.replaced || !pictured(e) {
 			continue
 		}
 		src, ok := dom.Picture(e)

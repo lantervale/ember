@@ -169,7 +169,7 @@ func (t *tree) leafChildren(n *node, out *output, pb, border rect, gutter point)
 			inline:   true,
 		}
 		if o := n.inline.oofOf(k); o != nil {
-			c.x, c.y = staticFromStart(o.static.x), staticFromStart(o.static.y)
+			c.x, c.y = startOf(staticFromStart(o.static.x), n.st), staticFromStart(o.static.y)
 			if o.positioned && k.st.Position == style.Absolute {
 				c.area = &oofArea{size: o.areaSize, offset: o.areaAt}
 			}

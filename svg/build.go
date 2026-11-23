@@ -9,13 +9,15 @@ import (
 type paintKind uint8
 
 const (
-	propStroke  = "stroke"
-	elemSymbol  = "symbol"
-	elemCircle  = "circle"
-	elemEllipse = "ellipse"
-	elemLine    = "line"
-	elemRect    = "rect"
-	elemPolygon = "polygon"
+	propStroke   = "stroke"
+	elemSymbol   = "symbol"
+	elemCircle   = "circle"
+	elemEllipse  = "ellipse"
+	elemLine     = "line"
+	elemPolyline = "polyline"
+	elemUse      = "use"
+	elemRect     = "rect"
+	elemPolygon  = "polygon"
 )
 
 const (
@@ -71,7 +73,14 @@ type style struct {
 	dashOffset                 float64
 	fontSize                   float64
 	evenOdd, hidden            bool
-	strokeFirst, markers       bool
+	strokeFirst                bool
+	clipEvenOdd, pixelated     bool
+	// markers are marker-start, marker-mid and marker-end.
+	markers    [3]string
+	fontFamily string
+	bold       bool
+	italic     bool
+	anchor     textAnchor
 }
 
 type builder struct {
@@ -79,13 +88,30 @@ type builder struct {
 	rules  []rule
 	vw, vh float64 // what percentages are of
 	color  color.NRGBA
+	base   style
 
 	paths     map[*node]Path
 	gradients map[*node]*gradientDef
+	styles    map[*node]style
 	using     []*node
+	// referring are the clip paths, masks, patterns and markers being
+	// built, which none of them may refer to again.
+	referring []*node
 	missing   map[string]bool
+	// clipping is set while the shapes of a clip path are read.
+	clipping bool
+	// sized is the symbol or svg a use is drawing, and the size it gives.
+	sized *useSize
+	// nesting is how many pictures this one is an image inside.
+	nesting int
 
 	visits, shapes, segments int
+}
+
+type useSize struct {
+	n          *node
+	w, h       string
+	hasW, hasH bool
 }
 
 const maxVisits = 4 * MaxElements
@@ -114,13 +140,26 @@ func (b *builder) props(n *node) map[string]string {
 	for k, v := range n.attr {
 		out[k] = v
 	}
+	decl, important := declarations(inline)
 	for _, r := range matched {
 		for k, v := range r.decl {
+			if !r.important[k] {
+				out[k] = v
+			}
+		}
+	}
+	for k, v := range decl {
+		if !important[k] {
 			out[k] = v
 		}
 	}
-	for k, v := range declarations(inline) {
-		out[k] = v
+	for _, r := range matched {
+		for k := range r.important {
+			out[k] = r.decl[k]
+		}
+	}
+	for k := range important {
+		out[k] = decl[k]
 	}
 	return out
 }
@@ -203,8 +242,39 @@ var properties = map[string]func(st *style, v string, ctx lengthContext){ //noli
 		}
 	},
 	"visibility": func(st *style, v string, _ lengthContext) {
-		if hidden, ok := map[string]bool{"visible": false, "hidden": true, "collapse": true}[v]; ok {
+		if hidden, ok := map[string]bool{valVisible: false, "hidden": true, "collapse": true}[v]; ok {
 			st.hidden = hidden
+		}
+	},
+	"clip-rule": func(st *style, v string, _ lengthContext) {
+		if rule, ok := map[string]bool{"evenodd": true, "nonzero": false}[v]; ok {
+			st.clipEvenOdd = rule
+		}
+	},
+	"image-rendering": func(st *style, v string, _ lengthContext) {
+		st.pixelated = v == "pixelated" || v == "optimizeSpeed"
+	},
+	"font-family": func(st *style, v string, _ lengthContext) { st.fontFamily = strings.ToLower(v) },
+	"font-weight": func(st *style, v string, _ lengthContext) {
+		if n, ok := number(v); ok {
+			st.bold = n >= 600
+			return
+		}
+		switch v {
+		case "bold", "bolder":
+			st.bold = true
+		case valNormal, "lighter":
+			st.bold = false
+		}
+	},
+	"font-style": func(st *style, v string, _ lengthContext) {
+		if v == valNormal || v == "italic" || strings.HasPrefix(v, "oblique") {
+			st.italic = v != valNormal
+		}
+	},
+	"text-anchor": func(st *style, v string, _ lengthContext) {
+		if a, ok := map[string]textAnchor{"start": anchorStart, "middle": anchorMiddle, "end": anchorEnd}[v]; ok {
+			st.anchor = a
 		}
 	},
 	"paint-order": func(st *style, v string, _ lengthContext) {
@@ -226,9 +296,13 @@ func (st *style) apply(p map[string]string, b *builder) {
 			set(st, strings.TrimSpace(v), ctx)
 		}
 	}
-	for _, k := range [...]string{"marker", "marker-start", "marker-mid", "marker-end"} {
+	if v, ok := p["marker"]; ok {
+		v = strings.TrimSpace(v)
+		st.markers = [3]string{v, v, v}
+	}
+	for i, k := range [...]string{"marker-start", "marker-mid", "marker-end"} {
 		if v, ok := p[k]; ok {
-			st.markers = strings.TrimSpace(v) != none || st.markers && k != "marker"
+			st.markers[i] = strings.TrimSpace(v)
 		}
 	}
 }
@@ -306,7 +380,10 @@ func parseAspect(s string) Aspect {
 }
 
 func build(doc *document, p *Picture) error {
-	b := &builder{doc: doc, color: p.currentColor, paths: map[*node]Path{}, gradients: map[*node]*gradientDef{}}
+	b := &builder{
+		doc: doc, color: p.currentColor, nesting: p.nesting,
+		paths: map[*node]Path{}, gradients: map[*node]*gradientDef{}, styles: map[*node]style{},
+	}
 	for _, sheet := range doc.sheets {
 		b.rules = parseSheet(sheet, b.rules, MaxRules, b.unsupported)
 	}
@@ -314,37 +391,47 @@ func build(doc *document, p *Picture) error {
 	props := b.props(root)
 	p.width, p.hasWidth = rootSize(props["width"])
 	p.height, p.hasHeight = rootSize(props["height"])
-	sc := &scanner{s: props["viewBox"]}
-	if v := sc.list(4); len(v) == 4 && sc.done() && v[2] > 0 && v[3] > 0 {
-		p.ViewBox = Box{v[0], v[1], v[2], v[3]}
-	}
+	p.ViewBox = viewBox(props["viewBox"])
 	p.Aspect = parseAspect(props["preserveAspectRatio"])
 	b.vw, b.vh = p.ViewBox.W, p.ViewBox.H
 	if p.ViewBox.Empty() {
 		b.vw, b.vh = p.Size()
 	}
-	st := style{
+	b.base = style{
 		fill: paintSpec{kind: paintColor, c: color.NRGBA{A: 255}}, color: p.currentColor,
 		fillOpacity: 1, strokeOpacity: 1, width: 1, miter: 4, fontSize: 16,
 	}
-	if t, ok := props["transform"]; ok && strings.TrimSpace(t) != "" {
-		b.unsupported("transform on the root")
+	p.transform = Identity()
+	if t, ok := props["transform"]; ok {
+		if tm, valid := parseTransform(t); valid && tm.finite() {
+			p.transform = tm
+		}
 	}
-	if err := b.walk(root, st, Identity(), &p.Items, 0); err != nil {
+	if err := b.walk(root, b.base, Identity(), &p.Items, 0); err != nil {
 		return err
 	}
 	p.unsupported = sortedKeys(b.missing)
 	return nil
 }
 
-// fold is group as an item: itself, or its one shape or group faded by
-// its opacity when that needs no layer.
+func viewBox(s string) Box {
+	sc := &scanner{s: s}
+	if v := sc.list(4); len(v) == 4 && sc.done() && v[2] > 0 && v[3] > 0 {
+		return Box{v[0], v[1], v[2], v[3]}
+	}
+	return Box{}
+}
+
+// fold is group as an item: itself, or its one shape, image or group
+// faded by its opacity when that needs no layer.
 func fold(g *Group) Item {
-	if len(g.Items) != 1 {
+	if len(g.Items) != 1 || g.Clip != nil || g.Mask != nil {
 		return Item{Group: g}
 	}
 	only := g.Items[0]
-	if s := only.Shape; s != nil {
+	switch {
+	case only.Shape != nil:
+		s := only.Shape
 		switch {
 		case s.Stroke.Kind == NoPaint:
 			s.Fill.Opacity *= g.Opacity
@@ -354,6 +441,9 @@ func fold(g *Group) Item {
 			return only
 		}
 		return Item{Group: g}
+	case only.Image != nil:
+		only.Image.Opacity *= g.Opacity
+		return only
 	}
 	only.Group.Opacity *= g.Opacity
 	return only
@@ -362,21 +452,50 @@ func fold(g *Group) Item {
 // drawn reports whether n is an element that draws; one that this
 // package does not draw is noted.
 func (b *builder) drawn(n *node) bool {
-	switch n.name {
-	case elemSVG:
-		if n != b.doc.root {
-			b.unsupported("nested svg")
-			return false
+	if b.clipping {
+		switch n.name {
+		case elemUse, elemPath, elemRect, elemCircle, elemEllipse, elemLine, elemPolyline, elemPolygon, elemText:
+			return true
 		}
+		return false
+	}
+	switch n.name {
+	case elemSVG, "g", "a", "switch", elemUse, elemPath, elemRect, elemCircle, elemEllipse, elemLine, elemPolyline,
+		elemPolygon, elemText, elemImage:
 		return true
-	case "g", "a", "switch", "use", "path", elemRect, elemCircle, elemEllipse, elemLine, "polyline", elemPolygon:
-		return true
-	case "text", "image", "foreignObject":
+	case elemSymbol:
+		return b.sized != nil && b.sized.n == n
+	case "foreignObject":
 		b.unsupported(n.name)
 	case "animate", "animateTransform", "animateMotion", "set":
 		b.unsupported("animation")
 	}
 	return false
+}
+
+// reference is the element a property such as clip-path or mask names
+// by url(#id), if it is one of the kind given and not already being
+// built: nil for none, and cyclic for one being built.
+func (b *builder) reference(v, prop, kind string) (*node, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" || v == none {
+		return nil, false
+	}
+	if !strings.HasPrefix(v, "url(") {
+		b.unsupported(prop)
+		return nil, false
+	}
+	spec, _ := parsePaint(v)
+	n := b.target(spec.ref)
+	if n == nil || n.name != kind {
+		return nil, false
+	}
+	for _, busy := range b.referring {
+		if busy == n {
+			return nil, true
+		}
+	}
+	return n, false
 }
 
 func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) error {
@@ -393,8 +512,11 @@ func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) e
 			m = m.Mul(tm)
 		}
 	}
-	for _, k := range [...]string{"clip-path", "mask", "filter", "mix-blend-mode", "vector-effect"} {
-		if v, ok := props[k]; ok && v != none && v != "normal" && v != "" {
+	if b.clipping {
+		return b.content(n, props, st, m, out, useDepth)
+	}
+	for _, k := range [...]string{"filter", "mix-blend-mode", "vector-effect"} {
+		if v, ok := props[k]; ok && v != none && v != valNormal && v != "" {
 			b.unsupported(k)
 		}
 	}
@@ -402,32 +524,55 @@ func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) e
 	if f, ok := fraction(props["opacity"]); ok {
 		opacity = f
 	}
-	if opacity == 0 {
+	clip, cyclicClip := b.reference(props["clip-path"], "clip-path", "clipPath")
+	mask, cyclicMask := b.reference(props["mask"], "mask", "mask")
+	clipped, masked := clip != nil, mask != nil
+	if opacity == 0 || cyclicClip || cyclicMask {
 		return nil
 	}
-	if opacity == 1 {
+	if opacity == 1 && !clipped && !masked {
 		return b.content(n, props, st, m, out, useDepth)
 	}
 	group := &Group{Opacity: opacity}
 	if err := b.content(n, props, st, m, &group.Items, useDepth); err != nil {
 		return err
 	}
-	if len(group.Items) > 0 {
-		*out = append(*out, fold(group))
+	if len(group.Items) == 0 {
+		return nil
 	}
+	if !clipped && !masked {
+		*out = append(*out, fold(group))
+		return nil
+	}
+	bbox := Box{}
+	if inv, ok := m.Inverse(); ok {
+		bbox = itemsBox(group.Items, inv)
+	}
+	var err error
+	if clipped {
+		if group.Clip, err = b.clipPath(clip, m, bbox); err != nil {
+			return err
+		}
+	}
+	if masked {
+		if group.Mask, err = b.mask(mask, m, bbox); err != nil {
+			return err
+		}
+	}
+	*out = append(*out, Item{Group: group})
 	return nil
 }
 
 // content appends what n draws, its own style applied, to out.
 func (b *builder) content(n *node, props map[string]string, st style, m Matrix, out *[]Item, useDepth int) error {
 	switch n.name {
-	case elemSVG, "g", "a":
-		for _, k := range n.kids {
-			if err := b.walk(k, st, m, out, useDepth); err != nil {
-				return err
-			}
+	case elemSVG, elemSymbol:
+		if n != b.doc.root {
+			return b.viewport(n, props, st, m, out, useDepth)
 		}
-		return nil
+		return b.kids(n, st, m, out, useDepth)
+	case "g", "a":
+		return b.kids(n, st, m, out, useDepth)
 	case "switch":
 		for _, k := range n.kids {
 			if _, conditional := k.attr["requiredExtensions"]; !conditional && k.name != "" {
@@ -435,10 +580,81 @@ func (b *builder) content(n *node, props map[string]string, st style, m Matrix, 
 			}
 		}
 		return nil
-	case "use":
+	case elemUse:
 		return b.use(n, props, st, m, out, useDepth)
+	case elemText:
+		return b.text(n, st, m, out)
+	case elemImage:
+		return b.image(props, &st, m, out)
 	}
 	return b.shape(n, props, &st, m, out)
+}
+
+func (b *builder) kids(n *node, st style, m Matrix, out *[]Item, useDepth int) error {
+	for _, k := range n.kids {
+		if err := b.walk(k, st, m, out, useDepth); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// viewport appends what a nested svg, or a symbol a use draws, draws:
+// its view box fitted into its own viewport, cut to it unless its
+// overflow is visible.
+func (b *builder) viewport(n *node, props map[string]string, st style, m Matrix, out *[]Item, useDepth int) error {
+	ws, hs := props["width"], props["height"]
+	if s := b.sized; s != nil && s.n == n {
+		if s.hasW {
+			ws = s.w
+		}
+		if s.hasH {
+			hs = s.h
+		}
+	}
+	b.sized = nil
+	size := func(s string, whole float64) float64 {
+		if v, ok := length(s, lengthContext{whole: whole, em: st.fontSize}); ok && strings.TrimSpace(s) != valAuto {
+			return v
+		}
+		return whole
+	}
+	w, h := size(ws, b.vw), size(hs, b.vh)
+	if !(w > 0) || !(h > 0) {
+		return nil
+	}
+	if n.name == elemSVG {
+		x, _ := length(props["x"], lengthContext{whole: b.vw, em: st.fontSize})
+		y, _ := length(props["y"], lengthContext{whole: b.vh, em: st.fontSize})
+		m = m.Mul(translate(x, y))
+	}
+	inner := m
+	vw, vh := w, h
+	if box := viewBox(props["viewBox"]); !box.Empty() {
+		inner = m.Mul(fit(box, parseAspect(props["preserveAspectRatio"]), w, h))
+		vw, vh = box.W, box.H
+	}
+	group := &Group{Opacity: 1}
+	if clipsOverflow(props) {
+		group.Clip = rectClip(Box{0, 0, w, h}, m)
+	}
+	savedW, savedH := b.vw, b.vh
+	b.vw, b.vh = vw, vh
+	err := b.kids(n, st, inner, &group.Items, useDepth)
+	b.vw, b.vh = savedW, savedH
+	if err != nil || len(group.Items) == 0 {
+		return err
+	}
+	if group.Clip == nil {
+		*out = append(*out, group.Items...)
+		return nil
+	}
+	*out = append(*out, Item{Group: group})
+	return nil
+}
+
+func rectClip(r Box, m Matrix) *Clip {
+	return &Clip{Shapes: []*Shape{{Path: rectPath(r.X, r.Y, r.W, r.H, 0, 0), Transform: m}}}
 }
 
 func (b *builder) use(n *node, props map[string]string, st style, m Matrix, out *[]Item, depth int) error {
@@ -446,13 +662,12 @@ func (b *builder) use(n *node, props map[string]string, st style, m Matrix, out 
 	if ref == nil {
 		return nil
 	}
-	switch ref.name {
-	case elemSymbol:
-		b.unsupported(elemSymbol)
-		return nil
-	case elemSVG:
-		b.unsupported("nested svg")
-		return nil
+	if b.clipping {
+		switch ref.name {
+		case elemPath, elemRect, elemCircle, elemEllipse, elemLine, elemPolyline, elemPolygon, elemText:
+		default:
+			return nil
+		}
 	}
 	for _, busy := range b.using {
 		if busy == ref {
@@ -469,9 +684,15 @@ func (b *builder) use(n *node, props map[string]string, st style, m Matrix, out 
 	}
 	x, _ := length(props["x"], lengthContext{whole: b.vw, em: st.fontSize})
 	y, _ := length(props["y"], lengthContext{whole: b.vh, em: st.fontSize})
+	if ref.name == elemSymbol || ref.name == elemSVG {
+		w, hasW := props["width"]
+		h, hasH := props["height"]
+		b.sized = &useSize{n: ref, w: w, h: h, hasW: hasW, hasH: hasH}
+	}
 	b.using = append(b.using, ref)
 	err := b.walk(ref, st, m.Mul(translate(x, y)), out, depth+1)
 	b.using = b.using[:len(b.using)-1]
+	b.sized = nil
 	return err
 }
 
@@ -490,7 +711,7 @@ func (b *builder) path(n *node, props map[string]string, em float64) Path {
 	}
 	var p Path
 	switch n.name {
-	case "path":
+	case elemPath:
 		p = parsePath(props["d"], budget)
 	case elemRect:
 		rx, okX := length(props["rx"], lengthContext{whole: b.vw, em: em})
@@ -513,7 +734,7 @@ func (b *builder) path(n *node, props map[string]string, em float64) Path {
 	case elemLine:
 		p.moveTo(Point{x("x1"), y("y1")})
 		p.lineTo(Point{x("x2"), y("y2")})
-	case "polyline", elemPolygon:
+	case elemPolyline, elemPolygon:
 		p = pointsPath(props["points"], n.name == elemPolygon, budget)
 	}
 	for _, q := range p.Points {
@@ -536,17 +757,52 @@ func (b *builder) shape(n *node, props map[string]string, st *style, m Matrix, o
 	if len(path.Verbs) == 0 || !m.finite() || m.det() == 0 {
 		return nil
 	}
+	if err := b.count(len(path.Verbs)); err != nil {
+		return err
+	}
+	if b.clipping {
+		*out = append(*out, Item{Shape: b.clipShape(path, st, m)})
+		return nil
+	}
+	bounds, _ := path.Bounds()
+	if s := b.paintShape(path, st, m, bounds, n.name == elemLine); s != nil {
+		*out = append(*out, Item{Shape: s})
+	}
+	if n.name != elemRect && n.name != elemCircle && n.name != elemEllipse {
+		return b.markers(path, st, m, out)
+	}
+	return nil
+}
+
+func (b *builder) count(segments int) error {
 	b.shapes++
-	b.segments += len(path.Verbs)
+	b.segments += segments
 	if b.shapes > MaxShapes || b.segments > MaxSegments {
 		return ErrTooComplex
 	}
-	bounds, _ := path.Bounds()
+	return nil
+}
+
+// clipShape is path as a shape of a clip path: its outline alone, under
+// the clip rule.
+func (b *builder) clipShape(path Path, st *style, m Matrix) *Shape {
+	s := &Shape{Path: path, Transform: m, Fill: Paint{Kind: Solid, Color: color.NRGBA{A: 255}, Opacity: 1}}
+	if st.clipEvenOdd {
+		s.FillRule = EvenOdd
+	}
+	return s
+}
+
+// paintShape is path with the paints of st, those in bounding-box units
+// taken from bounds; nil when it paints nothing.
+func (b *builder) paintShape(path Path, st *style, m Matrix, bounds Box, unfilled bool) *Shape {
 	s := &Shape{
 		Path: path, Transform: m,
-		Fill:        b.paint(st.fill, st.fillOpacity, st, bounds),
 		StrokeWidth: st.width, Cap: st.cap, Join: st.join, MiterLimit: st.miter,
 		StrokeFirst: st.strokeFirst,
+	}
+	if !unfilled {
+		s.Fill = b.paint(st.fill, st.fillOpacity, st, bounds)
 	}
 	if st.evenOdd {
 		s.FillRule = EvenOdd
@@ -559,17 +815,10 @@ func (b *builder) shape(n *node, props map[string]string, st *style, m Matrix, o
 	} else {
 		s.Dashes, s.DashOffset = st.dashes, st.dashOffset
 	}
-	if n.name == elemLine {
-		s.Fill = Paint{}
-	}
 	if s.Fill.Kind == NoPaint && s.Stroke.Kind == NoPaint {
 		return nil
 	}
-	if st.markers && n.name != elemRect && n.name != elemCircle && n.name != elemEllipse {
-		b.unsupported("marker")
-	}
-	*out = append(*out, Item{Shape: s})
-	return nil
+	return s
 }
 
 func (b *builder) paint(spec paintSpec, opacity float64, st *style, bounds Box) Paint {
@@ -586,7 +835,12 @@ func (b *builder) paint(spec paintSpec, opacity float64, st *style, bounds Box) 
 	case paintCurrent:
 		return solid(st.color)
 	case paintRef:
-		if paint, ok := b.gradient(b.target(spec.ref), opacity, bounds); ok {
+		ref := b.target(spec.ref)
+		if ref != nil && ref.name == elemPattern {
+			if paint, ok := b.pattern(ref, opacity, bounds); ok {
+				return paint
+			}
+		} else if paint, ok := b.gradient(ref, opacity, bounds); ok {
 			return paint
 		}
 		switch spec.fallback {

@@ -77,3 +77,26 @@ func TestAShiftMovesAMaskWithWhatItCuts(t *testing.T) {
 		t.Errorf("the mask's corner moved with the drawing: %v", got)
 	}
 }
+
+func TestAnInvertedMaskClipCutsWhereTheMaskIsAndBoundsNothing(t *testing.T) {
+	mask := &render.Texture{Image: image.NewAlpha(image.Rect(0, 0, 4, 4))}
+	var c List
+	c.PushClip(geom.Rect{W: 100, H: 100})
+	c.PushClipMaskInverted(geom.Rect{X: 10, Y: 10, W: 20, H: 20}, mask)
+	c.Rect(geom.Rect{W: 5, H: 5}, color.White)
+	b := c.Batches[0]
+	if b.Cut.Mask != mask || !b.Cut.Inverted {
+		t.Fatalf("the batch is cut by the mask inverted: %+v", b.Cut)
+	}
+	if b.Clip != (geom.Rect{W: 100, H: 100}) {
+		t.Errorf("what lies outside the mask shows, in the clip around: %v", b.Clip)
+	}
+	if got := b.Cut.ToMask.Xform(geom.V2(30, 30)); !near2(got, geom.V2(1, 1)) {
+		t.Errorf("the mask is stretched over its rect: %v", got)
+	}
+	c.PopClip()
+	c.Rect(geom.Rect{W: 5, H: 5}, color.White)
+	if last := c.Batches[len(c.Batches)-1]; !last.Cut.IsZero() {
+		t.Fatalf("popping ends it: %+v", last)
+	}
+}

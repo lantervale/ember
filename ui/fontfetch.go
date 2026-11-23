@@ -382,14 +382,14 @@ func (p *pageFonts) drawFace(c *fonts.Face) *draw.Face {
 // the faces that draw its characters have landed or failed, or are
 // the Document's own. It fetches nothing.
 func (d *Document) FontsReady(families []string, weight int, italic bool, text string) bool {
-	return d.fonts.Ready(style.Font{Family: families, Size: 16, Weight: weight, Italic: italic}, text, false)
+	return d.fonts.Ready(style.Font{Family: families, Size: 16, Weight: float32(weight), Italic: italic}, text, false)
 }
 
 // LoadFonts asks for the fonts text set in families needs, as laying
 // it out would, and reports whether none is on its way: FontsLoading
 // counts those that are, and the Document lays out again as they land.
 func (d *Document) LoadFonts(families []string, weight int, italic bool, text string) bool {
-	ready := d.fonts.Ready(style.Font{Family: families, Size: 16, Weight: weight, Italic: italic}, text, true)
+	ready := d.fonts.Ready(style.Font{Family: families, Size: 16, Weight: float32(weight), Italic: italic}, text, true)
 	d.fetchFonts()
 	return ready
 }

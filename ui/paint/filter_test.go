@@ -3,6 +3,7 @@ package paint //nolint:testpackage // white-box: builds box trees by hand and re
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,7 +23,8 @@ var _ Pictures = (*twod.Canvas)(nil)
 // with its margin, show with its effects by shader.
 type picturing struct {
 	*recorder
-	effects []*render.Effect
+	effects  []*render.Effect
+	pictures []*twod.Picture
 }
 
 func newPicturing() *picturing { return &picturing{recorder: newRecorder()} }
@@ -30,7 +32,25 @@ func newPicturing() *picturing { return &picturing{recorder: newRecorder()} }
 func (r *picturing) BeginPicture() { r.add(op{Kind: "begin"}) }
 func (r *picturing) EndPicture(margin float32) *twod.Picture {
 	r.add(op{Kind: "end", Width: margin})
-	return &twod.Picture{}
+	pic := &twod.Picture{}
+	r.pictures = append(r.pictures, pic)
+	return pic
+}
+
+// number is pic's place among the pictures ended, from 1.
+func (r *picturing) number(pic *twod.Picture) int { return slices.Index(r.pictures, pic) + 1 }
+
+func (r *picturing) SumPicture(pic *twod.Picture, _ ...*render.Effect) {
+	r.add(op{Kind: "sum", Text: fmt.Sprint(r.number(pic))})
+}
+
+func (r *picturing) PushClipPicture(pic *twod.Picture, opts ...twod.MaskOption) {
+	r.clips = append(r.clips, geom.Rect{X: -1e6, Y: -1e6, W: 2e6, H: 2e6})
+	kind := "cut"
+	if len(opts) > 0 {
+		kind = "cut out"
+	}
+	r.add(op{Kind: "cut", Text: fmt.Sprintf("%s %d", kind, r.number(pic))})
 }
 
 func (r *picturing) DrawPicture(_ *twod.Picture, effects ...*render.Effect) {
@@ -61,6 +81,8 @@ func shaderName(s string) string {
 		return "blur"
 	case shadowShader:
 		return "shadow"
+	case luminanceShader:
+		return "luminance"
 	case mirroredBlurShader:
 		return "mirrored"
 	}
@@ -78,6 +100,10 @@ func (r *picturing) steps() string {
 			out = append(out, fmt.Sprintf("end %g", o.Width))
 		case "show":
 			out = append(out, "show("+o.Text+")")
+		case "sum":
+			out = append(out, "sum "+o.Text)
+		case "cut":
+			out = append(out, o.Text)
 		case "mix":
 			out = append(out, "mix("+o.Text+")")
 		case "push-round":

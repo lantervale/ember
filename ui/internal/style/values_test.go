@@ -37,3 +37,11 @@ func TestMixIsASumOfTheTwoScaled(t *testing.T) {
 	}
 	assert.True(t, m.IsPercent)
 }
+
+func TestPlusSumsTwoLengths(t *testing.T) {
+	l := style.Px(5).Plus(style.Percent(10))
+	assert.Equal(t, [2]float32{5, 10}, [2]float32{l.Px, l.Percent})
+	m := style.Px(100).Mix(style.Percent(50), 0.5).Plus(style.Px(10))
+	c := m.Calc.Value()
+	assert.InDelta(t, float32(50+25+10), c.At(100), 1e-4, "a calc() and a length")
+}
