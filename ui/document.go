@@ -168,6 +168,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 	d.html.Append(d.body)
 	dom.Data(d.html).Root = true
 	d.trans.MeasureFonts(d.fontUnits)
+	d.trans.MeasureInk(d.fonts.Ink)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)

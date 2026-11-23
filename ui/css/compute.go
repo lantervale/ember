@@ -1711,6 +1711,8 @@ var props = func() map[string]prop {
 				return true
 			}},
 		},
+		propInitialLetter: field(func(c *style.Computed) *style.InitialLetter { return &c.InitialLetter },
+			initialLetterOf, flips[style.InitialLetter]()),
 		"float": field(func(c *style.Computed) *style.Float { return &c.Float },
 			func(x *ctx, v []Component) style.Float {
 				return sided(x, v[0], map[string]style.Float{"none": style.FloatNone, "left": style.FloatLeft,

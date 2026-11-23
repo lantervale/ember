@@ -62,7 +62,7 @@ var properties = map[string]property{
 	"-webkit-box-orient": {initial: "horizontal"},
 	"overflow-x":         {initial: "visible"}, "overflow-y": {initial: "visible"},
 	"position": {initial: "static"},
-	"float":    {initial: "none"}, "clear": {initial: "none"},
+	"float":    {initial: "none"}, "clear": {initial: "none"}, propInitialLetter: {initial: "normal"},
 	"vertical-align": {initial: "baseline"},
 	"top":            {initial: "auto"}, "right": {initial: "auto"},
 	"bottom": {initial: "auto"}, "left": {initial: "auto"},

@@ -398,6 +398,7 @@ var checks = map[string]check{
 	"overflow-y":            single(words("visible", "hidden", "clip", "auto", "scroll")),
 	"position":              single(words("static", "relative", "absolute", "fixed", "sticky")),
 	"float":                 single(words("none", "left", "right", "inline-start", "inline-end")),
+	propInitialLetter:       checkInitialLetter,
 	"vertical-align": single(either(lengthPercent,
 		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
 			"-webkit-baseline-middle"))),

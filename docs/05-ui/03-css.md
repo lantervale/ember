@@ -324,6 +324,8 @@ A list numbers its items with the same counters: `ol`, `ul` and `menu` reset `li
 
 `::first-letter` is a box round the first letter of a block's first line, with the punctuation before and after it (`"W` of `"Well,"`), wherever that letter is: in an inline element, in `::before`'s text, in the first child block. It takes what `::first-line` takes, and margins, padding, borders, their radii and `float`: a floated letter is a drop cap, the lines going round it. It inherits from the element its letter is in. A picture, a control, an inline block or a `br` before any text leaves the block none, as in Chrome.
 
+`initial-letter` on a `::first-letter` makes the drop cap as Chrome does, without sizing it by hand: `initial-letter: 3` sizes the letter so its capitals reach from the cap height of the first line to the baseline of the third, floats it at the start of the line, its box as wide as the letter's ink and as tall as its capitals, and the lines beside it go round. A second value is the line its baseline sits on: `3 2` raises it a line above the first, which moves down to make room, `2 raise` is `2 1`, and `drop`, the default, is the size rounded up. Its padding, borders and margins go round that box.
+
 ```css
 article p:first-of-type::first-letter { float: left; font-size: 3.2em; line-height: 1; margin: 2px 6px 0 0; }
 article p:first-of-type::first-line { font-weight: 700; letter-spacing: 1px; }

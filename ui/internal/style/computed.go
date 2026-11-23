@@ -176,7 +176,10 @@ type Box struct {
 	// flow of a block container, not to a flex or grid item or a box
 	// position takes out of the flow.
 	Float Float
-	Clear Clear
+	// InitialLetter is initial-letter on a ::first-letter: how many lines
+	// tall its capitals stand (0 for normal), and how many it sinks.
+	InitialLetter InitialLetter
+	Clear         Clear
 	// VerticalAlign is vertical-align: where an inline-level box stands on its line, or
 	// a table cell's content in the cell. VerticalShift is how far up an AlignLength
 	// raises it, its percentage of the box's own line height.
@@ -1567,6 +1570,16 @@ const (
 type ImageWidth struct {
 	Kind ImageWidthKind
 	V    float32
+}
+
+// InitialLetter is a drop cap's size, in lines from the cap height of the
+// first to the baseline of the last, and the line its baseline sits on.
+type InitialLetter struct {
+	Size float32
+	Sink int
+	// Raise is how far a letter raised over the first line pushes the
+	// lines down, in points: those of the size it rises above the sink.
+	Raise float32
 }
 
 // MaskBoxImage is a picture cut in nine (Image's Slice and Fill), its
