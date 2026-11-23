@@ -90,8 +90,8 @@ own-filter-functions.svg 256x256-ff 0.29
 own-filter-functions.svg 48x48-ff 3.42
 own-filter-images.svg 200x120-ff 0.28
 own-filter-images.svg 256x256-80 0.34
-own-filter-images.svg 256x256-ff 0.37
-own-filter-images.svg 48x48-ff 0.82
+own-filter-images.svg 256x256-ff 0.38
+own-filter-images.svg 48x48-ff 1.52
 own-filter-inputs.svg 200x120-ff 0.22
 own-filter-inputs.svg 256x256-80 0.21
 own-filter-inputs.svg 256x256-ff 0.28

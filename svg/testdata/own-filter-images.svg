@@ -5,7 +5,9 @@
     <filter id="moved" x="0" y="0" width="1" height="1" primitiveUnits="objectBoundingBox"><feImage href="#dot" x=".25" y=".25" width=".5" height=".5"/></filter>
     <filter id="cut"><feImage href="#dot" result="d"/><feComposite in="SourceGraphic" in2="d" operator="in"/></filter>
     <filter id="png" x="0" y="0" width="1" height="1"><feImage preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4nGM4Y2z83zjtzH8GpVXl//+fYfgPAFCwCaL4rhNzAAAAAElFTkSuQmCC"/></filter>
+    <filter id="svg"><feImage href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 1'%3E%3Crect width='1' height='1' fill='%23c33'/%3E%3Crect x='1' width='1' height='1' fill='%232a7'/%3E%3C/svg%3E"/></filter>
   </defs>
+  <rect x="86" y="44" width="30" height="30" fill="#eee" filter="url(#svg)"/>
   <rect x="0" y="0" width="36" height="36" fill="#eee" filter="url(#at)"/>
   <rect x="80" y="0" width="36" height="36" fill="#eee" filter="url(#moved)"/>
   <rect x="0" y="84" width="36" height="36" fill="#c33" filter="url(#cut)"/>

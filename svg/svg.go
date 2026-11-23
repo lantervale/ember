@@ -7,11 +7,12 @@
 // paths and the basic shapes, groups, use, symbols, nested svg elements,
 // transforms, solid colours, linear and radial gradients, patterns,
 // strokes with caps, joins and dashes, markers, fill rules, opacity, clip
-// paths (of a clipPath or a basic shape), masks, filters, blend modes,
-// strokes that do not scale, images held in data: addresses, text in Go's
+// paths (of a clipPath or a basic shape), masks (of a mask or a CSS
+// gradient), filters, blend modes, strokes that do not scale, images
+// held in data: addresses, text in Go's
 // faces (along paths too), style sheets of simple selectors, the view box
 // and preserveAspectRatio, in UTF-8 or UTF-16. What a file uses beyond
-// that (foreignObject, feTurbulence…) is not drawn, and
+// that (foreignObject, animation…) is not drawn, and
 // Picture.Unsupported names it, so a caller can warn or fall back instead
 // of showing a wrong picture.
 package svg

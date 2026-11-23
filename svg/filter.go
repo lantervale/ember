@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"slices"
@@ -584,6 +585,9 @@ func (b *builder) feImage(props map[string]string, st *style, m Matrix, r Box) [
 			"href": href, "x": num(r.X), "y": num(r.Y), "width": num(r.W), "height": num(r.H),
 			"preserveAspectRatio": props["preserveAspectRatio"],
 		}, st, m, &items)
+		if data, ok := dataURL(href); ok && isSVG(data) {
+			return unitRaster(items, m, r)
+		}
 		return items
 	}
 	ref := b.target(href)
@@ -600,6 +604,22 @@ func (b *builder) feImage(props map[string]string, st *style, m Matrix, r Box) [
 	}
 	b.using = b.using[:len(b.using)-1]
 	return items
+}
+
+// unitRaster is items, drawn in the region r of the space m takes to the
+// picture's, as an image of a pixel a unit of that space: Chrome draws
+// an SVG picture in an feImage so, and scales it to the pixels it shows
+// at.
+func unitRaster(items []Item, m Matrix, r Box) []Item {
+	inv, ok := m.Inverse()
+	w, h := int(math.Ceil(r.W)), int(math.Ceil(r.H))
+	if !ok || len(items) == 0 || w <= 0 || h <= 0 || w > maxTileSide || h > maxTileSide || w*h > maxTilePixels {
+		return items
+	}
+	pix := image.NewRGBA(image.Rect(0, 0, w, h))
+	sub := &drawer{view: translate(-r.X, -r.Y).Mul(inv), unit: 1}
+	sub.items(pix, pix.Rect, items, 1, 0)
+	return []Item{{Image: &Image{Pix: pix, Transform: m.Mul(translate(r.X, r.Y)), Opacity: 1}}}
 }
 
 // colorMatrix is an feColorMatrix's matrix: its type's, from its values.
