@@ -69,6 +69,7 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
 		b.ContainerScrollState == o.ContainerScrollState &&
+		b.Snap == o.Snap &&
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
 		b.WebkitBox == o.WebkitBox &&

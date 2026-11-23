@@ -143,7 +143,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an email address whose domain is not in ASCII letters | invalid, where Chrome turns the domain to punycode first |
 | `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
-| `scroll-state(scrolled: …)`, `snapped` other than `none`, `container-type: anchored` | refused with a warning, or never holds: ui keeps no last scroll direction and snaps no scroll |
+| `container-type: anchored` | refused with a warning |
+| a scroll by the user gliding, `scroll-snap-type` on both axes snapping to one area on both (Chrome's mutual snap), snapping a selection's drag | the wheel, the keys and a held thumb move at once, the keys to their snap position too (the wheel and the thumb glide to theirs), each axis picks its own nearest area, and a drag past an edge never snaps, where Chrome glides the user's scrolls as the system says, prefers an area aligned on both axes and snaps once a drag ends |
+| `overscroll-behavior` on a touch's scroll, `overscroll-behavior: none`'s bounce | ui scrolls by no touch and bounces nothing: `contain` and `none` stop the chain alike |
 | `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |

@@ -211,6 +211,24 @@ func checkScrollbarColor(v []Component) error {
 	return repeated(colorTerm, 2)(v)
 }
 
+// checkSnapType takes none, or an axis with mandatory or proximity after
+// it or not.
+func checkSnapType(v []Component) error {
+	axes := words("x", "y", kwBlock, kwInline, kwBoth)
+	switch {
+	case len(v) == 1 && isWord(v[0], kwNone):
+		return nil
+	case len(v) == 1:
+		return axes(v[0])
+	case len(v) == 2:
+		if err := axes(v[0]); err != nil {
+			return err
+		}
+		return words("mandatory", "proximity")(v[1])
+	}
+	return errors.New("expected none, or an axis and mandatory or proximity")
+}
+
 // checkScrollbarGutter takes auto, or stable with both-edges in either
 // order.
 func checkScrollbarGutter(v []Component) error {
@@ -464,22 +482,36 @@ var checks = map[string]check{
 	"color-scheme":              checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
-	"text-overflow":       single(words("clip", "ellipsis")),
-	"scrollbar-width":     single(words("auto", "thin", "none")),
-	"scrollbar-color":     checkScrollbarColor,
-	"scrollbar-gutter":    checkScrollbarGutter,
-	"list-style-type":     checkListStyle,
-	"list-style-image":    checkListImage,
-	"content":             checkContent,
-	"counter-reset":       checkCounters,
-	"counter-increment":   checkCounters,
-	"counter-set":         checkCounters,
-	"quotes":              checkQuotes,
-	"visibility":          single(words("visible", "hidden", "collapse")),
-	"pointer-events":      single(words("auto", "none")),
-	"app-region":          single(words("none", "drag", "no-drag")),
-	"user-select":         single(words("auto", "text", "none", "all")),
-	"list-style-position": single(words("inside", "outside")),
+	"text-overflow":         single(words("clip", "ellipsis")),
+	"scrollbar-width":       single(words("auto", "thin", "none")),
+	"scrollbar-color":       checkScrollbarColor,
+	"scrollbar-gutter":      checkScrollbarGutter,
+	propSnapType:            checkSnapType,
+	propSnapAlign:           repeated(words(kwNone, kwStart, kwEnd, kwCenter), 2),
+	propSnapStop:            single(words(kwNormal, "always")),
+	"scroll-padding-top":    single(either(sizeLP, words(kwAuto))),
+	"scroll-padding-right":  single(either(sizeLP, words(kwAuto))),
+	"scroll-padding-bottom": single(either(sizeLP, words(kwAuto))),
+	"scroll-padding-left":   single(either(sizeLP, words(kwAuto))),
+	"scroll-margin-top":     single(length),
+	"scroll-margin-right":   single(length),
+	"scroll-margin-bottom":  single(length),
+	"scroll-margin-left":    single(length),
+	propScrollBehavior:      single(words(kwAuto, "smooth")),
+	propOverscrollX:         single(words(kwAuto, kwContain, kwNone)),
+	propOverscrollY:         single(words(kwAuto, kwContain, kwNone)),
+	"list-style-type":       checkListStyle,
+	"list-style-image":      checkListImage,
+	"content":               checkContent,
+	"counter-reset":         checkCounters,
+	"counter-increment":     checkCounters,
+	"counter-set":           checkCounters,
+	"quotes":                checkQuotes,
+	"visibility":            single(words("visible", "hidden", "collapse")),
+	"pointer-events":        single(words("auto", "none")),
+	"app-region":            single(words("none", "drag", "no-drag")),
+	"user-select":           single(words("auto", "text", "none", "all")),
+	"list-style-position":   single(words("inside", "outside")),
 
 	"background-color":      single(colorTerm),
 	"background-image":      commaList(single(either(words("none"), imageTerm))),

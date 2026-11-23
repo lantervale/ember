@@ -233,6 +233,9 @@ type Box struct {
 	ContainerType        ContainerType
 	ContainerNames       []string
 	ContainerScrollState bool
+	// Snap is the scroll-snap properties, scroll-padding, scroll-margin,
+	// scroll-behavior and overscroll-behavior.
+	Snap Snap
 	// LineClamp is line-clamp: the lines a block container shows, 0 for
 	// none, an ellipsis ending the last when more follows, the content
 	// after it not drawn.

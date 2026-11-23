@@ -60,11 +60,14 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	}
 	var err error
 	switch name {
-	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius":
+	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius",
+		"scroll-padding", "scroll-margin":
 		err = expandBox(long, v, out)
 	case "gap", "overflow", "place-items", "place-content", "place-self", shortMarginInline, "margin-block",
 		shortPaddingInline, "padding-block", shortInsetInline, "inset-block", "border-inline-width", "border-inline-style",
-		"border-inline-color", "border-block-width", "border-block-style", "border-block-color":
+		"border-inline-color", "border-block-width", "border-block-style", "border-block-color",
+		shortScrollPaddingInline, "scroll-padding-block", shortScrollMarginInline, "scroll-margin-block",
+		"overscroll-behavior":
 		err = expandPair(long, v, out)
 	case kwFlex:
 		err = expandFlex(v, out)

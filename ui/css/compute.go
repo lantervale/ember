@@ -2324,6 +2324,7 @@ var props = func() map[string]prop {
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}}
 	m["border-image-outset"] = noop
 	maps.Copy(m, contentProps())
+	maps.Copy(m, snapProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },

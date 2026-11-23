@@ -395,7 +395,7 @@ func (d *Document) wheels(w geom.Vec2) bool {
 		return true
 	}
 	for _, b := range scrollContainers(d.replay.hit) {
-		if canScroll(paint.BarsOf(b, origin(b)), w) {
+		if canScroll(paint.BarsOf(b, origin(b)), w) || overscrollContained(b, w) {
 			return true
 		}
 	}

@@ -97,6 +97,9 @@ type interaction struct {
 	pinned   map[*Node]dom.State
 	scrolls  map[*Node]*paint.Scrolling
 	dragging *Node
+	// scrollers are the scroll containers' snaps, glides and wheel
+	// gestures (snap.go).
+	scrollers map[*Node]*scrollerState
 	// scrolled is set when input moved a scroll offset since the last
 	// layout, so the boxes\' rects are copied again.
 	scrolled bool
@@ -250,19 +253,44 @@ func (d *Document) Scroll(n *Node) geom.Vec2 {
 	return dom.Data(n).Scroll
 }
 
-// SetScroll scrolls n's content to off, kept within what n scrolls: at
-// once for an element laid out, at its first layout for another, where a
-// page shown again is put back where it was left. Nothing else scrolls,
-// and a ScrollIntoView or ScrollToStart still waited for comes after it.
+// SetScroll scrolls n's content to off, kept within what n scrolls, as
+// the DOM's scrollTo: at once for an element laid out, at its first
+// layout for another, where a page shown again is put back where it was
+// left. A snap container lands on the snap position nearest off, and one
+// of scroll-behavior: smooth glides there on the Document's clock.
+// Nothing else scrolls, and a ScrollIntoView or ScrollToStart still
+// waited for comes after it.
 func (d *Document) SetScroll(n *Node, off geom.Vec2) {
+	d.scrollNode(n, off, false)
+}
+
+// ScrollBy scrolls n's content by by, as the DOM's scrollBy: a snap
+// container lands on the snap position ahead nearest where by takes it,
+// stopping at a scroll-snap-stop: always on the way. It glides as
+// SetScroll does, and counts as a scroll by the user for
+// scroll-state(scrolled).
+func (d *Document) ScrollBy(n *Node, by geom.Vec2) {
+	at := d.Scroll(n)
+	if s := d.scrollers[n]; s != nil && s.glide != nil {
+		at = s.glide.to
+	}
+	d.scrollNode(n, at.Add(by), true)
+}
+
+func (d *Document) scrollNode(n *Node, off geom.Vec2, relative bool) {
+	if d.tree != nil {
+		layout.Refresh(d.tree, d.html)
+		if b := d.scroller(n); b != nil {
+			kind := snapEnd
+			if relative {
+				kind = snapAhead
+			}
+			d.scrollBoxTo(b, off, kind, snapStyle(b).Snap.Smooth, relative)
+			layout.Refresh(d.tree, d.html)
+			return
+		}
+	}
 	dom.Data(n).Scroll = off
-	if d.tree == nil {
-		return
-	}
-	layout.Refresh(d.tree, d.html)
-	if b := d.scroller(n); b != nil {
-		dom.Data(n).Scroll = b.Scroll
-	}
 	d.scrolled = true
 }
 
@@ -1708,10 +1736,14 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		s := d.scrolling(n)
 		if b != nil {
 			off, _ := s.Input(paint.BarsOf(b, origin(b)), paint.Pointer{At: at, Down: in.Down(input.MouseLeft)}, d.lineStep(b))
+			d.noteScrolled(d.scrollerOf(n), b.Scroll, off)
 			d.setScroll(b, off)
 		}
 		if b == nil || !s.Dragging() {
 			d.dragging = nil
+			if b != nil {
+				d.scrollBoxTo(b, b.Scroll, snapEnd, true, false)
+			}
 		}
 		return true
 	}
@@ -1724,9 +1756,11 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 			}
 			s := d.scrolling(b.Node)
 			off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true}, d.lineStep(b))
-			d.setScroll(b, off)
 			if s.Dragging() {
+				d.setScroll(b, off)
 				d.dragging = b.Node
+			} else {
+				d.scrollBoxTo(b, off, snapAhead, false, true)
 			}
 			return true
 		}
@@ -1744,9 +1778,13 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 	for _, b := range held {
 		bars := paint.BarsOf(b, origin(b))
 		if !canScroll(bars, w) {
+			if overscrollContained(b, w) {
+				break
+			}
 			continue
 		}
 		off, _ := d.scrolling(b.Node).Input(bars, paint.Pointer{At: at, Hover: true, Wheel: w}, d.lineStep(b))
+		d.wheelTurned(b, bars.Scroll, off)
 		d.setScroll(b, off)
 		break
 	}
@@ -1771,27 +1809,38 @@ func (d *Document) scrollKey(n *Node, i control.Intent) bool {
 	b := d.tree.Of[n]
 	for _, s := range scrollContainers(b) {
 		bars := paint.BarsOf(s, origin(s))
-		off := bars.Scroll
+		off, kind := bars.Scroll, snapAhead
 		switch i {
 		case control.PageUp:
 			off.Y -= bars.View.H
 		case control.PageDown:
 			off.Y += bars.View.H
 		case control.Home:
-			off.Y = bars.Start.Y
+			off.Y, kind = bars.Start.Y, snapEnd
 		case control.End:
-			off.Y = math.MaxFloat32
+			off.Y, kind = math.MaxFloat32, snapEnd
 		case control.None, control.Activate, control.Back, control.Up, control.Down, control.Left, control.Right:
 			// scrollKey lets only the four above through
 		}
 		off = bars.Clamp(off)
 		if off == bars.Scroll {
+			if overscrollContained(s, geom.V2(0, off.Y-bars.Scroll.Y+pageWay(i))) {
+				return true
+			}
 			continue
 		}
-		d.setScroll(s, off)
+		d.scrollBoxTo(s, off, kind, false, true)
 		return true
 	}
 	return false
+}
+
+// pageWay is the way i scrolls along y.
+func pageWay(i control.Intent) float32 {
+	if i == control.PageUp || i == control.Home {
+		return -1
+	}
+	return 1
 }
 
 // pageKey is the key that pages a scroll container for i, taken from the
@@ -1851,9 +1900,22 @@ func (d *Document) reveal(n *Node, start bool) {
 	if b == nil {
 		return
 	}
+	type move struct {
+		b        *box.Box
+		from, to geom.Vec2
+	}
+	var moves []move
+	m := b.Style.Snap.Margin
 	for _, s := range scrollContainers(b.Parent) {
 		bars := paint.BarsOf(s, origin(s))
 		r, v := b.Rect(), bars.View
+		r = geom.Rect{X: r.X - m.Left.At(0), Y: r.Y - m.Top.At(0), W: r.W + m.Left.At(0) + m.Right.At(0),
+			H: r.H + m.Top.At(0) + m.Bottom.At(0)}
+		if st := snapStyle(s); st != nil {
+			p := st.Snap.Padding
+			top, left := p.Top.At(v.H), p.Left.At(v.W)
+			v = geom.Rect{X: v.X + left, Y: v.Y + top, W: v.W - left - p.Right.At(v.W), H: v.H - top - p.Bottom.At(v.H)}
+		}
 		off := bars.Scroll
 		off.X += nearest(r.X, r.W, v.X, v.W)
 		if start {
@@ -1861,7 +1923,17 @@ func (d *Document) reveal(n *Node, start bool) {
 		} else {
 			off.Y += nearest(r.Y, r.H, v.Y, v.H)
 		}
-		d.setScroll(s, bars.Clamp(off))
+		from := s.Scroll
+		off = bars.Clamp(d.snap(s, from, bars.Clamp(off), snapEnd))
+		moves = append(moves, move{s, from, off})
+		// the containers further out are scrolled from where this one lands
+		s.Scroll = off
+	}
+	for _, mv := range moves {
+		mv.b.Scroll = mv.from
+		st := snapStyle(mv.b)
+		d.scrollerOf(mv.b.Node).wheeling = false
+		d.glideTo(mv.b, d.scrollerOf(mv.b.Node), mv.from, mv.to, st != nil && st.Snap.Smooth)
 	}
 }
 
