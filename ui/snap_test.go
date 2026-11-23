@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,6 +121,22 @@ func TestPageKeysSnapAPageAheadAndGlide(t *testing.T) {
 	p.key(input.KeyHome)
 	p.w.RunFrames(10)
 	assert.InDelta(t, 0, p.at(), 0.01)
+}
+
+func TestAClickHeldOnTheTrackSnapsOnceLetGo(t *testing.T) {
+	p := newSnapPage(t, "#list { scroll-snap-type: y mandatory; }")
+	l := p.list.Box()
+	p.in.SetMouse(geom.V2(l.X+l.W-5, l.Y+l.H-5))
+	p.w.RunFrames(1)
+	p.in.SetMouseButton(input.MouseLeft, true)
+	p.w.RunFrames(16)
+	p.in.SetMouseButton(input.MouseLeft, false)
+	p.w.RunFrames(1)
+	held := p.at()
+	assert.Greater(t, held, float32(60), "it paged on past the first item")
+	p.w.RunFrames(60)
+	assert.Zero(t, math.Mod(float64(p.at()), 60), "then snapped to an item")
+	assert.GreaterOrEqual(t, p.at(), held, "ahead of where it was let go")
 }
 
 func TestASnapStopAlwaysHoldsTheScrollThatPassesIt(t *testing.T) {

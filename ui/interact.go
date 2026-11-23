@@ -97,6 +97,8 @@ type interaction struct {
 	pinned   map[*Node]dom.State
 	scrolls  map[*Node]*paint.Scrolling
 	dragging *Node
+	// trackHeld is a click held on a scrollbar's track (scrollmotion.go).
+	trackHeld *trackHold
 	// scrollers are the scroll containers' snaps, glides and wheel
 	// gestures (snap.go).
 	scrollers map[*Node]*scrollerState
@@ -1772,6 +1774,10 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		}
 		return true
 	}
+	if d.trackHeld != nil {
+		d.holdTrack(in, at)
+		return true
+	}
 	held := scrollContainers(hit)
 	if in.Pressed(input.MouseLeft) {
 		for _, b := range held {
@@ -1787,9 +1793,10 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 				d.scrollerOf(b.Node).glide = nil
 				d.setScroll(b, off)
 				d.dragging = b.Node
-			} else if off != bars.Scroll {
+			} else if by := off.Sub(bars.Scroll); by != (geom.Vec2{}) {
 				from := d.userAim(b)
-				d.userScroll(b, bars.Clamp(d.snap(b, from, bars.Clamp(from.Add(off.Sub(bars.Scroll))), snapPage)), byKeys)
+				d.userScroll(b, bars.Clamp(d.snap(b, from, bars.Clamp(from.Add(by)), snapPage)), byKeys)
+				d.trackHeld = newTrackHold(b.Node, by, page, d.clock)
 			}
 			return true
 		}
