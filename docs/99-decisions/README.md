@@ -194,6 +194,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0190 | [Line ends are shaped again and carets share a ligature](0190-line-ends-are-shaped-again-and-carets-share-a-ligature.md) | api |
 | 0191 | [Markers are numbered apart from the list-item counter](0191-markers-are-numbered-apart-from-the-list-item-counter.md) | rendering |
 | 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
+| 0197 | [Text right to left and sideways is shaped as one, and a reshaped end keeps its joins](0197-text-right-to-left-and-sideways-is-shaped-as-one-and-a-reshaped-end-keeps-its-joins.md) | api |
 
 ## Writing one
 
