@@ -876,9 +876,16 @@ func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)
-	r.W, r.H = max(r.W-b.Scrollbar.X, 0), max(r.H-b.Scrollbar.Y, 0)
+	bar := b.Scrollbar
+	// A stable gutter no bar stands in clips nothing: the content shows
+	// under it, as in Chrome.
+	if oy := shown(b).Overflow.Height; b.Kind == box.Element && oy != style.Scroll &&
+		(oy != style.OverflowAuto || b.Content.Y <= r.H-bar.Y) {
+		bar.X = 0
+	}
+	r.W, r.H = max(r.W-bar.X, 0), max(r.H-bar.Y, 0)
 	if shown(b).Dir == style.RTL {
-		r.X += b.Scrollbar.X
+		r.X += bar.X
 	}
 	if o.Width == style.Visible {
 		r.X, r.W = -unbounded, 2*unbounded

@@ -83,12 +83,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
 	border := n.borders()
-	g := n.ownGutter()
-	gutter := rect{r: g.x, b: g.y}
-	if st.Dir == style.RTL {
-		// the vertical scrollbar stands on the start side, as Chrome's
-		gutter.l, gutter.r = gutter.r, 0
-	}
+	gutter := gutterEdges(st, n.ownGutter())
 	pb := padding.add(border)
 	pbSize := pb.sum()
 	inset := pb.add(gutter)
