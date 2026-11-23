@@ -85,3 +85,58 @@ func TestLineClampDiscardsTheBlocksAfterItsLastLine(t *testing.T) {
 	tr = lay(el(dom.Div, block, d), 200)
 	assert.False(t, tr.Of[after].Discarded, "-webkit-line-clamp draws it")
 }
+
+func TestLineClampHidesTheLinesOfAnInlinePastItsLast(t *testing.T) {
+	s := el(dom.Span, nil, text("HH HH HH HH HH HH"))
+	d := el(dom.Div, clamped(2, false), s)
+	tr := lay(el(dom.Div, block, d), 200)
+	assert.Len(t, tr.Of[s].Fragments, 3, "laid out on every line, as Chrome's client rects")
+	assert.Equal(t, 1, tr.Of[s].Hidden)
+
+	s = el(dom.Span, nil, text("HH HH HH HH HH HH"))
+	tr = lay(el(dom.Div, block, el(dom.Div, clamped(2, true), s)), 200)
+	assert.Zero(t, tr.Of[s].Hidden, "-webkit-line-clamp draws it")
+}
+
+func TestLineClampDiscardsTheFloatsAfterItsLastLine(t *testing.T) {
+	float := func(st *style.Computed) {
+		st.Display, st.Float, st.Size.Width = style.Block, style.FloatLeft, style.Px(10)
+	}
+	before, after := el(dom.Div, float, text("H")), el(dom.Div, float, text("H"))
+	d := el(dom.Div, clamped(1, false), before, el(dom.P, block, text("HH HH HH")), after)
+	tr := lay(el(dom.Div, block, d), 200)
+	assert.False(t, tr.Of[before].Discarded)
+	assert.True(t, tr.Of[after].Discarded)
+}
+
+func TestLineClampAutoShowsTheLinesItsHeightHolds(t *testing.T) {
+	auto := func(edit func(*style.Computed)) func(*style.Computed) {
+		return func(st *style.Computed) {
+			width(60)(st)
+			st.ClampAuto = true
+			edit(st)
+		}
+	}
+	d := el(dom.Div, auto(func(st *style.Computed) { st.MaxSize.Height = style.Px(25) }), text("HH HH HH HH HH HH"))
+	tr := lay(el(dom.Div, block, d), 200)
+	assert.Equal(t, float32(20), tr.Of[d].Size.Y, "the two lines 25 holds")
+	assert.Equal(t, []string{"HH HH", "HH HH…"}, lines(tr.Of[d]))
+
+	p := el(dom.P, block, text("HH HH HH HH"))
+	d = el(dom.Div, auto(func(st *style.Computed) { st.Size.Height = style.Px(15) }), p, el(dom.P, block, text("HH")))
+	tr = lay(el(dom.Div, block, d), 200)
+	assert.Equal(t, float32(15), tr.Of[d].Size.Y)
+	assert.Equal(t, float32(10), tr.Of[p].Size.Y, "the block ends below the one line 15 holds")
+
+	d = el(dom.Div, auto(func(*style.Computed) {}), text("HH HH HH HH HH HH"))
+	assert.Equal(t, float32(30), lay(el(dom.Div, block, d), 200).Of[d].Size.Y, "nothing limits it")
+}
+
+func TestLinesHeldAreTheMostWhoseHeightFits(t *testing.T) {
+	laid := func(lines int) (float32, int) { return float32(min(lines, 7)*10 + 4), 7 }
+	assert.Equal(t, 3, linesHeld(35, laid))
+	assert.Equal(t, 2, linesHeld(33, laid))
+	assert.Equal(t, 0, linesHeld(80, laid), "all fit")
+	assert.Equal(t, 0, linesHeld(none, laid))
+	assert.Equal(t, 1, linesHeld(5, laid), "not even one")
+}

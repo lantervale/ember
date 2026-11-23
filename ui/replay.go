@@ -122,7 +122,7 @@ func (d *Document) options() []paint.Option {
 	if d.replay.opts == nil || d.replay.optsAt != d.viewport || d.replay.optsScale != d.fonts.Scale() {
 		d.replay.opts = []paint.Option{
 			paint.Faces(d.face), paint.Fonts(d.fonts), paint.Controls(d.machine),
-			paint.Viewport(d.viewport), paint.Images(d.image), paint.Vectors(d.vector), paint.Filters(d.svgFilter),
+			paint.Viewport(d.viewport), paint.Images(d.paintImage), paint.Vectors(d.vector), paint.Filters(d.svgFilter),
 			paint.Scale(d.fonts.Scale()),
 		}
 		d.replay.frameOpts = slices.Concat(d.replay.opts, []paint.Option{paint.Each(&d.replay.frame)})

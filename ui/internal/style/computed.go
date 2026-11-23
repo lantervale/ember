@@ -250,9 +250,13 @@ type Box struct {
 	// LineClamp is line-clamp: the lines a block container shows, 0 for
 	// none, an ellipsis ending the last when more follows, the content
 	// after it not drawn; NoEllipsis is its no-ellipsis, which leaves the
-	// ellipsis out.
-	LineClamp  int
-	NoEllipsis bool
+	// ellipsis out. ClampAuto is line-clamp: auto (or no-ellipsis alone),
+	// which clamps at the last line the box's height holds; ClampLegacy
+	// its -webkit-legacy, which clamps as -webkit-line-clamp does.
+	LineClamp   int
+	NoEllipsis  bool
+	ClampAuto   bool
+	ClampLegacy bool
 	// WebkitBox is display: -webkit-box or -webkit-inline-box, laid out
 	// as flex, or as flow-root clamped to WebkitLineClamp lines when
 	// BoxVertical (-webkit-box-orient: vertical) and that is set: Chrome's
@@ -271,12 +275,24 @@ type Box struct {
 	BoxOrdinal        int
 }
 
-// Clamp is how many lines the box shows, 0 for all, and whether the
-// content after them is still drawn.
+// ClampByHeight is the line count Clamp gives a box that shows as many lines
+// as its height holds.
+const ClampByHeight = -1
+
+// Clamp is how many lines the box shows, 0 for all or ClampByHeight, and
+// whether the content after them is still drawn.
 func (b *Box) Clamp() (int, bool) {
+	lines := b.LineClamp
+	if b.ClampAuto {
+		lines = ClampByHeight
+	}
 	switch {
-	case b.LineClamp > 0:
-		return b.LineClamp, false
+	case b.ClampLegacy:
+		if b.WebkitBox && b.BoxVertical {
+			return lines, true
+		}
+	case lines != 0:
+		return lines, false
 	case b.WebkitBox && b.BoxVertical && b.WebkitLineClamp > 0:
 		return b.WebkitLineClamp, true
 	}

@@ -730,15 +730,12 @@ func EvalPage(url string, size geom.Vec2) ([]byte, error) {
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	out, err := runAt(dir, url, size, dumpDOM, css.Media{})
+	marginOnce.Do(measureMargin)
+	out, err := runAt(dir, url, size.Add(margin), dumpDOM, css.Media{})
 	if err != nil {
 		return nil, err
 	}
-	res := evalJSON.FindSubmatch(out)
-	if res == nil {
-		return nil, fmt.Errorf("chrome: no result in the page:\n%s", out)
-	}
-	return res[1], nil
+	return evalResult(out)
 }
 
 // Eval lays d out in Chrome in a viewport of size points, evaluates the
@@ -756,10 +753,18 @@ func EvalIn(m css.Media, d *ui.Document, size geom.Vec2, expr string) ([]byte, e
 	if err := export.Write(&page, d, export.Head(EvalScript(expr))); err != nil {
 		return nil, err
 	}
-	out, err := run(page.Bytes(), size, dumpDOM, m)
+	return evalRun(page.Bytes(), size, m)
+}
+
+func evalRun(page []byte, size geom.Vec2, m css.Media) ([]byte, error) {
+	out, err := run(page, size, dumpDOM, m)
 	if err != nil {
 		return nil, err
 	}
+	return evalResult(out)
+}
+
+func evalResult(out []byte) ([]byte, error) {
 	res := evalJSON.FindSubmatch(out)
 	if res == nil {
 		return nil, fmt.Errorf("chrome: no result in the page:\n%s", out)

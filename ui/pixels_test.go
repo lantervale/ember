@@ -49,6 +49,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/border-image-width", 460, 170, 0.0007},
 		{"./internal/pages/flex-negative-margin", 640, 220, 0.0004},
 		{"./internal/pages/img-crisp", 160, 104, 0.0002},
+		{"./internal/pages/img-crisp-animated", 176, 120, 0.004},
 		{"./internal/pages/bevels", 480, 120, 0.0001},
 		{"./internal/pages/mitres", 560, 90, 0.0002},
 		{"./internal/pages/disabled", 480, 110, 0.0024},
@@ -119,6 +120,23 @@ func TestPagesLookLikeChrome(t *testing.T) {
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
+		})
+	}
+}
+
+// TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of
+// what Chrome ships behind a flag, turned on.
+func TestFlaggedPagesLookLikeChrome(t *testing.T) {
+	for _, c := range []struct {
+		pkg     string
+		w, h    int
+		mean    float64
+		feature string
+	}{
+		{"./internal/pages/line-clamp-past", 420, 360, 0.003, "CSSLineClamp"},
+	} {
+		t.Run(c.pkg, func(t *testing.T) {
+			chrome.WithinWith(t, c.pkg, c.w, c.h, c.mean, c.feature)
 		})
 	}
 }
