@@ -15,7 +15,7 @@ import (
 
 //nolint:gochecknoglobals // a lookup table
 var blendNames = [...]string{"normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge",
-	"color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"}
+	"color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity", "plus-lighter"}
 
 func TestBlendModesComputeAsInChrome(t *testing.T) {
 	css := `
