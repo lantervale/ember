@@ -78,6 +78,14 @@ func Viewport(r geom.Rect) Option { return func(p *painter) { p.viewport, p.host
 // Text is never snapped. Without it nothing is.
 func Scale(pixelsPerPoint float32) Option { return func(p *painter) { p.scale = pixelsPerPoint } }
 
+// Lists keeps an open select's list inside within, in the root's space,
+// rather than the viewport: a Document in an iframe has its list shown
+// whole over the page round it, in the window (decision 0166). Apart,
+// the paint leaves the list out, for DrawLists to draw over that page.
+func Lists(within geom.Rect, apart bool) Option {
+	return func(p *painter) { p.lists, p.listsIn, p.listsApart = true, within, apart }
+}
+
 // Frame is what changes from one paint to the next: the clock, the live
 // set and whether its parts are kept apart, and the box to Keep. A host
 // keeps one and passes Each(&frame) once, so a frame's paint makes no
@@ -95,6 +103,10 @@ type Frame struct {
 	// Highlight is the system's selection colours, which a selection no
 	// ::selection colours is drawn in.
 	Highlight Highlight
+	// Lists, when set, is where an open select's list is kept, and
+	// ListsApart whether it is left out, as the Lists option says.
+	Lists      *geom.Rect
+	ListsApart bool
 }
 
 // Highlight is the colours a system selects text in, as
@@ -142,6 +154,9 @@ func Each(f *Frame) Option {
 		if f.Live != nil {
 			f.Live.reset()
 			p.live, p.apart = f.Live, f.Apart
+		}
+		if f.Lists != nil {
+			p.lists, p.listsIn, p.listsApart = true, *f.Lists, f.ListsApart
 		}
 	}
 }
@@ -192,6 +207,10 @@ type painter struct {
 	scale    float32
 	// popups are the open selects met, drawn over everything at the end.
 	popups []popup
+	// lists is set when the open selects' lists are kept in listsIn,
+	// left out of the paint when listsApart.
+	lists, listsApart bool
+	listsIn           geom.Rect
 	// top is the top layer: the modal dialogs met, painted over the page
 	// in the order they were shown modal.
 	top []entry
@@ -522,14 +541,35 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	}
 }
 
+// shaped is e cut by its clip-path, false where the clip-path leaves
+// nothing, and on a scan by its border box where it is masked.
+func (p *painter) shaped(e entry, st *style.Computed) (entry, bool) {
+	b := e.b
+	if s, ok := clipShapeOf(b, e.at, st); ok {
+		if s.bounds.W <= 0 || s.bounds.H <= 0 {
+			return e, false
+		}
+		e.clip = p.newClip(clip{rect: s.bounds, xf: p.s.Transform(), parent: e.clip, shape: &s})
+	}
+	if p.probing && b.Kind == box.Element && st.Masked() {
+		// Chrome hits a masked element's content in its border box alone,
+		// wherever its mask is clear or reaches.
+		e.clip = p.newClip(clip{rect: geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}, xf: p.s.Transform(),
+			parent: e.clip})
+	}
+	return e, true
+}
+
 func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 	b, st := e.b, shown(e.b)
+	whole, in := e, alpha
 	if b.Kind == box.Element {
 		alpha *= st.Opacity
 	}
 	if alpha <= 0 && !p.probing {
 		return
 	}
+	from, gapped := p.stackGap()
 	if p.modal(b) {
 		p.use(nil)
 		if p.probing {
@@ -542,18 +582,10 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 	if b.Kind == box.Element && len(st.Transform) > 0 {
 		p.s.SetTransform(saved.Mul(transform(st, e.at, b.Size)))
 	}
-	if s, ok := clipShapeOf(b, e.at, st); ok {
-		if s.bounds.W <= 0 || s.bounds.H <= 0 {
-			p.s.SetTransform(saved)
-			return
-		}
-		e.clip = p.newClip(clip{rect: s.bounds, xf: p.s.Transform(), parent: e.clip, shape: &s})
-	}
-	if p.probing && b.Kind == box.Element && st.Masked() {
-		// Chrome hits a masked element's content in its border box alone,
-		// wherever its mask is clear or reaches.
-		e.clip = p.newClip(clip{rect: geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}, xf: p.s.Transform(),
-			parent: e.clip})
+	e, shows := p.shaped(e, st)
+	if !shows {
+		p.s.SetTransform(saved)
+		return
 	}
 	group := p.beginGroup(e, st, &alpha)
 	var mask *masking
@@ -583,18 +615,26 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 	for _, c := range sortZ(l.positive) {
 		p.context(c, alpha)
 	}
-	for _, c := range l.scrollers {
+	p.scrollbars(l.scrollers, alpha)
+	p.endFilters(filters, e.clip)
+	p.endMask(mask, e, st)
+	p.endGroup(group, e.clip)
+	p.use(around)
+	p.s.SetTransform(saved)
+	if gapped {
+		p.endStackGap(from, whole, saved, in, pseudo)
+	}
+}
+
+// scrollbars paints the bars of the scrollers in view.
+func (p *painter) scrollbars(scrollers []entry, alpha float32) {
+	for _, c := range scrollers {
 		if p.missed(c, geom.Rect{X: c.at.X, Y: c.at.Y, W: c.b.Size.X, H: c.b.Size.Y}) {
 			continue
 		}
 		p.use(c.clip)
 		p.bars(BarsOf(c.b, c.at), alpha)
 	}
-	p.endFilters(filters, e.clip)
-	p.endMask(mask, e, st)
-	p.endGroup(group, e.clip)
-	p.use(around)
-	p.s.SetTransform(saved)
 }
 
 // collect sorts e's descendants, but those whose ink and all they hold

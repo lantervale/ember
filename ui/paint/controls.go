@@ -131,6 +131,7 @@ func (p *painter) marks(e entry, alpha float32) {
 		p.bar(c, f, trackInk(st, alpha), accentInk(st, alpha))
 		if !known && p.timed && p.record(livePart{kind: liveSlide, e: e, rect: c, ink: ink}, c) {
 			p.slide(c, ink)
+			p.endGap()
 		}
 	case dom.Meter:
 		m := meterOf(p.machine(n), n)
@@ -539,6 +540,7 @@ func (p *painter) caret(e entry, ink color.Color) {
 	}
 	if p.record(livePart{kind: liveCaret, e: e, ink: ink}, intersect(caretRect(e, t).Inset(-1), padding(e.b, e.at))) {
 		p.drawCaret(e, ink)
+		p.endGap()
 	}
 }
 
@@ -653,6 +655,7 @@ func (p *painter) canvasElement(e entry, c geom.Rect) {
 	}
 	if p.record(livePart{kind: liveCanvas, e: e, rect: c, timed: m.Live}, c) {
 		p.drawCanvas(m, c)
+		p.endGap()
 	}
 }
 

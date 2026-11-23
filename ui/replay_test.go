@@ -111,7 +111,7 @@ func TestAFocusedFieldReplaysAndDrawsItsCaretOnTop(t *testing.T) {
 	assert.Equal(t, 5, p.counted()["ui replays + live"]-before, "the rest replayed, the caret drawn again")
 }
 
-func TestAPopoverOverAFocusedFieldRepaintsItWhole(t *testing.T) {
+func TestAPopoverOverAFocusedFieldReplaysRoundTheCaret(t *testing.T) {
 	in := ui.Input(ui.Value("Heron"))
 	pop := ui.Div(ui.Style("position: absolute; left: 0; top: 0; width: 200px; height: 60px; background-color: #222222"))
 	p := replayPage(t, in, pop)
@@ -121,7 +121,8 @@ func TestAPopoverOverAFocusedFieldRepaintsItWhole(t *testing.T) {
 	p.w.RunFrames(5)
 	after := p.counted()
 	assert.Equal(t, before["ui replays + live"], after["ui replays + live"], "never drawn on top of what covers it")
-	assert.Equal(t, 5, after["ui repaints: live"]-before["ui repaints: live"])
+	assert.Equal(t, before["ui repaints: live"], after["ui repaints: live"])
+	assert.Equal(t, 5, after["ui replays round live"]-before["ui replays round live"], "caret in its place")
 }
 
 func TestInputRepaints(t *testing.T) {

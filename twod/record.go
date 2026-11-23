@@ -12,7 +12,12 @@ type Mark struct{ m draw.Mark }
 // Recording is what a Canvas drew from a Mark, kept to draw again: a UI
 // host's last frame, replayed when nothing in it changed. Games draw their
 // entities each frame and never need one.
-type Recording struct{ r draw.Recording }
+type Recording struct {
+	r draw.Recording
+	// parts are the ranges KeepAround kept round its gaps, gapped set.
+	parts  []draw.Recording
+	gapped bool
+}
 
 // Mark is where u's drawing is now.
 func (u *Canvas) Mark() Mark { return Mark{u.list.Mark()} }
@@ -53,9 +58,12 @@ func (u *Canvas) Try(do func()) (any, []byte) {
 // whether Replay can draw it again: not when it was lit, masked, cut by
 // a picture or a pass's picture, or when u's transform, modulate, blend or
 // clip moved since m.
-func (u *Canvas) Keep(m Mark, r *Recording) bool { return u.list.Record(m.m, &r.r) }
+func (u *Canvas) Keep(m Mark, r *Recording) bool {
+	r.gapped = false
+	return u.list.Record(m.m, &r.r)
+}
 
 // Replay draws r again, at the same place, and reports whether it did:
 // not when r holds nothing replayable or u's transform, modulate, blend or
 // clip are not what they were when r was recorded.
-func (u *Canvas) Replay(r *Recording) bool { return u.list.Replay(&r.r) }
+func (u *Canvas) Replay(r *Recording) bool { return !r.gapped && u.list.Replay(&r.r) }
