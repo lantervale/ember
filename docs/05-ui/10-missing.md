@@ -40,7 +40,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a line that breaks at a space or an emergency break inside a ligature or a kerned pair | its parts keep the widths the text shaped as one gives them (the part on the next line none where the ligature took it), where Chrome shapes the lines' ends again |
 | two elements of one font and spacing whose `lang`, `text-rendering` or `-webkit-font-smoothing` differ | shaped as one, where Chrome's font descriptions differ and it shapes them apart |
 | a caret or a selection's end inside a ligature | where the characters before it measure without it (in text shaped as one with another element's, at the ligature's end), where Chrome divides the ligature's advance evenly among its characters |
-| selecting text of vertical lines: a drag, a double click, a caret placed by the pointer, the selection drawn | the characters found and the selection drawn as if the lines ran across, the selection not drawn on them |
+| a selection of vertical lines going past an empty line of preformatted text, a br alone on its line or a tab kept between fragments ([decision 0193](../99-decisions/0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md)) | the empty line and the br unmarked and the tab's room left out, where Chrome marks them as on horizontal lines |
+| a double click on ideographs | takes one ideograph, where Chrome takes the word ICU's dictionary finds (一丁) |
 | a character standing in a vertical line that a fallback face draws (an emoji of the system's colour font, a symbol of Go Mono) | it takes the first face's ascent and descent, or its vertical advance, where Chrome takes the fallback face's |
 
 ## Generated content

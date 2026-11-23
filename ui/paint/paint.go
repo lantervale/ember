@@ -282,6 +282,11 @@ type painter struct {
 	// lineDecorated is set while the parts of a vertical line are drawn,
 	// whose text decorations are drawn along the whole line instead.
 	lineDecorated bool
+	// lineSelecting is set while the parts of a vertical line are drawn, whose
+	// selection's background is drawn along the whole line: lineParts is what of the
+	// part drawn it selects, in that part's space.
+	lineSelecting bool
+	lineParts     []Selected
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey
