@@ -12,16 +12,12 @@ func (t *tree) mirrored(n *node, in input, lay func() output) output {
 	if n.st.Dir != style.RTL {
 		return lay()
 	}
-	own, collapsed := n.st, n.collapsed
+	own := n.st
 	flipped := *own
 	flipped.Padding.Left, flipped.Padding.Right = own.Padding.Right, own.Padding.Left
 	flipped.Border.Left, flipped.Border.Right = own.Border.Right, own.Border.Left
 	n.st = &flipped
-	if collapsed != nil {
-		c := *collapsed
-		c.l, c.r = c.r, c.l
-		n.collapsed = &c
-	}
+	n.flipCollapsed()
 	kids := make([]*style.Computed, len(n.kids))
 	for i, k := range n.kids {
 		kids[i] = k.st
@@ -31,7 +27,8 @@ func (t *tree) mirrored(n *node, in input, lay func() output) output {
 		k.st = &f
 	}
 	out := lay()
-	n.st, n.collapsed = own, collapsed
+	n.st = own
+	n.flipCollapsed()
 	for i, k := range n.kids {
 		k.st = kids[i]
 	}
@@ -91,6 +88,16 @@ func (t *tree) mirroredTable(n *node, in input) output {
 		r.X = out.size.w - r.X - r.W
 	}
 	return out
+}
+
+// flipCollapsed swaps the left and right of the borders collapsing left n: a table's are
+// its mirror image's while it lays out, collapse resolving them there.
+func (n *node) flipCollapsed() {
+	if n.collapsed != nil {
+		c := *n.collapsed
+		c.l, c.r = c.r, c.l
+		n.collapsed = &c
+	}
 }
 
 func flipEdge(e staticEdge) staticEdge {
