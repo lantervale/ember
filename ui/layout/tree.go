@@ -537,7 +537,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	container := n.st.Display
 	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
 		container == style.GridDisplay || container == style.InlineGrid
-	items := t.lift(n, t.flatten(n, children))
+	items := spaced(n, inFlexOrGrid, t.lift(n, t.flatten(n, children)))
 	if !inFlexOrGrid && !hasBlockChild(items) {
 		t.buildInline(n, items)
 		return
@@ -572,10 +572,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	for i := 0; i < len(items); i++ {
 		it := items[i]
 		if it.text != nil {
-			// A -webkit-box drops the white space between its children, inline ones too.
-			if !n.st.WebkitBox || !inFlexOrGrid || !onlyCollapsibleSpace(items[i:i+1]) {
-				run = append(run, it)
-			}
+			run = append(run, it)
 			continue
 		}
 		st := styleOf(it.element)
@@ -606,6 +603,17 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.holdsFloats = true
 		}
 	}
+}
+
+// spaced is items less, in a -webkit-box laid out as flex, the white space between its
+// children: Chrome drops it between inline ones too.
+func spaced(n *node, inFlexOrGrid bool, items []item) []item {
+	if !n.st.WebkitBox || !inFlexOrGrid {
+		return items
+	}
+	return slices.DeleteFunc(items, func(it item) bool {
+		return it.text != nil && onlyCollapsibleSpace([]item{it})
+	})
 }
 
 // tableParts lists the table parts that follow one another from items[i], with the white
