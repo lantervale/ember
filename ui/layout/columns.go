@@ -29,6 +29,9 @@ type columnSet struct {
 	places []columnPlace
 	// rows are the rows of columns between the spanners, from the first column's top.
 	rows []columnRow
+	// leads are how far text-box-trim raises what each column shows, past the room
+	// above the line it starts with.
+	leads []float32
 	// top is where the first column starts in the border box; width and gap the used
 	// column width and gap, height the height of the columns and spanners down to the
 	// end of the last.
@@ -101,7 +104,15 @@ func (c *columnSet) last(k int, bottom float32) int {
 
 // shift is how far column k's part of the flow shows from where the flow has it.
 func (c *columnSet) shift(k int) point {
-	return point{c.places[k].x, c.places[k].top - c.starts[k]}
+	return point{c.places[k].x, c.places[k].top - c.starts[k] - c.lead(k)}
+}
+
+// lead is how far text-box-trim raises what column k shows.
+func (c *columnSet) lead(k int) float32 {
+	if k < len(c.leads) {
+		return c.leads[k]
+	}
+	return 0
 }
 
 // flowFrag is a node's place in the multi-column flow it is laid out in.
@@ -134,7 +145,7 @@ func (f *flowFrag) cut(at point, w, h float32, first, last int, origin point, en
 			continue
 		}
 		shift := cs.shift(k)
-		top := fmax(at.y, cs.starts[k]) + shift.y
+		top := fmax(at.y, cs.starts[k]+cs.lead(k)) + shift.y
 		bottom := at.y + h + shift.y
 		switch {
 		case k == last:
@@ -296,6 +307,7 @@ func (t *tree) columns(n *node, in input) output {
 		flowH := max(0, inner.size.h-inset.vertical())
 		h := flowH
 		var starts []float32
+		var fill filled
 		if !part.span && (part.flows() || len(parts) == 1) {
 			units := t.flowUnitsOf(n, part.kids, size{w + inset.horizontal(), inner.size.h}, inset)
 			room := none
@@ -308,7 +320,7 @@ func (t *tree) columns(n *node, in input) output {
 			case some(room):
 				h = filledHeight(room, flowH, some(styled.h))
 			}
-			fill := fillColumns(units, flowY, h)
+			fill = fillColumns(units, flowY, h)
 			starts = fill.starts
 			cs.addLanes(fill.lanes, len(cs.starts))
 		}
@@ -321,11 +333,13 @@ func (t *tree) columns(n *node, in input) output {
 					x = content - width - x
 				}
 				cs.starts = append(cs.starts, start)
+				cs.leads = append(cs.leads, fill.leads[j])
 				cs.places = append(cs.places, columnPlace{x: x, top: y, bottom: y + h})
 			}
 			cs.rows = append(cs.rows, columnRow{first: k, count: len(starts), top: y - inset.t, height: h})
 		} else {
 			cs.starts = append(cs.starts, flowY)
+			cs.leads = append(cs.leads, 0)
 			cs.places = append(cs.places, columnPlace{top: y, bottom: y + h, span: part.span})
 		}
 		if !some(firstBaseline) && some(inner.firstBaseline) {
@@ -849,6 +863,9 @@ type flowUnit struct {
 	para, line, lines int
 	orphans, widows   int
 	lanes             []lane
+	// lead and tail are what text-box-trim takes off a line's top when it starts a
+	// column, and off its bottom when it ends one.
+	lead, tail float32
 }
 
 // lane is one of boxes side by side in the flow, a flex or grid row's item or a row's
@@ -871,6 +888,8 @@ type unitWalk struct {
 	keep    float32
 	paras   int
 	sorted  bool
+	// sides counts the boxes side by side walked into, whose lines no column trims.
+	sides int
 }
 
 func (w *unitWalk) emit(u flowUnit) {
@@ -920,7 +939,7 @@ func settle(units []flowUnit, sorted bool) []flowUnit {
 	for _, u := range units {
 		if last := len(out) - 1; last >= 0 && u.top < out[last].bottom-columnEpsilon && !u.forced {
 			p := &out[last]
-			p.bottom = fmax(p.bottom, u.bottom)
+			p.merge(u)
 			p.space = p.space && u.space
 			p.lanes = nil
 			continue
@@ -938,10 +957,11 @@ func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 		ls := c.lines(s.w - inset.horizontal())
 		at := y + w.t.textTop(n, ls, inset.t, s.h-inset.vertical())
 		for i, l := range ls {
-			lh, _ := w.t.lineBox(c, l)
+			lh, lb := w.t.lineBox(c, l)
 			at += l.push
+			lead, tail := w.trims(c, lh, lb)
 			w.emit(flowUnit{top: at, bottom: at + lh, para: w.paras, line: i, lines: len(ls),
-				orphans: n.st.Orphans, widows: n.st.Widows})
+				orphans: n.st.Orphans, widows: n.st.Widows, lead: lead, tail: tail})
 			at += lh
 		}
 	} else {
@@ -973,6 +993,25 @@ func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 	}
 }
 
+// trims are what the multi-column container's text-box-trim takes off a line of c, lh
+// high with its baseline lb down, where it starts a column and where it ends one: Chrome
+// trims each column's first and last lines, not those of boxes side by side.
+func (w *unitWalk) trims(c *inlineContent, lh, lb float32) (float32, float32) {
+	trim, e := w.root.st.TextBoxTrim, w.root.st.TextBoxEdge
+	if trim == style.TrimNone || w.sides > 0 {
+		return 0, 0
+	}
+	m := w.t.metricsOf(c, c.owner.st)
+	var lead, tail float32
+	if trim == style.TrimStart || trim == style.TrimBoth {
+		lead = lb - overEdge(m, e)
+	}
+	if trim == style.TrimEnd || trim == style.TrimBoth {
+		tail = lh - lb - underEdge(m, e)
+	}
+	return lead, tail
+}
+
 // kid walks k, a child in the flow whose parent's border box is at y, with the breaks
 // asked before and after it.
 func (w *unitWalk) kid(k *node, y float32) {
@@ -999,6 +1038,7 @@ type walked struct {
 func (w *unitWalk) side(kids []*node, y float32) {
 	held, pending, keep, outer, sorted := w.top, w.pending, w.keep, w.units, w.sorted
 	ws := make([]walked, 0, len(kids))
+	w.sides++
 	for _, k := range kids {
 		w.units, w.sorted, w.top, w.pending, w.keep = nil, true, none, style.BreakAuto, 0
 		w.kid(k, y)
@@ -1012,6 +1052,7 @@ func (w *unitWalk) side(kids []*node, y float32) {
 		}
 		ws = append(ws, walked{lane{k, units, top + l.size.h}, w.pending, fmax(l.margin.t, 0), at})
 	}
+	w.sides--
 	w.top, w.pending, w.keep, w.units, w.sorted = held, pending, keep, outer, sorted
 	slices.SortStableFunc(ws, func(a, b walked) int { return cmp.Compare(a.at, b.at) })
 	for i := 0; i < len(ws); {
@@ -1108,6 +1149,10 @@ func (w *unitWalk) box(k *node, y float32) {
 	if end := w.units[low].bottom; bottom-end > l.padding.b+l.border.b+columnEpsilon {
 		w.emit(flowUnit{top: end, bottom: bottom, space: true})
 	} else {
+		if bottom > end+columnEpsilon {
+			// the box's edges below its last line end the column there
+			w.units[low].tail = 0
+		}
 		w.units[low].bottom = fmax(end, bottom)
 	}
 }
@@ -1119,7 +1164,7 @@ func (w *unitWalk) join(first int) {
 	for _, u := range w.units[first:] {
 		if last := len(out) - 1; last >= first && !u.forced {
 			o := &out[last]
-			o.top, o.bottom = fmin(o.top, u.top), fmax(o.bottom, u.bottom)
+			o.merge(u)
 			o.space = o.space && u.space
 			o.lanes = nil
 			continue
@@ -1127,6 +1172,16 @@ func (w *unitWalk) join(first int) {
 		out = append(out, u)
 	}
 	w.units = out
+}
+
+// merge makes u part of v, which takes u's trims where u's edges are its own.
+func (v *flowUnit) merge(u flowUnit) {
+	if u.top < v.top {
+		v.top, v.lead = u.top, u.lead
+	}
+	if u.bottom > v.bottom {
+		v.bottom, v.tail = u.bottom, u.tail
+	}
 }
 
 // appealOf is the appeal of a break before unit i in a column that starts with unit
@@ -1150,12 +1205,14 @@ func appealOf(units []flowUnit, i, first int) int8 {
 	return appealLines
 }
 
-// filled is a flow of units cut into columns: where each column starts in the flow, the
-// least room one more unit would have asked of a column, the least appeal of the breaks
-// taken, how far down its column the content of the last goes, and how the boxes side
-// by side it cut are cut, their columns counted from the first.
+// filled is a flow of units cut into columns: where each column starts in the flow and
+// how far a trim raises what it shows (by column, none for most), the least room one
+// more unit would have asked of a column, the least appeal of the breaks taken, how far
+// down its column the content of the last goes, and how the boxes side by side it cut
+// are cut, their columns counted from the first.
 type filled struct {
 	starts   []float32
+	leads    map[int]float32
 	shortage float32
 	appeal   int8
 	used     float32
@@ -1172,16 +1229,15 @@ func fillColumns(units []flowUnit, top, h float32) filled {
 	if h <= 0 {
 		return f
 	}
+	// s is where the column's room starts in the flow, below what a trim raises past it
 	s, first, best := top, 0, -1
 	var bestAppeal int8
 	column := func(at int, y float32) {
-		s, first, best = y, at, -1
-		f.starts = append(f.starts, y)
-		f.used = 0
+		s, first, best = f.column(&units[at], y), at, -1
 	}
 	take := func(u *flowUnit) {
 		if !u.room {
-			f.used = fmax(f.used, u.bottom-s)
+			f.used = fmax(f.used, u.bottom-u.tail-s)
 		}
 	}
 	for i := 0; i < len(units); {
@@ -1196,7 +1252,7 @@ func fillColumns(units []flowUnit, top, h float32) filled {
 		switch {
 		case u.forced && i > first:
 			column(i, u.top-u.keep)
-		case u.bottom-s <= h+columnEpsilon:
+		case u.bottom-u.tail-s <= h+columnEpsilon:
 			if i > first {
 				if a := appealOf(units, i, first); best < 0 || a >= bestAppeal {
 					best, bestAppeal = i, a
@@ -1215,11 +1271,11 @@ func fillColumns(units []flowUnit, top, h float32) filled {
 		case u.space && u.top < s+h-columnEpsilon:
 			column(i, s+h)
 		case i == first:
-			f.shortage = fmin(f.shortage, u.bottom-s-h)
+			f.shortage = fmin(f.shortage, u.bottom-u.tail-s-h)
 			take(u)
 			i++
 		default:
-			f.shortage = fmin(f.shortage, u.bottom-s-h)
+			f.shortage = fmin(f.shortage, u.bottom-u.tail-s-h)
 			appeal := appealOf(units, i, first)
 			if best >= 0 && bestAppeal > appeal {
 				i, appeal = best, bestAppeal
@@ -1229,6 +1285,22 @@ func fillColumns(units []flowUnit, top, h float32) filled {
 		}
 	}
 	return f
+}
+
+// column starts a column at y in the flow with unit u, and returns where its room starts:
+// below the room a trim takes off u's top when the column starts with u.
+func (f *filled) column(u *flowUnit, y float32) float32 {
+	f.used = 0
+	at := len(f.starts)
+	f.starts = append(f.starts, y)
+	if u.lead == 0 || y != u.top {
+		return y
+	}
+	if f.leads == nil {
+		f.leads = map[int]float32{}
+	}
+	f.leads[at] = u.lead
+	return y + u.lead
 }
 
 // lanesStart reports boxes side by side that each have room for their first unit in a
@@ -1434,6 +1506,11 @@ func keepFlow(n, m *node, cs *columnSet, flow, moved point) {
 	}
 	by := cs.shift(first)
 	origin := point{at.x + by.x, at.y + by.y}
+	if clip := cs.starts[first] + cs.lead(first) - at.y; cs.lead(first) > 0 && clip > 0 && last == first {
+		// a box starting with the line a column's trim raises keeps its top at the column's
+		origin.y += clip
+		n.final.size.h -= clip
+	}
 	*f = flowFrag{cols: cs, y: at.y, col: first, pieces: f.pieces[:0]}
 	if last > first {
 		origin = f.cut(at, n.unrounded.size.w, h, first, last, origin, contentEnds(n, cs, at, first, last))
