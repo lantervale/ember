@@ -100,6 +100,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandTextDecoration(v, out)
 	case shortFont:
 		err = expandFont(v, out)
+	case "font-variant":
+		err = expandVariant(v, out)
 	case "list-style":
 		err = expandListStyle(v, out)
 	default:
@@ -591,7 +593,7 @@ func backgroundLayer(v []Component, out map[string][]Component) error {
 	return nil
 }
 
-// expandFont splits the font shorthand: style and weight in any order, a
+// expandFont splits the font shorthand: style, small-caps and weight in any order, a
 // size, a line height after a slash, then the families. What it leaves
 // out is reset, as CSS says.
 func expandFont(v []Component, out map[string][]Component) error {
@@ -600,7 +602,9 @@ func expandFont(v []Component, out map[string][]Component) error {
 		one := []Component{v[i]}
 		switch {
 		case isWord(v[i], "normal"):
-		case isWord(v[i], "small-caps") || checks["font-stretch-word"](one) == nil:
+		case out["font-variant-caps"] == nil && isWord(v[i], "small-caps"):
+			out["font-variant-caps"] = one
+		case checks["font-stretch-word"](one) == nil:
 			return fmt.Errorf("font: %s is not supported", v[i].String())
 		case out["font-style"] == nil && checks["font-style"](one) == nil:
 			out["font-style"] = one

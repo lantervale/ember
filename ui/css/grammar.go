@@ -37,11 +37,19 @@ func isWord(c Component, words ...string) bool {
 
 func isSlash(c Component) bool { return c.Kind == Delim && c.Text == "/" }
 
-// globalKeyword returns inherit, initial or unset when v is one alone.
+// globalKeyword returns inherit, initial or unset when v is one alone;
+// revert and revert-layer, which the cascade rolls back where they win,
+// are unset wherever they are left (a keyframe, a var()).
 func globalKeyword(v []Component) string {
 	v = items(v)
-	if len(v) == 1 && isWord(v[0], "inherit", "initial", kwUnset) {
+	if len(v) != 1 {
+		return ""
+	}
+	switch {
+	case isWord(v[0], "inherit", "initial", kwUnset):
 		return strings.ToLower(v[0].Text)
+	case isWord(v[0], kwRevert, kwRevertLayer):
+		return kwUnset
 	}
 	return ""
 }
@@ -378,23 +386,30 @@ var checks = map[string]check{
 		"semi-expanded", "expanded", "extra-expanded", "ultra-expanded")),
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
-	"font-style":             single(words("normal", "italic", "oblique")),
-	"font-weight":            single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
-	"line-height":            single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
-	"letter-spacing":         single(either(lengthPercent, words("normal"))),
-	"word-spacing":           single(either(lengthPercent, words("normal"))),
-	"border-spacing":         repeated(length, 2),
-	"border-collapse":        single(words("separate", "collapse")),
-	"caption-side":           single(words("top", "bottom")),
-	"table-layout":           single(words("auto", "fixed")),
-	"text-align":             single(textAlign),
-	"text-indent":            single(lengthPercent),
-	"text-transform":         single(words("none", "uppercase", "lowercase", "capitalize")),
-	"-webkit-font-smoothing": single(words("auto", "none", "antialiased", "subpixel-antialiased")),
-	"white-space":            single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
-	"overflow-wrap":          single(words("normal", "break-word", "anywhere")),
-	"color":                  single(colorTerm),
-	"color-scheme":           checkColorScheme,
+	"font-style":     single(words("normal", "italic", "oblique")),
+	"font-weight":    single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
+	"line-height":    single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
+	"letter-spacing": single(either(lengthPercent, words("normal"))),
+	"font-variant-caps": single(words("normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps",
+		"unicase", "titling-caps")),
+	"font-variant-ligatures":  checkVariant("font-variant-ligatures"),
+	"font-variant-numeric":    checkVariant("font-variant-numeric"),
+	"font-variant-east-asian": checkVariant("font-variant-east-asian"),
+	"font-variant-alternates": checkVariant("font-variant-alternates"),
+	"font-variant-position":   checkVariant("font-variant-position"),
+	"word-spacing":            single(either(lengthPercent, words("normal"))),
+	"border-spacing":          repeated(length, 2),
+	"border-collapse":         single(words("separate", "collapse")),
+	"caption-side":            single(words("top", "bottom")),
+	"table-layout":            single(words("auto", "fixed")),
+	"text-align":              single(textAlign),
+	"text-indent":             single(lengthPercent),
+	"text-transform":          single(words("none", "uppercase", "lowercase", "capitalize")),
+	"-webkit-font-smoothing":  single(words("auto", "none", "antialiased", "subpixel-antialiased")),
+	"white-space":             single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
+	"overflow-wrap":           single(words("normal", "break-word", "anywhere")),
+	"color":                   single(colorTerm),
+	"color-scheme":            checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
 	"text-overflow":     single(words("clip", "ellipsis")),

@@ -28,6 +28,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
 | `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
 | `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
+| `font-variant-ligatures`, `-numeric`, `-east-asian`, `-alternates`, `-position` on a face that has the features (`tnum`, `liga`, `sups`…) | read and kept, drawn as `normal`: ui applies no OpenType feature, where Chrome does; with the Go faces, which have none, both draw alike |
 | an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
 
 ## Generated content
@@ -127,7 +128,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 | math functions in a colour's channels and in times (`calc(1s + 100ms)`) | refused |
 | a percentage inside `sign()` in a `line-height` | of the font size, where Chrome measures it against something else |
-| `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `@counter-style`, `revert` | refused |
+| `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `@counter-style` | refused |
 
 ## Windows
 

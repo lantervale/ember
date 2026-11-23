@@ -455,7 +455,9 @@ func (t *Text) WordGap() float32 { return t.WordSpacing.Px + t.WordSpacing.Perce
 
 // LetterGap is the room letter-spacing adds after each character in t's
 // font.
-func (t *Text) LetterGap() float32 { return t.LetterSpacing.Px + t.LetterSpacing.Percent*t.Font.Size/100 }
+func (t *Text) LetterGap() float32 {
+	return t.LetterSpacing.Px + t.LetterSpacing.Percent*t.Font.Size/100
+}
 
 // Spacing is the room letter-spacing and word-spacing add to s: the one
 // after each character, the other after each word separator.
@@ -477,8 +479,31 @@ func (t *Text) Spacing(s string) float32 {
 	return letter*float32(n) + word*float32(seps)
 }
 
+// FontCaps is font-variant-caps.
+type FontCaps uint8
+
+const (
+	NormalCaps FontCaps = iota
+	SmallCaps
+	AllSmallCaps
+	PetiteCaps
+	AllPetiteCaps
+	Unicase
+	TitlingCaps
+)
+
+// FontVariant is font-variant's longhands. Caps draws small capitals
+// where it asks for them; the others are kept as written, their keywords
+// in the order CSS lists them, "" for normal, and change nothing drawn: ui
+// applies no OpenType feature of a face.
+type FontVariant struct {
+	Caps                                                FontCaps
+	Ligatures, Numeric, EastAsian, Alternates, Position string
+}
+
 type Text struct {
 	Font          Font
+	FontVariant   FontVariant
 	LineHeight    LineHeight
 	LetterSpacing Spacing
 	WordSpacing   Spacing

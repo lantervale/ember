@@ -44,6 +44,15 @@ var compared = map[string]func(s *style.Computed) string{
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
 	"font-family": func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"font-variant-caps": func(s *style.Computed) string {
+		return [...]string{"normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase",
+			"titling-caps"}[s.FontVariant.Caps]
+	},
+	"font-variant-ligatures":  func(s *style.Computed) string { return orNormal(s.FontVariant.Ligatures) },
+	"font-variant-numeric":    func(s *style.Computed) string { return orNormal(s.FontVariant.Numeric) },
+	"font-variant-east-asian": func(s *style.Computed) string { return orNormal(s.FontVariant.EastAsian) },
+	"font-variant-alternates": func(s *style.Computed) string { return orNormal(s.FontVariant.Alternates) },
+	"font-variant-position":   func(s *style.Computed) string { return orNormal(s.FontVariant.Position) },
 	"line-height": func(s *style.Computed) string {
 		switch {
 		case s.LineHeight.Normal:
@@ -328,6 +337,13 @@ input[type=range][title] { background-color: RebeccaPurple; border-top: 2px soli
 		),
 	)
 	matchChrome(t, d)
+}
+
+func orNormal(s string) string {
+	if s == "" {
+		return "normal"
+	}
+	return s
 }
 
 func lengthCSS(l style.Length) string {

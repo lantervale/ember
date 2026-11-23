@@ -24,6 +24,8 @@ const (
 	kwAuto         = "auto"
 	kwMiddle       = "middle"
 	kwInherit      = "inherit"
+	kwRevert       = "revert"
+	kwRevertLayer  = "revert-layer"
 	kwBaseline     = "baseline"
 	kwRepeat       = "repeat"
 	kwSubgrid      = "subgrid"
