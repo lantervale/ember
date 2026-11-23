@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
 )
 
 // Feature is an OpenType feature a run turns on (1, or the alternate to
@@ -64,45 +63,9 @@ func Splice(text, face string) string {
 	return strings.Join(parts, ",")
 }
 
-// defaults are the features every horizontal run of Latin, Greek or
-// Cyrillic has on, as HarfBuzz's default shaper has them.
-//
-//nolint:gochecknoglobals // a fixed list
-var defaults = []Tag{
-	MakeTag("rvrn"), MakeTag("ccmp"), MakeTag("locl"), MakeTag("rlig"), MakeTag("rclt"), MakeTag("calt"),
-	MakeTag("clig"), MakeTag("liga"), MakeTag("kern"), MakeTag("mark"), MakeTag("mkmk"), MakeTag("dist"),
-	MakeTag("abvm"), MakeTag("blwm"), MakeTag("curs"),
-}
-
-// Script is the OpenType script of text: its first letter's, Latin for
-// text of none.
-func Script(text string) Tag {
-	for _, r := range text {
-		switch {
-		case r < 0x80 && !unicode.IsLetter(r):
-			continue
-		case unicode.Is(unicode.Latin, r):
-			return latn
-		case unicode.Is(unicode.Greek, r):
-			return MakeTag("grek")
-		case unicode.Is(unicode.Cyrillic, r):
-			return MakeTag("cyrl")
-		case unicode.IsLetter(r):
-			return dflt
-		}
-	}
-	return latn
-}
-
-//nolint:gochecknoglobals // tags read once
-var (
-	latn = MakeTag("latn")
-	dflt = MakeTag("DFLT")
-	kern = MakeTag("kern")
-)
-
 // Plan is what shaping a run of a font in one script with some features
-// applies: lookups in the order of the font's lists.
+// applies: lookups in stages, each stage's in the order of the font's
+// lists.
 type Plan struct {
 	font *Font
 	gsub []planned
@@ -111,14 +74,14 @@ type Plan struct {
 	first glyphSet
 	// kerns is whether the run is kerned.
 	kerns bool
+	// rtl is whether the run is written right to left, and joins whether
+	// its letters join, each glyph then marked with the mask of its form's
+	// feature in forms.
+	rtl, joins bool
+	forms      [len(formTags)]uint32
 	// mentioned are the glyphs its lookups take after the first, read
 	// when Mentions is first asked.
 	mentioned glyphSet
-}
-
-type planned struct {
-	lk    *lookup
-	value uint32
 }
 
 type planKey struct {
@@ -127,8 +90,8 @@ type planKey struct {
 }
 
 // Plan is the plan for runs in script with features, HarfBuzz's written
-// comma separated (ParseFeatures) after the defaults, a feature written
-// again overriding it.
+// comma separated (ParseFeatures) after those the script's shaper has
+// on, a feature written again overriding it.
 func (f *Font) Plan(script Tag, features string) *Plan {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -136,18 +99,19 @@ func (f *Font) Plan(script Tag, features string) *Plan {
 	if p, ok := f.plans[key]; ok {
 		return p
 	}
-	on := map[Tag]uint32{}
-	for _, t := range defaults {
-		on[t] = 1
+	asked := requests(script, ParseFeatures(features))
+	m := masks(asked)
+	p := &Plan{font: f, gsub: f.gsub.plan(script, asked, m), gpos: f.gpos.plan(script, asked, m),
+		rtl: RightToLeft(script), kerns: m[kern] != 0}
+	if slices.Contains(joiningScripts, script) {
+		p.joins = true
+		for i, t := range formTags {
+			p.forms[i] = m[t]
+		}
 	}
-	for _, ft := range ParseFeatures(features) {
-		on[ft.Tag] = ft.Value
-	}
-	p := &Plan{font: f, gsub: f.gsub.plan(script, on), gpos: f.gpos.plan(script, on)}
 	for _, l := range append(slices.Clip(p.gsub), p.gpos...) {
 		p.first.union(l.lk.first)
 	}
-	p.kerns = on[kern] != 0
 	f.plans[key] = p
 	return p
 }
@@ -264,36 +228,4 @@ func (l *layout) has(script Tag, t Tag) bool {
 	found := false
 	l.features(script, func(tag Tag, _ data, _ bool) { found = found || tag == t })
 	return found
-}
-
-// plan is l's lookups of the features on has on, in their list's order.
-func (l *layout) plan(script Tag, on map[Tag]uint32) []planned {
-	values := map[uint16]uint32{}
-	l.features(script, func(tag Tag, f data, required bool) {
-		v, ok := on[tag]
-		if required {
-			v, ok = 1, true
-		}
-		if !ok || v == 0 {
-			return
-		}
-		for k := range int(f.u16(2)) {
-			i := f.u16(4 + 2*k)
-			if _, seen := values[i]; !seen {
-				values[i] = v
-			}
-		}
-	})
-	idx := make([]uint16, 0, len(values))
-	for i := range values {
-		idx = append(idx, i)
-	}
-	slices.Sort(idx)
-	var out []planned
-	for _, i := range idx {
-		if lk := l.lookup(i); lk != nil {
-			out = append(out, planned{lk, values[i]})
-		}
-	}
-	return out
 }

@@ -62,31 +62,121 @@ func (b *buffer) ligature(lk *lookup, s data, i int) bool {
 		return false
 	}
 	set := s.sub(6 + 2*k)
+	first := b.glyphs[i]
 	for n := range int(set.u16(0)) {
 		lig := set.sub(2 + 2*n)
 		count := int(lig.u16(2))
 		if count == 0 {
 			continue
 		}
-		at := make([]int, 0, count-1)
+		at := make([]int, 1, count)
+		at[0] = i
 		j := i
 		for c := 1; c < count; c++ {
 			j = b.next(lk, j)
-			if j < 0 || b.glyphs[j].ID != lig.u16(4+2*(c-1)) {
+			if j < 0 || b.glyphs[j].ID != lig.u16(4+2*(c-1)) || b.glyphs[j].mask&b.mask == 0 {
+				break
+			}
+			// A mark on a component of a ligature joins only marks on the same one.
+			g := b.glyphs[j]
+			if first.lig != 0 && compOf(first) != 0 {
+				if g.lig != first.lig || compOf(g) != compOf(first) {
+					break
+				}
+			} else if g.lig != 0 && compOf(g) != 0 && g.lig != first.lig {
 				break
 			}
 			at = append(at, j)
 		}
-		if len(at) != count-1 {
+		if len(at) != count {
 			continue
 		}
-		b.glyphs[i].ID = lig.u16(0)
-		for c := len(at) - 1; c >= 0; c-- {
-			b.glyphs = append(b.glyphs[:at[c]], b.glyphs[at[c]+1:]...)
-		}
+		b.ligate(at, lig.u16(0))
 		return true
 	}
 	return false
+}
+
+// ligate makes the glyphs at at, in order, ligature id, the glyphs it
+// passed over between them kept after it, and has the marks among
+// those and after it sit on the components they sat on, as HarfBuzz
+// numbers them.
+func (b *buffer) ligate(at []int, id uint16) {
+	marks := true
+	for _, k := range at[1:] {
+		marks = marks && b.f.isMark(b.glyphs[k].ID)
+	}
+	first := &b.glyphs[at[0]]
+	baseLig := marks && b.f.glyphClasses.class(first.ID) == baseGlyph
+	markLig := marks && b.f.isMark(first.ID)
+	isLig := !baseLig && !markLig
+	var lig uint8
+	if isLig {
+		b.ligs++
+		if b.ligs == 0 {
+			b.ligs = 1
+		}
+		lig = b.ligs
+	}
+	var total uint8
+	for _, k := range at {
+		total += b.comps(b.glyphs[k])
+	}
+	lastLig, lastComps := first.lig, b.comps(*first)
+	sofar := lastComps
+	if isLig {
+		first.lig, first.comp, first.ligated = lig, total, true
+	}
+	first.ID = id
+	onto := func(g *Glyph) {
+		this := compOf(*g)
+		if this == 0 {
+			this = lastComps
+		}
+		g.lig, g.comp, g.ligated = lig, sofar-lastComps+min(this, lastComps), false
+	}
+	for c := 1; c < len(at); c++ {
+		if isLig {
+			for k := at[c-1] + 1; k < at[c]; k++ {
+				onto(&b.glyphs[k])
+			}
+		}
+		g := b.glyphs[at[c]]
+		lastLig, lastComps = g.lig, b.comps(g)
+		sofar += lastComps
+	}
+	if !markLig && lastLig != 0 {
+		for k := at[len(at)-1] + 1; k < len(b.glyphs); k++ {
+			g := &b.glyphs[k]
+			if g.lig != lastLig || compOf(*g) == 0 {
+				break
+			}
+			onto(g)
+		}
+	}
+	b.merge(at[0], at[len(at)-1])
+	for c := len(at) - 1; c > 0; c-- {
+		b.glyphs = append(b.glyphs[:at[c]], b.glyphs[at[c]+1:]...)
+	}
+}
+
+// merge gives the glyphs from first to last, and those beside them of
+// the same clusters, the first of their clusters, as HarfBuzz merges
+// the clusters a ligature joins.
+func (b *buffer) merge(first, last int) {
+	lo, hi := b.glyphs[first].Cluster, b.glyphs[first].Cluster
+	for k := first; k <= last; k++ {
+		lo, hi = min(lo, b.glyphs[k].Cluster), max(hi, b.glyphs[k].Cluster)
+	}
+	for first > 0 && b.glyphs[first-1].Cluster >= lo && b.glyphs[first-1].Cluster <= hi {
+		first--
+	}
+	for last+1 < len(b.glyphs) && b.glyphs[last+1].Cluster >= lo && b.glyphs[last+1].Cluster <= hi {
+		last++
+	}
+	for k := first; k <= last; k++ {
+		b.glyphs[k].Cluster = lo
+	}
 }
 
 // reverse applies subtable format 1 of a reverse chaining single

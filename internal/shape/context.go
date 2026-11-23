@@ -108,7 +108,8 @@ func (b *buffer) chain(lk *lookup, s data, i int) (int, bool) {
 }
 
 // input is where the count glyphs from i lie, lk passing over those it
-// ignores, when each after the first matches; nil when they don't.
+// ignores, when each after the first matches and has the lookup's mask;
+// nil when they don't.
 func (b *buffer) input(lk *lookup, i, count int, match func(c int, g uint16) bool) []int {
 	if count <= 0 {
 		return nil
@@ -117,7 +118,7 @@ func (b *buffer) input(lk *lookup, i, count int, match func(c int, g uint16) boo
 	pos[0] = i
 	j := i
 	for c := 1; c < count; c++ {
-		if j = b.next(lk, j); j < 0 || !match(c, b.glyphs[j].ID) {
+		if j = b.next(lk, j); j < 0 || b.glyphs[j].mask&b.mask == 0 || !match(c, b.glyphs[j].ID) {
 			return nil
 		}
 		pos = append(pos, j)

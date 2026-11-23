@@ -21,7 +21,7 @@ var variantGroups = map[string][][]string{
 	propEastAsian: {{"jis78", "jis83", "jis90", "jis04", "simplified", "traditional"},
 		{"full-width", "proportional-width"}, {"ruby"}},
 	propAlternates: {{"historical-forms"}},
-	propPosition:   {{"sub", "super"}},
+	propPosition:   {{kwSub, kwSuper}},
 }
 
 // capsWords are font-variant-caps' keywords.
