@@ -689,7 +689,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		}
 		p := piece{kind: kind, run: i, text: s, at: from, level: level}
 		if kind == word || kind == gap {
-			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) + r.st.Spacing(s)
+			p.width = advance(fonts, r.st, strings.ReplaceAll(s, zeroWidthSpace, "")) + r.st.Spacing(s)
 		}
 		c.unspace(&p, r.st)
 		c.pieces = append(c.pieces, p)
@@ -746,7 +746,7 @@ type spaceTies interface {
 // word takes its kerning with the space after it, a space its kerning with the word
 // after it.
 func (c *inlineContent) tieSpaces(fonts box.Fonts, st *style.Computed, first int) {
-	if t, ok := fonts.(spaceTies); !ok || !t.SpaceTies(st.Font) {
+	if t, ok := fonts.(spaceTies); !ok || !t.SpaceTies(st.Font) || st.Stands() {
 		return
 	}
 	space := fonts.Advance(st.Font, " ")
@@ -781,7 +781,7 @@ func (c *inlineContent) control(fonts box.Fonts, st *style.Computed, i int, at i
 	case '\n':
 		p = piece{kind: newline, run: i, level: level}
 	case '\t':
-		space := fonts.Advance(st.Font, " ")
+		space := advance(fonts, st, " ")
 		p.stop, p.least = st.TabStop(space), space/2
 	}
 	c.pieces = append(c.pieces, p)
@@ -818,7 +818,7 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 	for at := 0; len(rest) > 0; {
 		g, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
 		at += len(g)
-		adv := fonts.Advance(st.Font, strings.ReplaceAll(s[:at], zeroWidthSpace, ""))
+		adv := advance(fonts, st, strings.ReplaceAll(s[:at], zeroWidthSpace, ""))
 		w := adv - prev + st.Spacing(g)
 		prev = adv
 		switch {
@@ -2662,7 +2662,7 @@ func (t *tree) fitPrefix(st *style.Computed, text string, room float32) (string,
 	}
 	width := func(i int) float32 {
 		s := text[:ends[i]]
-		return t.fonts.Advance(st.Font, s) + st.Spacing(s)
+		return advance(t.fonts, st, s) + st.Spacing(s)
 	}
 	lo, hi := 0, len(ends)-1
 	for lo < hi {
@@ -2690,7 +2690,7 @@ func (t *tree) fitSuffix(st *style.Computed, text string, room float32) (string,
 	}
 	width := func(i int) float32 {
 		s := text[starts[i]:]
-		return t.fonts.Advance(st.Font, s) + st.Spacing(s)
+		return advance(t.fonts, st, s) + st.Spacing(s)
 	}
 	lo, hi := 0, len(starts)-1
 	for lo < hi {

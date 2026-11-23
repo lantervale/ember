@@ -1,7 +1,8 @@
 // Vertical writing modes against Chrome: lines of vertical-rl stacking from the right
 // with their glyphs turned a quarter clockwise, vertical-lr stacking from the left,
 // sideways-lr's lines running up, underlined and padded inline elements on vertical
-// lines, a flex row running down a box, and a horizontal block in a vertical one.
+// lines, a flex row running down a box, a horizontal block in a vertical one, and
+// letters standing upright (text-orientation: upright).
 package main
 
 import (
@@ -24,6 +25,7 @@ u { text-decoration-color: #3a6fd8; }
 .row { display: flex; gap: 6px; }
 .row div { inline-size: 30px; background-color: #3a6fd8; }
 .row .grow { flex: 1; }
+.upright { text-orientation: upright; }
 .across { writing-mode: horizontal-tb; width: 90px; background-color: #e8e2d6; margin-block: 4px; }
 `
 
@@ -38,6 +40,7 @@ func main() {
 		ui.Div(ui.Class("box", "rl", "row"), ui.Div(), ui.Div(ui.Class("grow")), ui.Div()),
 		ui.Div(ui.Class("box", "rl"), ui.P(ui.Text("Before")),
 			ui.Div(ui.Class("across"), ui.Text("A horizontal block inside.")), ui.P(ui.Text("After"))),
+		ui.Div(ui.Class("box", "rl", "upright"), ui.P(ui.Text("Upright Hi"))),
 	)
 	pages.Run(d, 440, 240)
 }
