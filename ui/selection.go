@@ -962,7 +962,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 // stop, the first from the fragment's end.
 func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float32, float32) {
 	st, f := b.Style, b.Lines[k]
-	if m == nil || f.RTL || st.WhiteSpace.Collapse() != style.Preserve {
+	if m == nil || f.RTL || !st.WhiteSpace.KeepsSpaces() {
 		return false, 0, 0
 	}
 	var after *box.Fragment
@@ -1206,7 +1206,7 @@ func (c *copier) dropped(src []rune, from, to int, ws style.WhiteSpace, wrap boo
 		switch {
 		case r == '\n' && keeps:
 			c.put('\n')
-		case r == '\t' && ws.Collapse() == style.Preserve:
+		case r == '\t' && ws.KeepsSpaces():
 			c.put('\t')
 		case isBlank(r) && wrap:
 			if c.last != ' ' {

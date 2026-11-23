@@ -543,7 +543,7 @@ var checks = map[string]check{
 	"-webkit-text-fill-color":   single(colorTerm),
 	"-webkit-text-stroke-width": single(borderWidth),
 	"-webkit-text-stroke-color": single(colorTerm),
-	"white-space-collapse":      single(words("collapse", "preserve", "preserve-breaks")),
+	"white-space-collapse":      single(words("collapse", "preserve", "preserve-breaks", "break-spaces")),
 	"text-wrap-mode":            single(words("wrap", "nowrap")),
 	"text-wrap-style":           single(words("auto", "balance", "pretty", "stable")),
 	"hyphens":                   single(words("manual", "none", "auto")),

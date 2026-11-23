@@ -18,6 +18,7 @@ const (
 	kwWrap           = "wrap"
 	// kwCollapseSpaces is white-space-collapse's collapse.
 	kwCollapseSpaces = "collapse"
+	kwBreakSpaces    = "break-spaces"
 )
 
 // quoted is a string.
@@ -31,9 +32,9 @@ func quoted(c Component) error {
 //nolint:gochecknoglobals,goconst // lookup tables
 var (
 	whiteSpaces = map[string]style.WhiteSpace{"normal": style.Normal, "nowrap": style.NoWrapSpace, "pre": style.Pre,
-		"pre-wrap": style.PreWrap, "pre-line": style.PreLine}
+		"pre-wrap": style.PreWrap, "pre-line": style.PreLine, kwBreakSpaces: style.BreakSpaces}
 	collapses = map[string]style.Collapse{kwCollapseSpaces: style.CollapseSpaces, "preserve": style.Preserve,
-		"preserve-breaks": style.PreserveBreaks}
+		"preserve-breaks": style.PreserveBreaks, kwBreakSpaces: style.CollapseBreakSpaces}
 	overEdges  = map[string]style.TextEdge{kwText: style.EdgeText, "cap": style.EdgeCap, "ex": style.EdgeEx}
 	underEdges = map[string]style.TextEdge{kwText: style.EdgeText, kwAlphabetic: style.EdgeAlphabetic}
 )
