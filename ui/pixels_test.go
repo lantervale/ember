@@ -3,9 +3,6 @@
 package ui_test
 
 import (
-	"os"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/lantervale/ember/ui/internal/chrome"
@@ -99,9 +96,6 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-text", 640, 300, 0.0031},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
-			if strings.HasSuffix(c.pkg, "/mitres") && os.Getenv("CI") != "" && runtime.GOOS != "windows" {
-				t.Skip("Chrome on the macOS and Linux runners draws the page's background and none of its boxes")
-			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}
