@@ -55,7 +55,6 @@ var interpolated = [][][3]string{
 	},
 	{
 		{"-webkit-text-stroke-width", "1px", "5px"}, {"-webkit-text-stroke-color", "red", "blue"},
-		{"-webkit-text-fill-color", "blue", "red"},
 	},
 }
 

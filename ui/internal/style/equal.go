@@ -93,7 +93,7 @@ func (f Font) Equal(o Font) bool {
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
-		f.Caps == o.Caps
+		f.Caps == o.Caps && sameSlice(f.Variations, o.Variations)
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -123,8 +123,6 @@ func (t *Text) equal(o *Text) bool {
 		t.SelectionStroke == o.SelectionStroke &&
 		t.HasSelectionStroke == o.HasSelectionStroke &&
 		t.TextStroke == o.TextStroke &&
-		t.TextFill == o.TextFill &&
-		t.FillSet == o.FillSet &&
 		sameSlice(t.TextShadows, o.TextShadows) &&
 		t.TextDecoration == o.TextDecoration &&
 		sameSliceFunc(t.Decorations, o.Decorations, (*Decoration).equal) &&
@@ -134,6 +132,8 @@ func (t *Text) equal(o *Text) bool {
 		t.CaretColor == o.CaretColor &&
 		t.AccentAuto == o.AccentAuto &&
 		t.CaretAuto == o.CaretAuto &&
+		t.TextFill == o.TextFill &&
+		t.TextFilled == o.TextFilled &&
 		t.Content.equal(&o.Content) &&
 		sameSlice(t.CounterReset, o.CounterReset) &&
 		sameSlice(t.CounterIncrement, o.CounterIncrement) &&
@@ -227,7 +227,7 @@ func (l *Look) equal(o *Look) bool {
 }
 
 func (i *Image) equal(o *Image) bool {
-	return i.Source == o.Source && i.Slice == o.Slice && i.Gradient.equal(o.Gradient)
+	return i.Source == o.Source && i.Slice == o.Slice && i.Fill == o.Fill && i.Gradient.equal(o.Gradient)
 }
 
 func (g *Gradient) equal(o *Gradient) bool {

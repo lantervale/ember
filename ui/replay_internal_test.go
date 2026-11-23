@@ -223,7 +223,7 @@ func TestAFrameUncoveredThenChangedIsDrawnOnce(t *testing.T) {
 	child := NewDocument(FetchFonts(func(string, string) ([]byte, error) {
 		<-held
 		return gobold.TTF, nil
-	}), CSS(`@font-face { font-family: Heavy; src: url(heavy.ttf); }
+	}), CSS(`@font-face { font-family: Heavy; src: url(heavy.ttf); font-display: swap; }
 div { font: 25px/1 Heavy; }`))
 	child.Body().Append(Div(Text("1 2 3 4")))
 	outer := NewDocument(CSS(`iframe { width: 300px; height: 100px; border: 0; }

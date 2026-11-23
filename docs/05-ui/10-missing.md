@@ -68,7 +68,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | logical properties in `@keyframes` and `transition-property` under `direction: rtl` | the left side's |
 | a float of direction `rtl` beside a block that avoids floats, a block's own `text-align` of `-webkit-left` under rtl | not compared with Chrome |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
-| a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
@@ -85,14 +84,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a rounded border whose sides differ in width or in style, or that is `inset`, `outset`, `groove` or `ridge`; a rounded `dashed` or `dotted` one | drawn square; the dashed or dotted one drawn solid |
-| a rounded border of three or four colours | each meets the next on Chrome's line, with a trace of the first colour through the blend where two later ones meet |
-| `outline-style` but `solid` and `double` (`dashed`, `dotted`, `inset`, `outset`, `groove`, `ridge`, `auto`) | drawn solid |
-| `background-clip: text` | refused |
-| `background-attachment: fixed` on an element under a transform | placed in the viewport, where Chrome places it in the element |
+| `background-clip: text` on the root or `body` painting the canvas | the canvas is painted whole, not clipped to the text |
+| `-webkit-text-stroke` | refused |
 | a scaled picture's tile seams, the gaps of `background-repeat: space` | each tile keeps its own edge, where Chrome blends across: about a pixel row; a gap of a fraction of a pixel is a whole pixel or none, where Chrome blends it |
-| a `border-image` from an SVG on a dense screen | rasterised at one pixel a point, so blurred |
-| a canvas picture in a Document without `ui.ScrollingViewport()` | placed in the window, where Chrome places it in `html`'s box |
+| a `border-image-slice` of `100%` without `fill` | the picture drawn whole over the border box, where Chrome draws its corners alone |
 
 ## Sheets
 
@@ -106,8 +101,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an element's own transition of a property it inherits, while a transition above its parent moves it | follows the moving value, where Chrome runs it on to the end value |
 | `animation-composition: add` or `accumulate` on a property other than lengths, numbers, colours, `transform`, `box-shadow`, `filter` and `font-weight` (positions, sizes, grid tracks, `clip-path`…) | replaces, where Chrome adds |
 | `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
-| `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)), its widths, size, metrics and kerning read ([decision 0143](../99-decisions/0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md)); what is left: `font-display` is always `swap` (no block period, a font landing late still swaps in); of `font-feature-settings` only `"kern" 0` does something (`liga`, `tnum`… need a GSUB reader); `font-variation-settings`, `font-named-instance` and a variable font's instances are read and do nothing (x/image's sfnt reads no `fvar`/`gvar`), a variable font drawing its default instance; colour fonts, collections and `CFF2` are not read |
-| made-up faces | a bold or italic is made up from an `@font-face` family's face as Chrome does, but not from ember's faces nor the machine's (`ui.SystemFonts()`), which draw their closest face as it is; `font-synthesis: small-caps` and `position` are read and do nothing |
+| `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)), its widths, size, metrics and kerning read ([decision 0143](../99-decisions/0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md)); variable fonts drawn at their instance and `font-display` timed ([decision 0148](../99-decisions/0148-variable-fonts-are-read-in-pure-go-and-font-display-is-timed-on-the-documents-clock.md)); what is left: of `font-feature-settings` only `"kern" 0` does something (`liga`, `tnum`… need a GSUB reader); a variable font's `MVAR` (its metrics stay the default instance's), `font-named-instance`, `font-optical-sizing` (`opsz`), and `ital`/`slnt` from `font-style` are not read, nor variations of `CFF2` outlines or of the machine's fonts (`ui.SystemFonts()`); `font-variation-settings` jumps where Chrome interpolates it in transitions and animations; a page's text in its block period is checked against ember's own clock, Chrome's timing of it only at its end (which font a late file leaves); colour fonts, collections and `CFF2` are not read |
+| made-up faces | a bold or italic is made up from an `@font-face` family's face as Chrome does, but not from ember's faces nor the machine's (`ui.SystemFonts()`), which draw their closest face as it is; `font-synthesis: position` is read and does nothing (`small-caps` left out draws the letters as they are, [decision 0148](../99-decisions/0148-variable-fonts-are-read-in-pure-go-and-font-display-is-timed-on-the-documents-clock.md)) |
 | `font-stretch` | chooses among a family's `@font-face` faces; the machine's families are not chosen among by width, and no face is stretched |
 | `prefers-color-scheme` and `prefers-reduced-motion` on Linux and the web | no preference: neither says its scheme or its reduced motion yet, so a Document given `ui.Preferences` answers light and no preference there ([decision 0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)) |
 | `<meta name="color-scheme">` | not read: ui reads no page's `head`; a program reading a page puts `:where(:root) { color-scheme: … }` in a sheet of its own ([decision 0126](../99-decisions/0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md)) |
@@ -189,12 +184,18 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `filter`, `foreignObject`, `textPath`, `mix-blend-mode`, `vector-effect`, animation | not drawn, and named in a warning |
-| a `clip-path` or a `mask` of a basic shape or another file, `clip-path` on the shapes inside a `clipPath` | the first two named in a warning and not applied, the last ignored |
-| the letters of `text` | Go's faces, the monospace one for a family naming one, whatever font the file asks for (Chrome's sans-serif differs by a few levels on average); no `letter-spacing`, `word-spacing`, `textLength`, `text-decoration`, `dominant-baseline`, vertical text, ligatures or shaping of complex scripts |
+| `foreignObject`, animation, `vector-effect` other than `non-scaling-stroke` | not drawn, and named in a warning |
+| `feTurbulence`, `feImage`, `feConvolveMatrix`, `feDisplacementMap`, `feDiffuseLighting`, `feSpecularLighting` | a clear result, and named in a warning |
+| `BackgroundImage`, `BackgroundAlpha`, `FillPaint`, `StrokePaint` as a primitive's input; `edgeMode` of `feGaussianBlur` | read as clear and named in a warning; ignored, the edges clear |
+| a filter over more than 4 million pixels (2048 a side) | not run: the element is drawn unfiltered |
+| a filter of an element under a rotation or a skew | blurred, eroded and dilated along the pixels' axes, where Chrome filters in the element's own space |
+| a filter list with a CSS function after a `url()` (`filter: url(#soft) drop-shadow(…)`) | the function reads the filter element's result cut to its region, where Chrome's shadow is fainter |
+| a `mask` of a basic shape, a gradient or another file, a `clip-path` of another file, `clip-path` on the shapes inside a `clipPath` | the first two named in a warning and not applied, the last ignored |
+| corners of their own in a basic shape's `round` (`inset(0 round 2px 8px)`) | every corner the first radius |
+| the letters of `text` | Go's faces, the monospace one for a family naming one, whatever font the file asks for (Chrome's sans-serif differs by a few levels on average); no `textLength`, `dominant-baseline`, vertical text, ligatures or shaping of complex scripts; `text-decoration` at the Go face's own place and thickness, thinner than Chrome's |
+| `textPath`'s `method`, `spacing`, `side` and the path's `pathLength`; text after a `textPath` in the same `text` | ignored; set from the path's end point |
 | an `image` of a file | not fetched, and named in a warning: only `data:` addresses are drawn |
 | an SVG `image` sized by its own `width` and `height` with no `viewBox`, under a `preserveAspectRatio` other than the default | fitted from its own size as if it had a view box of it |
-| a UTF-16 file | rejected |
 | hairline strokes, dashes along curves | differ a little from Chrome's |
 | `currentColor` in an `img` or a `url()`, `image-rendering: pixelated` | black, as in Chrome, where only an `svg` element takes the page's colour; ignored |
 | an SVG as a twod texture | by hand: `svg.LoadPicture`, `Rasterise`, `twod.NewTexture` |

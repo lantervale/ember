@@ -13,6 +13,10 @@ type shared struct {
 	width  float32
 	color  color.Color
 	hidden bool
+	// order is the place of the box it came from among the table's boxes, as Chrome
+	// merges them: the cells in the document's order, then the rows, the row groups, the
+	// columns, the column groups and the table. As good, the earlier wins.
+	order int
 }
 
 // side is one of an element's four borders, as an edge of the grid would take it.
@@ -41,14 +45,14 @@ func borderOf(n *node, s side) shared {
 func styleBorder(st *style.Computed, s side) shared {
 	switch s {
 	case sideTop:
-		return shared{st.BorderStyle.Top, st.Border.Top, st.BorderColor.Top, st.BorderHidden.Top}
+		return shared{st.BorderStyle.Top, st.Border.Top, st.BorderColor.Top, st.BorderHidden.Top, 0}
 	case sideRight:
-		return shared{st.BorderStyle.Right, st.Border.Right, st.BorderColor.Right, st.BorderHidden.Right}
+		return shared{st.BorderStyle.Right, st.Border.Right, st.BorderColor.Right, st.BorderHidden.Right, 0}
 	case sideBottom:
-		return shared{st.BorderStyle.Bottom, st.Border.Bottom, st.BorderColor.Bottom, st.BorderHidden.Bottom}
+		return shared{st.BorderStyle.Bottom, st.Border.Bottom, st.BorderColor.Bottom, st.BorderHidden.Bottom, 0}
 	case sideLeft:
 	}
-	return shared{st.BorderStyle.Left, st.Border.Left, st.BorderColor.Left, st.BorderHidden.Left}
+	return shared{st.BorderStyle.Left, st.Border.Left, st.BorderColor.Left, st.BorderHidden.Left, 0}
 }
 
 // rank orders the border styles where two borders are as wide: double over solid over
@@ -71,14 +75,13 @@ func rank(s style.BorderStyle) int {
 		return 2
 	case style.BorderInset:
 		return 1
-	case style.BorderNone:
+	case style.BorderNone, style.BorderAuto:
 	}
 	return 0
 }
 
 // beats reports whether e wins the edge over the border held so far: a hidden one wins
-// over all, then the wider, then the style; as good, the one held stays, the borders
-// being offered from the cell out to the table and from the left and the top.
+// over all, then the wider, then the style; as good, the one from the earlier box.
 func (e shared) beats(held shared) bool {
 	switch {
 	case held.hidden:
@@ -87,8 +90,42 @@ func (e shared) beats(held shared) bool {
 		return true
 	case e.width != held.width:
 		return e.width > held.width
+	case rank(e.style) != rank(held.style):
+		return rank(e.style) > rank(held.style)
 	}
-	return rank(e.style) > rank(held.style)
+	return held.style != style.BorderNone && e.order < held.order
+}
+
+// paints reports an edge that draws: there, not hidden, with a width and a style.
+func (e shared) paints() bool { return e.width > 0 && e.style != style.BorderNone && !e.hidden }
+
+// compare is which of two edges meeting at a corner paints over it, as Chrome's
+// CompareForPaint: 1 for e, -1 for o, 0 when neither is better. An edge that paints
+// beats one that doesn't, then the wider, the style, the earlier box.
+func (e shared) compare(o shared) int {
+	ep, op := e.paints(), o.paints()
+	switch {
+	case !ep && !op:
+		return 0
+	case !ep:
+		return -1
+	case !op:
+		return 1
+	case e.width != o.width:
+		return sign(e.width > o.width)
+	case rank(e.style) != rank(o.style):
+		return sign(rank(e.style) > rank(o.style))
+	case e.order != o.order:
+		return sign(e.order < o.order)
+	}
+	return 0
+}
+
+func sign(win bool) int {
+	if win {
+		return 1
+	}
+	return -1
 }
 
 func resolved(candidates ...shared) shared {
@@ -152,11 +189,50 @@ func columnLines(tracks []track, cols int) []gridLine {
 
 // groupSide is the border of l's group on side s where l is the line of the group at
 // that side, none otherwise.
-func (l gridLine) groupSide(s side, at bool) shared {
+func (l gridLine) groupSide(o orders, s side, at bool) shared {
 	if l.group == nil || !at {
 		return shared{}
 	}
-	return borderOf(l.group, s)
+	return o.of(l.group, s)
+}
+
+// orders are the places of a table's boxes, as shared.order counts them.
+type orders map[*node]int
+
+func (o orders) of(n *node, s side) shared {
+	e := borderOf(n, s)
+	e.order = o[n]
+	return e
+}
+
+// ordersOf numbers the boxes of table n, whose cells are cells and rows rows, in the
+// order Chrome merges their borders: every column shares a number, and so does every
+// column group.
+func ordersOf(n *node, cells []slot, rows []*node, tracks []track) orders {
+	o := make(orders, len(cells)+len(rows)+len(tracks)+1)
+	for _, c := range cells {
+		o[c.cell] = len(o)
+	}
+	for _, r := range rows {
+		o[r] = len(o)
+	}
+	at := len(o)
+	for _, k := range n.kids {
+		if k.role == roleGroup {
+			o[k] = at
+			at++
+		}
+	}
+	for _, tr := range tracks {
+		if tr.col != nil {
+			o[tr.col] = at
+		}
+		if tr.group != nil {
+			o[tr.group] = at + 1
+		}
+	}
+	o[n] = at + 2
+	return o
 }
 
 // collapse resolves the borders of a table whose borders collapse (CSS 2.1 §17.6.2):
@@ -193,6 +269,7 @@ func (t *tree) collapse(n *node, rows []*node, tracks []track) {
 		return at[r][k]
 	}
 	rowAt, colAt := rowLines(n), columnLines(tracks, cols)
+	o := ordersOf(n, cells, rows, tracks)
 	line := func(lines []gridLine, i int) gridLine {
 		if i < 0 || i >= len(lines) {
 			return gridLine{}
@@ -207,20 +284,20 @@ func (t *tree) collapse(n *node, rows []*node, tracks []track) {
 				continue
 			}
 			left, right := line(colAt, k-1), line(colAt, k)
-			cands := []shared{borderOf(before, sideRight), borderOf(after, sideLeft)}
+			cands := []shared{o.of(before, sideRight), o.of(after, sideLeft)}
 			if k == 0 {
-				cands = append(cands, borderOf(rowAt[r].own, sideLeft), rowAt[r].groupSide(sideLeft, true))
+				cands = append(cands, o.of(rowAt[r].own, sideLeft), rowAt[r].groupSide(o, sideLeft, true))
 			}
 			if k == cols {
-				cands = append(cands, borderOf(rowAt[r].own, sideRight), rowAt[r].groupSide(sideRight, true))
+				cands = append(cands, o.of(rowAt[r].own, sideRight), rowAt[r].groupSide(o, sideRight, true))
 			}
-			cands = append(cands, borderOf(left.own, sideRight), borderOf(right.own, sideLeft),
-				left.groupSide(sideRight, left.last), right.groupSide(sideLeft, right.first))
+			cands = append(cands, o.of(left.own, sideRight), o.of(right.own, sideLeft),
+				left.groupSide(o, sideRight, left.last), right.groupSide(o, sideLeft, right.first))
 			if k == 0 {
-				cands = append(cands, borderOf(n, sideLeft))
+				cands = append(cands, o.of(n, sideLeft))
 			}
 			if k == cols {
-				cands = append(cands, borderOf(n, sideRight))
+				cands = append(cands, o.of(n, sideRight))
 			}
 			g.v[r][k] = resolved(cands...)
 		}
@@ -234,16 +311,16 @@ func (t *tree) collapse(n *node, rows []*node, tracks []track) {
 			}
 			above, below := line(rowAt, r-1), line(rowAt, r)
 			cands := []shared{
-				borderOf(before, sideBottom), borderOf(after, sideTop),
-				borderOf(above.own, sideBottom), borderOf(below.own, sideTop),
-				above.groupSide(sideBottom, above.last), below.groupSide(sideTop, below.first),
+				o.of(before, sideBottom), o.of(after, sideTop),
+				o.of(above.own, sideBottom), o.of(below.own, sideTop),
+				above.groupSide(o, sideBottom, above.last), below.groupSide(o, sideTop, below.first),
 			}
 			if r == 0 {
-				cands = append(cands, borderOf(colAt[k].own, sideTop), colAt[k].groupSide(sideTop, true), borderOf(n, sideTop))
+				cands = append(cands, o.of(colAt[k].own, sideTop), colAt[k].groupSide(o, sideTop, true), o.of(n, sideTop))
 			}
 			if r == len(rows) {
-				cands = append(cands, borderOf(colAt[k].own, sideBottom), colAt[k].groupSide(sideBottom, true),
-					borderOf(n, sideBottom))
+				cands = append(cands, o.of(colAt[k].own, sideBottom), colAt[k].groupSide(o, sideBottom, true),
+					o.of(n, sideBottom))
 			}
 			g.h[r][k] = resolved(cands...)
 		}
@@ -328,59 +405,91 @@ func (n *node) borders() rect {
 	return borders(n.st)
 }
 
-// edges lists the grid's borders as the table draws them, in its box: colX and rowY
-// are where the columns and the rows start, one more for the end. Where borders cross,
-// the wider way goes through and the other stops at its sides; as wide, the one across,
-// and a double down too, so that their lines cross as Chrome draws them.
+// edges lists the grid's borders as the table draws them, in its box and in Chrome's
+// order, row by row, each edge down before the one across from the same corner: colX and
+// rowY are where the columns and the rows start, one more for the end. At each corner the
+// edges meeting there are weighed as Chrome's ComputeEdgeJoints weighs them: an edge
+// that wins its corner reaches through the way across it, one that loses stops short of
+// it, and when two win, the later drawn shows.
 func (g *borderGrid) edges(colX, rowY []float32) []box.Edge {
 	if g.rows == 0 || g.cols == 0 {
 		return nil
 	}
+	v := func(r, k int) shared {
+		if r < 0 || r >= g.rows || k < 0 || k > g.cols {
+			return shared{}
+		}
+		return g.v[r][k]
+	}
+	h := func(r, k int) shared {
+		if r < 0 || r > g.rows || k < 0 || k >= g.cols {
+			return shared{}
+		}
+		return g.h[r][k]
+	}
 	out := make([]box.Edge, 0, 2*g.rows*g.cols+g.rows+g.cols)
-	width := func(grid [][]shared, r, k int) float32 {
-		if r < 0 || r >= len(grid) || k < 0 || k >= len(grid[r]) {
-			return 0
-		}
-		return grid[r][k].width
-	}
-	across := func(r, k int) float32 { return max(width(g.h, r, k-1), width(g.h, r, k)) }
-	down := func(r, k int) float32 { return max(width(g.v, r-1, k), width(g.v, r, k)) }
-	reach := func(through bool, crossing float32) float32 {
-		if through {
-			return crossing / 2
-		}
-		return -crossing / 2
-	}
-	for r := range g.v {
-		for k, e := range g.v[r] {
-			if e.width <= 0 {
-				continue
+	for r := range g.rows + 1 {
+		for k := range g.cols + 1 {
+			if e := v(r, k); e.paints() {
+				start, startWide := joint(h(r, k-1), h(r, k), v(r-1, k), e, false, false)
+				end, endWide := joint(h(r+1, k-1), h(r+1, k), e, v(r+1, k), false, true)
+				top, bottom := reach(start, startWide), reach(end, endWide)
+				out = append(out, box.Edge{
+					Rect: geom.Rect{
+						X: colX[k] - e.width/2, Y: rowY[r] - top, W: e.width, H: rowY[r+1] - rowY[r] + top + bottom,
+					},
+					Style: e.style, Color: e.color,
+				})
 			}
-			double := e.style == style.BorderDouble
-			top := reach(down(r, k) > across(r, k) || double && e.width >= across(r, k), across(r, k))
-			bottom := reach(down(r+1, k) > across(r+1, k) || double && e.width >= across(r+1, k), across(r+1, k))
-			out = append(out, box.Edge{
-				Rect: geom.Rect{
-					X: colX[k] - e.width/2, Y: rowY[r] - top, W: e.width, H: rowY[r+1] - rowY[r] + top + bottom,
-				},
-				Style: e.style, Color: e.color,
-			})
-		}
-	}
-	for r := range g.h {
-		for k, e := range g.h[r] {
-			if e.width <= 0 {
-				continue
+			if e := h(r, k); e.paints() {
+				start, startWide := joint(h(r, k-1), e, v(r-1, k), v(r, k), true, false)
+				end, endWide := joint(e, h(r, k+1), v(r-1, k+1), v(r, k+1), true, true)
+				left, right := reach(start, startWide), reach(end, endWide)
+				out = append(out, box.Edge{
+					Rect: geom.Rect{
+						X: colX[k] - left, Y: rowY[r] - e.width/2, W: colX[k+1] - colX[k] + left + right, H: e.width,
+					},
+					Style: e.style, Color: e.color, Across: true,
+				})
 			}
-			left := reach(across(r, k) >= down(r, k), down(r, k))
-			right := reach(across(r, k+1) >= down(r, k+1), down(r, k+1))
-			out = append(out, box.Edge{
-				Rect: geom.Rect{
-					X: colX[k] - left, Y: rowY[r] - e.width/2, W: colX[k+1] - colX[k] + left + right, H: e.width,
-				},
-				Style: e.style, Color: e.color, Across: true,
-			})
 		}
 	}
 	return out
+}
+
+// joint weighs a corner of the grid for one of the edges meeting there: before and after
+// the edges across, left and right of it, over and under those down, above and below.
+// It reports whether the edge, across when across is set, wins the corner from its start
+// or, when end is set, its end, and how wide the corner is along it: the width of the
+// winner of the other way.
+func joint(before, after, over, under shared, across, end bool) (bool, float32) {
+	acrossCmp, downCmp := before.compare(after), over.compare(under)
+	acrossWinner, downWinner := after, under
+	if acrossCmp == 1 {
+		acrossWinner = before
+	}
+	if downCmp == 1 {
+		downWinner = over
+	}
+	ways := acrossWinner.compare(downWinner)
+	own := acrossCmp
+	if !across {
+		own, ways = downCmp, -ways
+	}
+	if end {
+		own = -own
+	}
+	if across {
+		return ways != -1 && own != 1, downWinner.width
+	}
+	return ways != -1 && own != 1, acrossWinner.width
+}
+
+// reach is how far an edge goes past a corner as wide as wide: through it when it wins,
+// else short of it.
+func reach(wins bool, wide float32) float32 {
+	if wins {
+		return wide / 2
+	}
+	return -wide / 2
 }

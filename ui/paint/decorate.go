@@ -220,7 +220,7 @@ func (p *painter) collapsedBorders(e entry, alpha float32) {
 			}
 			p.s.Rect(a, first)
 			p.s.Rect(b, second)
-		case style.BorderNone, style.BorderSolid:
+		case style.BorderNone, style.BorderAuto, style.BorderSolid:
 			p.s.Rect(r, c)
 		}
 	}
@@ -249,6 +249,10 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		p.s.PushClip(r)
 		defer p.s.PopClip()
 	}
+	var text *twod.Picture
+	if clipsText(st) {
+		text = p.textMask(e)
+	}
 	mixing := p.beginLayers(st)
 	defer mixing.end()
 	if st.Background.A > 0 && !tracked(b) {
@@ -263,13 +267,16 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		case silhouetted(b, st):
 			p.maskedFill(b, r, edges, radius, st, alpha)
 		default:
-			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundLayer(n-1).Clip, style.UnderBorder))
-			p.fill(clip, rounding, fade(st.Background, alpha))
+			which := or(st.BackgroundLayer(n-1).Clip, style.UnderBorder)
+			clip, rounding := backgroundBox(b, r, edges, radius, which)
+			p.throughText(text, which, func() { p.fill(clip, rounding, fade(st.Background, alpha)) })
 		}
 	}
 	for i := n - 1; i >= 0; i-- {
 		if l := st.BackgroundLayer(i); l.Image.Source != "" || l.Image.Gradient != nil {
-			mixing.layer(l.Blend, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
+			mixing.layer(l.Blend, func() {
+				p.throughText(text, l.Clip, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
+			})
 		}
 	}
 }
@@ -297,7 +304,9 @@ func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edge
 	}
 	switch l.Attachment {
 	case style.AttachFixed:
-		area = p.viewport
+		if !transformed(b) {
+			area = p.viewport
+		}
 	case style.AttachLocal:
 		pad := inside(r, edges)
 		view = intersect(view, pad)
@@ -306,6 +315,18 @@ func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edge
 	case style.AttachScroll:
 	}
 	p.backgroundImage(view, area, rounding, l, st, alpha)
+}
+
+// transformed reports whether b or a box round it is turned, moved or
+// scaled by its style, where Chrome places a fixed background in b's box
+// as a scrolling one.
+func transformed(b *box.Box) bool {
+	for ; b != nil; b = b.Parent {
+		if st := shown(b); b.Kind == box.Element && st != nil && len(st.Transform) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func or(b, initial style.BackgroundBox) style.BackgroundBox {
@@ -329,7 +350,8 @@ func backgroundBox(
 			Bottom: edges.Bottom + b.Padding.Bottom, Left: edges.Left + b.Padding.Left,
 		}
 		return inside(r, in), radius.inside(in)
-	case style.InitialBox, style.UnderBorder, style.FillBox, style.StrokeBox, style.ViewBox, style.NoClip:
+	case style.InitialBox, style.UnderBorder, style.FillBox, style.StrokeBox, style.ViewBox, style.NoClip,
+		style.UnderText:
 	}
 	return r, radius
 }
@@ -390,9 +412,10 @@ func (p *painter) decorate(e entry, alpha float32) {
 				p.insetShadow(inside(r, pc.edges), radius.inside(pc.edges), sh, alpha)
 			}
 		}
-		if tex := p.find(st.BorderImage, st); tex != nil {
-			p.picture(r, tex, st.BorderImage.Slice, imageWidths(r, st.BorderImageWidth, st.Border, st.BorderImage.Slice),
-				st.BorderImageRepeat, alpha)
+		if tex, k := p.borderImage(st); tex != nil {
+			s := st.BorderImage.Slice
+			p.picture(r, tex, style.Sides[float32]{Top: s.Top * k, Right: s.Right * k, Bottom: s.Bottom * k, Left: s.Left * k},
+				imageWidths(r, st.BorderImageWidth, st.Border, s), st.BorderImageRepeat, st.BorderImage.Fill, alpha)
 		} else if gap, ok := legendGap(b, e.at); ok {
 			for _, clip := range around(r, p.snap(gap)) {
 				p.s.PushClip(clip)
@@ -423,7 +446,7 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 		rule.BorderStyle.Left = style.BorderRidge
 	case style.BorderOutset:
 		rule.BorderStyle.Left = style.BorderGroove
-	case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
+	case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
 		style.BorderRidge, style.BorderDouble:
 	}
 	b := e.b
@@ -454,6 +477,22 @@ func (p *painter) find(img style.Image, st *style.Computed) *twod.Texture {
 		return tex
 	}
 	return pixelated(tex)
+}
+
+// borderImage is st's border-image picture and how many of its pixels
+// make one of the picture's own: a picture of shapes is drawn at the
+// screen's density, as Chrome rasterises it, its slices scaled to match.
+func (p *painter) borderImage(st *style.Computed) (*twod.Texture, float32) {
+	v := p.shapes(st.BorderImage.Source)
+	if v == nil {
+		return p.find(st.BorderImage, st), 1
+	}
+	natural := v.Intrinsic().Natural(geom.V2(defaultWidth, defaultHeight))
+	tex := p.drawn(v, natural)
+	if tex == nil || natural.X <= 0 {
+		return nil, 1
+	}
+	return tex, tex.Size().X / natural.X
 }
 
 // defaultWidth and defaultHeight are the size CSS gives a picture that
@@ -745,14 +784,15 @@ func place(l style.Length, fromEnd bool, origin, extent, img float32) float32 {
 // picture stretches tex over r, or when slice is set draws it cut by
 // slice, its sides widths thick, its edges and centre laid by repeat.
 func (p *painter) picture(
-	r geom.Rect, tex *twod.Texture, slice, widths style.Sides[float32], repeat [2]style.ImageRepeat, alpha float32,
+	r geom.Rect, tex *twod.Texture, slice, widths style.Sides[float32], repeat [2]style.ImageRepeat, fill bool,
+	alpha float32,
 ) {
 	tint := fade(color.White, alpha)
 	if slice == (style.Sides[float32]{}) {
 		p.s.Image(r, tex, whole, tint)
 		return
 	}
-	p.ninePatch(r, tex, slice, widths, repeat, tint)
+	p.ninePatch(r, tex, slice, widths, repeat, tint, fill)
 }
 
 // imageWidths is how thick a border image's sides are drawn over r, as
@@ -1326,10 +1366,10 @@ func grow(r geom.Rect, d float32) geom.Rect {
 	return g
 }
 
-// border paints the border: one stroke when every side is alike and the
-// box is rounded, else each side square, solid or dashed or dotted, solid
-// sides of more than one colour mitered into each other; a rounded dashed
-// border is drawn solid for now.
+// border paints the border: one stroke when the box is rounded and its
+// sides solid or double alike, any other rounded border side by side as
+// Chrome draws it, else each side square, solid or dashed or dotted, solid
+// sides of more than one colour mitered into each other.
 func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Computed, alpha float32) {
 	side := func(width float32, s style.BorderStyle, c color.Color) (float32, color.Color) {
 		if s == style.BorderNone || width <= 0 {
@@ -1341,6 +1381,11 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 	rw, rc := side(w.Right, st.BorderStyle.Right, st.BorderColor.Right)
 	bw, bc := side(w.Bottom, st.BorderStyle.Bottom, st.BorderColor.Bottom)
 	lw, lc := side(w.Left, st.BorderStyle.Left, st.BorderColor.Left)
+	styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
+	if !radius.zero() && !oneRing([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, styles) {
+		p.roundedBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, styles, radius)
+		return
+	}
 	if p.doubleBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, radius, st.BorderStyle) {
 		return
 	}
@@ -1352,7 +1397,6 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 			p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
 			return
 		}
-		styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
 		half, rest := [4]float32{tw, rw, bw, lw}, [4]float32{}
 		for i, s := range styles {
 			if s == style.BorderGroove || s == style.BorderRidge {
@@ -1365,9 +1409,10 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		p.bevel(in, rest, [4]color.Color{tc, rc, bc, lc}, inner)
 		return
 	}
-	if tw == rw && rw == bw && bw == lw && !radius.zero() &&
-		(tc == rc && rc == bc && bc == lc || solidAround(st.BorderStyle)) {
-		p.roundedSides(r, tw, [4]color.Color{tc, rc, bc, lc}, radius)
+	if !radius.zero() {
+		if tw > 0 && tc.A > 0 {
+			p.ring(r, radius, tw, tc)
+		}
 		return
 	}
 	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
@@ -1391,17 +1436,11 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		switch s.style {
 		case style.BorderDashed, style.BorderDotted:
 			p.dashes(s.rect, s.across, s.style == style.BorderDotted, s.c)
-		case style.BorderNone, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
+		case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
 			style.BorderRidge, style.BorderDouble:
 			p.s.Rect(s.rect, s.c)
 		}
 	}
-}
-
-// solidAround reports a border solid on every side.
-func solidAround(s style.Sides[style.BorderStyle]) bool {
-	return s.Top == style.BorderSolid && s.Right == style.BorderSolid && s.Bottom == style.BorderSolid &&
-		s.Left == style.BorderSolid
 }
 
 // mitered reports solid sides that must not lie over each other's
@@ -1448,7 +1487,7 @@ func halves(s style.Sides[style.BorderStyle]) (style.Sides[style.BorderStyle], s
 		case style.BorderRidge:
 			split = true
 			return style.BorderOutset, style.BorderInset
-		case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
+		case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
 			style.BorderOutset, style.BorderDouble:
 		}
 		return x, x
@@ -1540,10 +1579,12 @@ func (p *painter) dashes(r geom.Rect, across, dotted bool, c color.Color) {
 	}
 }
 
-// outline paints an element's outline outside its border box.
+// outline paints an element's outline outside its border box: a solid or
+// double one as rings, any other as a border of its style all round would
+// be drawn there.
 func (p *painter) outline(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	ring := grow(inkOf(e, st), st.OutlineOffset+st.OutlineWidth)
+	ring := grow(inkOf(e, st), outlineReach(st))
 	if !outlined(b) || p.missed(e, ring) {
 		return
 	}
@@ -1560,24 +1601,28 @@ func (p *painter) outline(e entry, alpha float32) {
 	} else {
 		ps[0].rect = geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}
 	}
+	w := st.OutlineWidth
+	lined := style.Computed{BorderStyle: style.All(st.OutlineStyle), BorderColor: style.All(c)}
 	for _, pc := range ps {
 		r := p.snap(pc.rect)
 		out := geom.Rect{X: r.X - grow, Y: r.Y - grow, W: r.W + 2*grow, H: r.H + 2*grow}
-		ring := func(r geom.Rect, radius radii, w float32) {
-			if radius.uniform() {
-				p.s.Border(r, radius[0], w, c)
-			} else {
-				p.s.BorderCorners(r, radius, w, c)
+		switch st.OutlineStyle {
+		case style.BorderAuto:
+			p.focusRing(r, radius.grown(-grow), w, st.OutlineOffset, c)
+		case style.BorderDouble:
+			if outer, inner, ok := doubleCut(w, p.maskScale()); ok {
+				p.ring(out, radius, outer, c)
+				gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
+				p.ring(inside(out, gap), radius.inside(gap), w-inner, c)
+				continue
 			}
+			p.ring(out, radius, w, c)
+		case style.BorderNone, style.BorderSolid:
+			p.ring(out, radius, w, c)
+		case style.BorderDashed, style.BorderDotted, style.BorderInset, style.BorderOutset, style.BorderGroove,
+			style.BorderRidge:
+			p.border(out, box.Edges{Top: w, Right: w, Bottom: w, Left: w}, radius, &lined, 1)
 		}
-		w := st.OutlineWidth
-		if outer, inner, ok := doubleCut(w, p.maskScale()); ok && st.OutlineStyle == style.BorderDouble {
-			ring(out, radius, outer)
-			gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
-			ring(inside(out, gap), radius.inside(gap), w-inner)
-			continue
-		}
-		ring(out, radius, w)
 	}
 }
 
@@ -1678,6 +1723,15 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	if !st.Visible {
 		return
 	}
+	if p.glyphsOnly {
+		white := color.White
+		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
+		for _, f := range b.Lines {
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+		}
+		return
+	}
 	c := fade(st.Fill(), alpha)
 	if placeholder(b) {
 		c = fade(c, placeholderAlpha)
@@ -1704,28 +1758,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	}
 	face := p.faceOf(st.Font)
 	if len(st.TextShadows) > 0 || len(parts) > 0 && len(st.SelectionShadows) > 0 {
-		for i, f := range b.Lines {
-			k := -1
-			if st.HasSelectionShadows {
-				k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
-			}
-			if k < 0 {
-				p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
-				continue
-			}
-			for j, clip := range p.partClips(e, st, f, parts[k]) {
-				shadows, current := st.TextShadows, st.Color
-				if j == 1 {
-					shadows, current = st.SelectionShadows, color.Color{}
-				}
-				if clip.W <= 0 || len(shadows) == 0 {
-					continue
-				}
-				p.s.PushClip(clip)
-				p.shadows(e, st, face, f, shadows, current, alpha)
-				p.s.PopClip()
-			}
-		}
+		p.runShadows(e, st, face, parts, alpha)
 	}
 	opts := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	if ink != c {
@@ -1740,6 +1773,33 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	}
 	p.decorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// runShadows draws the text shadows of e's run, the selected parts' the
+// ::selection's where it sets them.
+func (p *painter) runShadows(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	for i, f := range e.b.Lines {
+		k := -1
+		if st.HasSelectionShadows {
+			k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		}
+		if k < 0 {
+			p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			shadows, current := st.TextShadows, st.Color
+			if j == 1 {
+				shadows, current = st.SelectionShadows, color.Color{}
+			}
+			if clip.W <= 0 || len(shadows) == 0 {
+				continue
+			}
+			p.s.PushClip(clip)
+			p.shadows(e, st, face, f, shadows, current, alpha)
+			p.s.PopClip()
+		}
+	}
 }
 
 // strokes draws -webkit-text-stroke over the fill of e's run: the

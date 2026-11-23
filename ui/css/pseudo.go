@@ -45,7 +45,7 @@ type pseudoElement struct {
 //nolint:gochecknoglobals,goconst // the properties each pseudo-element takes
 var (
 	fontProps = []string{"font", "font-family", "font-size", "font-style", "font-weight", "font-stretch",
-		"line-height"}
+		propFontVariations, "line-height"}
 	markerProps = append([]string{"color", "content", "cursor", "letter-spacing", "overflow-wrap", "quotes",
 		"text-shadow", "text-transform", "white-space", "transition", "transition-property", "transition-duration",
 		"transition-timing-function", "transition-delay", "-webkit-font-smoothing", "word-spacing"}, fontProps...)

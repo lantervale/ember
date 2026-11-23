@@ -1,6 +1,6 @@
 // Stroked text against Chrome's: -webkit-text-stroke at a few widths and
 // sizes over filled glyphs, outlined text whose -webkit-text-fill-color is
-// transparent, a fill colour apart from the color its decoration takes,
+// transparent, a fill colour apart from color, the decoration in the fill,
 // the stroke with a text-shadow, and a selection whose ::selection
 // strokes the selected glyphs its own way and fills them in its color,
 // its -webkit-text-fill-color left unread as Chrome leaves it.
@@ -38,7 +38,7 @@ func main() {
 		ui.P(ui.Class("wide"), ui.Text("Wide stroke, yellow fill")),
 		ui.P(ui.Class("outlined"), ui.Text("Outlined Ego")),
 		ui.P(ui.Class("mitres"), ui.Text("MAW VIA 47")),
-		ui.P(ui.Class("fill"), ui.Text("Green fill, red underline")),
+		ui.P(ui.Class("fill"), ui.Text("Green fill and underline, red color")),
 		ui.P(ui.Class("shadowed"), ui.Text("Stroked and shadowed")),
 		ui.P(ui.Class("current"), ui.Text("Thick, in currentColor")),
 		sel,

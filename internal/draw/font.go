@@ -14,6 +14,7 @@ import (
 	"weak"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/render"
 	"github.com/rivo/uniseg"
 	"golang.org/x/image/font"
@@ -49,8 +50,8 @@ type Face struct {
 	emoji     Emoji
 	// only are the characters the face draws of those it has (Only), all
 	// without any; blank those drawn as nothing when no face has them
-	// (Blank).
-	only, blank []Range
+	// (Blank); hidden those drawn invisible in their room (Hidden).
+	only, blank, hidden []Range
 	// look is how the face is drawn other than as its file has it.
 	look  Look
 	sizes map[float32]*Font
@@ -103,17 +104,34 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: f.look, fallbacks: fallbacks,
-		emoji: emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, hidden: f.hidden, look: f.look,
+		fallbacks: fallbacks, emoji: emoji, sizes: map[float32]*Font{}}
 }
 
 // Look is how a face is drawn other than as its file has it, as an
 // @font-face and the font asked for have it: its glyphs and advances
 // scaled by Scale (0 for 1), made bold or slanted where its family has
-// no such face, kerned or not.
+// no such face, kerned or not, and a variable font's at the instance
+// Variation places it.
 type Look struct {
 	Scale                 float32
 	Bold, Oblique, NoKern bool
+	Variation             *Variation
+}
+
+// Variation is an instance of a variable font: the face's file read by
+// varfont, and the place on its axes.
+type Variation struct {
+	Font   *varfont.Font
+	Coords varfont.Coords
+}
+
+// varied is the instance l draws, nil for the font's default.
+func (l Look) varied() *Variation {
+	if l.Variation == nil || l.Variation.Coords == nil {
+		return nil
+	}
+	return l.Variation
 }
 
 func (l Look) scale() float32 {
@@ -125,8 +143,8 @@ func (l Look) scale() float32 {
 
 // Styled is f drawn with look.
 func (f *Face) Styled(look Look) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, hidden: f.hidden, look: look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Range is the characters from Lo to Hi.
@@ -146,16 +164,23 @@ func Covers(ranges []Range, r rune) bool {
 // Only is f drawing only the characters in ranges, as an @font-face's
 // unicode-range has it: another is left to the faces after it.
 func (f *Face) Only(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, look: f.look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, hidden: f.hidden, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Blank is f drawing nothing, in no room, for a character in ranges
 // that neither it nor its fallbacks have, where another shows as '?':
 // what a face still on its way may draw.
 func (f *Face) Blank(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, look: f.look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, hidden: f.hidden, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
+}
+
+// Hidden is f drawing the characters in ranges invisible, in the room
+// they take: those of a face in its font-display block period.
+func (f *Face) Hidden(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, hidden: ranges, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Wrap makes the twod.Face of f, for the engine packages that build
@@ -324,8 +349,8 @@ type Font struct {
 	sources    []*opentype.Font
 	// only are the characters each source draws, and blank those drawn
 	// as nothing when no source has them (Face.Only, Face.Blank).
-	only  [][]Range
-	blank []Range
+	only          [][]Range
+	blank, hidden []Range
 	// looks are how each source is drawn (Face.Styled).
 	looks      []Look
 	emoji      Emoji
@@ -357,7 +382,7 @@ const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûü
 
 func newFont(f *Face, px float32, how smoothing, stroke float32) (*Font, error) {
 	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, smoothing: how,
-		blank: f.blank, stroke: stroke}
+		blank: f.blank, hidden: f.hidden, stroke: stroke}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
@@ -445,6 +470,9 @@ func (f *Font) picture(c string) (*render.Texture, bool) {
 func (f *Font) advance(face int, idx sfnt.GlyphIndex) float32 {
 	src := f.sources[face]
 	upem := src.UnitsPerEm()
+	if v := f.looks[face].varied(); v != nil {
+		return v.Font.Advance(uint16(idx), v.Coords) * f.size * f.looks[face].scale() / float32(upem)
+	}
 	a, err := src.GlyphAdvance(&f.buf, idx, fixed.I(int(upem)), font.HintingNone)
 	if err != nil {
 		return 0
@@ -585,12 +613,15 @@ func (f *Font) raster(r rune, phase int) glyph {
 		return f.glyphAt('?', phase)
 	}
 	g := glyph{advance: f.advance(face, idx), face: face, idx: idx, r: r}
+	if len(f.hidden) > 0 && Covers(f.hidden, r) {
+		return g
+	}
 	x := fixed.Int26_6(phase * 64 / phases) //nolint:gosec // phase < phases, so at most 64
 	var dr image.Rectangle
 	var mask image.Image
 	var mp image.Point
 	var ok bool
-	if l := f.looks[face]; l.Bold || l.Oblique || f.stroke > 0 {
+	if l := f.looks[face]; l.Bold || l.Oblique || l.varied() != nil || f.stroke > 0 {
 		dr, mask, ok = f.synthetic(face, idx, x, l)
 	} else {
 		dr, mask, mp, _, ok = f.faces[face].Glyph(fixed.Point26_6{X: x}, r)

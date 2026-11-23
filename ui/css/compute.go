@@ -330,7 +330,7 @@ func paintOnly(c *style.Computed) {
 	c.SelectionShadows, c.HasSelectionShadows = nil, false
 	c.SelectionDecoration, c.HasSelectionDecoration = style.TextDecoration{}, false
 	c.SelectionStroke, c.HasSelectionStroke = style.TextStroke{}, false
-	c.TextStroke, c.TextFill, c.FillSet = style.TextStroke{}, zero, false
+	c.TextStroke, c.TextFill, c.TextFilled = style.TextStroke{}, zero, false
 	c.TextShadows, c.CurrentColor, c.Vars, c.Backdrop = nil, 0, nil, color.Color{}
 	c.TextDecoration, c.Decorations = style.TextDecoration{}, nil
 	c.ColorScheme, c.Dark = 0, false
@@ -1124,7 +1124,6 @@ func (x *ctx) finish(root bool) {
 	x.transitions()
 	x.animations()
 	c.FollowColor(c.Color)
-	c.FillSet = c.CurrentColor&style.FillCurrent == 0
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
@@ -1532,6 +1531,11 @@ var (
 		"inset": style.BorderInset, "outset": style.BorderOutset,
 		"groove": style.BorderGroove, "ridge": style.BorderRidge, "double": style.BorderDouble,
 	}
+	outlineStyles = func() map[string]style.BorderStyle {
+		m := maps.Clone(borderStyles)
+		m["auto"] = style.BorderAuto
+		return m
+	}()
 	overflows = map[string]style.Overflow{
 		"visible": style.Visible, "hidden": style.Hidden, "clip": style.Clip,
 		"scroll": style.Scroll, "auto": style.OverflowAuto,
@@ -1861,17 +1865,24 @@ var props = func() map[string]prop {
 			}, numbers(0, math.MaxFloat32)),
 		"font-synthesis": field(func(c *style.Computed) *style.FontSynthesis { return &c.Font.Synthesis },
 			func(_ *ctx, v []Component) style.FontSynthesis {
-				no := style.NoSyntheticBold | style.NoSyntheticItalic
+				no := style.NoSyntheticBold | style.NoSyntheticItalic | style.NoSyntheticSmallCaps
 				for _, c := range v {
 					switch {
 					case isWord(c, "weight"):
 						no &^= style.NoSyntheticBold
 					case isWord(c, "style"):
 						no &^= style.NoSyntheticItalic
+					case isWord(c, "small-caps"):
+						no &^= style.NoSyntheticSmallCaps
 					}
 				}
 				return no
 			}, flips[style.FontSynthesis]()),
+		propFontVariations: field(func(c *style.Computed) *[]style.FontVariation { return &c.Font.Variations },
+			func(_ *ctx, v []Component) []style.FontVariation {
+				out, _ := fontVariations(v)
+				return out
+			}, flips[[]style.FontVariation]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {
@@ -2052,6 +2063,7 @@ var props = func() map[string]prop {
 		"background-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundClips },
 			wordOf(map[string]style.BackgroundBox{
 				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
+				"text": style.UnderText,
 			}), flips[[]style.BackgroundBox]()),
 		"mask-image": layered(func(c *style.Computed) *[]style.Image { return &c.MaskImages },
 			backgroundImage, flips[[]style.Image]()),
@@ -2084,8 +2096,6 @@ var props = func() map[string]prop {
 			borderWidthOf, flips[float32]()),
 		"-webkit-text-stroke-color": currentField(style.StrokeCurrent,
 			func(c *style.Computed) *color.Color { return &c.TextStroke.Color }).painted(),
-		"-webkit-text-fill-color": currentField(style.FillCurrent,
-			func(c *style.Computed) *color.Color { return &c.TextFill }).painted(),
 		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
 			decorationLine, flips[style.DecorationLine]()),
 		"text-decoration-style": keyword(func(c *style.Computed) *style.DecorationStyle { return &c.TextDecoration.Style },
@@ -2098,6 +2108,9 @@ var props = func() map[string]prop {
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
 		"caret-color":  autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.CaretColor, &c.CaretAuto }),
+
+		"-webkit-text-fill-color": textFill(),
+
 		"object-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.ObjectPosition },
 			(*ctx).position, positions),
 		"object-fit": keyword(func(c *style.Computed) *style.ObjectFit { return &c.ObjectFit },
@@ -2105,7 +2118,7 @@ var props = func() map[string]prop {
 				"none": style.FitNone, "scale-down": style.FitScaleDown}),
 		"border-image-source": field(func(c *style.Computed) *string { return &c.BorderImage.Source },
 			imageSource, flips[string]()),
-		"border-image-slice": field(
+		"border-image-slice": filled(field(
 			func(c *style.Computed) *style.Sides[float32] { return &c.BorderImage.Slice },
 			func(_ *ctx, v []Component) style.Sides[float32] {
 				if len(v) == 1 && v[0].Kind == Percentage && v[0].Num == 100 {
@@ -2120,7 +2133,7 @@ var props = func() map[string]prop {
 				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(n)-1]
 				return style.Sides[float32]{Top: n[pick[0]], Right: n[pick[1]], Bottom: n[pick[2]], Left: n[pick[3]]}
 			}, imageSlices,
-		),
+		)),
 		"border-image-width": field(
 			func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.BorderImageWidth },
 			func(x *ctx, v []Component) style.Sides[style.ImageWidth] {
@@ -2166,7 +2179,7 @@ var props = func() map[string]prop {
 		"box-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.Shadows },
 			(*ctx).shadows, shadows).painted(),
 		"outline-width": field(func(c *style.Computed) *float32 { return &c.OutlineWidth }, borderWidthOf, widths),
-		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, borderStyles),
+		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, outlineStyles),
 		"outline-color": currentField(style.OutlineCurrent,
 			func(c *style.Computed) *color.Color { return &c.OutlineColor }).painted(),
 		"outline-offset": field(func(c *style.Computed) *float32 { return &c.OutlineOffset },
@@ -2319,6 +2332,43 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 				ca, aa := get(a)
 				cb, ab := get(b)
 				return *aa == *ab && (*aa || *ca == *cb)
+			},
+		},
+	}
+}
+
+// filled is border-image-slice's p that also reads its fill word, which
+// flips with the slices.
+func filled(p prop) prop {
+	set, inherit := p.set, p.inherit
+	p.set = func(x *ctx, v []Component) {
+		set(x, v)
+		x.c.BorderImage.Fill = slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "fill") })
+	}
+	p.inherit = func(dst, src *style.Computed) {
+		inherit(dst, src)
+		dst.BorderImage.Fill = src.BorderImage.Fill
+	}
+	return p
+}
+
+// textFill is -webkit-text-fill-color: a colour, or currentColor, which
+// leaves the glyphs to color, as the element's own, inherited or not.
+func textFill() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			if x.c.TextFilled = !isWord(v[0], kwCurrentColor); x.c.TextFilled {
+				x.c.TextFill = linear(v[0], x.c.Color)
+			}
+		},
+		inherit: func(dst, src *style.Computed) { dst.TextFill, dst.TextFilled = src.TextFill, src.TextFilled },
+		anim: anim{kind: interpolated,
+			lerp: func(dst, a, b *style.Computed, t float32) bool {
+				dst.TextFill, dst.TextFilled = lerpColor(a.Fill(), b.Fill(), t), true
+				return true
+			},
+			equal: func(a, b *style.Computed) bool {
+				return a.TextFilled == b.TextFilled && (!a.TextFilled || a.TextFill == b.TextFill)
 			},
 		},
 	}

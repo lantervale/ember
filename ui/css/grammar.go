@@ -373,6 +373,12 @@ var checks = map[string]check{
 		"extra-condensed", "condensed", "semi-condensed", "semi-expanded", "expanded", "extra-expanded",
 		"ultra-expanded"))),
 	"font-synthesis": checkFontSynthesis,
+	propFontVariations: func(v []Component) error {
+		if _, ok := fontVariations(v); !ok {
+			return fmt.Errorf(`font-variation-settings: expected normal, or "tag" and a number, with commas between`)
+		}
+		return nil
+	},
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
 	"font-style":     single(words("normal", "italic", "oblique")),
@@ -399,9 +405,9 @@ var checks = map[string]check{
 	"text-indent":               single(lengthPercent),
 	"text-transform":            single(words("none", "uppercase", "lowercase", "capitalize")),
 	"-webkit-font-smoothing":    single(words("auto", "none", "antialiased", "subpixel-antialiased")),
+	"-webkit-text-fill-color":   single(colorTerm),
 	"-webkit-text-stroke-width": single(borderWidth),
 	"-webkit-text-stroke-color": single(colorTerm),
-	"-webkit-text-fill-color":   single(colorTerm),
 	"white-space":               single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
 	"overflow-wrap":             single(words("normal", "break-word", "anywhere")),
 	"word-break":                single(words("normal", "break-all", "keep-all", "break-word")),
@@ -431,7 +437,7 @@ var checks = map[string]check{
 	"background-repeat":     commaList(checkTiling),
 	"background-attachment": commaList(single(words("scroll", "fixed", "local"))),
 	"background-origin":     commaList(single(backgroundBox)),
-	"background-clip":       commaList(single(backgroundBox)),
+	"background-clip":       commaList(single(either(words("text"), backgroundBox))),
 	"background-size":       commaList(checkBackgroundSize),
 	"background-position":   commaList(checkPosition),
 	"mask-image":            commaList(single(either(words("none"), imageTerm))),
@@ -451,7 +457,7 @@ var checks = map[string]check{
 	"object-position":       checkPosition,
 	"box-shadow":            checkBoxShadow,
 	"outline-width":         single(borderWidth),
-	"outline-style":         single(borderStyle),
+	"outline-style":         single(either(borderStyle, words("auto"))),
 	"outline-color":         single(colorTerm),
 	"outline-offset":        single(length),
 	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),

@@ -23,9 +23,9 @@ type CapsRun struct {
 // as Chrome synthesises small capitals for a face that has none: what it
 // makes small capitals uppercased at 70% of the size rounded to a whole
 // one, the rest as they are, each run's font without Caps. It is nil
-// where f synthesises none.
+// where f synthesises none, font-synthesis leaving out small-caps.
 func (f Font) SmallCaps(text string) []CapsRun {
-	if !f.Caps.synthesised() {
+	if !f.Caps.synthesised() || f.Synthesis&NoSyntheticSmallCaps != 0 {
 		return nil
 	}
 	plain := f

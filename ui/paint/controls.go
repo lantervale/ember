@@ -327,9 +327,8 @@ func (p *painter) marker(e entry, alpha float32) {
 	case len(e.b.Lines) > 0 && (e.b.Node == nil || e.b.Node.Tag() != dom.Summary):
 		// a list item's number, or its ::marker's content
 		for _, f := range e.b.Lines {
-			face := p.faceOf(st.Font)
-			p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
-			opts := p.textOptions(face, st.Font.Size, st.LetterGap(), ink, smoothingOf(st))
+			p.shadows(e, st, p.faceOf(st.Font), f, st.TextShadows, st.Color, alpha)
+			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), ink, smoothingOf(st))
 			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 		return

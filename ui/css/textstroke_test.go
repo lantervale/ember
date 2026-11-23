@@ -20,7 +20,7 @@ func TestTextStrokeAndFillAreInheritedAndFollowTheColor(t *testing.T) {
 	red, blue, green := color.RGB8(255, 0, 0), color.RGB8(0, 0, 255), color.RGB8(0, 255, 0)
 	assert.Equal(t, style.TextStroke{Width: 1, Color: red}, styleOf(outer).TextStroke)
 	assert.Equal(t, red, styleOf(outer).Fill(), "currentcolor")
-	assert.False(t, styleOf(outer).FillSet)
+	assert.False(t, styleOf(outer).TextFilled)
 	assert.Equal(t, style.TextStroke{Width: 1, Color: blue}, styleOf(inner).TextStroke, "inherited as currentcolor")
 	assert.Equal(t, color.Color{}, styleOf(inner).Fill())
 	assert.Equal(t, style.TextStroke{Width: 3, Color: green}, styleOf(plain).TextStroke)
