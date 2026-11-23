@@ -1141,7 +1141,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Border = box.Edges{Top: f.border.t, Right: f.border.r, Bottom: f.border.b, Left: f.border.l}
 	b.Padding = box.Edges{Top: f.padding.t, Right: f.padding.r, Bottom: f.padding.b, Left: f.padding.l}
 	b.Content, b.ScrollStart = scrollRange(n.st, f)
-	b.Scrollbar = geom.Vec2{X: f.scrollbar.w - fmin(startGutter(n.st), f.scrollbar.w), Y: f.scrollbar.h}
+	b.Scrollbar = endBars(b.Style, f.scrollbar)
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
 	b.Discarded = n.discarded
@@ -1185,6 +1185,9 @@ func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 	if !st.GutterStable || !scrollContainer(st.Overflow.Height) || st.Overflow.Width == style.Hidden {
 		return content, start
 	}
+	if st.Mode.Vertical() {
+		return verticalScrollRange(st, f, content, start)
+	}
 	g := gutterEdges(st, point{x: f.scrollbar.w, y: f.scrollbar.h})
 	w := f.size.w - f.border.l - f.border.r
 	bar := float32(0)
@@ -1198,15 +1201,34 @@ func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 		return content, start
 	}
 	lo, hi := float32(0), over
-	switch {
-	case st.Mode.BlockFromRight():
-		lo, hi = -over, 0
-	case st.Mode.Vertical():
-	case st.Dir == style.RTL:
+	if st.Dir == style.RTL {
 		shift := g.l + g.r - bar
 		lo, hi = -(shift + over), -shift
 	}
 	return geom.Vec2{X: hi - lo + port, Y: content.Y}, geom.Vec2{X: lo, Y: start.Y}
+}
+
+// verticalScrollRange is scrollRange for a box of a vertical writing mode:
+// along its lines, the content less the padding box but the horizontal
+// bar that stands, whatever gutter is empty; a box whose blocks start on
+// the right starts scrolled to its end.
+func verticalScrollRange(st *style.Computed, f placed, content, start geom.Vec2) (geom.Vec2, geom.Vec2) {
+	w, h := f.size.w-f.border.l-f.border.r, f.size.h-f.border.t-f.border.b
+	bars := endBars(st, f.scrollbar)
+	port := geom.Vec2{X: w - bars.X, Y: h - bars.Y}
+	if content.X > port.X && st.Mode.BlockFromRight() {
+		// the overflow, from the right, takes in the vertical bar's room
+		over := fmax(content.X-w, 0)
+		content.X, start.X = over+port.X, -over
+	}
+	bar := float32(0)
+	if o := st.Overflow.Width; o == style.Scroll || o == style.OverflowAuto && content.X > port.X {
+		bar = st.ScrollbarHeight
+	}
+	if content.Y > port.Y {
+		content.Y = fmax(content.Y-(h-bar), 0) + port.Y
+	}
+	return content, start
 }
 
 // markerGap is how far a bullet stands from its item's content, past its own offset, as
@@ -1414,7 +1436,7 @@ func keepLayout(n *node, cumulative point) { keepIn(n, cumulative, false) }
 // boxes take their parent's place too, as no containing block places them.
 func keepIn(n *node, cumulative point, hidden bool) {
 	n.final = n.laid()
-	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
+	n.final.scrollbar = n.barRoom(n.final.scrollbar)
 	n.absolute = point{cumulative.x + n.unrounded.location.x, cumulative.y + n.unrounded.location.y}
 	if n.frag != nil {
 		n.frag = nil
