@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/lantervale/ember/internal/varfont"
 )
 
 // Feature is an OpenType feature a run turns on (1, or the alternate to
@@ -100,20 +102,34 @@ type Plan struct {
 	indic                   *indicPlan
 	khmer                   *khmerPlan
 	use                     *usePlan
+
+	// vf and coords are the variable font and the instance its runs are
+	// shaped at, coords nil for the default instance.
+	vf     *varfont.Font
+	coords varfont.Coords
 }
 
 type planKey struct {
 	script   Tag
 	features string
+	coords   string
 }
 
 // Plan is the plan for runs in script with features, HarfBuzz's written
 // comma separated (ParseFeatures) after those the script's shaper has
 // on, a feature written again overriding it.
-func (f *Font) Plan(script Tag, features string) *Plan {
+func (f *Font) Plan(script Tag, features string) *Plan { return f.PlanAt(script, features, nil, nil) }
+
+// PlanAt is Plan for runs drawn at instance at of variable font vf, the
+// font's file: the features its feature variations choose there, GPOS's
+// values moved by their deltas and the glyphs' advances the instance's.
+func (f *Font) PlanAt(script Tag, features string, vf *varfont.Font, at varfont.Coords) *Plan {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := planKey{script, features}
+	if vf == nil {
+		at = nil
+	}
+	key := planKey{script, features, coordsKey(at)}
 	if p, ok := f.plans[key]; ok {
 		return p
 	}
@@ -127,10 +143,11 @@ func (f *Font) Plan(script Tag, features string) *Plan {
 	if !positions {
 		gposLS = nil
 	}
-	p := &Plan{font: f, gsub: f.gsub.plan(gsubLS, asked, m), gpos: f.gpos.plan(gposLS, asked, m),
-		rtl: RightToLeft(script), kerns: m[kern] != 0, script: script, shaper: sh, chosen: chosen,
+	p := &Plan{font: f, gsub: f.gsub.plan(gsubLS, f.gsub.substitution(at), asked, m),
+		gpos: f.gpos.plan(gposLS, f.gpos.substitution(at), asked, m),
+		rtl:  RightToLeft(script), kerns: m[kern] != 0, script: script, shaper: sh, chosen: chosen,
 		requests: asked, masks: m, pauses: pauses, positions: positions, marks: marks,
-		found: slices.Contains(candidates(script), chosen)}
+		found: slices.Contains(candidates(script), chosen), vf: vf, coords: at}
 	if s := scriptByTag(script); sh == arabicShaper || sh == useShaper && s != nil && s.joins {
 		p.joins = true
 		for i, t := range formTags {
@@ -267,8 +284,9 @@ func (l *layout) langSys(script Tag) (Tag, data) {
 }
 
 // features calls fn with each feature language system ls has in l, its
-// required one included, and its lookups' list.
-func (l *layout) features(ls data, fn func(tag Tag, f data, required bool)) {
+// required one included, and its lookups' list, that of the feature
+// subst puts in its place where it does.
+func (l *layout) features(ls, subst data, fn func(tag Tag, f data, required bool)) {
 	if ls == nil {
 		return
 	}
@@ -276,7 +294,7 @@ func (l *layout) features(ls data, fn func(tag Tag, f data, required bool)) {
 		if i >= int(l.feats.u16(0)) {
 			return
 		}
-		fn(Tag(l.feats.u32(2+6*i)), l.feats.sub(2+6*i+4), required)
+		fn(Tag(l.feats.u32(2+6*i)), l.feature(i, subst), required)
 	}
 	if req := ls.u16(2); req != 0xFFFF {
 		each(int(req), true)
@@ -294,6 +312,6 @@ func (l *layout) has(script Tag, t Tag) bool {
 // inLangSys reports whether language system ls of l has feature t.
 func (l *layout) inLangSys(ls data, t Tag) bool {
 	found := false
-	l.features(ls, func(tag Tag, _ data, _ bool) { found = found || tag == t })
+	l.features(ls, nil, func(tag Tag, _ data, _ bool) { found = found || tag == t })
 	return found
 }

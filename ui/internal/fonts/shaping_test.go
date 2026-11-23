@@ -30,6 +30,22 @@ func TestAVariableFaceIsShapedAtItsInstance(t *testing.T) {
 		1e-3, "the ligature, at the instance")
 }
 
+func TestAVariableFacesLayoutIsItsInstances(t *testing.T) {
+	s := Builtin()
+	loaded(t, s, Descriptors{Family: "Varied", Weight: 400, WeightMax: 400, AutoWeight: true,
+		Stretch: 100, StretchMax: 100, AutoStretch: true}, varfonttest.Build(varfonttest.Options{Layout: true}))
+	at := func(weight, stretch float32) style.Font {
+		return style.Font{Family: []string{"Varied"}, Size: 20, Weight: weight, Stretch: stretch}
+	}
+	// What hb-shape --font-size=2048 --variations=… prints, as widths.
+	assert.InDelta(t, units(1286+1366), s.Advance(at(400, 100), "AV"), 1e-3)
+	assert.InDelta(t, units(1246+1486), s.Advance(at(900, 100), "AV"), 1e-3, "GDEF's deltas")
+	assert.InDelta(t, units(1512+1912), s.Advance(at(400, 150), "AV"), 1e-3, "GPOS's feature variations")
+	assert.InDelta(t, units(1486), s.Advance(at(900, 100), "$"), 1e-3, "rvrn draws $ as S")
+	assert.InDelta(t, units(1203), s.Advance(at(100, 100), "z"), 1e-3, "liga draws z as Z")
+	assert.InDelta(t, units(1144), s.Advance(at(900, 100), "x^"), 1e-3, "^ is a mark")
+}
+
 // featured is the builtin set with Featured, Go with ligatures, small
 // capitals, figures and kerning (internal/shape/testdata).
 func featured(t *testing.T) (*Set, []byte) {

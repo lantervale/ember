@@ -146,9 +146,8 @@ func (b *buffer) placeAround(base, end int, adjust bool) {
 	}
 	baseBox.y += g[base].YOffset
 	baseBox.x = g[base].XOffset
-	if a, err := b.f.src.GlyphAdvance(&b.f.buf, sfnt.GlyphIndex(g[base].ID), fixed.I(int(b.f.upem)),
-		font.HintingNone); err == nil {
-		baseBox.width = int32(a >> 6)
+	if a, found := b.advance(g[base].ID); found {
+		baseBox.width = a
 	}
 	comps := int32(1)
 	if g[base].ligated {

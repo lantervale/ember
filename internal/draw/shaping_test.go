@@ -10,6 +10,8 @@ import (
 	"golang.org/x/image/font/sfnt"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/varfont"
+	"github.com/lantervale/ember/internal/varfont/varfonttest"
 )
 
 func featuredFace(t *testing.T) *Face {
@@ -120,6 +122,25 @@ func TestAMarkIsDrawnOnItsBase(t *testing.T) {
 	assert.Equal(t, 1, its[0].clusters+its[1].clusters)
 	assert.InDelta(t, -690.0/2048*24, its[1].offset.X, 0.01)
 	assert.InDelta(t, -1200.0/2048*24, its[1].offset.Y, 0.01)
+}
+
+func TestAVariableFontIsShapedAtItsInstance(t *testing.T) {
+	ttf := varfonttest.Build(varfonttest.Options{Layout: true})
+	face, err := ParseFace("varied", ttf)
+	require.NoError(t, err)
+	vf, err := varfont.Parse(ttf)
+	require.NoError(t, err)
+	bold := face.Styled(Look{Variation: &Variation{Font: vf, Coords: vf.Normalize([]float32{900, 100})}}).Size(24)
+	var its []item
+	bold.items("AVx^$", "", false, "", "", func(it item) { its = append(its, it) })
+	require.Len(t, its, 5)
+	// What hb-shape --font-size=2048 --variations=wght=900 prints.
+	for i, want := range []float32{1246, 1486, 1144, 0, 1486} {
+		assert.InDelta(t, want/2048*24, its[i].advance, 1e-3, "glyph %d", i)
+	}
+	assert.InDelta(t, -792.0/2048*24, its[3].offset.X, 1e-3)
+	assert.InDelta(t, -260.0/2048*24, its[3].offset.Y, 1e-3)
+	assert.True(t, its[4].shaped, "rvrn draws $ as S")
 }
 
 func TestShapedRunsAreKept(t *testing.T) {

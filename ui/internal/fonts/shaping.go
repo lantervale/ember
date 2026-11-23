@@ -48,20 +48,22 @@ func (c *Face) layout() *shape.Font {
 // joined is features with the face's own among them (shape.Splice).
 func (c *Face) joined(features string) string { return shape.Splice(features, c.Look.Features) }
 
-// shapedRun is a run shaped: its width in its face's units at the
-// default instance, and the glyphs it is drawn with.
-type shapedRun struct {
-	width  int32
-	glyphs []uint16
+// plan is c's plan for runs in script with features at instance at of
+// a variable font, nil for its default.
+func (c *Face) plan(script shape.Tag, features string, at varfont.Coords) *shape.Plan {
+	if at == nil {
+		return c.layout().Plan(script, c.joined(features))
+	}
+	return c.layout().PlanAt(script, c.joined(features), c.Variable(), at)
 }
 
 // shaped is the advance of run, glyphs of c, in c's units at instance
 // at of a variable font (nil for its default): shaped with the
 // features, in script, when its layout does anything to them, else the
-// sum of their advances. GPOS's values stay the default instance's.
+// sum of their advances.
 func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph, at varfont.Coords,
 	ctx context) float32 {
-	p := c.layout().Plan(script, c.joined(features))
+	p := c.plan(script, features, at)
 	if !p.Touches(run) {
 		if at != nil {
 			var w float32
@@ -88,28 +90,21 @@ func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Gly
 	}
 	ids = append(append(append(append(ids, 0xff), ctx.before...), 0xff), ctx.after...)
 	s.ids = ids
-	r, ok := s.shapedRuns[p][string(ids)]
+	w, ok := s.shapedRuns[p][string(ids)]
 	if !ok {
 		for _, g := range p.ShapeIn(run, ctx.before, ctx.after) {
-			r.width += g.Advance
-			r.glyphs = append(r.glyphs, g.ID)
+			w += g.Advance
 		}
 		if s.shapedRuns == nil || s.shapedCount >= maxShaped {
-			s.shapedRuns, s.shapedCount = map[*shape.Plan]map[string]shapedRun{}, 0
+			s.shapedRuns, s.shapedCount = map[*shape.Plan]map[string]int32{}, 0
 		}
 		if s.shapedRuns[p] == nil {
-			s.shapedRuns[p] = map[string]shapedRun{}
+			s.shapedRuns[p] = map[string]int32{}
 		}
-		s.shapedRuns[p][string(ids)] = r
+		s.shapedRuns[p][string(ids)] = w
 		s.shapedCount++
 	}
-	w := float32(r.width)
-	if at != nil {
-		for _, g := range r.glyphs {
-			w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
-		}
-	}
-	return w
+	return float32(w)
 }
 
 // context is the text before a run of glyphs and after it, as much as
@@ -153,7 +148,7 @@ func (s *Set) SpaceTies(f style.Font) bool {
 	if err != nil || g == 0 {
 		return false
 	}
-	return c.layout().Plan(shape.MakeTag("latn"), c.joined(f.Features)).Mentions(uint16(g))
+	return c.plan(shape.MakeTag("latn"), f.Features, c.Instance(f)).Mentions(uint16(g))
 }
 
 // capsFeatures are the features that draw f's capitals with c, as
