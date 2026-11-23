@@ -201,6 +201,12 @@ func TestLongSyllablesAreShapedAsHarfBuzzShapesThem(t *testing.T) {
 		"क" + strings.Repeat("़", 40) + "ि", strings.Repeat("क्", 64) + "कि",
 		strings.Repeat("\u0930\u094D\u0915\u093F", 40),
 	}
+	// HarfBuzz's handling of long syllables changes between releases;
+	// shape ports 14.2.1's.
+	if out, err := exec.Command("hb-shape", "--version").Output(); err == nil &&
+		!strings.HasPrefix(string(out), "hb-shape (HarfBuzz) 14.2.1\n") {
+		t.Skipf("hb-shape is not HarfBuzz 14.2.1: %s", strings.SplitN(string(out), "\n", 2)[0])
+	}
 	n := compareFaces(t, []hbFace{{"testdata/noto-devanagari.ttf", 0, long}})
 	t.Logf("%d texts compared", n)
 }

@@ -128,7 +128,7 @@ meter::-webkit-meter-suboptimum-value { background-color: #f00; }`)})
 			t.Errorf("%s: min-height %v, want %v", name, got, c.h)
 		}
 	}
-	if st := styleOf(own); st.Size.Height != style.Px(16) || st.Parts.Thumb.Appearance.Native() {
+	if st := styleOf(own); st.Size.Height.Kind != style.Auto || st.Parts.Thumb.Appearance.Native() {
 		t.Errorf("a range of its own look: height %v, thumb %v", st.Size.Height, st.Parts.Thumb.Appearance)
 	}
 }
@@ -199,13 +199,14 @@ func TestARangesContainerAndVerticalLinesSizeIt(t *testing.T) {
 	if got := styleOf(padded).MinSize.Height; got != style.Px(16) {
 		t.Errorf("a padded container: min-height %v, want 16px", got)
 	}
-	if st := styleOf(upright); st.MinSize.Width != style.Px(12) || st.Size.Height != style.Px(129) ||
+	if st := styleOf(upright); st.MinSize.Width != style.Px(12) || st.Size.Height.Kind != style.Auto ||
 		st.MinSize.Height.Kind != style.Auto {
 		t.Errorf("vertical lines: min-width %v, height %v, min-height %v", st.MinSize.Width, st.Size.Height,
 			st.MinSize.Height)
 	}
-	if st := styleOf(own); st.Size.Width != style.Px(16) || st.Size.Height != style.Px(129) {
-		t.Errorf("its own look in vertical lines: %v × %v", st.Size.Width, st.Size.Height)
+	if st := styleOf(own); st.Size.Width.Kind != style.Auto || st.Size.Height.Kind != style.Auto {
+		t.Errorf("its own look in vertical lines, its sizes natural ones layout gives: %v × %v", st.Size.Width,
+			st.Size.Height)
 	}
 	if a := styleOf(sv).Appearance; a != style.AppearanceSliderVertical {
 		t.Errorf("appearance: slider-vertical computes as %v", a)

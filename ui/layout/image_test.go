@@ -141,3 +141,37 @@ func TestAPictureOfAFullWidthFillsItsAutoGridTrack(t *testing.T) {
 	assert.Equal(t, geom.V2(30, 15), sizes[stretched], "its track stretched to the grid's width")
 	assert.Equal(t, geom.V2(30, 15), sizes[started], "its track as wide as the grid, the picture no wider")
 }
+
+func TestAPictureIsSizedInItsOwnWritingMode(t *testing.T) {
+	across := img("tile.png", func(st *style.Computed) { st.Mode = style.VerticalRL })
+	upright := img("tile.png", nil)
+	sizes := layImages(el(dom.Div, block, el(dom.P, block, across),
+		el(dom.P, func(st *style.Computed) { st.Display, st.Mode = style.Block, style.VerticalRL }, upright)))
+	assert.Equal(t, geom.V2(40, 20), sizes[across])
+	assert.Equal(t, geom.V2(40, 20), sizes[upright])
+}
+
+func TestAPositionedPictureTransfersItsMinAndMaxSizesThroughItsRatio(t *testing.T) {
+	positioned := func(edit func(*style.Computed)) *dom.Node {
+		return img("tile.png", func(st *style.Computed) {
+			st.Position = style.Absolute
+			edit(st)
+		})
+	}
+	short := positioned(func(st *style.Computed) { st.MaxSize.Height = style.Px(10) })
+	tall := positioned(func(st *style.Computed) { st.MinSize.Height = style.Px(40) })
+	sizes := layImages(el(dom.P, block, short, tall))
+	assert.Equal(t, geom.V2(20, 10), sizes[short])
+	assert.Equal(t, geom.V2(80, 40), sizes[tall])
+}
+
+func TestAnAspectRatioAloneSetsAPicturesBlockSize(t *testing.T) {
+	square := func(st *style.Computed) { st.AspectRatio = 1 }
+	inline := img("tile.png", square)
+	positioned := img("tile.png", func(st *style.Computed) { square(st); st.Position = style.Absolute })
+	vertical := img("tile.png", func(st *style.Computed) { square(st); st.Mode = style.VerticalRL })
+	sizes := layImages(el(dom.P, block, inline, positioned, vertical))
+	assert.Equal(t, geom.V2(40, 40), sizes[inline])
+	assert.Equal(t, geom.V2(40, 40), sizes[positioned])
+	assert.Equal(t, geom.V2(20, 20), sizes[vertical])
+}
