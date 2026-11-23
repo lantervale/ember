@@ -132,7 +132,7 @@ func TestRepeatableListsRepeatToTheirLeastCommonMultiple(t *testing.T) {
 }
 
 func TestNumbersAndIntegers(t *testing.T) {
-	if v, _ := numbers(0, 1).lerp(0.2, 1, 1.5); v != 1 {
+	if v, _ := numbers(1).lerp(0.2, 1, 1.5); v != 1 {
 		t.Errorf("opacity past its end: %v", v)
 	}
 	for _, c := range []struct {

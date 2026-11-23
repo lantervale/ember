@@ -100,7 +100,7 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandTextDecoration(v, out)
 	case shortFont:
 		err = expandFont(v, out)
-	case "font-variant":
+	case shortVariant:
 		err = expandVariant(v, out)
 	case "list-style":
 		err = expandListStyle(v, out)
@@ -602,8 +602,8 @@ func expandFont(v []Component, out map[string][]Component) error {
 		one := []Component{v[i]}
 		switch {
 		case isWord(v[i], "normal"):
-		case out["font-variant-caps"] == nil && isWord(v[i], "small-caps"):
-			out["font-variant-caps"] = one
+		case out[propCaps] == nil && isWord(v[i], "small-caps"):
+			out[propCaps] = one
 		case checks["font-stretch-word"](one) == nil:
 			return fmt.Errorf("font: %s is not supported", v[i].String())
 		case out["font-style"] == nil && checks["font-style"](one) == nil:

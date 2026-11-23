@@ -76,11 +76,11 @@ func lerpf(a, b, t float32) float32 { return a + (b-a)*t }
 
 func clampf(v, lo, hi float32) float32 { return min(max(v, lo), hi) }
 
-// numbers interpolates numbers, clamped to [lo, hi] as CSS does past the
+// numbers interpolates numbers, clamped to [0, hi] as CSS does past the
 // ends of an easing.
-func numbers(lo, hi float32) interp[float32] {
+func numbers(hi float32) interp[float32] {
 	return interp[float32]{
-		lerp:  func(a, b, t float32) (float32, bool) { return clampf(lerpf(a, b, t), lo, hi), true },
+		lerp:  func(a, b, t float32) (float32, bool) { return clampf(lerpf(a, b, t), 0, hi), true },
 		equal: same[float32],
 	}
 }
@@ -431,7 +431,7 @@ var imageSlices = interp[style.Sides[float32]]{
 		if (a == whole) != (b == whole) {
 			return a, false
 		}
-		return sides(numbers(0, math.MaxFloat32)).lerp(a, b, t)
+		return sides(numbers(math.MaxFloat32)).lerp(a, b, t)
 	},
 	equal: same[style.Sides[float32]],
 }

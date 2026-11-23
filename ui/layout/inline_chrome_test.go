@@ -237,7 +237,8 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 		"letter-spacing as a percentage": page(
 			ui.P(ui.Style("width: 220px; letter-spacing: 10%; font-size: 12px"), ui.Text("A tenth of an em, "),
 				ui.Span(ui.Style("font-size: 24px"), ui.Text("then of a bigger one")), ui.Text(" and back.")),
-			ui.P(ui.Style("width: 220px; letter-spacing: calc(5% + 1px)"), ui.Text("A sum of both, wrapped where Chrome wraps it.")),
+			ui.P(ui.Style("width: 220px; letter-spacing: calc(5% + 1px)"),
+				ui.Text("A sum of both, wrapped where Chrome wraps it.")),
 		),
 		"word-spacing justified": page(
 			ui.P(ui.Style("width: 170px; text-align: justify; word-spacing: 4px"), ui.Text(sentence)),
@@ -287,6 +288,17 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 			ui.Div(ui.Style("display: flex; width: 30px"),
 				ui.Div(ui.Style("line-break: anywhere"), ui.Text("min-content"))),
 			ui.P(ui.Style("width: 100px; line-break: strict"), ui.Text(sentence)),
+		),
+		"small caps": page(
+			ui.P(ui.Style("width: 160px; font-variant: small-caps"), ui.Text(sentence)),
+			ui.P(ui.Style("font-variant-caps: all-small-caps"), ui.Text("Hello World, ÉTÉ ß 42")),
+			ui.P(ui.Style("font: small-caps 20px Go; letter-spacing: 1px; word-spacing: 4px"), ui.Text("Mixed Case Text")),
+			ui.P(ui.Style("font-variant-caps: unicase"), ui.Text("The Quick Brown Fox")),
+			ui.P(ui.Style("font-variant-caps: small-caps; font-size: 18px"), ui.Text("Eighteen halves up")),
+			ui.P(ui.Style("font-variant-caps: small-caps; font-size: 15px"), ui.Text("Fifteen halves")),
+			ui.P(ui.Style("font-variant-caps: petite-caps; text-transform: capitalize"), ui.Text("petite caps here"),
+				ui.Span(ui.Style("font-variant: normal"), ui.Text(" normal again"))),
+			ui.P(ui.Style("font-variant-caps: titling-caps"), ui.Text("Titling is not synthesised")),
 		),
 		"tabs": page(
 			ui.Div(ui.Style("white-space: pre"), ui.Text("a\tb\tcc\tddd\t\te")),

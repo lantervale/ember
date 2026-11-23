@@ -4,6 +4,7 @@ package css
 // outside its tables.
 const (
 	kwNone         = "none"
+	kwNormal       = "normal"
 	kwUnset        = "unset"
 	kwCurrentColor = "currentcolor"
 	kwFlex         = "flex"
@@ -64,6 +65,12 @@ const (
 	propWidth             = "width"
 	propHeight            = "height"
 	propFontSize          = "font-size"
+	propCaps              = "font-variant-caps"
+	propLigatures         = "font-variant-ligatures"
+	propNumeric           = "font-variant-numeric"
+	propEastAsian         = "font-variant-east-asian"
+	propAlternates        = "font-variant-alternates"
+	propPosition          = "font-variant-position"
 	propColorScheme       = "color-scheme"
 	propAnimationTiming   = "animation-timing-function"
 	propAnimationName     = "animation-name"
@@ -87,6 +94,7 @@ const (
 	shortTransition  = "transition"
 	shortAnimation   = "animation"
 	shortFont        = "font"
+	shortVariant     = "font-variant"
 
 	classAnyLink = "any-link"
 )

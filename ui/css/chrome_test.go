@@ -44,6 +44,9 @@ var compared = map[string]func(s *style.Computed) string{
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
 	"font-family": func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"text-decoration-skip-ink": func(s *style.Computed) string {
+		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
+	},
 	"tab-size": func(s *style.Computed) string {
 		if s.TabSize.Length {
 			return px(s.TabSize.Px)
@@ -58,7 +61,7 @@ var compared = map[string]func(s *style.Computed) string{
 	},
 	"font-variant-caps": func(s *style.Computed) string {
 		return [...]string{"normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase",
-			"titling-caps"}[s.FontVariant.Caps]
+			"titling-caps"}[s.Font.Caps]
 	},
 	"font-variant-ligatures":  func(s *style.Computed) string { return orNormal(s.FontVariant.Ligatures) },
 	"font-variant-numeric":    func(s *style.Computed) string { return orNormal(s.FontVariant.Numeric) },

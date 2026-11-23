@@ -47,7 +47,7 @@ func Initial() Computed {
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
 			Orphans:    2, Widows: 2,
-			TabSize:    TabSize{Spaces: 8},
+			TabSize: TabSize{Spaces: 8},
 		},
 		Look: Look{
 			Opacity: 1, Visible: true, TransformOrigin: Size[Length]{Percent(50), Percent(50)},
@@ -362,6 +362,9 @@ type Font struct {
 	Size   float32
 	Weight int
 	Italic bool
+	// Caps is font-variant-caps, which measuring and drawing synthesise
+	// (SmallCaps).
+	Caps FontCaps
 }
 
 // LineHeight is normal, a factor of the font size, or points.
@@ -493,12 +496,11 @@ const (
 	TitlingCaps
 )
 
-// FontVariant is font-variant's longhands. Caps draws small capitals
-// where it asks for them; the others are kept as written, their keywords
-// in the order CSS lists them, "" for normal, and change nothing drawn: ui
-// applies no OpenType feature of a face.
+// FontVariant is font-variant's longhands but its capitals (Font.Caps),
+// kept as written, their keywords in the order CSS lists them, "" for
+// normal. They change nothing drawn: ui applies no OpenType feature of a
+// face.
 type FontVariant struct {
-	Caps                                                FontCaps
 	Ligatures, Numeric, EastAsian, Alternates, Position string
 }
 
@@ -592,6 +594,9 @@ type Text struct {
 	WordBreak     WordBreak
 	LineBreak     LineBreak
 	TabSize       TabSize
+	// InkThrough is text-decoration-skip-ink: none: underlines and
+	// overlines go through the glyphs' ink, which they otherwise skip.
+	InkThrough bool
 }
 
 // WordBreak is word-break: where lines may break inside words.

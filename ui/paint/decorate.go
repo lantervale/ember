@@ -1674,34 +1674,52 @@ func (p *painter) text(e entry, alpha float32) {
 // by st's word-spacing: whole without one, else word by word, each where
 // layout measured it.
 func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
+	runs := st.Font.SmallCaps(text)
+	if runs == nil {
+		p.wordsIn(at, text, st, st.Font, opts)
+		return
+	}
+	for _, r := range runs {
+		o := opts
+		if r.Font.Size != st.Font.Size {
+			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
+		}
+		at.X = p.wordsIn(at, r.Text, st, r.Font, o)
+	}
+}
+
+// wordsIn is words in font f, a part of st's text small capitals cut, and
+// returns where the text after it starts.
+func (p *painter) wordsIn(at geom.Vec2, text string, st *style.Computed, f style.Font, opts []twod.TextOption) float32 {
 	gap := st.WordGap()
 	if gap == 0 {
 		p.s.Text(at, text, opts...)
-		return
+		return at.X + p.advance(st, f, text, opts)
 	}
 	for len(text) > 0 {
 		i := strings.IndexFunc(text, style.WordSeparator)
 		if i < 0 {
 			p.s.Text(at, text, opts...)
-			return
+			return at.X + p.advance(st, f, text, opts)
 		}
 		if i > 0 {
 			p.s.Text(at, text[:i], opts...)
-			at.X += p.advance(st, text[:i], opts)
+			at.X += p.advance(st, f, text[:i], opts)
 		}
 		_, n := utf8.DecodeRuneInString(text[i:])
-		at.X += p.advance(st, text[i:i+n], opts) + gap
+		at.X += p.advance(st, f, text[i:i+n], opts) + gap
 		text = text[i+n:]
 	}
+	return at.X
 }
 
-// advance is how far s takes the text after it, its letters spaced: by
-// layout's fonts, or without them by the face opts draw it in.
-func (p *painter) advance(st *style.Computed, s string, opts []twod.TextOption) float32 {
+// advance is how far s in f takes the text after it, its letters spaced:
+// by layout's fonts, or without them by the face opts draw it in.
+func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []twod.TextOption) float32 {
 	if p.fonts == nil {
 		return twod.Measure(s, opts...).X
 	}
-	return p.fonts.Advance(st.Font, s) + st.LetterGap()*float32(utf8.RuneCountInString(s))
+	return p.fonts.Advance(f, s) + st.LetterGap()*float32(utf8.RuneCountInString(s))
 }
 
 // selectionColors are the ::selection of the element st styles: its

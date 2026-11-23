@@ -91,7 +91,8 @@ func (f Font) Equal(o Font) bool {
 	return sameSlice(f.Family, o.Family) &&
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
-		f.Italic == o.Italic
+		f.Italic == o.Italic &&
+		f.Caps == o.Caps
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -143,7 +144,8 @@ func (t *Text) equal(o *Text) bool {
 		t.BreakAnywhere == o.BreakAnywhere &&
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
-		t.TabSize == o.TabSize
+		t.TabSize == o.TabSize &&
+		t.InkThrough == o.InkThrough
 }
 
 func (d *Decoration) equal(o *Decoration) bool {

@@ -13,21 +13,21 @@ import (
 //
 //nolint:gochecknoglobals // a grammar table
 var variantGroups = map[string][][]string{
-	"font-variant-ligatures": {{"common-ligatures", "no-common-ligatures"},
+	propLigatures: {{"common-ligatures", "no-common-ligatures"},
 		{"discretionary-ligatures", "no-discretionary-ligatures"}, {"historical-ligatures", "no-historical-ligatures"},
 		{"contextual", "no-contextual"}},
-	"font-variant-numeric": {{"lining-nums", "oldstyle-nums"}, {"proportional-nums", "tabular-nums"},
+	propNumeric: {{"lining-nums", "oldstyle-nums"}, {"proportional-nums", "tabular-nums"},
 		{"diagonal-fractions", "stacked-fractions"}, {"ordinal"}, {"slashed-zero"}},
-	"font-variant-east-asian": {{"jis78", "jis83", "jis90", "jis04", "simplified", "traditional"},
+	propEastAsian: {{"jis78", "jis83", "jis90", "jis04", "simplified", "traditional"},
 		{"full-width", "proportional-width"}, {"ruby"}},
-	"font-variant-alternates": {{"historical-forms"}},
-	"font-variant-position":   {{"sub", "super"}},
+	propAlternates: {{"historical-forms"}},
+	propPosition:   {{"sub", "super"}},
 }
 
 // capsWords are font-variant-caps' keywords.
 //
 //nolint:gochecknoglobals // a grammar table
-var capsWords = map[string]style.FontCaps{"normal": style.NormalCaps, "small-caps": style.SmallCaps,
+var capsWords = map[string]style.FontCaps{kwNormal: style.NormalCaps, "small-caps": style.SmallCaps,
 	"all-small-caps": style.AllSmallCaps, "petite-caps": style.PetiteCaps, "all-petite-caps": style.AllPetiteCaps,
 	"unicase": style.Unicase, "titling-caps": style.TitlingCaps}
 
@@ -35,8 +35,8 @@ var capsWords = map[string]style.FontCaps{"normal": style.NormalCaps, "small-cap
 // serialise.
 //
 //nolint:gochecknoglobals // a shorthand's longhands
-var variantLonghands = []string{"font-variant-ligatures", "font-variant-caps", "font-variant-alternates",
-	"font-variant-numeric", "font-variant-east-asian", "font-variant-position"}
+var variantLonghands = []string{propLigatures, propCaps, propAlternates,
+	propNumeric, propEastAsian, propPosition}
 
 // variantGroup is the group of the longhand name word belongs to, -1 for
 // none.
@@ -55,7 +55,7 @@ func variantGroup(name, word string) int {
 // normal, none for the ligatures, or keywords of distinct groups.
 func checkVariant(name string) check {
 	return func(v []Component) error {
-		if len(v) == 1 && (isWord(v[0], "normal") || name == "font-variant-ligatures" && isWord(v[0], kwNone)) {
+		if len(v) == 1 && (isWord(v[0], kwNormal) || name == propLigatures && isWord(v[0], kwNone)) {
 			return nil
 		}
 		var seen []int
@@ -81,7 +81,7 @@ func checkVariant(name string) check {
 // variantText is a longhand's value as Chrome writes it back: its
 // keywords in their groups' order, "" for normal.
 func variantText(name string, v []Component) string {
-	if len(v) == 1 && isWord(v[0], "normal") {
+	if len(v) == 1 && isWord(v[0], kwNormal) {
 		return ""
 	}
 	if len(v) == 1 && isWord(v[0], kwNone) {
@@ -105,12 +105,12 @@ func variantText(name string, v []Component) string {
 // expandVariant splits font-variant: normal, none (no ligatures), or
 // each keyword given to the longhand that takes it.
 func expandVariant(v []Component, out map[string][]Component) error {
-	if len(v) == 1 && isWord(v[0], "normal", kwNone) {
+	if len(v) == 1 && isWord(v[0], kwNormal, kwNone) {
 		for _, l := range variantLonghands {
-			out[l] = []Component{word("normal")}
+			out[l] = []Component{word(kwNormal)}
 		}
 		if isWord(v[0], kwNone) {
-			out["font-variant-ligatures"] = v
+			out[propLigatures] = v
 		}
 		return nil
 	}
@@ -119,10 +119,10 @@ func expandVariant(v []Component, out map[string][]Component) error {
 		switch {
 		case c.Kind != Ident:
 		case capsWords[strings.ToLower(c.Text)] != style.NormalCaps:
-			if out["font-variant-caps"] != nil {
+			if out[propCaps] != nil {
 				return fmt.Errorf("font-variant: %q is a second capitals keyword", c.String())
 			}
-			into = "font-variant-caps"
+			into = propCaps
 		default:
 			for _, l := range variantLonghands {
 				if variantGroup(l, c.Text) >= 0 {
@@ -137,7 +137,7 @@ func expandVariant(v []Component, out map[string][]Component) error {
 	}
 	for _, l := range variantLonghands {
 		if out[l] == nil {
-			out[l] = []Component{word("normal")}
+			out[l] = []Component{word(kwNormal)}
 		} else if err := checks[l](out[l]); err != nil {
 			return err
 		}

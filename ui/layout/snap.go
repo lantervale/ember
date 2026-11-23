@@ -57,11 +57,9 @@ func (p *pen) step(q piece, perGap float32) float32 {
 	if !isText(q.kind) {
 		p.close()
 		at := p.start
-		switch q.kind {
-		case tab:
+		if q.kind == tab {
 			p.start += tabAdvance(at-p.origin, q.stop, q.least)
-		case newline:
-		default:
+		} else if q.kind != newline {
 			p.start += q.width
 		}
 		return at

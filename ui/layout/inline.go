@@ -364,8 +364,6 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	ws := r.st.WhiteSpace
 	text := collapsedBlanks(r.text, ws)
 	var b strings.Builder
-	splits := wraps(ws) && (r.st.WrapsAnywhere() || r.st.WordBreak == style.BreakAll ||
-		r.st.LineBreak == style.LineBreakAnywhere)
 	// n counts the characters read, and from is where the text in b starts.
 	var n, from int32
 	emit := func(kind pieceKind) {
@@ -374,7 +372,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		}
 		s := b.String()
 		b.Reset()
-		if kind == word && splits {
+		if kind == word && wraps(ws) && splitsWords(r.st) {
 			c.graphemes(fonts, r.st, i, s, from)
 			return
 		}
@@ -405,12 +403,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			c.pieces = append(c.pieces, piece{kind: newline, run: i})
 		case ch == '\t' || ch == '\r':
 			emit(word)
-			p := piece{kind: tab, run: i, at: n - 1}
-			if ch == '\t' {
-				space := fonts.Advance(r.st.Font, " ")
-				p.stop, p.least = r.st.TabStop(space), space/2
-			}
-			c.pieces = append(c.pieces, p)
+			c.pieces = append(c.pieces, tabPiece(fonts, r.st, i, n-1, ch))
 			afterSpace = false
 		case ch == ' ':
 			emit(word)
@@ -431,6 +424,22 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	}
 	emit(word)
 	return afterSpace
+}
+
+// splitsWords reports whether st's text may break inside a word: by overflow-wrap,
+// word-break or line-break.
+func splitsWords(st *style.Computed) bool {
+	return st.WrapsAnywhere() || st.WordBreak == style.BreakAll || st.LineBreak == style.LineBreakAnywhere
+}
+
+// tabPiece is the tab or the carriage return ch of run i at character at.
+func tabPiece(fonts box.Fonts, st *style.Computed, i int, at int32, ch rune) piece {
+	p := piece{kind: tab, run: i, at: at}
+	if ch == '\t' {
+		space := fonts.Advance(st.Font, " ")
+		p.stop, p.least = st.TabStop(space), space/2
+	}
+	return p
 }
 
 // anchorsAt adds the anchors of the out-of-flow elements before run i, and notes the
@@ -525,7 +534,7 @@ func (c *inlineContent) afterWord() bool {
 			continue
 		case word:
 			return true
-		case gap, breakHere, newline, atomic, emergency, marker, anchor:
+		case gap, breakHere, newline, atomic, emergency, marker, anchor, tab:
 		}
 		return false
 	}
@@ -839,7 +848,7 @@ func (c *inlineContent) passes(p piece) bool {
 		return true
 	case gap:
 		return collapses(c.runs[p.run].st.WhiteSpace)
-	case word, atomic, newline, emergency, marker:
+	case word, atomic, newline, emergency, marker, tab:
 	}
 	return false
 }
