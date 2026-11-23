@@ -373,7 +373,7 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 }
 
 func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
-	in = n.contain(in)
+	in = t.listBox(n, n.contain(in))
 	if n.st.Multicol() && n.columnar() {
 		return t.columns(n, in)
 	}

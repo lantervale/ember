@@ -100,6 +100,7 @@ const (
 	// element shows.
 	PictureElement
 	Source
+	Optgroup
 	tagCount
 )
 
@@ -113,7 +114,7 @@ var tagNames = [tagCount]string{ //nolint:gochecknoglobals // a lookup table by 
 	"hgroup", "menu", "search", "a", "b", "i", "u", "s", "small", "abbr", "cite", "mark", "time", "var", "del",
 	"ins", "dfn", "bdi", "bdo", "data", "br",
 	"center", "big", "font", "sub", "sup", "q", "fieldset", "legend", "svg", "iframe",
-	"col", "colgroup", "picture", "source",
+	"col", "colgroup", "picture", "source", "optgroup",
 }
 
 // String is the tag's HTML name, "#text" for text nodes.

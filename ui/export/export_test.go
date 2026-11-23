@@ -8,11 +8,13 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -241,10 +243,22 @@ func TestARangeIsDrawnForChromeAsEmbersConventionHasIt(t *testing.T) {
 	assert.Contains(t, svg, `width="114" height="20"`, "the box and the thumb's overhang each side")
 	assert.Contains(t, svg, `<rect x="7" y="7" width="100" height="6" rx="3" fill="#000000"`, "the track")
 	assert.Contains(t, svg, `<rect x="7" y="7" width="25" height="6" rx="3" fill="#ff0000"`, "the fill to the value")
-	assert.Contains(t, svg, `<circle cx="32" cy="10" r="7" fill="#ffffff"`, "the thumb on the value")
+	assert.Contains(t, svg, `<circle cx="32" cy="10" r="7" fill="#ff0000"`, "the thumb on the value in the accent")
 
-	r.SetState(dom.Hover, true)
-	assert.Contains(t, svgOf(t, written(t, d)), `<circle cx="32" cy="10" r="7" fill="#ff0000"`, "hovered: the accent")
+	r.SetState(dom.Hover|dom.PartHover, true)
+	hovered := style.AccentShade(color.Hex("#ff0000"), style.ShadeHovered, false).Hex()
+	assert.Contains(t, svgOf(t, written(t, d)), `<circle cx="32" cy="10" r="7" fill="`+hovered+`"`,
+		"hovered: the accent's hovered shade")
+
+	r.SetState(dom.Hover|dom.PartHover, false)
+	r.SetStyle("writing-mode: vertical-lr; direction: rtl; width: 20px; height: 100px")
+	d.Layout(geom.V2(400, 300))
+	got = written(t, d)
+	assert.Contains(t, got, "border-image-outset: 7px 0")
+	svg = svgOf(t, got)
+	assert.Contains(t, svg, `width="20" height="114"`, "the thumb's overhang above and below")
+	assert.Contains(t, svg, `<rect x="7" y="82" width="6" height="25"`, "filled up from the bottom")
+	assert.Contains(t, svg, `<circle cx="10" cy="82" r="7"`)
 }
 
 func TestAProgressIsItsTrackAndAccentFillForChrome(t *testing.T) {
@@ -337,6 +351,14 @@ func TestMediaRulesTravelForChromeToAnswer(t *testing.T) {
 	d := ui.NewDocument(ui.CSS(`p { color: #100; } @media (max-width: 600px) { p { color: #200; colour: red; } }`))
 	got := written(t, d)
 	assert.Contains(t, got, "p { color: #100; }\n@media (max-width: 600px) { p { color: #200; } }\n")
+}
+
+func TestAScrollbarPartsStatesAreLeftToChromesPointer(t *testing.T) {
+	got := written(t, ui.NewDocument(ui.CSS(".s::-webkit-scrollbar-thumb:vertical:hover { color: red }\n"+
+		".s:hover::-webkit-scrollbar-thumb:active, .t:active { color: blue }")))
+	assert.Contains(t, got, ".s::-webkit-scrollbar-thumb:vertical:hover {")
+	assert.Contains(t, got, ".s:is(:hover, [data-ember-hover])::-webkit-scrollbar-thumb:active, "+
+		".t:is(:active, [data-ember-active])")
 }
 
 func TestABrowsersSheetTravelsAsItWasWritten(t *testing.T) {

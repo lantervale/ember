@@ -92,16 +92,17 @@ var pseudoElements = map[string]pseudoElement{
 
 	// A scroll container's bars, as Chrome draws them once its
 	// ::-webkit-scrollbar is styled (decision 0158).
-	webkitScrollbar:            {},
-	scrollbarTrack:             {},
-	scrollbarTrackPiece:        {},
-	scrollbarThumb:             {},
-	scrollbarCorner:            {},
-	"-webkit-scrollbar-button": {status: pseudoUnmatched},
-	"-webkit-resizer":          {status: pseudoUnmatched},
+	webkitScrollbar:     {},
+	scrollbarTrack:      {},
+	scrollbarTrackPiece: {},
+	scrollbarThumb:      {},
+	scrollbarCorner:     {},
+	scrollbarButton:     {},
+	webkitResizer:       {},
 
 	// The parts of a range, a progress and a meter, as Chrome lays them
 	// out once the control's appearance is none (decision 0160).
+	sliderContainer:   {},
 	sliderTrack:       {},
 	sliderThumb:       {},
 	progressBar:       {},
@@ -168,12 +169,15 @@ const (
 	scrollbarTrackPiece = "-webkit-scrollbar-track-piece"
 	scrollbarThumb      = "-webkit-scrollbar-thumb"
 	scrollbarCorner     = "-webkit-scrollbar-corner"
+	scrollbarButton     = "-webkit-scrollbar-button"
+	webkitResizer       = "-webkit-resizer"
 )
 
 // The parts of the controls drawn from their CSS.
 const (
 	progressInner     = "-webkit-progress-inner-element"
 	meterInner        = "-webkit-meter-inner-element"
+	sliderContainer   = "-webkit-slider-container"
 	sliderTrack       = "-webkit-slider-runnable-track"
 	sliderThumb       = "-webkit-slider-thumb"
 	progressBar       = "-webkit-progress-bar"
@@ -197,15 +201,18 @@ const (
 	partCornerPresent
 	partEnabled
 	partNoButton
-	// The states no part of ui's bars is ever in: hovered and pressed
-	// parts, buttons, an inactive window's bars.
+	// A hovered and a pressed part, a bar's or a control's, from under
+	// the pointer.
 	partHover
 	partActive
 	partDecrement
 	partIncrement
+	// The states no part of ui's bars is ever in: the buttons Chrome on
+	// macOS never places itself, and a bar that can't scroll.
 	partSingleButton
 	partDoubleButton
 	partDisabled
+	// partWindowInactive is read as the selector's :window-inactive.
 	partWindowInactive
 )
 
@@ -243,11 +250,23 @@ func ownPart(name string) bool {
 // scrollbarPart reports whether name is a part of a scrollbar, which
 // takes the pseudo-classes of partStates.
 func scrollbarPart(name string) bool {
-	return strings.HasPrefix(name, webkitScrollbar) || name == "-webkit-resizer"
+	return strings.HasPrefix(name, webkitScrollbar) || name == webkitResizer
+}
+
+// controlPart reports whether name is a part of a range, a progress or a
+// meter, which takes :hover and :active.
+func controlPart(name string) bool {
+	switch name {
+	case progressInner, meterInner, sliderContainer, sliderTrack, sliderThumb, progressBar, progressValue, meterBar,
+		meterOptimum, meterSuboptimum, meterEvenLessGood:
+		return true
+	}
+	return false
 }
 
 // partStatesOf is cs without the pseudo-classes that follow a scrollbar's
-// part, and the states they ask for; cs as it is when it ends with none.
+// or a control's part, and the states they ask for; cs as it is when it
+// ends with none.
 func partStatesOf(cs []Component) ([]Component, partState) {
 	var want partState
 	n := len(cs)
@@ -259,8 +278,11 @@ func partStatesOf(cs []Component) ([]Component, partState) {
 		want |= st
 		n -= 2
 	}
-	if want == 0 || n < 3 || cs[n-2].Kind != Colon || cs[n-3].Kind != Colon || cs[n-1].Kind != Ident ||
-		!scrollbarPart(strings.ToLower(cs[n-1].Text)) {
+	if want == 0 || n < 3 || cs[n-2].Kind != Colon || cs[n-3].Kind != Colon || cs[n-1].Kind != Ident {
+		return cs, 0
+	}
+	if name := strings.ToLower(cs[n-1].Text); !scrollbarPart(name) &&
+		(!controlPart(name) || want&^(partHover|partActive) != 0) {
 		return cs, 0
 	}
 	return cs[:n], want
@@ -270,6 +292,10 @@ func partStatesOf(cs []Component) ([]Component, partState) {
 // control's own look, which hold while its appearance isn't none: Export
 // writes it as an attribute only the controls of appearance: none lack.
 const nativeClass = "-ember-native"
+
+// listBoxClass is the user agent's pseudo-class of a select shown as a
+// listbox, Chrome's :-internal-list-box.
+const listBoxClass = "-ember-listbox"
 
 // nativeOf is cs without its :-ember-native, and whether it had one.
 func nativeOf(cs []Component) ([]Component, bool) {

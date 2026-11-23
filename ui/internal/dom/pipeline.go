@@ -59,6 +59,10 @@ type Pipeline struct {
 	// Scroll is a scroll container's offset, kept across layouts, which
 	// clamp it to the scrollable overflow and copy it to the Box.
 	Scroll geom.Vec2
+	// BarHover and BarPressed are the part of a scroll container's bars
+	// under the pointer and the one the left button holds, which its
+	// styled parts' :hover and :active read: the viewport's on the root.
+	BarHover, BarPressed style.BarPart
 	// Shadow is the text an input, textarea or select shows: its value,
 	// the selected option's label, or its placeholder when Placeholder is
 	// set. The Document keeps it; layout lays it out as the element's only

@@ -216,9 +216,16 @@ type Box struct {
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
+	// ScrollbarThin is scrollbar-width: thin, which asks for the system's
+	// bars as scrollbar-color does: overlay bars (decision 0198).
+	ScrollbarThin bool
 	// ScrollbarOverlay is a Document's overlay scrollbars on a box that
 	// shows bars: they take no gutter and draw over its content.
 	ScrollbarOverlay bool
+	// ViewportBars are the viewport's bars as the rules of this element,
+	// the root or body, style them; nil where none styles its
+	// ::-webkit-scrollbar.
+	ViewportBars *StyledBars
 	// Viewport is the style of the viewport, in a Document whose viewport
 	// scrolls: on the root always, and on body when the viewport takes
 	// body's overflow. OverflowPropagated is set on the one of them whose
@@ -989,8 +996,11 @@ type Text struct {
 	BreakAnywhere bool
 	WordBreak     WordBreak
 	LineBreak     LineBreak
-	TabSize       TabSize
-	SkipInk       SkipInk
+	// Strictness is the rules line-break and the element's language
+	// break its lines by.
+	Strictness Strictness
+	TabSize    TabSize
+	SkipInk    SkipInk
 	// UnderlineOffset is text-underline-offset, Auto for auto, its
 	// percentage kept: it is of the font size of the box decorating.
 	UnderlineOffset   Length
@@ -1035,8 +1045,9 @@ const (
 	WordBreakBreakWord
 )
 
-// LineBreak is line-break. Its values but anywhere differ only on the
-// punctuation of Chinese and Japanese, where ui breaks as normal.
+// LineBreak is line-break. Its values but anywhere differ on the small
+// kana and the punctuation of Chinese and Japanese, which Strictness
+// says by the element's language.
 type LineBreak uint8
 
 const (
@@ -1046,6 +1057,27 @@ const (
 	LineBreakStrict
 	// LineBreakAnywhere breaks between any two characters.
 	LineBreakAnywhere
+)
+
+// Strictness is the rules of Chrome's line breaker, which line-break
+// picks by the element's language.
+type Strictness uint8
+
+const (
+	// StrictnessNormal breaks before small kana and prolonged sound marks.
+	StrictnessNormal Strictness = iota
+	// StrictnessStrict breaks before none of them.
+	StrictnessStrict
+	// StrictnessNormalCJK also breaks before 〜 and ゠, in Chinese,
+	// Japanese and Korean.
+	StrictnessNormalCJK
+	// StrictnessLoose also breaks before iteration marks and between
+	// inseparable characters.
+	StrictnessLoose
+	// StrictnessLooseCJK also breaks before CJK hyphens, centred
+	// punctuation and postfixes and after prefixes, in Chinese, Japanese
+	// and Korean.
+	StrictnessLooseCJK
 )
 
 // TabSize is tab-size: Spaces spaces of the text's font, or Px points
@@ -1230,6 +1262,11 @@ type Look struct {
 	// ScrollbarColored.
 	ScrollbarThumb, ScrollbarTrack color.Color
 	ScrollbarColored               bool
+	// Resizable is resize other than none on a box that clips: Chrome
+	// keeps its bars' corner for the resizer, which Resizer, its
+	// ::-webkit-resizer, draws where a rule styles it.
+	Resizable bool
+	Resizer   *Computed
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
 	Background color.Color

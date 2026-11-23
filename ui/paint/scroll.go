@@ -29,7 +29,9 @@ var (
 // view they scroll, the tracks and thumbs of those showing, and the
 // content's size.
 type Bars struct {
-	View                           geom.Rect
+	View geom.Rect
+	// Port is the size of the view less the gutters its bars take.
+	Port                           geom.Vec2
 	VTrack, VThumb, HTrack, HThumb geom.Rect
 	V, H                           bool
 	Content                        geom.Vec2
@@ -42,6 +44,13 @@ type Bars struct {
 	// in place of ui's own look; nil for that look.
 	Parts              *style.ScrollbarParts
 	VBar, HBar, Corner geom.Rect
+	// VButtons and HButtons are the bars' styled buttons, in the order of
+	// style.BarParts.Buttons, empty where none shows.
+	VButtons, HButtons [4]geom.Rect
+	// Resizer is the ::-webkit-resizer of a box the user may resize,
+	// drawn in ResizerAt, the corner Chrome keeps for it.
+	Resizer   *style.Computed
+	ResizerAt geom.Rect
 	// Thumb and Track are scrollbar-color's, Thumb nil for auto: the
 	// thumbs drawn in it, the gutters filled with Track.
 	Thumb *color.Color
@@ -50,7 +59,7 @@ type Bars struct {
 
 // Clamp is off kept within what the bars scroll.
 func (l Bars) Clamp(off geom.Vec2) geom.Vec2 {
-	return box.ClampScroll(off, l.Start, l.Content, geom.V2(l.View.W, l.View.H))
+	return box.ClampScroll(off, l.Start, l.Content, l.Port)
 }
 
 // A thumb is sized and placed on the whole bar, as Chrome sizes the box of
@@ -67,11 +76,17 @@ const (
 // the scrollport, overflow: scroll always and auto when the content
 // overflows that way; none for scrollbar-width: none, which still scrolls
 // by the wheel. Overlay bars lie in the same place with no gutter under
-// them, over the content's edge.
+// them, over the content's edge. A box the user may resize has its styled
+// resizer in the corner.
 func BarsOf(b *box.Box, at geom.Vec2) Bars {
+	return barsOf(b, at).resizer(shown(b), b.Scrollbar.X, b.Scrollbar.Y)
+}
+
+func barsOf(b *box.Box, at geom.Vec2) Bars {
 	view := padding(b, at)
 	st := shown(b)
-	l := Bars{View: view, Content: b.Content, Scroll: b.Scroll, Start: b.ScrollStart, Overlay: st.ScrollbarOverlay}
+	l := Bars{View: view, Port: geom.V2(view.W-b.Scrollbar.X, view.H-b.Scrollbar.Y), Content: b.Content, Scroll: b.Scroll,
+		Start: b.ScrollStart, Overlay: st.ScrollbarOverlay}
 	o := st.Overflow
 	l.V = !st.ScrollbarNone && (o.Height == style.Scroll || o.Height == style.OverflowAuto && b.Content.Y > view.H)
 	l.H = !st.ScrollbarNone && (o.Width == style.Scroll || o.Width == style.OverflowAuto && b.Content.X > view.W)
@@ -104,7 +119,7 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		if b.Content.Y > view.H {
 			bar := view.H - corner(l.H)
 			h := max(bar*view.H/b.Content.Y, minThumb)
-			y := view.Y + (bar-h)*(b.Scroll.Y-b.ScrollStart.Y)/(b.Content.Y-view.H)
+			y := view.Y + (bar-h)*(b.Scroll.Y-b.ScrollStart.Y)/(b.Content.Y-l.Port.Y)
 			l.VThumb = geom.Rect{X: l.VTrack.X, Y: y + thumbInset, W: barWidth, H: h - 2*thumbInset}
 		}
 	}
@@ -116,7 +131,7 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		if b.Content.X > view.W {
 			bar := view.W - corner(l.V)
 			w := max(bar*view.W/b.Content.X, minThumb)
-			x := l.HTrack.X - 4 + (bar-w)*(b.Scroll.X-b.ScrollStart.X)/(b.Content.X-view.W)
+			x := l.HTrack.X - 4 + (bar-w)*(b.Scroll.X-b.ScrollStart.X)/(b.Content.X-l.Port.X)
 			l.HThumb = geom.Rect{X: x + thumbInset, Y: l.HTrack.Y, W: w - 2*thumbInset, H: barWidth}
 		}
 	}
@@ -129,10 +144,11 @@ const minStyledThumb = 26
 
 // styled lays l out as Chrome lays out a scrollbar its sheets style: each
 // bar as thick as its ::-webkit-scrollbar, along the padding box's edge
-// less the corner, its track that less the track's margins along it, and
-// the thumb sized by the share of the content in view, no shorter than
-// its min-height, placed along the track by the offset; none where it
-// doesn't fit the track.
+// less the corner, its buttons at its ends, its track what they leave
+// less the track's margins along it, and the thumb sized by the share of
+// the content in view, no shorter than its min-height, placed along the
+// track by the offset; none where it doesn't fit the track. A box the
+// user may resize keeps the corner beside one bar too.
 func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
 	parts, view := st.Scrollbar, l.View
 	w, h := st.ScrollbarWidth, st.ScrollbarHeight
@@ -140,49 +156,145 @@ func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
 	l.V, l.H = l.V && w > 0, l.H && h > 0
 	port := geom.V2(view.W-b.Scrollbar.X, view.H-b.Scrollbar.Y)
 	rtl := st.Dir == style.RTL
+	cw, ch := l.corner(st.Resizable, w, h)
 	margin := func(m style.Length) float32 { v, _ := m.Resolve(0); return v }
 	if l.V {
-		l.VBar = geom.Rect{X: view.X + view.W - w, Y: view.Y, W: w, H: view.H}
+		l.VBar = geom.Rect{X: view.X + view.W - w, Y: view.Y, W: w, H: view.H - ch}
 		if rtl {
 			l.VBar.X = view.X
 		}
-		if l.H {
-			l.VBar.H -= h
+		buttons, before, after, fits := buttonsAlong(parts.V.Buttons, l.VBar.Y, l.VBar.H,
+			func(t *style.Computed) style.Length { return t.Size.Height },
+			func(t *style.Computed) (style.Length, style.Length) { return t.MinSize.Height, t.MaxSize.Height })
+		for i, r := range buttons {
+			if r.H > 0 {
+				l.VButtons[i] = geom.Rect{X: l.VBar.X, Y: r.Y, W: w, H: r.H}
+			}
 		}
 		l.VTrack = l.VBar
-		if t := parts.V.Track; t != nil {
+		l.VTrack.Y, l.VTrack.H = l.VTrack.Y+before, max(l.VTrack.H-before-after, 0)
+		if t := parts.V.Track; t != nil && fits {
 			top, bottom := margin(t.Margin.Top), margin(t.Margin.Bottom)
 			l.VTrack.Y, l.VTrack.H = l.VTrack.Y+top, max(l.VTrack.H-top-bottom, 0)
 		}
-		if at, n, ok := thumbAlong(l.VTrack.Y, l.VTrack.H, port.Y, b.Content.Y, b.Scroll.Y,
+		if at, n, ok := thumbAlong(l.VTrack.Y, l.VTrack.H, port.Y, b.Content.Y, b.Scroll.Y-b.ScrollStart.Y,
 			minThumbOf(parts.V.Thumb, parts.V.Thumb != nil && parts.V.Thumb.MinSize.Height.Kind != style.Auto,
 				func(t *style.Computed) style.Length { return t.MinSize.Height })); ok {
 			l.VThumb = geom.Rect{X: l.VBar.X, Y: at, W: w, H: n}
 		}
 	}
 	if l.H {
-		l.HBar = geom.Rect{X: view.X, Y: view.Y + view.H - h, W: view.W, H: h}
-		if l.V {
-			l.HBar.W -= w
+		l.HBar = geom.Rect{X: view.X, Y: view.Y + view.H - h, W: view.W - cw, H: h}
+		if rtl {
+			l.HBar.X += cw
 		}
-		if l.V && rtl {
-			l.HBar.X += w
+		buttons, before, after, fits := buttonsAlong(parts.H.Buttons, l.HBar.X, l.HBar.W,
+			func(t *style.Computed) style.Length { return t.Size.Width },
+			func(t *style.Computed) (style.Length, style.Length) { return t.MinSize.Width, t.MaxSize.Width })
+		for i, r := range buttons {
+			if r.H > 0 {
+				l.HButtons[i] = geom.Rect{X: r.Y, Y: l.HBar.Y, W: r.H, H: h}
+			}
 		}
 		l.HTrack = l.HBar
-		if t := parts.H.Track; t != nil {
+		l.HTrack.X, l.HTrack.W = l.HTrack.X+before, max(l.HTrack.W-before-after, 0)
+		if t := parts.H.Track; t != nil && fits {
 			left, right := margin(t.Margin.Left), margin(t.Margin.Right)
 			l.HTrack.X, l.HTrack.W = l.HTrack.X+left, max(l.HTrack.W-left-right, 0)
 		}
-		if at, n, ok := thumbAlong(l.HTrack.X, l.HTrack.W, port.X, b.Content.X, b.Scroll.X,
+		if at, n, ok := thumbAlong(l.HTrack.X, l.HTrack.W, port.X, b.Content.X, b.Scroll.X-b.ScrollStart.X,
 			minThumbOf(parts.H.Thumb, parts.H.Thumb != nil && parts.H.Thumb.MinSize.Width.Kind != style.Auto,
 				func(t *style.Computed) style.Length { return t.MinSize.Width })); ok {
 			l.HThumb = geom.Rect{X: at, Y: l.HBar.Y, W: n, H: h}
 		}
 	}
-	if l.V && l.H {
-		l.Corner = geom.Rect{X: l.VBar.X, Y: l.HBar.Y, W: w, H: h}
+	if cw > 0 && ch > 0 {
+		l.Corner = geom.Rect{X: view.X + view.W - cw, Y: view.Y + view.H - ch, W: cw, H: ch}
+		if rtl {
+			l.Corner.X = view.X
+		}
 	}
 	return l
+}
+
+// resizer gives l the resizer of a box of style st the user may resize,
+// its bars w and h thick, in the corner Chrome keeps for it: where the
+// bars meet, square beside a lone bar, and as thick as Chrome's own bars
+// with none.
+func (l Bars) resizer(st *style.Computed, w, h float32) Bars {
+	if !st.Resizable || st.Resizer == nil {
+		return l
+	}
+	if w, h = l.corner(true, w, h); w == 0 {
+		w, h = barGutter, barGutter
+	}
+	l.Resizer = st.Resizer
+	l.ResizerAt = geom.Rect{X: l.View.X + l.View.W - w, Y: l.View.Y + l.View.H - h, W: w, H: h}
+	if st.Dir == style.RTL {
+		l.ResizerAt.X = l.View.X
+	}
+	return l
+}
+
+// corner is the size of the corner where l's bars, w and h thick, meet,
+// or beside a lone bar of a box resizable; none otherwise.
+func (l Bars) corner(resizable bool, w, h float32) (float32, float32) {
+	switch {
+	case l.V && l.H:
+		return w, h
+	case l.V && resizable:
+		return w, w
+	case l.H && resizable:
+		return h, h
+	}
+	return 0, 0
+}
+
+// barGutter is the thickness of Chrome's own bars on macOS.
+const barGutter = 15
+
+// autoButton is the length of a styled button whose height (width on a
+// horizontal bar) is auto, measured from Chrome 157.
+const autoButton = 16
+
+// buttonsAlong places a bar's buttons, of the styles buttons, along it
+// from start, length long, as Chrome places them, in whole points: their spans, as Y and
+// H of each rect, the room they take at the bar's start and end, and
+// whether they fit: when they are longer than the bar, none shows and
+// the track is the whole bar, its margins left out. A button shows only
+// with display: block, as on macOS, whose own bars have none.
+func buttonsAlong(buttons [4]*style.Computed, start, length float32, size func(*style.Computed) style.Length,
+	limits func(*style.Computed) (style.Length, style.Length)) ([4]geom.Rect, float32, float32, bool) {
+	var n [4]float32
+	for i, st := range buttons {
+		if st == nil || st.Display != style.Block {
+			continue
+		}
+		v := float32(autoButton)
+		if l := size(st); l.Kind != style.Auto {
+			v, _ = l.Resolve(length)
+		}
+		least, most := limits(st)
+		if least.Kind != style.Auto {
+			m, _ := least.Resolve(length)
+			v = max(v, m)
+		}
+		if most.Kind != style.None && most.Kind != style.Auto {
+			m, _ := most.Resolve(length)
+			v = min(v, m)
+		}
+		n[i] = float32(int(max(v, 0)))
+	}
+	var out [4]geom.Rect
+	before, after := n[0]+n[1], n[2]+n[3]
+	if before+after > length {
+		return out, 0, 0, false
+	}
+	out[0] = geom.Rect{Y: start, H: n[0]}
+	out[1] = geom.Rect{Y: start + n[0], H: n[1]}
+	out[3] = geom.Rect{Y: start + length - n[3], H: n[3]}
+	out[2] = geom.Rect{Y: start + length - n[3] - n[2], H: n[2]}
+	return out, before, after, true
 }
 
 // minThumbOf is a styled thumb's least length: its min-height or
@@ -196,60 +308,63 @@ func minThumbOf(t *style.Computed, set bool, get func(*style.Computed) style.Len
 }
 
 // thumbAlong is where a styled thumb starts along a track from start, of
-// length track, and its length, rounded to whole points as Chrome's; not
-// ok when the content fits the port or the thumb the track.
+// length track, and its length, in whole points as Chrome's, no
+// longer than the track; not ok when the content fits the port.
 func thumbAlong(start, track, port, content, scroll, least float32) (float32, float32, bool) {
 	if content <= port || track <= 0 {
 		return 0, 0, false
 	}
-	n := max(round(track*port/content), least)
-	if n > track {
-		return 0, 0, false
-	}
-	return start + round((track-n)*min(max(scroll, 0), content-port)/(content-port)), n, true
+	n := min(max(round(track*port/content), least), track)
+	return start + float32(int((track-n)*min(max(scroll, 0), content-port)/(content-port))), n, true
 }
 
 func round(v float32) float32 { return float32(math.Round(float64(v))) }
 
-// bars paints l: its styled parts, else ui's own look.
+// bars paints l: its styled parts, else ui's own look, then its styled
+// resizer.
 func (p *painter) bars(l Bars, alpha float32) {
 	if l.Parts != nil {
 		p.styledBars(l, alpha)
-		return
+	} else {
+		l.paint(p.s, alpha)
 	}
-	l.paint(p.s, alpha)
+	p.part(l.Resizer, l.ResizerAt, alpha)
 }
 
 // styledBars paints l's parts as boxes of their styles: each bar's own
-// box, its track, the track's pieces before and after the thumb, the
-// thumb, then the corner, white where no rule styles it, as Chrome's.
+// box, its buttons, its track, the track's pieces before and after the
+// thumb's middle, as Chrome splits the track, the thumb, then the
+// corner, white where no rule styles it, as Chrome's.
 func (p *painter) styledBars(l Bars, alpha float32) {
 	if p.probing {
 		return
 	}
-	bar := func(on bool, parts style.BarParts, whole, track, thumb geom.Rect, vertical bool) {
+	bar := func(on bool, parts style.BarParts, whole, track, thumb geom.Rect, buttons [4]geom.Rect, vertical bool) {
 		if !on {
 			return
 		}
 		p.part(parts.Bar, whole, alpha)
+		for i, r := range buttons {
+			p.part(parts.Buttons[i], r, alpha)
+		}
 		p.part(parts.Track, track, alpha)
 		before, after := track, track
 		switch {
 		case thumb.W <= 0 || thumb.H <= 0:
 			before = geom.Rect{}
 		case vertical:
-			before.H = thumb.Y - track.Y
-			after.Y, after.H = thumb.Y+thumb.H, track.Y+track.H-(thumb.Y+thumb.H)
+			before.H = thumb.Y - track.Y + float32(int(thumb.H/2))
+			after.Y, after.H = track.Y+before.H, track.H-before.H
 		default:
-			before.W = thumb.X - track.X
-			after.X, after.W = thumb.X+thumb.W, track.X+track.W-(thumb.X+thumb.W)
+			before.W = thumb.X - track.X + float32(int(thumb.W/2))
+			after.X, after.W = track.X+before.W, track.W-before.W
 		}
 		p.part(parts.Start, before, alpha)
 		p.part(parts.End, after, alpha)
 		p.part(parts.Thumb, thumb, alpha)
 	}
-	bar(l.V, l.Parts.V, l.VBar, l.VTrack, l.VThumb, true)
-	bar(l.H, l.Parts.H, l.HBar, l.HTrack, l.HThumb, false)
+	bar(l.V, l.Parts.V, l.VBar, l.VTrack, l.VThumb, l.VButtons, true)
+	bar(l.H, l.Parts.H, l.HBar, l.HTrack, l.HThumb, l.HButtons, false)
 	if l.Parts.Corner == nil && l.Corner.W > 0 && l.Corner.H > 0 {
 		p.s.Rect(l.Corner, fade(color.White, alpha))
 		return
@@ -299,9 +414,45 @@ func (l Bars) paint(s Surface, alpha float32) {
 	}
 }
 
-// Over reports whether p is on a bar showing.
+// Over reports whether p is on a bar showing: a styled one's whole bar,
+// ui's own track.
 func (l Bars) Over(p geom.Vec2) bool {
+	if l.Parts != nil {
+		return l.V && l.VBar.Contains(p) || l.H && l.HBar.Contains(p)
+	}
 	return l.V && l.VTrack.Contains(p) || l.H && l.HTrack.Contains(p)
+}
+
+// PartAt is the part of l's styled bars at p, as Chrome tells it: a
+// button, the thumb, the track before or after it, or the bar off them;
+// none off the bars, and on ui's own bars, which no part styles.
+func (l Bars) PartAt(p geom.Vec2) style.BarPart {
+	if l.Parts == nil {
+		return style.NoBarPart
+	}
+	part := func(track, thumb geom.Rect, buttons [4]geom.Rect, vertical bool) style.BarPart {
+		for i, r := range buttons {
+			if r.Contains(p) {
+				return style.BarBackStart + style.BarPart(i)
+			}
+		}
+		switch {
+		case thumb.Contains(p):
+			return style.BarThumb
+		case !track.Contains(p):
+			return style.BarBackground
+		case vertical && p.Y < thumb.Y || !vertical && p.X < thumb.X || thumb.W <= 0 || thumb.H <= 0:
+			return style.BarBackTrack
+		}
+		return style.BarForwardTrack
+	}
+	switch {
+	case l.V && l.VBar.Contains(p):
+		return part(l.VTrack, l.VThumb, l.VButtons, true)
+	case l.H && l.HBar.Contains(p):
+		return part(l.HTrack, l.HThumb, l.HButtons, false) | style.BarHorizontal
+	}
+	return style.NoBarPart
 }
 
 // Pointer is the mouse over a scroll container this frame.
@@ -316,8 +467,9 @@ type Pointer struct {
 	// Hover is the pointer over the container, nothing covering it.
 	Hover bool
 	// Page is how far a click on a track pages on each axis, the view's
-	// length where zero.
+	// length where zero, and Line how far a click on a button scrolls.
 	Page geom.Vec2
+	Line float32
 }
 
 // Scrolling is a scroll container's drag of its thumbs, kept between
@@ -329,8 +481,9 @@ type Scrolling struct {
 
 // Input is the offset l's container scrolls to for p, step points a wheel
 // line, as the old ember/ui's bars do: the wheel turns it, a thumb drags it, a
-// click on a track pages it. It reports whether the bars took the mouse,
-// so what is under them doesn't also take the click.
+// click on a track pages it, and one on a styled button scrolls a line.
+// It reports whether the bars took the mouse, so what is under them
+// doesn't also take the click.
 func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 	offset, took := l.Scroll, false
 	if w := p.Wheel; p.Hover && (w.X != 0 || w.Y != 0) {
@@ -340,22 +493,7 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 		offset = offset.Add(w.Scale(step * 3))
 	}
 	if p.Pressed {
-		switch {
-		case l.V && l.VTrack.Contains(p.At):
-			took = true
-			if l.VThumb.Contains(p.At) {
-				s.dragV, s.grab = true, p.At.Y-l.VThumb.Y
-			} else if l.VThumb.H > 0 {
-				offset.Y += page(p.At.Y < l.VThumb.Y, orView(p.Page.Y, l.View.H))
-			}
-		case l.H && l.HTrack.Contains(p.At):
-			took = true
-			if l.HThumb.Contains(p.At) {
-				s.dragH, s.grab = true, p.At.X-l.HThumb.X
-			} else if l.HThumb.W > 0 {
-				offset.X += page(p.At.X < l.HThumb.X, orView(p.Page.X, l.View.W))
-			}
-		}
+		offset, took = s.press(l, p, offset)
 	}
 	switch {
 	case !p.Down:
@@ -372,6 +510,47 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 		took = true
 	}
 	return l.Clamp(offset), took
+}
+
+// press is offset after p presses l's bars, and whether they took the
+// press: on a thumb to drag it, on a track to page it, on a styled button
+// to scroll a line.
+func (s *Scrolling) press(l Bars, p Pointer, offset geom.Vec2) (geom.Vec2, bool) {
+	switch {
+	case l.V && l.VTrack.Contains(p.At):
+		if l.VThumb.Contains(p.At) {
+			s.dragV, s.grab = true, p.At.Y-l.VThumb.Y
+		} else if l.VThumb.H > 0 {
+			offset.Y += page(p.At.Y < l.VThumb.Y, orView(p.Page.Y, l.View.H))
+		}
+	case l.H && l.HTrack.Contains(p.At):
+		if l.HThumb.Contains(p.At) {
+			s.dragH, s.grab = true, p.At.X-l.HThumb.X
+		} else if l.HThumb.W > 0 {
+			offset.X += page(p.At.X < l.HThumb.X, orView(p.Page.X, l.View.W))
+		}
+	case l.Over(p.At):
+		part := l.PartAt(p.At)
+		if by := p.Line * buttonWay(part); part&style.BarHorizontal != 0 {
+			offset.X += by
+		} else {
+			offset.Y += by
+		}
+	default:
+		return offset, false
+	}
+	return offset, true
+}
+
+// buttonWay is the way a press on part scrolls: back, on, or not at all
+// off the buttons.
+func buttonWay(part style.BarPart) float32 {
+	if p := part.Part(); p == style.BarBackStart || p == style.BarBackEnd {
+		return -1
+	} else if p == style.BarForwardStart || p == style.BarForwardEnd {
+		return 1
+	}
+	return 0
 }
 
 // Dragging reports whether a thumb is being dragged.

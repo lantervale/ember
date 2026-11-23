@@ -545,3 +545,35 @@ func TestATextOfItsFirstLetterAloneIsPressedAndSelected(t *testing.T) {
 	l.up()
 	assert.Equal(t, ui.Position{Node: n, Offset: 1}, l.doc.Selection().Focus, "a press on the letter's right half")
 }
+
+func TestTextOfVerticalLinesIsSelectedDownThem(t *testing.T) {
+	p := ui.P(ui.Text("The quick brown fox jumps"))
+	l := selectableDoc(t, `p { writing-mode: vertical-rl; height: 100px; }`, p)
+	n := textOf(p)
+	l.doc.Select(ui.Position{Node: n, Offset: 4}, ui.Position{Node: n, Offset: 9})
+	rects := l.doc.SelectionRects()
+	require.Len(t, rects, 1)
+	word := rects[0]
+	assert.Greater(t, word.H, word.W, "the part runs down its line")
+	assert.Equal(t, "quick", l.doc.Selection().Text)
+
+	l.doc.ClearSelection()
+	l.frames(30)
+	l.dragged(geom.V2(word.X+word.W/2, word.Y+1), geom.V2(word.X+word.W/2, word.Y+word.H-1))
+	assert.Equal(t, "quick", l.doc.Selection().Text, "a drag down the line takes what it passes")
+
+	l.doc.ClearSelection()
+	l.frames(30)
+	at := geom.V2(word.X+word.W/2, word.Y+word.H/2)
+	for range 2 {
+		l.down(at)
+		l.up()
+	}
+	assert.Equal(t, "quick", l.doc.Selection().Text, "a double click takes the word")
+
+	l.doc.Select(ui.Position{Node: n, Offset: 4}, ui.Position{Node: n, Offset: 5})
+	l.held(input.KeyLeftShift, input.KeyDown)
+	assert.Equal(t, "qu", l.doc.Selection().Text, "the arrow down the line steps on through the text")
+	l.held(input.KeyLeftShift, input.KeyLeft)
+	assert.Greater(t, l.doc.Selection().Focus.Offset, 9, "the arrow towards the next line goes on to it")
+}

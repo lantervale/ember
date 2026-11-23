@@ -38,6 +38,9 @@ func controlOf(e *dom.Node) controlKind {
 	case dom.Input:
 		return inputControl
 	case dom.Select:
+		if dom.ListBox(e) {
+			return noControl
+		}
 		return selectControl
 	case dom.Textarea:
 		return textareaControl
@@ -51,7 +54,7 @@ func controlOf(e *dom.Node) controlKind {
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
-		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source:
+		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source, dom.Optgroup:
 	}
 	return noControl
 }
@@ -102,7 +105,7 @@ func centresContent(n *node) bool {
 	}
 	e := n.box.Node
 	if e.Tag() != dom.Input {
-		return e.Tag() == dom.Button || e.Tag() == dom.Select
+		return e.Tag() == dom.Button || e.Tag() == dom.Select && !dom.ListBox(e)
 	}
 	t, _ := e.Attr("type")
 	t = strings.ToLower(strings.TrimSpace(t))
@@ -224,10 +227,8 @@ func (t *tree) measureControl(n *node, known size) (size, float32, float32) {
 		}
 		rows = intAttr(e, "rows", 2)
 	case selectControl:
-		for _, o := range e.Children() {
-			if o.Tag() == dom.Option {
-				w = max(w, t.fonts.Advance(st.Font, o.Text()))
-			}
+		for _, o := range dom.Options(e) {
+			w = max(w, t.fonts.Advance(st.Font, GroupIndent(o)+o.Text()))
 		}
 		if dom.Data(e).Placeholder && len(n.inline.runs) > 0 {
 			w = max(w, t.fonts.Advance(st.Font, n.inline.runs[0].text))
@@ -237,6 +238,15 @@ func (t *tree) measureControl(n *node, known size) (size, float32, float32) {
 	}
 	s := size{or(known.w, w), or(known.h, float32(rows)*lh)}
 	return s, base, base + float32(rows-1)*lh
+}
+
+// GroupIndent is what Chrome sets before the text of an option in an
+// optgroup to measure a select's width and to show it in the list.
+func GroupIndent(o *dom.Node) string {
+	if p := o.Parent(); p != nil && p.Tag() == dom.Optgroup {
+		return "    "
+	}
+	return ""
 }
 
 // textareaText is a textarea's text wrapped in its used width, as its scrollable content

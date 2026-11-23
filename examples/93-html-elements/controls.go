@@ -8,6 +8,7 @@ func controls() map[string]element {
 		"input":    {input, 296},
 		"select":   {selectElement, 288},
 		"option":   {option, 200},
+		"optgroup": {optgroup, 220},
 		"textarea": {textarea, 300},
 		"progress": {progress, 296},
 		"meter":    {meter, 272},
@@ -97,6 +98,17 @@ func option(*ui.Document) *ui.Node {
 		ui.Option(ui.Value("easy"), ui.Text("Easy")),
 		ui.Option(ui.Value("normal"), ui.Text("Normal"), ui.Selected()),
 		ui.Option(ui.Value("nightmare"), ui.Text("Nightmare"), ui.Disabled()),
+	))
+}
+
+// optgroup is a hero's weapon, chosen among groups, one of them locked,
+// with room below for its open list.
+func optgroup(*ui.Document) *ui.Node {
+	return ui.Label(ui.Style("display: block; height: 220px"), ui.Text("Weapon "), ui.Select(
+		ui.Option(ui.Text("Fists")),
+		ui.Optgroup("Blades", ui.Option(ui.Text("Sword")), ui.Option(ui.Text("Dagger"), ui.Selected())),
+		ui.Optgroup("Magic", ui.Option(ui.Text("Wand")), ui.Option(ui.Text("Staff"))),
+		ui.Optgroup("Cursed", ui.Disabled(), ui.Option(ui.Text("Bone flail"))),
 	))
 }
 

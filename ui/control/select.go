@@ -1,6 +1,7 @@
 package control
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -8,9 +9,42 @@ import (
 // Option is one choice of a select.
 type Option struct {
 	Label, Value string
-	Disabled     bool
+	// Valued says Value is the option's even empty, as a value attribute
+	// written empty.
+	Valued   bool
+	Disabled bool
 	// Shown is the label as the player reads it, translated; Label when empty.
 	Shown string
+	// Group is 1 + the index in the select's Groups of the group the
+	// option is in, 0 for none.
+	Group int
+}
+
+// Group is an optgroup: a label the list shows, never chosen, before
+// its options.
+type Group struct {
+	Label    string
+	Disabled bool
+	// Shown is the label as the player reads it, translated; Label when empty.
+	Shown string
+	// At is the option the label stands before: the group's first, or
+	// the next one for an empty group.
+	At int
+}
+
+// Text is what the list shows of the group.
+func (g Group) Text() string {
+	if g.Shown != "" {
+		return g.Shown
+	}
+	return g.Label
+}
+
+// Row is a line of the open list: option Option, or a group's label
+// when Option is -1. Group is 1 + the index of the group it belongs to,
+// 0 for none.
+type Row struct {
+	Option, Group int
 }
 
 // Text is what the list shows of the option.
@@ -21,9 +55,9 @@ func (o Option) Text() string {
 	return o.Label
 }
 
-// value is what a form reads of the option: its Value, else its label.
-func (o Option) value() string {
-	if o.Value != "" {
+// FormValue is what a form reads of the option: its Value, else its label.
+func (o Option) FormValue() string {
+	if o.Value != "" || o.Valued {
 		return o.Value
 	}
 	return o.Label
@@ -35,19 +69,51 @@ func (o Option) value() string {
 // closes it as it was. Typing jumps to the next option starting with
 // that letter, open or closed.
 type Select struct {
-	Options  []Option
+	Options []Option
+	// Groups are its optgroups, in order.
+	Groups   []Group
 	Disabled bool
-	// Selected is the chosen option, -1 for none; Highlight the one the
-	// open list is on.
+	// Selected is the chosen option, -1 for none, a listbox's first
+	// selected; Highlight the one the open list is on.
 	Selected, Highlight int
 	Open                bool
+	// ListBox shows the options as rows of the page, Size of them in
+	// view; Multiple lets it select several (listbox.go).
+	ListBox, Multiple bool
+	Size              int
+	// Active is a listbox's option the keys move from, Anchor the one a
+	// run starts at; -1 for none.
+	Active, Anchor int
+	// picked marks a listbox's selected options; was is them as a press
+	// began, base them as a Command press left them, and held a press
+	// on an option not let go yet.
+	picked, was, base []bool
+	held              bool
 }
 
 func NewSelect(options ...Option) *Select {
-	s := &Select{Options: options, Selected: -1}
+	s := &Select{Options: options, Selected: -1, Active: -1, Anchor: -1}
 	s.Selected = s.next(-1, 1)
 	s.Highlight = s.Selected
 	return s
+}
+
+// Rows are the open list's lines in order, each group's label before
+// its options.
+func (s *Select) Rows() []Row {
+	rows := make([]Row, 0, len(s.Options)+len(s.Groups))
+	g := 0
+	label := func(before int) {
+		for ; g < len(s.Groups) && s.Groups[g].At <= before; g++ {
+			rows = append(rows, Row{Option: -1, Group: g + 1})
+		}
+	}
+	for i, o := range s.Options {
+		label(i)
+		rows = append(rows, Row{Option: i, Group: o.Group})
+	}
+	label(len(s.Options))
+	return rows
 }
 
 // Value is the selected option's value, "" for none.
@@ -55,14 +121,18 @@ func (s *Select) Value() string {
 	if s.Selected < 0 || s.Selected >= len(s.Options) {
 		return ""
 	}
-	return s.Options[s.Selected].value()
+	return s.Options[s.Selected].FormValue()
 }
 
 // Handles reports whether i is the select's: Activate always, and the
-// arrows and Back only while it is open.
+// arrows and Back only while it is open; a listbox's arrows always, never
+// Back.
 func (s *Select) Handles(i Intent) bool {
 	if s.Disabled {
 		return false
+	}
+	if s.ListBox {
+		return i != Back && i != Left && i != Right && i != None
 	}
 	switch i {
 	case Activate:
@@ -77,6 +147,9 @@ func (s *Select) Handles(i Intent) bool {
 func (s *Select) Do(i Intent) Events {
 	if !s.Handles(i) {
 		return 0
+	}
+	if s.ListBox {
+		return s.Key(i, false, false)
 	}
 	if !s.Open {
 		s.open()
@@ -100,10 +173,11 @@ func (s *Select) Do(i Intent) Events {
 	return 0
 }
 
-// Click opens or closes the list from the select itself.
+// Click opens or closes the list from the select itself; a listbox
+// never opens.
 func (s *Select) Click() Events {
 	switch {
-	case s.Disabled:
+	case s.Disabled, s.ListBox:
 	case s.Open:
 		s.Open = false
 	default:
@@ -125,22 +199,32 @@ func (s *Select) ClickOutside() { s.Open = false }
 
 // TypeAhead goes to the next enabled option after the current one whose
 // label starts with text, any case, wrapping: the highlight while open,
-// the choice while closed.
+// the choice while closed, a listbox's selection, which it holds alone.
 func (s *Select) TypeAhead(text string) Events {
 	if s.Disabled || text == "" {
 		return 0
 	}
 	from := s.Selected
-	if s.Open {
+	switch {
+	case s.Open:
 		from = s.Highlight
+	case s.ListBox:
+		from = s.Active
 	}
 	n := len(s.Options)
 	for k := 1; k <= n; k++ {
 		i := (from + k + n) % n
 		if s.enabled(i) && strings.HasPrefix(strings.ToLower(s.Options[i].Text()), strings.Map(unicode.ToLower, text)) {
-			if s.Open {
+			switch {
+			case s.Open:
 				s.Highlight = i
 				return 0
+			case s.ListBox:
+				was := slices.Clone(s.picked)
+				s.Active, s.Anchor = i, i
+				s.only(i)
+				s.settle()
+				return s.changed(was)
 			}
 			return s.pick(i)
 		}

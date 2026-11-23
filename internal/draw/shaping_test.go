@@ -99,6 +99,22 @@ func TestTextRightToLeftIsJoinedInItsOrderAndDrawnFromItsEnd(t *testing.T) {
 	assert.Equal(t, '(', brackets[0].r, "the closing bracket drawn first, turned round")
 }
 
+func TestTextRightToLeftShapedAsOneDrawsTheGlyphsItsClustersStart(t *testing.T) {
+	f := arabicFace(t).Size(24)
+	glyphs := func(s, lead, trail string) []sfnt.GlyphIndex {
+		var out []sfnt.GlyphIndex
+		f.items(s, "", true, round{lead: lead, trail: trail}, func(it item) { out = append(out, it.idx) })
+		return out
+	}
+	lamAlef := glyphs("لا", "", "")
+	require.Len(t, lamAlef, 1, "lam and alef ligate")
+	assert.Equal(t, lamAlef, glyphs("ل", "", "ا"), "the ligature is the lam's, which starts it")
+	assert.Empty(t, glyphs("ا", "ل", ""))
+	assert.Equal(t, glyphs("ببب", "", "")[:2], glyphs("بب", "ب", ""), "drawn from the end, joined to the lead")
+	assert.InDelta(t, f.measure("لا", "", 0, round{}).X, f.measure("ل", "", 0, round{trail: "ا"}).X, 1e-3)
+	assert.Zero(t, f.measure("ا", "", 0, round{lead: "ل"}).X)
+}
+
 func TestALetterJoinsWithTheTextRoundIt(t *testing.T) {
 	f := arabicFace(t).Size(24)
 	glyphs := func(s, before, after string) []sfnt.GlyphIndex {

@@ -586,7 +586,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
-	r.scrollbars(&c, n, rem)
+	r.scrollbars(&c, n, rem, x.toViewport, parent)
 	r.controlParts(&c, n, rem)
 	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
 		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
@@ -1207,10 +1207,10 @@ func (x *ctx) propagateOverflow(root bool) {
 	v := initial
 	v.Display, v.Font = style.Block, c.Font
 	v.Overflow = style.Size[style.Overflow]{Width: of(c.Overflow.Width), Height: of(c.Overflow.Height)}
-	v.ScrollbarNone = c.ScrollbarNone
+	v.ScrollbarNone, v.ScrollbarThin = c.ScrollbarNone, c.ScrollbarThin
 	v.ScrollbarColored, v.ScrollbarThumb, v.ScrollbarTrack = c.ScrollbarColored, c.ScrollbarThumb, c.ScrollbarTrack
 	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
-		if v.ScrollbarOverlay = x.overlay || v.ScrollbarColored; !v.ScrollbarOverlay {
+		if v.ScrollbarOverlay = x.overlay || v.ScrollbarColored || v.ScrollbarThin; !v.ScrollbarOverlay {
 			v.ScrollbarWidth, v.ScrollbarHeight = barGutter, barGutter
 		}
 	}
@@ -1252,10 +1252,11 @@ func (x *ctx) finish(root bool) {
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
 		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto ||
 		c.GutterStable && scrolls(oy)) && !c.ScrollbarNone {
-		if c.ScrollbarOverlay = x.overlay || c.ScrollbarColored; !c.ScrollbarOverlay {
+		if c.ScrollbarOverlay = x.overlay || c.ScrollbarColored || c.ScrollbarThin; !c.ScrollbarOverlay {
 			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
+	c.Resizable = c.Resizable && (scrolls(ox) || scrolls(oy))
 	if scrolls(ox) && !scrolls(oy) {
 		c.Overflow.Height = fix(oy)
 	} else if scrolls(oy) && !scrolls(ox) {
@@ -1271,6 +1272,7 @@ func (x *ctx) finish(root bool) {
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
+	c.Strictness = x.strictness()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	c.Filters = followFilterColor(c.Filters, c.Color)
 	c.BackdropFilters = followFilterColor(c.BackdropFilters, c.Color)
@@ -2309,8 +2311,15 @@ var props = func() map[string]prop {
 		"line-break": keyword(func(c *style.Computed) *style.LineBreak { return &c.LineBreak },
 			map[string]style.LineBreak{"auto": style.LineBreakAuto, "loose": style.LineBreakLoose,
 				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
-		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
+		"scrollbar-width": {
+			set: func(x *ctx, v []Component) {
+				x.c.ScrollbarNone, x.c.ScrollbarThin = isWord(v[0], "none"), isWord(v[0], "thin")
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.ScrollbarNone, dst.ScrollbarThin = src.ScrollbarNone, src.ScrollbarThin
+			},
+			anim: anim{kind: discrete},
+		},
 		"scrollbar-gutter": scrollbarGutter(),
 		"scrollbar-color":  scrollbarColor(),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
@@ -2504,7 +2513,8 @@ var props = func() map[string]prop {
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
 		"appearance": keyword(func(c *style.Computed) *style.Appearance { return &c.Appearance }, appearances),
-		"resize":     {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
+		"resize": keyword(func(c *style.Computed) *bool { return &c.Resizable },
+			map[string]bool{"none": false, "both": true, "horizontal": true, "vertical": true}),
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
 			cornerOf, pairs(sizeLength)),

@@ -19,6 +19,8 @@ import (
 const wholeSheet = `
 @font-face { font-family: Featured; src: url(features.ttf); }
 @font-face { font-family: Spaced; src: url(spaced.ttf); }
+@font-face { font-family: Joined; src: url(arabic.ttf); }
+@font-face { font-family: Hebrew; src: url(hebrew.ttf); }
 body { user-select: text; }
 div { margin: 0 0 4px; font: 32px Featured, monospace; white-space: nowrap; }
 div > span { display: inline-block; }
@@ -37,6 +39,11 @@ div > span { display: inline-block; }
 .lig { font-variant-ligatures: common-ligatures; } .ctx { font-variant-ligatures: contextual; }
 .fliga { font-feature-settings: "liga" 1; } .fcalt { font-feature-settings: "calt" 1; }
 .dlig { font-variant-ligatures: discretionary-ligatures; }
+.rtl { direction: rtl; } .rlo { direction: rtl; unicode-bidi: bidi-override; }
+.arabic { font-family: Joined, monospace; } .hebrew { font-family: Hebrew, monospace; }
+.vrl { writing-mode: vertical-rl; } .vlr { writing-mode: vertical-lr; }
+.upright { text-orientation: upright; } .sideways { text-orientation: sideways; }
+.srl { writing-mode: sideways-rl; } .slr { writing-mode: sideways-lr; }
 .w40 { width: 40px; } .w60 { width: 60px; } .w90 { width: 90px; }
 `
 
