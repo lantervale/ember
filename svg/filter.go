@@ -67,6 +67,10 @@ func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, b
 	v = strings.TrimSpace(v)
 	var out []*Filter
 	var fns *Filter
+	// linear is the colour space of the last primitive: functions after a
+	// filter element work in it, as Chrome runs them, a shadow's colour
+	// taken as it is in that space.
+	linear := false
 	for v != "" {
 		open := strings.IndexByte(v, '(')
 		end := closing(v, open)
@@ -87,12 +91,16 @@ func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, b
 				return nil, false
 			}
 			out = append(out, f)
+			linear = f.Primitives[len(f.Primitives)-1].LinearRGB
 			continue
 		}
 		p, ok := cssFunction(name, args, st)
 		if !ok {
 			b.unsupported("filter")
 			return nil, true
+		}
+		if p.LinearRGB = linear; linear {
+			p.Color = encoded(p.Color)
 		}
 		if fns == nil {
 			fns = &Filter{Transform: m}
@@ -107,6 +115,13 @@ func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, b
 		}
 	}
 	return out, true
+}
+
+// encoded is the colour that is c in linear light: what a primitive in
+// linear light paints when it takes c's values as they are.
+func encoded(c color.NRGBA) color.NRGBA {
+	at := func(v uint8) uint8 { return round8(255 * float64(toSRGB(float32(v)/255))) }
+	return color.NRGBA{at(c.R), at(c.G), at(c.B), c.A}
 }
 
 // closing is the index of the bracket closing the one at open in s, -1
@@ -328,16 +343,16 @@ func (b *builder) filterElement(n *node, m Matrix, bbox Box) (*Filter, bool) {
 }
 
 // input is what a primitive's in or in2 names: a standard input, an
-// earlier result, or, unnamed or unknown, the result before it.
+// earlier result, or, unnamed or unknown, the result before it. Chrome
+// draws neither the background nor the fill and stroke paints, and
+// reads BackgroundImage, BackgroundAlpha, FillPaint and StrokePaint so
+// too.
 func (b *builder) input(v string, f *Filter, results map[string]Input) Input {
 	switch v = strings.TrimSpace(v); v {
 	case "SourceGraphic":
 		return SourceGraphic
 	case "SourceAlpha":
 		return SourceAlpha
-	case "BackgroundImage", "BackgroundAlpha", "FillPaint", "StrokePaint":
-		b.unsupported(v)
-		return Transparent
 	}
 	if in, ok := results[v]; ok && v != "" {
 		return in
@@ -456,9 +471,6 @@ func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, 
 		dev, ok := pair(props["stdDeviation"], c, 0)
 		if ok && dev.X >= 0 && dev.Y >= 0 {
 			p.StdDev = dev
-		}
-		if mode := strings.TrimSpace(props["edgeMode"]); mode != "" && mode != none {
-			b.unsupported("edgeMode")
 		}
 	case "feOffset":
 		p.Kind = Offset

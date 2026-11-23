@@ -2,6 +2,7 @@ package svg
 
 import (
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -175,7 +176,7 @@ func rectShape(name string, words []string, ref Box, em float64) (Path, bool) {
 			break
 		}
 	}
-	r, ok := radius(round, ref, em)
+	r, ok := corners(round, ref, em)
 	if !ok {
 		return Path{}, false
 	}
@@ -206,7 +207,7 @@ func rectShape(name string, words []string, ref Box, em float64) (Path, bool) {
 	if y1 < y0 {
 		y0, y1 = (y0+y1)/2, (y0+y1)/2
 	}
-	return rectPath(x0, y0, x1-x0, y1-y0, r.X, r.Y), true
+	return roundedRectPath(x0, y0, x1-x0, y1-y0, r), true
 }
 
 // polygonShape is polygon(): its points in ref, and its fill rule.
@@ -281,26 +282,54 @@ func sides(words []string, ref Box, em float64) ([4]float64, bool) {
 	return [4]float64{got[0], got[1], got[2], got[3]}, true
 }
 
-// radius reads a round's radius: one length, or a horizontal and a
-// vertical one about a slash; corners of their own are read as the
-// first.
-func radius(words []string, ref Box, em float64) (Point, bool) {
+// corners reads a round's radii as border-radius gives them: one to
+// four horizontal ones, then after a slash one to four vertical ones,
+// top-left first as CSS repeats them.
+func corners(words []string, ref Box, em float64) ([4]Point, bool) {
+	var out [4]Point
 	if len(words) == 0 {
-		return Point{}, true
+		return out, true
 	}
-	x, ok := length(words[0], lengthContext{whole: ref.W, em: em})
-	if !ok {
-		return Point{}, false
-	}
-	y := x
-	for i, w := range words {
-		if w == "/" && i+1 < len(words) {
-			if y, ok = length(words[i+1], lengthContext{whole: ref.H, em: em}); !ok {
-				return Point{}, false
-			}
+	across, down := words, []string(nil)
+	if i := slices.Index(words, "/"); i >= 0 {
+		across, down = words[:i], words[i+1:]
+		if len(down) == 0 {
+			return out, false
 		}
 	}
-	return Point{x, y}, true
+	x, ok := cornerRadii(across, ref.W, em)
+	y := x
+	if ok && down != nil {
+		y, ok = cornerRadii(down, ref.H, em)
+	}
+	for i := range out {
+		out[i] = Point{x[i], y[i]}
+	}
+	return out, ok
+}
+
+// cornerRadii reads one to four radii, each a share of whole.
+func cornerRadii(words []string, whole, em float64) ([4]float64, bool) {
+	if len(words) == 0 || len(words) > 4 {
+		return [4]float64{}, false
+	}
+	got := make([]float64, len(words))
+	for i, w := range words {
+		r, ok := length(w, lengthContext{whole: whole, em: em})
+		if !ok || r < 0 {
+			return [4]float64{}, false
+		}
+		got[i] = r
+	}
+	switch len(got) {
+	case 1:
+		return [4]float64{got[0], got[0], got[0], got[0]}, true
+	case 2:
+		return [4]float64{got[0], got[1], got[0], got[1]}, true
+	case 3:
+		return [4]float64{got[0], got[1], got[2], got[1]}, true
+	}
+	return [4]float64{got[0], got[1], got[2], got[3]}, true
 }
 
 // roundShape is circle() or ellipse(): its radii, closest-side by

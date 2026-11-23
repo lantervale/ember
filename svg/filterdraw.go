@@ -87,6 +87,9 @@ func (d *drawer) filterArea(filters []*Filter, from image.Rectangle) image.Recta
 // filtered is a layer holding g's items run through its filters, over
 // what of clip they draw; nil when nothing shows.
 func (d *drawer) filtered(g *Group, clip image.Rectangle, depth int) *image.RGBA {
+	if own, turned := d.ownSpace(g); turned {
+		return d.filteredTurned(g, clip, depth, own)
+	}
 	reach := 0
 	for _, f := range g.Filters {
 		reach = min(maxReach, reach+f.reach(d.view.Mul(f.Transform)))
@@ -124,6 +127,46 @@ func (d *drawer) filtered(g *Group, clip image.Rectangle, depth int) *image.RGBA
 		return nil
 	}
 	return &image.RGBA{Pix: layer.Pix[layer.PixOffset(shown.Min.X, shown.Min.Y):], Stride: layer.Stride, Rect: shown}
+}
+
+// ownSpace is the view drawing g's filtered element in its own space,
+// scaled to the picture's pixels but neither turned nor skewed; turned
+// is false when the element's space is not.
+func (d *drawer) ownSpace(g *Group) (Matrix, bool) {
+	t := g.Filters[0].Transform
+	m := d.view.Mul(t)
+	inv, ok := t.Inverse()
+	if math.Abs(m.B) < 1e-9 && math.Abs(m.C) < 1e-9 || !ok || !m.finite() {
+		return Matrix{}, false
+	}
+	s := scales(m)
+	return scale(s.X, s.Y).Mul(inv), true
+}
+
+// filteredTurned is filtered for an element turned or skewed: its
+// filters run in its own space under the view own, as Chrome runs them,
+// and their result is drawn turned into a layer over the picture's
+// pixels.
+func (d *drawer) filteredTurned(g *Group, clip image.Rectangle, depth int, own Matrix) *image.RGBA {
+	back, _ := own.Inverse()
+	toOwn, ok := d.view.Mul(back).Inverse()
+	if !ok {
+		return nil
+	}
+	sub := &drawer{view: own, unit: d.unit}
+	area := Box{float64(clip.Min.X), float64(clip.Min.Y), float64(clip.Dx()), float64(clip.Dy())}
+	src := sub.filtered(g, pixelArea(area, toOwn), depth)
+	if src == nil {
+		return nil
+	}
+	im := &Image{Pix: src, Transform: back.Mul(translate(float64(src.Rect.Min.X), float64(src.Rect.Min.Y))), Opacity: 1}
+	box := imageBounds(im, d.view.Mul(im.Transform)).Intersect(clip)
+	if box.Empty() {
+		return nil
+	}
+	layer := d.layer(depth, box)
+	d.image(layer, box, im, 1)
+	return layer
 }
 
 // run makes the picture of layer anew through f.
