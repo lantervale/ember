@@ -135,6 +135,38 @@ func TestShiftTurnsTheWheelSideways(t *testing.T) {
 	assert.Positive(t, box.Box().X-wide.Box().X)
 }
 
+func TestARightToLeftScrollerScrollsLeftFromZero(t *testing.T) {
+	wide := ui.Div(ui.Style("width: 600px; height: 20px"))
+	box := ui.Div(ui.Attr("dir", "rtl"), ui.Style("overflow: auto; width: 200px; height: 60px"), wide)
+	doc := ui.NewDocument()
+	doc.Body().Append(box)
+	win := platform.NewWindow(platform.Size(400, 300))
+	win.Add(doc)
+	w := ember.New().AddEntities(win)
+	in := win.Input()
+	w.RunFrames(2)
+	start := wide.Box().X
+	assert.Equal(t, geom.Vec2{}, doc.Scroll(box), "at its right end")
+	assert.InDelta(t, box.Box().X+box.Box().W-600, start, 1e-3, "the content's right on the box's right")
+
+	in.SetMouse(box.Box().Center())
+	in.SetKey(input.KeyLeftShift, true)
+	w.RunFrames(1)
+	in.AddWheel(geom.V2(0, 1))
+	w.RunFrames(2)
+	assert.InDelta(t, 0, doc.Scroll(box).X, 1e-3, "nothing past its right end")
+	in.AddWheel(geom.V2(0, -1))
+	w.RunFrames(2)
+	in.SetKey(input.KeyLeftShift, false)
+	assert.Negative(t, doc.Scroll(box).X, "the wheel scrolls it left")
+	assert.InDelta(t, start-doc.Scroll(box).X, wide.Box().X, 1e-3)
+
+	doc.SetScroll(box, geom.V2(-9999, 0))
+	assert.Equal(t, geom.V2(-400, 0), doc.Scroll(box), "kept within what scrolls, as Chrome's scrollLeft")
+	doc.SetScroll(box, geom.V2(50, 0))
+	assert.Equal(t, geom.Vec2{}, doc.Scroll(box))
+}
+
 func TestDraggingTheThumbScrollsAndClicksNothing(t *testing.T) {
 	s := newScroller(t)
 	l := s.list.Box()

@@ -200,7 +200,8 @@ func TestCollapsedBordersMatchChrome(t *testing.T) {
 .pad { padding: 10px; border-spacing: 9px; } .w { width: 300px; } .h { height: 120px; }
 .odd td { border-width: 1px 2px 3px 4px; }
 .t { display: table; border-collapse: collapse; } .r { display: table-row; }
-.c { display: table-cell; border: 3px solid black; padding: 2px; }`
+.c { display: table-cell; border: 3px solid black; padding: 2px; } .rtl { direction: rtl; }
+.start { border-inline-start: 9px solid; } .tl { border-left: 2px solid; border-right: 8px solid; }`
 	row := func(class string, cells ...*ui.Node) *ui.Node {
 		tr := ui.Tr(ui.Class(class))
 		for _, c := range cells {
@@ -251,7 +252,20 @@ func TestCollapsedBordersMatchChrome(t *testing.T) {
 			ui.Div(ui.Class("t"), ui.Div(ui.Class("r"), ui.Div(ui.Class("c"), ui.Text("one")),
 				ui.Div(ui.Class("c"), ui.Text("two"))), ui.Div(ui.Class("r"), ui.Div(ui.Class("c"), ui.Text("three")),
 				ui.Div(ui.Class("c"), ui.Text("four"))))),
-		"an empty table keeps its border": styled(sheet, ui.Table(ui.Class("tb", "w", "h"))),
+		"an empty table keeps its border":      styled(sheet, ui.Table(ui.Class("tb", "w", "h"))),
+		"right to left, each side its width":   styled(sheet, grid("odd", "rtl")),
+		"right to left, the table's own sides": styled(sheet, grid("tl", "rtl")),
+		"right to left, a cell's start wins": styled(sheet,
+			ui.Table(ui.Class("rtl"), ui.Tbody(row("", td("one", ui.Class("start")), td("two"), td("three", ui.Class("start"))),
+				row("", td("four"), td("five", ui.Class("wide")), td("six"))))),
+		"right to left, rows, columns and spans": styled(sheet,
+			ui.Table(ui.Class("rtl", "b3"), ui.Colgroup(ui.Col(ui.Class("start")), ui.Col(ui.Class("rb"))),
+				ui.Tbody(row("tl", td("one", ui.Attr("colspan", "2")), td("three")),
+					row("", td("four", ui.Attr("rowspan", "2"), ui.Class("odd")), td("five"), td("six", ui.Class("tl"))),
+					row("", td("eight"), td("nine"))))),
+		"right to left, a row of direction ltr": styled(sheet,
+			ui.Table(ui.Class("rtl"), ui.Tbody(row("", td("one", ui.Class("tl")), td("two", ui.Class("start"))),
+				ui.Tr(ui.Style("direction: ltr"), td("three", ui.Class("start")), td("four"))))),
 		"blocks in the cells": styled(sheet,
 			ui.Table(ui.Class("b3", "tb"), ui.Tbody(row("", ui.Td(ui.Div(ui.Style("width: 50px; height: 30px"))),
 				ui.Td(ui.Div(ui.Style("width: 20%; height: 10px"))))))),

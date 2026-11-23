@@ -66,3 +66,17 @@ var mirrors = func() map[string]string {
 	}
 	return m
 }()
+
+// physical is the property name stands for in an element of direction rtl or
+// not: a logical one's physical one, the right side's for an inline side
+// under rtl.
+func physical(name string, rtl bool) string {
+	as, ok := logical[name]
+	if !ok {
+		return name
+	}
+	if rtl && horizontal(as) {
+		return mirrored(as)
+	}
+	return as
+}

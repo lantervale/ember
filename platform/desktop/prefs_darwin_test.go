@@ -5,16 +5,17 @@ package desktop //nolint:testpackage // tests the unexported AppKit bridge to th
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/lantervale/ember/platform"
 )
 
-func TestMacOSSaysItsAppearanceAndLanguagesAndWhenTheAppearanceChanges(t *testing.T) {
+func TestMacOSSaysItsPreferencesAndWhenTheAppearanceChanges(t *testing.T) {
 	var failed error
 	var first, forced, back platform.Appearance
 	var motion platform.Motion
+	var contrast platform.Contrast
+	var highlight platform.Highlight
 	var languages []string
 	var told, quiet, again bool
 	main(func() {
@@ -23,16 +24,16 @@ func TestMacOSSaysItsAppearanceAndLanguagesAndWhenTheAppearanceChanges(t *testin
 			return
 		}
 		watchPreferences()
-		var asked time.Time
-		told = systemChanged(&asked)
+		told = systemChanged(false)
 		first, motion, languages = systemAppearance(), systemMotion(), systemLanguages()
-		quiet = !systemChanged(&asked)
+		contrast, highlight = systemContrast(), systemHighlight()
+		quiet = !systemChanged(false)
 		other := platform.AppearanceDark
 		if first == platform.AppearanceDark {
 			other = platform.AppearanceLight
 		}
 		overrideAppearance(other)
-		again = systemChanged(&asked)
+		again = systemChanged(false)
 		forced = systemAppearance()
 		overrideAppearance(platform.AppearanceUnknown)
 		back = systemAppearance()
@@ -48,6 +49,12 @@ func TestMacOSSaysItsAppearanceAndLanguagesAndWhenTheAppearanceChanges(t *testin
 	}
 	if motion == platform.MotionUnknown {
 		t.Fatal("macOS knows whether it reduces motion")
+	}
+	if contrast != platform.ContrastNoPreference && contrast != platform.ContrastMore {
+		t.Fatalf("macOS says whether it increases contrast: %v", contrast)
+	}
+	if highlight.Background.A != 1 || highlight.Inactive.A != 1 || highlight.Text.A != 0 {
+		t.Fatalf("macOS says the colours it selects in, the text keeping its own: %+v", highlight)
 	}
 	if len(languages) == 0 {
 		t.Fatal("macOS has at least one preferred language")

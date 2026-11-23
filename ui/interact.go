@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"slices"
 	"strings"
 
@@ -254,7 +255,7 @@ func (d *Document) Scroll(n *Node) geom.Vec2 {
 // page shown again is put back where it was left. Nothing else scrolls,
 // and a ScrollIntoView or ScrollToStart still waited for comes after it.
 func (d *Document) SetScroll(n *Node, off geom.Vec2) {
-	dom.Data(n).Scroll = geom.V2(max(off.X, 0), max(off.Y, 0))
+	dom.Data(n).Scroll = off
 	if d.tree == nil {
 		return
 	}
@@ -1770,7 +1771,6 @@ func (d *Document) scrollKey(n *Node, i control.Intent) bool {
 	b := d.tree.Of[n]
 	for _, s := range scrollContainers(b) {
 		bars := paint.BarsOf(s, origin(s))
-		end := max(bars.Content.Y-bars.View.H, 0)
 		off := bars.Scroll
 		switch i {
 		case control.PageUp:
@@ -1778,13 +1778,13 @@ func (d *Document) scrollKey(n *Node, i control.Intent) bool {
 		case control.PageDown:
 			off.Y += bars.View.H
 		case control.Home:
-			off.Y = 0
+			off.Y = bars.Start.Y
 		case control.End:
-			off.Y = end
+			off.Y = math.MaxFloat32
 		case control.None, control.Activate, control.Back, control.Up, control.Down, control.Left, control.Right:
 			// scrollKey lets only the four above through
 		}
-		off.Y = min(max(off.Y, 0), end)
+		off = bars.Clamp(off)
 		if off == bars.Scroll {
 			continue
 		}
@@ -1861,9 +1861,7 @@ func (d *Document) reveal(n *Node, start bool) {
 		} else {
 			off.Y += nearest(r.Y, r.H, v.Y, v.H)
 		}
-		off.X = min(max(off.X, 0), max(bars.Content.X-v.W, 0))
-		off.Y = min(max(off.Y, 0), max(bars.Content.Y-v.H, 0))
-		d.setScroll(s, off)
+		d.setScroll(s, bars.Clamp(off))
 	}
 }
 
@@ -1911,9 +1909,10 @@ func (d *Document) scroller(n *Node) *box.Box {
 // scroll the way w turns.
 func canScroll(bars paint.Bars, w geom.Vec2) bool {
 	const eps = 0.01
-	room := geom.V2(max(bars.Content.X-bars.View.W, 0), max(bars.Content.Y-bars.View.H, 0))
-	return w.Y > 0 && bars.Scroll.Y < room.Y-eps || w.Y < 0 && bars.Scroll.Y > eps ||
-		w.X > 0 && bars.Scroll.X < room.X-eps || w.X < 0 && bars.Scroll.X > eps
+	lo := bars.Start
+	hi := bars.Clamp(geom.V2(math.MaxFloat32, math.MaxFloat32))
+	return w.Y > 0 && bars.Scroll.Y < hi.Y-eps || w.Y < 0 && bars.Scroll.Y > lo.Y+eps ||
+		w.X > 0 && bars.Scroll.X < hi.X-eps || w.X < 0 && bars.Scroll.X > lo.X+eps
 }
 
 func origin(b *box.Box) geom.Vec2 { r := b.Rect(); return geom.V2(r.X, r.Y) }

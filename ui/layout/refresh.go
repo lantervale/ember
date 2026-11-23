@@ -145,11 +145,7 @@ func clampScroll(b *box.Box) geom.Vec2 {
 		return geom.Vec2{}
 	}
 	port := scrollport(b)
-	s := dom.Data(b.Node).Scroll
-	return geom.Vec2{
-		X: min(max(s.X, 0), max(b.Content.X-port.W, 0)),
-		Y: min(max(s.Y, 0), max(b.Content.Y-port.H, 0)),
-	}
+	return box.ClampScroll(dom.Data(b.Node).Scroll, b.ScrollStart, b.Content, geom.V2(port.W, port.H))
 }
 
 // flowAt is a box's border box top-left in the root's space as the flow placed it, before

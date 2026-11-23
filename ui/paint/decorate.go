@@ -451,9 +451,13 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	}
 	b := e.b
 	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
+	right := e.at.X + b.Size.X - b.Border.Right - b.Padding.Right
 	for _, r := range c.Rows {
 		for k := 1; k < r.Count; k++ {
 			x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
+			if st.Dir == style.RTL {
+				x = right - float32(k)*(c.Width+c.Gap) + (c.Gap-w)/2
+			}
 			p.border(p.snap(geom.Rect{X: x, Y: top + r.Top, W: w, H: r.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
 		}
 	}
@@ -1976,14 +1980,22 @@ func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []two
 // selectionColors are the ::selection of the element st styles: its
 // background-color and its color. A rule that sets either leaves the
 // other as CSS has it, no background and the text's own colour; with no
-// rule the background is Chrome's on macOS, greyed while the window is
-// inactive, and the text keeps its colour.
+// rule they are the system's, its background blended with white as Chrome
+// on macOS blends it, else Chrome's there, greyed while the window is
+// inactive, and the text keeps its colour where the system gives it none.
 func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha float32) (color.Color, color.Color) {
 	if !st.HasSelection && !st.HasSelectionText {
+		back, sys := pageSelection, p.system.Background
 		if p.inactive {
-			return fade(inactiveSelection, alpha), text
+			back, sys = inactiveSelection, p.system.Inactive
 		}
-		return fade(pageSelection, alpha), text
+		if sys.A > 0 {
+			back = blendWithWhite(sys)
+		}
+		if p.system.Text.A > 0 {
+			text = fade(p.system.Text, alpha)
+		}
+		return fade(back, alpha), text
 	}
 	var back color.Color
 	if st.HasSelection {
@@ -1994,6 +2006,34 @@ func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha fl
 	}
 	return back, text
 }
+
+// blendWithWhite is c made as translucent as it can be, from 60% to 80%
+// opaque, and still show as c over white, as Chrome draws a system's
+// selection colour (Color::BlendWithWhite): a colour too dark for that
+// keeps 80%, its channels clamped. A translucent colour stays as it is.
+func blendWithWhite(c color.Color) color.Color {
+	if c.A < 1 {
+		return c
+	}
+	srgb := c.SRGB()
+	var ch [3]int
+	alpha := 153
+	for ; alpha <= 204; alpha += 17 {
+		a := float32(alpha) / 255
+		negative := false
+		for i, v := range srgb {
+			ch[i] = int(float32(int(v*255+0.5)-(255-alpha)) / a)
+			negative = negative || ch[i] < 0
+		}
+		if !negative {
+			break
+		}
+	}
+	alpha = min(alpha, 204)
+	return color.RGB8(clamp8(ch[0]), clamp8(ch[1]), clamp8(ch[2])).Alpha(float32(alpha) / 255)
+}
+
+func clamp8(v int) uint8 { return uint8(max(0, min(255, v))) }
 
 // highlight draws the selection behind a text run's selected parts and
 // returns the colour their text takes.
