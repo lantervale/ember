@@ -14,7 +14,12 @@ import (
 )
 
 func TestTheChromeLockSaysWhoHoldsItToThoseWaiting(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
+	// os.TempDir reads TMP and TEMP on Windows: the lock of the Chrome runs
+	// of other packages' tests stays apart.
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
 	unlock, err := lockChrome()
 	require.NoError(t, err)
 	held, err := os.ReadFile(lockPath())
