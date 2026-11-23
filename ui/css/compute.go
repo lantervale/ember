@@ -2247,11 +2247,16 @@ var props = func() map[string]prop {
 		"-webkit-font-smoothing": {
 			set: func(x *ctx, v []Component) {
 				kw := strings.ToLower(v[0].Text)
-				x.c.PixelText, x.c.ExactText = kw == kwNone, kw == "antialiased"
+				x.c.PixelText, x.c.ExactText, x.c.SubpixelText = kw == kwNone, kw == "antialiased", kw == "subpixel-antialiased"
 			},
-			inherit: func(dst, src *style.Computed) { dst.PixelText, dst.ExactText = src.PixelText, src.ExactText },
-			anim:    anim{kind: discrete},
+			inherit: func(dst, src *style.Computed) {
+				dst.PixelText, dst.ExactText, dst.SubpixelText = src.PixelText, src.ExactText, src.SubpixelText
+			},
+			anim: anim{kind: discrete},
 		},
+		"text-rendering": keyword(func(c *style.Computed) *style.TextRendering { return &c.TextRendering },
+			map[string]style.TextRendering{"auto": style.TextRenderingAuto, "optimizespeed": style.OptimizeSpeed,
+				"optimizelegibility": style.OptimizeLegibility, "geometricprecision": style.GeometricPrecision}),
 		"text-transform": keyword(func(c *style.Computed) *style.TextTransform { return &c.TextTransform },
 			map[string]style.TextTransform{"none": style.NoTransform, "uppercase": style.Uppercase,
 				"lowercase": style.Lowercase, "capitalize": style.Capitalize}),

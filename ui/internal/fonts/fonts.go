@@ -85,6 +85,8 @@ type Set struct {
 	shapedCount int
 	run         []shape.Glyph
 	ids         []byte
+	// counted counts the glyphs measures count, each its own part's (Carets).
+	counted int
 	// uprights are the clusters set upright in vertical lines so far.
 	uprights map[uprightKey]uprightSet
 	// scale is device pixels per point, 0 for 1.
@@ -323,6 +325,7 @@ func (s *Set) advanceIn(f style.Font, text, before, after string, own part) floa
 			w += s.advance(f, text[start:at], before+text[:start], text[at:]+after, own.in(start))
 			if own.has(at) {
 				w += f.Size
+				s.counted++
 			}
 			start = at + len(c)
 		}
@@ -408,6 +411,7 @@ func (s *Set) advance(f style.Font, text, before, after string, own part) float3
 			if ok {
 				if own.has(i) {
 					other += a
+					s.counted++
 				}
 				w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
 				run = run[:0]

@@ -132,6 +132,34 @@ func TestTextShapedAmidItsNeighboursTakesTheGlyphsItsClustersStart(t *testing.T)
 		s.AdvanceAmid(f, "o", "T", "", "", ""), 1e-3)
 }
 
+func TestCaretsShareALigatureEvenlyAndGiveAPairsKerningToItsFirst(t *testing.T) {
+	s, _ := featured(t)
+	f := style.Font{Family: []string{"Featured"}, Size: 20, Weight: 400}
+	plain := f
+	plain.Features = "-liga,-kern"
+	carets := func(text, lead, trail string) []float32 {
+		xs, _ := s.Carets(f, text, lead, trail, "", "")
+		return xs
+	}
+	o, ffi, c := s.Advance(f, "o"), units(1383), s.Advance(f, "c")
+	want := []float32{0, o, o + ffi/3, o + 2*ffi/3, o + ffi, o + ffi + c, s.Advance(f, "office")}
+	assert.InDeltaSlice(t, want, carets("office", "", ""), 1e-3)
+	_, starts := s.Carets(f, "office", "", "", "", "")
+	assert.Equal(t, []bool{true, true, false, false, true, true, true}, starts, "no glyph starts inside the ligature")
+	a := s.Advance(plain, "A") - units(160)
+	assert.InDeltaSlice(t, []float32{0, a, s.Advance(f, "AV")}, carets("AV", "", ""), 1e-3)
+	assert.InDeltaSlice(t, []float32{0, 0, 0}, carets("fi", "of", "ce"), 1e-3,
+		"a ligature the text before starts is its")
+	_, starts = s.Carets(f, "fi", "of", "ce", "", "")
+	assert.Equal(t, []bool{false, false, true}, starts)
+	assert.InDeltaSlice(t, []float32{0, o, o + ffi}, carets("of", "", "fice"), 1e-3,
+		"one it starts is its first character's whole")
+	assert.InDeltaSlice(t, []float32{0, a}, carets("A", "", "V"), 1e-3)
+	accented := carets("e\u0301x", "", "")
+	assert.InDeltaSlice(t, []float32{0, 0, s.Advance(f, "e\u0301"), s.Advance(f, "e\u0301x")}, accented, 1e-3,
+		"a caret inside a grapheme cluster at its start")
+}
+
 func TestLayoutAndDrawingShapeAlike(t *testing.T) {
 	s, ttf := featured(t)
 	face, err := draw.ParseFace("Featured", ttf)

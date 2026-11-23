@@ -24,6 +24,12 @@ func TestTextIsShapedWithTheFeaturesItsPropertiesAskFor(t *testing.T) {
 		{`font-feature-settings: "tnum", "liga" 0, "salt" 3; font-variant-numeric: proportional-nums`,
 			"pnum|-liga,salt=3,tnum"},
 		{`font-feature-settings: "kern" 1; font-kerning: none`, "-kern|kern"},
+		{"text-rendering: optimizeSpeed", "-liga,-clig,-calt|"},
+		{"text-rendering: optimizeSpeed; font-variant-ligatures: common-ligatures", "-calt,liga,clig|"},
+		{"text-rendering: optimizeSpeed; font-variant-ligatures: contextual", "-liga,-clig,calt|"},
+		{"text-rendering: optimizeSpeed; font-variant-ligatures: none", "-liga,-clig,-dlig,-hlig,-calt|"},
+		{`text-rendering: optimizeSpeed; font-feature-settings: "liga"`, "-liga,-clig,-calt|liga"},
+		{"text-rendering: optimizeLegibility", ""},
 	} {
 		d := dom.NewElement(dom.Div)
 		d.SetStyle(c.decls)
