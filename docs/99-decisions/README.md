@@ -138,6 +138,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0133 | [A masked element is a picture cut by the picture of its mask](0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md) | rendering |
 | 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
 | 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
+| 0137 | [A box placed past a scroller is moved back as it scrolls](0137-a-box-placed-past-a-scroller-is-moved-back-as-it-scrolls.md) | api |
 | 0138 | [Animated pictures play as one texture per address](0138-animated-pictures-play-as-one-texture-per-address.md) | assets |
 
 ## Writing one

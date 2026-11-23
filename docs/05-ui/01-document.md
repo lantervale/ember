@@ -131,7 +131,7 @@ The import registers ember's `svg` reader with ui (`ui.RegisterVectorFormat`); a
 | The file has | In an `img` with no size | As a background, `background-size: auto` |
 |---|---|---|
 | `width` and `height` | that size; with one side set, the other keeps the ratio | that size |
-| a `viewBox` alone | the width of its block, the height by its ratio; nothing in a block that shrinks to its content (a float, an inline block) | the largest size of its ratio the padding box holds, as `contain` |
+| a `viewBox` alone | the width of its block, the height by its ratio; nothing in a block that shrinks to its content (a float, an inline block); a flex row's width as a flex item with no size; its containing block's room between its insets when absolutely positioned | the largest size of its ratio the padding box holds, as `contain` |
 | neither | 300 by 150; a side that is set leaves the other alone | the whole padding box |
 
 `width` and `height` attributes on the `img`, CSS sizes, `object-fit`, and the other forms of `background-size` (lengths, percentages, `cover`, `contain`) apply as for any picture. A file with a `width` and a `height` and no `viewBox` has their ratio.
@@ -150,7 +150,7 @@ A file that is no SVG, or over the reader's limits (16 MB, 100,000 elements or s
 
 An SVG written in the page itself is an [`svg` element](02-elements/85-svg.md), `ui.Svg(markup, args…)`: the same reader, with `currentColor` the colour of the element's text.
 
-Limits: an `img` with a `viewBox` alone is not given a width as a flex item with no size or as an absolutely positioned box, where Chrome gives it the room there; give it a width. A `border-image` from an SVG is drawn at the size the file asks for, one pixel a point. To use an SVG outside ui, read it with the `svg` package itself and make a texture of the picture: `p, err := svg.LoadPicture(fsys, "star.svg")`, `img, err := p.Rasterise(64, 64)`, `twod.NewTexture(img)`.
+Limits: a `border-image` from an SVG is drawn at the size the file asks for, one pixel a point. To use an SVG outside ui, read it with the `svg` package itself and make a texture of the picture: `p, err := svg.LoadPicture(fsys, "star.svg")`, `img, err := p.Rasterise(64, 64)`, `twod.NewTexture(img)`.
 
 ```
 go run ./examples/92-ui-kit -element settings

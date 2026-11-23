@@ -2,6 +2,7 @@ package layout
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
@@ -16,6 +17,10 @@ const defaultWidth, defaultHeight = 300, 150
 // brokenIcon is the side of the icon an img that didn't load shows, as Chrome's
 // (paint.BrokenIcon).
 const brokenIcon = 16
+
+// noRatio is the Ratio of the shape of an img with no picture and no proportions from
+// its attributes: its icon and alt text give it a size, never proportions, as Chrome's.
+const noRatio = -1
 
 // pictured reports an element laid out as a picture: an img, an svg, or
 // one its content property replaces by a picture.
@@ -46,7 +51,7 @@ func pictureOf(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fon
 	}
 	src, ok := dom.Picture(e)
 	if !ok {
-		return size{}, box.Intrinsic{}, false
+		return size{}, box.Intrinsic{Ratio: attributeRatio(e)}, false
 	}
 	density := dom.Density(e)
 	if shapes, has := images.(box.IntrinsicImages); has {
@@ -62,16 +67,50 @@ func pictureOf(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fon
 	if s, found := images.ImageSize(src); found {
 		return size{s.X / density, s.Y / density}, box.Intrinsic{}, false
 	}
+	shape := box.Intrinsic{Ratio: attributeRatio(e)}
+	if shape.Ratio == 0 {
+		shape.Ratio = noRatio
+	}
 	alt, hasAlt := e.Attr("alt")
 	switch {
 	case !hasAlt:
-		return size{brokenIcon, brokenIcon}, box.Intrinsic{}, false
+		return size{brokenIcon, brokenIcon}, shape, false
 	case alt != "":
 		m := fonts.Metrics(st.Font)
 		return size{brokenIcon + fonts.Advance(st.Font, alt), max(brokenIcon, m.Ascent+m.Descent+m.LineGap)},
-			box.Intrinsic{}, false
+			shape, false
 	}
-	return size{}, box.Intrinsic{}, false
+	return size{}, shape, false
+}
+
+// attributeRatio is the proportions the width and height attributes of an img give it
+// while it has no picture, loading or broken, as Chrome's sheet gives them (aspect-ratio:
+// auto w / h): 0 for an element of another kind, or but two numbers above 0.
+func attributeRatio(e *dom.Node) float32 {
+	if e.Tag() != dom.Img {
+		return 0
+	}
+	w, h := attrNumber(e, "width"), attrNumber(e, "height")
+	if w <= 0 || h <= 0 {
+		return 0
+	}
+	return w / h
+}
+
+// attrNumber is the number an attribute starts with, as HTML reads a dimension, -1 for
+// none or a percentage.
+func attrNumber(e *dom.Node, name string) float32 {
+	v, _ := e.Attr(name)
+	v = strings.TrimLeft(v, " \t\r\n\f")
+	end := 0
+	for end < len(v) && (v[end] >= '0' && v[end] <= '9' || v[end] == '.') {
+		end++
+	}
+	f, err := strconv.ParseFloat(v[:end], 32)
+	if err != nil || strings.HasPrefix(v[end:], "%") {
+		return -1
+	}
+	return float32(f)
 }
 
 // Landed tells the kept layout that the pictures landed reports arrived since it ran.
@@ -143,6 +182,13 @@ func (n *node) naturalRatio() float32 {
 		}
 		return none
 	}
+	switch {
+	case n.replaced && n.shape.Ratio > 0:
+		// an img's attributes, while it has no picture
+		return n.shape.Ratio
+	case n.shape.Ratio == noRatio:
+		return none
+	}
 	if !n.replaced || n.natural.w <= 0 || n.natural.h <= 0 {
 		return none
 	}
@@ -198,9 +244,12 @@ func replacedSize(natural size, ratio float32, minSize, maxSize size) size {
 }
 
 // measureReplaced is a replaced box's content size: its natural size, or the side it is
-// given and the other through its ratio.
-func measureReplaced(n *node, known size) size {
+// given and the other through its ratio. A picture that fills is as wide as room.
+func measureReplaced(n *node, known size, room space) size {
 	s := n.natural
+	if n.fills() {
+		s = n.filled(room, 0)
+	}
 	if r := n.naturalRatio(); some(r) {
 		switch {
 		case some(known.w) && !some(known.h):
