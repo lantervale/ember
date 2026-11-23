@@ -8,6 +8,8 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
+//go:generate go run -tags chrome ./gen -out asciibreaks_gen.go
+
 // A character a line-break strictness breaks around as around an
 // ideograph is replaced by one before UAX #14 reads the text: uniseg's
 // rules are strict's, which ICU's other rules relax by classing these
@@ -195,6 +197,47 @@ func (c *inlineContent) anywhereEnds(add func(pos int), starts []int) {
 		}
 		last = r
 	}
+}
+
+// printableASCII reports whether c is a printable ASCII character other
+// than the space.
+func printableASCII(c byte) bool { return c > ' ' && c < 0x7F }
+
+// asciiPair reports whether the characters before and at byte pos of
+// text are both printable ASCII, where Chrome breaks by its own table in
+// place of UAX #14.
+func asciiPair(text string, pos int) bool {
+	return pos > 0 && pos < len(text) && printableASCII(text[pos-1]) && printableASCII(text[pos])
+}
+
+// asciiBreaksIn calls fn with each byte of text Chrome breaks before
+// between two printable ASCII characters.
+func asciiBreaksIn(text string, fn func(pos int)) {
+	for pos := 1; pos < len(text); pos++ {
+		if asciiPair(text, pos) && asciiBreak(text, pos) {
+			fn(pos)
+		}
+	}
+}
+
+// asciiBreak reports whether Chrome breaks before byte pos of text
+// between two printable ASCII characters: by its table, but between a
+// hyphen and a digit only after a letter or a digit, so a minus sign
+// stays with its number.
+func asciiBreak(text string, pos int) bool {
+	a, b := text[pos-1], text[pos]
+	if a == '-' && b >= '0' && b <= '9' {
+		return pos >= 2 && asciiAlphanumeric(text[pos-2])
+	}
+	return tableBreak(&asciiBreaks, a, b)
+}
+
+func tableBreak(table *[asciiCount][2]uint64, a, b byte) bool {
+	return table[a-'!'][(b-'!')/64]&(1<<((b-'!')%64)) != 0
+}
+
+func asciiAlphanumeric(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 // inseparable reports whether r is of UAX #14's class IN.

@@ -69,6 +69,7 @@
   "shaped-whole": 0.016,
   "line-break": 0.013,
   "shaped-whole-rtl": 0.015,
+  "ascii-breaks": 0.0135,
   "list-counters": 0.0075,
   "list-inside": 0.0135,
   "lists": 0.0065,

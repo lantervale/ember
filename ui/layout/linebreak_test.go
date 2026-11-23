@@ -93,3 +93,42 @@ func TestAnywhereBreaksWhereItsTextEnds(t *testing.T) {
 	tr := Layout(el(dom.Div, block, p), geom.V2(200, 600), ahemFonts{})
 	assert.Equal(t, float32(20), tr.Of[p].Size.Y, "the text after the span starts a second line")
 }
+
+// asciiLines are the lines of content in a paragraph five characters
+// wide.
+func asciiLines(content string) []string {
+	p := el(dom.P, width(50), text(content))
+	tr := Layout(el(dom.Div, block, p), geom.V2(200, 600), ahemFonts{})
+	return lines(tr.Of[p])
+}
+
+func TestASCIIPairsBreakByChromesTable(t *testing.T) {
+	for content, want := range map[string][]string{
+		"ab!cdefg":    {"ab!cdefg"},
+		"ab}cdefg":    {"ab}cdefg"},
+		"ab|c1234":    {"ab|c1234"},
+		"$$$$$$$$":    {"$$$$$$$$"},
+		"%%%%%%%%":    {"%%%%%%%%"},
+		"abc,(def)":   {"abc,", "(def)"},
+		"abcd-12":     {"abcd-", "12"},
+		"1234-56":     {"1234-", "56"},
+		"!!!!-12":     {"!!!!-12"},
+		"what?nowhy":  {"what?", "nowhy"},
+		"a/b/c/d/e/f": {"a/b/c/d/e/f"},
+		"ab!éfgh":     {"ab!", "éfgh"},
+	} {
+		assert.Equal(t, want, asciiLines(content), content)
+	}
+}
+
+func TestBreakAllTakesChromesASCIITable(t *testing.T) {
+	p := el(dom.P, breaking(style.BreakAll, style.LineBreakAuto, width(10)), text("ab(cd)"))
+	tr := Layout(el(dom.Div, block, p), geom.V2(200, 600), ahemFonts{})
+	assert.Equal(t, []string{"a", "b", "(c", "d)"}, lines(tr.Of[p]), "no break after ( nor before )")
+}
+
+func TestASCIITableBreaksAcrossElements(t *testing.T) {
+	p := el(dom.P, width(50), text("ab!"), el(dom.Span, nil, text("cdefg")))
+	tr := Layout(el(dom.Div, block, p), geom.V2(200, 600), ahemFonts{})
+	assert.Equal(t, float32(10), tr.Of[p].Size.Y, "no break after ! before the span's letter")
+}
