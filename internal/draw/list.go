@@ -40,6 +40,9 @@ const (
 	KindBorder    = 5
 	KindImage     = 6
 	KindGlow      = 7
+	// KindSmoothImage is an image whose edges, the bounds of its UV in
+	// Shape.Y, Z, W and Extra, are anti-aliased (SmoothImage).
+	KindSmoothImage = 8
 )
 
 // Vertex is the presenter-facing layout: 16 floats.
@@ -745,6 +748,32 @@ func (c *List) mark(slot, n int) {
 // Image draws the uv part (0..1) of a texture over r, tinted.
 func (c *List) Image(r geom.Rect, tex *render.Texture, uv geom.Rect, tint color.Color) {
 	c.vertices(r, [4]float32{uv.X, uv.Y, uv.X + uv.W, uv.Y + uv.H}, tint, geom.Vec4{X: KindImage})
+	c.batchImage(nil, tex, 4, 6)
+}
+
+// SmoothImage draws as Image, but where a rotation or a skew slants its
+// edges they are anti-aliased (decision 0220): its quad reaches a point
+// past r on the screen, its UV carrying on, and the GPU covers each pixel
+// by its distance to the edges of uv, read back to it, as Chrome draws a
+// turned picture. Drawn square, it is an Image.
+func (c *List) SmoothImage(r geom.Rect, tex *render.Texture, uv geom.Rect, tint color.Color) {
+	t := c.transform
+	det := abs(t.X.X*t.Y.Y - t.X.Y*t.Y.X)
+	if !c.turned() || det == 0 || r.W <= 0 || r.H <= 0 || uv.W == 0 || uv.H == 0 {
+		c.Image(r, tex, uv, tint)
+		return
+	}
+	// A point past r on the screen is at most this far past it here: one
+	// over the transform's smallest stretch.
+	pad := float32(math.Sqrt(float64(t.X.Dot(t.X)+t.Y.Dot(t.Y)))) / det
+	du, dv := pad*uv.W/r.W, pad*uv.H/r.H
+	out := geom.Rect{X: r.X - pad, Y: r.Y - pad, W: r.W + 2*pad, H: r.H + 2*pad}
+	u0, v0, u1, v1 := uv.X, uv.Y, uv.X+uv.W, uv.Y+uv.H
+	shape := geom.Vec4{X: KindSmoothImage, Y: min(u0, u1), Z: min(v0, v1), W: max(u0, u1)}
+	c.vertices(out, [4]float32{u0 - du, v0 - dv, u1 + du, v1 + dv}, tint, shape)
+	for i := len(c.Vertices) - 4; i < len(c.Vertices); i++ {
+		c.Vertices[i].Extra = max(v0, v1)
+	}
 	c.batchImage(nil, tex, 4, 6)
 }
 

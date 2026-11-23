@@ -38,6 +38,7 @@ type Surface interface {
 	TrianglesColored(points []geom.Vec2, colors []color.Color, indices []int)
 	Text(at geom.Vec2, text string, opts ...twod.TextOption) geom.Vec2
 	Image(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color)
+	SmoothImage(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color)
 	NinePatch(r geom.Rect, tex *twod.Texture, left, top, right, bottom float32, tint color.Color)
 	PushClip(r geom.Rect)
 	PushClipRounded(r geom.Rect, radii [4]float32)

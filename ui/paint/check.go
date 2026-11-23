@@ -192,6 +192,10 @@ func (t *tally) Image(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.C
 	t.add(pictured("image", tex), r, append(rgba(tint), uv.X, uv.Y, uv.W, uv.H)...)
 }
 
+func (t *tally) SmoothImage(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color) {
+	t.Image(r, tex, uv, tint)
+}
+
 func (t *tally) NinePatch(r geom.Rect, tex *twod.Texture, left, top, right, bottom float32, tint color.Color) {
 	t.add(pictured("nine-patch", tex), r, append(rgba(tint), left, top, right, bottom)...)
 }

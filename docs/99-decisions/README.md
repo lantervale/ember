@@ -217,6 +217,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0215 | [A subgrid's axes are its grid's by their frames](0215-a-subgrids-axes-are-its-grids-by-their-frames.md) | rendering |
 | 0216 | [A clip under a rotation or a skew cuts in its own space](0216-a-clip-under-a-rotation-or-a-skew-cuts-in-its-own-space.md) | rendering |
 | 0219 | [A transform holds fixed boxes, and a point hits through it as its pixel square](0219-a-transform-holds-fixed-boxes-and-a-point-hits-through-it-as-its-pixel-square.md) | rendering |
+| 0220 | [A turned picture's and border's edges are covered by their distance](0220-a-turned-pictures-and-borders-edges-are-covered-by-their-distance.md) | rendering |
 
 ## Writing one
 

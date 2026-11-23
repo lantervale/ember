@@ -629,12 +629,17 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, l *style.BackgroundL
 	if shape {
 		tex = silhouette(tex)
 	}
-	backgroundTiles(view, first, rep, gap, func(tile geom.Rect) {
-		if g != nil {
+	// Turned or skewed, tiles reach a point past the view for its clip to
+	// anti-alias their edges; a picture alone smooths its own.
+	backgroundTiles(grow(view, p.slant()), first, rep, gap, func(tile geom.Rect) {
+		switch {
+		case g != nil:
 			p.gradientIn(tile, radii{}, g, alpha, 0)
-			return
+		case alone:
+			p.s.SmoothImage(tile, tex, texels(tex), tint)
+		default:
+			p.s.Image(tile, tex, texels(tex), tint)
 		}
-		p.s.Image(tile, tex, texels(tex), tint)
 	})
 }
 
@@ -800,7 +805,7 @@ func (p *painter) picture(
 ) {
 	tint := fade(color.White, alpha)
 	if slice == (style.Sides[float32]{}) {
-		p.s.Image(r, tex, whole, tint)
+		p.s.SmoothImage(r, tex, whole, tint)
 		return
 	}
 	p.ninePatch(r, tex, slice, widths, repeat, tint, fill)
@@ -1426,7 +1431,8 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		}
 		return
 	}
-	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
+	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) ||
+		p.slant() > 0 && !dashed([4]float32{tw, rw, bw, lw}, st.BorderStyle) {
 		p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
 		return
 	}
@@ -1473,6 +1479,16 @@ func mitered(w [4]float32, c [4]color.Color, s style.Sides[style.BorderStyle]) b
 		sides++
 	}
 	return differ && sides > 1
+}
+
+// dashed reports whether a side of width w is dashed or dotted.
+func dashed(w [4]float32, s style.Sides[style.BorderStyle]) bool {
+	for i, x := range [4]style.BorderStyle{s.Top, s.Right, s.Bottom, s.Left} {
+		if w[i] > 0 && (x == style.BorderDashed || x == style.BorderDotted) {
+			return true
+		}
+	}
+	return false
 }
 
 // beveled reports whether a side is inset, outset, groove or ridge.

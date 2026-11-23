@@ -174,14 +174,15 @@ func (s *probe) PushClipMask(r geom.Rect, _ *twod.Texture) { s.PushClip(r) }
 func (s *probe) pushShape(c *clipShape) {
 	s.clips = append(s.clips, probeClip{rect: c.bounds, back: s.xf.Inverse(), shape: c})
 }
-func (s *probe) PopClip()                                               { s.clips = s.clips[:len(s.clips)-1] }
-func (s *probe) Transform() geom.Transform2D                            { return s.xf }
-func (s *probe) SetTransform(t geom.Transform2D)                        { s.xf = t }
-func (s *probe) Rect(geom.Rect, color.Color)                            {}
-func (s *probe) RoundRect(geom.Rect, float32, color.Color)              {}
-func (s *probe) Border(geom.Rect, float32, float32, color.Color)        {}
-func (s *probe) Glow(geom.Rect, float32, float32, color.Color)          {}
-func (s *probe) Image(geom.Rect, *twod.Texture, geom.Rect, color.Color) {}
+func (s *probe) PopClip()                                                     { s.clips = s.clips[:len(s.clips)-1] }
+func (s *probe) Transform() geom.Transform2D                                  { return s.xf }
+func (s *probe) SetTransform(t geom.Transform2D)                              { s.xf = t }
+func (s *probe) Rect(geom.Rect, color.Color)                                  {}
+func (s *probe) RoundRect(geom.Rect, float32, color.Color)                    {}
+func (s *probe) Border(geom.Rect, float32, float32, color.Color)              {}
+func (s *probe) Glow(geom.Rect, float32, float32, color.Color)                {}
+func (s *probe) Image(geom.Rect, *twod.Texture, geom.Rect, color.Color)       {}
+func (s *probe) SmoothImage(geom.Rect, *twod.Texture, geom.Rect, color.Color) {}
 func (s *probe) NinePatch(geom.Rect, *twod.Texture, float32, float32, float32, float32, color.Color) {
 }
 func (s *probe) Line(geom.Vec2, geom.Vec2, float32, color.Color)           {}

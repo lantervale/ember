@@ -38,7 +38,7 @@ func (p *painter) img(e entry, alpha float32) {
 		p.s.PushClip(box)
 		defer p.s.PopClip()
 	}
-	p.s.Image(at, tex, texels(tex), fade(color.White, alpha))
+	p.s.SmoothImage(at, tex, texels(tex), fade(color.White, alpha))
 }
 
 // shapesImg draws an img whose picture is drawn from shapes: placed as
@@ -63,7 +63,7 @@ func (p *painter) shapesImg(e entry, v Vector, st *style.Computed, alpha float32
 		p.s.PushClip(area)
 		defer p.s.PopClip()
 	}
-	p.s.Image(at, tex, whole, fade(color.White, alpha))
+	p.s.SmoothImage(at, tex, whole, fade(color.White, alpha))
 }
 
 // objectFit is where a picture of natural size goes in box by fit, placed
