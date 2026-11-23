@@ -144,7 +144,8 @@ func (p *listBoxDriver) check(step string) {
 		Sel []string       `json:"sel"`
 		Ev  map[string]int `json:"ev"`
 	}
-	p.s.Eval(`({sel: [...document.querySelectorAll("select")].map(s => [...s.options].map(o => o.selected ? "1" : "0").join("")), ev})`, &want)
+	p.s.Eval(`({ev, sel: [...document.querySelectorAll("select")].map(s =>
+	[...s.options].map(o => o.selected ? "1" : "0").join(""))})`, &want)
 	for i, s := range p.sels {
 		got := []byte(strings.Repeat("0", len(dom.Options(s))))
 		for _, k := range p.doc.SelectedOptions(s) {

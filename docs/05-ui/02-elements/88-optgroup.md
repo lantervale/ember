@@ -23,7 +23,7 @@ ui.Select(
 
 In the open list, the arrows, typing and the pointer pass over the labels, and a group's options stand behind four spaces, which the select's width counts, as Chrome's does; the labels never widen the select.
 
-A select with `multiple` or a `size` above 1 is still shown as a dropdown ([what is missing](../10-missing.md)).
+In a [listbox](21-select.md#a-listbox-multiple-or-a-size) (a select with `multiple` or a `size` above 1), the label is a bold row of the page before the group's options, which stand 20px in; it takes no press, and the keys pass over it.
 
 Automation: through its select's `select`, by an option's index, value or text; a label is never one.
 

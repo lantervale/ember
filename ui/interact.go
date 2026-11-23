@@ -1369,11 +1369,8 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 		d.tab(f.RawDown(int(input.KeyShift)))
 		return
 	}
-	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
+	if d.typedIn(n, f, in) {
 		return
-	}
-	if s := d.listBox(n); s != nil && !d.commandHeld(f) {
-		d.listBoxType(n, s, in.Text())
 	}
 	intents, from := pressedIntents(f, pressed)
 	for j, i := range intents {
@@ -1382,6 +1379,18 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 			taken.add(from[j])
 		}
 	}
+}
+
+// typedIn hands the focused n what was typed: a listbox finds an option
+// by it. It reports a grid with a shortcut held, which leaves the keys.
+func (d *Document) typedIn(n *Node, f inputfeed.Feed, in *input.State) bool {
+	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
+		return true
+	}
+	if s := d.listBox(n); s != nil && !d.commandHeld(f) {
+		d.listBoxType(n, s, in.Text())
+	}
+	return false
 }
 
 // stillHeld reports whether a key or pad button that was down when a modal

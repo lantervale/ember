@@ -274,6 +274,13 @@ const (
 	Shift = 8
 )
 
+// kindField and modifiers are the fields of DevTools' input events
+// naming the event and the modifiers held.
+const (
+	kindField = "type"
+	modifiers = "modifiers"
+)
+
 // Press presses the left button at (x, y), in CSS pixels, with the
 // modifier keys mods held.
 func (s *Session) Press(x, y float32, mods int) {
@@ -306,7 +313,7 @@ func (s *Session) Click(x, y float32, mods int) {
 
 func (s *Session) mouse(kind string, x, y float32, mods, buttons int) {
 	s.t.Helper()
-	params := map[string]any{"type": kind, "x": x, "y": y, "modifiers": mods, "buttons": buttons}
+	params := map[string]any{kindField: kind, "x": x, "y": y, modifiers: mods, "buttons": buttons}
 	if kind != "mouseMoved" || buttons != 0 {
 		params["button"], params["clickCount"] = "left", 1
 	}
@@ -332,7 +339,7 @@ var keyCodes = map[string]struct {
 // types itself unless a modifier other than Shift is held.
 func (s *Session) Key(key string, mods int) {
 	s.t.Helper()
-	down := map[string]any{"type": "rawKeyDown", "key": key, "modifiers": mods}
+	down := map[string]any{kindField: "rawKeyDown", "key": key, modifiers: mods}
 	if k, ok := keyCodes[key]; ok {
 		down["windowsVirtualKeyCode"], down["code"] = k.vk, k.code
 	} else if len(key) == 1 {
@@ -343,10 +350,10 @@ func (s *Session) Key(key string, mods int) {
 		}
 	}
 	if len(key) == 1 && mods&^Shift == 0 {
-		down["type"], down["text"] = "keyDown", key
+		down[kindField], down["text"] = "keyDown", key
 	}
 	s.call("Input.dispatchKeyEvent", down, nil)
-	up := map[string]any{"type": "keyUp", "key": key, "modifiers": mods}
+	up := map[string]any{kindField: "keyUp", "key": key, modifiers: mods}
 	for _, f := range []string{"windowsVirtualKeyCode", "code"} {
 		if v, ok := down[f]; ok {
 			up[f] = v

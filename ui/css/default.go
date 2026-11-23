@@ -204,10 +204,17 @@ select:-ember-listbox, select:-ember-listbox:dir(rtl):-ember-native {
 }
 select:-ember-listbox option, select:-ember-listbox optgroup { line-height: normal; }
 select:-ember-listbox optgroup > option { padding-inline-start: 20px; }
-select:-ember-listbox option:checked { background-color: light-dark(#cecece, #545454); color: light-dark(#101010, white); }
-select:-ember-listbox:focus option:checked { background-color: light-dark(#b3d7ff, #545454); color: light-dark(black, white); }
+select:-ember-listbox option:checked {
+  background-color: light-dark(#cecece, #545454); color: light-dark(#101010, white);
+}
+select:-ember-listbox:focus option:checked {
+  background-color: light-dark(#b3d7ff, #99c8ff); color: light-dark(black, #3b3b3b);
+}
 select:-ember-listbox option:checked:disabled, select:-ember-listbox:disabled option:checked {
   color: light-dark(gray, #aaa);
+}
+select:-ember-listbox:focus option:checked:disabled {
+  background-color: light-dark(#dcdcdc, rgba(59, 59, 59, 0.3)); color: light-dark(black, #3b3b3b);
 }
 input[type="checkbox"], input[type="radio"] { padding: 0; }
 input[type="checkbox"]:-ember-native { width: 13px; height: 13px; border-radius: 2px; }

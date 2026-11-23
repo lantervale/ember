@@ -69,6 +69,7 @@
   "shaped-whole": 0.016,
   "list-counters": 0.0075,
   "list-inside": 0.0135,
+  "listboxes": 0.006,
   "lists": 0.0065,
   "m0": 0.0003,
   "marker-properties": 0.013,

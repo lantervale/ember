@@ -31,6 +31,29 @@ Its width is its widest option's, an option of a group behind four spaces, its p
 
 Automation: its `id`, else `data-name`, `aria-label`, its label's text, then its placeholder (`difficulty`); `press` opens it, `select` chooses an option by index, value or text.
 
+## A listbox: `multiple` or a `size`
+
+```go
+ui.Select(ui.Attr("multiple", ""), ui.Attr("size", "5"),
+	ui.Option(ui.Text("Sword"), ui.Selected()),
+	ui.Optgroup("Magic", ui.Option(ui.Text("Wand")), ui.Option(ui.Text("Staff"), ui.Selected())),
+	ui.Option(ui.Text("Bow"), ui.Disabled()),
+)
+```
+
+With `multiple`, or a `size` above 1, the select is a listbox, as in a browser: its options are rows of the page, `size` of them in view (4 for `multiple` alone), each row as tall as the tallest option or group label, and it scrolls through the rest. A group's label is a bold row of its own; its options stand 20px in. Nothing is selected until a `selected` attribute, the player or the program says so.
+
+| | |
+|---|---|
+| a press | selects its option alone; with Command (Control off macOS) turns it on or off, with Shift selects the run from the last pressed; a drag selects the run it crosses |
+| the arrows, Home, End, Page Up and Down | select the enabled option they reach alone; with Shift the run from the anchor; with Command they move without selecting, and Space turns the option reached on or off |
+| typing a letter | selects the next option starting with it |
+| `doc.SelectedOptions(n)`, `doc.SetSelectedOptions(n, is...)` | every selected option, as the DOM's `selectedOptions`; without `multiple` the last of `is` alone |
+| `doc.Values(n)` | what a form submits: each selected, enabled option's value |
+| `doc.Selected(n)`, `doc.Value(n)` | the first selected, as `selectedIndex` and `value` |
+
+A run passes over disabled options, and a group's label takes no press. `required` holds once an option is selected. Each change fires `ui.Edited` then `ui.Changed` (`OnInput`, `OnChange`), once a press lets go. Selected rows are grey, light blue while the listbox has the focus (`select:-ember-listbox option:checked` in the default sheet). Automation's `select` takes a list of options, which it selects alone, and a `multiple` listbox's value is the list of those selected.
+
 ```
 go run ./examples/93-html-elements -element select
 ```

@@ -452,15 +452,18 @@ func (d *Document) SetSelectedOptions(n *Node, is ...int) {
 }
 
 // Values are what a form submits for the select n, as the DOM's
-// FormData holds them: the value of each option selected, in order.
+// FormData holds them: the value of each option selected and enabled, in
+// order; none for a disabled select.
 func (d *Document) Values(n *Node) []string {
 	s, ok := d.machine(n).(*control.Select)
-	if !ok {
+	if !ok || disabledField(n) {
 		return nil
 	}
 	var out []string
 	for _, i := range d.SelectedOptions(n) {
-		out = append(out, s.Options[i].FormValue())
+		if !s.Options[i].Disabled {
+			out = append(out, s.Options[i].FormValue())
+		}
 	}
 	return out
 }

@@ -197,6 +197,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
 | 0194 | [A float after text is placed as its lines are broken](0194-a-float-after-text-is-placed-as-its-lines-are-broken.md) | rendering |
 | 0201 | [An optgroup is a label row of a select's list](0201-an-optgroup-is-a-label-row-of-a-selects-list.md) | api |
+| 0202 | [A select with multiple or a size is a listbox of rows in the page](0202-a-select-with-multiple-or-a-size-is-a-listbox-of-rows-in-the-page.md) | api |
 
 ## Writing one
 

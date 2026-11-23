@@ -93,14 +93,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		b.WriteString(classicScrollbars + stillViewport)
 	}
 	b.WriteString(ownLook)
-	agent := strings.ReplaceAll(css.Default, ":"+nativeClass, ownLookOn) + listTypes
-	if d.BrowserSheets() {
-		agent += css.BrowserDefault
-	} else {
-		agent += generatedBoxes
-	}
-	agent = strings.ReplaceAll(agent, ":"+listBoxClass, listBoxOn)
-	b.WriteString("@layer ember-user-agent {\n" + states(inline(d, agent, nil)) + "}\n")
+	b.WriteString("@layer ember-user-agent {\n" + states(inline(d, agentSheet(d), nil)) + "}\n")
 	b.WriteString(truncateStart)
 	for _, s := range d.Sheets() {
 		b.WriteString(states(inline(d, s.String(), s.URL)))
@@ -257,15 +250,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		write("data-ember-modal", strconv.FormatUint(layer, 10))
 	}
 	popoverAttrs(d, n, write)
-	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
-		write("data-ember-bars", "")
-	}
-	if bare(n) {
-		write("data-ember-bare", "")
-	}
-	if dom.ListBox(n) {
-		write("data-ember-listbox", "")
-	}
+	marks(n, write)
 	live := map[string]bool{
 		"open": modal, "style": true, "checked": n.Tag() == dom.Input, "value": n.Tag() == dom.Input && typ != checkboxType,
 		"placeholder": n.Tag() == dom.Select, "selected": n.Tag() == dom.Option,
@@ -416,6 +401,32 @@ const (
 	nativeClass = "-ember-native"
 	ownLookOn   = ":not([data-ember-bare])"
 )
+
+// marks writes the attributes standing for what ui's sheets read of n
+// that Chrome's can't: scrollbars of its own, appearance: none, a listbox.
+func marks(n *dom.Node, write func(name, value string)) {
+	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
+		write("data-ember-bars", "")
+	}
+	if bare(n) {
+		write("data-ember-bare", "")
+	}
+	if dom.ListBox(n) {
+		write("data-ember-listbox", "")
+	}
+}
+
+// agentSheet is ui's user agent sheet for d as the page holds it, its own
+// pseudo-classes as the attributes export writes.
+func agentSheet(d *ui.Document) string {
+	agent := strings.ReplaceAll(css.Default, ":"+nativeClass, ownLookOn) + listTypes
+	if d.BrowserSheets() {
+		agent += css.BrowserDefault
+	} else {
+		agent += generatedBoxes
+	}
+	return strings.ReplaceAll(agent, ":"+listBoxClass, listBoxOn)
+}
 
 // listBoxClass is the user agent's pseudo-class of a select shown as a
 // listbox: on the page, one marked data-ember-listbox.
