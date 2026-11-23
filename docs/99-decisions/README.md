@@ -210,6 +210,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0207 | [A resizer writes the box's size into its style, and parts restyle as Chrome's bars](0207-a-resizer-writes-the-boxs-size-into-its-style-and-parts-restyle-as-chromes-bars.md) | api |
 | 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
 | 0210 | [Marks of vertical lines are measured in their flow, and a fallback stands by its own metrics](0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md) | rendering |
+| 0214 | [translate, rotate and scale are their own values before transform](0214-translate-rotate-and-scale-are-their-own-values-before-transform.md) | rendering |
 
 ## Writing one
 

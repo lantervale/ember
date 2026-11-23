@@ -1376,7 +1376,7 @@ func (t *tree) flexItemLayout(it *flexItem, totalMain *float32, totalCross,
 	*totalMain += it.offsetMain + d.mainSum(it.margin) + s.get(d.main())
 	contributionLoc := point{loc.x - c.paddingBoxInset.l, loc.y - c.paddingBoxInset.t}
 	*overflow = overflow.union(overflowContribution(contributionLoc, s,
-		out.overflow.rect, it.border, it.overflow, container, it.margin))
+		out.overflow.rect, it.border, it.overflow, it.node.st, container, it.margin))
 }
 
 func (t *tree) flexFinalPass(lines []*flexLine, c *flexConstants) rect {

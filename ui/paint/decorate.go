@@ -328,7 +328,7 @@ func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edge
 // as a scrolling one.
 func transformed(b *box.Box) bool {
 	for ; b != nil; b = b.Parent {
-		if st := shown(b); b.Kind == box.Element && st != nil && len(st.Transform) > 0 {
+		if st := shown(b); b.Kind == box.Element && st != nil && st.Transformed() {
 			return true
 		}
 	}
@@ -2525,36 +2525,4 @@ func placeholder(run *box.Box) bool {
 		}
 	}
 	return false
-}
-
-// transform is the element's transform in the root's space: its
-// functions in order, about its origin.
-func transform(st *style.Computed, at, size geom.Vec2) geom.Transform2D {
-	ox, _ := st.TransformOrigin.Width.Resolve(size.X)
-	oy, _ := st.TransformOrigin.Height.Resolve(size.Y)
-	o := at.Add(geom.V2(ox, oy))
-	m := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o}
-	for _, op := range st.Transform {
-		m = m.Mul(transformOp(op, size))
-	}
-	return m.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o.Scale(-1)})
-}
-
-func transformOp(op style.TransformOp, size geom.Vec2) geom.Transform2D {
-	a := op.A
-	switch op.Kind {
-	case style.Translate:
-		x, _ := op.X.Resolve(size.X)
-		y, _ := op.Y.Resolve(size.Y)
-		return geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(x, y)}
-	case style.ScaleOp:
-		return geom.Transform2D{X: geom.V2(a[0], 0), Y: geom.V2(0, a[1])}
-	case style.Rotate:
-		return geom.Transform2DFrom(geom.Vec2{}, a[0], 0, geom.V2(1, 1))
-	case style.Skew:
-		return geom.Transform2D{X: geom.V2(1, geom.Tan(a[1])), Y: geom.V2(geom.Tan(a[0]), 1)}
-	case style.Matrix:
-		return geom.Transform2D{X: geom.V2(a[0], a[1]), Y: geom.V2(a[2], a[3]), Origin: geom.V2(a[4], a[5])}
-	}
-	return geom.Identity2D()
 }

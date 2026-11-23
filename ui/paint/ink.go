@@ -97,7 +97,7 @@ func looseItself(b *box.Box, st *style.Computed) bool {
 	if b.Kind != box.Element {
 		return false
 	}
-	if st.Position == style.Absolute || st.Position == style.FixedPosition || len(st.Transform) > 0 ||
+	if st.Position == style.Absolute || st.Position == style.FixedPosition || st.Transformed() ||
 		(st.Overflow.Width == style.Visible) != (st.Overflow.Height == style.Visible) {
 		return true
 	}

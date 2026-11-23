@@ -201,6 +201,9 @@ var properties = map[string]property{
 	"opacity":          {initial: "1"},
 	"transform":        {initial: "none"},
 	"transform-origin": {initial: "50% 50%"},
+	"translate":        {initial: "none"},
+	"rotate":           {initial: "none"},
+	"scale":            {initial: "none"},
 	"appearance":       {initial: "none"},
 	"resize":           {initial: "none"},
 

@@ -233,13 +233,14 @@ func TestAStyleChangeThatNeedsNoLayoutMovesWhatIsCulled(t *testing.T) {
 
 	p.late.SetAttr("style", fmt.Sprintf("box-shadow: 0 %gpx 0 4px #ffffff", -up))
 	p.look(0)
+	assert.Equal(t, laid, ui.Placed(p.doc), "a shadow asks for no layout")
+	// a transform does, its scroller's overflow growing with it (decision 0214)
 	p.late.SetAttr("style", fmt.Sprintf("transform: translateY(%gpx)", -up))
 	p.look(0)
 	assert.Same(t, p.late, p.doc.ElementAt(geom.V2(200, 110)), "hit where its transform shows it")
 	p.late.SetAttr("style", "")
 	p.look(0)
 	assert.NotSame(t, p.late, p.doc.ElementAt(geom.V2(200, 110)), "and no longer once it is back")
-	assert.Equal(t, laid, ui.Placed(p.doc), "none of which asked for a layout")
 
 	p.late.SetAttr("class", "late slow")
 	p.w.RunFrames(2)
