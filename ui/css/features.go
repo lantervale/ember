@@ -91,7 +91,9 @@ var variantFeatures = map[string]string{
 }
 
 // shapingFeatures are the features t's text is shaped with, HarfBuzz's
-// way: font-variant's longhands but its capitals, then
+// way: the common ligatures and contextual alternates text-rendering:
+// optimizeSpeed turns off where font-variant-ligatures names neither,
+// font-variant's longhands but its capitals, then
 // font-kerning, then the optional ligatures letter-spacing turns off,
 // then, after a '|' where a face's @font-face features go
 // (shape.Splice), font-feature-settings, a later one overriding an
@@ -99,6 +101,15 @@ var variantFeatures = map[string]string{
 // turn off.
 func shapingFeatures(t *style.Text) string {
 	var out, settings []string
+	if t.TextRendering == style.OptimizeSpeed {
+		lig := " " + t.FontVariant.Ligatures + " "
+		if !strings.Contains(lig, "common-ligatures ") && lig != " none " {
+			out = append(out, variantFeatures["no-common-ligatures"])
+		}
+		if !strings.Contains(lig, "contextual ") && lig != " none " {
+			out = append(out, variantFeatures["no-contextual"])
+		}
+	}
 	for _, v := range []string{t.FontVariant.Ligatures, t.FontVariant.Numeric, t.FontVariant.EastAsian,
 		t.FontVariant.Alternates} {
 		for _, w := range strings.Fields(v) {

@@ -107,6 +107,7 @@ var properties = map[string]property{
 	"text-indent":               {inherited: true, initial: "0"},
 	"text-transform":            {inherited: true, initial: "none"},
 	"-webkit-font-smoothing":    {inherited: true, initial: "auto"},
+	"text-rendering":            {inherited: true, initial: "auto"},
 	"-webkit-text-fill-color":   {inherited: true, initial: "currentcolor"},
 	"-webkit-text-stroke-width": {inherited: true, initial: "0"},
 	"-webkit-text-stroke-color": {inherited: true, initial: "currentcolor"},

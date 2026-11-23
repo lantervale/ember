@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/rivo/uniseg"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -101,12 +102,14 @@ func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Gly
 	}
 	r := s.shapedRun(p, run, ctx)
 	if own.covers(run) {
+		s.counted += len(r.advances)
 		return float32(r.width)
 	}
 	var w float32
 	for k, a := range r.advances {
 		if own.has(int(run[r.starts[k]].Cluster)) {
 			w += float32(a)
+			s.counted++
 		}
 	}
 	return w
@@ -120,6 +123,7 @@ func (s *Set) unshaped(c *Face, run []shape.Glyph, at varfont.Coords, own part) 
 		for _, g := range run {
 			if own.has(int(g.Cluster)) {
 				w += c.web.vf.Advance(g.ID, at)
+				s.counted++
 			}
 		}
 		return w
@@ -130,6 +134,7 @@ func (s *Set) unshaped(c *Face, run []shape.Glyph, at varfont.Coords, own part) 
 		if !own.has(int(g.Cluster)) {
 			continue
 		}
+		s.counted++
 		if a, err := c.font.GlyphAdvance(&s.buf, sfnt.GlyphIndex(g.ID), ppem, font.HintingNone); err == nil {
 			w += a
 		}
@@ -199,6 +204,57 @@ func around(text string, run []shape.Glyph, before, after string) context {
 		a = a[:contextBytes]
 	}
 	return context{strings.ToValidUTF8(b, ""), strings.ToValidUTF8(a, "")}
+}
+
+// Carets is where a caret stands before each character of text and after
+// its last, from its start: text shaped as one with lead before it and
+// trail after it, between before and after (box.CaretFonts). A glyph's
+// advance is the character's its cluster starts at, so a kerned pair's
+// kerning is its first's, and a ligature's is shared evenly among the
+// grapheme clusters it draws, as Chrome places carets; one the text
+// before starts draws the characters it takes at no width. A caret inside
+// a grapheme cluster stands at its start. starts reports for each place
+// whether a glyph's cluster starts there, as the text's end does: Chrome
+// breaks no line inside a ligature.
+func (s *Set) Carets(f style.Font, text, lead, trail, before, after string) ([]float32, []bool) {
+	n := utf8.RuneCountInString(text) + 1
+	xs, starts := make([]float32, 0, n), make([]bool, n)
+	// held are where the grapheme clusters drawn by the glyphs of the
+	// last cluster to start one begin in xs, shared those glyphs' advance.
+	var x, shared float32
+	var held []int
+	share := func() {
+		for k, i := range held {
+			end := len(xs)
+			if k+1 < len(held) {
+				end = held[k+1]
+			}
+			for j := i; j < end; j++ {
+				xs[j] += shared * float32(k) / float32(len(held))
+			}
+		}
+		x += shared
+		held, shared = held[:0], 0
+	}
+	rest, state := text, -1
+	var g string
+	for at := 0; len(rest) > 0; at += len(g) {
+		g, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
+		s.counted = 0
+		w := s.AdvanceAmid(f, g, lead+text[:at], text[at+len(g):]+trail, before, after)
+		if s.counted > 0 {
+			share()
+			starts[len(xs)] = true
+		}
+		shared += w
+		held = append(held, len(xs))
+		for range g {
+			xs = append(xs, x)
+		}
+	}
+	share()
+	starts[len(xs)] = true
+	return append(xs, x), starts
 }
 
 // SpaceTies reports whether f's face shapes a space with the words on

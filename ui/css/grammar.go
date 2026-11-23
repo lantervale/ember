@@ -540,6 +540,7 @@ var checks = map[string]check{
 	"text-indent":               single(lengthPercent),
 	"text-transform":            single(words("none", "uppercase", "lowercase", "capitalize")),
 	"-webkit-font-smoothing":    single(words("auto", "none", "antialiased", "subpixel-antialiased")),
+	"text-rendering":            single(words("auto", "optimizespeed", "optimizelegibility", "geometricprecision")),
 	"-webkit-text-fill-color":   single(colorTerm),
 	"-webkit-text-stroke-width": single(borderWidth),
 	"-webkit-text-stroke-color": single(colorTerm),

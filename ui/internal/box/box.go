@@ -289,6 +289,15 @@ type WholeFonts interface {
 	AdvanceAmid(f style.Font, text, lead, trail, before, after string) float32
 }
 
+// CaretFonts is Fonts that places carets: Carets is where one stands
+// before each character of text and after its last, shaped as
+// WholeFonts.AdvanceAmid shapes it, a ligature's advance shared evenly
+// among the characters it draws; starts reports where a glyph's cluster
+// starts, which a ligature's characters but its first don't.
+type CaretFonts interface {
+	Carets(f style.Font, text, lead, trail, before, after string) (xs []float32, starts []bool)
+}
+
 // InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the
 // stretches of x where the glyphs of text, drawn from 0 on its baseline
 // with letter points after each character and word after each word

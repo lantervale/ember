@@ -713,6 +713,7 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text, before, after string, 
 				of = nil
 				if own.has(i) {
 					w += a
+					s.counted++
 				}
 				continue
 			}
