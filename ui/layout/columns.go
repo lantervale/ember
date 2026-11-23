@@ -435,23 +435,64 @@ func (t *tree) touchFlow(n *node) {
 		k.performed = t.gen
 		if breaksInside(k) {
 			t.touchFlow(k)
+			t.touchPositioned(k)
+		}
+	}
+}
+
+// touchPositioned is touchFlow for the positioned boxes n cuts with the flow.
+func (t *tree) touchPositioned(n *node) {
+	for _, h := range n.hoisted {
+		if h.st.Position == style.Absolute {
+			h.performed = t.gen
+			if cuttable(h) {
+				t.touchFlow(h)
+				t.touchPositioned(h)
+			}
 		}
 	}
 }
 
 // breaksInside reports a box columns may cut: a block container in the flow that holds
-// blocks or lines. The others go into one column whole, as Chrome keeps monolithic
-// boxes; so do a float, a table, a flex or grid container and a nested multi-column
+// blocks or lines, a flex container between its lines and inside its items, a table or
+// a row group between its rows. The others go into one column whole, as Chrome keeps
+// monolithic boxes; so do a float, a row, a grid container and a nested multi-column
 // container, which Chrome would cut.
-func breaksInside(n *node) bool {
+func breaksInside(n *node) bool { return !outOfFlow(n.st.Position) && cuttable(n) }
+
+// cuttable is breaksInside whatever n's position: an absolutely positioned box whose
+// containing block is in the flow is cut with it.
+func cuttable(n *node) bool {
 	st := n.st
-	if n.atomic || n.replaced || n.control != noControl || n.role != roleNone || st.Display != style.Block ||
-		st.Float != style.FloatNone || st.BreakInsideAvoid || st.Multicol() || outOfFlow(st.Position) ||
-		isScrollContainer(st) {
+	if n.atomic || n.replaced || n.control != noControl || st.Display != style.Block && st.Display != style.FlexDisplay ||
+		st.Float != style.FloatNone || st.BreakInsideAvoid && !forcesBreak(n) || st.Multicol() || isScrollContainer(st) {
 		return false
 	}
-	c := n.context()
-	return c == contextBlock || c == contextLeaf
+	switch c := n.context(); n.role {
+	case roleTable:
+		return c == contextTable && len(n.captions()) == 0
+	case roleGroup:
+		return true
+	case roleNone:
+		return c == contextBlock || c == contextLeaf || c == contextFlex
+	case roleRow, roleCaption, roleColumn, roleColumnGroup:
+	}
+	return false
+}
+
+// forcesBreak reports a box holding a block that forces a column break before or after
+// it: break-inside: avoid gives way to it, as Chrome's.
+func forcesBreak(n *node) bool {
+	for _, k := range n.kids {
+		st := k.st
+		if st.Display == style.DisplayNone || outOfFlow(st.Position) {
+			continue
+		}
+		if st.BreakBefore == style.BreakColumn || st.BreakAfter == style.BreakColumn || forcesBreak(k) {
+			return true
+		}
+	}
+	return false
 }
 
 // relativeShift is how far position: relative moves n from its place in the flow.
@@ -498,7 +539,9 @@ type flowUnit struct {
 }
 
 type unitWalk struct {
-	t     *tree
+	t *tree
+	// root is the multi-column container, whose positioned boxes columns never cut.
+	root  *node
 	units []flowUnit
 	// top is the edge the next unit starts at, a block's border top above its first
 	// content, and pending the strongest break-before or break-after since the last unit.
@@ -537,7 +580,7 @@ func (w *unitWalk) ask(b style.Break) {
 
 // flowUnits are the units of n's flow, in its border box of size s with inset.
 func (t *tree) flowUnits(n *node, s size, inset rect) []flowUnit {
-	w := &unitWalk{t: t, top: none, sorted: true}
+	w := &unitWalk{t: t, root: n, top: none, sorted: true}
 	w.content(n, 0, s, inset)
 	if !w.sorted {
 		slices.SortStableFunc(w.units, func(a, b flowUnit) int {
@@ -564,7 +607,8 @@ func (t *tree) flowUnits(n *node, s size, inset rect) []flowUnit {
 	return out
 }
 
-// content walks what n holds, its border box at y in the flow.
+// content walks what n holds, its border box at y in the flow, and the boxes it
+// positions, which columns cut with that flow.
 func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 	if c := n.inline; c != nil {
 		w.paras++
@@ -577,49 +621,90 @@ func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 				orphans: n.st.Orphans, widows: n.st.Widows})
 			at += lh
 		}
+	} else {
+		for _, k := range n.kids {
+			st := k.st
+			if st.Display == style.DisplayNone || outOfFlow(st.Position) || k.role == roleColumn ||
+				k.role == roleColumnGroup {
+				continue
+			}
+			w.ask(st.BreakBefore)
+			if w.pending == style.BreakColumn {
+				w.keep = fmax(k.unrounded.margin.t, 0)
+			}
+			w.box(k, y)
+			w.ask(st.BreakAfter)
+		}
+	}
+	if n == w.root {
 		return
 	}
-	for _, k := range n.kids {
-		st := k.st
-		if st.Display == style.DisplayNone || outOfFlow(st.Position) {
-			continue
+	for _, h := range n.hoisted {
+		if h.st.Position == style.Absolute && h.st.Display != style.DisplayNone {
+			w.box(h, y)
 		}
-		l := k.unrounded
-		top := y + l.location.y - relativeShift(k).y
-		bottom := top + l.size.h
-		w.ask(st.BreakBefore)
-		if w.pending == style.BreakColumn {
-			w.keep = fmax(l.margin.t, 0)
-		}
-		if !breaksInside(k) {
-			if l.size.h > 0 {
-				w.emit(flowUnit{top: top, bottom: bottom})
-			}
-			w.ask(st.BreakAfter)
-			continue
-		}
-		held := some(w.top)
-		if !held {
-			w.top = top
-		}
-		before := len(w.units)
-		w.content(k, top, l.size, l.padding.add(l.border))
-		switch {
-		case len(w.units) == before:
-			if !held {
-				w.top = none
-			}
-			if l.size.h > 0 {
-				w.emit(flowUnit{top: top, bottom: bottom, space: true})
-			}
-		case bottom-w.units[len(w.units)-1].bottom > l.padding.b+l.border.b+columnEpsilon:
-			w.emit(flowUnit{top: w.units[len(w.units)-1].bottom, bottom: bottom, space: true})
-		default:
-			u := &w.units[len(w.units)-1]
-			u.bottom = fmax(u.bottom, bottom)
-		}
-		w.ask(st.BreakAfter)
 	}
+}
+
+// box walks k, a box whose parent's border box is at y in the flow: one unit when
+// columns never cut it, else what it holds between its edges.
+func (w *unitWalk) box(k *node, y float32) {
+	l := k.unrounded
+	top := y + l.location.y - relativeShift(k).y
+	bottom := top + l.size.h
+	if !cuttable(k) {
+		if l.size.h > 0 {
+			w.emit(flowUnit{top: top, bottom: bottom})
+		}
+		return
+	}
+	held := some(w.top)
+	if !held {
+		w.top = top
+	}
+	before := len(w.units)
+	w.content(k, top, l.size, l.padding.add(l.border))
+	if k.st.BreakInsideAvoid {
+		w.join(before)
+	}
+	if len(w.units) == before {
+		if !held {
+			w.top = none
+		}
+		if l.size.h > 0 {
+			w.emit(flowUnit{top: top, bottom: bottom, space: true})
+		}
+		return
+	}
+	// A flex row's items and positioned boxes lie beside the rest: the lowest unit ends
+	// the content.
+	low := len(w.units) - 1
+	for j := before; j < len(w.units); j++ {
+		if w.units[j].bottom > w.units[low].bottom {
+			low = j
+		}
+	}
+	if end := w.units[low].bottom; bottom-end > l.padding.b+l.border.b+columnEpsilon {
+		w.emit(flowUnit{top: end, bottom: bottom, space: true})
+	} else {
+		w.units[low].bottom = fmax(end, bottom)
+	}
+}
+
+// join makes the units from the first on one, but where a break is forced: those of a
+// box with break-inside: avoid.
+func (w *unitWalk) join(first int) {
+	out := w.units[:first]
+	for _, u := range w.units[first:] {
+		if last := len(out) - 1; last >= first && !u.forced {
+			o := &out[last]
+			o.top, o.bottom = fmin(o.top, u.top), fmax(o.bottom, u.bottom)
+			o.space = o.space && u.space
+			continue
+		}
+		out = append(out, u)
+	}
+	w.units = out
 }
 
 // appealOf is the appeal of a break before unit i in a column that starts with unit
@@ -747,7 +832,7 @@ func keepFlow(n, m *node, flow, moved point) {
 		n.frag = &flowFrag{}
 	}
 	f := n.frag
-	breaks := breaksInside(n)
+	breaks := cuttable(n)
 	h := n.unrounded.size.h
 	first := cs.at(at.y)
 	last := first
@@ -789,6 +874,14 @@ func keepFlow(n, m *node, flow, moved point) {
 				keepFlow(c, m, at, moved)
 			}
 		}
+		for _, c := range n.hoisted {
+			if c.st.Position == style.Absolute {
+				keepFlow(c, m, at, moved)
+			} else {
+				keepIn(c, n.absolute, false)
+			}
+		}
+		return
 	default:
 		for _, c := range n.kids {
 			if !outOfFlow(c.st.Position) || c.st.Display == style.DisplayNone {

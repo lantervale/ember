@@ -57,8 +57,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
-| a flex container or a table cut between rows by a column | kept whole |
-| a positioned box cut by a column | kept whole |
+| a table row, a grid container, a table with a caption cut by a column | kept whole, where Chrome cuts them |
+| a table with `border-spacing` cut by a column | the spacing after its last row kept in its last part, where Chrome leaves it out and balances the columns without it |
 | columns right to left | left to right only, their content laid out right to left in each |
 | a table's background round a collapsed column | drawn over the table's box, where Chrome draws it as wide as before the column was taken out |
 | a scroller of direction `rtl` | scrolls from its left, where Chrome starts it at its right end; its bar is on its left, as Chrome's |
