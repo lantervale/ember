@@ -267,6 +267,10 @@ dialog:modal {
 }
 dialog::backdrop { background-color: rgba(0, 0, 0, 0.1); }
 dialog:not([open]) { display: none; }
+[popover] { position: fixed; inset: 0; width: fit-content; height: fit-content; margin: auto; border: solid;
+  padding: 0.25em; overflow: auto; color: CanvasText; background-color: Canvas; }
+[popover]:not(:popover-open):not(dialog[open]) { display: none; }
+dialog:popover-open { display: block; }
 [role="menu"]:not([open]) { display: none; }
 :focus-visible { outline: 2px solid #0075ff; outline-offset: 1px; }
 .ember-title-tip {

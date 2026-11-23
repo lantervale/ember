@@ -221,7 +221,7 @@ type Tree struct {
 	// Anchored are the elements anchors place, whose places a scroll
 	// moving their anchors changes: only a layout brings them up to date.
 	Anchored []*dom.Node
-	Root *Box
+	Root     *Box
 	// Of is each node's box. A retained layout updates one map in place, so it holds the
 	// latest layout's alone: Written are the nodes that layout gave a box, or whose kept
 	// box isn't where their Placed points, and Dropped those it took out of it.

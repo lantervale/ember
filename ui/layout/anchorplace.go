@@ -110,8 +110,10 @@ func (a *anchorsOf) defaultFor(st *style.Computed) (rect, bool) {
 	case style.AnchorNamed:
 		r, ok := a.named[st.Anchoring.AnchorName]
 		return r, ok
-	case style.AnchorAuto, style.AnchorNormal:
+	case style.AnchorAuto:
 		return a.implicit, a.hasImplicit
+	case style.AnchorNormal:
+		return a.implicit, a.hasImplicit && st.Anchoring.Area.Set
 	case style.AnchorNone:
 	}
 	return rect{}, false
@@ -139,13 +141,15 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 		offset = point{offset.x + x0, offset.y + y0}
 		area = size{max(x1-x0, 0), max(y1-y0, 0)}
 		normal := func(a style.Align) bool { return a == style.AlignNormal || a == style.AlignAuto }
-		if normal(s.JustifySelf) && s.Inset.Left.Kind == style.Auto && s.Inset.Right.Kind == style.Auto {
+		// One auto inset aligns the box to the other, as anywhere else.
+		if normal(s.JustifySelf) && (s.Inset.Left.Kind == style.Auto) == (s.Inset.Right.Kind == style.Auto) {
 			s.JustifySelf = areaAlign(ar.X)
 		}
-		if normal(s.AlignSelf) && s.Inset.Top.Kind == style.Auto && s.Inset.Bottom.Kind == style.Auto {
+		if normal(s.AlignSelf) && (s.Inset.Top.Kind == style.Auto) == (s.Inset.Bottom.Kind == style.Auto) {
 			s.AlignSelf = areaAlign(ar.Y)
 		}
-		for _, l := range []*style.Length{&s.Inset.Top, &s.Inset.Right, &s.Inset.Bottom, &s.Inset.Left} {
+		for _, l := range []*style.Length{&s.Inset.Top, &s.Inset.Right, &s.Inset.Bottom, &s.Inset.Left,
+			&s.Margin.Top, &s.Margin.Right, &s.Margin.Bottom, &s.Margin.Left} {
 			if l.Kind == style.Auto {
 				*l = style.Px(0)
 			}

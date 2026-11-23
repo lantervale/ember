@@ -137,6 +137,10 @@ type interaction struct {
 	// dialog just shown, until its focus (and trap, when modal) is set.
 	modals   []*Node
 	focusing *Node
+	// popovers are the auto and hint popovers open, the newest last, and
+	// openPopovers each open popover's state.
+	popovers     []*Node
+	openPopovers map[*Node]*popover
 	// menuFocus is a menu opened from the keys whose first item (last with
 	// menuFocusLast) takes the focus once it is laid out.
 	menuFocus     *Node
@@ -703,6 +707,7 @@ func (d *Document) click(n *Node) {
 		d.fire(n, e)
 		if e.Has(control.Clicked) {
 			d.dialogClick(n)
+			d.popoverClick(n)
 			d.submitClick(n)
 		}
 	case *control.Checkbox:
@@ -897,6 +902,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		open.ClickOutside()
 	}
 	d.menuPressOutside(d.hovered)
+	d.lightDismiss(d.hovered)
 	d.pressed = d.hovered
 	if src := draggableIn(d.hovered); src != nil {
 		d.drag = &dragState{source: src, from: at}
@@ -1407,7 +1413,7 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 	if n != nil && d.menuIntent(n, i) {
 		return d.focused(), true
 	}
-	if i == control.Back && d.backFromModal() {
+	if i == control.Back && (d.backFromPopover() || d.backFromModal()) {
 		return n, true
 	}
 	if n == nil {
@@ -1536,6 +1542,7 @@ func (d *Document) intent(n *Node, m any, i control.Intent) bool {
 		d.fire(n, e)
 		if _, button := m.(*control.Button); button && e.Has(control.Clicked) {
 			d.dialogClick(n)
+			d.popoverClick(n)
 			d.submitClick(n)
 		}
 		return true
@@ -1585,7 +1592,7 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 	if f.RawPressed(int(input.KeyEscape)) && !prevented.has(input.KeyEscape) {
 		if t.Handles(control.Back) {
 			d.fire(n, t.Do(control.Back))
-		} else if !d.backFromModal() {
+		} else if !d.backFromPopover() && !d.backFromModal() {
 			d.moveFocus(func() bool { d.focus.Blur(); return true })
 		}
 		return

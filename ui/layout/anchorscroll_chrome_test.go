@@ -42,4 +42,3 @@ func TestScopedAndChainedAnchorsMatchChrome(t *testing.T) {
 		})
 	}
 }
-

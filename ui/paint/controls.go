@@ -86,9 +86,17 @@ func (p *painter) modal(b *box.Box) bool {
 	return ok && d.Open && d.Modal
 }
 
+// topLayer reports whether b is in the top layer: a dialog shown modal or
+// a popover shown.
+func (p *painter) topLayer(b *box.Box) bool {
+	return p.modal(b) || b.Kind == box.Element && b.Node != nil && b.Node.State().Has(dom.PopoverOpen)
+}
+
 func (p *painter) layer(b *box.Box) uint64 {
-	d, _ := p.machine(b.Node).(*control.Dialog)
-	return d.Layer
+	if d, ok := p.machine(b.Node).(*control.Dialog); ok && d.Modal {
+		return d.Layer
+	}
+	return dom.Data(b.Node).TopLayer
 }
 
 func content(e entry) geom.Rect {

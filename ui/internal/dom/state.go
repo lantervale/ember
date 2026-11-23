@@ -38,6 +38,9 @@ const (
 	UserInvalid
 	InRange
 	OutOfRange
+	// PopoverOpen is an element with the popover attribute shown
+	// (:popover-open).
+	PopoverOpen
 )
 
 func (s State) Has(f State) bool { return s&f == f }

@@ -25,7 +25,8 @@ type Changed struct{ Node *Node }
 // shortcut.
 type Submitted struct{ Node *Node }
 
-// Toggled is a details element opened or closed.
+// Toggled is a details element opened or closed, or a popover shown or
+// hidden.
 type Toggled struct{ Node *Node }
 
 // KeyPressed is a key pressed that no control, menu, grid, listbox or focus move took:

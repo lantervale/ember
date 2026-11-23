@@ -18,6 +18,7 @@ var stateNames = map[string]dom.State{
 	"focus-within": dom.FocusWithin, "target": dom.Target, "empty": dom.Empty,
 	"placeholder-shown": dom.PlaceholderShown, "default": dom.Default, "valid": dom.Valid, "invalid": dom.Invalid,
 	"user-valid": dom.UserValid, "user-invalid": dom.UserInvalid, "in-range": dom.InRange, "out-of-range": dom.OutOfRange,
+	"popover-open": dom.PopoverOpen,
 }
 
 // Specificity is a selector's (ids, classes, types) weight, compared in

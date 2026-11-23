@@ -425,11 +425,14 @@ func (d *Document) Layout(size geom.Vec2) {
 // layout left out (under display: none) at none, and notes the tooltips
 // showing. A node moved to another Document is that one's to place.
 func (d *Document) lay(size geom.Vec2) {
-	d.tree = layout.Layout(d.html, size, d.fonts, layout.Images(d), layout.Retain(&d.kept), layout.Translate(d.tr()))
+	d.tree = layout.Layout(d.html, size, d.fonts, layout.Images(d), layout.Retain(&d.kept), layout.Translate(d.tr()),
+		layout.ImplicitAnchors(d.implicitAnchor))
 	d.landFonts()
 	for _, n := range d.tree.Dropped {
 		if d.inDocument(n) {
 			dom.Data(n).Placed = nil
+		} else if d.PopoverOpen(n) {
+			d.HidePopover(n)
 		}
 		d.tips, d.followers = dropNode(d.tips, n), dropNode(d.followers, n)
 	}

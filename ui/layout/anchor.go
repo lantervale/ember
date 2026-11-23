@@ -119,7 +119,7 @@ func (t *tree) anchorsFor(out *box.Tree, b *box.Box, idx *anchorIndex) *anchorsO
 	case style.AnchorNamed:
 		def = idx.last(b, cb, st.Anchoring.AnchorName)
 	case style.AnchorAuto, style.AnchorNormal:
-		if res.hasImplicit {
+		if res.hasImplicit && (st.Anchoring.Anchor == style.AnchorAuto || st.Anchoring.Area.Set) {
 			def = out.Of[t.implicit(b.Node)]
 		}
 	case style.AnchorNone:

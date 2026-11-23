@@ -566,7 +566,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	if r.may(n, "selection") {
 		r.selection(x, n)
 	}
-	if n.Tag() == dom.Dialog && r.may(n, "backdrop") {
+	if _, popover := n.Attr("popover"); (n.Tag() == dom.Dialog || popover) && r.may(n, "backdrop") {
 		if bd, ok := x.pseudo(r.pm, n, r.sheets, "backdrop"); ok {
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}

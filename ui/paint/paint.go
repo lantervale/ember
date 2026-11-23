@@ -577,6 +577,9 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		} else if st.Backdrop.A > 0 {
 			p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 		}
+	} else if p.topLayer(b) && st.Backdrop.A > 0 && !p.probing {
+		p.use(nil)
+		p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 	}
 	saved, around := p.s.Transform(), e.clip
 	if b.Kind == box.Element && len(st.Transform) > 0 {
@@ -671,7 +674,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		st := shown(c)
 		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
 		switch {
-		case p.modal(c):
+		case p.topLayer(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
 		case c.Kind != box.Element:
 			own.flow = append(own.flow, ce)
