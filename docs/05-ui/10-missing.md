@@ -162,9 +162,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a select's list of a Document in an `iframe`, where it passes the frame's box | cut at the box, where Chrome shows its list whole over the page; a menu, a tooltip or a dialog are cut there as in Chrome, the top layer being each Document's own |
+| a press on the page while a framed select's list is open | closes the list and goes on to the page, where Chrome's list, a window of the system's, takes the press on macOS ([decision 0166](../99-decisions/0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md)) |
+| a framed select's list where the outermost Document is not a window's (drawn by a canvas element or a 2D entity) | kept inside that Document's canvas, not the window |
 | a selection running from a page into its frame, and select all over both | each Document selects its own text, one at a time |
-| an element lying over an `iframe`, or an `opacity` below 1 on it or round it | the page is painted each frame while it does, where it replays with nothing over the frame: the framed Document is drawn in the page's paint, which a replay skips |
+| a live part (a frame, a canvas, a caret) in an `opacity`'s, a filter's or a mask's picture | its stacking context is drawn again each frame, the page replayed round it; in a picture of the whole page (a blend mode on the root) the page is painted each frame |
 | `scrolling="no"`, `allowtransparency`, `loading`, `sandbox`, `allow`, `name` | not read: what a frame may do is the program's |
 | a panic of a framed Document outside its own frame: a call the program makes on it, a fetch it started | the program's own, with or without `ui.Guarded()` |
 | a control taken out of its Document (a field, a canvas, an `iframe`) | its node and state stay held by the Document until the Document goes; an `iframe` lets go of what it showed |
