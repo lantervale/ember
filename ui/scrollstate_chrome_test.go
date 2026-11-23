@@ -27,6 +27,7 @@ body { margin: 8px; font-size: 14px; }
 .head { position: sticky; top: 0; height: 20px; container-type: scroll-state; background: #eee; }
 .side { position: sticky; left: 0; width: 30px; height: 20px; container-type: scroll-state; }
 .self { container: self / scroll-state; }
+.rtl { direction: rtl; }
 i { display: block; height: 2px; width: 1px; }
 @container scroll-state(stuck: top) { .a { width: 11px; } }
 @container scroll-state(stuck) { .b { width: 12px; } }
@@ -52,13 +53,16 @@ func TestScrollStateQueriesAnswerAsChromes(t *testing.T) {
 		}
 		return out
 	}
-	scrolls := []geom.Vec2{{}, {Y: 40}, {X: 30}, {X: 30, Y: 400}, {}}
+	scrolls := []geom.Vec2{{}, {Y: 40}, {X: 30}, {X: 30, Y: 400}, {}, {X: -30}, {}}
 	d := ui.NewDocument(ui.CSS(scrollStateSheet))
 	var scrollers []*ui.Node
 	for i := range scrolls {
 		args := []ui.Arg{ui.Class("scroller", "self")}
 		if i == 4 {
 			args = []ui.Arg{ui.Class("scroller")}
+		}
+		if i >= 5 {
+			args = append(args, ui.Class("rtl"))
 		}
 		s := ui.Div(append(args,
 			ui.Div(append([]ui.Arg{ui.Class("head")}, probes()...)...),

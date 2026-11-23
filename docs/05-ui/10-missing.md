@@ -139,7 +139,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `scroll-state(scrolled: …)`, `snapped` other than `none`, `container-type: anchored` | refused with a warning, or never holds: ui keeps no last scroll direction and snaps no scroll |
-| `scroll-state(scrollable: …)` on the root's viewport, and on a right-to-left scroller | the root answers none; a right-to-left scroller starts at its left edge in ui, at its right in Chrome |
+| `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 

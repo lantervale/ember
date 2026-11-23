@@ -499,9 +499,9 @@ func scrollState(n *Node) css.ScrollState {
 	scrolls := func(o style.Overflow) bool { return o != style.Visible && o != style.Clip }
 	if scrolls(b.Style.Overflow.Width) || scrolls(b.Style.Overflow.Height) {
 		client := b.Size.Sub(geom.V2(b.Border.Horizontal(), b.Border.Vertical())).Sub(b.Scrollbar)
-		end := b.Content.Sub(client)
-		s.Scrollable |= side(b.Scroll.Y > near, css.SideTop) | side(b.Scroll.Y < end.Y-near, css.SideBottom) |
-			side(b.Scroll.X > near, css.SideLeft) | side(b.Scroll.X < end.X-near, css.SideRight)
+		from, to := b.ScrollStart, b.ScrollStart.Add(b.Content.Sub(client))
+		s.Scrollable |= side(b.Scroll.Y > from.Y+near, css.SideTop) | side(b.Scroll.Y < to.Y-near, css.SideBottom) |
+			side(b.Scroll.X > from.X+near, css.SideLeft) | side(b.Scroll.X < to.X-near, css.SideRight)
 	}
 	return s
 }
