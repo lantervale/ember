@@ -473,10 +473,10 @@ func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geo
 	}
 }
 
-// turnPicture turns the natural size and proportions of a replaced node into the frame
-// its style is in.
+// turnPicture turns the natural size and proportions of a replaced node into its own
+// frame, the one it is sized in whatever its parent's or its containing block's.
 func (n *node) turnPicture() {
-	n.natural, n.shape = turnPicture(n.natural, n.shape, outerFrame(n.parent, n.box.Style))
+	n.natural, n.shape = turnPicture(n.natural, n.shape, n.box.Style.Mode)
 }
 
 // turnPicture is a picture's natural size and proportions in the frame of mode.

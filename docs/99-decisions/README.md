@@ -212,6 +212,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0209 | [Last baselines and safe alignment share groups as Chrome's](0209-last-baselines-and-safe-alignment-share-groups-as-chromes.md) | api |
 | 0210 | [Marks of vertical lines are measured in their flow, and a fallback stands by its own metrics](0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md) | rendering |
 | 0211 | [A face's chws spaces its pairs, and vertical text trims by vhal](0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md) | rendering |
+| 0212 | [A picture takes its natural size in its own writing mode](0212-a-picture-takes-its-natural-size-in-its-own-writing-mode.md) | rendering |
 | 0213 | [A page's textarea resizes, and sideways lines are spaced as horizontal ones](0213-a-pages-textarea-resizes-and-sideways-lines-are-spaced-as-horizontal-ones.md) | api |
 | 0214 | [translate, rotate and scale are their own values before transform](0214-translate-rotate-and-scale-are-their-own-values-before-transform.md) | rendering |
 | 0215 | [A subgrid's axes are its grid's by their frames](0215-a-subgrids-axes-are-its-grids-by-their-frames.md) | rendering |

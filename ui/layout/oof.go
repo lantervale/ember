@@ -356,16 +356,7 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 		known.h = stretchFit.h
 		known = known.withAspectRatio(stretchRatio).mClamp(minSize, maxSize)
 	}
-	final := known
-	if !some(final.w) && !some(final.h) {
-		final.w = mClamp(t.measureChildSize(n, final, area, availSpace, contentSize, horizontal, [2]bool{}),
-			minSize.w, maxSize.w)
-	}
-	if !final.both() {
-		measured := t.measureChildSizeBoth(n, final, area, availSpace, contentSize, [2]bool{})
-		final = final.or(measured)
-	}
-	final = final.mClamp(minSize, maxSize)
+	final := t.oofMeasured(n, known, area, availSpace, minSize, maxSize)
 
 	out := t.computeChild(n, input{
 		run:             performLayout,
@@ -391,6 +382,24 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 	}
 	n.unrounded = layout
 	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}, p.fits(layout, offset)
+}
+
+// oofMeasured is the size of n, an absolutely positioned box of the sizes known, where
+// its content gives those it lacks.
+func (t *tree) oofMeasured(n *node, known, area size, avail spaces, minSize, maxSize size) size {
+	final := known
+	if n.replaced && !some(final.w) && !some(final.h) {
+		// sized as an inline picture: its min and max sizes transfer through its ratio
+		final = t.measureChildSizeBoth(n, final, area, avail, inherentSize)
+	}
+	if !some(final.w) && !some(final.h) {
+		final.w = mClamp(t.measureChildSize(n, final, area, avail, contentSize, horizontal, [2]bool{}),
+			minSize.w, maxSize.w)
+	}
+	if !final.both() {
+		final = final.or(t.measureChildSizeBoth(n, final, area, avail, contentSize))
+	}
+	return final.mClamp(minSize, maxSize)
 }
 
 // performOOF lays out the candidates this containing block claims, and the ones they
