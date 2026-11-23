@@ -168,6 +168,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0163 | [Scrolls snap and glide as Chrome's strategies, on the Document's clock](0163-scrolls-snap-and-glide-as-chromes-strategies-on-the-documents-clock.md) | api |
 | 0164 | [Indic, Khmer, Myanmar and USE scripts are shaped by HarfBuzz's syllabic shapers](0164-indic-khmer-myanmar-and-use-scripts-are-shaped-by-harfbuzzs-syllabic-shapers.md) | rendering |
 | 0166 | [A page replays round its covered live parts, and a framed list shows over the window](0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md) | rendering |
+| 0171 | [Thai, Hangul and Hebrew are shaped as HarfBuzz, and a run between the text round it](0171-thai-hangul-and-hebrew-are-shaped-as-harfbuzz-and-a-run-between-the-text-round-it.md) | rendering |
 
 ## Writing one
 
