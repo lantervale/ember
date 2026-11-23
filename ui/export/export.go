@@ -316,7 +316,7 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 }
 
 // controlSized is the sizes of a range of ui's own look its sheets leave auto, its
-// natural ones: Chrome's range of no look of its own has none.
+// natural ones: Chrome's range of no look of its own has no thickness.
 func controlSized(n *dom.Node) string {
 	st := dom.Data(n).Style
 	if t, _ := n.Attr("type"); st == nil || bare(n) || n.Tag() != dom.Input || !strings.EqualFold(t, "range") {
@@ -328,17 +328,17 @@ func controlSized(n *dom.Node) string {
 		s.X += st.Border.Left + st.Border.Right + pad(st.Padding.Left) + pad(st.Padding.Right)
 		s.Y += st.Border.Top + st.Border.Bottom + pad(st.Padding.Top) + pad(st.Padding.Bottom)
 	}
-	// generated content makes a range taller than its track, Chrome's as ui's
-	least := ""
-	if d := dom.Data(n); d.Before != nil || d.After != nil {
-		least = "min-"
-	}
+	// Chrome's track keeps its length along the inline axis whatever its look; across
+	// it, the look export gives it has no thickness. Both are floors, as a grid or a
+	// flexbox stretches a range past them, and generated content makes it taller.
+	generated := dom.Data(n).Before != nil || dom.Data(n).After != nil
+	vertical := st.Mode.Vertical()
 	var sized []string
-	if st.Size.Width.Kind == style.Auto {
-		sized = append(sized, fmt.Sprintf("%swidth: %gpx", least, s.X))
+	if st.Size.Width.Kind == style.Auto && (vertical || generated) {
+		sized = append(sized, fmt.Sprintf("min-width: %gpx", s.X))
 	}
-	if st.Size.Height.Kind == style.Auto {
-		sized = append(sized, fmt.Sprintf("%sheight: %gpx", least, s.Y))
+	if st.Size.Height.Kind == style.Auto && (!vertical || generated) {
+		sized = append(sized, fmt.Sprintf("min-height: %gpx", s.Y))
 	}
 	return strings.Join(sized, "; ")
 }

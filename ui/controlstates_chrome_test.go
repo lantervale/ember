@@ -103,6 +103,29 @@ func TestRangesOfAnAutoSizeAreChromes(t *testing.T) {
 	}
 }
 
+// Ranges of ui's look whose sizes are auto stretch in a grid and a flexbox
+// past their natural size as Chrome's own, exported or not.
+func TestRangesOfAnAutoSizeStretchAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; }
+.g { display: grid; grid-template-columns: 100px minmax(0, 1fr); width: 320px; }
+.g input { width: auto; justify-self: stretch; }
+.c { display: flex; flex-direction: column; width: 300px; }
+.r { display: flex; width: 300px; height: 40px; }
+.v { writing-mode: vertical-lr; display: flex; height: 200px; }
+`))
+	d.Body().Append(
+		ui.Div(ui.Class("g"), ui.Span(ui.Text("a")), ui.Input(ui.Type("range"))),
+		ui.Div(ui.Class("g"), ui.Span(ui.Text("a")), ui.Input(ui.Type("range"), ui.Style("height: auto"))),
+		ui.Div(ui.Class("c"), ui.Input(ui.Type("range"))),
+		ui.Div(ui.Class("r"), ui.Input(ui.Type("range"), ui.Style("flex-grow: 1"))),
+		ui.Div(ui.Class("v"), ui.Input(ui.Type("range"))),
+		ui.Div(ui.Input(ui.Type("range"), ui.Style("display: block"))),
+	)
+	r := chrome.Match(t, d, geom.V2(400, 500))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
 // TestAccentShadesAreChromes hovers and presses Chrome's own ranges and
 // checkboxes of several accents and reads the colours it fills them
 // with: the range's fill and thumb, the checkbox's box, each within a
