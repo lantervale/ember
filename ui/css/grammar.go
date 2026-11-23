@@ -200,20 +200,32 @@ func repeated(t term, most int) check {
 	}
 }
 
-// checkLineClamp takes none, or a number of lines with no-ellipsis before or after it.
+// checkLineClamp takes none, or a number of lines and an ellipsis (auto or no-ellipsis), in
+// either order and either alone, then -webkit-legacy, as Chrome reads it.
 func checkLineClamp(v []Component) error {
-	switch {
-	case len(v) == 1 && isWord(v[0], "none"):
+	if len(v) == 1 && isWord(v[0], "none") {
 		return nil
-	case len(v) == 2 && isWord(v[0], "no-ellipsis"):
-		return positiveInteger(v[1])
-	case len(v) == 2:
-		if err := positiveInteger(v[0]); err != nil {
-			return err
-		}
-		return words("no-ellipsis")(v[1])
 	}
-	return single(positiveInteger)(v)
+	if len(v) > 1 && isWord(v[len(v)-1], "-webkit-legacy") {
+		v = v[:len(v)-1]
+	}
+	var count, auto, bare bool
+	for _, c := range v {
+		switch {
+		case !count && positiveInteger(c) == nil:
+			count = true
+		case !auto && isWord(c, "auto"):
+			auto = true
+		case !bare && isWord(c, "no-ellipsis"):
+			bare = true
+		default:
+			return fmt.Errorf("expected none, or a number of lines, auto or no-ellipsis, found %q", c.String())
+		}
+	}
+	if len(v) == 0 || len(v) > 2 {
+		return errors.New("expected one or two of a number of lines, auto and no-ellipsis")
+	}
+	return nil
 }
 
 // checkScrollbarColor takes auto, or the thumb's colour then the track's.
@@ -437,6 +449,7 @@ var checks = map[string]check{
 	"overflow-y":                single(words("visible", "hidden", "clip", "auto", "scroll")),
 	"position":                  single(words("static", "relative", "absolute", "fixed", "sticky")),
 	"float":                     single(words("none", "left", "right", "inline-start", "inline-end")),
+	propInitialLetter:           checkInitialLetter,
 	"vertical-align": single(either(lengthPercent,
 		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
 			"-webkit-baseline-middle"))),
@@ -551,7 +564,13 @@ var checks = map[string]check{
 	"mask-image":            commaList(single(either(words("none"), imageTerm))),
 	"mask-repeat":           commaList(checkTiling),
 	"mask-size":             commaList(checkBackgroundSize),
-	"mask-position":         commaList(checkMaskPosition),
+	propMaskBoxSource:       single(either(words("none"), urlTerm)),
+	propMaskBoxSlice:        checkImageSlice,
+	propMaskBoxWidth:        repeated(either(dimTerm(allowPercent|allowNumber|nonNegative), words("auto")), 4),
+	propMaskBoxOutset:       repeated(dimTerm(allowNumber|nonNegative), 4),
+	propMaskBoxRepeat:       repeated(words("stretch", "repeat", "round", "space"), 2),
+	propMaskPositionX:       commaList(checkMaskAxis(isXEdge)),
+	propMaskPositionY:       commaList(checkMaskAxis(isYEdge)),
 	"mask-origin":           commaList(single(maskBox)),
 	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
 	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
@@ -999,15 +1018,19 @@ var filterAmounts = map[string]bool{
 	"sepia": true,
 }
 
-// checkFilter takes none or filter functions; a url() to an SVG filter is
-// refused, as nothing reads one.
+// checkFilter takes none or filter functions and url()s to a filter
+// element of the Document; one to another file is refused, as ui fetches
+// none.
 func checkFilter(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
 	}
 	for _, c := range v {
-		if c.Kind == URL || c.Kind == Function && strings.EqualFold(c.Text, "url") {
-			return fmt.Errorf("url() filters are not read")
+		if ref, ok := filterURL(c); ok {
+			if !strings.HasPrefix(ref, "#") || len(ref) == 1 {
+				return fmt.Errorf("a url() filter in another file is not fetched: name a filter element of the page")
+			}
+			continue
 		}
 		if c.Kind != Function {
 			return fmt.Errorf("expected a filter function, found %q", c.String())
@@ -1193,7 +1216,7 @@ func parsePosition(v []Component) (position, error) {
 		case isEdge(v[0]):
 			err = p.set('x', v[0], nil)
 		default:
-			err = lengthPercent(v[0])
+			p.x, err = v[0], lengthPercent(v[0])
 		}
 	case 2:
 		err = p.pair(v[0], v[1])
@@ -1348,4 +1371,18 @@ func pair(v []Component) (Component, Component, bool) {
 		return Component{}, Component{}, false
 	}
 	return v[0], v[1], true
+}
+
+// filterURL is the address of a url() in a filter list.
+func filterURL(c Component) (string, bool) {
+	switch {
+	case c.Kind == URL:
+		return strings.TrimSpace(c.Text), true
+	case c.Kind == Function && strings.EqualFold(c.Text, "url"):
+		if a := items(c.Args); len(a) == 1 && a[0].Kind == String {
+			return strings.TrimSpace(a[0].Text), true
+		}
+		return "", true
+	}
+	return "", false
 }

@@ -167,7 +167,12 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0162 | [A copy puts the selection's markup beside its text](0162-a-copy-puts-the-selections-markup-beside-its-text.md) | api |
 | 0163 | [Scrolls snap and glide as Chrome's strategies, on the Document's clock](0163-scrolls-snap-and-glide-as-chromes-strategies-on-the-documents-clock.md) | api |
 | 0164 | [Indic, Khmer, Myanmar and USE scripts are shaped by HarfBuzz's syllabic shapers](0164-indic-khmer-myanmar-and-use-scripts-are-shaped-by-harfbuzzs-syllabic-shapers.md) | rendering |
+| 0165 | [A filter element runs on the GPU over an element's picture, and a drop cap is a trimmed float](0165-a-filter-element-runs-on-the-gpu-over-an-elements-picture-and-a-drop-cap-is-a-trimmed-float.md) | rendering |
 | 0166 | [A page replays round its covered live parts, and a framed list shows over the window](0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md) | rendering |
+| 0167 | [Pictures load, play and choose again when a desktop Chrome does](0167-pictures-load-play-and-choose-again-when-a-desktop-chrome-does.md) | assets |
+| 0168 | [Nested rules and @scope rules are read as flat rules of the sheet](0168-nested-rules-and-scope-rules-are-read-as-flat-rules-of-the-sheet.md) | api |
+| 0169 | [The user's scrolls glide on Chrome's curves, and two-axis snaps land where both areas show](0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md) | api |
+| 0170 | [What columns cut and a line clamp hides follow Chrome's ends](0170-what-columns-cut-and-a-line-clamp-hides-follow-chromes-ends.md) | rendering |
 | 0172 | [Colour fonts are drawn in pure Go, as pictures of their glyphs](0172-colour-fonts-are-drawn-in-pure-go-as-pictures-of-their-glyphs.md) | rendering |
 
 ## Writing one

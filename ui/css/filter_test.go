@@ -65,8 +65,8 @@ func TestADropShadowInCurrentColorFollowsTheElementsColour(t *testing.T) {
 
 func TestWhatFilterDoesNotReadIsRefused(t *testing.T) {
 	for _, decl := range []string{
-		"filter: url(#f)",
 		"filter: blur(1px) url(f.svg#a)",
+		"filter: url(#)",
 		"filter: blur(-1px)",
 		"filter: blur(10%)",
 		"filter: brightness(-1)",
@@ -86,9 +86,9 @@ func TestWhatFilterDoesNotReadIsRefused(t *testing.T) {
 			t.Errorf("%s: warnings %v, want one", decl, warns)
 		}
 	}
-	_, warns := Parse("t.css", "div { filter: url(#f) }")
-	if len(warns) != 1 || !strings.Contains(warns[0].Error(), "url() filters are not read") {
-		t.Errorf("an SVG filter: %v", warns)
+	_, warns := Parse("t.css", "div { filter: url(f.svg#f) }")
+	if len(warns) != 1 || !strings.Contains(warns[0].Error(), "not fetched") {
+		t.Errorf("a filter in another file: %v", warns)
 	}
 	if _, warns = Parse("t.css", "div { transition: filter 1s }"); len(warns) != 0 {
 		t.Errorf("filter transitions: %v", warns)
@@ -141,5 +141,25 @@ div { animation: f 1s linear }`)
 	tr.Step(0.25)
 	if f := shown(d).Filters; len(f) != 1 || !nearf(f[0].Amount, 2.5) {
 		t.Errorf("a quarter in: %+v", f)
+	}
+}
+
+func TestAURLFilterNamesAFilterElementOfThePage(t *testing.T) {
+	d := el(dom.Div, "d")
+	Compute(page(d), []*Sheet{sheet(t, `#d { filter: url(#soft) blur(2px) url("#glow"); backdrop-filter: url(#a) }`)})
+	f := styleOf(d).Filters
+	if len(f) != 3 || f[0] != (style.Filter{Kind: style.FilterURL, Ref: "soft"}) || f[1].Kind != style.Blur ||
+		f[2].Ref != "glow" {
+		t.Errorf("filters %+v", f)
+	}
+	if b := styleOf(d).BackdropFilters; len(b) != 1 || b[0].Ref != "a" {
+		t.Errorf("backdrop filters %+v", b)
+	}
+	a := []style.Filter{{Kind: style.FilterURL, Ref: "a"}}
+	if _, ok := lerpFilters(a, []style.Filter{{Kind: style.FilterURL, Ref: "b"}}, 0.5); ok {
+		t.Error("two filter elements flip")
+	}
+	if got, ok := lerpFilters(a, a, 0.5); !ok || got[0] != a[0] {
+		t.Errorf("one with itself: %+v", got)
 	}
 }

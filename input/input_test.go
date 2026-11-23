@@ -61,6 +61,26 @@ func TestScrollAndMouseDelta(t *testing.T) {
 	}
 }
 
+func TestATrackpadsWheelIsPrecise(t *testing.T) {
+	var s State
+	s.AddPreciseWheel(geom.V2(0, 0.4))
+	s.AddPreciseWheel(geom.V2(0, 0.2))
+	fed(&s).BeginFrame()
+	if !s.WheelPrecise() || geom.Abs(s.Wheel().Y-0.6) > 1e-6 {
+		t.Fatalf("precise %v scroll %v", s.WheelPrecise(), s.Wheel())
+	}
+	s.AddPreciseWheel(geom.V2(0, 0.4))
+	s.AddWheel(geom.V2(0, 1))
+	fed(&s).BeginFrame()
+	if s.WheelPrecise() {
+		t.Fatal("a notch in the frame makes it a mouse's")
+	}
+	fed(&s).BeginFrame()
+	if s.WheelPrecise() {
+		t.Fatal("no wheel is no precise one")
+	}
+}
+
 func TestKeyboardCaptureHidesKeysFromGameplay(t *testing.T) {
 	var s State
 	s.SetKey(KeyW, true)

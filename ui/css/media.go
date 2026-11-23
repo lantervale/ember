@@ -371,7 +371,7 @@ func (p *mediaParser) kind() string {
 	if p.container {
 		return kwContainer
 	}
-	return "media"
+	return atMedia
 }
 
 func (p *mediaParser) specs() map[string]*mediaSpec {

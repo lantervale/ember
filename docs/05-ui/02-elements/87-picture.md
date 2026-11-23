@@ -23,7 +23,7 @@ An `img` chooses its picture as Chrome does when it has a `srcset` or stands in 
 | the density | a candidate's own, or its width over the slot's |
 | the one shown | the least density at or above the screen's pixels a point, else the greatest. A denser candidate the Document already has, or a `data:` one, wins over it, as one in Chrome's cache does |
 | its size | its pixels over its density: a 2x picture shows at half its pixels, one of widths at its slot's width |
-| again | when the viewport or the pixels a point change, or an attribute or the `source`s do; the picture shown stays until the one chosen in its place lands |
+| again | when the viewport resizes, or an attribute or the `source`s change; one in a `picture` with a `source` of `media` also when another media feature changes (the colour scheme, the density with it). The pixels a point changing alone keep the picture, as Chrome keeps it: each `img` chooses at the density it last chose for until something has it choose again. The picture shown stays until the one chosen in its place lands |
 
 An `img` whose `sizes` starts with `auto` is laid out 300 × 150 points, without proportions, whatever its picture, as Chrome's sheet sizes it (`contain: size; contain-intrinsic-size: 300px 150px`): give it a width and a height.
 
@@ -33,7 +33,7 @@ An `img` whose `sizes` starts with `auto` is laid out 300 × 150 points, without
 
 Automation: the `img` is recorded as any `img`; `picture` and `source` by their `role`, as any other element.
 
-Chosen as Chrome chooses at one and two pixels a point, and sized as Chrome sizes the pictures, in `TestAnImgChoosesThePictureChromeChoosesAndShowsItAtItsDensity`.
+Chosen as Chrome chooses at one and two pixels a point, and sized as Chrome sizes the pictures, in `TestAnImgChoosesThePictureChromeChoosesAndShowsItAtItsDensity`; chosen again when Chrome's are, on a denser screen, a dark scheme and a wider window, in `TestAnImgChoosesAgainWhenChromesDoes`.
 
 ```
 go run ./examples/93-html-elements -element picture

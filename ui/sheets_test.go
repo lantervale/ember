@@ -105,6 +105,34 @@ func TestRulesAreInsertedAndDeletedOneAtATime(t *testing.T) {
 	assert.Equal(t, ".box { width: 220px; height: 30px }\n@media (min-width: 1px) { .box { height: 20px; } }", s.Text())
 }
 
+func TestANestedRuleIsInsertedAndDeletedWhole(t *testing.T) {
+	d, box := sheetsDoc()
+	inner := ui.Div(ui.Class("in"))
+	box.Append(inner)
+	s := d.AddSheet(`.box { width: 200px; .in { height: 2px; } }`)
+	require.NoError(t, s.InsertRule(1, `.box { @media (min-width: 1px) { width: 230px; } &.box { height: 40px; } }`))
+	require.NoError(t, s.InsertRule(0, `@scope (.box) { :scope { width: 240px; } .in { height: 3px; } }`))
+	assert.InDelta(t, 240, width(d, box), 0.01, "a scoped rule wins a tie of weight by proximity, before the order")
+	assert.InDelta(t, 40, box.Box().H, 0.01)
+	assert.InDelta(t, 2, inner.Box().H, 0.01, "an @scope's root weighs nothing in its selectors")
+	matched := d.MatchedRules(box)
+	require.Greater(t, len(matched), 3)
+	assert.Equal(t, []string{".box.box", ":scope", ".box"},
+		[]string{matched[0].Selector, matched[1].Selector, matched[2].Selector}, "the strongest first, nested or not")
+	assert.Equal(t, []string{"(.box)"}, matched[1].Scopes, "a tool sees the scope a rule stands in")
+	assert.Equal(t, []string{"(min-width: 1px)"}, matched[2].Media)
+	assert.Equal(t, []string{`@scope (.box) { :scope { width: 240px; } .in { height: 3px; } }`,
+		`.box { width: 200px; .in { height: 2px; } }`,
+		`.box { @media (min-width: 1px) { width: 230px; } &.box { height: 40px; } }`}, s.Rules())
+
+	require.NoError(t, s.DeleteRule(0))
+	assert.InDelta(t, 230, width(d, box), 0.01, "the nested @media's declarations stand after the rule's own")
+	require.NoError(t, s.DeleteRule(1))
+	assert.InDelta(t, 200, width(d, box), 0.01)
+	assert.InDelta(t, 10, box.Box().H, 0.01)
+	assert.Empty(t, d.Warnings())
+}
+
 func TestARuleUIReadsPartOfIsTakenAndOneThatIsNoRuleIsAnError(t *testing.T) {
 	d, box := sheetsDoc()
 	s := d.AddSheet(``)
