@@ -707,9 +707,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 	count(c, why)
 	m := c.Mark()
 	apart := !d.replay.inPlace
-	d.painted++
-	d.unsettled = false
-	clear(d.drawnPictures)
+	d.paintBegins()
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
 		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
@@ -718,6 +716,14 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.replay.inPlace = live.Covered()
 	d.replay.replayedLast = false
 	d.replay.repaint, d.replay.size, d.replay.scale = d.unsettled, size, d.fonts.Scale()
+}
+
+// paintBegins counts a paint, which settles the Document and notes the
+// animations it draws afresh.
+func (d *Document) paintBegins() {
+	d.painted++
+	d.unsettled = false
+	clear(d.drawnPictures)
 }
 
 // tick moves the document's clock to the World's real time and steps its

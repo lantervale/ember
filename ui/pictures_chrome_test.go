@@ -44,7 +44,7 @@ func flagGIF(t *testing.T, delay int) []byte {
 	for i := range flags {
 		p := image.NewPaletted(image.Rect(0, 0, 40, 40), flags)
 		for j := range p.Pix {
-			p.Pix[j] = uint8(i) //nolint:gosec // four colours
+			p.Pix[j] = uint8(i)
 		}
 		g.Image, g.Delay = append(g.Image, p), append(g.Delay, delay)
 	}
@@ -97,7 +97,7 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	s := chrome.Open(t, srv.URL, geom.V2(400, 300), 1)
 	var loaded float64
 	s.Eval(`performance.getEntriesByType("navigation")[0].loadEventEnd / 1000`, &loaded)
-	var want, at []int
+	var want []int
 	var when []float64
 	for _, step := range steps {
 		var now float64
@@ -110,7 +110,6 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 		var shot float64
 		s.Eval(`performance.now() / 1000`, &shot)
 		when = append(when, shot-loaded)
-		at = append(at, int(step.scroll))
 	}
 	require.Len(t, want, 3)
 	for i, w := range want {

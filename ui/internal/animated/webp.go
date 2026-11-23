@@ -113,13 +113,13 @@ func DecodeWebP(data []byte, frame func([]byte) (image.Image, error)) (*Picture,
 		if !at.In(canvas.Rect) {
 			return nil, errFrame
 		}
-		cleared, clear := last, dispose
+		cleared, wipe := last, dispose
 		step := func(img *image.NRGBA) (func(), error) {
 			pic, frameErr := framePicture(f[anmfLength:], at.Dx(), at.Dy(), frame)
 			if frameErr != nil {
 				return nil, frameErr
 			}
-			if clear {
+			if wipe {
 				Clear(img, cleared)
 			}
 			if f[15]&noBlend != 0 {
@@ -127,7 +127,7 @@ func DecodeWebP(data []byte, frame func([]byte) (image.Image, error)) (*Picture,
 			} else {
 				blend(img, at, pic)
 			}
-			return nil, nil
+			return Keep, nil
 		}
 		if err = canvas.Add(time.Duration(uint24(f[12:]))*time.Millisecond, step); err != nil {
 			return nil, err

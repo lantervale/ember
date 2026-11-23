@@ -44,7 +44,8 @@ type Session struct {
 // Serve serves d, exported, at the root of a server on 127.0.0.1, and
 // the files of files under their names, each after delay; the func it
 // returns tells the paths of those files asked for so far, in order.
-func Serve(t testing.TB, d *ui.Document, files map[string][]byte, delay time.Duration) (*httptest.Server, func() []string) {
+func Serve(t testing.TB, d *ui.Document, files map[string][]byte,
+	delay time.Duration) (*httptest.Server, func() []string) {
 	t.Helper()
 	var page bytes.Buffer
 	if err := export.Write(&page, d); err != nil {
@@ -179,8 +180,8 @@ func (s *Session) call(method string, params, out any) {
 		s.t.Fatal(err)
 	}
 	for {
-		line, err := s.out.ReadBytes(0)
-		if err != nil {
+		var line []byte
+		if line, err = s.out.ReadBytes(0); err != nil {
 			s.t.Fatalf("chrome: %s: %v", method, err)
 		}
 		var resp struct {

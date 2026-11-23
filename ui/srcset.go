@@ -40,7 +40,7 @@ func choosesPicture(n *Node) bool {
 
 // choosePictures has the imgs that choose their picture choose it for
 // m, when it or the tree changed since they last did, or one waits for
-// its picture, or the media moved as mediaMoves says: each at the
+// its picture, or the media moved (viewportMoves, featuresMove): each at the
 // density it last chose for, unless the media moved so as to have it
 // choose again. Once laid out,
 // only those whose sizes say auto choose, by the width they were laid
@@ -52,7 +52,7 @@ func (d *Document) choosePictures(m css.Media, laid bool) bool {
 	c := &d.choices
 	restyle, resized, other := false, false, false
 	if !laid {
-		resized, other = mediaMoves(c.media, m)
+		resized, other = viewportMoves(c.media, m), featuresMove(c.media, m)
 		if !c.stale && !resized && !other && !c.waiting {
 			c.media = m
 			return false
@@ -65,7 +65,7 @@ func (d *Document) choosePictures(m css.Media, laid bool) bool {
 	c.dppx = make(map[*Node]float32, len(c.imgs))
 	for _, n := range c.imgs {
 		at := m
-		if dppx, ok := kept[n]; ok && !resized && !(other && mediaSources(n)) {
+		if dppx, ok := kept[n]; ok && !resized && (!other || !mediaSources(n)) {
 			at.Resolution = dppx
 		}
 		c.dppx[n] = at.Resolution
@@ -157,15 +157,20 @@ func scrollContainer(o style.Size[style.Overflow]) bool {
 	return sc(o.Width) || sc(o.Height)
 }
 
-// mediaMoves reports what changed from was to now that has imgs choose
-// again, as Chrome's do: the viewport's size, which has them all choose,
-// and another feature but the density, which has those in a picture
-// with a source of media choose. Chrome for Testing 156 keeps the
-// pictures it chose when the density alone changes.
-func mediaMoves(was, now css.Media) (resized, other bool) {
-	resized = was.Width != now.Width || was.Height != now.Height
+// viewportMoves reports whether the viewport resized from was to now,
+// which has every img choose again, as Chrome's do.
+func viewportMoves(was, now css.Media) bool {
+	return was.Width != now.Width || was.Height != now.Height
+}
+
+// featuresMove reports whether a media feature other than the viewport's
+// size and the density changed from was to now, which has those in a
+// picture with a source of media choose again, as Chrome's do. Chrome
+// for Testing 156 keeps the pictures it chose when the density alone
+// changes.
+func featuresMove(was, now css.Media) bool {
 	was.Width, was.Height, was.Resolution, was.Inactive = now.Width, now.Height, now.Resolution, now.Inactive
-	return resized, was != now
+	return was != now
 }
 
 // mediaSources reports whether the img n is in a picture with a source

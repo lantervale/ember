@@ -23,18 +23,19 @@ import (
 // reaches past the picture, which the image package refuses: then it is
 // the one frame.
 func decodeGIF(data []byte) (*animated.Picture, error) {
-	w, h, first, reach, past := gifReach(data)
+	r := gifReach(data)
+	past := r.past
 	if past {
 		data = bytes.Clone(data)
-		binary.LittleEndian.PutUint16(data[6:], uint16(min(reach.X, 0xffff))) //nolint:gosec // at most 16 bits
-		binary.LittleEndian.PutUint16(data[8:], uint16(min(reach.Y, 0xffff))) //nolint:gosec // at most 16 bits
+		binary.LittleEndian.PutUint16(data[6:], uint16(min(r.reach.X, 0xffff))) //nolint:gosec // at most 16 bits
+		binary.LittleEndian.PutUint16(data[8:], uint16(min(r.reach.Y, 0xffff))) //nolint:gosec // at most 16 bits
 	}
 	g, err := gif.DecodeAll(bytes.NewReader(data))
 	if err != nil || len(g.Image) < 2 && !past {
 		return nil, err
 	}
 	if past {
-		g.Config.Width, g.Config.Height = max(w, first.X), max(h, first.Y)
+		g.Config.Width, g.Config.Height = max(r.size.X, r.first.X), max(r.size.Y, r.first.Y)
 	}
 	plays := 1
 	if g.LoopCount >= 0 {
@@ -62,7 +63,7 @@ func decodeGIF(data []byte) (*animated.Picture, error) {
 			case gif.DisposalPrevious:
 				return func() { copy(img.Pix, saved) }, nil
 			}
-			return nil, nil
+			return animated.Keep, nil
 		}
 		if err = canvas.Add(time.Duration(g.Delay[i])*10*time.Millisecond, step); err != nil {
 			return nil, err
@@ -74,16 +75,23 @@ func decodeGIF(data []byte) (*animated.Picture, error) {
 	return canvas.Picture(), nil
 }
 
-// gifReach is the size data says its picture is, how far right and down
+// reach is the size a GIF says its picture is, how far right and down
 // its first frame and all its frames reach, and whether one reaches past
-// the picture: false for a file that ends or breaks before its trailer,
-// left to the image package to read.
-func gifReach(data []byte) (w, h int, first, reach image.Point, past bool) {
+// the picture.
+type reach struct {
+	size, first, reach image.Point
+	past               bool
+}
+
+// gifReach is data's reach: not past for a file that ends or breaks
+// before its trailer, left to the image package to read.
+func gifReach(data []byte) reach {
 	const header = 13
+	var r reach
 	if len(data) < header {
-		return 0, 0, first, reach, false
+		return r
 	}
-	w, h = int(binary.LittleEndian.Uint16(data[6:])), int(binary.LittleEndian.Uint16(data[8:]))
+	r.size = image.Pt(int(binary.LittleEndian.Uint16(data[6:])), int(binary.LittleEndian.Uint16(data[8:])))
 	at := header + colorTable(data[10])
 	blocks := func() bool {
 		for at < len(data) {
@@ -100,30 +108,31 @@ func gifReach(data []byte) (w, h int, first, reach image.Point, past bool) {
 		case 0x21:
 			at += 2
 			if !blocks() {
-				return w, h, first, reach, false
+				return r
 			}
 		case 0x2c:
 			if at+10 > len(data) {
-				return w, h, first, reach, false
+				return r
 			}
 			d := data[at+1:]
 			x, y := int(binary.LittleEndian.Uint16(d)), int(binary.LittleEndian.Uint16(d[2:]))
-			fw, fh := int(binary.LittleEndian.Uint16(d[4:])), int(binary.LittleEndian.Uint16(d[6:]))
-			reach = image.Pt(max(reach.X, x+fw), max(reach.Y, y+fh))
-			if first == (image.Point{}) {
-				first = reach
+			w, h := int(binary.LittleEndian.Uint16(d[4:])), int(binary.LittleEndian.Uint16(d[6:]))
+			r.reach = image.Pt(max(r.reach.X, x+w), max(r.reach.Y, y+h))
+			if r.first == (image.Point{}) {
+				r.first = r.reach
 			}
 			at += 10 + colorTable(d[8]) + 1
 			if !blocks() {
-				return w, h, first, reach, false
+				return r
 			}
 		case 0x3b:
-			return w, h, first, reach, reach.X > w || reach.Y > h
+			r.past = r.reach.X > r.size.X || r.reach.Y > r.size.Y
+			return r
 		default:
-			return w, h, first, reach, false
+			return r
 		}
 	}
-	return w, h, first, reach, false
+	return r
 }
 
 // colorTable is the length of the colour table a GIF's flags byte says

@@ -95,23 +95,24 @@ func (p *Picture) Frame(i int) *image.NRGBA {
 			l.live = image.NewNRGBA(p.Frames[0].Rect)
 		}
 		copy(l.live.Pix, l.from)
-		l.next, l.dispose = len(p.Frames), nil
+		l.next, l.dispose = len(p.Frames), Keep
 	}
 	for ; l.next <= i; l.next++ {
-		if l.dispose != nil {
-			l.dispose()
-		}
+		l.dispose()
 		var err error
 		if l.dispose, err = l.steps[l.next-len(p.Frames)](l.live); err != nil {
-			l.dispose = nil
+			l.dispose = Keep
 		}
 	}
 	return l.live
 }
 
 // Step draws a frame on the canvas, and returns what disposes of it
-// once shown, nil for nothing.
-type Step func(canvas *image.NRGBA) (dispose func(), err error)
+// once shown.
+type Step func(canvas *image.NRGBA) (func(), error)
+
+// Keep is the disposal of a frame that leaves the canvas as it is.
+func Keep() {}
 
 // Decoder reads an animation: nil and no error for a picture of one
 // frame the image package reads, a Still for one it doesn't.
@@ -195,9 +196,7 @@ func (c *Canvas) Add(delay time.Duration, step Step) error {
 	frame := image.NewNRGBA(c.Rect)
 	copy(frame.Pix, c.Pix)
 	p.Frames, p.Delays = append(p.Frames, frame), append(p.Delays, delay)
-	if dispose != nil {
-		dispose()
-	}
+	dispose()
 	return nil
 }
 

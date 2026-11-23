@@ -77,7 +77,7 @@ func grey(w int, v uint8, cleared bool) animated.Step {
 		if cleared {
 			return func() { animated.Clear(img, at) }, nil
 		}
-		return nil, nil
+		return animated.Keep, nil
 	}
 }
 

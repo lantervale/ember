@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/gif"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -139,7 +140,8 @@ func sampled(samples []image.Point) string {
 	b, _ := json.Marshal(xy)
 	return strings.Replace(chromeFrames, "pixels: [...g.getImageData(0, 0, c.width, c.height).data]",
 		"pixels: (() => { const d = g.getImageData(0, 0, c.width, c.height).data, at = "+string(b)+
-			", out = []; for (let i = 0; i < at.length; i += 2) out.push(...d.slice(4 * (at[i+1] * c.width + at[i]), 4 * (at[i+1] * c.width + at[i]) + 4)); return out; })()", 1)
+			", out = []; for (let i = 0; i < at.length; i += 2) { const k = 4 * (at[i+1] * c.width + at[i]); "+
+			"out.push(...d.slice(k, k + 4)); } return out; })()", 1)
 }
 
 func TestAnAnimationPastTheMostPixelsPlaysEveryFrameAsChromes(t *testing.T) {
@@ -168,4 +170,21 @@ func TestAnAnimationPastTheMostPixelsPlaysEveryFrameAsChromes(t *testing.T) {
 		}
 		assertPixels(t, f.Pixels, got, fmt.Sprintf("frame %d", i))
 	}
+}
+
+// heavyGIF is a GIF of 1024×1024 pixels whose 40 frames hold more
+// pixels than an animation keeps: squares over a first frame, some
+// cleared, some put back.
+func heavyGIF(t *testing.T) []byte {
+	t.Helper()
+	frames := []*image.Paletted{gifFrame(image.Rect(0, 0, 1024, 1024), 1)}
+	disposal := []byte{gif.DisposalNone}
+	delays := []int{2}
+	for i := 1; i < 40; i++ {
+		at := image.Pt(i*97%900, i*61%900)
+		frames = append(frames, gifFrame(image.Rectangle{Min: at, Max: at.Add(image.Pt(120, 120))}, uint8(1+i%3)))
+		disposal = append(disposal, []byte{gif.DisposalNone, gif.DisposalBackground, gif.DisposalPrevious}[i%3])
+		delays = append(delays, 2)
+	}
+	return encodeGIFOf(t, 1024, 0, disposal, delays, frames...)
 }
