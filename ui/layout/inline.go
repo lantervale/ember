@@ -1951,10 +1951,10 @@ func (c *inlineContent) shown(l line) []piece {
 		p.han, p.width = h, p.width+d
 	}
 	if first, last := c.firstWord(l.from, l.to), c.lastWord(l.from, l.to); first == last {
-		place(first, l.start, c.runGoesOn(first, l.to))
+		place(first, l.start, l.closed || c.runGoesOn(first, l.to))
 	} else {
 		place(first, l.start, false)
-		place(last, midLine, c.runGoesOn(last, l.to))
+		place(last, midLine, l.closed || c.runGoesOn(last, l.to))
 	}
 	if first, start, last, end := c.cuts(l); start != 0 || end != 0 {
 		if &out[0] == &pieces[0] {
@@ -2266,7 +2266,7 @@ func (b *breaker) close() []line {
 	trails := b.trails()
 	if !b.empty && !trails || len(b.out) == 0 && b.cur.to > b.cur.from {
 		b.cur.width = b.kept.end()
-		b.cur.width, _ = b.c.lineEnd(b.cur, false)
+		b.cur.width, b.cur.closed = b.c.lineEnd(b.cur, false)
 		b.out = append(b.out, b.cur)
 	} else if trails && b.opensSpan() {
 		// An inline element whole after the break stands on a line of its own, as
