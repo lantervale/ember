@@ -397,7 +397,7 @@ func (t *tree) table(n *node, in input) output {
 		heights[ri] = t.rowHeight(r, widths, content)
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below, false)
+	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
 	s := size{w, hgt}
 	if in.run == computeSize {
 		return sizeOutput(s)
@@ -970,7 +970,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 		w -= colX[cols] - shownX[cols]
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below, rowGone != nil)
+	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
 	fullY, _ := shownLines(heights, nil, nil, sy, 0)
 	rowY, rowAt := shownLines(heights, rowGone, rowSections(n, len(rows)), sy, above+inset.t+sy)
 	hgt -= fullY[len(rows)] - (rowY[len(rows)] - rowY[0])
@@ -1289,9 +1289,10 @@ func spannedPercents(cells []slot, percent, colMax []float32) {
 
 // tableHeight is the height of a table whose rows are heights tall, around being its
 // inset and captions: the rows' with the spacing round them, or the height the table is
-// given, which grows the rows where it is above theirs. A table that collapses rows takes
-// the height it is given as a floor only, as Chrome: it is taken from before the collapse.
-func tableHeight(st *style.Computed, in input, heights []float32, sy, around float32, collapses bool) float32 {
+// given, which grows the rows where it is above theirs: a floor only, as Chrome's, which
+// never shortens a table below its rows, and for a table that collapses rows one taken
+// from before the collapse.
+func tableHeight(st *style.Computed, in input, heights []float32, sy, around float32) float32 {
 	hgt := around
 	if len(heights) > 0 {
 		hgt += sy
@@ -1302,9 +1303,6 @@ func tableHeight(st *style.Computed, in input, heights []float32, sy, around flo
 	if given := or(in.known.h, resolve(st.Size.Height, in.parent.h)); some(given) && given > hgt {
 		growRows(heights, given-hgt)
 		return given
-	}
-	if some(in.known.h) && !collapses {
-		return in.known.h
 	}
 	return hgt
 }

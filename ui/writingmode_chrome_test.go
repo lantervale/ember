@@ -207,6 +207,18 @@ func TestVerticalFlexPicturesAsChrome(t *testing.T) {
 		"a picture of a set width in a vertical flex row of a set width": page(`.f { position: relative;
 			display: flex; writing-mode: vertical-lr; width: 100px; align-items: start; } img { width: 40px; }
 			.abs { position: absolute; left: 40px; width: 60px; height: 100px; }`, tall),
+		"an orthogonal table as a flex item": func(_ *testing.T) *ui.Document {
+			d := ui.NewDocument(ui.CSS(`.f { display: flex; width: 0; } .t { display: table; writing-mode: vertical-rl;
+				min-width: 0; width: 100px; height: 100px; } .c { display: table-cell; } .w { width: 100px; }`))
+			d.Body().Append(ui.Div(ui.Class("f"), ui.Div(ui.Class("t"), ui.Div(ui.Class("c"), ui.Div(ui.Class("w"))))))
+			return d
+		},
+		"a table as a flex column's item": func(_ *testing.T) *ui.Document {
+			d := ui.NewDocument(ui.CSS(`.f { display: flex; flex-direction: column; height: 0; } .t { display: table;
+				min-height: 0; width: 100px; height: 100px; } .c { display: table-cell; } .w { height: 100px; }`))
+			d.Body().Append(ui.Div(ui.Class("f"), ui.Div(ui.Class("t"), ui.Div(ui.Class("c"), ui.Div(ui.Class("w"))))))
+			return d
+		},
 		"a vertical flow in an inline flex box of a percentage height": func(_ *testing.T) *ui.Document {
 			d := ui.NewDocument(ui.CSS(`.t { width: 100px; height: 100px; line-height: 0; }
 				.f { display: inline-flex; height: 100%; } .v { writing-mode: vertical-rl; }
