@@ -1078,27 +1078,7 @@ func (x *ctx) finish(root bool) {
 	if x.toViewport {
 		x.propagateOverflow(root)
 	}
-	if c.WebkitBox {
-		x.webkitBox()
-	}
-	switch x.parent.Display {
-	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
-		if !root {
-			c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
-			c.Float = style.FloatNone
-		}
-	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
-		// not a flex or grid container
-	}
-	c.StaticInline = !root && (c.Position == style.Absolute || c.Position == style.FixedPosition) &&
-		blockified(c.Display) != c.Display
-	if root || c.Position == style.Absolute || c.Position == style.FixedPosition {
-		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
-		c.Float = style.FloatNone
-	}
-	if c.Float != style.FloatNone {
-		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
-	}
+	x.display(root)
 	x.transitions()
 	x.animations()
 	c.FollowColor(c.Color)
@@ -1129,11 +1109,37 @@ func (x *ctx) snapWidths() {
 	c.BorderSpacing = [2]float32{x.env.snap(c.BorderSpacing[0], false), x.env.snap(c.BorderSpacing[1], false)}
 }
 
+// display is the box the element's display makes where it stands: a block for the root,
+// a flex or grid item, a float or a box out of the flow.
+func (x *ctx) display(root bool) {
+	c := x.c
+	x.webkitBox()
+	switch x.parent.Display {
+	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
+		if !root {
+			c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
+			c.Float = style.FloatNone
+		}
+	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
+		// not a flex or grid container
+	}
+	outside := c.Position == style.Absolute || c.Position == style.FixedPosition
+	c.StaticInline = !root && outside && blockified(c.Display) != c.Display
+	if root || outside {
+		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
+		c.Float = style.FloatNone
+	}
+	if c.Float != style.FloatNone {
+		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
+	}
+}
+
 // webkitBox lays display: -webkit-box out as Chrome does: a vertical one
 // clamping its lines as flow-root, any other as flex along its orient.
 func (x *ctx) webkitBox() {
 	c := x.c
 	switch {
+	case !c.WebkitBox:
 	case c.BoxVertical && c.WebkitLineClamp > 0:
 		if c.Display == style.InlineFlex {
 			c.Display = style.InlineBlock
@@ -1354,7 +1360,7 @@ func (x *ctx) length(c Component) style.Length {
 			return style.Length{Kind: style.MaxContent}
 		case kwFitContent:
 			return style.Length{Kind: style.FitContent}
-		case "stretch":
+		case kwStretch:
 			return style.Length{Kind: style.Stretch}
 		case kwNone:
 			return style.Length{Kind: style.None}

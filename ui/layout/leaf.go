@@ -20,7 +20,7 @@ func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, ins
 // leaf lays out a node without child boxes: empty, or holding inline content, Taffy's
 // compute_leaf_layout with text as its measure function.
 //
-//nolint:cyclop,funlen,gocyclo // Taffy's compute_leaf_layout, kept in its shape
+//nolint:cyclop,funlen,gocognit,gocyclo // Taffy's compute_leaf_layout, kept in its shape
 func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	padding := edges(st.Padding, in.parent.w)
@@ -98,10 +98,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	if !some(in.known.w) && !some(nodeSize.w) {
 		basis = none
 	}
-	clamp := in.clamp
-	if n.inline != nil && n.control == noControl {
-		clamp = clampFor(n, clamp)
-	}
+	clamp := textClamp(n, in.clamp)
 	measured, first, last, lines := t.measureContent(n, known, avail, basis, clamp.lines)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
 	s := clamped
@@ -135,13 +132,10 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		lastBaseline:     none,
 		collapsesThrough: !preventsCollapse && s.h == 0 && measured.h == 0,
 		lines:            lines,
-		clamped:          clamp.lines > 0 && (lines > clamp.lines || lines == clamp.lines && clamp.more),
+		clamped:          clamp.ends(lines),
 	}
 	if in.run == performLayout {
-		n.clamp = clampOut{}
-		if out.clamped {
-			n.clamp = clampOut{shown: clamp.lines, hides: clamp.hides, ellipsis: true}
-		}
+		n.clamp = clamp.out(lines)
 	}
 	if some(first) {
 		shift := fmax(s.h-inset.vertical()-measured.h, 0)*contentShare(n) + n.lowered

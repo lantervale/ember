@@ -85,6 +85,28 @@ type clampIn struct {
 	hides bool
 }
 
+// ends reports whether the clamp falls in a box of so many lines: past them, or at its
+// last with more after it.
+func (c clampIn) ends(lines int) bool {
+	return c.lines > 0 && (lines > c.lines || lines == c.lines && c.more)
+}
+
+// out is what the clamp leaves of a box's text of so many lines.
+func (c clampIn) out(lines int) clampOut {
+	if !c.ends(lines) {
+		return clampOut{}
+	}
+	return clampOut{shown: c.lines, hides: c.hides, ellipsis: true}
+}
+
+// textClamp is the clamp the text of n follows, none for a control's.
+func textClamp(n *node, in clampIn) clampIn {
+	if n.inline == nil || n.control != noControl {
+		return in
+	}
+	return clampFor(n, in)
+}
+
 // clampFor is the clamp n's lines follow: its own line-clamp's, or in's.
 func clampFor(n *node, in clampIn) clampIn {
 	if lines, keeps := n.st.Clamp(); lines > 0 {

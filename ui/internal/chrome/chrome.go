@@ -422,7 +422,8 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 	if len(features) > 0 {
 		args = append([]string{"--enable-blink-features=" + strings.Join(features, ",")}, args...)
 	}
-	cmd := exec.CommandContext(ctx, browser(), args...) //nolint:gosec // the Chrome found on this machine, run on our own page
+	//nolint:gosec // the Chrome found on this machine, run on our own page
+	cmd := exec.CommandContext(ctx, browser(), args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
