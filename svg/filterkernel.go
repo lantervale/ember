@@ -5,8 +5,9 @@ import (
 	"strings"
 )
 
-// maxOrder is the widest and highest kernel a convolution runs.
-const maxOrder = 64
+// maxCells is the most weights a convolution's kernel has; a larger one
+// draws nothing.
+const maxCells = 256
 
 // convolve reads an feConvolveMatrix; ok is false for one in error,
 // which draws nothing.
@@ -22,14 +23,17 @@ func convolve(props map[string]string) (Convolve, bool) {
 			o = append(o, o[0])
 		}
 		for i, n := range o {
-			if n != math.Trunc(n) || n < 1 || n > maxOrder {
+			if n != math.Trunc(n) || n < 1 || n > maxCells {
 				return cv, false
 			}
 			cv.Order[i] = int(n)
 		}
 	}
 	sc := &scanner{s: props["kernelMatrix"]}
-	cv.Kernel = sc.list(maxOrder * maxOrder)
+	if cv.Order[0]*cv.Order[1] > maxCells {
+		return cv, false
+	}
+	cv.Kernel = sc.list(maxCells + 1)
 	if !sc.done() || len(cv.Kernel) != cv.Order[0]*cv.Order[1] {
 		return cv, false
 	}
@@ -88,6 +92,7 @@ func edgeAt(x, y int, area [4]int, mode EdgeMode) (int, int, bool) {
 	case EdgeWrap:
 		w, h := x1-x0, y1-y0
 		return x0 + ((x-x0)%w+w)%w, y0 + ((y-y0)%h+h)%h, true
+	case EdgeNone:
 	}
 	return 0, 0, false
 }
@@ -102,32 +107,10 @@ func (fr *filterRun) convolve(out, in *fbuf, p *Primitive) {
 		return
 	}
 	area := [4]int{a.Min.X, a.Min.Y, a.Max.X, a.Max.Y}
-	ox, oy := cv.Order[0], cv.Order[1]
 	div, bias := float32(1/cv.Divisor), float32(cv.Bias)
 	for y := a.Min.Y; y < a.Max.Y; y++ {
 		for x := a.Min.X; x < a.Max.X; x++ {
-			var sum [4]float32
-			for i := range oy {
-				for j := range ox {
-					sx, sy, ok := edgeAt(x-cv.Target[0]+j, y-cv.Target[1]+i, area, cv.Edge)
-					if !ok {
-						continue
-					}
-					k := float32(cv.Kernel[(oy-1-i)*ox+ox-1-j])
-					px := in.pix[4*(sy*fr.w+sx):][:4]
-					if cv.PreserveAlpha {
-						if px[3] > 0 {
-							for c := range 3 {
-								sum[c] += px[c] / px[3] * k
-							}
-						}
-						continue
-					}
-					for c := range 4 {
-						sum[c] += px[c] * k
-					}
-				}
-			}
+			sum := fr.weighed(in, cv, x, y, area)
 			o := out.pix[4*(y*fr.w+x):][:4]
 			alpha := min(max(sum[3]*div+bias, 0), 1)
 			if cv.PreserveAlpha {
@@ -143,6 +126,34 @@ func (fr *filterRun) convolve(out, in *fbuf, p *Primitive) {
 			}
 		}
 	}
+}
+
+// weighed is the sum of the pixels of in about x, y by cv's kernel, their
+// colours not premultiplied when cv keeps alpha.
+func (fr *filterRun) weighed(in *fbuf, cv *Convolve, x, y int, area [4]int) [4]float32 {
+	var sum [4]float32
+	ox, oy := cv.Order[0], cv.Order[1]
+	for i := range oy {
+		for j := range ox {
+			sx, sy, ok := edgeAt(x-cv.Target[0]+j, y-cv.Target[1]+i, area, cv.Edge)
+			if !ok {
+				continue
+			}
+			k := float32(cv.Kernel[(oy-1-i)*ox+ox-1-j])
+			px := in.pix[4*(sy*fr.w+sx):][:4]
+			switch {
+			case !cv.PreserveAlpha:
+				for c := range 4 {
+					sum[c] += px[c] * k
+				}
+			case px[3] > 0:
+				for c := range 3 {
+					sum[c] += px[c] / px[3] * k
+				}
+			}
+		}
+	}
+	return sum
 }
 
 // displace writes in moved by the map's colours to out: each pixel the

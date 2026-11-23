@@ -16,7 +16,7 @@ const (
 	randR        = 2836
 	// maxOctaves is the most octaves noise is summed over: those past it
 	// add less than a level.
-	maxOctaves = 24
+	maxOctaves = 10
 )
 
 // noise reads an feTurbulence; ok is false for one in error, which

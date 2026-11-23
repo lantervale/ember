@@ -180,8 +180,8 @@ func sobel(alpha func(x, y int) float64, x, y, x0, y0, x1, y1 int) (float64, flo
 	return diff(true), diff(false)
 }
 
-func sub3(a, b Point3) Point3     { return Point3{a.X - b.X, a.Y - b.Y, a.Z - b.Z} }
-func dot3(a, b Point3) float64    { return a.X*b.X + a.Y*b.Y + a.Z*b.Z }
+func sub3(a, b Point3) Point3  { return Point3{a.X - b.X, a.Y - b.Y, a.Z - b.Z} }
+func dot3(a, b Point3) float64 { return a.X*b.X + a.Y*b.Y + a.Z*b.Z }
 func unit3(a Point3) Point3 {
 	l := math.Sqrt(dot3(a, a))
 	if l == 0 {

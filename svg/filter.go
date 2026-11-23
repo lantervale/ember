@@ -510,22 +510,29 @@ func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, 
 		}
 	case "feTile":
 		p.Kind = Tile
+	default:
+		b.morePrimitive(p, n, props, st, f, c, results)
+	}
+}
+
+// morePrimitive sets what the primitives that make their picture anew
+// from noise, neighbours, light or another picture do; one this package
+// does not draw makes nothing.
+func (b *builder) morePrimitive(p *Primitive, n *node, props map[string]string, st *style, f *Filter,
+	c filterContext, results map[string]Input,
+) {
+	ok := true
+	switch n.name {
 	case "feTurbulence":
 		p.Kind, p.In = Turbulence, nil
-		var ok bool
-		if p.Noise, ok = noise(props, c); !ok {
-			p.Kind = Clear
-		}
+		p.Noise, ok = noise(props, c)
 	case "feConvolveMatrix":
 		p.Kind = ConvolveMatrix
-		var ok bool
-		if p.Convolve, ok = convolve(props); !ok {
-			p.Kind = Clear
-		}
+		p.Convolve, ok = convolve(props)
 	case "feDisplacementMap":
 		p.Kind = DisplacementMap
 		p.In = append(p.In, b.input(props["in2"], f, results))
-		p.Scale = num("scale", 0)
+		p.Scale, _ = number(props["scale"])
 		if c.boxed {
 			p.Scale *= c.bbox.W
 		}
@@ -537,6 +544,9 @@ func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, 
 	default:
 		p.Kind, p.In = Clear, nil
 		b.unsupported(n.name)
+	}
+	if !ok {
+		p.Kind = Clear
 	}
 }
 

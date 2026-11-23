@@ -19,6 +19,10 @@ const (
 	elemRect     = "rect"
 	elemPolygon  = "polygon"
 	nonScaling   = "non-scaling-stroke"
+	boxBorder    = "border-box"
+	boxFill      = "fill-box"
+	closestSide  = "closest-side"
+	farthestSide = "farthest-side"
 )
 
 const (

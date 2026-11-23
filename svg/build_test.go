@@ -526,8 +526,10 @@ func TestUnsupportedNamesWhatIsNotDrawn(t *testing.T) {
 		`<g mask="url(#m)"/>`:                                  nil,
 		`<g style="filter:url(#f)"/>`:                          nil,
 		`<filter id="f"><feWobble/></filter><rect width="1" height="1" filter="url(#f)"/>`: {"feWobble"},
-		`<filter id="f"><feBlend in2="BackgroundImage"/></filter><rect width="1" height="1" filter="url(#f)"/>`: nil,
-		`<filter id="f"><feGaussianBlur edgeMode="wrap"/></filter><rect width="1" height="1" filter="url(#f)"/>`: nil,
+		`<filter id="f"><feBlend in2="BackgroundImage"/></filter>` +
+			`<rect width="1" height="1" filter="url(#f)"/>`: nil,
+		`<filter id="f"><feGaussianBlur edgeMode="wrap"/></filter>` +
+			`<rect width="1" height="1" filter="url(#f)"/>`: nil,
 		`<rect width="1" height="1" style="filter: wobble(2)"/>`:                            {"filter"},
 		`<g filter="none" clip-path="none" mask="none"/>`:                                   nil,
 		`<pattern id="p"/><rect width="1" height="1" fill="url(#p)"/>`:                      nil,

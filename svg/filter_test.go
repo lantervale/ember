@@ -234,7 +234,8 @@ func TestAFilterUnderARotationWorksInTheElementsOwnSpace(t *testing.T) {
 	}
 	expect(t, img, "not along its y", 38, 50, clearPx, 0)
 	expect(t, img, "the middle", 50, 50, redPx, 2)
-	img = draw(t, `<filter id="f" x="-1" y="-1" width="3" height="3"><feMorphology operator="dilate" radius="6 0"/></filter>
+	img = draw(t, `<filter id="f" x="-1" y="-1" width="3" height="3">`+
+		`<feMorphology operator="dilate" radius="6 0"/></filter>
 		<rect x="40" y="40" width="20" height="20" fill="red" transform="rotate(45 50 50)" filter="url(#f)"/>`)
 	expect(t, img, "thickened along the element's x", 60, 60, redPx, 0)
 	expect(t, img, "and not along its y", 40, 60, clearPx, 0)
@@ -263,7 +264,8 @@ func TestCSSFunctionsAfterAFilterElementWorkInItsColourSpace(t *testing.T) {
 	img := draw(t, defs+`<rect x="0" y="0" width="40" height="40" fill="#c63" style="filter: url(#t) grayscale(1)"/>
 		<rect x="50" y="0" width="40" height="40" fill="#c63" style="filter: url(#s) grayscale(1)"/>
 		<rect x="0" y="50" width="20" height="20" fill="#c63" style="filter: url(#t) drop-shadow(20px 0 0 #036)"/>
-		<rect x="50" y="50" width="20" height="20" fill="#c63" style="filter: url(#t) grayscale(0) drop-shadow(20px 0 0 #036)"/>`)
+		<rect x="50" y="50" width="20" height="20" fill="#c63"
+			style="filter: url(#t) grayscale(0) drop-shadow(20px 0 0 #036)"/>`)
 	expect(t, img, "grey in linear light", 20, 20, color.RGBA{131, 131, 131, 255}, 1)
 	expect(t, img, "grey in sRGB", 70, 20, color.RGBA{120, 120, 120, 255}, 1)
 	expect(t, img, "a shadow whose colour is taken as linear", 30, 60, color.RGBA{0, 124, 170, 255}, 1)
@@ -286,7 +288,8 @@ func TestABasicShapesCornersTakeRadiiOfTheirOwn(t *testing.T) {
 		expect(t, img, c.clip+", a round corner", c.round[0], c.round[1], clearPx, 0)
 		expect(t, img, c.clip+", a straight one", c.straight[0], c.straight[1], redPx, 0)
 	}
-	img := draw(t, `<rect x="30" y="30" width="40" height="40" fill="red" style="clip-path: inset(0 round 30px 30px 0 0)"/>`)
+	img := draw(t, `<rect x="30" y="30" width="40" height="40" fill="red"
+		style="clip-path: inset(0 round 30px 30px 0 0)"/>`)
 	expect(t, img, "radii past a side are scaled down together", 32, 46, redPx, 0)
 	expect(t, img, "to meet", 31, 31, clearPx, 0)
 }

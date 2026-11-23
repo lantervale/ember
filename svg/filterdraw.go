@@ -160,7 +160,17 @@ func (d *drawer) filteredTurned(g *Group, clip image.Rectangle, depth int, own M
 	}
 	sub := &drawer{view: own, unit: d.unit}
 	area := Box{float64(clip.Min.X), float64(clip.Min.Y), float64(clip.Dx()), float64(clip.Dy())}
-	src := sub.filtered(g, pixelArea(area, toOwn), depth)
+	ownClip := pixelArea(area, toOwn)
+	if ownClip.Dx() > MaxSide || ownClip.Dy() > MaxSide || ownClip.Dx()*ownClip.Dy() > maxFilterPixels {
+		box := d.bounds(g.Items).Intersect(clip)
+		if box.Empty() {
+			return nil
+		}
+		layer := d.layer(depth, box)
+		d.items(layer, box, g.Items, 1, depth+1)
+		return layer
+	}
+	src := sub.filtered(g, ownClip, depth)
 	if src == nil {
 		return nil
 	}
@@ -416,6 +426,18 @@ func (fr *filterRun) primitive(p *Primitive, f *Filter) *fbuf {
 			tile = pixelArea(f.Region, fr.m).Intersect(fr.box)
 		}
 		fr.tile(out.pix, src.pix, tile)
+	case Turbulence, ConvolveMatrix, DisplacementMap, DiffuseLighting, SpecularLighting, FeImage:
+		out = fr.anew(out, p, in)
+	}
+	fr.crop(out)
+	return out
+}
+
+// anew is out made by a primitive that makes its picture anew from
+// noise, neighbours, light or another picture, reading its inputs
+// through in.
+func (fr *filterRun) anew(out *fbuf, p *Primitive, in func(int) *fbuf) *fbuf {
+	switch p.Kind {
 	case Turbulence:
 		fr.turbulence(out, p)
 	case ConvolveMatrix:
@@ -426,9 +448,10 @@ func (fr *filterRun) primitive(p *Primitive, f *Filter) *fbuf {
 	case DiffuseLighting, SpecularLighting:
 		fr.light(out, in(0), p)
 	case FeImage:
-		out = fr.convert(fr.drawn(p.Items, area), p.LinearRGB)
+		return fr.convert(fr.drawn(p.Items, out.area), p.LinearRGB)
+	case Clear, GaussianBlur, Offset, Flood, ColorMatrix, ComponentTransfer, Composite, Merge, Blend, DropShadow,
+		Morphology, Tile:
 	}
-	fr.crop(out)
 	return out
 }
 

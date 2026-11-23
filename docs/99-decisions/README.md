@@ -158,6 +158,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0155 | [The system says its contrast, forced colours and selection colours, read-only](0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md) | api |
 | 0157 | [Arabic is joined, and marks attached, by HarfBuzz's stages and masks](0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) | rendering |
 | 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
+| 0161 | [SVG filters run in the element's own space, with every primitive Chrome draws](0161-svg-filters-run-in-the-elements-own-space-with-every-primitive-chrome-draws.md) | assets |
 
 ## Writing one
 

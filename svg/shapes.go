@@ -51,9 +51,9 @@ func shapeArgs(s string) []string {
 // element's fill box, its stroke box, or its viewport's.
 func (b *builder) referenceBox(name string, items []Item, bbox Box) (Box, bool) {
 	switch name {
-	case "fill-box", "content-box", "padding-box":
+	case boxFill, "content-box", "padding-box":
 		return bbox, true
-	case "stroke-box", "border-box", "margin-box":
+	case "stroke-box", boxBorder, "margin-box":
 		half := 0.0
 		for _, s := range shapesOf(items, nil) {
 			if s.Stroke.Kind != NoPaint {
@@ -73,7 +73,7 @@ func (b *builder) referenceBox(name string, items []Item, bbox Box) (Box, bool) 
 func (b *builder) shapeClip(v string, st *style, m Matrix, items []Item, bbox Box) *Clip {
 	words := shapeArgs(v)
 	var fn string
-	box := "border-box"
+	box := boxBorder
 	for _, w := range words {
 		if open := strings.IndexByte(w, '('); open > 0 && strings.HasSuffix(w, ")") && fn == "" {
 			fn = w
@@ -351,9 +351,9 @@ func roundShape(circle bool, words []string, ref Box, em float64) (Path, bool, b
 	dy := [2]float64{math.Abs(c.Y - ref.Y), math.Abs(ref.Y + ref.H - c.Y)}
 	side := func(word string, d [2]float64, whole float64) (float64, bool) {
 		switch word {
-		case "", "closest-side":
+		case "", closestSide:
 			return math.Min(d[0], d[1]), true
-		case "farthest-side":
+		case farthestSide:
 			return math.Max(d[0], d[1]), true
 		}
 		v, valid := length(word, lengthContext{whole: whole, em: em})
@@ -366,9 +366,9 @@ func roundShape(circle bool, words []string, ref Box, em float64) (Path, bool, b
 		}
 		var r float64
 		switch word {
-		case "", "closest-side":
+		case "", closestSide:
 			r = math.Min(math.Min(dx[0], dx[1]), math.Min(dy[0], dy[1]))
-		case "farthest-side":
+		case farthestSide:
 			r = math.Max(math.Max(dx[0], dx[1]), math.Max(dy[0], dy[1]))
 		default:
 			if r, ok = side(word, dx, math.Hypot(ref.W, ref.H)/math.Sqrt2); !ok {

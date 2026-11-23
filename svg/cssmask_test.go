@@ -56,12 +56,13 @@ func TestACSSMaskIsPlacedOnTheFillBoxAndRepeated(t *testing.T) {
 
 func TestMasksThatAreNotDrawn(t *testing.T) {
 	for style, want := range map[string][]string{
-		"mask: circle(40%)": nil,
-		"mask: conic-gradient(red, blue)": {"mask"},
-		"mask: linear-gradient(red, blue), linear-gradient(red, blue)": {"mask"},
-		"mask: linear-gradient(red, blue) center / 50% 50%":          {"mask"},
-		"mask-image: none":                                       nil,
-		"mask: linear-gradient(red, blue) repeat-x stroke-box add": nil,
+		"mask: circle(40%)":                                               nil,
+		"mask: conic-gradient(red, blue)":                                 {"mask"},
+		"mask: linear-gradient(red, blue), linear-gradient(red, blue)":    {"mask"},
+		"mask: linear-gradient(red, blue) center / 50% 50%":               {"mask"},
+		"mask-image: none":                                                nil,
+		"mask: linear-gradient(red, blue) repeat-x stroke-box add":        nil,
+		"mask-image: linear-gradient(red, blue); mask-composite: exclude": {"mask"},
 	} {
 		p := picture(t, `<rect width="10" height="10" fill="red" style="`+style+`"/>`)
 		if got := p.Unsupported(); !slices.Equal(got, want) {

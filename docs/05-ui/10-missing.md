@@ -189,16 +189,16 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | `foreignObject`, animation, `vector-effect` other than `non-scaling-stroke` | not drawn, and named in a warning |
-| `feTurbulence`, `feImage`, `feConvolveMatrix`, `feDisplacementMap`, `feDiffuseLighting`, `feSpecularLighting` | a clear result, and named in a warning |
-| `BackgroundImage`, `BackgroundAlpha`, `FillPaint`, `StrokePaint` as a primitive's input; `edgeMode` of `feGaussianBlur` | read as clear and named in a warning; ignored, the edges clear |
+| `feConvolveMatrix` and the lighting primitives in a small picture (an icon of 48 pixels) | several levels from Chrome's on average, both working on whole pixels; a convolution's `edgeMode` where its region's edge falls between pixels reads the partly covered pixels there, a fainter edge than Chrome's |
+| `kernelUnitLength` of `feConvolveMatrix` and the lighting primitives | ignored: their kernels are over the pixels the picture shows at |
+| an `feConvolveMatrix` of more than 256 weights | draws nothing |
 | a filter over more than 4 million pixels (2048 a side) | not run: the element is drawn unfiltered |
-| a filter of an element under a rotation or a skew | blurred, eroded and dilated along the pixels' axes, where Chrome filters in the element's own space |
-| a filter list with a CSS function after a `url()` (`filter: url(#soft) drop-shadow(…)`) | the function reads the filter element's result cut to its region, where Chrome's shadow is fainter |
-| a `mask` of a basic shape, a gradient or another file, a `clip-path` of another file, `clip-path` on the shapes inside a `clipPath` | the first two named in a warning and not applied, the last ignored |
-| corners of their own in a basic shape's `round` (`inset(0 round 2px 8px)`) | every corner the first radius |
+| a `mask` of another file, a conic gradient or another CSS image, a `clip-path` of another file, `clip-path` on the shapes inside a `clipPath` | the first two named in a warning and not applied, the last ignored |
+| masks of more than one layer, `mask-size`, `mask-position`, `mask-composite`; `space` and `round` of `mask-repeat` | the first layer alone, the image the size of its box at its corner, named in a warning; repeated as `repeat` |
+| a gradient mask's colours between stops of different alpha, under `mask-mode: luminance` | mixed with alpha not premultiplied, where CSS mixes them premultiplied |
 | the letters of `text` | Go's faces, the monospace one for a family naming one, whatever font the file asks for (Chrome's sans-serif differs by a few levels on average); no `textLength`, `dominant-baseline`, vertical text, ligatures or shaping of complex scripts; `text-decoration` at the Go face's own place and thickness, thinner than Chrome's |
-| `textPath`'s `method`, `spacing`, `side` and the path's `pathLength`; text after a `textPath` in the same `text` | ignored; set from the path's end point |
-| an `image` of a file | not fetched, and named in a warning: only `data:` addresses are drawn |
+| text after a `textPath` in the same `text` | set from the path's end point |
+| an `image` or an `feImage` of a file | not fetched, and named in a warning: only `data:` addresses are drawn |
 | an SVG `image` sized by its own `width` and `height` with no `viewBox`, under a `preserveAspectRatio` other than the default | fitted from its own size as if it had a view box of it |
 | hairline strokes, dashes along curves | differ a little from Chrome's |
 | `currentColor` in an `img` or a `url()`, `image-rendering: pixelated` | black, as in Chrome, where only an `svg` element takes the page's colour; ignored |

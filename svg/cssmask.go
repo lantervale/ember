@@ -1,6 +1,14 @@
 package svg
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
+
+const (
+	valLuminance = "luminance"
+	valNoClip    = "no-clip"
+)
 
 // maskLayer is a mask of CSS: its image, how it is read, repeated and
 // placed, from the mask shorthand and its longhands.
@@ -12,10 +20,11 @@ type maskLayer struct {
 	origin, clip string
 }
 
-// maskLayerOf reads an element's mask properties; odd is set for what
-// they ask that is not drawn: more layers than one, a size or a place.
-func maskLayerOf(props map[string]string) (layer maskLayer, odd bool) {
-	layer = maskLayer{repeat: [2]bool{true, true}, origin: "border-box", clip: "border-box"}
+// maskLayerOf reads an element's mask properties, and whether they ask
+// for what is not drawn: more layers than one, a size or a place.
+func maskLayerOf(props map[string]string) (maskLayer, bool) {
+	layer := maskLayer{repeat: [2]bool{true, true}, origin: boxBorder, clip: boxBorder}
+	odd := false
 	if v := strings.TrimSpace(props["mask"]); v != "" {
 		layers := splitCommas(v)
 		odd = len(layers) > 1
@@ -26,11 +35,11 @@ func maskLayerOf(props map[string]string) (layer maskLayer, odd bool) {
 			switch {
 			case strings.Contains(w, "(") || lw == none:
 				layer.image = w
-			case lw == "alpha" || lw == "luminance" || lw == "match-source":
-				layer.luminance = lw == "luminance"
+			case lw == "alpha" || lw == valLuminance || lw == "match-source":
+				layer.luminance = lw == valLuminance
 			case setRepeat(&layer, lw, repeats):
 				repeats++
-			case lw == "no-clip":
+			case lw == valNoClip:
 				layer.clip = lw
 			case isBox(lw):
 				if boxes == 0 {
@@ -51,7 +60,7 @@ func maskLayerOf(props map[string]string) (layer maskLayer, odd bool) {
 		layer.image = layers[0]
 	}
 	if v := strings.ToLower(strings.TrimSpace(props["mask-mode"])); v != "" {
-		layer.luminance = v == "luminance"
+		layer.luminance = v == valLuminance
 	}
 	if v := strings.TrimSpace(props["mask-repeat"]); v != "" {
 		layer.repeat = [2]bool{true, true}
@@ -62,11 +71,13 @@ func maskLayerOf(props map[string]string) (layer maskLayer, odd bool) {
 	if v := strings.ToLower(strings.TrimSpace(props["mask-origin"])); isBox(v) {
 		layer.origin = v
 	}
-	if v := strings.ToLower(strings.TrimSpace(props["mask-clip"])); isBox(v) || v == "no-clip" {
+	if v := strings.ToLower(strings.TrimSpace(props["mask-clip"])); isBox(v) || v == valNoClip {
 		layer.clip = v
 	}
-	for _, k := range [...]string{"mask-size", "mask-position"} {
-		if v := strings.TrimSpace(props[k]); v != "" && v != valAuto && v != "0% 0%" && v != "0 0" {
+	for k, plain := range map[string][]string{
+		"mask-size": {valAuto}, "mask-position": {"0% 0%", "0 0", "left top"}, "mask-composite": {"add"},
+	} {
+		if v := strings.ToLower(strings.TrimSpace(props[k])); v != "" && !slices.Contains(plain, v) {
 			odd = true
 		}
 	}
@@ -90,7 +101,7 @@ func isImage(v string) bool {
 
 func isBox(w string) bool {
 	switch w {
-	case "border-box", "padding-box", "content-box", "margin-box", "fill-box", "stroke-box", "view-box":
+	case boxBorder, "padding-box", "content-box", "margin-box", boxFill, "stroke-box", "view-box":
 		return true
 	}
 	return false
@@ -125,8 +136,8 @@ func setRepeat(layer *maskLayer, w string, nth int) bool {
 // draw.
 func (b *builder) cssMask(layer maskLayer, st *style, m Matrix, items []Item, bbox Box) *Mask {
 	originName := layer.origin
-	if originName == "border-box" {
-		originName = "fill-box"
+	if originName == boxBorder {
+		originName = boxFill
 	}
 	origin, _ := b.referenceBox(originName, items, bbox)
 	g, ok := cssGradient(layer.image, origin, st)
@@ -140,7 +151,7 @@ func (b *builder) cssMask(layer maskLayer, st *style, m Matrix, items []Item, bb
 	mk := &Mask{Alpha: !layer.luminance}
 	stroke, _ := b.referenceBox("stroke-box", items, bbox)
 	area := union(stroke, Box{0, 0, b.vw, b.vh})
-	if layer.clip != "no-clip" {
+	if layer.clip != valNoClip {
 		area, _ = b.referenceBox(layer.clip, items, bbox)
 		mk.Region = rectClip(area, m)
 	}

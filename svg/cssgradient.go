@@ -149,7 +149,7 @@ func radialShape(g *Gradient, v string, box Box, em float64) (float64, bool) {
 				return 0, false
 			}
 			shape = w
-		case "closest-side", "farthest-side", "closest-corner", "farthest-corner":
+		case closestSide, farthestSide, "closest-corner", "farthest-corner":
 			size = w
 		default:
 			lengths = append(lengths, w)
@@ -171,12 +171,12 @@ func radialShape(g *Gradient, v string, box Box, em float64) (float64, bool) {
 		}
 		ry = rx
 	case len(lengths) == 2 && shape == elemEllipse:
-		rx, okX := length(lengths[0], lengthContext{whole: box.W, em: em})
-		ry, okY := length(lengths[1], lengthContext{whole: box.H, em: em})
-		if !okX || !okY || rx < 0 || ry < 0 {
+		var okY bool
+		rx, ok = length(lengths[0], lengthContext{whole: box.W, em: em})
+		ry, okY = length(lengths[1], lengthContext{whole: box.H, em: em})
+		if !ok || !okY || rx < 0 || ry < 0 {
 			return 0, false
 		}
-		return setRadial(g, c, rx, ry), true
 	case len(lengths) != 0:
 		return 0, false
 	default:
