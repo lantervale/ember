@@ -269,13 +269,7 @@ func (s *Session) Mouse(kind string, at geom.Vec2, clicks int) {
 // with Shift held, as extending a selection by the keyboard does.
 func (s *Session) ShiftArrow(key string) {
 	s.t.Helper()
-	const shift = 8
-	// the Windows key codes, which Blink's editing commands read
-	code := map[string]int{"ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40}[key]
-	for _, kind := range []string{"rawKeyDown", "keyUp"} {
-		s.call("Input.dispatchKeyEvent", map[string]any{"type": kind, "key": key, "code": key,
-			"windowsVirtualKeyCode": code, "modifiers": shift}, nil)
-	}
+	s.Key(key, Shift)
 }
 
 // Shot is the viewport as Chrome shows it now, in device pixels.
