@@ -98,7 +98,9 @@ func TestAnimationsDecodeToChromesFramesTimesAndLoops(t *testing.T) {
 		if w.Repetitions != nil {
 			plays = *w.Repetitions + 1
 		}
-		assert.Equal(t, plays, got.Plays, "%s plays", name)
+		if len(w.Frames) > 1 {
+			assert.Equal(t, plays, got.Plays, "%s plays", name)
+		}
 		require.Len(t, got.Frames, len(w.Frames), name)
 		for i, f := range w.Frames {
 			assert.Equal(t, time.Duration(f.Duration)*time.Microsecond, got.Delays[i], "%s frame %d", name, i)

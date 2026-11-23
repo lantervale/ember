@@ -78,7 +78,7 @@ func (p *Picture) add(canvas *image.NRGBA, delay time.Duration) bool {
 }
 
 // Decoder reads an animation: nil and no error for a picture of one
-// frame, which the image package reads.
+// frame the image package reads, a Still for one it doesn't.
 type Decoder func(data []byte) (*Picture, error)
 
 type format struct {
@@ -162,6 +162,18 @@ func (c *Canvas) Save() []byte { return bytes.Clone(c.Pix) }
 
 // Restore puts back what Save kept.
 func (c *Canvas) Restore(saved []byte) { copy(c.Pix, saved) }
+
+// Still is the one frame drawn so far, as a picture that doesn't move:
+// for a file the image package can't read, nil when there is none.
+func (c *Canvas) Still() *Picture {
+	if len(c.pic.Frames) == 0 {
+		return nil
+	}
+	return &Picture{Frames: c.pic.Frames[:1], Delays: c.pic.Delays[:1], Plays: 1}
+}
+
+// Moves reports whether p is an animation, not a Still.
+func (p *Picture) Moves() bool { return len(p.Frames) > 1 }
 
 // Picture is the animation drawn so far, nil when it holds one frame
 // or none.

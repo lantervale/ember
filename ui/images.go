@@ -143,8 +143,10 @@ func (d *Document) landImages() {
 			continue
 		case got.vec != nil:
 			d.keepVector(got.url, got.vec, got.warning, true)
-		case got.anim != nil:
+		case got.anim != nil && got.anim.Moves():
 			d.images[got.url] = d.play(got.url, got.anim)
+		case got.anim != nil:
+			d.images[got.url] = twod.NewTexture(got.anim.Frames[0], twod.Encoded())
 		default:
 			d.images[got.url] = twod.NewTexture(got.img, twod.Encoded())
 		}
@@ -204,8 +206,11 @@ func (d *Document) decoded(url string, b []byte) *twod.Texture {
 		return nil
 	}
 	anim, err := animated.Decode(b)
-	if anim != nil {
+	switch {
+	case anim != nil && anim.Moves():
 		return d.play(url, anim)
+	case anim != nil:
+		return twod.NewTexture(anim.Frames[0], twod.Encoded())
 	}
 	if err != nil {
 		d.warn(fmt.Errorf("ui: image %s: %w", url, err))
