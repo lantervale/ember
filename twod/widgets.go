@@ -72,6 +72,9 @@ type Canvas struct {
 	keptUsed int
 	open     []*Picture
 	effects  map[string]*effects
+	// ended are the passes of the pictures ended, in the order the GPU
+	// draws them, until placed among passes.
+	ended []*draw.Pass
 }
 
 // ShowCursor asks for the pointer's look this frame, such as

@@ -26,8 +26,7 @@ var (
 // initialStyle is style.Initial with the initial values it leaves out:
 // border widths are medium, used only under a border-style (finish),
 // outline-width is medium whatever outline-style says, as in Chrome,
-// corners are 0, and the transform origin and mask position are
-// percentages.
+// corners are 0, and the transform and object origins are percentages.
 func initialStyle() style.Computed {
 	c := style.Initial()
 	c.Border = style.Sides[float32]{Top: 3, Right: 3, Bottom: 3, Left: 3}
@@ -39,7 +38,6 @@ func initialStyle() style.Computed {
 	half := style.Length{Kind: style.Fixed, Percent: 50, IsPercent: true}
 	c.TransformOrigin = style.Size[style.Length]{Width: half, Height: half}
 	c.AccentAuto, c.CaretAuto = true, true
-	c.MaskPosition = style.TopLeft
 	c.ObjectPosition = style.BackgroundPosition{X: half, Y: half}
 	return c
 }
@@ -139,9 +137,12 @@ type restyler struct {
 	// browser reads style attributes as a browser does
 	// (Transitions.BrowserSheets).
 	browser bool
-	// before, after and marker are set when some sheet has a rule for the
-	// pseudo-element: only then is one looked for.
-	before, after, marker bool
+	// before, after, marker, firstLine and firstLetter are set when some
+	// sheet has a rule for the pseudo-element: only then is one looked for.
+	before, after, marker, firstLine, firstLetter bool
+	// styles are the sheets' counter styles, worked out when first asked
+	// for (counterStyles).
+	styles *counterStyles
 	// counts is set once an element counts: a numbered list item, a
 	// counter property, or generated content of counters or quotes; and
 	// recount when what the counters read may have changed.
@@ -150,12 +151,22 @@ type restyler struct {
 
 // run restyles the tree under root, all of it when stale, then counts
 // its counters again where they may have moved.
+// counterStyles are the counter styles of r's sheets.
+func (r *restyler) counterStyles() *counterStyles {
+	if r.styles == nil {
+		r.styles = authorStyles(r.sheets, Media{})
+	}
+	return r.styles
+}
+
 func (r *restyler) run(root *dom.Node, stale bool) {
 	for _, s := range r.sheets {
 		x := s.indexed()
 		r.before = r.before || x.pseudos["before"] != nil
 		r.after = r.after || x.pseudos["after"] != nil
 		r.marker = r.marker || x.pseudos["marker"] != nil
+		r.firstLine = r.firstLine || x.pseudos["first-line"] != nil
+		r.firstLetter = r.firstLetter || x.pseudos["first-letter"] != nil
 		r.siblings = r.siblings || x.siblings
 		r.treeStates |= x.aboveStates
 		r.besideStates |= x.besideStates
@@ -174,7 +185,9 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.anchor(root)
 	}
 	r.visit(root, nil, 0, stale, stale)
+	r.recount = r.recount || stale
 	r.count(root)
+	r.firsts(root)
 }
 
 // countsOn reports a change of an element, as dom.Pipeline.Changed names
@@ -417,6 +430,7 @@ var colored = map[string]bool{
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
 	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
+	"backdrop-filter": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -514,7 +528,8 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
-	if c.ListItem && c.ListStyle.Numeric() || len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
+	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
+		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
 		r.counts = true
 	}
 	return &c
@@ -1020,6 +1035,7 @@ func (x *ctx) finish(root bool) {
 	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	c.Filters = followFilterColor(c.Filters, c.Color)
+	c.BackdropFilters = followFilterColor(c.BackdropFilters, c.Color)
 	if c.AccentAuto {
 		c.AccentColor = c.Color
 	}
@@ -1546,8 +1562,8 @@ var props = func() map[string]prop {
 		"column-width": lengthField(func(c *style.Computed) *style.Length { return &c.ColumnWidth }, sizeLength),
 		"column-fill": field(func(c *style.Computed) *bool { return &c.ColumnFillAuto },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "auto") }, flips[bool]()),
-		"column-span": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {},
-			anim: anim{kind: discrete}},
+		"column-span": field(func(c *style.Computed) *bool { return &c.ColumnSpanAll },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], kwAll) }, flips[bool]()),
 		"column-rule-width": field(func(c *style.Computed) *float32 { return &c.ColumnRuleWidth }, borderWidthOf, widths),
 		"column-rule-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.ColumnRuleStyle }, borderStyles),
 		"column-rule-color": currentField(style.ColumnRuleCurrent,
@@ -1677,6 +1693,8 @@ var props = func() map[string]prop {
 		"text-indent": lengthField(func(c *style.Computed) *style.Length { return &c.TextIndent }, anyLength),
 		"caption-side": keyword(func(c *style.Computed) *style.CaptionSide { return &c.CaptionSide },
 			map[string]style.CaptionSide{"top": style.CaptionTop, "bottom": style.CaptionBottom}),
+		"empty-cells": field(func(c *style.Computed) *bool { return &c.EmptyCellsHide },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "hide") }, flips[bool]()),
 		"border-collapse": field(func(c *style.Computed) *bool { return &c.BorderCollapse },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }, flips[bool]()),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
@@ -1709,10 +1727,25 @@ var props = func() map[string]prop {
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
-		"list-style-type": keyword(func(c *style.Computed) *style.ListStyle { return &c.ListStyle }, listStyles),
-		"visibility": field(func(c *style.Computed) *bool { return &c.Visible }, func(_ *ctx, v []Component) bool {
-			return isWord(v[0], "visible")
-		}, visibility),
+		"list-style-image": field(func(c *style.Computed) *string { return &c.ListImage },
+			func(x *ctx, v []Component) string {
+				if isWord(v[0], kwNone) {
+					return ""
+				}
+				return imageSource(x, v)
+			}, flips[string]()),
+		"list-style-type": {
+			set:     listStyle,
+			inherit: func(dst, src *style.Computed) { dst.ListStyle, dst.ListName = src.ListStyle, src.ListName },
+			anim:    anim{kind: discrete},
+		},
+		"visibility": {
+			set: func(x *ctx, v []Component) {
+				x.c.Visible, x.c.Collapse = isWord(v[0], "visible"), isWord(v[0], "collapse")
+			},
+			inherit: func(dst, src *style.Computed) { dst.Visible, dst.Collapse = src.Visible, src.Collapse },
+			anim:    visibility.on(func(c *style.Computed) *bool { return &c.Visible }),
+		},
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },
@@ -1760,14 +1793,27 @@ var props = func() map[string]prop {
 			wordOf(map[string]style.BackgroundBox{
 				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
 			}), flips[[]style.BackgroundBox]()),
-		"mask-image": field(func(c *style.Computed) *style.Image { return &c.MaskImage },
-			func(x *ctx, v []Component) style.Image { return style.Image{Source: imageSource(x, v)} }, flips[style.Image]()),
-		"mask-size": field(func(c *style.Computed) *style.BackgroundSize { return &c.MaskSize },
-			(*ctx).backgroundSize, backgroundSizes),
-		"mask-repeat": field(func(c *style.Computed) *style.BackgroundRepeat { return &c.MaskRepeat },
-			tiling, flips[style.BackgroundRepeat]()),
-		"mask-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.MaskPosition },
-			(*ctx).position, positions),
+		"mask-image": layered(func(c *style.Computed) *[]style.Image { return &c.MaskImages },
+			backgroundImage, flips[[]style.Image]()),
+		"mask-size": layered(func(c *style.Computed) *[]style.BackgroundSize { return &c.MaskSizes },
+			(*ctx).backgroundSize, repeatable(backgroundSizes, style.BackgroundSize{})),
+		"mask-repeat": layered(func(c *style.Computed) *[]style.BackgroundRepeat { return &c.MaskRepeats },
+			tiling, flips[[]style.BackgroundRepeat]()),
+		"mask-position": layered(func(c *style.Computed) *[]style.BackgroundPosition { return &c.MaskPositions },
+			(*ctx).position, repeatable(positions, style.TopLeft)),
+		"mask-origin": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.MaskOrigins },
+			wordOf(maskBoxes), flips[[]style.BackgroundBox]()),
+		"mask-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.MaskClips },
+			wordOf(maskBoxes), flips[[]style.BackgroundBox]()),
+		"mask-mode": layered(func(c *style.Computed) *[]style.MaskMode { return &c.MaskModes },
+			wordOf(map[string]style.MaskMode{
+				"match-source": style.MaskMatchSource, "alpha": style.MaskAlpha, "luminance": style.MaskLuminance,
+			}), flips[[]style.MaskMode]()),
+		"mask-composite": layered(func(c *style.Computed) *[]style.MaskComposite { return &c.MaskComposites },
+			wordOf(map[string]style.MaskComposite{
+				"add": style.CompositeAdd, "subtract": style.CompositeSubtract, "intersect": style.CompositeIntersect,
+				"exclude": style.CompositeExclude,
+			}), flips[[]style.MaskComposite]()),
 		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
 			clipPaths).painted(),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),
@@ -1863,6 +1909,13 @@ var props = func() map[string]prop {
 			(*ctx).transform, transforms).painted(),
 		"filter": field(func(c *style.Computed) *[]style.Filter { return &c.Filters }, (*ctx).filters,
 			filters).painted(),
+		"backdrop-filter": field(func(c *style.Computed) *[]style.Filter { return &c.BackdropFilters }, (*ctx).filters,
+			filters).painted(),
+		"mix-blend-mode": keyword(func(c *style.Computed) *style.BlendMode { return &c.BlendMode }, blendModes),
+		"isolation": keyword(func(c *style.Computed) *bool { return &c.Isolate },
+			map[string]bool{"auto": false, "isolate": true}),
+		"background-blend-mode": layered(func(c *style.Computed) *[]style.BlendMode { return &c.BackgroundBlends },
+			wordOf(blendModes), flips[[]style.BlendMode]()),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
 		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
@@ -2059,6 +2112,15 @@ func layered[T any](get func(*style.Computed) *[]T, each func(x *ctx, v []Compon
 
 func wordOf[T any](m map[string]T) func(*ctx, []Component) T {
 	return func(_ *ctx, v []Component) T { return m[strings.ToLower(v[0].Text)] }
+}
+
+// maskBoxes are the boxes mask-origin and mask-clip name; the border box
+// is both one's initial.
+//
+//nolint:gochecknoglobals // lookup table
+var maskBoxes = map[string]style.BackgroundBox{
+	"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
+	"fill-box": style.FillBox, "stroke-box": style.StrokeBox, "view-box": style.ViewBox, "no-clip": style.NoClip,
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -2315,6 +2377,16 @@ func (x *ctx) shadows(v []Component) []style.Shadow {
 		out = append(out, s)
 	}
 	return out
+}
+
+//nolint:gochecknoglobals // lookup table
+var blendModes = map[string]style.BlendMode{
+	"normal": style.BlendNormal, "multiply": style.BlendMultiply, "screen": style.BlendScreen,
+	"overlay": style.BlendOverlay, "darken": style.BlendDarken, "lighten": style.BlendLighten,
+	"color-dodge": style.BlendColorDodge, "color-burn": style.BlendColorBurn, "hard-light": style.BlendHardLight,
+	"soft-light": style.BlendSoftLight, "difference": style.BlendDifference, "exclusion": style.BlendExclusion,
+	"hue": style.BlendHue, "saturation": style.BlendSaturation, "color": style.BlendColor,
+	"luminosity": style.BlendLuminosity,
 }
 
 //nolint:gochecknoglobals // lookup table

@@ -48,6 +48,10 @@ type Fragment struct {
 	Start int32
 	// Ellipsis is set when Text was cut and ends with "…".
 	Ellipsis bool
+	// Style is the text's style on a first line a ::first-line styles,
+	// nil where the run's own draws it. Only a run's first fragments
+	// have one.
+	Style *style.Computed
 }
 
 // Box is one box. Positions are relative to the parent box's border box,
@@ -93,8 +97,16 @@ type Box struct {
 	// not Loose where its Ink is out of view or misses the pointer.
 	Ink   geom.Rect
 	Loose bool
+	// Group is set with Ink on an element paint draws, with all it holds,
+	// as one picture its descendants read: one an element under it mixes
+	// with (mix-blend-mode), or the backdrop root an element under it
+	// filters what lies behind it up to (backdrop-filter).
+	Group bool
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
+	// Picture is the address of the picture a Marker shows, its item's
+	// list-style-image, "" for its text or its bullet.
+	Picture string
 	// Fragments is an inline element's border box on each line it spans,
 	// in the box's space: the first holds its left edge and the last its
 	// right, as Chrome's getClientRects. With Broken they are a block's
@@ -111,17 +123,27 @@ type Box struct {
 	// its grid: its background, border and shadows frame the box less it, as
 	// Chrome's table wrapper leaves the captions out.
 	Wrap Edges
+	// Cut marks a table cell a collapsed row or column narrowed: what it
+	// holds is clipped to its padding box, as Chrome clips it.
+	Cut bool
 	// Collapsed is the borders of a table that collapses them, which it
 	// draws over its cells: nil for any other box.
 	Collapsed []Edge
 }
 
 // Columns are a multi-column container's columns, side by side from its
-// content box's start: Count of them hold content, each Width wide and
-// Height high, Gap apart.
+// content box's start, each Width wide and Gap apart, in rows the blocks
+// spanning them cut.
 type Columns struct {
-	Count              int
-	Width, Gap, Height float32
+	Width, Gap float32
+	Rows       []ColumnRow
+}
+
+// ColumnRow is a row of columns: Count of them hold content, each
+// Height high, Top down from the content box's top.
+type ColumnRow struct {
+	Count       int
+	Top, Height float32
 }
 
 // Append adds children to b.
@@ -172,6 +194,9 @@ type Tree struct {
 	// else changes a box's size, its place or the style it is shown with,
 	// but a scroll, clears it.
 	Inked bool
+	// Grouped is set with Inked when the page itself is such a group: an
+	// element mixes with, or filters, what the page drew under it.
+	Grouped bool
 }
 
 // Metrics are a font's vertical metrics at a size, in points: CSS's

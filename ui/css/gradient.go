@@ -28,7 +28,8 @@ func gradientKind(c Component) (style.GradientKind, bool) {
 // gradientTerm checks a linear-, conic- or radial-gradient(): its own
 // first part when it has one (an angle or "to" a side or corner; from an
 // angle and at a position; a shape, a size keyword and at a position),
-// then two colour stops or more, each a colour with up to two positions,
+// then two colour stops or more, each a colour with up to two positions
+// (a colour with two is two stops),
 // lengths or percentages, a conic one's angles or percentages.
 // Transition hints and repeating gradients aren't in the subset.
 //
@@ -42,8 +43,12 @@ var gradientTerm = term(func(c Component) error {
 	if len(parts) > 0 && prelude(kind, parts[0]) == nil {
 		parts = parts[1:]
 	}
-	if len(parts) < 2 {
-		return fmt.Errorf("%s() needs two colour stops, found %d", c.Text, len(parts))
+	stops := 0
+	for _, p := range parts {
+		stops += max(len(p)-1, 1)
+	}
+	if stops < 2 {
+		return fmt.Errorf("%s() needs two colour stops, found %d", c.Text, stops)
 	}
 	for _, p := range parts {
 		if len(p) == 0 || len(p) > 3 {

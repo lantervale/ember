@@ -9,13 +9,16 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
-// Pictures is a Surface that draws a part apart, as one picture, and
-// shows it through effects: *twod.Canvas is one. On a Surface that isn't,
-// filters are not drawn.
+// Pictures is a Surface that draws a part apart, as one picture, shows
+// it through effects and cuts by its alpha: *twod.Canvas is one. On a
+// Surface that isn't, filters and masks are not drawn.
 type Pictures interface {
 	BeginPicture()
 	EndPicture(margin float32) *twod.Picture
 	DrawPicture(p *twod.Picture, effects ...*render.Effect)
+	SumPicture(p *twod.Picture, effects ...*render.Effect)
+	PushClipPicture(p *twod.Picture, opts ...twod.MaskOption)
+	DrawPictureOver(p, backdrop *twod.Picture, m twod.Mix, effects ...*render.Effect)
 	Effect(shader string) *render.Effect
 }
 
@@ -98,6 +101,7 @@ func (p *painter) beginFilters(e entry, st *style.Computed) *filtering {
 	for range f.open + 1 {
 		on.BeginPicture()
 	}
+	p.pictures += f.open + 1
 	p.floor, p.spread = e.clip, p.spread+filterReach(st.Filters)
 	return f
 }
@@ -111,6 +115,7 @@ func (p *painter) endFilters(f *filtering, c *clip) {
 	}
 	p.use(nil)
 	p.floor, p.spread = f.floor, f.spread
+	p.pictures -= f.open + 1
 	xf := p.s.Transform()
 	scale := float32(math.Sqrt(math.Abs(float64(xf.X.X*xf.Y.Y - xf.X.Y*xf.Y.X))))
 	from := 0

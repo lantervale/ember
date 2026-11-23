@@ -6,8 +6,10 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/internal/wgpu"
+	"github.com/lantervale/ember/render"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,9 +31,20 @@ func TestEachBlendModeHasItsBlendState(t *testing.T) {
 			Color: wgpu.BlendComponent{Op: wgpu.Max, Src: wgpu.One, Dst: wgpu.One},
 			Alpha: wgpu.BlendComponent{Op: wgpu.Max, Src: wgpu.One, Dst: wgpu.One},
 		},
+		draw.Plus: {
+			Color: wgpu.BlendComponent{Op: wgpu.Add, Src: wgpu.One, Dst: wgpu.One},
+			Alpha: wgpu.BlendComponent{Op: wgpu.Add, Src: wgpu.One, Dst: wgpu.One},
+		},
 	} {
 		assert.Equal(t, want, blendOf(m), "blend %d", m)
 	}
+}
+
+func TestAnInvertedCutIsFlaggedInItsUniforms(t *testing.T) {
+	b := draw.Batch{Cut: draw.Cut{Mask: &render.Texture{}, ToMask: geom.Identity2D()}}
+	assert.Zero(t, batchUniforms(&b, target2D{}, geom.V2(10, 10), 1, 0, 0).CutV[3])
+	b.Cut.Inverted = true
+	assert.Equal(t, float32(1), batchUniforms(&b, target2D{}, geom.V2(10, 10), 1, 0, 0).CutV[3])
 }
 
 func TestTheUniformsLieAsUIWGSLsDrawStruct(t *testing.T) {

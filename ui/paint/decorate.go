@@ -139,6 +139,20 @@ func (p *painter) columnBackground(col *box.Box, at geom.Vec2, c color.Color) {
 	}
 }
 
+// hiddenEmpty reports a cell that empty-cells: hide leaves undrawn: its borders apart
+// and nothing in it, white space aside; an element, even an empty one, is something.
+func hiddenEmpty(b *box.Box, st *style.Computed) bool {
+	if !st.EmptyCellsHide || partOf(b) != style.TableCell || sharesBorders(b) {
+		return false
+	}
+	for _, c := range b.Children {
+		if c.Kind != box.TextRun || len(c.Lines) > 0 {
+			return false
+		}
+	}
+	return b.Node == nil || !slices.ContainsFunc(b.Node.Children(), func(c *dom.Node) bool { return !c.IsText() })
+}
+
 // sharesBorders reports a table that collapses its borders, or a cell of one: the table
 // draws them all, over its cells.
 func sharesBorders(b *box.Box) bool {
@@ -235,6 +249,8 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		p.s.PushClip(r)
 		defer p.s.PopClip()
 	}
+	mixing := p.beginLayers(st)
+	defer mixing.end()
 	if st.Background.A > 0 && !tracked(b) {
 		switch {
 		case st.TablePart == style.TableRow:
@@ -244,8 +260,8 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 			p.groupBackground(b, e.at, fade(st.Background, alpha))
 		case st.TablePart == style.TableColumn || st.TablePart == style.TableColumnGroup:
 			p.columnBackground(b, e.at, fade(st.Background, alpha))
-		case st.MaskImage.Source != "":
-			p.maskedFill(r, radius, st, alpha)
+		case silhouetted(b, st):
+			p.maskedFill(b, r, edges, radius, st, alpha)
 		default:
 			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundLayer(n-1).Clip, style.UnderBorder))
 			p.fill(clip, rounding, fade(st.Background, alpha))
@@ -253,7 +269,7 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 	}
 	for i := n - 1; i >= 0; i-- {
 		if l := st.BackgroundLayer(i); l.Image.Source != "" || l.Image.Gradient != nil {
-			p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha)
+			mixing.layer(l.Blend, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
 		}
 	}
 }
@@ -313,7 +329,7 @@ func backgroundBox(
 			Bottom: edges.Bottom + b.Padding.Bottom, Left: edges.Left + b.Padding.Left,
 		}
 		return inside(r, in), radius.inside(in)
-	case style.InitialBox, style.UnderBorder:
+	case style.InitialBox, style.UnderBorder, style.FillBox, style.StrokeBox, style.ViewBox, style.NoClip:
 	}
 	return r, radius
 }
@@ -336,6 +352,9 @@ func (p *painter) decorate(e entry, alpha float32) {
 		for _, pc := range ps {
 			p.probed(b, p.snap(pc.rect))
 		}
+		return
+	}
+	if hiddenEmpty(b, st) {
 		return
 	}
 	radius := radiiOf(st, framed(b))
@@ -390,11 +409,11 @@ func (p *painter) decorate(e entry, alpha float32) {
 
 // columnRules draws a multi-column container's column-rule in the middle
 // of each gap between two columns holding content, as high as the
-// columns, as a border of its style would be drawn.
+// columns, row by row, as a border of its style would be drawn.
 func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	c := e.b.Columns
 	w := st.ColumnRuleWidth
-	if c == nil || c.Count < 2 || st.ColumnRuleStyle == style.BorderNone || w <= 0 {
+	if c == nil || st.ColumnRuleStyle == style.BorderNone || w <= 0 {
 		return
 	}
 	var rule style.Computed
@@ -409,9 +428,11 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	}
 	b := e.b
 	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
-	for k := 1; k < c.Count; k++ {
-		x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
-		p.border(p.snap(geom.Rect{X: x, Y: top, W: w, H: c.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
+	for _, r := range c.Rows {
+		for k := 1; k < r.Count; k++ {
+			x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
+			p.border(p.snap(geom.Rect{X: x, Y: top + r.Top, W: w, H: r.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
+		}
 	}
 }
 
@@ -483,15 +504,6 @@ const maxTiles = 4096
 func (p *painter) backgroundImage(view, area geom.Rect, radius radii, l *style.BackgroundLayer, st *style.Computed,
 	alpha float32) {
 	p.tiled(view, area, radius, l, st, alpha, fade(color.White, alpha), false)
-}
-
-// maskedFill paints st's background colour through its mask-image over
-// r, the border box: the picture's alpha, sized, placed and tiled as a
-// background image is, in the colour (decision 0093). Nothing is painted
-// until the picture is there.
-func (p *painter) maskedFill(r geom.Rect, radius radii, st *style.Computed, alpha float32) {
-	mask := style.BackgroundLayer{Image: st.MaskImage, Size: st.MaskSize, Repeat: st.MaskRepeat, Position: st.MaskPosition}
-	p.tiled(r, r, radius, &mask, st, alpha, fade(st.Background, alpha), true)
 }
 
 // tiled draws l's picture tinted by tint, as its shape alone when shape
@@ -1615,10 +1627,49 @@ func (r radii) grown(d float32) radii {
 	return r
 }
 
-// text paints a text run's fragments.
+// text paints a text run's fragments: those of a first line a ::first-line
+// styles in its style, the others in the run's.
 func (p *painter) text(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	if b.Kind != box.TextRun || !st.Visible || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+		return
+	}
+	var parts []Selected
+	if p.sel != nil {
+		parts = p.sel.Parts(b)
+	}
+	first := 0
+	for first < len(b.Lines) && b.Lines[first].Style != nil {
+		first++
+	}
+	if first == 0 {
+		p.textLines(e, st, parts, alpha)
+		return
+	}
+	head, rest := *b, *b
+	head.Lines, rest.Lines = b.Lines[:first], b.Lines[first:]
+	var headParts, restParts []Selected
+	for _, s := range parts {
+		if s.Line < first {
+			headParts = append(headParts, s)
+		} else {
+			s.Line -= first
+			restParts = append(restParts, s)
+		}
+	}
+	at := e
+	at.b = &head
+	p.textLines(at, b.Lines[0].Style, headParts, alpha)
+	if len(rest.Lines) > 0 {
+		at.b = &rest
+		p.textLines(at, st, restParts, alpha)
+	}
+}
+
+// textLines paints the fragments of e's box in st, parts of them selected.
+func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha float32) {
+	b := e.b
+	if !st.Visible {
 		return
 	}
 	c := fade(st.Color, alpha)
@@ -1628,12 +1679,9 @@ func (p *painter) text(e entry, alpha float32) {
 			c = fade(st.PlaceholderColor, alpha)
 		}
 	}
-	var parts []Selected
 	ink := c
-	if p.sel != nil {
-		if parts = p.sel.Parts(b); len(parts) > 0 {
-			ink = p.highlight(e, st, parts, c, alpha)
-		}
+	if len(parts) > 0 {
+		ink = p.highlight(e, st, parts, c, alpha)
 	}
 	p.decorations(e, st, style.Underline|style.Overline, alpha)
 	if c.A <= 0 && ink == c {

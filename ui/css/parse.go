@@ -136,12 +136,13 @@ type Keyframe struct {
 
 // Sheet is a parsed stylesheet. Name is the file it came from.
 type Sheet struct {
-	Name      string
-	Rules     []Rule
-	Keyframes []Keyframes
-	faces     []FontFace
-	once      sync.Once
-	index     *index
+	Name          string
+	Rules         []Rule
+	Keyframes     []Keyframes
+	CounterStyles []CounterStyle
+	faces         []FontFace
+	once          sync.Once
+	index         *index
 	// media are its @media rules' queries, in the order they open.
 	media []*mediaList
 	// layers are the full names of its cascade layers (theme.dark), in
@@ -241,6 +242,12 @@ func (s *Sheet) String() string {
 			b.WriteString(" }")
 		}
 		b.WriteString(" }" + strings.Repeat(" }", len(k.media)) + "\n")
+	}
+	for _, cs := range s.CounterStyles {
+		for _, m := range cs.media {
+			b.WriteString("@media " + s.media[m].text + " { ")
+		}
+		b.WriteString(cs.String() + strings.Repeat(" }", len(cs.media)) + "\n")
 	}
 	return b.String()
 }
@@ -425,6 +432,8 @@ func (p *parser) atRule(t Token, in scope) {
 		p.container(t, in)
 	case name == atKeyframes:
 		p.keyframes(t, in)
+	case name == "counter-style":
+		p.counterStyle(t, in)
 	case name == "supports" && p.browser:
 		p.supports(t, in)
 	case name == "layer" && p.browser:
@@ -913,6 +922,7 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		}
 		if as != "" {
 			d.Name = as
+			v.plainWords(plain, d.Value)
 		}
 	}
 	if as, ok := logical[d.Name]; ok {

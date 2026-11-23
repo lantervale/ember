@@ -33,10 +33,11 @@ type counting struct {
 }
 
 // count works out, once the tree is styled, what stands where an element
-// is in the document: each list item's number, and the text of the
-// generated content that reads counters or quotes. It runs only for a
-// tree in which something counts, and only after a change that can move
-// a counter; what it changes is flagged for layout.
+// is in the document: each list item's number and marker, and the text
+// of the generated content that reads counters or quotes. It runs only
+// for a tree in which something counts, and only after a change that can
+// move a counter or restyles the whole tree; what it changes is flagged
+// for layout.
 func (r *restyler) count(root *dom.Node) {
 	data := dom.Data(root)
 	if r.counts && !data.Counts {
@@ -78,28 +79,37 @@ func (c *counting) element(n *dom.Node, depth int) {
 // generated counts a ::before or ::after box, a child of its element, and
 // gives it its text.
 func (c *counting) generated(origin, g *dom.Node, depth int) {
-	st := dom.Data(g).Style
+	gd := dom.Data(g)
+	st := gd.Style
 	c.apply(nil, st, depth)
+	if st.ListItem {
+		c.item(g, gd, st)
+	}
 	if c.r.fill(g, st, c.text(st)) {
 		flagLayout(origin)
 	}
 }
 
-// item gives a list item its number and its ::marker its text.
+// item gives a list item its number and its ::marker its text: its
+// content's, or the marker string of its list-style-type.
 func (c *counting) item(n *dom.Node, data *dom.Pipeline, st *style.Computed) {
 	ordinal := 0
 	if i := c.find(listItem); i >= 0 {
 		ordinal = c.stack[i].value
 	}
 	text, has := "", false
-	if m := data.Marker; m != nil && m.Content.Kind != style.ContentNormal {
+	switch m := data.Marker; {
+	case m != nil && m.Content.Kind != style.ContentNormal:
 		text, has = contentText(m.Content, c.text(m)), true
+	case st.ListStyle == style.ListCounter:
+		text, has = c.r.counterStyles().marker(st.ListName, ordinal), true
+	case st.ListStyle == style.ListString:
+		text, has = st.ListName, true
 	}
 	if data.Ordinal == ordinal && data.Counted && data.MarkerText == text && data.HasMarkerText == has {
 		return
 	}
-	shown := data.Ordinal != ordinal && (st.ListStyle.Numeric() || has) || data.MarkerText != text ||
-		data.HasMarkerText != has
+	shown := data.MarkerText != text || data.HasMarkerText != has
 	data.Ordinal, data.Counted, data.MarkerText, data.HasMarkerText = ordinal, true, text, has
 	if shown {
 		flagLayout(n)
@@ -246,16 +256,16 @@ func (c *counting) text(st *style.Computed) func(style.ContentItem) string {
 			if i := c.find(it.Name); i >= 0 {
 				value = c.stack[i].value
 			}
-			return it.Style.Format(value)
+			return c.represent(it.Style, value)
 		case style.ContentCounters:
 			var parts []string
 			for _, k := range c.stack {
 				if k.name == it.Name {
-					parts = append(parts, it.Style.Format(k.value))
+					parts = append(parts, c.represent(it.Style, k.value))
 				}
 			}
 			if parts == nil {
-				parts = []string{it.Style.Format(0)}
+				parts = []string{c.represent(it.Style, 0)}
 			}
 			return strings.Join(parts, it.Text)
 		case style.ContentOpenQuote, style.ContentNoOpenQuote:
@@ -275,6 +285,18 @@ func (c *counting) text(st *style.Computed) func(style.ContentItem) string {
 		}
 		return ""
 	}
+}
+
+// represent writes n in the counter style name counter() names: decimal
+// when it names none, nothing for none.
+func (c *counting) represent(name string, n int) string {
+	switch name {
+	case "":
+		name = kwDecimal
+	case kwNone:
+		return ""
+	}
+	return c.r.counterStyles().represent(name, n)
 }
 
 // autoQuotes are quotes: auto's marks, English's as Chrome's.
