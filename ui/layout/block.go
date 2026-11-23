@@ -621,7 +621,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			collapsible:     collapsibleIf(it.inSameBFC),
 		}
 		if left > 0 && it.inSameBFC {
-			in.clamp = clampIn{lines: left, more: clamp.more || i < lastInFlow, hides: clamp.hides}
+			in.clamp = clampIn{lines: left, more: clamp.more || i < lastInFlow, hides: clamp.hides, bare: clamp.bare}
 		}
 		if run == performLayout {
 			it.node.discarded = clamp.hides && some(clampEnd)

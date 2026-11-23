@@ -68,6 +68,7 @@ func (b *Box) equal(o *Box) bool {
 		b.ContainerType == o.ContainerType &&
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
+		b.NoEllipsis == o.NoEllipsis &&
 		b.WebkitBox == o.WebkitBox &&
 		b.BoxVertical == o.BoxVertical &&
 		b.WebkitLineClamp == o.WebkitLineClamp &&

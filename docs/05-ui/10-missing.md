@@ -77,7 +77,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
 | a `br` ending the last line a `-webkit-line-clamp` or `line-clamp` shows | no wider than before, where Chrome's is as wide as the ellipsis drawn in its place |
-| `line-clamp`'s longhands (`max-lines`, `block-ellipsis`, `continue`) and its values but a number and `none` | refused; past its last line the inline elements' backgrounds and borders, the floats and the positioned boxes are still drawn, and what it doesn't draw still takes the pointer |
+| `line-clamp: auto`, `-webkit-legacy` | refused, where Chrome clamps at the last line its height holds |
+| `line-clamp` with `no-ellipsis` ending inside a block of its own | as high as the clamped line ends, where Chrome's is that block's bottom margin higher |
+| past a `line-clamp`'s last line | the inline elements' backgrounds and borders, the floats and the positioned boxes are still drawn, and what it doesn't draw still takes the pointer |
 
 ## Backgrounds and borders
 

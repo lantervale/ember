@@ -227,8 +227,10 @@ type Box struct {
 	ContainerNames []string
 	// LineClamp is line-clamp: the lines a block container shows, 0 for
 	// none, an ellipsis ending the last when more follows, the content
-	// after it not drawn.
-	LineClamp int
+	// after it not drawn; NoEllipsis is its no-ellipsis, which leaves the
+	// ellipsis out.
+	LineClamp  int
+	NoEllipsis bool
 	// WebkitBox is display: -webkit-box or -webkit-inline-box, laid out
 	// as flex, or as flow-root clamped to WebkitLineClamp lines when
 	// BoxVertical (-webkit-box-orient: vertical) and that is set: Chrome's

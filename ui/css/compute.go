@@ -1826,7 +1826,19 @@ var props = func() map[string]prop {
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }, flips[bool]()),
 		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
 		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
-		"line-clamp":   field(func(c *style.Computed) *int { return &c.LineClamp }, clampOf, flips[int]()),
+		"line-clamp": {
+			set: func(x *ctx, v []Component) {
+				x.c.LineClamp, x.c.NoEllipsis = 0, false
+				for _, c := range v {
+					if c.Kind == Number {
+						x.c.LineClamp = int(c.Num)
+					}
+					x.c.NoEllipsis = x.c.NoEllipsis || isWord(c, "no-ellipsis")
+				}
+			},
+			inherit: func(dst, src *style.Computed) { dst.LineClamp, dst.NoEllipsis = src.LineClamp, src.NoEllipsis },
+			anim:    anim{kind: discrete},
+		},
 		"-webkit-line-clamp": field(func(c *style.Computed) *int { return &c.WebkitLineClamp }, clampOf,
 			flips[int]()),
 		"-webkit-box-orient": field(func(c *style.Computed) *bool { return &c.BoxVertical },

@@ -199,6 +199,22 @@ func repeated(t term, most int) check {
 	}
 }
 
+// checkLineClamp takes none, or a number of lines with no-ellipsis before or after it.
+func checkLineClamp(v []Component) error {
+	switch {
+	case len(v) == 1 && isWord(v[0], "none"):
+		return nil
+	case len(v) == 2 && isWord(v[0], "no-ellipsis"):
+		return positiveInteger(v[1])
+	case len(v) == 2:
+		if err := positiveInteger(v[0]); err != nil {
+			return err
+		}
+		return words("no-ellipsis")(v[1])
+	}
+	return single(positiveInteger)(v)
+}
+
 // checkBackgroundSize takes cover or contain alone, or a width then a
 // height, each a length, a percentage or auto.
 func checkBackgroundSize(v []Component) error {
@@ -352,7 +368,7 @@ var checks = map[string]check{
 	"break-before":              single(words(breakWords...)),
 	"break-after":               single(words(breakWords...)),
 	"orphans":                   single(positiveInteger),
-	"line-clamp":                single(either(positiveInteger, words("none"))),
+	"line-clamp":                checkLineClamp,
 	"-webkit-line-clamp":        single(either(positiveInteger, words("none"))),
 	"-webkit-box-orient":        single(words("horizontal", "vertical", "inline-axis", "block-axis")),
 	"-webkit-box-pack":          single(words("start", "end", "center", "justify")),

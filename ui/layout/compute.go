@@ -81,8 +81,8 @@ type clampIn struct {
 	lines int
 	more  bool
 	// hides is set when the content after the clamp is not drawn, as line-clamp's;
-	// -webkit-line-clamp's is.
-	hides bool
+	// -webkit-line-clamp's is; bare when its last line ends in no ellipsis.
+	hides, bare bool
 }
 
 // ends reports whether the clamp falls in a box of so many lines: past them, or at its
@@ -96,7 +96,7 @@ func (c clampIn) out(lines int) clampOut {
 	if !c.ends(lines) {
 		return clampOut{}
 	}
-	return clampOut{shown: c.lines, hides: c.hides, ellipsis: true}
+	return clampOut{shown: c.lines, hides: c.hides, ellipsis: !c.bare}
 }
 
 // textClamp is the clamp the text of n follows, none for a control's.
@@ -110,7 +110,7 @@ func textClamp(n *node, in clampIn) clampIn {
 // clampFor is the clamp n's lines follow: its own line-clamp's, or in's.
 func clampFor(n *node, in clampIn) clampIn {
 	if lines, keeps := n.st.Clamp(); lines > 0 {
-		return clampIn{lines: lines, hides: !keeps}
+		return clampIn{lines: lines, hides: !keeps, bare: n.st.NoEllipsis && !keeps}
 	}
 	return in
 }
