@@ -23,7 +23,7 @@ func TestVerticalAlignMatchesChrome(t *testing.T) {
 	src := ui.Attr("src", "tile.png")
 	cases := map[string]*ui.Document{}
 	for _, v := range []string{"baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
-		"7px", "-5px", "50%", "-25%", "calc(10% + 3px)"} {
+		"7px", "-5px", "50%", "-25%", "calc(10% + 3px)", "-webkit-baseline-middle"} {
 		at := "vertical-align: " + v
 		var ps []*ui.Node
 		for _, lh := range []string{"1.2", "40px", "normal", "8px"} {

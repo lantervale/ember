@@ -362,7 +362,8 @@ var checks = map[string]check{
 	"position":              single(words("static", "relative", "absolute", "fixed", "sticky")),
 	"float":                 single(words("none", "left", "right", "inline-start", "inline-end")),
 	"vertical-align": single(either(lengthPercent,
-		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom"))),
+		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
+			"-webkit-baseline-middle"))),
 	"clear":   single(words("none", "left", "right", "both", "inline-start", "inline-end")),
 	"top":     single(either(lengthPercent, words("auto"))),
 	"right":   single(either(lengthPercent, words("auto"))),
@@ -385,7 +386,8 @@ var checks = map[string]check{
 		return nil
 	},
 	"font-size": single(either(sizeLP,
-		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
+		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller",
+			"larger"))),
 	"font-style":     single(words("normal", "italic", "oblique")),
 	"font-weight":    single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
 	"line-height":    single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
@@ -544,7 +546,7 @@ func iterationCount(c Component) error {
 //nolint:gochecknoglobals // the keywords of two animation longhands
 var (
 	animationDirections = []string{"normal", "reverse", "alternate", "alternate-reverse"}
-	animationFills      = []string{kwNone, "forwards", "backwards", "both"}
+	animationFills      = []string{kwNone, "forwards", "backwards", kwBoth}
 )
 
 func timingFunction(c Component) error {

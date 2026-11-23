@@ -1191,6 +1191,9 @@ const (
 	AlignBottom
 	// AlignLength raises the box by the style's VerticalShift.
 	AlignLength
+	// AlignBaselineMiddle is -webkit-baseline-middle: the box's middle on its parent's
+	// baseline.
+	AlignBaselineMiddle
 )
 
 // ListStyle is a list-style-type: a list item's bullet or marker string,

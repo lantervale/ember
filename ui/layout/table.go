@@ -962,7 +962,12 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	}
 	colGone, rowGone := collapsedTracks(tracks, cols), collapsedRows(rows)
 	shownX, colAt := shownLines(widths, colGone, nil, sx, 0)
-	w -= colX[cols] - shownX[cols]
+	// A flex item keeps the width its container gave it, as wide as before the collapse,
+	// its rows too, as in Chrome; a grid item narrows as a block does.
+	kept := some(in.known.w) && inFlex(n)
+	if !kept {
+		w -= colX[cols] - shownX[cols]
+	}
 	above, below := t.captionHeights(n, w)
 	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
 	fullY, _ := shownLines(heights, nil, nil, sy, 0)
@@ -975,6 +980,9 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 
 	cellH := func(c slot) float32 { return fullY[c.row+c.rs] - fullY[c.row] - sy }
 	rowW := max(shownX[cols]-sx, 0)
+	if kept {
+		rowW = max(colX[cols]-sx, 0)
+	}
 	rowH := func(ri int) float32 { return max(rowY[ri+1]-rowAt[ri]-sy, 0) }
 	at := 0
 	place := func(r *node, origin point) {
@@ -1104,6 +1112,11 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 		}
 	}
 	return lowered, rowBase
+}
+
+// inFlex reports whether n is a flex item, sized by its container.
+func inFlex(n *node) bool {
+	return n.parent != nil && (n.parent.st.Display == style.FlexDisplay || n.parent.st.Display == style.InlineFlex)
 }
 
 // collapsedTracks marks the columns of a table with cols of them that tracks collapse,

@@ -1490,10 +1490,27 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			i = after
 			y += lh
 			bottom = y
+			if side := c.brClear(after - 1); side != style.ClearNone {
+				if below := c.flow.clearedThreshold(side); some(below) && below > y {
+					y = below
+				}
+			}
 			break
 		}
 	}
 	return b.close()
+}
+
+// brClear is the clear of the br whose break is piece i, none for any other piece: the
+// line after it starts below the floats it names, as Chrome's.
+func (c *inlineContent) brClear(i int) style.Clear {
+	if i < 0 || i >= len(c.pieces) || c.pieces[i].kind != newline {
+		return style.ClearNone
+	}
+	if b := c.runs[c.pieces[i].run].parent; b != nil && b.Node != nil && b.Node.Tag() == dom.Br {
+		return b.Style.Clear
+	}
+	return style.ClearNone
 }
 
 // lines breaks the pieces greedily into lines no wider than width where they may wrap.
@@ -1749,6 +1766,8 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 		return -st.VerticalShift.At(h), true
 	case style.AlignMiddle:
 		return (e.above-e.below)/2 - t.metricsOf(c, parent).XHeight/2, true
+	case style.AlignBaselineMiddle:
+		return (e.above - e.below) / 2, true
 	case style.AlignTextTop, style.AlignTextBottom, style.AlignTop, style.AlignBottom:
 		return 0, false
 	}
@@ -1789,7 +1808,8 @@ func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
 			top = max(top, p.extent.above+p.extent.below)
 		case style.AlignBottom:
 			bottom = max(bottom, p.extent.above+p.extent.below)
-		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength:
+		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
+			style.AlignBaselineMiddle:
 		}
 	}
 	grown := *e
@@ -1811,7 +1831,7 @@ func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
 		case style.AlignBottom:
 			c.settle(p, e, grown.below-p.extent.below)
 		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
-			style.AlignTextTop, style.AlignTextBottom:
+			style.AlignTextTop, style.AlignTextBottom, style.AlignBaselineMiddle:
 		}
 	}
 }

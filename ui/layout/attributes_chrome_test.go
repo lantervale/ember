@@ -102,3 +102,58 @@ p { font-size: 10pt; line-height: 14pt; padding: 0 1pc }`,
 		})
 	}
 }
+
+// hintTags are tableTags and the other elements whose attributes Chrome reads under its
+// own sheet.
+const hintTags = tableTags + "|thead|tbody|tfoot|tr|col|colgroup|hr|font|img"
+
+func TestTheOldAttributesOfTablesRulesAndPicturesLayOutAsInChrome(t *testing.T) {
+	a := ui.Attr
+	src := a("src", "tile.png")
+	grid := func(args ...ui.Arg) *ui.Node {
+		return ui.Table(append(args, ui.Tbody(
+			ui.Tr(ui.Td(ui.Text("one")), ui.Td(ui.Text("two"))),
+			ui.Tr(ui.Td(ui.Text("three")), ui.Td(ui.Text("four")))))...)
+	}
+	cases := map[string]*ui.Document{
+		"table borders": aligning("",
+			grid(a("border", "1")), grid(a("border", "4"), a("cellspacing", "0")), grid(a("border", "")),
+			grid(a("border", "2"), a("bordercolor", "red")), grid(a("rules", "all")),
+			grid(a("rules", "rows"), a("border", "3")), grid(a("rules", "cols")), grid(a("frame", "box")),
+			grid(a("frame", "hsides"), a("border", "5")), grid(a("border", "5"), a("frame", "vsides")),
+			grid(a("frame", "void"), a("rules", "all")),
+			ui.Table(a("rules", "groups"), ui.Colgroup(ui.Col()), ui.Colgroup(ui.Col()),
+				ui.Thead(ui.Tr(ui.Td(ui.Text("a")), ui.Td(ui.Text("b")))),
+				ui.Tbody(ui.Tr(ui.Td(ui.Text("c")), ui.Td(ui.Text("d"))))),
+		),
+		"floated tables and pictures": aligning("",
+			ui.Div(ui.Style("width: 500px"), grid(a("align", "left")), grid(a("align", "right")), ui.Text(sentence),
+				ui.Br(a("clear", "all")), ui.Text("below both")),
+			ui.Div(ui.Style("width: 500px"), ui.Img(src, a("align", "left"), a("hspace", "10"), a("vspace", "5")),
+				ui.Img(src, a("align", "right"), a("border", "2")), ui.Text(sentence+" "+sentence),
+				ui.Br(a("clear", "left")), ui.Text("after")),
+			ui.P(ui.Text("Hxg "), ui.Img(src, a("align", "top")), ui.Text(" "), ui.Img(src, a("align", "absmiddle")),
+				ui.Text(" "), ui.Img(src, a("align", "middle")), ui.Text(" "), ui.Img(src, a("align", "texttop")),
+				ui.Text(" "), ui.Img(src, a("align", "absbottom")), ui.Text(" "), ui.Img(src, a("align", "bottom")),
+				ui.Text(" "), ui.Img(src, a("hspace", "5%"))),
+		),
+		"rules": aligning("",
+			ui.Hr(a("size", "1")), ui.Hr(a("size", "8")), ui.Hr(a("noshade", ""), a("size", "3")),
+			ui.Hr(a("width", "50%")), ui.Hr(a("width", "120"), a("align", "left")), ui.Hr(a("width", "0")),
+			ui.Hr(a("width", "120"), a("align", "right")), ui.Hr(a("width", "120"), a("align", "center")),
+			ui.Hr(a("color", "red"), a("size", "5")),
+		),
+		"font": aligning("",
+			ui.P(ui.Font(a("size", "1"), ui.Text("one ")), ui.Font(a("size", "2"), ui.Text("two ")),
+				ui.Font(a("size", "4"), ui.Text("four ")), ui.Font(a("size", "+3"), ui.Text("six ")),
+				ui.Font(a("size", "7"), ui.Text("seven")), ui.Font(a("size", "-1"), ui.Text(" less"))),
+			ui.P(ui.Font(a("face", "Go Mono"), a("color", "green"), ui.Text(sentence))),
+		),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			matchesChromesOwn(t, d, geom.V2(800, 900), hintTags)
+			assert.Empty(t, d.Warnings())
+		})
+	}
+}

@@ -59,6 +59,9 @@ func TestFormPseudoClassesMatchWhatChromeMatches(t *testing.T) {
 			ui.Input(ui.ID("reset"), ui.Type("reset")),
 			ui.Input(ui.ID("hide"), ui.Type("hidden"), req),
 		),
+		ui.Form(ui.ID("f2"), radio("c1", "size", ui.Checked(true)), radio("c2", "shape"),
+			ui.Input(ui.ID("c4"), ui.Type("radio"), ui.Attr("name", "size"), ui.Attr("form", "f"))),
+		radio("c3", "size", ui.Attr("form", "f2")), radio("c5", "size", ui.Checked(true)),
 		ui.Button(ui.ID("out"), ui.Text("Out")),
 		ui.Progress(ui.ID("prog")),
 		ui.Progress(ui.ID("done"), ui.Value("1")),
@@ -98,6 +101,7 @@ $("tiny").value = "2";
 $("agree").checked = true;
 $("mixed").indeterminate = true;
 $("a2").checked = true;
+$("c3").checked = true;
 $("pick").selectedIndex = 1;
 $("plain").selectedIndex = 2;
 $("bio").value = "x";
@@ -142,6 +146,7 @@ return [before, ask()];`)
 	d.SetChecked(d.ByID("agree"), true)
 	d.SetIndeterminate(d.ByID("mixed"), true)
 	d.SetChecked(d.ByID("a2"), true)
+	d.SetChecked(d.ByID("c3"), true)
 	d.SetSelected(d.ByID("pick"), 1)
 	d.SetSelected(d.ByID("plain"), 2)
 	compare("after", chromes[1])
