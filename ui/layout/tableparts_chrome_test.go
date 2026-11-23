@@ -301,6 +301,21 @@ func TestCollapsedRowsAndColumnsMatchChrome(t *testing.T) {
 		"a column of a shrunk table": styled(sheet, ui.Div(ui.Style("float: left"), grid(cols("", "x", "")))),
 		"a column of a table in a flex row": styled(sheet, ui.Div(ui.Style("display: flex; align-items: flex-start"),
 			grid(cols("", "x", "")), grid(ui.Col(), ui.Col(ui.Class("x"))))),
+		"a column of a table in a grid": styled(sheet, ui.Div(ui.Style("display: grid; grid-template-columns: 260px 1fr"),
+			grid(cols("", "x", "")), grid(ui.Col(), ui.Col(ui.Class("x"))))),
+		"a column of a table in an auto grid": styled(sheet,
+			ui.Div(ui.Style("display: grid; grid-template-columns: auto auto; justify-content: start"),
+				grid(cols("", "x", "")), grid(ui.Col(ui.Class("x")), ui.Col()))),
+		"a column of a table in a narrow centred grid": styled(sheet, ui.Div(
+			ui.Style("display: grid; grid-template-columns: 60px 260px; justify-items: center; gap: 4px"),
+			grid(cols("", "x", "")), grid(cols("x", "", "")))),
+		"a column of a sized table in a flex row": styled(sheet, ui.Div(ui.Style("display: flex; align-items: flex-start"),
+			grid(ui.Class("w"), cols("", "x", "")), grid(ui.Style("width: 150px"), ui.Col(), ui.Col(ui.Class("x"))))),
+		"a column of a growing table in a flex row": styled(sheet, ui.Div(ui.Style("display: flex; width: 600px"),
+			grid(ui.Style("flex: 1"), cols("", "x", "")), grid(ui.Col(), ui.Col(ui.Class("x"))))),
+		"a column of a table in a flex column": styled(sheet,
+			ui.Div(ui.Style("display: flex; flex-direction: column; width: 400px"),
+				grid(cols("", "x", "")), grid(ui.Class("w"), ui.Col(), ui.Col(ui.Class("x"))))),
 		"rows": styled(sheet,
 			ui.Table(ui.Tbody(ui.Tr(ui.Class("x"), td("one"), td("two")), ui.Tr(td("three"), td("four")),
 				ui.Tr(ui.Class("x"), td("five"), td("six")), ui.Tr(td("seven"), td("eight")),
@@ -310,6 +325,23 @@ func TestCollapsedRowsAndColumnsMatchChrome(t *testing.T) {
 		"a row group": styled(sheet,
 			ui.Table(ui.Thead(ui.Tr(td("head"), td("h"))), ui.Tbody(ui.Class("x"), ui.Tr(td("one"), td("two"))),
 				ui.Tbody(ui.Tr(td("three"), td("four"))))),
+		"a row group of a table in a wrapping flex row": styled(
+			`body { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+table { border-spacing: 5px; } td { padding: 4px 8px; border: 2px solid; } .x { visibility: collapse; }`,
+			ui.Div(ui.Style("width: 400px; height: 100px")),
+			ui.Table(ui.Thead(ui.Tr(td("head"), td("of it"))), ui.Tbody(ui.Class("x"), ui.Tr(td("gone"), td("too"))),
+				ui.Tbody(ui.Tr(td("body"), td("stays"))))),
+		"a row group of tables given their heights": styled(sheet+` .c { margin-bottom: 10px; }`, func() []*ui.Node {
+			var boxes []*ui.Node
+			for _, style := range []string{"display: flex; align-items: flex-start", "display: flex",
+				"display: flex; flex-direction: column", "display: flex; flex-direction: column; height: 200px",
+				"display: grid", "display: grid; grid-template-rows: 150px 150px"} {
+				boxes = append(boxes, ui.Div(ui.Class("c"), ui.Style(style), ui.Table(ui.Tbody(ui.Tr(td("head"), td("of it"))),
+					ui.Tbody(ui.Class("x"), ui.Tr(td("gone"), td("too"))), ui.Tbody(ui.Tr(td("body"), td("stays")))),
+					ui.Div(ui.Text("after"))))
+			}
+			return boxes
+		}()...),
 		"a framed table's column group and row group": styled(sheet+` .f { border: 3px solid; padding: 5px; }`,
 			ui.Table(ui.Class("f"), ui.Colgroup(ui.Col()), ui.Colgroup(ui.Class("x"), ui.Col(), ui.Col()),
 				ui.Tbody(ui.Tr(td("one"), td("two two"), td("three")))),
