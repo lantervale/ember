@@ -57,3 +57,36 @@ func TestCounterStylesResolveWhatTheyExtendAndFallBack(t *testing.T) {
 	assert.Equal(t, "η", styles.represent("lower-greek", 7))
 	assert.True(t, strings.HasSuffix(styles.marker("hiragana", 1), "、"))
 }
+
+func TestComplexPredefinedStylesWriteByTheirAlgorithm(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		n    int
+		want string
+	}{
+		{"japanese-informal", 1111, "千百十一"},
+		{"japanese-informal", 1001, "千一"},
+		{"japanese-formal", 1011, "壱阡壱拾壱"},
+		{"japanese-formal", 10000, "一〇〇〇〇"},
+		{"japanese-informal", -12, "マイナス十二"},
+		{"simp-chinese-informal", 12, "十二"},
+		{"simp-chinese-informal", 112, "一百一十二"},
+		{"simp-chinese-informal", 1010, "一千零一十"},
+		{"simp-chinese-informal", 100000, "十万"},
+		{"simp-chinese-informal", 10000001, "一千万零一"},
+		{"simp-chinese-formal", 2025, "贰仟零贰拾伍"},
+		{"trad-chinese-informal", 100000000, "一億"},
+		{"cjk-ideographic", 20, "二十"},
+		{"korean-hangul-formal", 1234, "일천이백삼십사"},
+		{"korean-hangul-formal", 12345, "일만 이천삼백사십오"},
+		{"korean-hanja-informal", 11111, "萬 千百十一"},
+		{"korean-hanja-informal", -3, "마이너스 三"},
+		{"ethiopic-numeric", 1, "፩"},
+		{"ethiopic-numeric", 100, "፻"},
+		{"ethiopic-numeric", 78010092, "፸፰፻፩፼፺፪"},
+		{"ethiopic-numeric", 0, "0"},
+		{"cjk-decimal", 2025, "二〇二五"},
+	} {
+		assert.Equal(t, c.want, predefined().represent(c.name, c.n), "%s %d", c.name, c.n)
+	}
+}

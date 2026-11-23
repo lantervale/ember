@@ -104,6 +104,10 @@ func (p *parser) counterStyle(t Token, in scope) {
 			continue
 		}
 		v = items(trim(v[1:]))
+		if _, _, ok := internalSystem(v); ok && desc == "system" && p.sheet.Name == predefinedSheet {
+			cs.Descs[desc] = v
+			continue
+		}
 		if err := check(v); err != nil {
 			p.warnf(part[0].Pos, "@counter-style %s: %s: %v", cs.Name, desc, err)
 			continue
@@ -372,6 +376,8 @@ func (cs *counterStyles) resolve(r *CounterStyle, extending []string) *style.Cou
 			base = predefined().lookup(kwDecimal, nil)
 		}
 		*out = *base
+	} else if sys, l, ok := internalSystem(system); ok {
+		out.System, out.Longhand = sys, l
 	} else {
 		out.System, out.First = systemOf(system)
 		for _, c := range r.Descs["symbols"] {
