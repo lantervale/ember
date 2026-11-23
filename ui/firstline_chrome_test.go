@@ -82,7 +82,7 @@ p { margin: 0 0 12px; }
 .i2::first-letter { initial-letter: 2; color: #a00; }
 .raise::first-letter { initial-letter: 3 2; }
 .up::first-letter { initial-letter: 2 raise; }
-.boxed::first-letter { initial-letter: 2; padding: 2px 4px; margin-right: 6px; border: 2px solid #357; }
+.boxed::first-letter { initial-letter: 2; padding: 2px 4px; margin-right: 4px; border: 2px solid #357; }
 .tall { line-height: 26px; }
 .tall::first-letter { initial-letter: 3 drop; }
 .half::first-letter { initial-letter: 2.5; }
@@ -92,10 +92,11 @@ p { margin: 0 0 12px; }
 	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "half", "large"} {
 		d.Body().Append(ui.P(append([]ui.Arg{ui.Class(c), ui.Text("Down ")}, words(prose+" "+prose)...)...))
 	}
-	// Chrome on Linux rounds a letter's ink out to whole pixels, so its
-	// box is up to a pixel wider on each side than ui's and macOS's.
+	// Chrome on Linux and Windows rounds a letter's ink out to whole
+	// pixels, so its box is up to a pixel wider on each side than ui's
+	// and macOS's; each first line keeps more room than that.
 	within := float32(chrome.Tolerance)
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS != "darwin" {
 		within = 2
 	}
 	r := chrome.MatchWithin(t, d, geom.V2(400, 1400), within)
