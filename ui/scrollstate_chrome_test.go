@@ -79,7 +79,9 @@ func TestScrollStateQueriesAnswerAsChromes(t *testing.T) {
 	script += `];
 document.querySelectorAll(".scroller").forEach((s, i) => { s.scrollLeft = offs[i][0]; s.scrollTop = offs[i][1]; });
 await new Promise(r => setTimeout(r, 300));
-return [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().width);`
+return {widths: [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().width),
+  scrollers: [...document.querySelectorAll(".scroller")].map(s =>
+    [s.scrollLeft, s.scrollTop, s.scrollWidth, s.scrollHeight, s.clientWidth, s.clientHeight])};`
 	d.Layout(geom.V2(600, 800))
 	for i, s := range scrollers {
 		d.SetScroll(s, scrolls[i])
@@ -95,18 +97,24 @@ return [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().wi
 	// Headless Chrome answers scroll-state() from a snapshot it takes at
 	// a frame, which its virtual time sometimes runs after the script on a
 	// loaded machine: a run that answers otherwise is asked again.
-	var want []float32
+	var answer struct {
+		Widths    []float32    `json:"widths"`
+		Scrollers [][6]float32 `json:"scrollers"`
+	}
 	for range 4 {
 		raw, err := chrome.Eval(d, geom.V2(600, 800), script)
 		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(raw, &want))
-		if slices.Equal(want, got) {
+		require.NoError(t, json.Unmarshal(raw, &answer))
+		if slices.Equal(answer.Widths, got) {
 			break
 		}
 	}
+	want := answer.Widths
 	require.Len(t, got, len(want))
 	for i := range want {
-		assert.InDelta(t, want[i], got[i], 0.01, "scroller %d, box %d", i/33, i%33)
+		assert.InDelta(t, want[i], got[i], 0.01, "scroller %d, box %d; Chrome's scrollLeft, scrollTop, "+
+			"scrollWidth, scrollHeight, clientWidth, clientHeight %v; ui's scroll %v", i/33, i%33, answer.Scrollers[i/33],
+			d.Scroll(scrollers[i/33]))
 	}
 	assert.Empty(t, d.Warnings())
 }

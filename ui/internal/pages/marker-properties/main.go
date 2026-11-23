@@ -1,7 +1,8 @@
 // ::marker's text properties against Chrome's: a line-height of its own,
 // white-space collapsing the spaces of a string marker, overflow-wrap on
-// a long marker, quotes giving its content's open-quote and close-quote,
-// and a text-shadow.
+// a long marker, its item's quotes giving its content's open-quote and
+// close-quote (Chrome 156 ignores quotes set on ::marker itself, 157 takes
+// them, as ui does), and a text-shadow.
 package main
 
 import (
@@ -21,8 +22,9 @@ ol, ul { margin: 0 0 8px; padding-left: 60px; background-color: #f4f1ec; }
 .spaces li:nth-child(3)::marker { white-space: pre-line; }
 .wrap li::marker { content: "averyveryverylongmarker "; overflow-wrap: anywhere; }
 .wrap li:nth-child(2)::marker { overflow-wrap: normal; white-space: normal; }
-.quoted li::marker { content: open-quote "q" close-quote " "; quotes: "<<" ">>"; }
-.quoted li:nth-child(2)::marker { quotes: "[" "]"; }
+.quoted li { quotes: "<<" ">>"; }
+.quoted li::marker { content: open-quote "q" close-quote " "; }
+.quoted li:nth-child(2) { quotes: "[" "]"; }
 .shadow li::marker { text-shadow: 2px 2px #3c6fb0; font-weight: 700; }
 `
 
