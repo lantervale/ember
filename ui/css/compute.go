@@ -139,9 +139,9 @@ type restyler struct {
 	// browser reads style attributes as a browser does
 	// (Transitions.BrowserSheets).
 	browser bool
-	// before, after and marker are set when some sheet has a rule for the
-	// pseudo-element: only then is one looked for.
-	before, after, marker bool
+	// before, after, marker, firstLine and firstLetter are set when some
+	// sheet has a rule for the pseudo-element: only then is one looked for.
+	before, after, marker, firstLine, firstLetter bool
 	// styles are the sheets' counter styles, worked out when first asked
 	// for (counterStyles).
 	styles *counterStyles
@@ -167,6 +167,8 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.before = r.before || x.pseudos["before"] != nil
 		r.after = r.after || x.pseudos["after"] != nil
 		r.marker = r.marker || x.pseudos["marker"] != nil
+		r.firstLine = r.firstLine || x.pseudos["first-line"] != nil
+		r.firstLetter = r.firstLetter || x.pseudos["first-letter"] != nil
 		r.siblings = r.siblings || x.siblings
 		r.treeStates |= x.aboveStates
 		r.besideStates |= x.besideStates
@@ -187,6 +189,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	r.visit(root, nil, 0, stale, stale)
 	r.recount = r.recount || stale
 	r.count(root)
+	r.firsts(root)
 }
 
 // countsOn reports a change of an element, as dom.Pipeline.Changed names
@@ -429,6 +432,7 @@ var colored = map[string]bool{
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
 	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
+	"backdrop-filter": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -1033,6 +1037,7 @@ func (x *ctx) finish(root bool) {
 	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	c.Filters = followFilterColor(c.Filters, c.Color)
+	c.BackdropFilters = followFilterColor(c.BackdropFilters, c.Color)
 	if c.AccentAuto {
 		c.AccentColor = c.Color
 	}
@@ -1887,6 +1892,13 @@ var props = func() map[string]prop {
 			(*ctx).transform, transforms).painted(),
 		"filter": field(func(c *style.Computed) *[]style.Filter { return &c.Filters }, (*ctx).filters,
 			filters).painted(),
+		"backdrop-filter": field(func(c *style.Computed) *[]style.Filter { return &c.BackdropFilters }, (*ctx).filters,
+			filters).painted(),
+		"mix-blend-mode": keyword(func(c *style.Computed) *style.BlendMode { return &c.BlendMode }, blendModes),
+		"isolation": keyword(func(c *style.Computed) *bool { return &c.Isolate },
+			map[string]bool{"auto": false, "isolate": true}),
+		"background-blend-mode": layered(func(c *style.Computed) *[]style.BlendMode { return &c.BackgroundBlends },
+			wordOf(blendModes), flips[[]style.BlendMode]()),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
 		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
@@ -2339,6 +2351,16 @@ func (x *ctx) shadows(v []Component) []style.Shadow {
 		out = append(out, s)
 	}
 	return out
+}
+
+//nolint:gochecknoglobals // lookup table
+var blendModes = map[string]style.BlendMode{
+	"normal": style.BlendNormal, "multiply": style.BlendMultiply, "screen": style.BlendScreen,
+	"overlay": style.BlendOverlay, "darken": style.BlendDarken, "lighten": style.BlendLighten,
+	"color-dodge": style.BlendColorDodge, "color-burn": style.BlendColorBurn, "hard-light": style.BlendHardLight,
+	"soft-light": style.BlendSoftLight, "difference": style.BlendDifference, "exclusion": style.BlendExclusion,
+	"hue": style.BlendHue, "saturation": style.BlendSaturation, "color": style.BlendColor,
+	"luminosity": style.BlendLuminosity,
 }
 
 //nolint:gochecknoglobals // lookup table

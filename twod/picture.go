@@ -75,7 +75,6 @@ func (u *Canvas) BeginPicture() {
 	p.List.SetModulate(u.list.Modulate())
 	p.List.RestoreLight(u.list.Light())
 	k.pic = Picture{pass: p, outer: u.list}
-	u.passes = append(u.passes, p)
 	u.open = append(u.open, &k.pic)
 	u.list = p.List
 }
@@ -94,7 +93,25 @@ func (u *Canvas) EndPicture(margin float32) *Picture {
 		crop(pic.pass, r)
 		pic.rect = r
 	}
+	u.ended = append(u.ended, pic.pass)
 	return pic
+}
+
+// showing is the pass that shows pic through effects: its own the first
+// time, another drawing its list after.
+func (u *Canvas) showing(pic *Picture, effects []*render.Effect) *draw.Pass {
+	p := pic.pass
+	if pic.shown > 0 {
+		k := u.keep()
+		k.pass.List, k.pass.Width, k.pass.Height, k.pass.Screen = p.List, p.Width, p.Height, p.Screen
+		k.pass.Target.Filter, k.pass.Name = Linear, p.Name
+		i := slices.Index(u.ended, p)
+		u.ended = slices.Insert(u.ended, max(i, 0), k.pass)
+		p = k.pass
+	}
+	pic.shown++
+	p.Effects = append(p.Effects[:0], effects...)
+	return p
 }
 
 // DrawPicture shows pic, through effects in order, over what is drawn,
@@ -104,22 +121,55 @@ func (u *Canvas) DrawPicture(pic *Picture, effects ...*render.Effect) {
 	if pic == nil || pic.rect.W <= 0 || pic.rect.H <= 0 {
 		return
 	}
-	p := pic.pass
-	if pic.shown > 0 {
-		k := u.keep()
-		k.pass.List, k.pass.Width, k.pass.Height, k.pass.Screen = p.List, p.Width, p.Height, p.Screen
-		k.pass.Target.Filter, k.pass.Name = Linear, p.Name
-		i := slices.Index(u.passes, p)
-		u.passes = slices.Insert(u.passes, i+1, k.pass)
-		p = k.pass
-	}
-	pic.shown++
-	p.Effects = append(p.Effects[:0], effects...)
+	p := u.showing(pic, effects)
 	xf, mod := u.list.Transform(), u.list.Modulate()
 	u.list.Picture(pic.rect, p, draw.Alpha, nil)
 	u.list.SetTransform(xf)
 	u.list.SetModulate(mod)
 }
+
+// DrawPictureOver shows pic as DrawPicture does, its colours first mixed
+// by m with those of backdrop, a picture drawn on the same surface and
+// already shown under it, as CSS's mix-blend-mode mixes an element with
+// its backdrop: where backdrop is clear, pic shows as it is.
+func (u *Canvas) DrawPictureOver(pic, backdrop *Picture, m Mix, effects ...*render.Effect) {
+	if backdrop == nil || backdrop.rect.W <= 0 || backdrop.rect.H <= 0 || m == MixNormal {
+		u.DrawPicture(pic, effects...)
+		return
+	}
+	if pic == nil || pic.rect.W <= 0 || pic.rect.H <= 0 {
+		return
+	}
+	p := u.showing(pic, effects)
+	xf, mod := u.list.Transform(), u.list.Modulate()
+	u.list.PictureOver(pic.rect, p, backdrop.pass, backdrop.rect, draw.Mix(m))
+	u.list.SetTransform(xf)
+	u.list.SetModulate(mod)
+}
+
+// Mix is how a picture's colours mix with those under it, as CSS's
+// blend modes: separable ones channel by channel, Hue to Luminosity on
+// the colour's hue, saturation and luminosity.
+type Mix uint8
+
+const (
+	MixNormal Mix = iota
+	MixMultiply
+	MixScreen
+	MixOverlay
+	MixDarken
+	MixLighten
+	MixColorDodge
+	MixColorBurn
+	MixHardLight
+	MixSoftLight
+	MixDifference
+	MixExclusion
+	MixHue
+	MixSaturation
+	MixColor
+	MixLuminosity
+)
 
 // Effect is an effect running shader that the canvas keeps from frame to
 // frame: the n-th asked for with a shader in a frame is the n-th of the
@@ -147,10 +197,22 @@ type effects struct {
 	used int
 }
 
+// placePictures puts the passes of the pictures ended since the last
+// call before the passes from first on: each after those it shows, the
+// pictures nested in it and those it shows as a backdrop.
+func (u *Canvas) placePictures(first int) {
+	if len(u.ended) == 0 {
+		return
+	}
+	u.passes = slices.Insert(u.passes, first, u.ended...)
+	u.ended = u.ended[:0]
+}
+
 // resetPictures forgets the pictures and effects of the frame before.
 func (u *Canvas) resetPictures() {
 	u.keptUsed = 0
 	u.open = u.open[:0]
+	u.ended = u.ended[:0]
 	for _, e := range u.effects {
 		e.used = 0
 	}

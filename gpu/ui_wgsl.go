@@ -88,6 +88,11 @@ struct Draw {
 	// (decision 0119).
 	cutU: vec4f,
 	cutV: vec4f,
+	// backU and backV take a point to the UV of the batch's backdrop, its
+	// image 1, which its picture's colours mix with by backU.w's mode, 0
+	// for none (decision 0130).
+	backU: vec4f,
+	backV: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> u: Draw;
@@ -236,6 +241,89 @@ fn image(slot: u32, uv: vec2f) -> vec4f {
 	}
 }
 
+fn lum(c: vec3f) -> f32 { return dot(c, vec3f(0.3, 0.59, 0.11)); }
+
+fn clipColor(c: vec3f) -> vec3f {
+	let l = lum(c);
+	let n = min(c.r, min(c.g, c.b));
+	let x = max(c.r, max(c.g, c.b));
+	var o = c;
+	if (n < 0.0) { o = l + (o - l) * l / (l - n); }
+	if (x > 1.0) { o = l + (o - l) * (1.0 - l) / (x - l); }
+	return o;
+}
+
+fn setLum(c: vec3f, l: f32) -> vec3f { return clipColor(c + (l - lum(c))); }
+
+fn sat(c: vec3f) -> f32 { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+
+fn setSat(c: vec3f, s: f32) -> vec3f {
+	let n = min(c.r, min(c.g, c.b));
+	let x = max(c.r, max(c.g, c.b));
+	if (x > n) { return (c - n) * s / (x - n); }
+	return vec3f(0.0);
+}
+
+fn hardLight(b: vec3f, s: vec3f) -> vec3f {
+	return select(b + (2.0 * s - 1.0) - b * (2.0 * s - 1.0), b * 2.0 * s, s <= vec3f(0.5));
+}
+
+fn softLight(b: vec3f, s: vec3f) -> vec3f {
+	let d = select(sqrt(b), ((16.0 * b - 12.0) * b + 4.0) * b, b <= vec3f(0.25));
+	return select(b + (2.0 * s - 1.0) * (d - b), b - (1.0 - 2.0 * s) * b * (1.0 - b), s <= vec3f(0.5));
+}
+
+fn dodge(b: vec3f, s: vec3f) -> vec3f {
+	let d = select(min(vec3f(1.0), b / max(1.0 - s, vec3f(1e-6))), vec3f(1.0), s >= vec3f(1.0));
+	return select(d, vec3f(0.0), b <= vec3f(0.0));
+}
+
+fn burn(b: vec3f, s: vec3f) -> vec3f {
+	let d = select(1.0 - min(vec3f(1.0), (1.0 - b) / max(s, vec3f(1e-6))), vec3f(0.0), s <= vec3f(0.0));
+	return select(d, vec3f(1.0), b >= vec3f(1.0));
+}
+
+// blended is B(b, s) of the Compositing spec's mode m, for a backdrop
+// colour b and a source colour s, unpremultiplied.
+fn blended(m: u32, b: vec3f, s: vec3f) -> vec3f {
+	switch m {
+		case 1u: { return b * s; }
+		case 2u: { return b + s - b * s; }
+		case 3u: { return hardLight(s, b); }
+		case 4u: { return min(b, s); }
+		case 5u: { return max(b, s); }
+		case 6u: { return dodge(b, s); }
+		case 7u: { return burn(b, s); }
+		case 8u: { return hardLight(b, s); }
+		case 9u: { return softLight(b, s); }
+		case 10u: { return abs(b - s); }
+		case 11u: { return b + s - 2.0 * b * s; }
+		case 12u: { return setLum(setSat(s, sat(b)), lum(b)); }
+		case 13u: { return setLum(setSat(b, sat(s)), lum(b)); }
+		case 14u: { return setLum(s, lum(b)); }
+		case 15u: { return setLum(b, lum(s)); }
+		default: { return s; }
+	}
+}
+
+// mixed is t, a premultiplied colour of the picture at pos, mixed with
+// the backdrop under it: where the backdrop's alpha is ab, the source's
+// colour is (1 − ab)·s + ab·B(b, s), as Chrome mixes colours encoded.
+fn mixed(t: vec4f, pos: vec2f) -> vec4f {
+	if (t.a <= 0.0) {
+		return t;
+	}
+	let p = vec3f(pos / u.scale, 1.0);
+	let uv = vec2f(dot(u.backU.xyz, p), dot(u.backV.xyz, p));
+	var b = image(1u, uv);
+	if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)) || b.a <= 0.0) {
+		return t;
+	}
+	let s = t.rgb / t.a;
+	let m = clamp(blended(u32(u.backU.w + 0.5), b.rgb / b.a, s), vec3f(0.0), vec3f(1.0));
+	return vec4f(((1.0 - b.a) * s + b.a * m) * t.a, t.a);
+}
+
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4f {
 	let bits = u32(in.shape.x + 0.5);
@@ -254,6 +342,9 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 		c.a *= cover(abs(length(in.uv) - (hs.x - t * 0.5)) - t * 0.5);
 	} else if (kind == 6u) {
 		var t = image(slot, in.uv);
+		if (u.backU.w > 0.5) {
+			t = mixed(t, in.pos.xy);
+		}
 		if (((u.targets >> slot) & 1u) == 1u) {
 			if (t.a > 0.0) { t = vec4f(srgbDecode(t.rgb / t.a), t.a); } else { t = vec4f(0.0); }
 		} else {

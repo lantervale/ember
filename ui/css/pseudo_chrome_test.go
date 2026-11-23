@@ -164,3 +164,81 @@ return Array.from(document.body.querySelectorAll("*")).map(e => Object.fromEntri
 	}
 	t.Logf("%d values compared", checked)
 }
+
+// The styles of ::first-line and ::first-letter take the properties
+// Chrome's do and leave the others out, a first letter inheriting from
+// the element its text is in.
+func TestFirstLineAndLetterStylesMatchChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { color: #123456; font-size: 20px; }
+p { letter-spacing: 1px; }
+b { font-style: italic; }
+p::first-line { color: #a00; font-size: 150%; font-weight: 700; background-color: #0a0; margin-left: 9px;
+  padding-left: 7px; word-spacing: 3px; display: block; position: absolute; opacity: 0.5; }
+p::first-letter { color: #00a; font-size: 2em; float: left; margin-left: 4px; padding-left: 3px;
+  border-left: 2px solid #fa0; background-color: #ff0; opacity: 0.5; letter-spacing: 3px; position: absolute;
+  width: 50px; display: block; line-height: 1; }
+.plain::first-line { color: #070; }
+`))
+	d.Body().Append(ui.P(ui.Text("Lantern light")), ui.P(ui.B(ui.Text("Bold")), ui.Text(" start")),
+		ui.Div(ui.Class("plain"), ui.Text("plain")))
+	props := []string{"color", "font-size", "font-weight", "font-style", "letter-spacing", "word-spacing",
+		"background-color", "margin-left", "padding-left", "border-left-width", "border-left-color", "opacity",
+		"position", "display", "line-height"}
+	names, _ := json.Marshal(props)
+	raw, err := chrome.Eval(d, geom.V2(600, 400), fmt.Sprintf(`
+return Array.from(document.body.children).map(e => Object.fromEntries(
+	["::first-line", "::first-letter"].map(pe => {
+		const s = getComputedStyle(e, pe);
+		return [pe, Object.fromEntries(%s.concat(["float"]).map(p => [p, s.getPropertyValue(p)]))];
+	})));`, names))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []map[string]map[string]string
+	if err = json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	d.Layout(geom.V2(600, 400))
+	var els []*dom.Node
+	for _, n := range d.Body().Children() {
+		if !n.IsText() {
+			els = append(els, n)
+		}
+	}
+	checked := 0
+	for i, n := range els {
+		data := dom.Data(n)
+		styles := map[string]*style.Computed{"::first-line": data.FirstLine}
+		if data.FirstLetter != nil {
+			styles["::first-letter"] = dom.Data(data.FirstLetter).Style
+		}
+		for pe, st := range styles {
+			if st == nil {
+				t.Errorf("%s%s: no style", where(n), pe)
+				continue
+			}
+			for _, p := range props {
+				get := compared[p]
+				if get == nil {
+					get = everything[p]
+				}
+				if ours := get(st); !same(p, ours, want[i][pe][p]) {
+					t.Errorf("%s%s %s: ember %q, Chrome %q", where(n), pe, p, ours, want[i][pe][p])
+				}
+				checked++
+			}
+			if pe == "::first-letter" {
+				float := map[style.Float]string{style.FloatNone: "none", style.FloatLeft: "left",
+					style.FloatRight: "right"}[st.Float]
+				if float != want[i][pe]["float"] {
+					t.Errorf("%s%s float: ember %q, Chrome %q", where(n), pe, float, want[i][pe]["float"])
+				}
+			}
+		}
+	}
+	if checked < 60 {
+		t.Errorf("%d values compared", checked)
+	}
+	t.Logf("%d values compared", checked)
+}
