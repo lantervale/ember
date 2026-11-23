@@ -36,12 +36,26 @@ func gifFrame(r image.Rectangle, c uint8) *image.Paletted {
 
 func encodeGIF(t *testing.T, loops int, disposal []byte, delays []int, frames ...*image.Paletted) []byte {
 	t.Helper()
+	return encodeGIFOf(t, 8, loops, disposal, delays, frames...)
+}
+
+func encodeGIFOf(t *testing.T, size, loops int, disposal []byte, delays []int, frames ...*image.Paletted) []byte {
+	t.Helper()
 	var b bytes.Buffer
 	require.NoError(t, gif.EncodeAll(&b, &gif.GIF{
 		Image: frames, Delay: delays, Disposal: disposal, LoopCount: loops,
-		Config: image.Config{ColorModel: gifPalette, Width: 8, Height: 8},
+		Config: image.Config{ColorModel: gifPalette, Width: size, Height: size},
 	}))
 	return b.Bytes()
+}
+
+// pastGIF is a GIF of an 8×8 picture its frames reach past: written on
+// a canvas of 16×16, its size then said to be 8×8.
+func pastGIF(t *testing.T, loops int, disposal []byte, delays []int, frames ...*image.Paletted) []byte {
+	t.Helper()
+	data := encodeGIFOf(t, 16, loops, disposal, delays, frames...)
+	data[6], data[7], data[8], data[9] = 8, 0, 8, 0
+	return data
 }
 
 // animatedGIFs are GIFs of every disposal and loop count, by name.
@@ -62,6 +76,12 @@ func animatedGIFs(t *testing.T) map[string][]byte {
 		"loop-count-3":         encodeGIF(t, 3, nil, delays[:2], a, b),
 		"whole-frames":         encodeGIF(t, 0, nil, delays[:2], a, gifFrame(image.Rect(0, 0, 8, 8), 2)),
 		"unspecified-disposal": encodeGIF(t, 0, []byte{0, 0}, delays[:2], b, c),
+		"past-the-edge":        pastGIF(t, 0, nil, delays[:2], a, gifFrame(image.Rect(4, 3, 11, 10), 2)),
+		"first-past-the-edge": pastGIF(t, 0, []byte{back, none}, delays[:2],
+			gifFrame(image.Rect(0, 0, 12, 10), 1), b),
+		"first-moved-past-the-edge": pastGIF(t, 0, nil, delays[:2], gifFrame(image.Rect(2, 3, 12, 9), 1), b),
+		"one-frame-past-the-edge":   pastGIF(t, -1, nil, delays[:1], gifFrame(image.Rect(2, 3, 12, 9), 3)),
+		"outside":                   pastGIF(t, 0, nil, delays[:3], a, gifFrame(image.Rect(9, 9, 12, 12), 2), c),
 	}
 }
 
@@ -140,4 +160,23 @@ func TestAnAnimatedWebPBlendsDisposesAndLoopsAsItSays(t *testing.T) {
 	once, err := animated.Decode(animatedWebPs()["plays-once"])
 	require.NoError(t, err)
 	assert.Equal(t, 1, once.Plays, "a loop count of 1 plays once")
+}
+
+func TestAGIFFramePastThePictureIsCutAndAFirstOneGrowsIt(t *testing.T) {
+	gifs := animatedGIFs(t)
+	cut, err := animated.Decode(gifs["past-the-edge"])
+	require.NoError(t, err)
+	require.Len(t, cut.Frames, 2)
+	assert.Equal(t, image.Rect(0, 0, 8, 8), cut.Frames[1].Rect)
+	assert.Equal(t, color.NRGBA{40, 160, 60, 255}, cut.Frames[1].NRGBAAt(7, 7), "drawn up to the edge")
+
+	grown, err := animated.Decode(gifs["first-moved-past-the-edge"])
+	require.NoError(t, err)
+	assert.Equal(t, image.Rect(0, 0, 12, 9), grown.Frames[0].Rect, "as far as the first frame reaches")
+
+	still, err := animated.Decode(gifs["one-frame-past-the-edge"])
+	require.NoError(t, err)
+	require.NotNil(t, still, "the image package refuses it")
+	assert.False(t, still.Moves())
+	assert.Equal(t, image.Rect(0, 0, 12, 9), still.Frames[0].Rect)
 }

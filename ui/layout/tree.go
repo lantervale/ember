@@ -706,10 +706,21 @@ func (n *node) liftFloats(anon *node) {
 			continue
 		}
 		k.parent = n
+		if h := k.st.InitialLetter.Raise; h > 0 {
+			n.kids = append(n.kids, raisedRoom(anon, h))
+		}
 		n.kids = append(n.kids, k)
 		n.anonymous = true
 	}
 	anon.kids = kept
+}
+
+// raisedRoom is an empty block of anon's style h tall beside it: the room a
+// drop cap raised over its first line takes above the lines.
+func raisedRoom(anon *node, h float32) *node {
+	s := *anon.st
+	s.Size.Height = style.Px(h)
+	return &node{box: &box.Box{Kind: box.AnonymousBlock, Style: &s}, st: &s, parent: anon.parent, fresh: true}
 }
 
 // onlyCollapsibleSpace reports a run of text nodes that white-space collapses away.

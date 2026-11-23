@@ -106,6 +106,9 @@ type pseudo struct {
 	// lang is the range :lang() was given, dir the direction :dir()
 	// was, in lower case.
 	lang, dir string
+	// named is a :scope as written, which weighs as a class; the one
+	// leading :has()'s selectors weighs nothing.
+	named bool
 }
 
 // Attr is an attribute selector: [Name], or [Name="Value"] when HasValue.
@@ -204,15 +207,23 @@ func (s Selector) String() string {
 	return b.String()
 }
 
-// Matches reports whether the element e matches s.
+// Matches reports whether the element e matches s, a :scope in it
+// being the root element.
 func (s Selector) Matches(e *dom.Node) bool {
-	return s.matchFrom(len(s.Compounds)-1, e, nil)
+	return s.matchFrom(len(s.Compounds)-1, e, nil, nil)
 }
 
-// matchFrom reports whether e matches s's compounds up to i, a relative
-// selector's first compound being scope: what it matches lies under
-// scope's parent, so ancestors are looked for no higher.
-func (s Selector) matchFrom(i int, e, scope *dom.Node) bool {
+// MatchesIn reports whether the element e matches s with :scope the
+// element root, as in an @scope rule rooted there.
+func (s Selector) MatchesIn(e, root *dom.Node) bool {
+	return s.matchFrom(len(s.Compounds)-1, e, root, nil)
+}
+
+// matchFrom reports whether e matches s's compounds up to i, :scope
+// being scope (the root element for nil); ancestors are looked for no
+// higher than top, a relative selector's scope's parent, under which
+// all it matches lies.
+func (s Selector) matchFrom(i int, e, scope, top *dom.Node) bool {
 	if !s.Compounds[i].matches(e, scope) {
 		return false
 	}
@@ -222,14 +233,14 @@ func (s Selector) matchFrom(i int, e, scope *dom.Node) bool {
 	switch s.Combinators[i-1] {
 	case Child:
 		p := e.Parent()
-		return p != nil && s.matchFrom(i-1, p, scope)
+		return p != nil && s.matchFrom(i-1, p, scope, top)
 	case Next, Later:
 		before := elementsBefore(e)
 		for j := len(before) - 1; j >= 0; j-- {
 			if before[j].IsText() {
 				continue
 			}
-			if s.matchFrom(i-1, before[j], scope) {
+			if s.matchFrom(i-1, before[j], scope, top) {
 				return true
 			}
 			if s.Combinators[i-1] == Next {
@@ -239,12 +250,8 @@ func (s Selector) matchFrom(i int, e, scope *dom.Node) bool {
 		return false
 	case Descendant:
 	}
-	var top *dom.Node
-	if scope != nil {
-		top = scope.Parent()
-	}
 	for p := e.Parent(); p != nil && p != top; p = p.Parent() {
-		if s.matchFrom(i-1, p, scope) {
+		if s.matchFrom(i-1, p, scope, top) {
 			return true
 		}
 	}
@@ -256,7 +263,7 @@ func (s Selector) matchFrom(i int, e, scope *dom.Node) bool {
 func has(rels []Selector, a *dom.Node) bool {
 	for _, r := range rels {
 		last := len(r.Compounds) - 1
-		match := func(e *dom.Node) bool { return r.matchFrom(last, e, a) }
+		match := func(e *dom.Node) bool { return r.matchFrom(last, e, a, a.Parent()) }
 		if !r.Combinators[0].sibling() {
 			if last == 1 && r.Combinators[0] == Child {
 				if slices.ContainsFunc(a.Children(), func(c *dom.Node) bool { return !c.IsText() && match(c) }) {
@@ -326,7 +333,7 @@ func (c *Compound) matches(e, scope *dom.Node) bool {
 		return false
 	}
 	for i := range c.pseudos {
-		if p := &c.pseudos[i]; p.kind == pseudoScope && e != scope || p.kind != pseudoScope && !p.matches(e) {
+		if !c.pseudos[i].matches(e, scope) {
 			return false
 		}
 	}
@@ -359,7 +366,7 @@ func (c *Compound) names(e *dom.Node) bool {
 }
 
 //nolint:gocyclo,cyclop,funlen // one case per pseudo-class
-func (p *pseudo) matches(e *dom.Node) bool {
+func (p *pseudo) matches(e, scope *dom.Node) bool {
 	switch p.kind {
 	case pseudoState:
 		return e.State().Has(p.state)
@@ -377,9 +384,9 @@ func (p *pseudo) matches(e *dom.Node) bool {
 	case pseudoNthChild:
 		return nth(p.a, p.b, childIndex(e))
 	case pseudoNot:
-		return !matchesAny(p.sels, e)
+		return !matchesAny(p.sels, e, scope)
 	case pseudoIs, pseudoWhere:
-		return matchesAny(p.sels, e)
+		return matchesAny(p.sels, e, scope)
 	case pseudoEnabled:
 		return slices.Contains(controls, e.Tag()) && !e.State().Has(dom.Disabled)
 	case pseudoOnlyChild:
@@ -413,6 +420,10 @@ func (p *pseudo) matches(e *dom.Node) bool {
 	case pseudoDir:
 		return directionOf(e) == p.dir
 	case pseudoScope:
+		if scope == nil {
+			return e.Parent() == nil
+		}
+		return e == scope
 	}
 	return true
 }
@@ -600,9 +611,9 @@ var uneditable = []string{"checkbox", "radio", "range", "color", "file", "hidden
 //nolint:gochecknoglobals // lookup table
 var controls = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Option, dom.Fieldset}
 
-func matchesAny(sels []Selector, e *dom.Node) bool {
+func matchesAny(sels []Selector, e, scope *dom.Node) bool {
 	for _, s := range sels {
-		if s.Matches(e) {
+		if s.matchFrom(len(s.Compounds)-1, e, scope, nil) {
 			return true
 		}
 	}
@@ -911,7 +922,11 @@ func (c *Compound) specificity() Specificity {
 	}
 	for _, p := range c.pseudos {
 		switch p.kind {
-		case pseudoWhere, pseudoScope:
+		case pseudoWhere:
+		case pseudoScope:
+			if p.named {
+				sp[1]++
+			}
 		case pseudoNot, pseudoIs, pseudoHas:
 			var most Specificity
 			for _, s := range p.sels {
@@ -1032,6 +1047,8 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoLastChild}, 2, nil
 	case "root":
 		return pseudo{kind: pseudoRoot}, 2, nil
+	case kwScope:
+		return pseudo{kind: pseudoScope, named: true}, 2, nil
 	case "link", classAnyLink:
 		return pseudo{kind: pseudoLink}, 2, nil
 	case "visited":

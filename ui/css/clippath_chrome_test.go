@@ -70,7 +70,7 @@ div { width: 100px; height: 50px; transition: clip-path 1s linear; }
 	}
 	tr := css.NewTransitions()
 	tr.Compute(d.HTML(), d.Sheets())
-	script := `els.forEach(e => getComputedStyle(e).clipPath);
+	script := holdAtStart + `els.forEach(e => getComputedStyle(e).clipPath);
 	document.querySelectorAll("div").forEach(e => e.classList.add("on"));
 	els.forEach(e => getComputedStyle(e).clipPath);
 	document.getAnimations().forEach(a => { a.pause(); a.currentTime = 350; });`

@@ -41,8 +41,16 @@ func TestAnImgShowsTheCandidateOfItsSrcsetForTheScreensDensity(t *testing.T) {
 
 	d.fonts.SetScale(2)
 	d.Layout(geom.V2(800, 600))
+	src, _ = shownAs(t, img)
+	assert.Equal(t, "p100.png", src, "kept while only the density changes, as Chrome keeps it")
+	d.Body().Append(Div())
+	d.Layout(geom.V2(800, 600))
+	src, _ = shownAs(t, img)
+	assert.Equal(t, "p100.png", src, "whatever else changes in the tree")
+
+	d.Layout(geom.V2(700, 600))
 	src, size = shownAs(t, img)
-	assert.Equal(t, "p200.png", src, "chosen again on a denser screen")
+	assert.Equal(t, "p200.png", src, "chosen again for the denser screen once the viewport resizes")
 	assert.Equal(t, geom.V2(100, 50), size, "a 2x picture shows at half its pixels")
 
 	d.fonts.SetScale(3)
@@ -50,6 +58,12 @@ func TestAnImgShowsTheCandidateOfItsSrcsetForTheScreensDensity(t *testing.T) {
 	src, size = shownAs(t, img)
 	assert.Equal(t, "p400.png", src)
 	assert.Equal(t, geom.V2(100, 50), size)
+
+	img.SetAttr("srcset", "p100.png 1x, p200.png 2x")
+	d.fonts.SetScale(2)
+	d.Layout(geom.V2(800, 600))
+	src, _ = shownAs(t, img)
+	assert.Equal(t, "p200.png", src, "a srcset changed chooses at the density of the moment")
 }
 
 func TestAPictureOfShapesShowsAtTheSizeItAsksForOverItsDensity(t *testing.T) {
@@ -148,14 +162,14 @@ func TestAnImgKeepsItsPictureUntilTheOneChosenInItsPlaceLands(t *testing.T) {
 	require.Equal(t, geom.V2(100, 50), size)
 
 	d.fonts.SetScale(2)
-	d.Layout(geom.V2(800, 600))
+	d.Layout(geom.V2(700, 600))
 	src, size = shownAs(t, img)
 	assert.Equal(t, "p100.png", src, "the denser picture is on its way")
 	assert.Equal(t, geom.V2(100, 50), size)
 
 	close(release)
 	d.fetching.Wait()
-	d.Layout(geom.V2(800, 600))
+	d.Layout(geom.V2(700, 600))
 	src, size = shownAs(t, img)
 	assert.Equal(t, "p200.png", src, "shown once it landed")
 	assert.Equal(t, geom.V2(100, 50), size)

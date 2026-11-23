@@ -35,7 +35,7 @@ func (s *Sheet) Imports() []Import { return s.imports }
 // is one whose own imports are already in it.
 func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 	out := &Sheet{Name: s.Name, browser: s.browser, src: s.src, from: s.from, origin: s.origin, text: s.text,
-		joined: s.joined, within: s.within, media: slices.Clone(s.media), base: s}
+		joined: s.joined, within: s.within, media: slices.Clone(s.media), base: s, nests: slices.Clone(s.nests)}
 	own := make([]int, len(s.layers))
 	named := 0
 	nameOwn := func(upto int) {
@@ -47,6 +47,7 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 		imp   Import
 		sheet *Sheet
 		media int
+		nests int
 		as    []int
 	}
 	var put []placed
@@ -64,9 +65,9 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 		for k, full := range in.layers {
 			as[k] = out.declared(prefix + strings.ReplaceAll(full, anonymous, fmt.Sprint(anonymous, "import", i, "-")))
 		}
-		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), as: as})
-		out.faces, out.Keyframes = append(out.faces, in.faces...),
-			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...)
+		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), nests: len(out.nests), as: as})
+		out.faces, out.Keyframes, out.nests = append(out.faces, in.faces...),
+			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...), append(out.nests, in.nests...)
 		out.PositionTries = append(out.PositionTries, in.PositionTries...)
 		out.CounterStyles, out.media = append(out.CounterStyles,
 			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...)
@@ -99,7 +100,7 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 			case p.imp.layer > 0:
 				r.layer = own[p.imp.layer-1]
 			}
-			out.Rules = append(out.Rules, r)
+			out.Rules = append(out.Rules, r.nestedFrom(p.nests))
 		}
 		out.spliced = append(out.spliced, splice{imp: p.imp, sheet: p.sheet})
 	}

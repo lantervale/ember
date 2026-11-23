@@ -13,17 +13,30 @@ import (
 	"time"
 )
 
-// MaxPixels is the most pixels of all the frames of a picture together:
-// the frames past it are dropped, the animation playing those before.
+// MaxPixels is the most pixels of all the frames of a picture held
+// together: those past it are drawn as they show, from the frame before.
 const MaxPixels = 1 << 25
 
 // Picture is an animation: its frames as they show, one after the
 // other, how long each does as the file says, and how many times the
-// whole plays, 0 for ever.
+// whole plays, 0 for ever. Frames are those held, the first within
+// MaxPixels; Frame draws the others as they come.
 type Picture struct {
 	Frames []*image.NRGBA
 	Delays []time.Duration
 	Plays  int
+	later  *later
+}
+
+// later are the frames of a Picture past those it holds: drawn one
+// after the other on live, from the canvas as the last held frame left
+// it, each disposed of before the next.
+type later struct {
+	from    []byte
+	steps   []Step
+	live    *image.NRGBA
+	next    int
+	dispose func()
 }
 
 const (
@@ -32,6 +45,12 @@ const (
 	shortest = 10 * time.Millisecond
 	slowest  = 100 * time.Millisecond
 )
+
+// Len is how many frames p shows.
+func (p *Picture) Len() int { return len(p.Delays) }
+
+// Moves reports whether p is an animation, not a Still.
+func (p *Picture) Moves() bool { return p.Len() > 1 }
 
 // Duration is how long frame i shows, as Chrome shows it: 100 ms for
 // one the file gives 10 ms or less, as the ads that asked for frames as
@@ -43,42 +62,60 @@ func (p *Picture) Duration(i int) time.Duration {
 	return slowest
 }
 
-// At is the frame that shows t after the animation began, and whether
-// another follows it: once the animation has played its times, its last
-// frame stays.
-func (p *Picture) At(t time.Duration) (int, bool) {
+// Whole is how long one play of p lasts.
+func (p *Picture) Whole() time.Duration {
 	var whole time.Duration
-	for i := range p.Frames {
+	for i := range p.Delays {
 		whole += p.Duration(i)
 	}
-	last := len(p.Frames) - 1
-	if p.Plays > 0 && t >= whole*time.Duration(p.Plays) {
-		return last, false
-	}
-	t %= whole
-	for i := range p.Frames {
+	return whole
+}
+
+// Within is the frame that shows t into a play, t below Whole.
+func (p *Picture) Within(t time.Duration) int {
+	for i := range p.Delays {
 		if t < p.Duration(i) {
-			return i, true
+			return i
 		}
 		t -= p.Duration(i)
 	}
-	return last, true
+	return p.Len() - 1
 }
 
-// add appends a frame, a copy of canvas shown for delay, reporting
-// whether it was within MaxPixels.
-func (p *Picture) add(canvas *image.NRGBA, delay time.Duration) bool {
-	if (len(p.Frames)+1)*len(canvas.Pix)/4 > MaxPixels {
-		return false
+// Frame is frame i: one held, else drawn from the frames before it,
+// on a canvas Frame draws every later frame on, so it holds until the
+// next call. A frame that can't be drawn leaves the one before.
+func (p *Picture) Frame(i int) *image.NRGBA {
+	if i < len(p.Frames) {
+		return p.Frames[i]
 	}
-	frame := image.NewNRGBA(canvas.Rect)
-	copy(frame.Pix, canvas.Pix)
-	p.Frames, p.Delays = append(p.Frames, frame), append(p.Delays, delay)
-	return true
+	l := p.later
+	if l.live == nil || i < l.next {
+		if l.live == nil {
+			l.live = image.NewNRGBA(p.Frames[0].Rect)
+		}
+		copy(l.live.Pix, l.from)
+		l.next, l.dispose = len(p.Frames), Keep
+	}
+	for ; l.next <= i; l.next++ {
+		l.dispose()
+		var err error
+		if l.dispose, err = l.steps[l.next-len(p.Frames)](l.live); err != nil {
+			l.dispose = Keep
+		}
+	}
+	return l.live
 }
+
+// Step draws a frame on the canvas, and returns what disposes of it
+// once shown.
+type Step func(canvas *image.NRGBA) (func(), error)
+
+// Keep is the disposal of a frame that leaves the canvas as it is.
+func Keep() {}
 
 // Decoder reads an animation: nil and no error for a picture of one
-// frame, which the image package reads.
+// frame the image package reads, a Still for one it doesn't.
 type Decoder func(data []byte) (*Picture, error)
 
 type format struct {
@@ -131,8 +168,7 @@ func matches(magic string, data []byte) bool {
 // a frame shows the canvas once it is drawn.
 type Canvas struct {
 	*image.NRGBA
-	pic  *Picture
-	full bool
+	pic *Picture
 }
 
 // NewCanvas is a clear canvas of w×h pixels for an animation that plays
@@ -141,32 +177,48 @@ func NewCanvas(w, h, plays int) *Canvas {
 	return &Canvas{NRGBA: image.NewNRGBA(image.Rect(0, 0, w, h)), pic: &Picture{Plays: plays}}
 }
 
-// Show keeps the canvas as it is as the next frame, shown for delay,
-// and reports whether the picture has room for more.
-func (c *Canvas) Show(delay time.Duration) bool {
-	if !c.full && !c.pic.add(c.NRGBA, delay) {
-		c.full = true
+// Add has step draw the next frame, shown for delay: at once while the
+// frames held stay within MaxPixels, kept to draw as it shows past them.
+// An error drawing a frame at once is Add's.
+func (c *Canvas) Add(delay time.Duration, step Step) error {
+	p := c.pic
+	if p.later == nil && (len(p.Frames)+1)*len(c.Pix)/4 > MaxPixels && len(p.Frames) > 0 {
+		p.later = &later{from: bytes.Clone(c.Pix)}
 	}
-	return !c.full
+	if p.later != nil {
+		p.later.steps, p.Delays = append(p.later.steps, step), append(p.Delays, delay)
+		return nil
+	}
+	dispose, err := step(c.NRGBA)
+	if err != nil {
+		return err
+	}
+	frame := image.NewNRGBA(c.Rect)
+	copy(frame.Pix, c.Pix)
+	p.Frames, p.Delays = append(p.Frames, frame), append(p.Delays, delay)
+	dispose()
+	return nil
 }
 
-// Clear clears r of the canvas, as a frame disposed to the background
-// is in Chrome, whatever background the file names.
-func (c *Canvas) Clear(r image.Rectangle) {
-	draw.Draw(c.NRGBA, r, image.Transparent, image.Point{}, draw.Src)
+// Clear clears r of img, as a frame disposed to the background is in
+// Chrome, whatever background the file names.
+func Clear(img *image.NRGBA, r image.Rectangle) {
+	draw.Draw(img, r, image.Transparent, image.Point{}, draw.Src)
 }
 
-// Save is a copy of the canvas, to Restore once a frame disposed to
-// what was before it has shown.
-func (c *Canvas) Save() []byte { return bytes.Clone(c.Pix) }
-
-// Restore puts back what Save kept.
-func (c *Canvas) Restore(saved []byte) { copy(c.Pix, saved) }
+// Still is the one frame drawn so far, as a picture that doesn't move:
+// for a file the image package can't read, nil when there is none.
+func (c *Canvas) Still() *Picture {
+	if c.pic.Len() == 0 {
+		return nil
+	}
+	return &Picture{Frames: c.pic.Frames[:1], Delays: c.pic.Delays[:1], Plays: 1}
+}
 
 // Picture is the animation drawn so far, nil when it holds one frame
 // or none.
 func (c *Canvas) Picture() *Picture {
-	if len(c.pic.Frames) < 2 {
+	if !c.pic.Moves() {
 		return nil
 	}
 	return c.pic

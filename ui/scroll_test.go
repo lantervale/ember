@@ -50,18 +50,22 @@ func (s *scroller) scrolled() float32 { return s.list.Box().Y - s.items[0].Box()
 
 func (s *scroller) outerScrolled() float32 { return s.outer.Box().Y - s.list.Box().Y }
 
+// settle is enough frames for the longest of the user's glides, a
+// notch's 12, to end.
+const settle = 14
+
 func (s *scroller) wheel(at geom.Vec2, d geom.Vec2) {
 	s.in.SetMouse(at)
 	s.w.RunFrames(1)
 	s.in.AddWheel(d)
-	s.w.RunFrames(2)
+	s.w.RunFrames(settle)
 }
 
 func (s *scroller) key(k input.Key) {
 	s.in.SetKey(k, true)
 	s.w.RunFrames(1)
 	s.in.SetKey(k, false)
-	s.w.RunFrames(1)
+	s.w.RunFrames(settle)
 }
 
 func TestTheWheelScrollsTheScrollerUnderThePointer(t *testing.T) {
@@ -130,7 +134,7 @@ func TestShiftTurnsTheWheelSideways(t *testing.T) {
 	in.SetKey(input.KeyLeftShift, true)
 	w.RunFrames(1)
 	in.AddWheel(geom.V2(0, 1))
-	w.RunFrames(2)
+	w.RunFrames(settle)
 	in.SetKey(input.KeyLeftShift, false)
 	assert.Positive(t, box.Box().X-wide.Box().X)
 }
@@ -153,10 +157,10 @@ func TestARightToLeftScrollerScrollsLeftFromZero(t *testing.T) {
 	in.SetKey(input.KeyLeftShift, true)
 	w.RunFrames(1)
 	in.AddWheel(geom.V2(0, 1))
-	w.RunFrames(2)
+	w.RunFrames(settle)
 	assert.InDelta(t, 0, doc.Scroll(box).X, 1e-3, "nothing past its right end")
 	in.AddWheel(geom.V2(0, -1))
-	w.RunFrames(2)
+	w.RunFrames(settle)
 	in.SetKey(input.KeyLeftShift, false)
 	assert.Negative(t, doc.Scroll(box).X, "the wheel scrolls it left")
 	assert.InDelta(t, start-doc.Scroll(box).X, wide.Box().X, 1e-3)
@@ -216,7 +220,7 @@ func TestOverlayScrollbarsTakeNoRoomAndScrollAsClassicOnes(t *testing.T) {
 	assert.Zero(t, r.Count(s.w), "and takes the press from the button under it")
 }
 
-func TestAClickOnTheTrackPagesByTheView(t *testing.T) {
+func TestAClickOnTheTrackPagesBySevenEighthsOfTheView(t *testing.T) {
 	s := newScroller(t)
 	l := s.list.Box()
 	s.in.SetMouse(geom.V2(l.X+l.W-10+2+3, l.Y+l.H-8))
@@ -224,8 +228,8 @@ func TestAClickOnTheTrackPagesByTheView(t *testing.T) {
 	s.in.SetMouseButton(input.MouseLeft, true)
 	s.w.RunFrames(1)
 	s.in.SetMouseButton(input.MouseLeft, false)
-	s.w.RunFrames(2)
-	assert.InDelta(t, 100, s.scrolled(), 1e-3)
+	s.w.RunFrames(settle)
+	assert.InDelta(t, 87, s.scrolled(), 1e-3, "seven eighths of the view, as Chrome's")
 }
 
 func TestPageAndEndKeysScrollTheFocusedElementsScroller(t *testing.T) {
@@ -234,7 +238,7 @@ func TestPageAndEndKeysScrollTheFocusedElementsScroller(t *testing.T) {
 	s.w.RunFrames(1)
 	require.Zero(t, s.scrolled())
 	s.key(input.KeyPageDown)
-	assert.InDelta(t, 100, s.scrolled(), 1e-3, "a page is the view")
+	assert.InDelta(t, 87, s.scrolled(), 1e-3, "a page is seven eighths of the view, as Chrome's")
 	s.key(input.KeyEnd)
 	assert.InDelta(t, 300, s.scrolled(), 1e-3)
 	s.key(input.KeyHome)
@@ -269,7 +273,7 @@ func TestWithNothingFocusedPageKeysScrollWhatIsUnderThePointer(t *testing.T) {
 	s.in.SetMouse(s.list.Box().Center())
 	s.w.RunFrames(1)
 	s.key(input.KeyPageDown)
-	assert.InDelta(t, 100, s.scrolled(), 1e-3, "the list under the pointer")
+	assert.InDelta(t, 87, s.scrolled(), 1e-3, "the list under the pointer")
 	s.key(input.KeyEnd)
 	assert.InDelta(t, 300, s.scrolled(), 1e-3)
 
@@ -287,7 +291,7 @@ func TestAFocusedScrollContainerPagesItself(t *testing.T) {
 	s.doc.Focus(s.list)
 	s.w.RunFrames(1)
 	s.key(input.KeyPageDown)
-	assert.InDelta(t, 100, s.scrolled(), 1e-3)
+	assert.InDelta(t, 87, s.scrolled(), 1e-3)
 }
 
 func TestAPagingKeyIsTheGamesOnlyWhenNothingScrolled(t *testing.T) {
