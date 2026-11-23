@@ -55,10 +55,13 @@ func (d *Document) barStates(in *input.State, at geom.Vec2, hit *box.Box) {
 // css restyle what reads it: n, or for the viewport's bars, whose parts
 // body's or the root's rules style, both.
 func (d *Document) setBarState(n *Node, field func(*dom.Pipeline) *style.BarPart, part style.BarPart) {
-	f := field(dom.Data(n))
+	data := dom.Data(n)
+	f := field(data)
 	if *f == part {
 		return
 	}
+	data.BarsStale.Mark(*f)
+	data.BarsStale.Mark(part)
 	*f = part
 	dom.Invalidate(n, ":scrollbar")
 	if n == d.html && d.body != nil {
