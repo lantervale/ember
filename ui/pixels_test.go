@@ -48,6 +48,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/border-image-width", 460, 170, 0.0007},
 		{"./internal/pages/flex-negative-margin", 640, 220, 0.0004},
 		{"./internal/pages/img-crisp", 160, 104, 0.0002},
+		{"./internal/pages/img-crisp-animated", 176, 120, 0.004},
 		{"./internal/pages/bevels", 480, 120, 0.0001},
 		{"./internal/pages/mitres", 560, 90, 0.0002},
 		{"./internal/pages/disabled", 480, 110, 0.0024},

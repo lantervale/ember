@@ -51,6 +51,7 @@
   "iframe": 0.004,
   "iframe-borders": 0.0005,
   "iframe-faded": 0.002,
+  "img-crisp-animated": 0.008,
   "joined": 0.01,
   "list-inside": 0.0135,
   "lists": 0.0065,
