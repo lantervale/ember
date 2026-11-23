@@ -11,6 +11,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a stroke's mitre at a sharp corner between two short curves of a glyph | the curves are stroked as straight pieces, and the mitre can reach a little further than Chrome's |
 | the default selection colour on Windows and Linux, focused or not | the system's colours under `ui.Preferences` (Windows' `Highlight` and `HighlightText`, KDE's selection colours), blended with white as Chrome on macOS blends its own: the machines here run Chrome on macOS only, which can't say what the others draw; GNOME's accent colour is not read, an inactive window's selection there is Chrome's macOS grey, and without `ui.Preferences` macOS's blue everywhere ([decision 0155](../99-decisions/0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md)) |
 | a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
+| the spaces after a word on Windows, in a field's double click, Control+Shift+Right and a drag by words | the word alone, where Chrome on Windows takes the spaces after it as a page's double click does |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a selected tab or carriage return in text that keeps them | the selection is drawn on the text around it, not over the tab's room |
@@ -223,4 +224,3 @@ Things built and tested, with a part no test against Chrome covers yet.
 - A percentage `top` on a relative child inside columns.
 - The largest raster of an SVG (8192 pixels a side) against the device's own limit.
 - The Linux and Windows thresholds of the pixel pages added since `word-spacing`: those of `iframe`, `table-model`, `background-boxes`, `word-spacing`, `vertical-align` and `font-smoothing` are what the runners measured once, their text drawn differently there.
-- The `mitres` page on the macOS and Linux runners, where Chrome's screenshot has the page's background and none of its boxes: it is compared on a desktop Mac and on the Windows runner only.

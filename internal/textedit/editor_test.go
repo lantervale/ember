@@ -65,7 +65,10 @@ func TestEachPlatformsKeysMeanTheirMoves(t *testing.T) {
 		{input.KeyDelete, textedit.Mods{}}:                      textedit.Delete,
 		{input.KeyTab, textedit.Mods{}}:                         textedit.Tab,
 	}
-	for p, set := range map[textedit.Platform]map[chord]textedit.Action{textedit.Mac: mac, textedit.Others: others} {
+	platforms := map[textedit.Platform]map[chord]textedit.Action{
+		textedit.Mac: mac, textedit.Others: others, textedit.Windows: others,
+	}
+	for p, set := range platforms {
 		for c, want := range set {
 			if got, _ := textedit.Resolve(p, c.key, c.mods); got != want {
 				t.Errorf("platform %d, %v %+v: %v, want %v", p, c.key, c.mods, got, want)
