@@ -36,6 +36,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `font-variant-ligatures`, `-numeric`, `-east-asian`, `-alternates`, `-position` on a face that has the features (`tnum`, `liga`, `sups`…) | read and kept, drawn as `normal`: ui applies no OpenType feature, where Chrome does; with the Go faces, which have none, both draw alike |
 | an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
 | shaping right-to-left scripts: Arabic's joined forms, ligatures | each letter drawn in its own form, where Chrome joins them |
+| a selected space where a line's text changes direction (`שלום abc` from the `ם` into `abc`) | its room is highlighted with the run it is shown in, where Chrome's range leaves it out |
 | the caret and the selection of a `textarea` in text shown right to left; a field's selection over text of both directions | measured from the left; one rectangle from the first selected character's edge to the last's, where Chrome draws one per run |
 
 ## Generated content

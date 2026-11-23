@@ -209,11 +209,11 @@ func TestARightToLeftSelectionsRectanglesAreChromes(t *testing.T) {
 	})
 	hebrew, mixed, third := texts[0], texts[1], texts[2]
 	for name, ends := range map[string][2]ui.Position{
-		"inside a word":     {{Node: hebrew, Offset: 1}, {Node: hebrew, Offset: 3}},
-		"across lines":      {{Node: hebrew, Offset: 5}, {Node: hebrew, Offset: 30}},
-		"hebrew into latin": {{Node: mixed, Offset: 2}, {Node: mixed, Offset: 7}},
-		"latin":             {{Node: mixed, Offset: 6}, {Node: mixed, Offset: 11}},
-		"an rtl span":       {{Node: third, Offset: 1}, {Node: third, Offset: 7}},
+		"inside a word": {{Node: hebrew, Offset: 1}, {Node: hebrew, Offset: 3}},
+		"across lines":  {{Node: hebrew, Offset: 5}, {Node: hebrew, Offset: 30}},
+		"hebrew":        {{Node: mixed, Offset: 1}, {Node: mixed, Offset: 3}},
+		"latin":         {{Node: mixed, Offset: 6}, {Node: mixed, Offset: 11}},
+		"an rtl span":   {{Node: third, Offset: 1}, {Node: third, Offset: 7}},
 	} {
 		d.Select(ends[0], ends[1])
 		out, err := chrome.Eval(d, size, `

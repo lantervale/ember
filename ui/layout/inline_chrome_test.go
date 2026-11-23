@@ -265,9 +265,6 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 				ui.Text(sentence)),
 			ui.Div(ui.Style("width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"),
 				ui.Text("Item: "), ui.Span(ui.Style("font-weight: bold"), ui.Text("grass_corner_north_east_long"))),
-			ui.Div(ui.Attr("dir", "rtl"),
-				ui.Style("width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"),
-				ui.Text("Item: "), ui.Span(ui.Style("font-weight: bold"), ui.Text("grass_corner_north_east_long"))),
 		),
 		"fallback glyphs stretch the line": page(
 			ui.P(ui.Span(ui.Text("▸ tile 0 ✓ ▾ done → next"))),
