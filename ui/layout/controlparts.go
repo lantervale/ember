@@ -3,6 +3,7 @@ package layout
 import (
 	"strings"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -51,10 +52,70 @@ func controlPartOf(e *dom.Node) partKind {
 	if e.Tag() == dom.Progress || e.Tag() == dom.Meter {
 		return innerPart
 	}
-	if t, _ := e.Attr("type"); e.Tag() == dom.Input && strings.EqualFold(strings.TrimSpace(t), "range") {
+	if isRange(e) {
 		return sliderPart
 	}
 	return noPart
+}
+
+func isRange(e *dom.Node) bool {
+	t, _ := e.Attr("type")
+	return e.Tag() == dom.Input && strings.EqualFold(strings.TrimSpace(t), "range")
+}
+
+// ranged reports a range, which a block shrinks to its natural width as Chrome does a
+// form control.
+func (n *node) ranged() bool { return n.box.Node != nil && isRange(n.box.Node) }
+
+// Chrome's range: its track's length, its own thumb's side.
+const trackLength, nativeThumb = 129, 16
+
+// RangeNatural is the content size of a range of style st on the page: its natural
+// one, which its sizes left auto take.
+func RangeNatural(st *style.Computed) geom.Vec2 {
+	s := rangeNatural(st)
+	if st.Mode.Vertical() {
+		s = s.across()
+	}
+	return geom.Vec2{X: s.w, Y: s.h}
+}
+
+// rangeNatural is the content size of a range of physical style st in its own frame,
+// as Chrome's shadow tree gives it: its track's length along it, and across it its own
+// thumb's side, the track's length for one of appearance slider-vertical in horizontal
+// lines, which runs down it, and nothing for one of appearance none (its parts then
+// give it its min-size).
+func rangeNatural(st *style.Computed) size {
+	switch {
+	case !st.Appearance.Native():
+		return size{trackLength, 0}
+	case st.Appearance == style.AppearanceSliderVertical && !st.Mode.Vertical():
+		return size{trackLength, trackLength}
+	}
+	return size{trackLength, nativeThumb}
+}
+
+// sliderRow gives a range laid out as a row round its slider container, its width not
+// given, its track's length along it, as Chrome's keeps whatever its ::before and its
+// ::after hold.
+func (n *node) sliderRow(in input) input {
+	if !n.slider || some(in.known.w) {
+		return in
+	}
+	st := n.st
+	pb := edges(st.Padding, in.parent.w).add(n.borders()).sum()
+	w := float32(trackLength) + pb.w
+	if in.sizing == inherentSize {
+		adj := boxSizingAdjustment(st, pb)
+		if styled := resolveSize(st.Size, in.parent).mAdd(adj); some(styled.w) {
+			return in
+		}
+		minSize := resolveSize(st.MinSize, in.parent).mAdd(adj)
+		maxSize := resolveMax(st.MaxSize, in.parent).mAdd(adj)
+		w = mClamp(w, minSize.w, maxSize.w)
+	}
+	in.known.w = w
+	return in
 }
 
 // buildParts gives n, a control of part k, its ::before, the part and
@@ -67,8 +128,12 @@ func (t *tree) buildParts(n *node, k partKind) {
 		flow = append(flow, t.flatten(n, []*dom.Node{d.Before})...)
 	}
 	st := partStyles[k]
-	flow = append(flow, item{part: &node{box: &box.Box{Kind: box.ControlPart, Style: st}, st: st, parent: n,
-		fresh: true}})
+	part := &node{box: &box.Box{Kind: box.ControlPart, Style: st}, st: st, parent: n, fresh: true}
+	if k == sliderPart {
+		// the slider container holds the track, whose thickness the row takes
+		part.natural, n.natural = size{0, n.natural.h}, size{}
+	}
+	flow = append(flow, item{part: part})
 	if d.After != nil {
 		flow = append(flow, t.flatten(n, []*dom.Node{d.After})...)
 	}

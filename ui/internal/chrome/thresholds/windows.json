@@ -144,5 +144,6 @@
   "viewport-top": 0.0071,
   "webkit-masks": 0.002,
   "word-spacing": 0.0147,
-  "writing-modes": 0.014
+  "writing-modes": 0.014,
+  "positioned-pictures": 0.001
 }

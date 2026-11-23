@@ -52,7 +52,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a range of `appearance: slider-vertical` whose height is `auto` | 16 tall, where Chrome makes it 129 by 129 ([decision 0199](../99-decisions/0199-a-controls-parts-are-hovered-and-pressed-as-chromes-shadow-elements.md)) |
 | a part's `:focus`, `:focus-visible` and `:focus-within`, an author's `!important` `width` on a progress's value, a thumb hovered where it overhangs its range's box | the rule dropped with a warning, the value's width its fraction, and the thumb hovered only within the range's box, where Chrome reads the pseudo-classes and matches nothing, takes the width, and hovers the thumb wherever it is drawn |
 | a meter of its own look whose parts a sheet styles | ui's flat bar in the parts' `background-color`s, where Chrome draws its rounded native bar in them |
 | a page's textarea in its default face (`ui.BrowserSheets()`), `monospace` | its rows and columns measured in Go Mono, where Chrome's monospace face makes it a few points apart (182×38 against 183×34 on macOS) |
@@ -85,7 +84,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
 | a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
-| a picture absolutely positioned in a box of another writing mode than its containing block's ([decision 0204](../99-decisions/0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md)) | its natural size turned into its parent's frame, where Chrome takes its containing block's |
 | a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |
 | `position: sticky` in vertical writing modes | not checked against Chrome |
 | a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |

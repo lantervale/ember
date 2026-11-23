@@ -306,7 +306,8 @@ type node struct {
 	// leaves the table or one of its cells for borders, nil where borders are apart.
 	shared    *borderGrid
 	collapsed *rect
-	// replaced is an img, natural its picture's size (zero without one).
+	// replaced is an img, natural its picture's size (zero without one); a range's
+	// natural is the least content it takes, its track's (rangeNatural).
 	replaced bool
 	natural  size
 	// shape is what a picture that doesn't ask for a size of pixels asks
@@ -407,6 +408,9 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		return n
 	}
 	n := t.element(e, parent)
+	if isRange(e) {
+		n.natural = rangeNatural(n.box.Style)
+	}
 	if k := controlPartOf(e); k != noPart {
 		t.buildParts(n, k)
 		return n
