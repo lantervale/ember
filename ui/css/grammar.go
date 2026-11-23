@@ -48,7 +48,7 @@ func globalKeyword(v []Component) string {
 
 func hasVar(cs []Component) bool {
 	for _, c := range cs {
-		if c.Kind == Function && strings.EqualFold(c.Text, "var") || hasVar(c.Args) {
+		if c.Kind == Function && (strings.EqualFold(c.Text, "var") || strings.EqualFold(c.Text, "env")) || hasVar(c.Args) {
 			return true
 		}
 	}

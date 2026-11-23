@@ -183,7 +183,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	}
 	r.env.root = root
 	if stale {
-		r.env.used, r.env.prefersRead = 0, false
+		r.env.used, r.env.prefersRead, r.env.titleBarRead = 0, false, false
 	} else if r.anchors && dom.Data(root).Style != nil {
 		r.anchor(root)
 	}
@@ -831,6 +831,12 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 				return nil, false
 			}
 			out = append(out, fb...)
+		case c.Kind == Function && strings.EqualFold(c.Text, "env"):
+			val, ok := x.envValue(c)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, val...)
 		case len(c.Args) > 0:
 			args, ok := x.substitute(c.Args)
 			if !ok {
@@ -843,6 +849,26 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 		}
 	}
 	return out, true
+}
+
+// envValue is what env() c stands for: its variable, else its fallback,
+// false when it has neither.
+func (x *ctx) envValue(c Component) ([]Component, bool) {
+	args := trim(c.Args)
+	if len(args) == 0 || args[0].Kind != Ident {
+		return nil, false
+	}
+	rest := trim(args[1:])
+	if len(rest) > 0 && rest[0].Kind != Comma {
+		return nil, false
+	}
+	if val, ok := x.env.variable(args[0].Text); ok {
+		return val, true
+	}
+	if len(rest) == 0 {
+		return nil, false
+	}
+	return x.substitute(trim(rest[1:]))
 }
 
 // apply computes one longhand from its winning declaration, or from
@@ -1890,8 +1916,9 @@ var props = func() map[string]prop {
 		},
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
-		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "drag") }, flips[bool]()),
+		"app-region": keyword(func(c *style.Computed) *style.AppRegion { return &c.AppRegion },
+			map[string]style.AppRegion{"drag": style.AppRegionDrag, "no-drag": style.AppRegionNoDrag,
+				"none": style.AppRegionNoDrag}),
 		"user-select": field(func(c *style.Computed) *style.UserSelect { return &c.UserSelect },
 			func(_ *ctx, v []Component) style.UserSelect {
 				switch strings.ToLower(v[0].Text) {

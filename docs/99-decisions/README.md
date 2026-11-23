@@ -140,6 +140,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
 | 0137 | [A box placed past a scroller is moved back as it scrolls](0137-a-box-placed-past-a-scroller-is-moved-back-as-it-scrolls.md) | api |
 | 0138 | [Animated pictures play as one texture per address](0138-animated-pictures-play-as-one-texture-per-address.md) | assets |
+| 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 
 ## Writing one
 

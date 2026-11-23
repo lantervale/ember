@@ -247,7 +247,9 @@ func (d *Document) Value(n *Node) string {
 // SetValue sets a control's value, as the game does, without events. A
 // focused text field keeps what the player is typing, until it changes or
 // is submitted: then it takes the game's answer, as a chat clearing its
-// field on Enter.
+// field on Enter. A callback of the field's own events (OnKey, OnInput…)
+// sets it at once, its caret at the end, as a console walking its history
+// on Up (decision 0142).
 func (d *Document) SetValue(n *Node, v string) {
 	switch m := d.machine(n).(type) {
 	case *control.Select:
@@ -263,7 +265,10 @@ func (d *Document) SetValue(n *Node, v string) {
 	case *control.Checkbox:
 		m.Checked = v != ""
 	default:
-		if t := textOf(m); t != nil && (d.focused() != n || d.typing != n) {
+		if t := textOf(m); t != nil && (d.focused() != n || d.typing != n || d.answering == n) {
+			if d.typing == n {
+				d.typing = nil
+			}
 			t.SetValue(v)
 			if d.uses[n]&edited != 0 {
 				d.uses[n] &^= edited

@@ -36,7 +36,10 @@ type Document struct {
 	// typing is the text field the player has typed in since it last
 	// changed or was submitted: SetValue leaves it be while it has the
 	// focus, and sets it again once its text is committed.
-	typing     *Node
+	typing *Node
+	// answering is the element whose callbacks are running, whose value a
+	// SetValue sets though it is typed in.
+	answering  *Node
 	drawnOnce  bool
 	fresh      bool
 	html, body *Node
@@ -362,6 +365,9 @@ func (d *Document) Layout(size geom.Vec2) {
 	if d.trans.SetMedia(media) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
+	if d.trans.SetTitleBarArea(d.titleBarArea(size)) {
+		dom.Data(d.html).Dirty |= dom.DirtyStyle
+	}
 	d.style()
 	if d.choosePictures(media, false) {
 		d.style()
@@ -382,7 +388,7 @@ func (d *Document) Layout(size geom.Vec2) {
 	d.scrolled = false
 	d.lay(size)
 	d.requery(size)
-	if tips, lists := d.placeTips(), d.placeSuggestions(); tips || lists {
+	if tips, lists, title := d.placeTips(), d.placeSuggestions(), d.placeTitle(); tips || lists || title {
 		d.style()
 		d.lay(size)
 		d.requery(size)
