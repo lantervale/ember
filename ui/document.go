@@ -150,6 +150,8 @@ type Document struct {
 	idle     *input.State
 	// wheel is how many times the wheel's turn d scrolls by (wheel.go).
 	wheel float32
+	// instant is whether the user's scrolls move at once (scrollmotion.go).
+	instant bool
 }
 
 // DocumentOption configures a Document.

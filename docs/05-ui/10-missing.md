@@ -138,7 +138,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a form's submission | Chrome's validation bubble is not shown, and nothing is sent: `action`, `method`, `formaction`, `target` are the program's to read |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `container-type: anchored` | refused with a warning |
-| a scroll by the user gliding, `scroll-snap-type` on both axes snapping to one area on both (Chrome's mutual snap), snapping a selection's drag | the wheel, the keys and a held thumb move at once, the keys to their snap position too (the wheel and the thumb glide to theirs), each axis picks its own nearest area, and a drag past an edge never snaps, where Chrome glides the user's scrolls as the system says, prefers an area aligned on both axes and snaps once a drag ends |
+| a trackpad's or a smooth wheel's scroll on Windows, Linux and the web | counted as a mouse's notches, three lines each and gliding, as GLFW and the browser's `deltaY` tell them: only macOS says a turn is precise ([decision 0169](../99-decisions/0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md)) |
+| a `ScrollBy` moving both axes of a container that snaps on both, by Chrome's displacement strategy | lands as Chrome's search reads, which in some layouts is another area than Chrome 157 lands on |
+| a click held on a scrollbar's track | pages once, where Chrome pages again while it is held |
+| the arrows and Space with nothing focused on a Document without `ScrollingViewport()` | left to the game, where Chrome scrolls ([decision 0169](../99-decisions/0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md)) |
 | `overscroll-behavior` on a touch's scroll, `overscroll-behavior: none`'s bounce | ui scrolls by no touch and bounces nothing: `contain` and `none` stop the chain alike |
 | `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |

@@ -178,6 +178,7 @@ func TestAnElementOverAnIframeShieldsIt(t *testing.T) {
 
 func TestTheWheelScrollsAnIframeThenThePage(t *testing.T) {
 	p := newFramePage(t)
+	p.host.SetInstantScrolls(true)
 	p.in.SetMouse(p.inFrame(20, 100))
 	p.frames(2)
 	slotAt := func() float32 { r, _ := p.host.BoxOf(p.slot); return r.Y }
@@ -208,6 +209,7 @@ func TestTheWheelScrollsAnIframeThenThePage(t *testing.T) {
 
 func TestTheWheelFactorOfTheOutermostDocumentHoldsInItsIframes(t *testing.T) {
 	p := newFramePage(t)
+	p.host.SetInstantScrolls(true)
 	p.host.SetWheelScroll(-1)
 	p.child.SetWheelScroll(3)
 	p.in.SetMouse(p.inFrame(20, 100))

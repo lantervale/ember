@@ -383,6 +383,28 @@ func TestADragPastAScrollersEdgeScrollsIt(t *testing.T) {
 	assert.InDelta(t, scroll, scrolled(), 0.01, "the button up, it stops")
 }
 
+func TestADragPastASnapContainersEdgeSnapsItOnceItEnds(t *testing.T) {
+	var lines []ui.Arg
+	for range 30 {
+		lines = append(lines, ui.P(ui.Style("margin: 0; height: 40px; scroll-snap-align: start"), ui.Text("a line of text")))
+	}
+	scroller := ui.Div(append(lines, ui.Style("height: 100px; overflow: auto; scroll-snap-type: y mandatory"))...)
+	l := selectableDoc(t, "", scroller)
+	first := scroller.Children()[0]
+	l.down(l.at(t, first, 2))
+	scrolled := func() float32 { return scroller.Box().Y - first.Box().Y }
+	unsnapped := false
+	for range 30 {
+		l.moveTo(geom.V2(40, 160))
+		unsnapped = unsnapped || int(scrolled())%40 != 0
+	}
+	assert.True(t, unsnapped, "the drag scrolls freely")
+	l.up()
+	l.frames(40)
+	assert.Positive(t, scrolled())
+	assert.InDelta(t, 0, float32(int(scrolled()+0.5)%40), 0.01, "let go, it glides to a line's start: %v", scrolled())
+}
+
 func TestAutomationSelectsALabelsText(t *testing.T) {
 	note := ui.P(ui.ID("note"), ui.Text("The quick brown fox"))
 	fixed := ui.P(ui.ID("fixed"), ui.Style("user-select: none"), ui.Text("not for selecting"))
