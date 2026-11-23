@@ -44,6 +44,18 @@ var compared = map[string]func(s *style.Computed) string{
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
 	"font-family": func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"tab-size": func(s *style.Computed) string {
+		if s.TabSize.Length {
+			return px(s.TabSize.Px)
+		}
+		return num(s.TabSize.Spaces)
+	},
+	"word-break": func(s *style.Computed) string {
+		return [...]string{"normal", "break-all", "keep-all", "break-word"}[s.WordBreak]
+	},
+	"line-break": func(s *style.Computed) string {
+		return [...]string{"auto", "loose", "normal", "strict", "anywhere"}[s.LineBreak]
+	},
 	"font-variant-caps": func(s *style.Computed) string {
 		return [...]string{"normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase",
 			"titling-caps"}[s.FontVariant.Caps]

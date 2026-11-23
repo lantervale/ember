@@ -1720,6 +1720,19 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
+		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
+			func(x *ctx, v []Component) style.TabSize {
+				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
+					return style.TabSize{Spaces: x.number(v[0], 0)}
+				}
+				return style.TabSize{Px: x.px(v[0]), Length: true}
+			}, tabSizes),
+		"word-break": keyword(func(c *style.Computed) *style.WordBreak { return &c.WordBreak },
+			map[string]style.WordBreak{"normal": style.WordBreakNormal, "break-all": style.BreakAll,
+				"keep-all": style.KeepAll, "break-word": style.WordBreakBreakWord}),
+		"line-break": keyword(func(c *style.Computed) *style.LineBreak { return &c.LineBreak },
+			map[string]style.LineBreak{"auto": style.LineBreakAuto, "loose": style.LineBreakLoose,
+				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {

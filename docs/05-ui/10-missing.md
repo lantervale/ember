@@ -14,7 +14,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | the default selection colour on Windows and Linux | macOS's blue everywhere |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
-| a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
+| a selected tab or carriage return in text that keeps them | the selection is drawn on the text around it, not over the tab's room |
+| `word-break: break-all` between two elements (`ab<b>cd</b>`), and between a letter and punctuation other than a hyphen | no break where the element changes; elsewhere ui breaks between two letters or digits and before a hyphen, which Chrome's table may differ from round brackets and marks |
+| `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
 | `text-decoration-skip-ink`, a decoration's shadow | a line is drawn through descenders, and `text-shadow` leaves it out |
@@ -128,7 +130,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 | math functions in a colour's channels and in times (`calc(1s + 100ms)`) | refused |
 | a percentage inside `sign()` in a `line-height` | of the font size, where Chrome measures it against something else |
-| `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `@counter-style` | refused |
+| `list-style-image`, `direction`, `mix-blend-mode`, `@counter-style` | refused |
 
 ## Windows
 

@@ -140,7 +140,10 @@ func (t *Text) equal(o *Text) bool {
 		t.Orphans == o.Orphans &&
 		t.Widows == o.Widows &&
 		t.BreakWord == o.BreakWord &&
-		t.BreakAnywhere == o.BreakAnywhere
+		t.BreakAnywhere == o.BreakAnywhere &&
+		t.WordBreak == o.WordBreak &&
+		t.LineBreak == o.LineBreak &&
+		t.TabSize == o.TabSize
 }
 
 func (d *Decoration) equal(o *Decoration) bool {

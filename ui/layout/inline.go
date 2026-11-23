@@ -153,6 +153,9 @@ const (
 	marker
 	// anchor is where an out-of-flow element sits, zero wide; span is its index in anchors.
 	anchor
+	// tab is a tab of text that keeps it, as wide as it takes to reach the next tab stop,
+	// or a carriage return there, of no width.
+	tab
 )
 
 // piece is a word, a space, a zero-width break opportunity, a forced break, an atomic
@@ -166,6 +169,9 @@ type piece struct {
 	// at is where a word's or a gap's text starts in its run's, in characters.
 	at    int32
 	start bool
+	// stop is a tab's distance between tab stops, none for a carriage return, and least
+	// the room it takes at the least.
+	stop, least float32
 }
 
 const zeroWidthSpace = "\u200b"
@@ -358,7 +364,8 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	ws := r.st.WhiteSpace
 	text := collapsedBlanks(r.text, ws)
 	var b strings.Builder
-	splits := r.st.BreakWord && wraps(ws)
+	splits := wraps(ws) && (r.st.WrapsAnywhere() || r.st.WordBreak == style.BreakAll ||
+		r.st.LineBreak == style.LineBreakAnywhere)
 	// n counts the characters read, and from is where the text in b starts.
 	var n, from int32
 	emit := func(kind pieceKind) {
@@ -396,6 +403,15 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			emit(word)
 			afterSpace = true
 			c.pieces = append(c.pieces, piece{kind: newline, run: i})
+		case ch == '\t' || ch == '\r':
+			emit(word)
+			p := piece{kind: tab, run: i, at: n - 1}
+			if ch == '\t' {
+				space := fonts.Advance(r.st.Font, " ")
+				p.stop, p.least = r.st.TabStop(space), space/2
+			}
+			c.pieces = append(c.pieces, p)
+			afterSpace = false
 		case ch == ' ':
 			emit(word)
 			if collapses(ws) && afterSpace {
@@ -437,11 +453,13 @@ func (c *inlineContent) anchorsAt(i int) {
 	}
 }
 
-// graphemes adds word s of run i as one piece per grapheme, with emergency breaks between
-// them, each measured as the growth of the word's advance so that they add up to it.
+// graphemes adds word s of run i as one piece per grapheme, each measured as the growth of
+// the word's advance so that they add up to it. Between two, a line breaks where word-break:
+// break-all or line-break: anywhere let it, else in an emergency where overflow-wrap does;
+// two graphemes with neither stay one piece.
 func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s string, from int32) {
 	rest, state := s, -1
-	var g string
+	var g, last string
 	prev := float32(0)
 	for at := 0; len(rest) > 0; {
 		g, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
@@ -449,13 +467,35 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		adv := fonts.Advance(st.Font, strings.ReplaceAll(s[:at], zeroWidthSpace, ""))
 		w := adv - prev + st.Spacing(g)
 		prev = adv
-		if at > len(g) {
+		switch {
+		case at == len(g):
+		case st.LineBreak == style.LineBreakAnywhere || st.WordBreak == style.BreakAll && breaksAll(last, g):
+			c.pieces = append(c.pieces, piece{kind: breakHere, run: i})
+		case st.WrapsAnywhere():
 			c.pieces = append(c.pieces, piece{kind: emergency, run: i})
+		default:
+			p := &c.pieces[len(c.pieces)-1]
+			p.text += g
+			p.width += w
+			last = g
+			from += int32(utf8.RuneCountInString(g)) //nolint:gosec // a text node's length
+			continue
 		}
+		last = g
 		c.pieces = append(c.pieces, piece{kind: word, run: i, text: g, width: w, at: from})
 		from += int32(utf8.RuneCountInString(g)) //nolint:gosec // a text node's length
 	}
 }
+
+// breaksAll reports whether word-break: break-all breaks between the graphemes a and b:
+// after a letter or a digit, before another or a hyphen, as Chrome breaks it.
+func breaksAll(a, b string) bool {
+	ra, _ := utf8.DecodeLastRuneInString(a)
+	rb, _ := utf8.DecodeRuneInString(b)
+	return letterLike(ra) && (letterLike(rb) || rb == '-' || rb == '\u2010')
+}
+
+func letterLike(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
 
 // markerOf is the disclosure triangle list-style gives a ::marker, as
 // Chrome's text for it: "" for none.
@@ -554,7 +594,7 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 				continue
 			}
 		}
-		if c.runs[run].atomic != nil {
+		if c.runs[run].atomic != nil || c.runs[run].st.WordBreak == style.KeepAll && keeps(text[:pos], rest) {
 			continue
 		}
 		if soft[run] == nil {
@@ -563,6 +603,14 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		soft[run][pos-starts[run]] = true
 	}
 	return soft
+}
+
+// keeps reports whether word-break: keep-all keeps the break between before and after:
+// one between two letters or digits, ideographs included.
+func keeps(before, after string) bool {
+	a, _ := utf8.DecodeLastRuneInString(before)
+	b, _ := utf8.DecodeRuneInString(after)
+	return letterLike(a) && letterLike(b)
 }
 
 // fills reports whether an atomic inline is a picture that takes the width it is given.
@@ -668,6 +716,7 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 		return minW, maxW
 	}
 	cur := newPen(c.unit, c.indent(unbounded))
+	cur.origin = 0
 	hung := false
 	for i, p := range c.pieces {
 		switch p.kind {
@@ -681,7 +730,7 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 				cur, hung = newPen(c.unit, 0), false
 			}
 		case emergency:
-			if c.runs[p.run].st.BreakAnywhere {
+			if c.runs[p.run].st.MinAnywhere() {
 				cur = newPen(c.unit, 0)
 			}
 		case atomic:
@@ -697,7 +746,7 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 			default:
 				cur = newPen(c.unit, 0)
 			}
-		case breakHere, newline, anchor:
+		case breakHere, newline, anchor, tab:
 			cur = newPen(c.unit, 0)
 		}
 	}
@@ -728,6 +777,15 @@ type line struct {
 	forced   bool
 	x, avail float32
 	push     float32
+	// indent is the part of x text-indent is, which tab stops are not measured from.
+	indent float32
+}
+
+// pen is a pen at x walking l, its tab stops measured from l's start.
+func (l line) pen(unit, x float32) pen {
+	p := newPen(unit, x)
+	p.origin = x - l.indent
+	return p
 }
 
 // indent is text-indent for lines of that width: how far the first line starts in, a
@@ -878,7 +936,7 @@ func (c *inlineContent) joins(i int) bool {
 	switch c.pieces[i].kind {
 	case word, atomic, edge, marker, anchor:
 		return true
-	case gap, breakHere, newline, emergency:
+	case gap, breakHere, newline, emergency, tab:
 	}
 	return false
 }
@@ -889,7 +947,7 @@ func (c *inlineContent) measureUnit(at pen, pending, i, end int) (pen, pen) {
 	next := at
 	if pending >= 0 {
 		for k := pending; k < i; k++ {
-			if c.pieces[k].kind == gap {
+			if kind := c.pieces[k].kind; kind == gap || kind == tab {
 				next.step(c.pieces[k], 0)
 			}
 		}
@@ -932,6 +990,13 @@ func (b *breaker) open(i int, x, avail, push float32) {
 	b.kept = b.at
 	b.pending, b.spaced = -1, -1
 	b.empty, b.blank = true, true
+}
+
+// indent has the open line start in by indent, text-indent.
+func (b *breaker) indent(indent float32) {
+	b.cur.indent = indent
+	b.at.origin = -indent
+	b.kept = b.at
 }
 
 // one breaks the open line from piece i, no wider than width where it may wrap, and
@@ -1022,6 +1087,11 @@ func (b *breaker) between(i int) bool {
 			b.pending = i
 		}
 		return true
+	case tab:
+		if b.pending < 0 {
+			b.pending = i
+		}
+		return true
 	case breakHere:
 		return true
 	case newline, word, atomic, edge, emergency, marker, anchor:
@@ -1077,6 +1147,7 @@ func (b *breaker) breakAll(width float32) []line {
 	c := b.c
 	indent := c.indent(width)
 	b.open(0, indent, width-indent, 0)
+	b.indent(indent)
 	for i := 0; i < len(c.pieces); {
 		var ended bool
 		if i, ended = b.one(i, b.cur.avail); ended {
@@ -1105,6 +1176,7 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			room -= indent
 			b.out = b.out[:kept]
 			b.open(i, x-c.flowLeft+indent, room, y-bottom)
+			b.indent(indent)
 			after, ended := b.one(i, room)
 			l := b.cur
 			l.width = b.kept.end()
@@ -1531,7 +1603,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			t.spanRects(c, l, c.shown(l), start, perGap, y, lb,
 				map[*box.Box]geom.Rect{}, make([]bool, len(c.spans)), spanLines)
 		}
-		at := newPen(c.unit, start)
+		at := l.pen(c.unit, start)
 		for _, p := range c.shown(l) {
 			x := at.step(p, perGap)
 			if p.kind == anchor {
@@ -1715,10 +1787,11 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		if ellipsis && l.width > l.avail {
 			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
-		walk := newPen(c.unit, x)
+		walk := l.pen(c.unit, x)
 		for i := 0; i < len(pieces); {
 			run := pieces[i].run
-			if k := pieces[i].kind; k == atomic || k == edge || k == marker || k == anchor || k == gap && perGap > 0 {
+			if k := pieces[i].kind; k == atomic || k == edge || k == marker || k == anchor || k == tab ||
+				k == gap && perGap > 0 {
 				at := walk.step(pieces[i], perGap)
 				if k == marker {
 					c.placeMarker(geom.Rect{X: at, Y: y, W: pieces[i].width, H: lh}, lb)
@@ -1816,7 +1889,7 @@ func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left,
 func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, x, perGap, y,
 	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]geom.Rect) {
 	at := make([]float32, len(pieces)+1)
-	walk := newPen(c.unit, x)
+	walk := l.pen(c.unit, x)
 	for i, p := range pieces {
 		at[i] = walk.step(p, perGap)
 	}

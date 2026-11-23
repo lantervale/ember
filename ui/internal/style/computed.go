@@ -47,6 +47,7 @@ func Initial() Computed {
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
 			Orphans:    2, Widows: 2,
+			TabSize:    TabSize{Spaces: 8},
 		},
 		Look: Look{
 			Opacity: 1, Visible: true, TransformOrigin: Size[Length]{Percent(50), Percent(50)},
@@ -588,7 +589,61 @@ type Text struct {
 	// BreakAnywhere is overflow-wrap: anywhere, whose breaks also count
 	// in min-content widths.
 	BreakAnywhere bool
+	WordBreak     WordBreak
+	LineBreak     LineBreak
+	TabSize       TabSize
 }
+
+// WordBreak is word-break: where lines may break inside words.
+type WordBreak uint8
+
+const (
+	WordBreakNormal WordBreak = iota
+	// BreakAll breaks between any two letters, as between ideographs.
+	BreakAll
+	// KeepAll breaks no word of letters, ideographs neither.
+	KeepAll
+	// WordBreakBreakWord is break-word, the old name of overflow-wrap:
+	// anywhere.
+	WordBreakBreakWord
+)
+
+// LineBreak is line-break. Its values but anywhere differ only on the
+// punctuation of Chinese and Japanese, where ui breaks as normal.
+type LineBreak uint8
+
+const (
+	LineBreakAuto LineBreak = iota
+	LineBreakLoose
+	LineBreakNormal
+	LineBreakStrict
+	// LineBreakAnywhere breaks between any two characters.
+	LineBreakAnywhere
+)
+
+// TabSize is tab-size: Spaces spaces of the text's font, or Px points
+// when Length.
+type TabSize struct {
+	Spaces, Px float32
+	Length     bool
+}
+
+// TabStop is the distance between t's tab stops, space the advance of a
+// space in its font.
+func (t *Text) TabStop(space float32) float32 {
+	if t.TabSize.Length {
+		return t.TabSize.Px
+	}
+	return t.TabSize.Spaces * space
+}
+
+// WrapsAnywhere reports whether a word too wide for its line breaks
+// where it must: overflow-wrap or word-break: break-word.
+func (t *Text) WrapsAnywhere() bool { return t.BreakWord || t.WordBreak == WordBreakBreakWord }
+
+// MinAnywhere reports whether those breaks also count in min-content
+// widths: overflow-wrap: anywhere, word-break: break-word.
+func (t *Text) MinAnywhere() bool { return t.BreakAnywhere || t.WordBreak == WordBreakBreakWord }
 
 type BorderStyle uint8
 
