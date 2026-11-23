@@ -88,6 +88,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/multicol", 640, 440, 0.0046},
 		{"./internal/pages/column-span", 640, 420, 0.004},
 		{"./internal/pages/column-cuts", 560, 420, 0.0025},
+		{"./internal/pages/column-cuts-more", 560, 420, 0.0035},
 		{"./internal/pages/inline-opacity", 420, 240, 0.002},
 		{"./internal/pages/table-collapse", 520, 240, 0.0022},
 		{"./internal/pages/generated", 640, 440, 0.0025},

@@ -3,6 +3,7 @@
 package layout_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,6 +11,8 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // rows is a paragraph of n one-word lines, broken by newlines: Chrome reports a br that
@@ -290,4 +293,72 @@ p { margin: 0 0 8px; } h3 { margin: 0 0 6px; } .note { padding: 6px; border: 2px
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 		})
 	}
+}
+
+func TestColumnsCutMoreMatchChrome(t *testing.T) {
+	const base = `.m { column-count: 2; column-gap: 20px; width: 400px; background: #eee; margin-bottom: 10px; }
+p { margin: 0; background: #cdf; } .s { column-span: all; background: #cfc; }
+.f { display: flex; background: #cdf; } .g { display: grid; grid-template-columns: 1fr 1fr; background: #cdf; }
+table { border-spacing: 0; background: #cdf; } td { padding: 0; vertical-align: top; }`
+	m := func(style string, kids ...ui.Arg) *ui.Node {
+		return ui.Div(append([]ui.Arg{ui.Class("m"), ui.Style(style)}, kids...)...)
+	}
+	cases := map[string]*ui.Document{
+		"a spanner in a framed block": styled(base,
+			m("", ui.Div(ui.Style("padding: 5px; border: 2px solid; background: #fcc"), rows("", 3),
+				ui.Div(ui.Class("s"), ui.Text("across")), rows("", 4))),
+			m("", ui.Div(ui.Style("margin: 8px 0; background: #fcc"), rows("", 3),
+				ui.Div(ui.Class("s"), ui.Text("across")), rows("", 4))),
+			m("", rows("", 2), ui.Div(ui.Style("padding: 4px 10px; margin: 6px 12px; border: 3px solid"),
+				ui.Div(ui.Style("padding: 3px"), rows("", 2), ui.H3(ui.Class("s"), ui.Style("margin: 0"),
+					ui.Text("deep")), rows("", 2))), rows("", 2)),
+		),
+		"a table row cut": styled(base,
+			m("", ui.Table(ui.Tr(ui.Td(rows("", 6)), ui.Td(rows("", 2))))),
+			m("", rows("", 2), ui.Table(ui.Style("border: 2px solid; border-spacing: 3px"),
+				ui.Tr(ui.Td(rows("", 2))), ui.Tr(ui.Td(rows("", 5)), ui.Td(rows("line-height: 25px", 3))))),
+		),
+		"boxes side by side whose lines don't line up": styled(base,
+			m("", ui.Div(ui.Class("f"), rows("line-height: 23px", 5), rows("", 6))),
+			m("", ui.Div(ui.Class("g"), rows("line-height: 23px", 5), rows("", 6))),
+			m("", rows("", 1), ui.Div(ui.Class("f"), ui.Style("padding: 3px; gap: 4px"),
+				rows("line-height: 13px", 7), rows("line-height: 21px", 4))),
+		),
+	}
+	for name, page := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, page, geom.V2(900, 1400))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}
+
+// TestRightToLeftColumnsScrollAsChromes has multi-column scrollers of direction rtl whose
+// columns overflow past their left scrolled as far as Chrome lets them, then compared box
+// by box there.
+func TestRightToLeftColumnsScrollAsChromes(t *testing.T) {
+	const sheet = `.m { column-count: 2; column-gap: 20px; width: 400px; height: 45px; overflow: auto; direction: rtl;
+background: #eee; margin-bottom: 10px; } p { margin: 0; background: #cdf; }`
+	page := func() (*ui.Document, []*ui.Node) {
+		s := []*ui.Node{
+			ui.Div(ui.Class("m"), rows("", 9)),
+			ui.Div(ui.Class("m"), ui.Style("padding: 3px 7px; column-count: 3; border-left: 4px solid"), rows("", 12)),
+			ui.Div(ui.Class("m"), ui.Style("column-fill: auto"), rows("", 7)),
+		}
+		return styled(sheet, s...), s
+	}
+	d, _ := page()
+	out, err := chrome.Eval(d, geom.V2(900, 600), `return [...document.querySelectorAll(".m")]
+		.map(e => { e.scrollLeft = -1e6; return e.scrollLeft; });`)
+	require.NoError(t, err)
+	var want []float32
+	require.NoError(t, json.Unmarshal(out, &want))
+	d, s := page()
+	d.Layout(geom.V2(900, 600))
+	for i, n := range s {
+		d.SetScroll(n, geom.V2(-1e6, 0))
+		assert.InDelta(t, want[i], d.Scroll(n).X, 1, "scroller %d", i)
+	}
+	r := chrome.Match(t, d, geom.V2(900, 600))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
