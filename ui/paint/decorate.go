@@ -1812,7 +1812,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
 		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
 		for _, f := range b.Lines {
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
+			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 		return
 	}
@@ -1849,7 +1849,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		p.recoloured(e, st, face, parts, c, ink)
 	} else if c.A > 0 {
 		for _, f := range b.Lines {
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
+			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 	}
 	if stroked {
@@ -1899,7 +1899,7 @@ func (p *painter) strokes(e entry, st *style.Computed, face *twod.Face, parts []
 	draw := func(at geom.Vec2, f box.Fragment, s style.TextStroke) {
 		if s.Width > 0 && s.Color.A > 0 {
 			o := p.textOptions(face, st.Font.Size, st.LetterGap(), s.Color, smoothingOf(st))
-			p.words(at, &f, st, append(slices.Clip(o), twod.TextStroke(s.Width)))
+			p.fragment(at, &f, st, append(slices.Clip(o), twod.TextStroke(s.Width)))
 		}
 	}
 	for i, f := range e.b.Lines {
@@ -1954,7 +1954,7 @@ func (p *painter) shadows(e entry, st *style.Computed, face *twod.Face, f box.Fr
 				continue
 			}
 			o := p.textOptions(face, st.Font.Size, st.LetterGap(), tc, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), &f, st, o)
+			p.fragment(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), &f, st, o)
 		}
 	}
 }
@@ -1987,15 +1987,10 @@ func (p *painter) selectionDecorations(e entry, st *style.Computed, parts []Sele
 	}
 }
 
-// words draws fragment f's text from at as opts draw it, each word
-// separator widened by st's word-spacing but a space starting its block's
-// text: whole without one, else word by word, each where layout measured
-// it.
-func (p *painter) words(at geom.Vec2, fr *box.Fragment, st *style.Computed, opts []twod.TextOption) {
-	text := fr.Shown()
-	if fr.Unspaced && !fr.RTL {
-		at.X -= st.WordGap()
-	}
+// words draws text from at as opts draw it, each word separator widened
+// by st's word-spacing: whole without one, else word by word, each where
+// layout measured it.
+func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
 	f := st.Font
 	if c, ok := p.fonts.(capsFonts); ok {
 		f = c.Caps(f, text)
@@ -2011,6 +2006,61 @@ func (p *painter) words(at geom.Vec2, fr *box.Fragment, st *style.Computed, opts
 			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
 		}
 		at.X = p.wordsIn(at, r.Text, st, r.Font, withFeatures(o, r.Font))
+	}
+}
+
+// fragment draws fragment f of a line at at with words: text shown
+// right to left in the order it is read, shaped so and laid out from the
+// right, each piece small capitals or a word gap cut placed from where
+// the fragment ends.
+func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
+	if !f.RTL {
+		if f.Unspaced {
+			// The space starting its block's text takes no word-spacing.
+			at.X -= st.WordGap()
+		}
+		p.words(at, f.Text, st, opts)
+		return
+	}
+	opts = append(slices.Clip(opts), twod.RightToLeft())
+	font := st.Font
+	if c, ok := p.fonts.(capsFonts); ok {
+		font = c.Caps(font, f.Text)
+	}
+	runs := font.SmallCaps(f.Text)
+	if runs == nil {
+		runs = []style.CapsRun{{Text: f.Text, Font: font}}
+	}
+	type piece struct {
+		text   string
+		opts   []twod.TextOption
+		w, gap float32
+	}
+	var pieces []piece
+	var width float32
+	gap := st.WordGap()
+	for _, r := range runs {
+		o := opts
+		if r.Font.Size != st.Font.Size {
+			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
+		}
+		o = withFeatures(o, r.Font)
+		for text := r.Text; len(text) > 0; {
+			i, after := len(text), float32(0)
+			if k := strings.IndexFunc(text, style.WordSeparator); gap != 0 && k >= 0 {
+				_, n := utf8.DecodeRuneInString(text[k:])
+				i, after = k+n, gap
+			}
+			pc := piece{text[:i], o, p.advance(st, r.Font, text[:i], o) + after, after}
+			pieces = append(pieces, pc)
+			width += pc.w
+			text = text[i:]
+		}
+	}
+	x := at.X + width
+	for _, pc := range pieces {
+		x -= pc.w
+		p.s.Text(geom.V2(x+pc.gap, at.Y), pc.text, pc.opts...)
 	}
 }
 
@@ -2141,7 +2191,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
 		if k < 0 {
-			p.words(at, &f, st, plain)
+			p.fragment(at, &f, st, plain)
 			continue
 		}
 		for j, clip := range p.partClips(e, st, f, parts[k]) {
@@ -2153,7 +2203,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(clip)
-			p.words(at, &f, st, p.textOptions(face, st.Font.Size, st.LetterGap(), drawn, smoothingOf(st)))
+			p.fragment(at, &f, st, p.textOptions(face, st.Font.Size, st.LetterGap(), drawn, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}

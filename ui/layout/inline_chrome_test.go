@@ -119,9 +119,9 @@ func ourLines(d *ui.Document, size geom.Vec2) ([][]chromeLine, []*dom.Node) {
 }
 
 // matchText checks that every text node breaks into the same lines as in
-// Chrome, each line's glyphs within tol points horizontally, and its
-// glyphs' top (baseline minus ascent) within tol vertically.
-func matchText(t *testing.T, d *ui.Document, size geom.Vec2, tol float32) {
+// Chrome, each line's glyphs within textTolerance points horizontally, and
+// its glyphs' top (baseline minus ascent) within it vertically.
+func matchText(t *testing.T, d *ui.Document, size geom.Vec2) {
 	t.Helper()
 	raw, err := chrome.Eval(d, size, textLines)
 	if err != nil {
@@ -155,7 +155,7 @@ func matchText(t *testing.T, d *ui.Document, size geom.Vec2, tol float32) {
 			gr, wr := g[j].Rect, w[j].Rect
 			dx := max(abs(gr[0]-wr[0]), abs(gr[0]+gr[2]-wr[0]-wr[2]))
 			dy := abs(gr[1] - wr[1])
-			if dx > tol || dy > tol {
+			if dx > textTolerance || dy > textTolerance {
 				t.Errorf("%q line %d %q: ember %v, Chrome %v", nodes[i].Text(), j, w[j].Text, gr, wr)
 			}
 		}
@@ -323,23 +323,27 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := chrome.Match(t, d, geom.V2(800, 600))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
-			matchText(t, d, geom.V2(800, 600), 0.5)
+			matchText(t, d, geom.V2(800, 600))
 			if name != "ellipses" {
 				// Chrome splits a span its ellipsis cuts into several rects, an artefact
 				// of how it draws the ellipsis, not a box.
-				matchSpanFragments(t, d, geom.V2(800, 600), 0.5)
+				matchSpanFragments(t, d, geom.V2(800, 600))
 			}
 		})
 	}
 }
+
+// textTolerance is how far, in points, text and span boxes may stand from
+// Chrome's.
+const textTolerance = 0.5
 
 // spanRects is every span's getClientRects, in document order.
 const spanRects = `return Array.from(document.body.querySelectorAll("span"))
 	.map(e => Array.from(e.getClientRects()).map(r => [r.x, r.y, r.width, r.height]));`
 
 // matchSpanFragments checks every span's per-line border boxes against Chrome's
-// getClientRects.
-func matchSpanFragments(t *testing.T, d *ui.Document, size geom.Vec2, tol float32) {
+// getClientRects, within textTolerance points.
+func matchSpanFragments(t *testing.T, d *ui.Document, size geom.Vec2) {
 	t.Helper()
 	raw, err := chrome.Eval(d, size, spanRects)
 	if err != nil {
@@ -372,7 +376,7 @@ func matchSpanFragments(t *testing.T, d *ui.Document, size geom.Vec2, tol float3
 			w := want[i][j]
 			g := [4]float32{o.X + f.X, o.Y + f.Y, f.W, f.H}
 			for k := range g {
-				if abs(g[k]-w[k]) > tol {
+				if abs(g[k]-w[k]) > textTolerance {
 					t.Errorf("span %d %q fragment %d: ember %v, Chrome %v", i, n.Text(), j, g, w)
 					break
 				}

@@ -946,15 +946,8 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 	}
 	custom := strings.HasPrefix(d.Name, "--")
 	written, foreign := d.Name, false
-	if v, plain := vendorOf(d.Name); v != nil && p.browser {
-		as, other := v.property(plain)
-		if as == "" && other == dropped {
-			return Declaration{}, false
-		}
-		if as != "" {
-			d.Name = as
-			v.plainWords(plain, d.Value)
-		}
+	if !p.vendorProperty(&d, name.Pos) {
+		return Declaration{}, false
 	}
 	if as, ok := logical[d.Name]; ok {
 		d.logical = d.Name
@@ -986,6 +979,32 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		d.resolve()
 	}
 	return d, true
+}
+
+// vendorProperty reads d, a declaration of a vendor's property in a
+// browser's sheet, as the plain one the vendor reads it as, and reports
+// false when the vendor drops it.
+func (p *parser) vendorProperty(d *Declaration, at Pos) bool {
+	v, plain := vendorOf(d.Name)
+	if v == nil || !p.browser {
+		return true
+	}
+	written := d.Name
+	as, other := v.property(plain)
+	if as == "" {
+		return other != dropped
+	}
+	d.Name = as
+	v.plainWords(plain, d.Value)
+	if v != &webkit {
+		return true
+	}
+	var err error
+	if d.Value, err = webkitMask(plain, d.Value); err != nil {
+		p.warnf(at, "%s: %v", written, err)
+		return false
+	}
+	return true
 }
 
 // resolve keeps a checked value as the cascade reads it: a shorthand's

@@ -365,7 +365,8 @@ func (s *Set) advance(f style.Font, text string) float32 {
 				continue
 			}
 		}
-		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i)}) //nolint:gosec // a glyph index and a text offset
+		//nolint:gosec // a glyph index and a text offset
+		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r})
 	}
 	w += s.shaped(c, script, f.Features, run, nil)
 	s.run = run

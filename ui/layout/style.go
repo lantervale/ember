@@ -111,11 +111,11 @@ func isScrollContainer(s *style.Computed) bool {
 // vertically reserves a gutter's width.
 func scrollbarGutter(s *style.Computed) point {
 	var g point
-	if s.Overflow.Height == style.Scroll {
+	if s.Overflow.Height == style.Scroll || s.GutterStable && scrollContainer(s.Overflow.Height) {
 		g.x = s.ScrollbarWidth
 	}
 	if s.Overflow.Width == style.Scroll {
-		g.y = s.ScrollbarWidth
+		g.y = s.ScrollbarHeight
 	}
 	return g
 }

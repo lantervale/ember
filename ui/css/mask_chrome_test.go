@@ -62,7 +62,7 @@ func masksCSS(s *style.Computed) [8]string {
 			img = [...]string{"linear-gradient", "conic-gradient", "radial-gradient"}[g.Kind]
 		}
 		mode := [...]string{"match-source", "alpha", "luminance"}[l.Mode]
-		composite := [...]string{"add", "subtract", "intersect", "exclude"}[l.Composite]
+		composite := style.MaskCompositeWords[l.Composite]
 		for k, v := range []string{img, positionCSS(l.Position.X, l.Position.FromRight) + " " +
 			positionCSS(l.Position.Y, l.Position.FromBottom), sizeCSS(l.Size), repeatCSS(l.Repeat), boxes[l.Origin],
 			boxes[l.Clip], mode, composite} {
@@ -96,9 +96,16 @@ div { width: 20px; height: 20px; background-color: #36c; }
 .l { -webkit-mask-position: 3px 4px; -webkit-mask-clip: padding-box; -webkit-mask-origin: content-box; }
 .m { mask-composite: subtract; -webkit-mask-composite: xor; }
 .n { mask-image: none, url(img/panel.png); mask-size: 1px, 2px, 3px; }
+.o { -webkit-mask: url(img/panel.png) right 4px top / 10px, linear-gradient(red, blue) center bottom 2px;
+  -webkit-mask-composite: destination-in, plus-lighter; }
+.p { -webkit-mask-image: url(img/panel.png), url(img/panel.png); -webkit-mask-position: left 3px bottom, center top 20%;
+  -webkit-mask-composite: source-atop, xor; mask-composite: copy; }
+.q { -webkit-mask: url(img/panel.png) no-clip; -webkit-mask-composite: plus-darker; }
+.r { -webkit-mask: url(img/panel.png) xor; }
+.s { -webkit-mask: url(img/panel.png) add; }
 `)}}
 	d := ui.NewDocument(ui.Stylesheet(fsys, "m.css"), ui.BrowserSheets())
-	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", ""}
+	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", ""}
 	for _, class := range classes {
 		d.Body().Append(ui.Div(ui.Class(class)))
 	}
@@ -114,13 +121,10 @@ div { width: 20px; height: 20px; background-color: #36c; }
 	if err = json.Unmarshal(raw, &want); err != nil {
 		t.Fatal(err)
 	}
-	legacy := strings.NewReplacer("source-over", "add", "source-in", "intersect", "source-out", "subtract",
-		"xor", "exclude")
 	d.Layout(geom.V2(800, 600))
 	for i, n := range d.Body().Children() {
 		ours := masksCSS(dom.Data(n).Style)
 		want[i][0] = gradients.ReplaceAllString(want[i][0], "$1")
-		want[i][7] = legacy.Replace(want[i][7])
 		for k := range ours {
 			if !same("", ours[k], want[i][k]) {
 				t.Errorf("div %q, value %d: ember %q, Chrome %q", classes[i], k, ours[k], want[i][k])

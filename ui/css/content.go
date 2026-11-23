@@ -17,21 +17,28 @@ var listStyles = map[string]style.ListStyle{
 	"disclosure-closed": style.ListDisclosureClosed, "disclosure-open": style.ListDisclosureOpen,
 }
 
-// checkListStyle checks list-style-type: none, a counter style's name or
-// a string.
+// checkListStyle checks list-style-type: none, a counter style's name,
+// symbols() or a string.
 func checkListStyle(v []Component) error {
-	if len(v) == 1 && (v[0].Kind == String || isWord(v[0], kwNone) || checkStyleName(v) == nil) {
+	if len(v) == 1 && (v[0].Kind == String || isWord(v[0], kwNone)) {
 		return nil
 	}
-	return fmt.Errorf("expected none, a counter style's name (decimal, lower-roman…) or a string, found %q", join(v))
+	if len(v) == 1 && isSymbolsFunction(v[0]) {
+		return checkCounterStyleRef(v)
+	}
+	if checkStyleName(v) == nil {
+		return nil
+	}
+	return fmt.Errorf("expected none, a counter style's name (decimal, lower-roman…), symbols() or a string, found %q",
+		join(v))
 }
 
-// checkListImage checks list-style-image: none or a url().
+// checkListImage checks list-style-image: none, a url() or a gradient.
 func checkListImage(v []Component) error {
-	if len(v) == 1 && (isWord(v[0], kwNone) || urlTerm(v[0]) == nil) {
+	if len(v) == 1 && (isWord(v[0], kwNone) || imageTerm(v[0]) == nil) {
 		return nil
 	}
-	return fmt.Errorf("expected none or url(), found %q; ui draws no gradient for a marker", join(v))
+	return fmt.Errorf("expected none, url() or a gradient, found %q", join(v))
 }
 
 // listStyle computes list-style-type.
@@ -42,11 +49,11 @@ func listStyle(x *ctx, v []Component) {
 		x.c.ListStyle, x.c.ListName = style.ListString, c.Text
 		return
 	}
-	if ls, ok := listStyles[strings.ToLower(c.Text)]; ok {
+	if ls, ok := listStyles[strings.ToLower(c.Text)]; ok && c.Kind == Ident {
 		x.c.ListStyle = ls
 		return
 	}
-	x.c.ListStyle, x.c.ListName = style.ListCounter, styleName(c.Text)
+	x.c.ListStyle, x.c.ListName = style.ListCounter, counterStyleRef(c)
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -119,7 +126,7 @@ func checkCounterFunction(c Component, fixed int) error {
 		return fmt.Errorf("counters() takes a string second, found %q", join(parts[1]))
 	}
 	if len(parts) > fixed {
-		if err := checkStyleName(parts[fixed]); err != nil {
+		if err := checkCounterStyleRef(parts[fixed]); err != nil {
 			return fmt.Errorf("%s(): the counter style: %w", name, err)
 		}
 	}
@@ -214,7 +221,7 @@ func counterItem(c Component) style.ContentItem {
 		it.Kind, it.Text, at = style.ContentCounters, parts[1][0].Text, 2
 	}
 	if len(parts) > at {
-		it.Style = styleName(parts[at][0].Text)
+		it.Style = counterStyleRef(parts[at][0])
 	}
 	return it
 }

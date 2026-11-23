@@ -112,6 +112,7 @@ var properties = map[string]property{
 	"cursor":                    {inherited: true, initial: "auto"},
 	"list-style-type":           {inherited: true, initial: "disc"},
 	"list-style-image":          {inherited: true, initial: "none"},
+	"list-style-position":       {inherited: true, initial: "outside"},
 	"quotes":                    {inherited: true, initial: "auto"},
 	"content":                   {initial: "normal"},
 	"counter-reset":             {initial: "none"}, "counter-increment": {initial: "none"},
@@ -126,9 +127,11 @@ var properties = map[string]property{
 	// around it: the same regions, read off the element under the pointer
 	"app-region": {inherited: true, initial: "none"},
 	// inherited, as Chrome has it: an element with no rule takes its parent's
-	"user-select":     {inherited: true, initial: "auto"},
-	"text-overflow":   {initial: "clip"},
-	"scrollbar-width": {initial: "auto"},
+	"user-select":      {inherited: true, initial: "auto"},
+	"text-overflow":    {initial: "clip"},
+	"scrollbar-width":  {initial: "auto"},
+	"scrollbar-color":  {inherited: true, initial: "auto"},
+	"scrollbar-gutter": {initial: "auto"},
 
 	"background-color":    {initial: "transparent"},
 	"background-image":    {initial: "none"}, // layers of url() or gradients, no repeating ones
@@ -236,7 +239,7 @@ var shorthands = map[string][]string{
 		"background-size", "background-attachment", "background-origin", "background-clip"},
 	"mask": {"mask-image", "mask-position", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite",
 		"mask-mode"},
-	"list-style": {"list-style-type", "list-style-image"},
+	"list-style": {"list-style-position", "list-style-image", "list-style-type"},
 	"font": {"font-style", "font-weight", "font-stretch", "font-size", "line-height", "font-family", propCaps,
 		propLigatures, propNumeric, propEastAsian, propAlternates, propPosition, propFeatures, propKerning},
 	shortVariant: variantLonghands,

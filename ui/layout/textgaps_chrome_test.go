@@ -80,11 +80,11 @@ func TestTextSpacingAndShiftsMatchChrome(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := chrome.Match(t, d, geom.V2(800, 1000))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
-			matchText(t, d, geom.V2(800, 1000), 0.5)
+			matchText(t, d, geom.V2(800, 1000))
 			if name != "a top or bottom box holding a shifted one" {
 				// Chrome gives a span holding one that makes a box of its own a
 				// rectangle per child, not a box.
-				matchSpanFragments(t, d, geom.V2(800, 1000), 0.5)
+				matchSpanFragments(t, d, geom.V2(800, 1000))
 			}
 		})
 	}

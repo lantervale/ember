@@ -205,6 +205,9 @@ const (
 	MixSaturation
 	MixColor
 	MixLuminosity
+	// MixPlusLighter adds the picture to what is under it, premultiplied,
+	// up to white and opaque.
+	MixPlusLighter
 )
 
 // Effect is an effect running shader that the canvas keeps from frame to
