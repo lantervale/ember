@@ -2,7 +2,7 @@ package paint
 
 import (
 	"github.com/lantervale/ember/geom"
-	shaping "github.com/lantervale/ember/internal/shape"
+	textshape "github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -74,7 +74,7 @@ func (p *painter) standing(st *style.Computed) *style.Computed {
 		p.standings = map[*style.Computed]*style.Computed{}
 	}
 	v := *st
-	v.Font.Features = shaping.Splice(st.Font.Features, "vert")
+	v.Font.Features = textshape.Splice(st.Font.Features, "vert")
 	p.standings[st] = &v
 	return &v
 }

@@ -115,6 +115,23 @@ func TestAPlanSaysWhichGlyphsItMayChange(t *testing.T) {
 	assert.Same(t, f.Plan(latn, "smcp"), f.Plan(latn, "smcp"), "plans are made once")
 }
 
+func TestASpaceAContextReadsIsMentioned(t *testing.T) {
+	src, ttf := testFont(t, "go-spaced.ttf")
+	f := shape.Parse(src, ttf)
+	latn := shape.MakeTag("latn")
+	var buf sfnt.Buffer
+	space, err := src.GlyphIndex(&buf, ' ')
+	require.NoError(t, err)
+	assert.True(t, f.Plan(latn, "").Mentions(uint16(space)), "the ligature and the contexts read it")
+	assert.True(t, f.Plan(latn, "-liga").Mentions(uint16(space)), "the contexts read it")
+	assert.False(t, f.Plan(latn, "-liga,-calt").Mentions(uint16(space)))
+	// What hb-shape --font-size=2048 testdata/go-spaced.ttf prints.
+	p := f.Plan(latn, "")
+	assert.Equal(t, "[gid66=0+1139|gid1=1+569|gid96=2+2117|gid67=5+1139]", hb(p.Shape(run(t, src, "a x xb"))))
+	assert.Equal(t, "[gid97=0+1324|gid1=1+569|gid91=2+1024]", hb(p.Shape(run(t, src, "z z"))))
+	assert.Equal(t, "[gid82=0+1139|gid1=1+569|gid98=2+1539]", hb(p.Shape(run(t, src, "q q"))))
+}
+
 func TestFeaturesAreReadAsHarfBuzzWritesThem(t *testing.T) {
 	assert.Equal(t, []shape.Feature{
 		{Tag: shape.MakeTag("smcp"), Value: 1}, {Tag: shape.MakeTag("liga"), Value: 0},

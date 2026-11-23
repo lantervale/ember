@@ -62,8 +62,14 @@ type Fragment struct {
 	Style *style.Computed
 	// Before and After are the text of the paragraph round Text, which it
 	// is shaped between, where a letter of Text may join theirs; empty
-	// elsewhere.
+	// elsewhere. Where Lead or Trail is set, they are the text round them.
 	Before, After string
+	// Lead and Trail are the text beside Text on its line that Chrome
+	// shapes as one with it, the runs on either side sharing its font and
+	// spacing across edges that take no room: Text draws the glyphs whose
+	// clusters start in it, a ligature or a kerned pair across an element's
+	// edge the first element's.
+	Lead, Trail string
 }
 
 // Shown is f's text as it is drawn from the left: right to left text reversed, by
@@ -273,6 +279,14 @@ type Fonts interface {
 // element).
 type ContextFonts interface {
 	AdvanceIn(f style.Font, text, before, after string) float32
+}
+
+// WholeFonts is Fonts that shapes text as one with the text beside it:
+// AdvanceAmid is the advance of text's own glyphs, lead+text+trail
+// shaped as one text between before and after, a glyph text's where its
+// cluster starts in it.
+type WholeFonts interface {
+	AdvanceAmid(f style.Font, text, lead, trail, before, after string) float32
 }
 
 // InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the

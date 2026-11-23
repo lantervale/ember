@@ -223,6 +223,9 @@ type piece struct {
 	// the line it is shown in.
 	hyphen float32
 	shows  bool
+	// whole numbers the text Chrome shapes as one (shapingRuns) that the piece is in,
+	// 0 where it cuts it.
+	whole int32
 }
 
 const (
@@ -552,21 +555,37 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 	}
 }
 
-// joinRuns measures again, shaped between the text round them, the
-// words that start or end a run beside another run's letters: an Arabic
-// word an element cuts joins across it, as Chrome shapes it with its
-// paragraph's text as context.
+// joinRuns measures again the words and spaces whose shaping reads the text of other
+// runs. Where Chrome shapes their runs as one (shapingRuns), each is shaped as one with
+// the text beside it, a ligature or a kerned pair across an element's edge the first
+// element's, and in a face that shapes a space with its words (spaceTies) every word
+// and space is. Elsewhere a word that starts or ends a run beside another run's letters
+// is shaped between them: an Arabic word an element cuts joins across it, as Chrome
+// shapes it with its paragraph's text as context.
 func (c *inlineContent) joinRuns(fonts box.Fonts) {
-	cf, ok := fonts.(box.ContextFonts)
-	if !ok {
-		return
-	}
+	c.shapingRuns()
+	wf, whole := fonts.(box.WholeFonts)
+	cf, joins := fonts.(box.ContextFonts)
+	var ties map[*style.Computed]bool
 	for k := range c.pieces {
 		p := &c.pieces[k]
-		if p.kind != word {
+		if p.kind != word && p.kind != gap {
 			continue
 		}
 		r := c.runs[p.run]
+		text := unshown(p.text)
+		if whole && c.amid(fonts, k, &ties) {
+			lead, before := beside(c.pieces, k, -1, p.whole)
+			trail, after := beside(c.pieces, k, 1, p.whole)
+			p.width = wf.AdvanceAmid(r.st.Font, text, lead, trail, before, after) + r.st.Spacing(text)
+			if p.unspaced {
+				p.width -= r.st.WordGap()
+			}
+			continue
+		}
+		if p.kind != word || !joins {
+			continue
+		}
 		end := p.at + int32(utf8.RuneCountInString(p.text)) //nolint:gosec // a text node's length
 		if p.at > 0 && int(end) < utf8.RuneCountInString(r.text) {
 			continue
@@ -575,9 +594,154 @@ func (c *inlineContent) joinRuns(fonts box.Fonts) {
 		if !shape.JoinsAcross(before, after) {
 			continue
 		}
-		text := unshown(p.text)
 		p.width += cf.AdvanceIn(r.st.Font, text, before, after) - fonts.Advance(r.st.Font, text)
 	}
+}
+
+// shapingRuns numbers the pieces Chrome shapes as one text in whole: the words and
+// spaces of runs of one font and spacing, shown left to right across lines, between the
+// edges of elements that take no room and keep the baseline (CSS Text's boundary
+// shaping), with the break opportunities and anchors among them. A piece that cuts such
+// a text, an atomic inline, a newline, a tab, takes 0, as text set vertically or right
+// to left does.
+func (c *inlineContent) shapingRuns() {
+	var n int32
+	var last *style.Computed
+	var level bidi.Level
+	open := false
+	for k := range c.pieces {
+		p := &c.pieces[k]
+		p.whole = 0
+		switch p.kind {
+		case word, gap:
+			st := c.runs[p.run].st
+			if st.Mode.Vertical() || p.level%2 == 1 {
+				open = false
+				continue
+			}
+			if !open || p.level != level || !sameShaping(last, st) {
+				n++
+			}
+			open, last, level = true, st, p.level
+			p.whole = n
+		case edge:
+			if c.cutsShaping(p) {
+				open = false
+			} else if open {
+				p.whole = n
+			}
+		case breakHere, emergency, anchor, softHyphen:
+			if open {
+				p.whole = n
+			}
+		case newline, atomic, marker, tab:
+			open = false
+		}
+	}
+}
+
+// sameShaping reports whether Chrome shapes text of styles a and b as one: of one font,
+// letter-spacing and word-spacing.
+func sameShaping(a, b *style.Computed) bool {
+	return a == b || a.Font.Equal(b.Font) && a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing
+}
+
+// cutsShaping reports whether edge p of a span cuts the text Chrome shapes as one: it
+// takes room, by a margin, a border or padding on its side, or the span stands off the
+// baseline.
+func (c *inlineContent) cutsShaping(p *piece) bool {
+	sp := c.spans[p.span]
+	st := sp.st
+	if st.VerticalAlign != style.AlignBaselineText {
+		return true
+	}
+	if p.start && sp.noStart || !p.start && sp.noEnd {
+		return false
+	}
+	if p.start == (st.Dir == style.RTL) {
+		return room(st.Margin.Right) || room(st.Padding.Right) || st.Border.Right != 0
+	}
+	return room(st.Margin.Left) || room(st.Padding.Left) || st.Border.Left != 0
+}
+
+// room reports whether a margin or padding of l takes room, or may.
+func room(l style.Length) bool {
+	return l.At(0) != 0 || l.At(1000) != 0
+}
+
+// amid reports whether piece k is shaped as one with the text beside it: another run's
+// in the text Chrome shapes as one with it, or its own where its face shapes a space with
+// the words beside it.
+func (c *inlineContent) amid(fonts box.Fonts, k int, ties *map[*style.Computed]bool) bool {
+	p := c.pieces[k]
+	if p.whole == 0 {
+		return false
+	}
+	st := c.runs[p.run].st
+	tied, ok := (*ties)[st]
+	if !ok {
+		t, can := fonts.(spaceTies)
+		tied = can && t.SpaceTies(st.Font)
+		if *ties == nil {
+			*ties = map[*style.Computed]bool{}
+		}
+		(*ties)[st] = tied
+	}
+	for _, dir := range [2]int{-1, 1} {
+		for j := k + dir; j >= 0 && j < len(c.pieces) && c.pieces[j].whole == p.whole; j += dir {
+			if q := c.pieces[j]; q.kind == word || q.kind == gap {
+				if tied || q.run != p.run {
+					return true
+				}
+				break
+			}
+		}
+	}
+	return false
+}
+
+// beside is the text of the pieces before piece k (dir -1) or after it (dir 1), as much
+// as shaping reads: that of the text numbered whole, which shapes as one with it, and
+// the rest round it, an atomic inline standing as an object replacement character, up
+// to a newline.
+func beside(ps []piece, k, dir int, whole int32) (string, string) {
+	var shaped, round []rune
+	in := true
+	for j := k + dir; j >= 0 && j < len(ps) && len(round) < contextRunes; j += dir {
+		q := ps[j]
+		if q.kind == newline {
+			break
+		}
+		var rs []rune
+		switch q.kind {
+		case word, gap:
+			rs = []rune(unshown(q.text))
+		case atomic:
+			rs = []rune{'\uFFFC'}
+		case breakHere, emergency, anchor, softHyphen, edge, marker, tab, newline:
+		}
+		if q.whole != whole {
+			in = false
+		}
+		if dir < 0 {
+			slices.Reverse(rs)
+		}
+		for _, r := range rs {
+			if in && len(shaped) < contextRunes {
+				shaped = append(shaped, r)
+				continue
+			}
+			in = false
+			if len(round) < contextRunes {
+				round = append(round, r)
+			}
+		}
+	}
+	if dir < 0 {
+		slices.Reverse(shaped)
+		slices.Reverse(round)
+	}
+	return string(shaped), string(round)
 }
 
 // contextRunes is how many characters of the text on either side of a
@@ -789,6 +953,9 @@ type spaceTies interface {
 // word takes its kerning with the space after it, a space its kerning with the word
 // after it.
 func (c *inlineContent) tieSpaces(fonts box.Fonts, st *style.Computed, first int) {
+	if _, whole := fonts.(box.WholeFonts); whole && !st.Mode.Vertical() {
+		return
+	}
 	if t, ok := fonts.(spaceTies); !ok || !t.SpaceTies(st.Font) || st.Stands() {
 		return
 	}
@@ -2698,6 +2865,13 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 			after) {
 			frag.Before, frag.After = before, after
 		}
+		if whole := wholeOf(pieces[first:i]); whole != 0 && !frag.Ellipsis {
+			lead, before := beside(pieces, first, -1, whole)
+			trail, after := beside(pieces, i-1, 1, whole)
+			if lead != "" || trail != "" {
+				frag.Lead, frag.Trail, frag.Before, frag.After = lead, trail, before, after
+			}
+		}
 		if c.firstOn {
 			frag.Style = c.runs[run].st
 		}
@@ -3065,4 +3239,14 @@ func (t *tree) atomsIntoSpans(n *node) {
 		}
 		r.parent.Append(r.box)
 	}
+}
+
+// wholeOf is the text Chrome shapes as one that a fragment's pieces are in, 0 for none.
+func wholeOf(pieces []piece) int32 {
+	for _, p := range pieces {
+		if p.kind == word || p.kind == gap {
+			return p.whole
+		}
+	}
+	return 0
 }

@@ -35,7 +35,7 @@ func TestAPixelFontsGlyphsAreCoveredOrNotAndApartFromTheSmoothedOnes(t *testing.
 		_, soft := levels(smooth, r)
 		assert.Positive(t, soft, "%q smoothed as before", r)
 	}
-	assert.Equal(t, smooth.measure("Pixel 128", "", 0, "", ""), pixel.measure("Pixel 128", "", 0, "", ""),
+	assert.Equal(t, smooth.measure("Pixel 128", "", 0, round{}), pixel.measure("Pixel 128", "", 0, round{}),
 		"the same advances and metrics")
 }
 
