@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <style>
+    rect { fill: #c33 !important; stroke: #333 }
+    #b { fill: #2a7 }
+    .c { fill: #36c !important }
+    circle { stroke: #fc0 !important; stroke-width: 2 }
+  </style>
+  <rect x="1" y="1" width="10" height="10" style="fill: #000"/>
+  <rect id="b" x="13" y="1" width="10" height="10" class="c" fill="#999"/>
+  <rect x="1" y="13" width="10" height="10" style="fill: #93c !important"/>
+  <circle cx="18" cy="18" r="4" fill="#e60" style="stroke: #000; stroke-width: 3 !important"/>
+</svg>

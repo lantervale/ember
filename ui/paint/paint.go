@@ -764,6 +764,9 @@ func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 	}
 	r := padding(b, at)
 	r.W, r.H = max(r.W-b.Scrollbar.X, 0), max(r.H-b.Scrollbar.Y, 0)
+	if shown(b).Dir == style.RTL {
+		r.X += b.Scrollbar.X
+	}
 	if o.Width == style.Visible {
 		r.X, r.W = -unbounded, 2*unbounded
 	}

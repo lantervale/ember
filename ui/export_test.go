@@ -12,6 +12,7 @@ import (
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // LandImages waits for the pictures d is fetching, then lays it out at
@@ -142,3 +143,13 @@ func Painted(d *Document) uint64 { return d.painted }
 
 // Framed reports whether d is tied to an iframe that shows it.
 func Framed(d *Document) bool { return d.framed != nil }
+
+// Bidi is n's computed direction and unicode-bidi, as CSS writes them.
+func Bidi(n *Node) (string, string) {
+	st := dom.Data(n).Style
+	dir := "ltr"
+	if st.Dir == style.RTL {
+		dir = "rtl"
+	}
+	return dir, [...]string{"normal", "embed", "isolate", "bidi-override", "isolate-override", "plaintext"}[st.Bidi]
+}

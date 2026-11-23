@@ -433,6 +433,46 @@ const (
 	BlockCenter
 )
 
+// Direction is direction.
+type Direction uint8
+
+const (
+	LTR Direction = iota
+	RTL
+)
+
+// UnicodeBidi is unicode-bidi.
+type UnicodeBidi uint8
+
+const (
+	BidiNormal UnicodeBidi = iota
+	BidiEmbed
+	BidiIsolate
+	BidiOverride
+	BidiIsolateOverride
+	BidiPlaintext
+)
+
+// Isolates reports whether u isolates its content from the text round it.
+func (u UnicodeBidi) Isolates() bool {
+	return u == BidiIsolate || u == BidiIsolateOverride || u == BidiPlaintext
+}
+
+// Overrides reports whether u orders its content by its direction alone.
+func (u UnicodeBidi) Overrides() bool { return u == BidiOverride || u == BidiIsolateOverride }
+
+// Resolve is a, start and end on the sides d puts them, left or right;
+// the others as they are.
+func (a TextAlign) Resolve(d Direction) TextAlign {
+	switch {
+	case a == Start && d == RTL, a == End && d == LTR:
+		return Right
+	case a == Start, a == End:
+		return Left
+	}
+	return a
+}
+
 type WhiteSpace uint8
 
 const (
@@ -484,6 +524,11 @@ type Text struct {
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace
+	// Dir is direction: the order of the inline flow, and the side
+	// each start and end stands on. Bidi is unicode-bidi, how the element
+	// takes part in the bidi algorithm of the text round it.
+	Dir  Direction
+	Bidi UnicodeBidi
 	// TextIndent is text-indent: how far the first line of a block's text
 	// starts in from its edge, out when negative; a percentage is of the
 	// block's width.
