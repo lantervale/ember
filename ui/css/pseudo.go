@@ -271,6 +271,10 @@ func partStatesOf(cs []Component) ([]Component, partState) {
 // writes it as an attribute only the controls of appearance: none lack.
 const nativeClass = "-ember-native"
 
+// listBoxClass is the user agent's pseudo-class of a select shown as a
+// listbox, Chrome's :-internal-list-box.
+const listBoxClass = "-ember-listbox"
+
 // nativeOf is cs without its :-ember-native, and whether it had one.
 func nativeOf(cs []Component) ([]Component, bool) {
 	for i := 1; i < len(cs); i++ {

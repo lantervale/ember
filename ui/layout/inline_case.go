@@ -27,7 +27,8 @@ func Translated(text *dom.Node, tr func(message string) string) string {
 	if owner != nil && owner.Generated() {
 		return text.Text()
 	}
-	if owner != nil && dom.Data(owner).Shadow == text && !dom.Data(owner).Placeholder && owner.Tag() != dom.Select {
+	if owner != nil && dom.Data(owner).Shadow == text && !dom.Data(owner).Placeholder && owner.Tag() != dom.Select &&
+		owner.Tag() != dom.Optgroup {
 		return text.Text()
 	}
 	return TranslatedAt(owner, text.Text(), tr)

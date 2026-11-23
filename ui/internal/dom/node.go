@@ -113,6 +113,39 @@ func (n *Node) Index() int {
 	return slices.Index(n.parent.children, n)
 }
 
+// ListBox reports a select shown as a listbox, its options rows of the
+// page: one with multiple or a size above 1.
+func ListBox(n *Node) bool {
+	if n == nil || n.tag != Select {
+		return false
+	}
+	_, multiple := n.Attr("multiple")
+	return multiple || listSize(n) > 1
+}
+
+// ListBoxRows is how many rows the listbox n shows: its size, else 4.
+func ListBoxRows(n *Node) int {
+	if s := listSize(n); s > 0 {
+		return s
+	}
+	return 4
+}
+
+// listSize is n's size attribute as HTML reads a non-negative integer,
+// 0 for none.
+func listSize(n *Node) int {
+	v, _ := n.Attr("size")
+	v = strings.TrimLeft(v, " \t\n\f\r")
+	size := 0
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			break
+		}
+		size = min(size*10+int(c-'0'), 1<<20)
+	}
+	return size
+}
+
 // Options are the select n's options in order, as the DOM's options:
 // its option children and those of its optgroup children.
 func Options(n *Node) []*Node {

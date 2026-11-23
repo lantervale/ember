@@ -43,7 +43,7 @@ button, input, select, textarea { font: 13.333333px Arial; }
 textarea { font-family: monospace; }
 input { white-space: inherit; }
 input[type="button"], input[type="submit"], input[type="reset"], select { white-space: pre; }
-select[multiple], option { white-space: nowrap; }
+select:-ember-listbox, option { white-space: nowrap; }
 `
 
 // Default is the user-agent sheet: what every element looks like before
@@ -185,7 +185,7 @@ input:disabled, textarea:disabled {
   border-color: rgba(118, 118, 118, 0.3);
 }
 select:disabled { color: light-dark(gray, #aaa); border-color: rgba(118, 118, 118, 0.3); opacity: 0.7; }
-option { display: block; padding: 0 2px 1px; }
+option { display: block; padding: 0 2px 1px; min-height: 1.2em; font-weight: normal; }
 option:disabled { color: light-dark(gray, #aaa); }
 optgroup { display: block; font-weight: bolder; }
 optgroup:disabled { color: light-dark(gray, #aaa); }
@@ -198,6 +198,17 @@ select:-ember-native {
   background-position: right 6px center;
 }
 select:dir(rtl):-ember-native { padding-right: 2px; padding-left: 20px; background-position: left 6px center; }
+/* A select with multiple or a size above 1 (:-ember-listbox) lays its options out as rows, as Chrome's listbox. */
+select:-ember-listbox, select:-ember-listbox:dir(rtl):-ember-native {
+  padding: 0; border-radius: 0; background-image: none; overflow: hidden scroll; vertical-align: text-bottom;
+}
+select:-ember-listbox option, select:-ember-listbox optgroup { line-height: normal; }
+select:-ember-listbox optgroup > option { padding-inline-start: 20px; }
+select:-ember-listbox option:checked { background-color: light-dark(#cecece, #545454); color: light-dark(#101010, white); }
+select:-ember-listbox:focus option:checked { background-color: light-dark(#b3d7ff, #545454); color: light-dark(black, white); }
+select:-ember-listbox option:checked:disabled, select:-ember-listbox:disabled option:checked {
+  color: light-dark(gray, #aaa);
+}
 input[type="checkbox"], input[type="radio"] { padding: 0; }
 input[type="checkbox"]:-ember-native { width: 13px; height: 13px; border-radius: 2px; }
 input[type="checkbox"]:checked:-ember-native {

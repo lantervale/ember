@@ -211,6 +211,8 @@ type tree struct {
 	lost     map[*dom.Node]*box.Box
 	// anonymousStyles is the style of the anonymous blocks of each parent style.
 	anonymousStyles map[*style.Computed]*style.Computed
+	// labelStyles is the style of the label row of each listbox optgroup style.
+	labelStyles map[*style.Computed]*style.Computed
 	// anonymousTables is the style of the anonymous tables of each parent style.
 	anonymousTables map[*style.Computed]*style.Computed
 	// flowStyles are the styles multi-column containers lay their content out with, by
@@ -417,6 +419,10 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 	}
 	if e.Tag() == dom.Iframe {
 		buildFrame(n)
+		return n
+	}
+	if inListBox(e) {
+		t.buildOptgroup(n)
 		return n
 	}
 	t.buildChildren(n, e.Flow())

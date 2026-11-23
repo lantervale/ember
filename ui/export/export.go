@@ -99,6 +99,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 	} else {
 		agent += generatedBoxes
 	}
+	agent = strings.ReplaceAll(agent, ":"+listBoxClass, listBoxOn)
 	b.WriteString("@layer ember-user-agent {\n" + states(inline(d, agent, nil)) + "}\n")
 	b.WriteString(truncateStart)
 	for _, s := range d.Sheets() {
@@ -167,7 +168,7 @@ func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 		b.WriteString(n.Markup() + "</svg>")
 		return
 	}
-	if ph, ok := n.Attr("placeholder"); ok && n.Tag() == dom.Select && d.Selected(n) < 0 {
+	if ph, ok := n.Attr("placeholder"); ok && n.Tag() == dom.Select && !dom.ListBox(n) && d.Selected(n) < 0 {
 		fmt.Fprintf(b, `<option value="" disabled selected hidden data-ember-implied="">%s</option>`,
 			html.EscapeString(layout.TranslatedAt(n, ph, tr(d))))
 	}
@@ -262,6 +263,9 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	if bare(n) {
 		write("data-ember-bare", "")
 	}
+	if dom.ListBox(n) {
+		write("data-ember-listbox", "")
+	}
 	live := map[string]bool{
 		"open": modal, "style": true, "checked": n.Tag() == dom.Input, "value": n.Tag() == dom.Input && typ != checkboxType,
 		"placeholder": n.Tag() == dom.Select, "selected": n.Tag() == dom.Option,
@@ -337,7 +341,8 @@ func controlState(d *ui.Document, n *dom.Node, typ string) (string, string, bool
 		if p != nil && p.Tag() == dom.Optgroup {
 			p = p.Parent()
 		}
-		return "selected", "", p != nil && p.Tag() == dom.Select && slices.Index(dom.Options(p), n) == d.Selected(p)
+		return "selected", "", p != nil && p.Tag() == dom.Select &&
+			slices.Contains(d.SelectedOptions(p), slices.Index(dom.Options(p), n))
 	}
 	return "", "", false
 }
@@ -410,6 +415,13 @@ func switchThumb(d *ui.Document, n *dom.Node) string {
 const (
 	nativeClass = "-ember-native"
 	ownLookOn   = ":not([data-ember-bare])"
+)
+
+// listBoxClass is the user agent's pseudo-class of a select shown as a
+// listbox: on the page, one marked data-ember-listbox.
+const (
+	listBoxClass = "-ember-listbox"
+	listBoxOn    = "[data-ember-listbox]"
 )
 
 // ownLook keeps Chrome from drawing its own controls, which the user

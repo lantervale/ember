@@ -112,6 +112,9 @@ type interaction struct {
 	// or Clicked on a menu bar title doesn't fire for a press and release
 	// on it.
 	pressOpened *Node
+	// listPressed is the listbox a press on one of its options began on,
+	// until its release.
+	listPressed *Node
 	// drag is a press on a Draggable element, a drag once past dragStart;
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
@@ -852,6 +855,9 @@ func (d *Document) leftHeld(at geom.Vec2) {
 	if held, r := d.dragged(); r != nil {
 		d.fire(held, r.Drag(d.along(held, at)))
 	}
+	if d.listPressed != nil {
+		d.dragListBox()
+	}
 }
 
 // hitAt is the box under at and the innermost element holding it, the
@@ -938,6 +944,9 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 	if r, ok := d.machine(takes).(*control.Range); ok {
 		d.fire(takes, r.Press(d.along(takes, at)))
 	}
+	if d.listBox(takes) != nil {
+		d.pressListBox(in, takes)
+	}
 	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	return false
 }
@@ -947,6 +956,9 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 func (d *Document) leftRelease(open *control.Select, pick paint.Pick) {
 	if held, r := d.dragged(); r != nil {
 		d.fire(held, r.Release())
+	}
+	if d.listPressed != nil {
+		d.releaseListBox()
 	}
 	if o := d.pressOpened; o != nil {
 		d.pressOpened = nil
@@ -1360,6 +1372,9 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
 		return
 	}
+	if s := d.listBox(n); s != nil && !d.commandHeld(f) {
+		d.listBoxType(n, s, in.Text())
+	}
 	intents, from := pressedIntents(f, pressed)
 	for j, i := range intents {
 		var took bool
@@ -1429,6 +1444,15 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent,
 			return n, true
 		}
 		return n, false
+	}
+	if s := d.listBox(n); s != nil {
+		if k == input.KeyEnter || k == input.KeyPadEnter {
+			// not a listbox's: it goes on as a key of its own
+			return n, false
+		}
+		if d.listBoxKey(f, n, s, i) {
+			return n, true
+		}
 	}
 	if d.intent(n, m, i) {
 		return n, true

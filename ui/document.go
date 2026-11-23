@@ -597,6 +597,14 @@ func (d *Document) style() {
 		if sh := dom.Data(n).Shadow; sh != nil {
 			dom.Data(sh).Style = dom.Data(n).Style
 		}
+		if !dom.ListBox(n) {
+			continue
+		}
+		for _, g := range n.Children() {
+			if sh := dom.Data(g).Shadow; sh != nil && g.Tag() == dom.Optgroup {
+				dom.Data(sh).Style = dom.Data(g).Style
+			}
+		}
 	}
 }
 

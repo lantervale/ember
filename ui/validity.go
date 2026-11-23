@@ -226,7 +226,7 @@ func (d *Document) mismatch(n *Node, m any, kind string, group func(*Node) radio
 		}
 		return req && !m.Checked
 	case *control.Select:
-		return req && (m.Selected < 0 || m.Selected == 0 && placeholderOption(n))
+		return req && (m.Selected < 0 || !m.ListBox && m.Selected == 0 && placeholderOption(n))
 	}
 	t := textOf(m)
 	if t == nil || t.Empty() {

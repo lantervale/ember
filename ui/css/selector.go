@@ -93,6 +93,9 @@ const (
 	pseudoRequired
 	pseudoOptional
 	pseudoDir
+	// pseudoListBox is ui's own :-ember-listbox, a select shown as a
+	// listbox, as Chrome's :-internal-list-box.
+	pseudoListBox
 )
 
 type pseudo struct {
@@ -419,6 +422,8 @@ func (p *pseudo) matches(e, scope *dom.Node) bool {
 		return slices.Contains(fields, e.Tag()) && !required(e)
 	case pseudoDir:
 		return directionOf(e) == p.dir
+	case pseudoListBox:
+		return dom.ListBox(e)
 	case pseudoScope:
 		if scope == nil {
 			return e.Parent() == nil
@@ -938,7 +943,7 @@ func (c *Compound) specificity() Specificity {
 		case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 			pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
 			pseudoNthOfType, pseudoNthLastOfType, pseudoLang, pseudoReadOnly, pseudoReadWrite, pseudoIndeterminate,
-			pseudoRequired, pseudoOptional, pseudoDir:
+			pseudoRequired, pseudoOptional, pseudoDir, pseudoListBox:
 			sp[1]++
 		}
 	}
@@ -1073,6 +1078,8 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoRequired}, 2, nil
 	case "optional":
 		return pseudo{kind: pseudoOptional}, 2, nil
+	case listBoxClass:
+		return pseudo{kind: pseudoListBox}, 2, nil
 	case "autofill", "-webkit-autofill", "window-inactive":
 		// matching nothing: no field is filled in, and an element is never
 		// inactive, only its ::selection
@@ -1195,7 +1202,7 @@ func dropHas(s Selector, at Component) *SelectorError {
 			case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 				pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
 				pseudoNthOfType, pseudoNthLastOfType, pseudoScope, pseudoLang, pseudoReadOnly, pseudoReadWrite,
-				pseudoIndeterminate, pseudoRequired, pseudoOptional, pseudoDir:
+				pseudoIndeterminate, pseudoRequired, pseudoOptional, pseudoDir, pseudoListBox:
 			}
 		}
 	}
@@ -1341,7 +1348,7 @@ func (p *pseudo) reads() dom.State {
 	case pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink, pseudoVisited, pseudoIs,
 		pseudoWhere, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
 		pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope, pseudoLang, pseudoRequired, pseudoOptional,
-		pseudoDir:
+		pseudoDir, pseudoListBox:
 	}
 	return 0
 }
@@ -1451,6 +1458,8 @@ func (p *pseudo) attrs() []string {
 		return []string{"[required", "[type"}
 	case pseudoDir:
 		return []string{"[dir"}
+	case pseudoListBox:
+		return []string{"[multiple", "[size"}
 	case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink,
 		pseudoVisited, pseudoIs, pseudoWhere, pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType,
 		pseudoLastOfType, pseudoOnlyOfType, pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope:

@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,4 +263,94 @@ func (s *Session) Shot() image.Image {
 		s.t.Fatal(err)
 	}
 	return img
+}
+
+// Modifier keys held through a Session's Press, Release, Move and Key,
+// as DevTools numbers them.
+const (
+	Alt   = 1
+	Ctrl  = 2
+	Meta  = 4
+	Shift = 8
+)
+
+// Press presses the left button at (x, y), in CSS pixels, with the
+// modifier keys mods held.
+func (s *Session) Press(x, y float32, mods int) {
+	s.t.Helper()
+	s.mouse("mousePressed", x, y, mods, 1)
+}
+
+// Release lets the left button go at (x, y).
+func (s *Session) Release(x, y float32, mods int) {
+	s.t.Helper()
+	s.mouse("mouseReleased", x, y, mods, 0)
+}
+
+// Move moves the pointer to (x, y), the left button held while pressed.
+func (s *Session) Move(x, y float32, mods int, pressed bool) {
+	s.t.Helper()
+	buttons := 0
+	if pressed {
+		buttons = 1
+	}
+	s.mouse("mouseMoved", x, y, mods, buttons)
+}
+
+// Click presses and lets go the left button at (x, y).
+func (s *Session) Click(x, y float32, mods int) {
+	s.t.Helper()
+	s.Press(x, y, mods)
+	s.Release(x, y, mods)
+}
+
+func (s *Session) mouse(kind string, x, y float32, mods, buttons int) {
+	s.t.Helper()
+	params := map[string]any{"type": kind, "x": x, "y": y, "modifiers": mods, "buttons": buttons}
+	if kind != "mouseMoved" || buttons != 0 {
+		params["button"], params["clickCount"] = "left", 1
+	}
+	s.call("Input.dispatchMouseEvent", params, nil)
+}
+
+// keyCodes are the named keys Key presses, by the DOM's key, with their
+// Windows virtual key codes and DOM codes.
+//
+//nolint:gochecknoglobals // a fixed table
+var keyCodes = map[string]struct {
+	vk   int
+	code string
+}{
+	"ArrowUp": {38, "ArrowUp"}, "ArrowDown": {40, "ArrowDown"}, "ArrowLeft": {37, "ArrowLeft"},
+	"ArrowRight": {39, "ArrowRight"}, "Home": {36, "Home"}, "End": {35, "End"}, "PageUp": {33, "PageUp"},
+	"PageDown": {34, "PageDown"}, "Enter": {13, "Enter"}, "Escape": {27, "Escape"}, "Tab": {9, "Tab"},
+	" ": {32, "Space"},
+}
+
+// Key presses and lets go the key the DOM's KeyboardEvent.key names,
+// with mods held: a named key of keyCodes, or a letter or a digit, which
+// types itself unless a modifier other than Shift is held.
+func (s *Session) Key(key string, mods int) {
+	s.t.Helper()
+	down := map[string]any{"type": "rawKeyDown", "key": key, "modifiers": mods}
+	if k, ok := keyCodes[key]; ok {
+		down["windowsVirtualKeyCode"], down["code"] = k.vk, k.code
+	} else if len(key) == 1 {
+		up := strings.ToUpper(key)
+		down["windowsVirtualKeyCode"], down["code"] = int(up[0]), "Key"+up
+		if up[0] >= '0' && up[0] <= '9' {
+			down["code"] = "Digit" + up
+		}
+	}
+	if len(key) == 1 && mods&^Shift == 0 {
+		down["type"], down["text"] = "keyDown", key
+	}
+	s.call("Input.dispatchKeyEvent", down, nil)
+	up := map[string]any{"type": "keyUp", "key": key, "modifiers": mods}
+	for _, f := range []string{"windowsVirtualKeyCode", "code"} {
+		if v, ok := down[f]; ok {
+			up[f] = v
+		}
+	}
+	s.call("Input.dispatchKeyEvent", up, nil)
 }
