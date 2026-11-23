@@ -20,12 +20,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `text-spacing-trim` and `text-autospace: normal` | read and computed as Chrome's, laid out as `normal` and `no-autospace`: the full-width punctuation and the space between ideographs and letters are left as the face draws them |
 | `text-box-trim` on a flex or grid container, a table cell and columns, and a first line the block's first float or inline block holds | not compared with Chrome: trimmed as a block container's own lines, the propagation going into blocks of a block flow alone | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
 | `initial-letter` on an element (the first inline child of a block), `initial-letter-align`, and a drop cap in vertical text | not read: only a `::first-letter` is made a drop cap, its letter's ink measured in its first face |
-| `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
-| a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
-| a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
-| `text-underline-offset` and `text-underline-position` | not read: an underline lies half its thickness below the baseline, Chrome's `auto` |
+| `text-underline-position` and `from-font` on a variable font | the default instance's post and OS/2 values, not the instance's MVAR deltas ([decision 0189](../99-decisions/0189-an-underline-is-placed-by-its-decorating-box-as-chrome-places-it.md)) |
 | the characters whose ink `text-decoration-skip-ink: auto` leaves whole, outside the blocks measured (CJK, symbols, pictographs, Hangul, Linear B) | skipped as a Latin letter's, where Chrome's table may name more ([decision 0182](../99-decisions/0182-skipped-ink-follows-the-glyphs-drawn-and-chromes-table-of-characters.md)) |
 | text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time (each quad a texel longer right and below), 27 of the 44 pixel pages with text measured further from Chrome at that scale and 2 nearer, none changed at two pixels a point, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
@@ -72,10 +68,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `column-span: all` under a block with a margin, a border or padding, deeper in the container than its children | laid out in its column, where Chrome spans it and cuts the blocks round it, their margins, borders and padding on their parts |
-| a table row cut by a column | kept whole, where Chrome cuts its cells, each where its own content allows |
-| boxes side by side cut by a column (a flex row's items, a grid row's, a positioned box beside the lines of its containing block) whose lines don't line up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows: the columns' starts are one place in the flow for all of them |
-| a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
+| a positioned box beside the lines of its containing block, cut by a column, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
+| a forced break (`break-before: column`) inside one of boxes side by side cut by columns | breaks that box alone, the others filled on as they would be; not compared with Chrome |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |

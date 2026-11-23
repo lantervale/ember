@@ -407,7 +407,8 @@ func (d *Document) pieceOf(p Position) (piece, bool) {
 		k++
 	}
 	r, f := b.Rect(), b.Lines[k]
-	out := piece{n: p.Node, b: b, k: k, r: geom.Rect{X: r.X + f.Rect.X, Y: r.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}}
+	out := piece{n: p.Node, t: p.Node, b: b, k: k,
+		r: geom.Rect{X: r.X + f.Rect.X, Y: r.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}}
 	out.x = out.r.X + d.edges(m, b, k)[lower(m.frags[k].offs, p.Offset)]
 	return out, true
 }
@@ -524,11 +525,10 @@ func (d *Document) lineEdge(cur piece, end bool) Position {
 			best = p
 		}
 	})
-	offs := d.mapOf(best.n).frags[best.k].offs
 	if end {
-		return Position{best.n, int(offs[len(offs)-1])}
+		return best.at(d, len(d.mapOf(best.t).frags[best.k].offs)-1)
 	}
-	return Position{best.n, int(offs[0])}
+	return best.at(d, 0)
 }
 
 // revealRect scrolls the containers holding b by the least that shows r,

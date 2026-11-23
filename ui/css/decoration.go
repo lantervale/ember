@@ -18,7 +18,54 @@ var (
 		"dotted": style.DecorationDotted, "dashed": style.DecorationDashed,
 	}
 	decorationThickness = either(dimTerm(allowPercent|nonNegative), words("auto", "from-font"))
+	underlinePositions  = map[string]style.UnderlinePosition{
+		"from-font": style.UnderFromFont, "under": style.UnderUnder, "left": style.UnderLeft, "right": style.UnderRight,
+	}
 )
+
+// decorationThicknessOf is a thickness, from-font as a Length of Kind
+// None.
+func decorationThicknessOf(x *ctx, v []Component) style.Length {
+	if isWord(v[0], "from-font") {
+		return style.Length{Kind: style.None}
+	}
+	return x.length(v[0])
+}
+
+// checkUnderlinePosition takes auto, or from-font or under, left or
+// right, or one of each pair in any order.
+func checkUnderlinePosition(v []Component) error {
+	if len(v) == 1 && isWord(v[0], "auto") {
+		return nil
+	}
+	if len(v) == 0 || len(v) > 2 {
+		return fmt.Errorf("expected auto, from-font or under, and left or right")
+	}
+	var seen style.UnderlinePosition
+	for _, c := range v {
+		p, ok := underlinePositions[strings.ToLower(c.Text)]
+		if c.Kind != Ident || !ok {
+			return fmt.Errorf("expected auto, from-font, under, left or right, found %q", c.String())
+		}
+		pair, name := style.UnderFromFont|style.UnderUnder, "from-font and under"
+		if p&pair == 0 {
+			pair, name = style.UnderLeft|style.UnderRight, "left and right"
+		}
+		if seen&pair != 0 {
+			return fmt.Errorf("%q is a second of %s", c.String(), name)
+		}
+		seen |= p
+	}
+	return nil
+}
+
+func underlinePosition(_ *ctx, v []Component) style.UnderlinePosition {
+	var p style.UnderlinePosition
+	for _, c := range v {
+		p |= underlinePositions[strings.ToLower(c.Text)]
+	}
+	return p
+}
 
 func decorationStyle(c Component) error {
 	if isWord(c, "wavy") {
@@ -115,7 +162,23 @@ func (x *ctx) decorations() []style.Decoration {
 	if c.TextDecoration.Line == 0 {
 		return out
 	}
-	return append(slices.Clip(out), style.Decoration{TextDecoration: c.TextDecoration, Font: c.Font})
+	return append(slices.Clip(out), style.Decoration{TextDecoration: c.TextDecoration, Font: c.Font,
+		Offset: c.UnderlineOffset, Position: c.UnderlinePosition, RightInVertical: c.Stands() && x.rightUnderlined()})
+}
+
+// rightUnderlined reports whether the element's language is Japanese or
+// Korean, whose vertical lines Chrome underlines on their right.
+func (x *ctx) rightUnderlined() bool {
+	if x.node == nil {
+		return false
+	}
+	lang := strings.ToLower(language(x.node))
+	for _, l := range []string{"ja", "ko"} {
+		if lang == l || strings.HasPrefix(lang, l+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 func stopsDecorations(c *style.Computed) bool {

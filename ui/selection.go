@@ -209,7 +209,7 @@ func (d *Document) textRuns() []*Node {
 	}
 	d.html.Walk(func(n *Node) bool {
 		if n.IsText() {
-			if b := d.tree.Of[n]; b != nil && b.Kind == box.TextRun && len(b.Lines) > 0 {
+			if b := d.tree.Of[n]; b != nil && b.Kind == box.TextRun && (len(b.Lines) > 0 || dom.Data(n).Letter != nil) {
 				s.runs = append(s.runs, n)
 			}
 			return false
@@ -384,45 +384,61 @@ func away(v, lo, hi float32) float32 {
 	return 0
 }
 
-// piece is one fragment a selection may reach: fragment k of n's run b,
-// r in the Document's space as its ancestors show it, and q the point
-// asked about in that space.
+// piece is one fragment a selection may reach: fragment k of the run b
+// of text node t, which shows n's text from its character shift on (a
+// ::first-letter's, or n's own), r in the Document's space as its
+// ancestors show it, and q the point asked about in that space.
 type piece struct {
-	n *Node
-	b *box.Box
-	k int
-	r geom.Rect
-	x float32
-	q geom.Vec2
+	n, t  *Node
+	shift int
+	b     *box.Box
+	k     int
+	r     geom.Rect
+	x     float32
+	q     geom.Vec2
+}
+
+// at is the place in n's text of the piece's character edge j.
+func (p piece) at(d *Document, j int) Position {
+	return Position{p.n, p.shift + int(d.mapOf(p.t).frags[p.k].offs[j])}
 }
 
 // pieces calls each for the fragments that take a selection and show,
 // those inside scope when it is not nil, in the text's order, at the
-// point at.
+// point at: a text's first letter before the rest of it.
 func (d *Document) pieces(at geom.Vec2, scope *box.Box, each func(p piece)) {
 	for _, n := range d.textRuns() {
 		b := d.tree.Of[n]
 		if !selects(b.Style) || scope != nil && !under(b, scope) {
 			continue
 		}
-		pl := place(b)
-		q := at
-		if pl.turned {
-			q = pl.xf.Inverse().Xform(at)
+		if l, ok := d.letterOf(n); ok {
+			d.runPieces(n, l.text, l.lead, l.run, at, each)
 		}
-		for k, f := range b.Lines {
-			if f.Text == "" {
+		d.runPieces(n, n, 0, b, at, each)
+	}
+}
+
+// runPieces calls each for the fragments of t's run b, which shows n's
+// text from its character shift on.
+func (d *Document) runPieces(n, t *Node, shift int, b *box.Box, at geom.Vec2, each func(p piece)) {
+	pl := place(b)
+	q := at
+	if pl.turned {
+		q = pl.xf.Inverse().Xform(at)
+	}
+	for k, f := range b.Lines {
+		if f.Text == "" {
+			continue
+		}
+		r := geom.Rect{X: pl.at.X + f.Rect.X, Y: pl.at.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}
+		x := r.X
+		if pl.clipped {
+			if r = intersect(r, pl.clip); r.W <= 0 || r.H <= 0 {
 				continue
 			}
-			r := geom.Rect{X: pl.at.X + f.Rect.X, Y: pl.at.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}
-			x := r.X
-			if pl.clipped {
-				if r = intersect(r, pl.clip); r.W <= 0 || r.H <= 0 {
-					continue
-				}
-			}
-			each(piece{n: n, b: b, k: k, r: r, x: x, q: q})
 		}
+		each(piece{n: n, t: t, shift: shift, b: b, k: k, r: r, x: x, q: q})
 	}
 }
 
@@ -462,25 +478,23 @@ func (d *Document) positionNear(at geom.Vec2, scope *box.Box) (Position, bool) {
 	}
 	switch {
 	case bestY > 0 && best.q.Y < top:
-		return Position{first.n, int(d.mapOf(first.n).frags[first.k].offs[0])}, true
+		return first.at(d, 0), true
 	case bestY > 0 && best.q.Y >= bottom:
-		offs := d.mapOf(last.n).frags[last.k].offs
-		return Position{last.n, int(offs[len(offs)-1])}, true
+		return last.at(d, len(d.mapOf(last.t).frags[last.k].offs)-1), true
 	}
 	return d.positionIn(best, best.q.X), true
 }
 
 // positionIn is the character edge of p nearest x.
 func (d *Document) positionIn(p piece, x float32) Position {
-	m := d.mapOf(p.n)
-	xs := d.edges(m, p.b, p.k)
+	xs := d.edges(d.mapOf(p.t), p.b, p.k)
 	j := 0
 	for i, e := range xs {
 		if abs(p.x+e-x) < abs(p.x+xs[j]-x) {
 			j = i
 		}
 	}
-	return Position{p.n, int(m.frags[p.k].offs[j])}
+	return p.at(d, j)
 }
 
 // treeBefore reports whether a comes before b in tree order, an ancestor
@@ -894,15 +908,19 @@ type letter struct {
 func (d *Document) letterOf(n *Node) (letter, bool) {
 	data := dom.Data(n)
 	g := data.Letter
-	if g == nil || dom.Data(g).Letter != n || len(g.Children()) != 1 || data.LetterEnd > len(n.Text()) {
+	if g == nil || dom.Data(g).Letter != n || len(g.Children()) != 1 {
+		return letter{}, false
+	}
+	shown := d.shown(n)
+	if data.LetterEnd > len(shown) {
 		return letter{}, false
 	}
 	t := g.Children()[0]
 	b := d.tree.Of[t]
-	if b == nil || b.Kind != box.TextRun || len(b.Lines) == 0 || !strings.HasSuffix(n.Text()[:data.LetterEnd], t.Text()) {
+	if b == nil || b.Kind != box.TextRun || len(b.Lines) == 0 || !strings.HasSuffix(shown[:data.LetterEnd], t.Text()) {
 		return letter{}, false
 	}
-	end := utf8.RuneCountInString(n.Text()[:data.LetterEnd])
+	end := utf8.RuneCountInString(shown[:data.LetterEnd])
 	return letter{text: t, run: b, lead: end - utf8.RuneCountInString(t.Text()), end: end}, true
 }
 

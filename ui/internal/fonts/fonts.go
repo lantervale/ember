@@ -61,6 +61,10 @@ type Face struct {
 	// file is the installed font the face is read from when it is first
 	// drawn with, nil for a face added with its bytes.
 	file *installedFace
+	// typo is OS/2's typographic ascender and descender, read once
+	// (typoRead), typoOK when the face has them.
+	typo             [2]float32
+	typoRead, typoOK bool
 }
 
 // Of is a ui.Document's set, for export.
@@ -258,8 +262,10 @@ func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 	if px <= 0 {
 		px = 1
 	}
-	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
+	out := box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
 		XHeight: float32(m.XHeight) / 64 * scale, CapHeight: float32(m.CapHeight) / 64 * scale}
+	c.underlined(&out, scale)
+	return out
 }
 
 // Has reports whether f's own face has a glyph for r.

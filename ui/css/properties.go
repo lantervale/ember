@@ -126,6 +126,8 @@ var properties = map[string]property{
 	"line-break":                {inherited: true, initial: "auto"},
 	"tab-size":                  {inherited: true, initial: "8"},
 	"text-decoration-skip-ink":  {inherited: true, initial: "auto"},
+	"text-underline-offset":     {inherited: true, initial: "auto"},
+	"text-underline-position":   {inherited: true, initial: "auto"},
 	"color":                     {inherited: true, initial: "canvastext"},
 	"color-scheme":              {inherited: true, initial: "normal"},
 	"cursor":                    {inherited: true, initial: "auto"},

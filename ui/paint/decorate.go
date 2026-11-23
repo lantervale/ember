@@ -1828,8 +1828,10 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		return
 	}
 	if p.glyphsOnly {
-		white := color.White
-		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		if !p.lineDecorated {
+			white := color.White
+			p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		}
 		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
 		for _, f := range b.Lines {
 			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
@@ -1852,11 +1854,11 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 			ink = fade(st.SelectionText, alpha)
 		}
 	}
-	p.decorations(e, st, style.Underline|style.Overline, alpha)
+	p.ownDecorations(e, st, style.Underline|style.Overline, alpha)
 	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
 	stroked := st.TextStroke.Width > 0 || len(parts) > 0 && st.HasSelectionStroke
 	if c.A <= 0 && ink == c && !stroked {
-		p.decorations(e, st, style.LineThrough, alpha)
+		p.ownDecorations(e, st, style.LineThrough, alpha)
 		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
@@ -1875,8 +1877,16 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	if stroked {
 		p.strokes(e, st, face, parts, alpha)
 	}
-	p.decorations(e, st, style.LineThrough, alpha)
+	p.ownDecorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// ownDecorations is decorations, but for a part of a vertical line, whose
+// line draws them.
+func (p *painter) ownDecorations(e entry, st *style.Computed, lines style.DecorationLine, alpha float32) {
+	if !p.lineDecorated {
+		p.decorations(e, st, lines, alpha)
+	}
 }
 
 // runShadows draws the text shadows of e's run, the selected parts' the

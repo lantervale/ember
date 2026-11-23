@@ -262,8 +262,16 @@ type Tree struct {
 
 // Metrics are a font's vertical metrics at a size, in points: CSS's
 // normal line height is Ascent+Descent+LineGap, and XHeight and CapHeight
-// are how tall a lowercase x and a capital stand, unrounded.
-type Metrics struct{ Ascent, Descent, LineGap, XHeight, CapHeight float32 }
+// are how tall a lowercase x and a capital stand, unrounded. Underline is
+// how far below the baseline the face's own underline begins and
+// UnderlineThickness how thick it is, set when Underlined; EmAscent is
+// the share of the em box above the baseline, 0 when unknown.
+type Metrics struct {
+	Ascent, Descent, LineGap, XHeight, CapHeight float32
+	Underline, UnderlineThickness                float32
+	Underlined                                   bool
+	EmAscent                                     float32
+}
 
 // Fonts measures text for layout, which knows no faces: the root package
 // implements it over twod's.
