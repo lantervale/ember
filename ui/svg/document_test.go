@@ -27,7 +27,8 @@ func samples(t *testing.T, css string) fstest.MapFS {
 	t.Helper()
 	files := fstest.MapFS{
 		"page.css": {Data: []byte(css)}, "bare.svg": {Data: []byte(bare)},
-		"filter.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><filter id="f"><feTurbulence/></filter>` +
+		"filter.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` +
+			`<filter id="f"><feTurbulence/></filter>` +
 			`<rect width="24" height="24" filter="url(#f)"/></svg>`)},
 		"object.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><foreignObject/></svg>`)},
 	}

@@ -16,6 +16,9 @@ const (
 	valAuto     = "auto"
 	valVisible  = "visible"
 	valNormal   = "normal"
+	valRound    = "round"
+	valEvenOdd  = "evenodd"
+	valNonZero  = "nonzero"
 )
 
 // clipsOverflow reports a viewport that cuts what overflows it.

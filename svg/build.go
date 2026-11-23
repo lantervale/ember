@@ -218,13 +218,13 @@ var properties = map[string]func(st *style, v string, ctx lengthContext){ //noli
 		}
 	},
 	"stroke-linecap": func(st *style, v string, _ lengthContext) {
-		if c, ok := map[string]Cap{"butt": ButtCap, "round": RoundCap, "square": SquareCap}[v]; ok {
+		if c, ok := map[string]Cap{"butt": ButtCap, valRound: RoundCap, "square": SquareCap}[v]; ok {
 			st.cap = c
 		}
 	},
 	"stroke-linejoin": func(st *style, v string, _ lengthContext) {
 		joins := map[string]Join{
-			"miter": MiterJoin, "miter-clip": MiterJoin, "arcs": MiterJoin, "round": RoundJoin, "bevel": BevelJoin,
+			"miter": MiterJoin, "miter-clip": MiterJoin, "arcs": MiterJoin, valRound: RoundJoin, "bevel": BevelJoin,
 		}
 		if j, ok := joins[v]; ok {
 			st.join = j
@@ -242,7 +242,7 @@ var properties = map[string]func(st *style, v string, ctx lengthContext){ //noli
 		}
 	},
 	"fill-rule": func(st *style, v string, _ lengthContext) {
-		if rule, ok := map[string]bool{"evenodd": true, "nonzero": false}[v]; ok {
+		if rule, ok := map[string]bool{valEvenOdd: true, valNonZero: false}[v]; ok {
 			st.evenOdd = rule
 		}
 	},
@@ -252,7 +252,7 @@ var properties = map[string]func(st *style, v string, ctx lengthContext){ //noli
 		}
 	},
 	"clip-rule": func(st *style, v string, _ lengthContext) {
-		if rule, ok := map[string]bool{"evenodd": true, "nonzero": false}[v]; ok {
+		if rule, ok := map[string]bool{valEvenOdd: true, valNonZero: false}[v]; ok {
 			st.clipEvenOdd = rule
 		}
 	},
@@ -542,70 +542,102 @@ func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) e
 	if v := strings.TrimSpace(props["vector-effect"]); v != "" && v != none && v != nonScaling {
 		b.unsupported("vector-effect")
 	}
-	opacity := 1.0
-	if f, ok := fraction(props["opacity"]); ok {
-		opacity = f
-	}
-	blend, blended := blendModes[strings.TrimSpace(props["mix-blend-mode"])]
-	if v := strings.TrimSpace(props["mix-blend-mode"]); v != "" && !blended {
-		b.unsupported("mix-blend-mode")
-	}
-	isolated := blend != BlendNormal || strings.TrimSpace(props["isolation"]) == "isolate"
-	filter := strings.TrimSpace(props["filter"])
-	filtered := filter != "" && filter != none
-	var clip *node
-	var cyclicClip bool
-	shapeClip := strings.TrimSpace(props["clip-path"])
-	if shapeClip == none || strings.HasPrefix(shapeClip, "url(") {
-		clip, cyclicClip = b.reference(shapeClip, "clip-path", "clipPath")
-		shapeClip = ""
-	}
-	mask, cyclicMask := b.reference(props["mask"], "mask", "mask")
-	clipped, masked := clip != nil || shapeClip != "", mask != nil
-	if opacity == 0 || cyclicClip || cyclicMask {
+	fx, draw := b.effectsOf(props)
+	if !draw {
 		return nil
 	}
-	if opacity == 1 && !clipped && !masked && !filtered && !isolated {
+	if fx.opacity == 1 && !fx.layered() && fx.blend == BlendNormal {
 		return b.content(n, props, st, m, out, useDepth)
 	}
-	group := &Group{Opacity: opacity, Blend: blend}
+	group := &Group{Opacity: fx.opacity, Blend: fx.blend}
 	if err := b.content(n, props, st, m, &group.Items, useDepth); err != nil {
 		return err
 	}
 	if len(group.Items) == 0 {
 		return nil
 	}
-	if !clipped && !masked && !filtered && !isolated {
+	if !fx.layered() {
 		*out = append(*out, fold(group))
 		return nil
 	}
+	shown, err := b.applyEffects(group, fx, &st, m)
+	if err != nil || !shown {
+		return err
+	}
+	*out = append(*out, Item{Group: group})
+	return nil
+}
+
+// effects are what an element's group is drawn through.
+type effects struct {
+	opacity       float64
+	blend         BlendMode
+	isolated      bool
+	filter, shape string
+	clip, mask    *node
+}
+
+// layered reports effects that need the group in a layer of its own.
+func (fx *effects) layered() bool {
+	return fx.isolated || fx.filter != "" || fx.shape != "" || fx.clip != nil || fx.mask != nil
+}
+
+// effectsOf reads an element's effects; draw is false when they hide it.
+func (b *builder) effectsOf(props map[string]string) (effects, bool) {
+	fx := effects{opacity: 1}
+	if f, ok := fraction(props["opacity"]); ok {
+		fx.opacity = f
+	}
+	blend, blended := blendModes[strings.TrimSpace(props["mix-blend-mode"])]
+	if v := strings.TrimSpace(props["mix-blend-mode"]); v != "" && !blended {
+		b.unsupported("mix-blend-mode")
+	}
+	fx.blend = blend
+	fx.isolated = blend != BlendNormal || strings.TrimSpace(props["isolation"]) == "isolate"
+	if filter := strings.TrimSpace(props["filter"]); filter != none {
+		fx.filter = filter
+	}
+	var cyclicClip, cyclicMask bool
+	fx.shape = strings.TrimSpace(props["clip-path"])
+	if fx.shape == none || strings.HasPrefix(fx.shape, "url(") {
+		fx.clip, cyclicClip = b.reference(fx.shape, "clip-path", "clipPath")
+		fx.shape = ""
+	}
+	fx.mask, cyclicMask = b.reference(props["mask"], "mask", "mask")
+	return fx, fx.opacity != 0 && !cyclicClip && !cyclicMask
+}
+
+// applyEffects gives group the filters, clip and mask fx names, for an
+// element whose user space m takes to the picture's; shown is false when
+// they hide it.
+func (b *builder) applyEffects(group *Group, fx effects, st *style, m Matrix) (bool, error) {
 	bbox := Box{}
 	if inv, ok := m.Inverse(); ok {
 		bbox = itemsBox(group.Items, inv)
 	}
-	if filtered {
+	if fx.filter != "" {
 		var shown bool
-		if group.Filters, shown = b.filters(filter, &st, m, bbox); !shown {
-			return nil
+		if group.Filters, shown = b.filters(fx.filter, st, m, bbox); !shown {
+			return false, nil
 		}
 	}
 	var err error
-	if shapeClip != "" {
-		if group.Clip = b.shapeClip(shapeClip, &st, m, group.Items, bbox); group.Clip == nil {
+	switch {
+	case fx.shape != "":
+		if group.Clip = b.shapeClip(fx.shape, st, m, group.Items, bbox); group.Clip == nil {
 			b.unsupported("clip-path")
 		}
-	} else if clipped {
-		if group.Clip, err = b.clipPath(clip, m, bbox); err != nil {
-			return err
+	case fx.clip != nil:
+		if group.Clip, err = b.clipPath(fx.clip, m, bbox); err != nil {
+			return false, err
 		}
 	}
-	if masked {
-		if group.Mask, err = b.mask(mask, m, bbox); err != nil {
-			return err
+	if fx.mask != nil {
+		if group.Mask, err = b.mask(fx.mask, m, bbox); err != nil {
+			return false, err
 		}
 	}
-	*out = append(*out, Item{Group: group})
-	return nil
+	return true, nil
 }
 
 // content appends what n draws, its own style applied, to out.

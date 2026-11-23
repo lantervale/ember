@@ -116,26 +116,34 @@ func (fr *filterRun) morphology(pix []float32, rx, ry int, dilate bool) {
 	w, h := fr.w, fr.box.Dy()
 	rx, ry = min(rx, maxMorphology), min(ry, maxMorphology)
 	line, tmp := make([]float32, 4*max(w, h)), make([]float32, 4*max(w, h))
+	queue := make([]int, 0, max(w, h)+2*maxMorphology+1)
 	pass := func(n, r int) {
-		for i := range n {
-			var best [4]float32
-			if !dilate {
-				best = [4]float32{1, 1, 1, 1}
+		at := func(j, c int) float32 {
+			if j < 0 || j >= n {
+				return 0
 			}
-			for j := i - r; j <= i+r; j++ {
-				for c := range 4 {
-					v := float32(0)
-					if j >= 0 && j < n {
-						v = line[4*j+c]
-					}
-					if dilate {
-						best[c] = max(best[c], v)
-					} else {
-						best[c] = min(best[c], v)
-					}
+			return line[4*j+c]
+		}
+		better := func(a, b float32) bool { return dilate && a >= b || !dilate && a <= b }
+		for c := range 4 {
+			// The places of the window, best first, each worse than the one
+			// before: the best of a window found in a step on average.
+			queue = queue[:0]
+			head := 0
+			for j := -r; j < n+r; j++ {
+				for len(queue) > head && better(at(j, c), at(queue[len(queue)-1], c)) {
+					queue = queue[:len(queue)-1]
 				}
+				queue = append(queue, j)
+				i := j - r
+				if i < 0 {
+					continue
+				}
+				for queue[head] < i-r {
+					head++
+				}
+				tmp[4*i+c] = at(queue[head], c)
 			}
-			copy(tmp[4*i:4*i+4], best[:])
 		}
 		copy(line[:4*n], tmp[:4*n])
 	}

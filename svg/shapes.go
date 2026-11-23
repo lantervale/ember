@@ -106,115 +106,24 @@ func (b *builder) shapeClip(v string, st *style, m Matrix, items []Item, bbox Bo
 // ref, and its fill rule.
 func basicShape(name, args string, ref Box, em float64) (Path, bool, bool) {
 	words := shapeArgs(args)
-	along := func(s string, whole float64) (float64, bool) {
-		return length(s, lengthContext{whole: whole, em: em})
-	}
 	switch name {
 	case elemCircle, elemEllipse:
 		return roundShape(name == elemCircle, words, ref, em)
-	case "inset", "xywh", "rect":
-		var edges []string
-		var round []string
-		for i, w := range words {
-			if w == "round" {
-				round = words[i+1:]
-				break
-			}
-			edges = append(edges, w)
-		}
-		r, rok := radius(round, ref, em)
-		if !rok {
-			return Path{}, false, false
-		}
-		var x0, y0, x1, y1 float64
-		switch name {
-		case "inset":
-			t, ok := sides(edges, ref, em)
-			if !ok {
-				return Path{}, false, false
-			}
-			x0, y0, x1, y1 = ref.X+t[3], ref.Y+t[0], ref.X+ref.W-t[1], ref.Y+ref.H-t[2]
-		case "xywh":
-			if len(edges) != 4 {
-				return Path{}, false, false
-			}
-			var v [4]float64
-			for i, w := range edges {
-				whole := ref.W
-				if i%2 == 1 {
-					whole = ref.H
-				}
-				var ok bool
-				if v[i], ok = along(w, whole); !ok {
-					return Path{}, false, false
-				}
-			}
-			x0, y0, x1, y1 = ref.X+v[0], ref.Y+v[1], ref.X+v[0]+v[2], ref.Y+v[1]+v[3]
-		default:
-			if len(edges) != 4 {
-				return Path{}, false, false
-			}
-			var v [4]float64
-			for i, w := range edges {
-				whole := ref.H
-				if i%2 == 1 {
-					whole = ref.W
-				}
-				if w == valAuto {
-					v[i] = [4]float64{0, ref.W, ref.H, 0}[i]
-					continue
-				}
-				var ok bool
-				if v[i], ok = along(w, whole); !ok {
-					return Path{}, false, false
-				}
-			}
-			x0, y0, x1, y1 = ref.X+v[3], ref.Y+v[0], ref.X+v[1], ref.Y+v[2]
-		}
-		if x1 < x0 {
-			x0, x1 = (x0+x1)/2, (x0+x1)/2
-		}
-		if y1 < y0 {
-			y0, y1 = (y0+y1)/2, (y0+y1)/2
-		}
-		return rectPath(x0, y0, x1-x0, y1-y0, r.X, r.Y), false, true
+	case "inset", "xywh", elemRect:
+		p, ok := rectShape(name, words, ref, em)
+		return p, false, ok
 	case elemPolygon:
-		evenOdd, rest := fillRule(words)
-		var p Path
-		var pt []float64
-		for _, w := range rest {
-			if w == "," {
-				continue
-			}
-			whole := ref.W
-			if len(pt)%2 == 1 {
-				whole = ref.H
-			}
-			v, ok := along(w, whole)
-			if !ok {
-				return Path{}, false, false
-			}
-			pt = append(pt, v)
-		}
-		if len(pt) < 6 || len(pt)%2 != 0 {
-			return Path{}, false, false
-		}
-		for i := 0; i < len(pt); i += 2 {
-			q := Point{ref.X + pt[i], ref.Y + pt[i+1]}
-			if i == 0 {
-				p.moveTo(q)
-			} else {
-				p.lineTo(q)
-			}
-		}
-		p.close()
-		return p, evenOdd, true
+		return polygonShape(words, ref, em)
 	case elemPath:
 		evenOdd, rest := fillRule(words)
-		if len(rest) != 1 || len(rest[0]) < 2 || rest[0][0] != rest[0][len(rest[0])-1] || !strings.ContainsRune(`"'`, rune(rest[0][0])) {
+		if len(rest) != 1 {
 			return Path{}, false, false
 		}
-		p := parsePath(rest[0][1:len(rest[0])-1], MaxSegments)
+		d, quoted := unquote(rest[0])
+		if !quoted {
+			return Path{}, false, false
+		}
+		p := parsePath(d, MaxSegments)
 		for i := range p.Points {
 			p.Points[i] = p.Points[i].add(Point{ref.X, ref.Y})
 		}
@@ -223,14 +132,121 @@ func basicShape(name, args string, ref Box, em float64) (Path, bool, bool) {
 	return Path{}, false, false
 }
 
+// unquote is s within its quotes; ok is false when it has none.
+func unquote(s string) (string, bool) {
+	if len(s) < 2 || s[0] != s[len(s)-1] || s[0] != '"' && s[0] != '\'' {
+		return "", false
+	}
+	return s[1 : len(s)-1], true
+}
+
+// lengths reads four lengths, each a share of the box's width or its
+// height as across says of its place; auto stands for autos'.
+func lengths(words []string, ref Box, em float64, across [4]bool, autos *[4]float64) ([4]float64, bool) {
+	var v [4]float64
+	if len(words) != 4 {
+		return v, false
+	}
+	for i, w := range words {
+		if w == valAuto && autos != nil {
+			v[i] = autos[i]
+			continue
+		}
+		whole := ref.H
+		if across[i] {
+			whole = ref.W
+		}
+		var ok bool
+		if v[i], ok = length(w, lengthContext{whole: whole, em: em}); !ok {
+			return v, false
+		}
+	}
+	return v, true
+}
+
+// rectShape is inset(), xywh() or rect(): a rectangle in ref, rounded as
+// its round asks.
+func rectShape(name string, words []string, ref Box, em float64) (Path, bool) {
+	edges := words
+	var round []string
+	for i, w := range words {
+		if w == valRound {
+			edges, round = words[:i], words[i+1:]
+			break
+		}
+	}
+	r, ok := radius(round, ref, em)
+	if !ok {
+		return Path{}, false
+	}
+	var x0, y0, x1, y1 float64
+	switch name {
+	case "inset":
+		t, valid := sides(edges, ref, em)
+		if !valid {
+			return Path{}, false
+		}
+		x0, y0, x1, y1 = ref.X+t[3], ref.Y+t[0], ref.X+ref.W-t[1], ref.Y+ref.H-t[2]
+	case "xywh":
+		v, valid := lengths(edges, ref, em, [4]bool{true, false, true, false}, nil)
+		if !valid {
+			return Path{}, false
+		}
+		x0, y0, x1, y1 = ref.X+v[0], ref.Y+v[1], ref.X+v[0]+v[2], ref.Y+v[1]+v[3]
+	default:
+		v, valid := lengths(edges, ref, em, [4]bool{false, true, false, true}, &[4]float64{0, ref.W, ref.H, 0})
+		if !valid {
+			return Path{}, false
+		}
+		x0, y0, x1, y1 = ref.X+v[3], ref.Y+v[0], ref.X+v[1], ref.Y+v[2]
+	}
+	if x1 < x0 {
+		x0, x1 = (x0+x1)/2, (x0+x1)/2
+	}
+	if y1 < y0 {
+		y0, y1 = (y0+y1)/2, (y0+y1)/2
+	}
+	return rectPath(x0, y0, x1-x0, y1-y0, r.X, r.Y), true
+}
+
+// polygonShape is polygon(): its points in ref, and its fill rule.
+func polygonShape(words []string, ref Box, em float64) (Path, bool, bool) {
+	evenOdd, rest := fillRule(words)
+	var pt []float64
+	for _, w := range rest {
+		if w == "," {
+			continue
+		}
+		whole := ref.W
+		if len(pt)%2 == 1 {
+			whole = ref.H
+		}
+		v, ok := length(w, lengthContext{whole: whole, em: em})
+		if !ok {
+			return Path{}, false, false
+		}
+		pt = append(pt, v)
+	}
+	if len(pt) < 6 || len(pt)%2 != 0 {
+		return Path{}, false, false
+	}
+	var p Path
+	p.moveTo(Point{ref.X + pt[0], ref.Y + pt[1]})
+	for i := 2; i < len(pt); i += 2 {
+		p.lineTo(Point{ref.X + pt[i], ref.Y + pt[i+1]})
+	}
+	p.close()
+	return p, evenOdd, true
+}
+
 // fillRule takes a leading fill rule and its comma off words.
 func fillRule(words []string) (bool, []string) {
-	if len(words) > 0 && (words[0] == "evenodd" || words[0] == "nonzero") {
+	if len(words) > 0 && (words[0] == valEvenOdd || words[0] == valNonZero) {
 		rest := words[1:]
 		if len(rest) > 0 && rest[0] == "," {
 			rest = rest[1:]
 		}
-		return words[0] == "evenodd", rest
+		return words[0] == valEvenOdd, rest
 	}
 	return false, words
 }

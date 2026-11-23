@@ -113,8 +113,19 @@ func TestAFilterThatCannotBeRunHidesOrLeavesTheElement(t *testing.T) {
 	expect(t, img, "an empty filter hides it", 20, 20, clearPx, 0)
 	img = draw(t, `<rect width="50" height="50" fill="red" filter="url(#nothing)"/>`)
 	expect(t, img, "a filter that is not there leaves it", 20, 20, redPx, 0)
-	img = draw(t, `<filter id="f"><feFlood/></filter><g filter="url(#f)"><line x1="0" y1="0" x2="50" y2="0" stroke="red"/></g>`)
+	img = draw(t, `<filter id="f"><feFlood/></filter>
+		<g filter="url(#f)"><line x1="0" y1="0" x2="50" y2="0" stroke="red"/></g>`)
 	expect(t, img, "a box with no height hides it", 20, 0, clearPx, 0)
+}
+
+func TestAFilterOverTooManyPixelsIsNotRun(t *testing.T) {
+	p := picture(t, `<filter id="f"><feFlood flood-color="blue"/></filter>
+		<rect width="100" height="100" fill="red" filter="url(#f)"/>`)
+	img, err := p.Rasterise(2100, 2100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(t, img, "drawn as if unfiltered", 1000, 1000, redPx, 0)
 }
 
 func TestCSSFilterFunctions(t *testing.T) {
@@ -145,7 +156,9 @@ func TestBlendModesMixAGroupWithWhatIsUnderIt(t *testing.T) {
 		<rect x="20" y="20" width="40" height="40" fill="#0f0" style="mix-blend-mode: screen"/>`)
 	expect(t, img, "screen", 30, 30, color.RGBA{255, 255, 0, 255}, 0)
 	img = draw(t, `<rect width="100" height="100" fill="#fff"/>
-		<g style="isolation: isolate"><rect x="20" y="20" width="40" height="40" fill="#f00" style="mix-blend-mode: difference"/></g>`)
+		<g style="isolation: isolate">
+			<rect x="20" y="20" width="40" height="40" fill="#f00" style="mix-blend-mode: difference"/>
+		</g>`)
 	expect(t, img, "an isolated group blends with nothing", 30, 30, redPx, 0)
 	img = draw(t, `<rect width="100" height="100" fill="#fff"/>
 		<g><rect x="20" y="20" width="40" height="40" fill="#f00" style="mix-blend-mode: difference"/></g>`)
@@ -244,7 +257,8 @@ func TestTextSpacingDecorationsAndPaths(t *testing.T) {
 	img = draw(t, `<text x="10" y="50" font-size="20" fill="blue"><tspan style="text-decoration: line-through">--- `+
 		`</tspan><tspan fill="red">---</tspan></text>`)
 	expect(t, img, "a line through the space", 42, 44, bluePx, 30)
-	img = draw(t, `<path id="p" d="M10 90 V10"/><text font-size="20" fill="blue"><textPath href="#p">llll</textPath></text>`)
+	img = draw(t, `<path id="p" d="M10 90 V10"/>
+		<text font-size="20" fill="blue"><textPath href="#p">llll</textPath></text>`)
 	ink := 0
 	for y := range 100 {
 		for x := range 100 {
@@ -259,7 +273,8 @@ func TestTextSpacingDecorationsAndPaths(t *testing.T) {
 	if ink == 0 {
 		t.Error("nothing set along the path")
 	}
-	img = draw(t, `<path id="p" d="M10 50 H20"/><text font-size="20" fill="blue"><textPath href="#p">mmmmmm</textPath></text>`)
+	img = draw(t, `<path id="p" d="M10 50 H20"/>
+		<text font-size="20" fill="blue"><textPath href="#p">mmmmmm</textPath></text>`)
 	for x := 35; x < 100; x++ {
 		if img.RGBAAt(x, 45).A > 0 {
 			t.Fatalf("a glyph past the path's end, at x %d", x)
@@ -268,7 +283,8 @@ func TestTextSpacingDecorationsAndPaths(t *testing.T) {
 }
 
 func TestAUTF16FileIsRead(t *testing.T) {
-	const file = `<?xml version="1.0" encoding="UTF-16"?><svg ` + xmlns + ` viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`
+	const file = `<?xml version="1.0" encoding="UTF-16"?>` +
+		`<svg ` + xmlns + ` viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`
 	units := make([]byte, 0, 2*len(file)+2)
 	be := []byte{0xfe, 0xff}
 	le := []byte{0xff, 0xfe}

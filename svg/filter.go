@@ -32,21 +32,13 @@ type filterContext struct {
 	boxed bool
 }
 
-// x, y and the rest read a primitive's lengths in its units.
-func (b *builder) fx(c filterContext, s string) (float64, bool) {
+// scaled is p in the filter's space: as it is, or of the box when the
+// units are the box's.
+func (c filterContext) scaled(p Point) Point {
 	if c.boxed {
-		v, ok := length(s, lengthContext{whole: 1})
-		return v * c.bbox.W, ok
+		return Point{p.X * c.bbox.W, p.Y * c.bbox.H}
 	}
-	return length(s, lengthContext{whole: b.vw, em: 16})
-}
-
-func (b *builder) fy(c filterContext, s string) (float64, bool) {
-	if c.boxed {
-		v, ok := length(s, lengthContext{whole: 1})
-		return v * c.bbox.H, ok
-	}
-	return length(s, lengthContext{whole: b.vh, em: 16})
+	return p
 }
 
 // pair reads one or two numbers, the second the first when absent, each
@@ -64,18 +56,16 @@ func pair(s string, c filterContext, def float64) (Point, bool) {
 	case 2:
 		p = Point{v[0], v[1]}
 	}
-	if c.boxed {
-		p = Point{p.X * c.bbox.W, p.Y * c.bbox.H}
-	}
-	return p, true
+	return c.scaled(p), true
 }
 
 // filters are the filters of an element's filter property: those of the
 // filter elements it names and of its CSS functions. m takes the
 // element's user space to the picture's, where its items' bounding box
 // is bbox; shown is false when the element is not drawn at all.
-func (b *builder) filters(v string, st *style, m Matrix, bbox Box) (out []*Filter, shown bool) {
+func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, bool) {
 	v = strings.TrimSpace(v)
+	var out []*Filter
 	var fns *Filter
 	for v != "" {
 		open := strings.IndexByte(v, '(')
@@ -193,9 +183,15 @@ func saturateMatrix(s float64) [20]float64 {
 func hueMatrix(deg float64) [20]float64 {
 	sin, cos := math.Sincos(deg * math.Pi / 180)
 	out := identityMatrix()
-	copy(out[0:3], []float64{0.213 + cos*0.787 - sin*0.213, 0.715 - cos*0.715 - sin*0.715, 0.072 - cos*0.072 + sin*0.928})
-	copy(out[5:8], []float64{0.213 - cos*0.213 + sin*0.143, 0.715 + cos*0.285 + sin*0.140, 0.072 - cos*0.072 - sin*0.283})
-	copy(out[10:13], []float64{0.213 - cos*0.213 - sin*0.787, 0.715 - cos*0.715 + sin*0.715, 0.072 + cos*0.928 + sin*0.072})
+	copy(out[0:3], []float64{
+		0.213 + cos*0.787 - sin*0.213, 0.715 - cos*0.715 - sin*0.715, 0.072 - cos*0.072 + sin*0.928,
+	})
+	copy(out[5:8], []float64{
+		0.213 - cos*0.213 + sin*0.143, 0.715 + cos*0.285 + sin*0.140, 0.072 - cos*0.072 - sin*0.283,
+	})
+	copy(out[10:13], []float64{
+		0.213 - cos*0.213 - sin*0.787, 0.715 - cos*0.715 + sin*0.715, 0.072 + cos*0.928 + sin*0.072,
+	})
 	return out
 }
 
@@ -425,9 +421,29 @@ func floodColor(props map[string]string, st *style) color.NRGBA {
 func (b *builder) primitive(n *node, f *Filter, c filterContext, results map[string]Input) Primitive {
 	props := b.props(n)
 	st := b.inherited(n)
-	p := Primitive{LinearRGB: st.linearFilters}
-	in := b.input(props["in"], f, results)
-	p.In = []Input{in}
+	p := Primitive{LinearRGB: st.linearFilters, In: []Input{b.input(props["in"], f, results)}}
+	b.primitiveKind(&p, n, props, &st, f, c, results)
+	p.Region = b.subregion(props, f, c, p.In)
+	if p.Kind == Tile {
+		p.Region = b.subregion(props, f, c, nil)
+	}
+	if p.Region.Empty() {
+		p.Kind = Clear
+	}
+	if name := strings.TrimSpace(props["result"]); name != "" {
+		results[name] = Input(len(f.Primitives))
+	}
+	return p
+}
+
+// primitiveKind sets what the primitive n does, and what it reads
+// beyond its in.
+func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, st *style, f *Filter, c filterContext,
+	results map[string]Input,
+) {
+	if b.combining(p, n, props, f, results) {
+		return
+	}
 	num := func(k string, def float64) float64 {
 		if v, ok := number(props[k]); ok {
 			return v
@@ -446,23 +462,17 @@ func (b *builder) primitive(n *node, f *Filter, c filterContext, results map[str
 		}
 	case "feOffset":
 		p.Kind = Offset
-		p.Offset = Point{num("dx", 0), num("dy", 0)}
-		if c.boxed {
-			p.Offset = Point{p.Offset.X * c.bbox.W, p.Offset.Y * c.bbox.H}
-		}
+		p.Offset = c.scaled(Point{num("dx", 0), num("dy", 0)})
 	case "feDropShadow":
 		p.Kind = DropShadow
-		p.Offset = Point{num("dx", 2), num("dy", 2)}
-		if c.boxed {
-			p.Offset = Point{p.Offset.X * c.bbox.W, p.Offset.Y * c.bbox.H}
-		}
+		p.Offset = c.scaled(Point{num("dx", 2), num("dy", 2)})
 		if dev, ok := pair(props["stdDeviation"], c, 2); ok && dev.X >= 0 && dev.Y >= 0 {
 			p.StdDev = dev
 		}
-		p.Color = floodColor(props, &st)
+		p.Color = floodColor(props, st)
 	case "feFlood":
 		p.Kind, p.In = Flood, nil
-		p.Color = floodColor(props, &st)
+		p.Color = floodColor(props, st)
 	case "feColorMatrix":
 		p.Kind = ColorMatrix
 		p.Matrix = colorMatrix(props)
@@ -472,28 +482,6 @@ func (b *builder) primitive(n *node, f *Filter, c filterContext, results map[str
 			channel := strings.Index("RGBA", strings.TrimPrefix(k.name, "feFunc"))
 			if len(k.name) == len("feFuncR") && channel >= 0 {
 				p.Transfer[channel] = transfer(b.props(k))
-			}
-		}
-	case "feComposite":
-		p.Kind = Composite
-		p.In = append(p.In, b.input(props["in2"], f, results))
-		ops := map[string]CompositeOperator{
-			"over": CompositeOver, "in": CompositeIn, "out": CompositeOut, "atop": CompositeAtop,
-			"xor": CompositeXor, "lighter": CompositeLighter, "arithmetic": CompositeArithmetic,
-		}
-		p.Operator = ops[strings.TrimSpace(props["operator"])]
-		for i := range p.K {
-			p.K[i] = num("k"+string(rune('1'+i)), 0)
-		}
-	case "feBlend":
-		p.Kind = Blend
-		p.In = append(p.In, b.input(props["in2"], f, results))
-		p.Mode = blendModes[strings.TrimSpace(props["mode"])]
-	case "feMerge":
-		p.Kind, p.In = Merge, nil
-		for _, k := range n.kids {
-			if k.name == "feMergeNode" {
-				p.In = append(p.In, b.input(b.props(k)["in"], f, results))
 			}
 		}
 	case "feMorphology":
@@ -508,17 +496,38 @@ func (b *builder) primitive(n *node, f *Filter, c filterContext, results map[str
 		p.Kind, p.In = Clear, nil
 		b.unsupported(n.name)
 	}
-	p.Region = b.subregion(props, f, c, p.In)
-	if p.Kind == Tile {
-		p.Region = b.subregion(props, f, c, nil)
+}
+
+// combining sets the primitives that put pictures together, and is
+// false for another.
+func (b *builder) combining(p *Primitive, n *node, props map[string]string, f *Filter, results map[string]Input) bool {
+	switch n.name {
+	case "feComposite":
+		p.Kind = Composite
+		p.In = append(p.In, b.input(props["in2"], f, results))
+		ops := map[string]CompositeOperator{
+			"over": CompositeOver, "in": CompositeIn, "out": CompositeOut, "atop": CompositeAtop,
+			"xor": CompositeXor, "lighter": CompositeLighter, "arithmetic": CompositeArithmetic,
+		}
+		p.Operator = ops[strings.TrimSpace(props["operator"])]
+		for i, k := range [...]string{"k1", "k2", "k3", "k4"} {
+			p.K[i], _ = number(props[k])
+		}
+	case "feBlend":
+		p.Kind = Blend
+		p.In = append(p.In, b.input(props["in2"], f, results))
+		p.Mode = blendModes[strings.TrimSpace(props["mode"])]
+	case "feMerge":
+		p.Kind, p.In = Merge, nil
+		for _, k := range n.kids {
+			if k.name == "feMergeNode" {
+				p.In = append(p.In, b.input(b.props(k)["in"], f, results))
+			}
+		}
+	default:
+		return false
 	}
-	if p.Region.Empty() {
-		p.Kind = Clear
-	}
-	if name := strings.TrimSpace(props["result"]); name != "" {
-		results[name] = Input(len(f.Primitives))
-	}
-	return p
+	return true
 }
 
 // colorMatrix is an feColorMatrix's matrix: its type's, from its values.

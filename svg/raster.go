@@ -79,29 +79,18 @@ func (d *drawer) group(dst *image.RGBA, clip image.Rectangle, g *Group, fade flo
 	if depth >= maxEffectLayers {
 		return
 	}
+	if g.Clip != nil {
+		clip = clip.Intersect(d.clipBounds(g.Clip))
+	}
 	var layer *image.RGBA
 	if g.Filters != nil {
-		if layer = d.filtered(g, clip, depth); layer == nil {
-			return
-		}
-		if g.Clip != nil {
-			clip = clip.Intersect(d.clipBounds(g.Clip))
-		}
-		box := layer.Rect.Intersect(clip)
-		if box.Empty() {
-			return
-		}
-		layer = layer.SubImage(box).(*image.RGBA) //nolint:forcetypeassert // an RGBA's part is one
-	} else {
-		box := d.bounds(g.Items).Intersect(clip)
-		if g.Clip != nil {
-			box = box.Intersect(d.clipBounds(g.Clip))
-		}
-		if box.Empty() {
-			return
-		}
+		layer = d.filtered(g, clip, depth)
+	} else if box := d.bounds(g.Items).Intersect(clip); !box.Empty() {
 		layer = d.layer(depth, box)
 		d.items(layer, box, g.Items, 1, depth+1)
+	}
+	if layer == nil {
+		return
 	}
 	if g.Clip != nil {
 		applyCover(layer, d.clipCover(g.Clip, layer.Rect))

@@ -54,7 +54,9 @@ type fontLines struct {
 // readLines reads a TrueType file's fontLines from its tables.
 func readLines(ttf []byte) fontLines {
 	l := fontLines{under: -150, underThickness: 100, through: 500, throughThickness: 100}
-	be16 := func(b []byte, at int) float64 { return float64(int16(uint16(b[at])<<8 | uint16(b[at+1]))) } //nolint:gosec // a signed field
+	be16 := func(b []byte, at int) float64 {
+		return float64(int16(uint16(b[at])<<8 | uint16(b[at+1]))) //nolint:gosec // a signed field
+	}
 	if len(ttf) < 12 {
 		return l
 	}
@@ -306,16 +308,7 @@ func place(chars []textChar, buf *sfnt.Buffer) {
 			c.at = pen
 			continue
 		}
-		upem := fixed.Int26_6(c.font.UnitsPerEm()) << 6
-		c.scale = c.st.fontSize / float64(c.font.UnitsPerEm()) / 64
-		c.glyph, _ = c.font.GlyphIndex(buf, c.r)
-		if prev != nil && prev.font == c.font && prev.scale == c.scale {
-			if k, err := c.font.Kern(buf, prev.glyph, c.glyph, upem, font.HintingNone); err == nil {
-				pen.X += float64(k) * c.scale
-			}
-		}
-		adv, _ := c.font.GlyphAdvance(buf, c.glyph, upem, font.HintingNone)
-		c.advance = float64(adv) * c.scale
+		pen.X += c.measure(buf, prev)
 		c.at = pen
 		pen.X += c.advance + c.st.letterSpacing
 		if c.r == ' ' {
@@ -328,6 +321,60 @@ func place(chars []textChar, buf *sfnt.Buffer) {
 		if c := &chars[i]; c.path != nil {
 			c.along, c.hidden = c.path.place(c.at, c.advance)
 		}
+	}
+}
+
+// measure gives c its glyph, its scale and its advance, and is how far
+// it is kerned after prev.
+func (c *textChar) measure(buf *sfnt.Buffer, prev *textChar) float64 {
+	upem := fixed.Int26_6(c.font.UnitsPerEm()) << 6
+	c.scale = c.st.fontSize / float64(c.font.UnitsPerEm()) / 64
+	c.glyph, _ = c.font.GlyphIndex(buf, c.r)
+	kern := 0.0
+	if prev != nil && prev.font == c.font && prev.scale == c.scale {
+		if k, err := c.font.Kern(buf, prev.glyph, c.glyph, upem, font.HintingNone); err == nil {
+			kern = float64(k) * c.scale
+		}
+	}
+	adv, _ := c.font.GlyphAdvance(buf, c.glyph, upem, font.HintingNone)
+	c.advance = float64(adv) * c.scale
+	return kern
+}
+
+// outline appends c's glyph, where it is placed, to p.
+func (c *textChar) outline(buf *sfnt.Buffer, p *Path) {
+	upem := fixed.Int26_6(c.font.UnitsPerEm()) << 6
+	segs, err := c.font.LoadGlyph(buf, c.glyph, upem, nil)
+	if err != nil {
+		return
+	}
+	pt := func(a fixed.Point26_6) Point {
+		if c.path != nil {
+			return c.along.Apply(Point{float64(a.X) * c.scale, float64(a.Y) * c.scale})
+		}
+		return Point{c.at.X + float64(a.X)*c.scale, c.at.Y + float64(a.Y)*c.scale}
+	}
+	open := false
+	for _, s := range segs {
+		switch s.Op {
+		case sfnt.SegmentOpMoveTo:
+			if open {
+				p.close()
+			}
+			p.moveTo(pt(s.Args[0]))
+			open = true
+		case sfnt.SegmentOpLineTo:
+			p.lineTo(pt(s.Args[0]))
+		case sfnt.SegmentOpQuadTo:
+			p.Verbs = append(p.Verbs, QuadTo)
+			p.Points = append(p.Points, pt(s.Args[0]), pt(s.Args[1]))
+		case sfnt.SegmentOpCubeTo:
+			p.Verbs = append(p.Verbs, CubicTo)
+			p.Points = append(p.Points, pt(s.Args[0]), pt(s.Args[1]), pt(s.Args[2]))
+		}
+	}
+	if open {
+		p.close()
 	}
 }
 
@@ -344,40 +391,7 @@ func (b *builder) glyphs(chars []textChar, buf *sfnt.Buffer, m Matrix, out *[]It
 		if len(styles) == 0 || styles[len(styles)-1] != c.st {
 			paths, styles = append(paths, Path{}), append(styles, c.st)
 		}
-		p := &paths[len(paths)-1]
-		upem := fixed.Int26_6(c.font.UnitsPerEm()) << 6
-		segs, err := c.font.LoadGlyph(buf, c.glyph, upem, nil)
-		if err != nil {
-			continue
-		}
-		pt := func(a fixed.Point26_6) Point {
-			if c.path != nil {
-				return c.along.Apply(Point{float64(a.X) * c.scale, float64(a.Y) * c.scale})
-			}
-			return Point{c.at.X + float64(a.X)*c.scale, c.at.Y + float64(a.Y)*c.scale}
-		}
-		open := false
-		for _, s := range segs {
-			switch s.Op {
-			case sfnt.SegmentOpMoveTo:
-				if open {
-					p.close()
-				}
-				p.moveTo(pt(s.Args[0]))
-				open = true
-			case sfnt.SegmentOpLineTo:
-				p.lineTo(pt(s.Args[0]))
-			case sfnt.SegmentOpQuadTo:
-				p.Verbs = append(p.Verbs, QuadTo)
-				p.Points = append(p.Points, pt(s.Args[0]), pt(s.Args[1]))
-			case sfnt.SegmentOpCubeTo:
-				p.Verbs = append(p.Verbs, CubicTo)
-				p.Points = append(p.Points, pt(s.Args[0]), pt(s.Args[1]), pt(s.Args[2]))
-			}
-		}
-		if open {
-			p.close()
-		}
+		c.outline(buf, &paths[len(paths)-1])
 	}
 	var all Path
 	for _, p := range paths {
@@ -419,7 +433,8 @@ type decorationLine struct {
 // overlines, painted under the text, and lines through it, over it. Each
 // runs along the characters it decorates on one line, at the place and
 // thickness its element's face gives for its font size.
-func decorationLines(chars []textChar, buf *sfnt.Buffer) (under, through []decorationLine) {
+func decorationLines(chars []textChar, buf *sfnt.Buffer) ([]decorationLine, []decorationLine) {
+	var under, through []decorationLine
 	for i := range chars {
 		for _, d := range chars[i].decorations {
 			if d.done {
@@ -517,7 +532,7 @@ func (b *builder) textPath(props map[string]string, st *style) *textPath {
 		}
 		refProps := b.props(ref)
 		path = b.path(ref, refProps, st.fontSize)
-		if t, ok := parseTransform(refProps["transform"]); ok && t.finite() {
+		if t, valid := parseTransform(refProps["transform"]); valid && t.finite() {
 			moved := Path{Verbs: path.Verbs, Points: make([]Point, len(path.Points))}
 			for i, p := range path.Points {
 				moved.Points[i] = t.Apply(p)

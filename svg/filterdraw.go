@@ -6,9 +6,14 @@ import (
 	"math"
 )
 
-// maxReach is the furthest, in pixels, a filter is followed moving or
-// spreading a picture.
-const maxReach = MaxSide
+const (
+	// maxReach is the furthest, in pixels, a filter is followed moving or
+	// spreading a picture.
+	maxReach = MaxSide
+	// maxFilterPixels is the most pixels a filter runs over; a larger one
+	// is not run.
+	maxFilterPixels = 1 << 22
+)
 
 // fbuf is a picture a filter works on: premultiplied colours, 0–1, four
 // to a pixel over the filter's box, in linear light or encoded sRGB.
@@ -80,7 +85,7 @@ func (d *drawer) filterArea(filters []*Filter, from image.Rectangle) image.Recta
 }
 
 // filtered is a layer holding g's items run through its filters, over
-// as much as is needed to draw clip; nil when nothing shows.
+// what of clip they draw; nil when nothing shows.
 func (d *drawer) filtered(g *Group, clip image.Rectangle, depth int) *image.RGBA {
 	reach := 0
 	for _, f := range g.Filters {
@@ -98,15 +103,27 @@ func (d *drawer) filtered(g *Group, clip image.Rectangle, depth int) *image.RGBA
 		work = work.Union(area.Inset(-reach))
 	}
 	work = work.Intersect(clip.Inset(-reach))
-	if work.Empty() || work.Dx() > MaxSide || work.Dy() > MaxSide || work.Dx()*work.Dy() > MaxPixels {
+	if work.Empty() {
 		return nil
+	}
+	if work.Dx() > MaxSide || work.Dy() > MaxSide || work.Dx()*work.Dy() > maxFilterPixels {
+		if work = d.bounds(g.Items).Intersect(clip); work.Empty() {
+			return nil
+		}
+		layer := d.layer(depth, work)
+		d.items(layer, work, g.Items, 1, depth+1)
+		return layer
 	}
 	layer := d.layer(depth, work)
 	d.items(layer, work, g.Items, 1, depth+1)
 	for _, f := range g.Filters {
 		d.run(layer, f)
 	}
-	return layer
+	shown := work.Intersect(clip)
+	if shown.Empty() {
+		return nil
+	}
+	return &image.RGBA{Pix: layer.Pix[layer.PixOffset(shown.Min.X, shown.Min.Y):], Stride: layer.Stride, Rect: shown}
 }
 
 // run makes the picture of layer anew through f.
@@ -122,10 +139,24 @@ func (d *drawer) run(layer *image.RGBA, f *Filter) {
 			out[i] = float32(v) / 255
 		}
 	}
+	lastUse := make([]int, len(f.Primitives))
+	for i := range f.Primitives {
+		for _, in := range f.Primitives[i].In {
+			if in >= 0 && int(in) < i {
+				lastUse[in] = i
+			}
+		}
+	}
 	last := fr.src
 	for i := range f.Primitives {
 		last = fr.primitive(&f.Primitives[i], f)
 		fr.results[i] = last
+		for k := range i {
+			if lastUse[k] <= i {
+				fr.results[k] = nil
+				delete(fr.converted, k)
+			}
+		}
 	}
 	last = fr.convert(last, false)
 	for y := range box.Dy() {
