@@ -57,3 +57,41 @@ func TestAResizerDragsItsBoxsSize(t *testing.T) {
 		t.Errorf("a box that doesn't clip took %q", v.Style())
 	}
 }
+
+// A textarea's resizer is a page's: under BrowserSheets it takes
+// resize: auto, both axes as Chrome's, and drags; a game's screen shows
+// none, but where its sheet asks for one.
+func TestATextareaResizesUnderBrowserSheetsAlone(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		opts  []ui.DocumentOption
+		moved bool
+	}{
+		{"page", []ui.DocumentOption{ui.BrowserSheets()}, true},
+		{"screen", nil, false},
+		{"screen asking", []ui.DocumentOption{ui.CSS("textarea { resize: auto; }")}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := ui.NewDocument(append(c.opts, ui.CSS("body { margin: 0; }"))...)
+			ta := ui.Textarea()
+			d.Body().Append(ta)
+			win := platform.NewWindow(platform.Size(400, 300))
+			win.Add(d)
+			w := ember.New().AddEntities(win)
+			in := win.Input()
+			w.RunFrames(2)
+			b := ta.Box()
+			in.SetMouse(geom.V2(b.X+b.W-3, b.Y+b.H-3))
+			w.RunFrames(1)
+			in.SetMouseButton(input.MouseLeft, true)
+			w.RunFrames(1)
+			in.SetMouse(geom.V2(b.X+b.W+37, b.Y+b.H+27))
+			w.RunFrames(1)
+			in.SetMouseButton(input.MouseLeft, false)
+			w.RunFrames(2)
+			if got := ta.Box(); (got.W != b.W) != c.moved || (got.H != b.H) != c.moved {
+				t.Errorf("box %v from %v, resized %v", got, b, c.moved)
+			}
+		})
+	}
+}

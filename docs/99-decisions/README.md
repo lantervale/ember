@@ -211,6 +211,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
 | 0210 | [Marks of vertical lines are measured in their flow, and a fallback stands by its own metrics](0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md) | rendering |
 | 0211 | [A face's chws spaces its pairs, and vertical text trims by vhal](0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md) | rendering |
+| 0213 | [A page's textarea resizes, and sideways lines are spaced as horizontal ones](0213-a-pages-textarea-resizes-and-sideways-lines-are-spaced-as-horizontal-ones.md) | api |
 
 ## Writing one
 

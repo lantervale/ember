@@ -108,6 +108,75 @@ textarea { resize: both; }`))
 	}
 }
 
+// TestTextareasResizeAsChromes drags the corner of textareas no sheet
+// gives a resize, in ui and in Chrome: on a page read as a browser's
+// (BrowserSheets) each takes Chrome's resize: auto and the size Chrome
+// gives it, rows and cols, right to left, vertical, scrolled and
+// disabled alike; on a game's screen none resizes, in either.
+func TestTextareasResizeAsChromes(t *testing.T) {
+	for _, page := range []bool{true, false} {
+		t.Run(fmt.Sprint("browser sheets ", page), func(t *testing.T) {
+			var opts []ui.DocumentOption
+			if page {
+				opts = append(opts, ui.BrowserSheets())
+			}
+			d := ui.NewDocument(append(opts, ui.CSS(`body { margin: 10px; } textarea { margin: 6px; font: 14px/18px Go; }`))...)
+			boxes := []*ui.Node{ui.Textarea(), ui.Textarea(ui.Attr("rows", "4"), ui.Attr("cols", "10")),
+				ui.Textarea(ui.Attr("dir", "rtl")), ui.Textarea(ui.Style("writing-mode: vertical-lr")),
+				ui.Textarea(ui.Text(strings.Repeat("line\n", 12))), ui.Textarea(ui.Attr("disabled", ""))}
+			for _, b := range boxes {
+				d.Body().Append(ui.Div(b))
+			}
+			size := geom.V2(500, 900)
+			srv, _ := chrome.Serve(t, d, nil, 0)
+			win := platform.NewWindow(platform.Size(int(size.X), int(size.Y)))
+			win.Add(d)
+			w := ember.New().AddEntities(win)
+			in := win.Input()
+			in.SetMouse(geom.V2(490, 890))
+			w.RunFrames(3)
+			s := chrome.Open(t, srv.URL, size, 1)
+			for i, b := range boxes {
+				r := b.Box()
+				from, way := geom.V2(r.X+r.W-3, r.Y+r.H-3), float32(1)
+				if i == 2 {
+					from, way = geom.V2(r.X+3, r.Y+r.H-3), -1
+				}
+				to := from.Add(geom.V2(40*way, 30))
+				in.SetMouse(from)
+				w.RunFrames(2)
+				in.SetMouseButton(input.MouseLeft, true)
+				w.RunFrames(1)
+				in.SetMouse(to)
+				w.RunFrames(1)
+				in.SetMouseButton(input.MouseLeft, false)
+				w.RunFrames(2)
+				s.Press(from.X, from.Y, 0)
+				s.Move(to.X, to.Y, 0, true)
+				s.Release(to.X, to.Y, 0)
+				var want []struct {
+					W, H          float32
+					Width, Height string
+				}
+				s.Eval(`[...document.querySelectorAll('textarea')].map(e => { const r = e.getBoundingClientRect();
+	return {W: r.width, H: r.height, Width: e.style.width, Height: e.style.height}; })`, &want)
+				got := b.Box()
+				if math.Abs(float64(got.W-want[i].W)) > 0.5 || math.Abs(float64(got.H-want[i].H)) > 0.5 {
+					t.Errorf("textarea %d: ui %v, Chrome %vx%v", i, got, want[i].W, want[i].H)
+				}
+				if w, h := declaredIn(b.Style(), "width"), declaredIn(b.Style(), "height"); w != want[i].Width ||
+					h != want[i].Height {
+					t.Errorf("textarea %d: ui's style says width %q and height %q, Chrome's %q and %q", i, w, h,
+						want[i].Width, want[i].Height)
+				}
+				if page == (got == r) {
+					t.Errorf("textarea %d: %v from %v", i, got, r)
+				}
+			}
+		})
+	}
+}
+
 // declaredIn is the value of the last declaration of property in the style
 // attribute css, empty with none.
 func declaredIn(css, property string) string {
