@@ -146,6 +146,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0141 | [Keys and the arrows cross a frame; the frame fades and moves with its iframe](0141-keys-and-the-arrows-cross-a-frame-the-frame-fades-and-moves-with-its-iframe.md) | api |
 | 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
+| 0151 | [Stroked text is a font of its own, its glyphs' outlines stroked on the CPU](0151-stroked-text-is-a-font-of-its-own-glyphs-outlines.md) | rendering |
 
 ## Writing one
 

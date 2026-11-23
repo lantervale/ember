@@ -74,6 +74,7 @@ const (
 	propHeight               = "height"
 	propFontSize             = "font-size"
 	propCaps                 = "font-variant-caps"
+	shortStroke              = "-webkit-text-stroke"
 	propLigatures            = "font-variant-ligatures"
 	propNumeric              = "font-variant-numeric"
 	propEastAsian            = "font-variant-east-asian"

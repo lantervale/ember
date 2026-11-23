@@ -6,7 +6,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `::selection` with `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning, as ui draws neither on any text; Chrome reads them |
+| a `text-shadow` on stroked text whose fill is transparent | the shadow of the glyphs filled, where Chrome's is the shadow of their stroke |
+| `-webkit-text-stroke` on a colour emoji | drawn as the picture alone |
+| a stroke's mitre at a sharp corner between two short curves of a glyph | the curves are stroked as straight pieces, and the mitre can reach a little further than Chrome's |
 | the default selection colour on Windows and Linux, focused or not | macOS's blue everywhere, and its grey in an inactive window: the machines here run Chrome on macOS only, which can't say what the others draw |
 | a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |

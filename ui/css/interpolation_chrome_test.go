@@ -53,6 +53,10 @@ var interpolated = [][][3]string{
 		{"text-decoration-thickness", "1px", "4px"}, {"border-image-slice", "10", "30"},
 		{"border-image-width", "1", "3"}, {"visibility", "hidden", "visible"},
 	},
+	{
+		{"-webkit-text-stroke-width", "1px", "5px"}, {"-webkit-text-stroke-color", "red", "blue"},
+		{"-webkit-text-fill-color", "blue", "red"},
+	},
 }
 
 // moved is how to write each of interpolated as getComputedStyle does.

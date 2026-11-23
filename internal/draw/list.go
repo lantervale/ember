@@ -1044,6 +1044,10 @@ type Style struct {
 	// Exact draws them at their exact coverage, without stem darkening
 	// (Face.ExactSize); Pixelated comes first.
 	Exact bool
+	// Stroke draws each glyph as its outline stroked this many points
+	// wide, half outside it and half inside, in place of the glyph filled:
+	// a path, never darkened, as Chrome strokes one.
+	Stroke float32
 }
 
 type Align int
@@ -1062,6 +1066,13 @@ func (s Style) Font() *Font {
 	}
 	if size == 0 {
 		size = 16
+	}
+	if s.Stroke > 0 {
+		how := exact
+		if s.Pixelated {
+			how = unsmoothed
+		}
+		return face.stroked(size, s.Stroke*float32(math.Round(float64(size)))/size, how)
 	}
 	if s.Pixelated {
 		return face.PixelSize(size)

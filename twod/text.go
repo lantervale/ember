@@ -36,7 +36,9 @@ type Text struct {
 	pixelated bool `node:"prop"`
 	// exactCoverage draws them without stem darkening (ExactCoverage).
 	exactCoverage bool `node:"prop"`
-	face          *Face
+	// stroke is how wide the glyphs' outlines are drawn (TextStroke).
+	stroke float32 `node:"prop"`
+	face   *Face
 	// expanded is text with its shortcodes replaced, for expandedFrom.
 	expanded, expandedFrom string
 }
@@ -125,6 +127,7 @@ func (t *Text) style() draw.Style {
 		Baseline:  t.baseline,
 		Pixelated: t.pixelated,
 		Exact:     t.exactCoverage,
+		Stroke:    t.stroke,
 	}
 }
 
@@ -140,6 +143,18 @@ func ExactCoverage() TextOption { return textOption(func(t *Text) { t.exactCover
 // ExactCoverage reports whether t's glyphs are drawn without stem
 // darkening.
 func (t *Text) ExactCoverage() bool { return t.exactCoverage }
+
+// TextStroke draws each glyph of a text as its outline, stroked width
+// points wide (half outside it, half inside) with mitred corners, in
+// place of the glyph filled: the text drawn filled, then again with
+// TextStroke in another colour, is outlined text, as CSS's
+// -webkit-text-stroke draws it. 0 fills the glyphs.
+func TextStroke(width float32) TextOption {
+	return textOption(func(t *Text) { t.stroke = max(width, 0) })
+}
+
+func (t *Text) TextStroke() float32         { return t.stroke }
+func (t *Text) SetTextStroke(width float32) { t.stroke = max(width, 0) }
 
 // Lines are the text's lines once wrapped.
 func (t *Text) Lines() []string {

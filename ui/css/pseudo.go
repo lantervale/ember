@@ -64,7 +64,8 @@ var (
 		"border-image-repeat"}, firstLineProps...)
 	placeholderProps = []string{"color", "opacity"}
 	selectionProps   = []string{"color", "background-color", "background", "text-shadow", shortDecoration,
-		"text-decoration-line", "text-decoration-style", "text-decoration-color", "text-decoration-thickness"}
+		"text-decoration-line", "text-decoration-style", "text-decoration-color", "text-decoration-thickness",
+		"-webkit-text-fill-color", shortStroke, "-webkit-text-stroke-width", "-webkit-text-stroke-color"}
 	backdropProps = []string{"background-color", "background", "opacity"}
 )
 

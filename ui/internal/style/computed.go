@@ -620,6 +620,19 @@ type Text struct {
 	HasSelectionShadows    bool
 	SelectionDecoration    TextDecoration
 	HasSelectionDecoration bool
+	// SelectionStroke is the ::selection's -webkit-text-stroke, set when
+	// HasSelectionStroke is, the colour or the width undeclared there the
+	// selected text's own. Its -webkit-text-fill-color is read and, as in
+	// Chrome, fills nothing: the selected glyphs take its color.
+	SelectionStroke    TextStroke
+	HasSelectionStroke bool
+	// TextStroke is -webkit-text-stroke: each glyph's outline drawn over
+	// its fill, and TextFill -webkit-text-fill-color, the colour the
+	// glyphs are filled in where FillSet (not currentColor), else Color
+	// (Fill).
+	TextStroke TextStroke
+	TextFill   color.Color
+	FillSet    bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations
@@ -1063,7 +1076,7 @@ type Filter struct {
 }
 
 // CurrentColorFields is a set of colours given as currentColor.
-type CurrentColorFields uint8
+type CurrentColorFields uint16
 
 const (
 	BorderTopCurrent CurrentColorFields = 1 << iota
@@ -1073,7 +1086,17 @@ const (
 	OutlineCurrent
 	DecorationCurrent
 	ColumnRuleCurrent
+	StrokeCurrent
+	FillCurrent
 )
+
+// Fill is the colour the glyphs of the text are filled in.
+func (t *Text) Fill() color.Color {
+	if t.FillSet {
+		return t.TextFill
+	}
+	return t.Color
+}
 
 // FollowColor sets every colour marked currentColor to c.
 func (s *Computed) FollowColor(c color.Color) {
@@ -1081,7 +1104,7 @@ func (s *Computed) FollowColor(c color.Color) {
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
 		BorderBottomCurrent: &s.BorderColor.Bottom, BorderLeftCurrent: &s.BorderColor.Left,
 		OutlineCurrent: &s.OutlineColor, DecorationCurrent: &s.TextDecoration.Color,
-		ColumnRuleCurrent: &s.ColumnRuleColor,
+		ColumnRuleCurrent: &s.ColumnRuleColor, StrokeCurrent: &s.TextStroke.Color, FillCurrent: &s.TextFill,
 	} {
 		if s.CurrentColor&f != 0 {
 			*p = c
