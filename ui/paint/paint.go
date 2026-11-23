@@ -139,11 +139,11 @@ type Selected struct {
 // by, in the root's space, false when it has none.
 func TransformOf(b *box.Box) (geom.Transform2D, bool) {
 	st := shown(b)
-	if b.Kind != box.Element || st == nil || len(st.Transform) == 0 {
+	if b.Kind != box.Element || st == nil || !st.Transformed() {
 		return geom.Transform2D{}, false
 	}
 	r := b.Rect()
-	return transform(st, geom.V2(r.X, r.Y), b.Size), true
+	return st.TransformAt(geom.V2(r.X, r.Y), b.Size), true
 }
 
 // Each has every paint take f as it stands when the paint starts, as
@@ -617,8 +617,8 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 	}
 	saved, around := p.s.Transform(), e.clip
-	if b.Kind == box.Element && len(st.Transform) > 0 {
-		p.s.SetTransform(saved.Mul(transform(st, e.at, b.Size)))
+	if b.Kind == box.Element && st.Transformed() {
+		p.s.SetTransform(saved.Mul(st.TransformAt(e.at, b.Size)))
 	}
 	e, shows := p.shaped(e, st)
 	if !shows {
@@ -795,7 +795,7 @@ func (p *painter) reachable(b *box.Box, origin geom.Vec2, c *clip) ([]*box.Box, 
 	prev, reach := float32(math.Inf(-1)), float32(0)
 	for _, k := range kids {
 		st := shown(k)
-		if k.Kind != box.Element || k.Escapes || k.Pos.Y < prev || st.Position != style.Static || len(st.Transform) > 0 ||
+		if k.Kind != box.Element || k.Escapes || k.Pos.Y < prev || st.Position != style.Static || st.Transformed() ||
 			k.Content.X > k.Size.X || k.Content.Y > k.Size.Y {
 			return kids, nil
 		}
@@ -837,7 +837,7 @@ func inkReach(st *style.Computed) float32 {
 // positioned one with a z-index, or one less than opaque, transformed,
 // clipped by a clip-path, filtered, masked, mixed or isolated.
 func startsContext(st *style.Computed) bool {
-	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 ||
+	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || st.Transformed() ||
 		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 || st.Masked() ||
 		st.BlendMode != style.BlendNormal || st.Isolate
 }

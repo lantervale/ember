@@ -1,6 +1,11 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"math"
+
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 // alignment is an align-* or justify-* value with its overflow safety.
 type alignment struct {
@@ -117,8 +122,11 @@ type overflowContainer struct {
 	padding  rect
 }
 
+// overflowContribution is what a child of border box s at loc adds to its
+// container's scrollable overflow: its box and, where it lets it show,
+// its own overflow, turned by st's transforms.
 func overflowContribution(loc point, s size, childOverflow rect, border rect,
-	overflow style.Size[style.Overflow], c overflowContainer, margin rect) rect {
+	overflow style.Size[style.Overflow], st *style.Computed, c overflowContainer, margin rect) rect {
 	childOverflow = rect{
 		l: childOverflow.l + border.l, r: childOverflow.r + border.l,
 		t: childOverflow.t + border.t, b: childOverflow.b + border.t,
@@ -143,7 +151,11 @@ func overflowContribution(loc point, s size, childOverflow rect, border rect,
 	if propY {
 		startY = fmin(0, childOverflow.t)
 	}
-	r := rect{l: loc.x + startX, r: loc.x + endW, t: loc.y + startY, b: loc.y + endH}
+	r := rect{l: startX, r: endW, t: startY, b: endH}
+	if st != nil && st.Transformed() {
+		r = transformedBounds(st, r, s)
+	}
+	r = rect{l: loc.x + r.l, r: loc.x + r.r, t: loc.y + r.t, b: loc.y + r.b}
 	unreachableX := r.r <= 0
 	if c.reversed[0] {
 		unreachableX = r.l >= c.size.w
@@ -169,6 +181,18 @@ func overflowContribution(loc point, s size, childOverflow rect, border rect,
 		r.b = fmax(r.b, loc.y+s.h+fmax(0, c.padding.b+margin.b))
 	}
 	return r
+}
+
+// transformedBounds is the rect round r, in the space of a border box of
+// size s, once st's transforms turn it.
+func transformedBounds(st *style.Computed, r rect, s size) rect {
+	m := st.TransformAt(geom.Vec2{}, geom.V2(s.w, s.h))
+	out := rect{l: float32(math.Inf(1)), r: float32(math.Inf(-1)), t: float32(math.Inf(1)), b: float32(math.Inf(-1))}
+	for _, p := range [4]geom.Vec2{{X: r.l, Y: r.t}, {X: r.r, Y: r.t}, {X: r.l, Y: r.b}, {X: r.r, Y: r.b}} {
+		q := m.Xform(p)
+		out = rect{l: fmin(out.l, q.X), r: fmax(out.r, q.X), t: fmin(out.t, q.Y), b: fmax(out.b, q.Y)}
+	}
+	return out
 }
 
 func finalizeOverflow(r rect, s size, reversed [2]bool, scroll bool) overflowRect {

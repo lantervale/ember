@@ -83,6 +83,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-size", 660, 330, 0.0011},
 		{"./internal/pages/background-layers", 640, 330, 0.003},
 		{"./internal/pages/clip-path", 680, 470, 0.0015},
+		{"./internal/pages/individual-transforms", 600, 420, 0.0008},
 		{"./internal/pages/filters", 600, 420, 0.003},
 		{"./internal/pages/masks", 680, 560, 0.0009},
 		{"./internal/pages/blend-modes", 600, 330, 0.0015},

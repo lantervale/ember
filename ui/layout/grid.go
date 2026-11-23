@@ -502,7 +502,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		margin:    resolvedMargin,
 	}
 	contribution := overflowContribution(point{x - paddingBoxInset.l, y - paddingBoxInset.t},
-		final, out.overflow.rect, border, st.Overflow, container, resolvedMargin)
+		final, out.overflow.rect, border, st.Overflow, st, container, resolvedMargin)
 	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height)
 }
 

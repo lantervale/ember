@@ -151,8 +151,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `path()` transitioning to another `path()` with the same commands | flips half way; Chrome moves each point |
 | a pointer in the corner a rounded border cuts off | hits the box, where Chrome lets it through to what is under it |
 | a filtered element's live parts (a caret, a canvas element) when its Document draws them apart, and a filtered inline element holding absolute boxes | drawn unfiltered over it, placed by the nearest positioned block ([decision 0118](../99-decisions/0118-a-filtered-element-is-a-picture-drawn-through-wgsl-effects.md)) |
-| a `transform` holding fixed descendants | placed in the viewport, where Chrome places them in the transformed element, as it does under a `filter` |
-| the `translate`, `rotate` and `scale` properties | unknown, a warning: only `transform`'s functions move an element (WPT css/css-flexbox/flexbox-safe-overflow-position-006.html moves its item by `translate`) |
+| a `transform`, `translate`, `rotate` or `scale` holding fixed descendants | placed in the viewport, where Chrome places them in the transformed element, as it does under a `filter` |
+| a 3D `translate`, `rotate` or `scale` (a z other than 0 or 1, an axis other than z) | refused with a warning, as the 3D functions of `transform` are ([decision 0214](../99-decisions/0214-translate-rotate-and-scale-are-their-own-values-before-transform.md)) |
+| an additive `rotate` animation missing a keyframe | moves from the value under it by the keyframe's angle added to it, where Chrome moves it toward no turn at all; with both keyframes it adds as Chrome's |
+| a transformed box in a vertical writing mode's scroller, an inline-block's or the root's transform | its scrollable overflow is the box as laid out, untransformed, where Chrome's is the box as turned |
+| a point within a pixel and a half past the edge of a turned or scaled box | misses it, where Chrome hits it |
+| a `linear-gradient()` background of a box turned by `transform` or `rotate` | drawn upright over the rect round the turned box, cut at its corners, where Chrome turns it with the box |
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |
