@@ -4,7 +4,10 @@ package css_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"image/png"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -192,6 +195,68 @@ func TestPercentagesInSignInALineHeightComputeAsInChrome(t *testing.T) {
 	}
 	d.AddSheet(sheet)
 	matchChromeProps(t, d, map[string]func(*style.Computed) string{"line-height": compared["line-height"]}, 2)
+}
+
+// TestChromeDrawsTheLegacyGradientsAsTheirPlainOnes has Chrome draw each
+// -webkit- gradient a sheet read as a browser's turns into a plain one
+// beside that plain one, and finds both the same picture.
+func TestChromeDrawsTheLegacyGradientsAsTheirPlainOnes(t *testing.T) {
+	legacy := []string{"-webkit-linear-gradient(top, #f00, #00f)", "-webkit-linear-gradient(left, #f00, #00f 70%)",
+		"-webkit-linear-gradient(30deg, #f00, #00f)", "-webkit-linear-gradient(-0.25turn, #f00, #00f)",
+		"-webkit-linear-gradient(#f00, #00f)",
+		"-webkit-radial-gradient(#f00, #00f)", "-webkit-radial-gradient(30% 40%, circle cover, #f00, #00f)",
+		"-webkit-radial-gradient(left, ellipse contain, #f00, #00f)", "-webkit-radial-gradient(circle, #f00, #00f)",
+		"-webkit-radial-gradient(center, closest-corner, #f00, #00f)"}
+	var page strings.Builder
+	page.WriteString(`<!DOCTYPE html><style>body { margin: 0; display: grid; grid-template-columns: 60px 60px;
+		grid-auto-rows: 40px } div { width: 60px; height: 40px }</style>`)
+	for _, l := range legacy {
+		s, warns := css.Parse("t.css", "p { background-image: "+l+" }", css.Browser())
+		if len(warns) > 0 || len(s.Rules) != 1 {
+			t.Fatalf("%s: %v", l, warns)
+		}
+		var plain string
+		for _, c := range s.Rules[0].Decls[0].Value {
+			plain += c.String()
+		}
+		fmt.Fprintf(&page, `<div style="background-image: %s"></div><div style="background-image: %s"></div>`, l, plain)
+	}
+	out := t.TempDir() + "/shot.png"
+	size := geom.V2(120, float32(40*len(legacy)))
+	if err := chrome.Screenshot([]byte(page.String()), size, out); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, l := range legacy {
+		worst := 0
+		for y := i * 40; y < i*40+40; y++ {
+			for x := range 60 {
+				a, b := img.At(x, y), img.At(x+60, y)
+				ar, ag, ab, _ := a.RGBA()
+				br, bg, bb, _ := b.RGBA()
+				worst = max(worst, diff(ar, br), diff(ag, bg), diff(ab, bb))
+			}
+		}
+		if worst > 2 {
+			t.Errorf("%s: drawn up to %d steps off its plain gradient", l, worst)
+		}
+	}
+}
+
+func diff(a, b uint32) int {
+	d := int(a>>8) - int(b>>8)
+	if d < 0 {
+		return -d
+	}
+	return d
 }
 
 func animationsCSS(as []style.Animation, f func(style.Animation) string) string {
