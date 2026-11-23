@@ -155,6 +155,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0151 | [Stroked text is a font of its own, its glyphs' outlines stroked on the CPU](0151-stroked-text-is-a-font-of-its-own-glyphs-outlines.md) | rendering |
 | 0152 | [The old attributes of tables, rules and fonts are hints as Chrome's](0152-the-old-attributes-of-tables-rules-and-fonts-are-hints-as-chromes.md) | api |
 | 0155 | [The system says its contrast, forced colours and selection colours, read-only](0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md) | api |
+| 0159 | [A pattern is read as JavaScript, and a form is submitted by its button](0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md) | api |
 
 ## Writing one
 

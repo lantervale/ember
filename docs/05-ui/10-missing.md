@@ -51,7 +51,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 |---|---|
 | `::before`, `::after` on `progress`, `meter` and range inputs | no box, where Chrome lays one out among the control's own parts: in a progress or a meter on lines above and below its bar, overflowing the box, the last line giving the inline-block its baseline; in a range input at the start and the end of a row with the track between them |
 | a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
-| `::marker` with `cursor`, transitions | read, and they change nothing |
+| where a `::marker` takes the pointer, its own `cursor` shown | over its bullet's box, where Chrome's is its text's: the bullet and the space after it, the line's height |
+| a list item's colour transition under a `::marker` a rule styles | the marker shows the item's end colour, where Chrome's follows the item's |
 | `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
 | the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
 | a `list-style-image` gradient, `list-style-position: inside` | refused |
@@ -100,7 +101,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an animated `border-image-slice` from a percentage to a number, `border-image-width` from a length to a percentage | interpolates the numbers and flips, where Chrome flips and makes a `calc()` |
 | an animated `background-image`, `mask-image` or `border-image-source` between two pictures | flips halfway, where Chrome cross-fades them |
 | `content-visibility` and `overlay`, in a transition or anywhere | not read |
-| `@starting-style` of an element whose ancestor leaves `display: none`, or nested in a style rule | not read: only the element's own leaving, and top-level rules |
+| `@starting-style` of an element whose ancestor leaves `display: none` | not read: only the element's own leaving; nested in a style rule, its declarations are read, but no other nesting |
 | an element's own transition of a property it inherits, while a transition above its parent moves it | follows the moving value, where Chrome runs it on to the end value |
 | `animation-composition: add` or `accumulate` on a property other than lengths, numbers, colours, `transform`, `box-shadow`, `filter` and `font-weight` (positions, sizes, grid tracks, `clip-path`…) | replaces, where Chrome adds |
 | `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
@@ -136,11 +137,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `mask-composite` serialised after `-webkit-mask-composite` | as the plain word (`exclude`), where Chrome keeps the legacy one (`xor`) |
 | a masked element under a rotation or a skew | hit in its border box, where Chrome reaches about half a pixel further |
 | a masked element on a surface other than `twod.Canvas` | drawn unmasked, but for the one-colour icon |
-| a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |
-| `:dir()` on an element of `dir="auto"` whose text changes below it (a field typed in excepted) | answered from the text as it stood when the element was last restyled |
-| a `pattern` Go's `regexp` cannot read (a lookahead, a backreference) | constrains nothing, where Chrome reads it as JavaScript does |
-| an email address whose domain is not in ASCII letters | invalid, where Chrome turns the domain to punycode first |
-| `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
+| a `pattern` of a property of strings (`\p{RGI_Emoji}`), an emoji or case-mapping property (`\p{Emoji}`, `\p{Cased}`), a script's short name (`\p{sc=Grek}`) or `Script_Extensions`, or a group name used twice | constrains nothing, where Chrome reads it ([decision 0159](../99-decisions/0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md)) |
+| a typed email's `Value` | the address as typed, where Chrome's value holds its domain in punycode |
+| a form's submission | Chrome's validation bubble is not shown, and nothing is sent: `action`, `method`, `formaction`, `target` are the program's to read |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `scroll-state()` container queries and `container-type: scroll-state` | refused, with a warning: the condition never holds |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
@@ -214,7 +213,7 @@ Things built and tested, with a part no test against Chrome covers yet.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
 - `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone; the computed values are compared with Chrome's.
 - Pointer and key callbacks, `doc.Blur()`, the title tooltip and `env(titlebar-area-*)` with a title bar: headless Chrome is not driven by input and has no window controls overlay, so they are tested in ember alone; `env()` without an overlay is compared with Chrome.
-- `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so they are tested in ember alone; Chrome is asked only that nothing matches them before.
+- `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so a change is tested in ember alone; Chrome is asked that nothing matches them before, and what they match once a script submits the forms. Enter's implicit submission is tested in ember alone.
 - The picture `sizes="auto"` chooses: Chrome chooses it once the page is laid out, and takes a denser one already in its cache, so what it shows changes from run to run; the box is compared with Chrome's, the choice is tested in ember alone.
 - Choosing a picture again as the viewport or the pixels a point change, the one shown kept until the one chosen lands: headless Chrome is neither resized nor moved to another screen, so it is tested in ember alone.
 - A selection inside a transformed box other than a translation, and under a Document `Zoom`.

@@ -304,13 +304,22 @@ func accentInk(st *style.Computed, alpha float32) color.Color {
 func (p *painter) marker(e entry, alpha float32) {
 	st := shown(e.b)
 	if n := e.b.Node; n != nil && dom.Data(n).Marker != nil && e.b.Style == dom.Data(n).Marker {
-		// a ::marker a rule styles draws in its own style
+		// a ::marker a rule styles draws in its own style, as its
+		// transitions show it
 		st = e.b.Style
+		if g := dom.Data(n).MarkerNode; g != nil && dom.Data(g).Shown != nil {
+			st = dom.Data(g).Shown
+		}
 	}
 	if !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
 	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	if p.probing {
+		// the marker is its item's to the pointer, with its own cursor
+		p.probed(e.b, p.snap(r))
+		return
+	}
 	if e.b.Picture != "" {
 		if tex := p.find(style.Image{Source: e.b.Picture}, st); tex != nil {
 			p.s.Image(p.snap(r), tex, texels(tex), fade(color.White, alpha))
