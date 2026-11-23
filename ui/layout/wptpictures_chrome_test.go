@@ -14,13 +14,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/chrome"
 )
 
-func squarePNG(side int) []byte {
-	var b bytes.Buffer
-	if err := png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, side, side))); err != nil {
-		panic(err)
-	}
-	return b.Bytes()
-}
+func squarePNG(side int) []byte { return rectPNG(side, side) }
 
 // The cases of WPT's css/css-grid/grid-items/grid-minimum-size-grid-items-021.html: a
 // picture of 50×50 or 500×500 alone or over a 100×25 item in an auto track, the grid
@@ -80,4 +74,31 @@ func toArgs(nodes []*ui.Node) []ui.Arg {
 		args[i] = n
 	}
 	return args
+}
+
+func rectPNG(w, h int) []byte {
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, w, h))); err != nil {
+		panic(err)
+	}
+	return b.Bytes()
+}
+
+// The pages of WPT's css/css-flexbox/flex-aspect-ratio-img-vert-lr.html and
+// flexbox-vert-lr-with-img.html: a picture in a vertical-lr flex container, its main
+// size from its set cross size and its ratio, or from its natural size.
+func TestPicturesInVerticalFlexItemsMatchChrome(t *testing.T) {
+	const sheet = `
+.ratio { position: relative; display: flex; writing-mode: vertical-lr; width: 100px; align-items: start }
+.ratio img { width: 40px }
+.abs { width: 60px; height: 100px; background-color: green; position: absolute; left: 40px }
+.natural { writing-mode: vertical-lr; display: flex }`
+	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"page.css": {Data: []byte(sheet)},
+		"tall.png": {Data: rectPNG(20, 50)}, "square.png": {Data: squarePNG(100)}}, "page.css"))
+	d.Body().Append(
+		ui.P(ui.Text("Test passes if there is a filled green square.")),
+		ui.Div(ui.Class("ratio"), ui.Img(ui.Attr("src", "tall.png")), ui.Div(ui.Class("abs"))),
+		ui.Div(ui.Class("natural"), ui.Img(ui.Attr("src", "square.png"))))
+	r := chrome.Match(t, d, geom.V2(800, 600))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
