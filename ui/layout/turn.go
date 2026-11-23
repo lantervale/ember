@@ -319,9 +319,10 @@ func (t *tree) reframeOverflow(n *node, out output, from, to style.WritingMode) 
 	g := n.ownGutter()
 	port := out.size.sub(n.borders().sum()).sub(size{g.x, g.y})
 	r := o.rect
-	if e := gutterEdges(n.st, g); e.l > 0 || e.t > 0 {
+	if e := gutterEdges(n.st, g); !n.st.GutterStable && (e.l > 0 || e.t > 0) {
 		// o counts from inside the border, the bars on the frame's starting sides
-		// included, which are no overflow: the page's starts past them
+		// included, which are no overflow: the page's starts past them (a stable
+		// gutter's range is found from it as it is, verticalScrollRange)
 		r = rect{l: r.l - e.l, r: r.r - e.l, t: r.t - e.t, b: r.b - e.t}
 		if o.rect.l >= 0 {
 			r.l = 0
