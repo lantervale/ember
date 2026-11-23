@@ -624,7 +624,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	see := p.sight(inner)
 	for _, c := range run {
 		at := origin.Add(c.Pos)
-		if see.misses(c, at) {
+		if c.Discarded || see.misses(c, at) {
 			continue
 		}
 		p.reached++

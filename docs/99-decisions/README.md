@@ -147,9 +147,12 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
 | 0144 | [A background clipped to text shows through a picture of its glyphs](0144-a-background-clipped-to-text-shows-through-a-picture-of-its-glyphs.md) | rendering |
+| 0145 | [Text is shaped by a pure-Go OpenType layout reader](0145-text-is-shaped-by-a-pure-go-opentype-layout-reader.md) | rendering |
+| 0147 | [Lines are clamped as Chrome clamps them](0147-lines-are-clamped-as-chrome-clamps-them.md) | api |
 | 0148 | [Variable fonts are read in pure Go, and font-display is timed on the Document's clock](0148-variable-fonts-are-read-in-pure-go-and-font-display-is-timed-on-the-documents-clock.md) | rendering |
 | 0149 | [Rounded sides are bands of the ring cut to their side, as Chrome paints them](0149-rounded-sides-are-bands-of-the-ring-cut-to-their-side-as-chrome-paints-them.md) | rendering |
 | 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
+| 0152 | [The old attributes of tables, rules and fonts are hints as Chrome's](0152-the-old-attributes-of-tables-rules-and-fonts-are-hints-as-chromes.md) | api |
 | 0155 | [The system says its contrast, forced colours and selection colours, read-only](0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md) | api |
 
 ## Writing one

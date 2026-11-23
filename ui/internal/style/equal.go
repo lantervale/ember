@@ -37,6 +37,7 @@ func (b *Box) equal(o *Box) bool {
 		b.TablePart == o.TablePart &&
 		b.BoxSizing == o.BoxSizing &&
 		b.Position == o.Position &&
+		b.StaticInline == o.StaticInline &&
 		b.Float == o.Float &&
 		b.Clear == o.Clear &&
 		b.VerticalAlign == o.VerticalAlign &&
@@ -65,7 +66,11 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
-		sameSlice(b.ContainerNames, o.ContainerNames)
+		sameSlice(b.ContainerNames, o.ContainerNames) &&
+		b.LineClamp == o.LineClamp &&
+		b.WebkitBox == o.WebkitBox &&
+		b.BoxVertical == o.BoxVertical &&
+		b.WebkitLineClamp == o.WebkitLineClamp
 }
 
 func (g *Grid) equal(o *Grid) bool {
@@ -93,7 +98,7 @@ func (f Font) Equal(o Font) bool {
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
-		f.Caps == o.Caps && sameSlice(f.Variations, o.Variations)
+		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations)
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -102,6 +107,8 @@ func (t *Text) equal(o *Text) bool {
 		t.LineHeight == o.LineHeight &&
 		t.LetterSpacing == o.LetterSpacing &&
 		t.FontVariant == o.FontVariant &&
+		t.FeatureSettings == o.FeatureSettings &&
+		t.Kerning == o.Kerning &&
 		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&

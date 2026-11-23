@@ -132,6 +132,7 @@ var (
 	sizeLP        = dimTerm(allowPercent | nonNegative)
 	number        = dimTerm(allowNumber | nonNegative | noLength)
 	intrinsic     = words("min-content", "max-content", "fit-content")
+	boxSizes      = words("min-content", "max-content", "fit-content", "stretch")
 	colorTerm     = term(func(c Component) error {
 		if isWord(c, "currentcolor") {
 			return nil
@@ -272,14 +273,15 @@ var checks = map[string]check{
 	"container-name": checkContainerName,
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
 		"contents", "list-item", "flow-root", "table", "inline-table", "table-row", "table-cell", "table-row-group",
-		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption")),
+		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption",
+		"-webkit-box", "-webkit-inline-box")),
 	"box-sizing": single(words("content-box", "border-box")),
-	"width":      single(either(sizeLP, words("auto"), intrinsic)),
-	"height":     single(either(sizeLP, words("auto"), intrinsic)),
-	"min-width":  single(either(sizeLP, words("auto"), intrinsic)),
-	"min-height": single(either(sizeLP, words("auto"), intrinsic)),
-	"max-width":  single(either(sizeLP, words("none"), intrinsic)),
-	"max-height": single(either(sizeLP, words("none"), intrinsic)),
+	"width":      single(either(sizeLP, words("auto"), boxSizes)),
+	"height":     single(either(sizeLP, words("auto"), boxSizes)),
+	"min-width":  single(either(sizeLP, words("auto"), boxSizes)),
+	"min-height": single(either(sizeLP, words("auto"), boxSizes)),
+	"max-width":  single(either(sizeLP, words("none"), boxSizes)),
+	"max-height": single(either(sizeLP, words("none"), boxSizes)),
 
 	"margin-top":     single(either(lengthPercent, words("auto"))),
 	"margin-right":   single(either(lengthPercent, words("auto"))),
@@ -350,6 +352,9 @@ var checks = map[string]check{
 	"break-before":          single(words(breakWords...)),
 	"break-after":           single(words(breakWords...)),
 	"orphans":               single(positiveInteger),
+	"line-clamp":            single(either(positiveInteger, words("none"))),
+	"-webkit-line-clamp":    single(either(positiveInteger, words("none"))),
+	"-webkit-box-orient":    single(words("horizontal", "vertical", "inline-axis", "block-axis")),
 	"widows":                single(positiveInteger),
 	"aspect-ratio":          checkAspectRatio,
 	"overflow-x":            single(words("visible", "hidden", "clip", "auto", "scroll")),
@@ -357,7 +362,8 @@ var checks = map[string]check{
 	"position":              single(words("static", "relative", "absolute", "fixed", "sticky")),
 	"float":                 single(words("none", "left", "right", "inline-start", "inline-end")),
 	"vertical-align": single(either(lengthPercent,
-		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom"))),
+		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
+			"-webkit-baseline-middle"))),
 	"clear":   single(words("none", "left", "right", "both", "inline-start", "inline-end")),
 	"top":     single(either(lengthPercent, words("auto"))),
 	"right":   single(either(lengthPercent, words("auto"))),
@@ -380,7 +386,8 @@ var checks = map[string]check{
 		return nil
 	},
 	"font-size": single(either(sizeLP,
-		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
+		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller",
+			"larger"))),
 	"font-style":     single(words("normal", "italic", "oblique")),
 	"font-weight":    single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
 	"line-height":    single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
@@ -392,6 +399,8 @@ var checks = map[string]check{
 	propEastAsian:     checkVariant(propEastAsian),
 	propAlternates:    checkVariant(propAlternates),
 	propPosition:      checkVariant(propPosition),
+	propFeatures:      checkFeatures,
+	propKerning:       single(words("auto", "normal", "none")),
 	"word-spacing":    single(either(lengthPercent, words("normal"))),
 	"border-spacing":  repeated(length, 2),
 	"border-collapse": single(words("separate", "collapse")),
@@ -537,7 +546,7 @@ func iterationCount(c Component) error {
 //nolint:gochecknoglobals // the keywords of two animation longhands
 var (
 	animationDirections = []string{"normal", "reverse", "alternate", "alternate-reverse"}
-	animationFills      = []string{kwNone, "forwards", "backwards", "both"}
+	animationFills      = []string{kwNone, "forwards", "backwards", kwBoth}
 )
 
 func timingFunction(c Component) error {

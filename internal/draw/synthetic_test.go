@@ -80,12 +80,13 @@ func TestAnUnkernedFaceKernsNoPair(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kerned, unkerned := face.Size(40), face.Styled(Look{NoKern: true}).Size(40)
-	if k := kerned.kern(kerned.glyph('A'), kerned.glyph('V')); k == 0 {
+	kerned, unkerned := face.Size(40), face.Styled(Look{Features: "kern=0"}).Size(40)
+	apart := kerned.Measure("A").X + kerned.Measure("V").X
+	if kerned.Measure("AV").X >= apart {
 		t.Fatal("the face kerns no AV")
 	}
-	if k := unkerned.kern(unkerned.glyph('A'), unkerned.glyph('V')); k != 0 {
-		t.Errorf("unkerned AV: %v", k)
+	if got := unkerned.Measure("AV").X; got != apart {
+		t.Errorf("unkerned AV is %v wide, want %v", got, apart)
 	}
 }
 
