@@ -50,8 +50,8 @@ type Face struct {
 	emoji     Emoji
 	// only are the characters the face draws of those it has (Only), all
 	// without any; blank those drawn as nothing when no face has them
-	// (Blank).
-	only, blank []Range
+	// (Blank); hidden those drawn invisible in their room (Hidden).
+	only, blank, hidden []Range
 	// look is how the face is drawn other than as its file has it.
 	look  Look
 	sizes map[float32]*Font
@@ -95,8 +95,8 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: f.look, fallbacks: fallbacks,
-		emoji: emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, hidden: f.hidden, look: f.look,
+		fallbacks: fallbacks, emoji: emoji, sizes: map[float32]*Font{}}
 }
 
 // Look is how a face is drawn other than as its file has it, as an
@@ -134,8 +134,8 @@ func (l Look) scale() float32 {
 
 // Styled is f drawn with look.
 func (f *Face) Styled(look Look) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, hidden: f.hidden, look: look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Range is the characters from Lo to Hi.
@@ -155,16 +155,23 @@ func Covers(ranges []Range, r rune) bool {
 // Only is f drawing only the characters in ranges, as an @font-face's
 // unicode-range has it: another is left to the faces after it.
 func (f *Face) Only(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, look: f.look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, hidden: f.hidden, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Blank is f drawing nothing, in no room, for a character in ranges
 // that neither it nor its fallbacks have, where another shows as '?':
 // what a face still on its way may draw.
 func (f *Face) Blank(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, look: f.look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, hidden: f.hidden, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
+}
+
+// Hidden is f drawing the characters in ranges invisible, in the room
+// they take: those of a face in its font-display block period.
+func (f *Face) Hidden(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, hidden: ranges, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Wrap makes the twod.Face of f, for the engine packages that build
@@ -313,8 +320,8 @@ type Font struct {
 	sources    []*opentype.Font
 	// only are the characters each source draws, and blank those drawn
 	// as nothing when no source has them (Face.Only, Face.Blank).
-	only  [][]Range
-	blank []Range
+	only          [][]Range
+	blank, hidden []Range
 	// looks are how each source is drawn (Face.Styled).
 	looks      []Look
 	emoji      Emoji
@@ -343,7 +350,7 @@ const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûü
 
 func newFont(f *Face, px float32, how smoothing) (*Font, error) {
 	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, smoothing: how,
-		blank: f.blank}
+		blank: f.blank, hidden: f.hidden}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
@@ -574,6 +581,9 @@ func (f *Font) raster(r rune, phase int) glyph {
 		return f.glyphAt('?', phase)
 	}
 	g := glyph{advance: f.advance(face, idx), face: face, idx: idx, r: r}
+	if len(f.hidden) > 0 && Covers(f.hidden, r) {
+		return g
+	}
 	x := fixed.Int26_6(phase * 64 / phases) //nolint:gosec // phase < phases, so at most 64
 	var dr image.Rectangle
 	var mask image.Image

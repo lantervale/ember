@@ -365,7 +365,7 @@ var checks = map[string]check{
 		"extra-condensed", "condensed", "semi-condensed", "semi-expanded", "expanded", "extra-expanded",
 		"ultra-expanded"))),
 	"font-synthesis": checkFontSynthesis,
-	"font-variation-settings": func(v []Component) error {
+	propFontVariations: func(v []Component) error {
 		if _, ok := fontVariations(v); !ok {
 			return fmt.Errorf(`font-variation-settings: expected normal, or "tag" and a number, with commas between`)
 		}

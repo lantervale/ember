@@ -113,11 +113,15 @@ func TestAVariableFontsInstanceDrawsItsOwnOutlinesAndAdvances(t *testing.T) {
 		t.Errorf("the default instance covers %d in %v, the file as it is %d in %v", sc, sr.Size(), pc, pr.Size())
 	}
 	const units = 24.0 / 2048
-	if got, want := bold.glyph('l').advance-plain.glyph('l').advance, float32(2*varfonttest.Bolder*units); !near(got, want) {
+	got, want := bold.glyph('l').advance-plain.glyph('l').advance, float32(2*varfonttest.Bolder*units)
+	if !near(got, want) {
 		t.Errorf("an l at 900 is %v wider, want %v", got, want)
 	}
 	if w, p := wide.Measure("AVOH").X, plain.Measure("AVOH").X; w < p*1.35 {
 		t.Errorf("AVOH at a width of 150 is %v, at 100 %v", w, p)
+	}
+	if _, wr := coverage(wide, 'O'); wr.Dx() < pr.Dx()*2 {
+		t.Errorf("an O at a width of 150 is %d pixels wide, an l %d", wr.Dx(), pr.Dx())
 	}
 }
 

@@ -21,9 +21,10 @@ import (
 // The font's axes and how far each moves the glyphs at its ends, in font
 // units of Go Regular's 2048 a em.
 const (
-	// Bolder is how far wght 900 moves an outline out along its normals,
-	// Lighter how far wght 100 moves it in.
-	Bolder, Lighter = 60, 24
+	// Bolder is how far wght 900 moves an outline out along its normals.
+	Bolder = 60
+	// Lighter is how far wght 100 moves it in.
+	Lighter = 24
 	// Wider is how much of its x wdth 150 adds to each point, and wdth
 	// 50 takes away.
 	Wider = 0.4
@@ -60,7 +61,7 @@ func Build(opts Options) []byte {
 	advances := make([]float32, n)
 	glyphs := make([][]byte, n)
 	for g := range n {
-		gid := uint16(g) //nolint:gosec // under the font's glyph count
+		gid := uint16(g)
 		advances[g] = f.Advance(gid, nil)
 		data := glyphData(glyf, loca, long, g)
 		switch {
@@ -69,9 +70,9 @@ func Build(opts Options) []byte {
 		case int16(binary.BigEndian.Uint16(data)) < 0: //nolint:gosec // a signed count
 			glyphs[g] = compositeVariations(data[10:], advances[g])
 		default:
-			pts, ends, err := f.Outline(gid, nil)
-			if err != nil {
-				panic(err)
+			pts, ends, oerr := f.Outline(gid, nil)
+			if oerr != nil {
+				panic(oerr)
 			}
 			glyphs[g] = variations(pts, ends, advances[g])
 		}
@@ -302,7 +303,7 @@ func packPoints(b *bytes.Buffer, points []int) {
 	last := 0
 	for i := 0; i < n; {
 		run := min(n-i, 128)
-		b.WriteByte(0x80 | byte(run-1))
+		b.WriteByte(0x80 | byte(run-1)) //nolint:gosec // at most 128
 		for _, p := range points[i : i+run] {
 			put16(b, uint16(p-last)) //nolint:gosec // ascending point numbers
 			last = p
@@ -314,7 +315,7 @@ func packPoints(b *bytes.Buffer, points []int) {
 func packDeltas(b *bytes.Buffer, ds []int) {
 	for i := 0; i < len(ds); {
 		run := min(len(ds)-i, 64)
-		b.WriteByte(0x40 | byte(run-1))
+		b.WriteByte(0x40 | byte(run-1)) //nolint:gosec // at most 64
 		for _, d := range ds[i : i+run] {
 			put16(b, uint16(int16(d))) //nolint:gosec // deltas within a glyph's units
 		}
@@ -322,7 +323,7 @@ func packDeltas(b *bytes.Buffer, ds []int) {
 	}
 }
 
-func put16(b *bytes.Buffer, v uint16) { b.Write([]byte{byte(v >> 8), byte(v)}) }
+func put16(b *bytes.Buffer, v uint16) { b.Write(binary.BigEndian.AppendUint16(nil, v)) }
 
 func put32(b *bytes.Buffer, v uint32) { put16(b, uint16(v>>16)); put16(b, uint16(v)) } //nolint:gosec // halves
 
@@ -400,10 +401,10 @@ func gvar(glyphs [][]byte) []byte {
 	put32(&b, uint32(data)) //nolint:gosec // small
 	at := 0
 	for _, g := range glyphs {
-		put32(&b, uint32(at)) //nolint:gosec // under the table's size
+		put32(&b, uint32(at))
 		at += len(g)
 	}
-	put32(&b, uint32(at)) //nolint:gosec // as above
+	put32(&b, uint32(at))
 	for _, p := range sharedPeaks {
 		put16(&b, f2dot14(p[0]))
 		put16(&b, f2dot14(p[1]))
@@ -437,7 +438,7 @@ func hvar(advances []float32) []byte {
 	put16(&store, uint16(len(regions)))  //nolint:gosec // four
 	put16(&store, uint16(len(regions)))  //nolint:gosec // four
 	for i := range regions {
-		put16(&store, uint16(i)) //nolint:gosec // four
+		put16(&store, uint16(i))
 	}
 	for _, a := range advances {
 		wide := int(math.Round(float64(a * Wider)))
@@ -511,11 +512,11 @@ func build(tables map[string][]byte) []byte {
 	n := len(tags)
 	be := binary.BigEndian
 	head := 12 + 16*n
-	out := make([]byte, head)
+	out := append([]byte(nil), make([]byte, head)...)
 	be.PutUint32(out, 0x00010000)
 	sel := bits.Len(uint(n)) - 1
-	be.PutUint16(out[4:], uint16(n))             //nolint:gosec // a few dozen tables
-	be.PutUint16(out[6:], uint16(16<<sel))       //nolint:gosec // as the format has it
+	be.PutUint16(out[4:], uint16(n)) //nolint:gosec // a few dozen tables
+	be.PutUint16(out[6:], uint16(16<<sel))
 	be.PutUint16(out[8:], uint16(sel))           //nolint:gosec // under 16
 	be.PutUint16(out[10:], uint16(16*n-16<<sel)) //nolint:gosec // as the format has it
 	headAt := 0

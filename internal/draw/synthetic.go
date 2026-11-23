@@ -143,7 +143,10 @@ func varied(v *Variation, idx sfnt.GlyphIndex, ppem fixed.Int26_6) (sfnt.Segment
 	}
 	scale := float64(ppem) / float64(v.Font.UnitsPerEm())
 	at := func(x, y float32) fixed.Point26_6 {
-		return fixed.Point26_6{X: fixed.Int26_6(math.Round(float64(x) * scale)), Y: fixed.Int26_6(math.Round(-float64(y) * scale))}
+		return fixed.Point26_6{
+			X: fixed.Int26_6(math.Round(float64(x) * scale)),
+			Y: fixed.Int26_6(math.Round(-float64(y) * scale)),
+		}
 	}
 	var segs sfnt.Segments
 	varfont.Contours(points, ends,

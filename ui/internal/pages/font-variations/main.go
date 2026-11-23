@@ -34,7 +34,8 @@ func main() {
 		}
 		d.Body().Append(row)
 	}
-	for _, s := range []string{"font-stretch: 50%", "font-stretch: 150%", `font-variation-settings: "wght" 750, "wdth" 70`} {
+	for _, s := range []string{"font-stretch: 50%", "font-stretch: 150%",
+		`font-variation-settings: "wght" 750, "wdth" 70`} {
 		d.Body().Append(ui.Div(ui.Style("font-size: 22px; "+s), ui.Text("Handgloves AVOH")))
 	}
 	d.Body().Append(ui.Div(ui.Class("fixed"), ui.Style("font-size: 22px"), ui.Text("Fixed at 400, made bold")))

@@ -192,29 +192,19 @@ type component struct {
 	m [4]float32
 }
 
-// composite is the glyph of components data lists, each varied at c,
-// transformed and placed where gvar moves its offset.
-func (f *Font) composite(g uint16, c Coords, data []byte, o outline, depth int) (outline, error) {
+// components reads a composite glyph's components.
+func components(data []byte) ([]component, error) {
 	var comps []component
 	be := binary.BigEndian
 	for at := 0; ; {
 		if at+4 > len(data) {
-			return o, errGlyph
+			return nil, errGlyph
 		}
 		cp := component{flags: be.Uint16(data[at:]), glyph: be.Uint16(data[at+2:]), m: [4]float32{1, 0, 0, 1}}
 		at += 4
+		args := 2
 		if cp.flags&compArgsAreWords != 0 {
-			if at+4 > len(data) {
-				return o, errGlyph
-			}
-			cp.dx, cp.dy = float32(int16(be.Uint16(data[at:]))), float32(int16(be.Uint16(data[at+2:]))) //nolint:gosec // signed
-			at += 4
-		} else {
-			if at+2 > len(data) {
-				return o, errGlyph
-			}
-			cp.dx, cp.dy = float32(int8(data[at])), float32(int8(data[at+1])) //nolint:gosec // signed
-			at += 2
+			args = 4
 		}
 		var n int
 		switch {
@@ -225,23 +215,37 @@ func (f *Font) composite(g uint16, c Coords, data []byte, o outline, depth int) 
 		case cp.flags&comp2x2 != 0:
 			n = 4
 		}
-		if at+2*n > len(data) {
-			return o, errGlyph
+		if at+args+2*n > len(data) {
+			return nil, errGlyph
 		}
-		switch n {
+		if args == 4 {
+			cp.dx, cp.dy = float32(int16(be.Uint16(data[at:]))), float32(int16(be.Uint16(data[at+2:]))) //nolint:gosec // signed
+		} else {
+			cp.dx, cp.dy = float32(int8(data[at])), float32(int8(data[at+1])) //nolint:gosec // signed
+		}
+		at += args
+		switch m := data[at:]; n {
 		case 1:
-			s := f2dot14(data[at:])
-			cp.m = [4]float32{s, 0, 0, s}
+			cp.m = [4]float32{f2dot14(m), 0, 0, f2dot14(m)}
 		case 2:
-			cp.m = [4]float32{f2dot14(data[at:]), 0, 0, f2dot14(data[at+2:])}
+			cp.m = [4]float32{f2dot14(m), 0, 0, f2dot14(m[2:])}
 		case 4:
-			cp.m = [4]float32{f2dot14(data[at:]), f2dot14(data[at+2:]), f2dot14(data[at+4:]), f2dot14(data[at+6:])}
+			cp.m = [4]float32{f2dot14(m), f2dot14(m[2:]), f2dot14(m[4:]), f2dot14(m[6:])}
 		}
 		at += 2 * n
 		comps = append(comps, cp)
 		if cp.flags&compMore == 0 {
-			break
+			return comps, nil
 		}
+	}
+}
+
+// composite is the glyph of components data lists, each varied at c,
+// transformed and placed where gvar moves its offset.
+func (f *Font) composite(g uint16, c Coords, data []byte, o outline, depth int) (outline, error) {
+	comps, err := components(data)
+	if err != nil {
+		return o, err
 	}
 	offsets := make([]Point, len(comps))
 	for i, cp := range comps {
@@ -252,9 +256,9 @@ func (f *Font) composite(g uint16, c Coords, data []byte, o outline, depth int) 
 	placed := o
 	placed.points, placed.ends = nil, nil
 	for i, cp := range comps {
-		sub, err := f.glyph(cp.glyph, c, depth+1)
-		if err != nil {
-			return o, err
+		sub, serr := f.glyph(cp.glyph, c, depth+1)
+		if serr != nil {
+			return o, serr
 		}
 		base := len(placed.points)
 		for _, p := range sub.points {

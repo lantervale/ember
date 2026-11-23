@@ -187,7 +187,7 @@ func TestACompositeVariesItsComponentsAndMovesThemByItsOwnDeltas(t *testing.T) {
 	}
 }
 
-func TestBrokenTablesAreErrorsOrLeftOutNeverPanics(t *testing.T) {
+func TestBrokenTablesAreErrorsOrLeftOutNeverPanics(_ *testing.T) {
 	ttf := varfonttest.Weighty()
 	for cut := 0; cut < len(ttf); cut += 97 {
 		f, err := varfont.Parse(ttf[:cut])

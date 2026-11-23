@@ -33,9 +33,13 @@ type FontFetcher func(url, sheet string) ([]byte, error)
 // text first needs a character its face draws: a face no text uses, or
 // one whose unicode-range has none of the text's characters, is never
 // fetched. Until it lands the text shows in the next family of its
-// list, as font-display: swap has it whatever the rule says, a
-// character no family draws as nothing; then the Document lays out and
-// paints again, once however many fonts landed since the last frame.
+// list as the rule's font-display has it, timed on the World's real
+// time as Chrome times it: invisible in its room for 3 s (auto, block)
+// or 100 ms (fallback, optional), then in that family; a font landing
+// after 3 s (fallback) or 100 ms (optional) is not used, the text staying
+// there. A character no family draws shows as nothing. Once fonts land
+// the Document lays out and paints again, once however many landed since
+// the last frame.
 // The entries of src are tried in order, past those ui does not read
 // (an .eot, an SVG font, colour glyphs): a local() only with
 // SystemFonts. A fetch that fails, or bytes that are no font, are a
@@ -149,8 +153,14 @@ func faceDescriptors(f css.FontFace) fonts.Descriptors {
 	}
 	return fonts.Descriptors{Family: f.Family, Weight: f.Weight, WeightMax: f.WeightMax, Italic: f.Italic,
 		Stretch: f.Stretch, StretchMax: f.StretchMax, AutoWeight: f.AutoWeight, AutoStretch: f.AutoStretch,
-		Ranges: fontRanges(f.Ranges), Look: look}
+		Ranges: fontRanges(f.Ranges), Look: look, Display: displays[f.Display]}
 }
+
+// displays are font-display's words as the font set reads them.
+//
+//nolint:gochecknoglobals // a lookup table
+var displays = map[string]fonts.Display{"auto": fonts.DisplayAuto, "block": fonts.DisplayBlock,
+	"swap": fonts.DisplaySwap, "fallback": fonts.DisplayFallback, "optional": fonts.DisplayOptional}
 
 // readFontFace adds f from the first of its files fsys holds, and
 // reports whether it held one; a file that is no font is a warning, and
@@ -360,7 +370,8 @@ func (d *Document) landPageFonts() {
 			d.fonts.Loaded(got.file, got.ttf, got.font)
 		}
 	}
-	if len(landed) > 0 {
+	ticked := d.clock >= 0 && d.fonts.Tick(d.clock)
+	if len(landed) > 0 || ticked {
 		d.relayout = true
 		d.remeasureFields()
 	}
@@ -402,7 +413,7 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 			df = df.Styled(look)
 		}
 		if i == 0 {
-			df = df.Blank(ch.Loading())
+			df = df.Blank(ch.Loading()).Hidden(ch.Hidden(d.fonts))
 		}
 		if tf, ok := draw.Wrap(df).(*twod.Face); ok {
 			faces = append(faces, tf)

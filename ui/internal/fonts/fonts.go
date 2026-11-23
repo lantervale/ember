@@ -36,6 +36,12 @@ type Face struct {
 	// AutoWeight and AutoStretch are a face of an @font-face that gives
 	// no weight or width: normal, or a variable font's own.
 	AutoWeight, AutoStretch bool
+	// Display is how the face of the web shows while its file is on its
+	// way, period where it is in it, and expired whether it is past its
+	// swap period without its file.
+	Display Display
+	period  period
+	expired bool
 	// Ranges are the characters the face draws, all without any.
 	Ranges []Range
 	// Look is how its @font-face has the face measured and drawn.

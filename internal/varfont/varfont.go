@@ -95,8 +95,7 @@ func Parse(ttf []byte) (*Font, error) {
 		}
 	}
 	if hv := tables["HVAR"]; len(hv) >= 20 {
-		store, err := readItemStore(hv, int(be.Uint32(hv[4:])), len(f.Axes))
-		if err == nil {
+		if store, serr := readItemStore(hv, int(be.Uint32(hv[4:])), len(f.Axes)); serr == nil {
 			f.hvar = store
 			f.hvarMap = readDeltaSetMap(hv, int(be.Uint32(hv[8:])))
 		}
@@ -164,9 +163,13 @@ func (f *Font) readFvar(b []byte) error {
 	return nil
 }
 
-func fixed16(b []byte) float32 { return float32(int32(binary.BigEndian.Uint32(b))) / 65536 } //nolint:gosec // a 16.16 number
+func fixed16(b []byte) float32 {
+	return float32(int32(binary.BigEndian.Uint32(b))) / 65536 //nolint:gosec // a 16.16 number
+}
 
-func f2dot14(b []byte) float32 { return float32(int16(binary.BigEndian.Uint16(b))) / 16384 } //nolint:gosec // a 2.14 number
+func f2dot14(b []byte) float32 {
+	return float32(int16(binary.BigEndian.Uint16(b))) / 16384 //nolint:gosec // a 2.14 number
+}
 
 // axisMap is one point of avar's mapping for an axis: from a normalized
 // coordinate to another.
@@ -204,7 +207,7 @@ func readAvar(b []byte, axes int) [][]axisMap {
 // and rounded to the 2.14 numbers the font's tables are in.
 func (f *Font) Normalize(user []float32) Coords {
 	out := make(Coords, len(f.Axes))
-	any := false
+	moved := false
 	for i, a := range f.Axes {
 		v := a.Default
 		if i < len(user) {
@@ -221,9 +224,9 @@ func (f *Font) Normalize(user []float32) Coords {
 			n = mapAxis(f.avar[i], n)
 		}
 		out[i] = float32(math.Round(float64(n)*16384)) / 16384
-		any = any || out[i] != 0
+		moved = moved || out[i] != 0
 	}
-	if !any {
+	if !moved {
 		return nil
 	}
 	return out

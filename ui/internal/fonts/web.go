@@ -34,6 +34,9 @@ type File struct {
 	// vf is the font's axes and variations, nil for a font that has
 	// none, or no TrueType outlines.
 	vf *varfont.Font
+	// asked is the set's clock when text first needed the file, -1
+	// before the set had one.
+	asked float32
 }
 
 type fileState uint8
@@ -66,6 +69,9 @@ type webFonts struct {
 	chains  map[chainKey]*Chain
 	// gen counts the changes that make every chain stale.
 	gen uint64
+	// now is the clock the faces' periods are timed on, once clocked.
+	now     float32
+	clocked bool
 }
 
 // AddWeb adds a face of family whose file comes later: for the weights
@@ -88,6 +94,7 @@ type Descriptors struct {
 	AutoWeight, AutoStretch bool
 	Ranges                  []Range
 	Look                    Look
+	Display                 Display
 }
 
 // Look is how an @font-face has its face measured and drawn: scaled by
@@ -129,7 +136,8 @@ func (s *Set) AddFace(d Descriptors, file *File) *Face {
 	for _, c := range s.known {
 		if c.web == file && c.Family == d.Family && c.Weight == d.Weight && c.WeightMax == d.WeightMax &&
 			c.Italic == d.Italic && c.Stretch == d.Stretch && c.StretchMax == d.StretchMax && c.Look == d.Look &&
-			c.AutoWeight == d.AutoWeight && c.AutoStretch == d.AutoStretch && slices.Equal(c.Ranges, d.Ranges) {
+			c.AutoWeight == d.AutoWeight && c.AutoStretch == d.AutoStretch && c.Display == d.Display &&
+			slices.Equal(c.Ranges, d.Ranges) {
 			if !slices.Contains(s.web, c) {
 				s.web = append(s.web, c)
 				s.stale()
@@ -139,7 +147,7 @@ func (s *Set) AddFace(d Descriptors, file *File) *Face {
 	}
 	c := &Face{Family: d.Family, Weight: d.Weight, WeightMax: d.WeightMax, Italic: d.Italic, Stretch: d.Stretch,
 		StretchMax: d.StretchMax, AutoWeight: d.AutoWeight, AutoStretch: d.AutoStretch, Ranges: d.Ranges, Look: d.Look,
-		web: file}
+		Display: d.Display, web: file}
 	if file.state == fileLoaded {
 		c.TTF, c.font, c.upem = file.ttf, file.font, float32(file.font.UnitsPerEm())
 	}
@@ -189,8 +197,13 @@ func (s *Set) Want(file *File) {
 		return
 	}
 	file.state = fileWanted
+	file.asked = -1
+	if s.clocked {
+		file.asked = s.now
+	}
 	s.loading++
 	s.wanted = append(s.wanted, file)
+	s.stale()
 }
 
 // Parse reads a font file and checks it draws, off the frame: what
@@ -230,9 +243,14 @@ func (s *Set) Loaded(file *File, ttf []byte, f *sfnt.Font) {
 		file.vf = vf
 	}
 	for _, c := range s.known {
-		if c.web == file {
-			c.TTF, c.font, c.upem = ttf, f, float32(f.UnitsPerEm())
+		if c.web != file || c.expired {
+			continue
 		}
+		if s.late(c) {
+			c.expired = true
+			continue
+		}
+		c.TTF, c.font, c.upem = ttf, f, float32(f.UnitsPerEm())
 	}
 }
 
@@ -254,6 +272,10 @@ func (c *Face) Web() bool { return c.web != nil }
 
 // File is the file a face of the web draws from, nil for another.
 func (c *Face) File() *File { return c.web }
+
+// gone reports whether c draws nothing, ever: its file failed, or
+// landed or would land past its swap period.
+func (c *Face) gone() bool { return c.web != nil && (c.web.state == fileFailed || c.expired) }
 
 // covers reports whether c draws r when it has it.
 func (c *Face) covers(r rune) bool { return draw.Covers(c.Ranges, r) }
@@ -606,7 +628,7 @@ func (ch *Chain) Faces() []*Face {
 func (ch *Chain) Loading() []Range {
 	var out []Range
 	for _, c := range ch.entries {
-		if c.font != nil || c.web == nil || c.web.state == fileFailed {
+		if c.font != nil || c.web == nil || c.gone() {
 			continue
 		}
 		if len(c.Ranges) == 0 {
@@ -632,7 +654,7 @@ func (ch *Chain) glyph(s *Set, r rune) (*Face, sfnt.GlyphIndex, bool) {
 			if c.web.state == fileIdle && !waiting {
 				s.Want(c.web)
 			}
-			waiting = waiting || c.web.state != fileFailed
+			waiting = waiting || !c.gone()
 			continue
 		}
 		if g, err := c.font.GlyphIndex(&s.buf, r); err == nil && g != 0 {
@@ -835,7 +857,7 @@ func (s *Set) Ready(f style.Font, text string, ask bool) bool {
 				continue
 			}
 			if c.font == nil {
-				if c.web.state == fileFailed {
+				if c.gone() {
 					continue
 				}
 				ready = false

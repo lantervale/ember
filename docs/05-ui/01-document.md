@@ -90,8 +90,8 @@ doc := ui.NewDocument(
 
 - The first entry of `src` ui reads is taken: by its `format()` (`truetype`, `opentype`, `woff`, `woff2`, and their `-variations`), else by its extension; an `.eot`, an SVG font and a `tech(color-…)` are passed over. When it fails the next is tried. `local()` is looked for only with `ui.SystemFonts()`; a `data:` address needs no fetcher.
 - A font is asked for once per Document, by all the faces that name it, and only when text needs a character its face draws: a face no text uses, or whose `unicode-range` holds none of the text, is never fetched. So a Google Fonts sheet of thirty subsets fetches the one or two the page is written in.
-- Until it lands the text shows in the next family of its list; then the Document lays out and paints again, once a frame however many landed. That is `font-display: swap` for every value of `font-display`. A character no family there draws while a face that would is on its way (an icon of an icon font) shows as nothing, and takes no room.
-- `font-weight` takes one weight or two (a variable font's range); the face nearest the text's weight and style is used, the last declared of two alike. No bold or italic is made up from a regular face.
+- Until it lands the text is laid out in the next family of its list and shown as the face's `font-display` has it, timed on the World's real time as Chrome times it ([decision 0148](../99-decisions/0148-variable-fonts-are-read-in-pure-go-and-font-display-is-timed-on-the-documents-clock.md)): `auto` and `block` keep it invisible, in its room, for 3 s, `fallback` and `optional` for 100 ms, `swap` not at all; then it shows in that family. A font landing after 3 s with `fallback`, or after 100 ms with `optional`, is not used: the text stays in the next family. Once fonts land the Document lays out and paints again, once a frame however many landed. A Document laid out but never drawn has no clock, and takes its fonts whenever they land. A character no family there draws while a face that would is on its way (an icon of an icon font) shows as nothing, and takes no room.
+- `font-weight` takes one weight or two (a variable font's range), `auto` or none the font's own; the face nearest the text's weight and style is used, the last declared of two alike. A bold or italic the family lacks is made up from its face.
 - A fetch that fails, or bytes that are no font, are in `doc.Warnings()` once, with the address, and the text stays as it is.
 
 What is read of a font file:
@@ -100,7 +100,7 @@ What is read of a font file:
 |---|---|
 | TrueType (`glyf`) and OpenType (`CFF `) | read as they are |
 | WOFF, WOFF2 | unpacked to the same (zlib; Brotli, with WOFF2's packed `glyf`, `loca` and `hmtx`): a file whose sizes or offsets do not hold, or over 32 MB unpacked, is an error ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)) |
-| variable fonts | drawn as their default instance: the axes (`wght`, `wdth`, `opsz`) are not moved, so every weight of the range looks the same |
+| variable fonts (`fvar`, `avar`, `gvar`, `HVAR`) | drawn and measured at the instance the text asks: its `font-weight` and `font-stretch`, kept within the face's descriptors, on `wght` and `wdth`, then `font-variation-settings` on any axis. Read in pure Go (package `internal/varfont`), TrueType outlines only |
 | colour fonts (`COLR`, `CBDT`, `sbix`, `SVG `) | their plain outlines when the file has some, in the text's colour; a file of bitmaps or SVG alone is not read |
 | collections (`.ttc`, a WOFF2 collection), `CFF2`, `.eot`, SVG fonts | not read: a warning |
 

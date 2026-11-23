@@ -95,6 +95,52 @@ func (f *Font) vary(g uint16, c Coords, o *outline) {
 	}
 }
 
+// tuple is a tuple variation's header: its region, the size of its
+// data, and its flags.
+type tuple struct {
+	peak, start, end []float32
+	inter            bool
+	size             int
+	index            uint16
+}
+
+// header reads the tuple header at at in data into t, and returns where
+// the next starts; -1 when it is wrong.
+func (gv *gvar) header(data []byte, at int, t *tuple) int {
+	be := binary.BigEndian
+	if at+4 > len(data) {
+		return -1
+	}
+	t.size, t.index = int(be.Uint16(data[at:])), be.Uint16(data[at+2:])
+	at += 4
+	if t.index&embeddedPeak != 0 {
+		if at+2*gv.axes > len(data) {
+			return -1
+		}
+		for j := range t.peak {
+			t.peak[j] = f2dot14(data[at+2*j:])
+		}
+		at += 2 * gv.axes
+	} else {
+		k := int(t.index & tupleIndexMask)
+		if k >= len(gv.shared) {
+			return -1
+		}
+		copy(t.peak, gv.shared[k])
+	}
+	t.inter = t.index&intermediateRegion != 0
+	if t.inter {
+		if at+4*gv.axes > len(data) {
+			return -1
+		}
+		for j := range t.start {
+			t.start[j], t.end[j] = f2dot14(data[at+2*j:]), f2dot14(data[at+2*(gv.axes+j):])
+		}
+		at += 4 * gv.axes
+	}
+	return at
+}
+
 // apply adds each tuple's deltas at c, scaled by how far c is in its
 // region, to dx and dy; false when the data is wrong.
 func (gv *gvar) apply(data []byte, c Coords, n int, o *outline, dx, dy []float32) bool {
@@ -112,88 +158,71 @@ func (gv *gvar) apply(data []byte, c Coords, n int, o *outline, dx, dy []float32
 			return false
 		}
 	}
-	at := 4
-	peak, start, end := make([]float32, gv.axes), make([]float32, gv.axes), make([]float32, gv.axes)
-	tx, ty := make([]float32, n), make([]float32, n)
-	touched := make([]bool, n)
-	for range tuples {
-		if at+4 > len(data) {
+	t := tuple{peak: make([]float32, gv.axes), start: make([]float32, gv.axes), end: make([]float32, gv.axes)}
+	d := tupleDeltas{x: make([]float32, n), y: make([]float32, n), touched: make([]bool, n)}
+	for at := 4; tuples > 0; tuples-- {
+		if at = gv.header(data, at, &t); at < 0 || t.size > len(serial) {
 			return false
 		}
-		size, index := int(be.Uint16(data[at:])), be.Uint16(data[at+2:])
-		at += 4
-		if index&embeddedPeak != 0 {
-			if at+2*gv.axes > len(data) {
-				return false
-			}
-			for j := range peak {
-				peak[j] = f2dot14(data[at+2*j:])
-			}
-			at += 2 * gv.axes
-		} else {
-			k := int(index & tupleIndexMask)
-			if k >= len(gv.shared) {
-				return false
-			}
-			copy(peak, gv.shared[k])
-		}
-		inter := index&intermediateRegion != 0
-		if inter {
-			if at+4*gv.axes > len(data) {
-				return false
-			}
-			for j := range start {
-				start[j], end[j] = f2dot14(data[at+2*j:]), f2dot14(data[at+2*(gv.axes+j):])
-			}
-			at += 4 * gv.axes
-		}
-		if size > len(serial) {
-			return false
-		}
-		body := serial[:size]
-		serial = serial[size:]
-		scalar := tupleScalar(c, peak, start, end, inter)
+		body := serial[:t.size]
+		serial = serial[t.size:]
+		scalar := tupleScalar(c, t.peak, t.start, t.end, t.inter)
 		if scalar == 0 {
 			continue
 		}
 		points := shared
-		if index&privatePointNumber != 0 {
+		if t.index&privatePointNumber != 0 {
 			var ok bool
 			if points, body, ok = pointNumbers(body); !ok {
 				return false
 			}
 		}
-		count := n
-		if points != nil {
-			count = len(points)
-		}
-		xs, body, ok := deltas(body, count)
-		if !ok {
+		if !d.read(body, points) {
 			return false
-		}
-		ys, _, ok := deltas(body, count)
-		if !ok {
-			return false
-		}
-		clear(tx)
-		clear(ty)
-		clear(touched)
-		for i := range count {
-			p := i
-			if points != nil {
-				p = points[i]
-			}
-			if p >= n {
-				continue
-			}
-			tx[p], ty[p], touched[p] = xs[i], ys[i], true
 		}
 		if points != nil && len(o.ends) > 0 {
-			infer(o.points, o.ends, tx, ty, touched)
+			infer(o.points, o.ends, d.x, d.y, d.touched)
 		}
 		for i := range n {
-			dx[i] += scalar * tx[i]
-			dy[i] += scalar * ty[i]
+			dx[i] += scalar * d.x[i]
+			dy[i] += scalar * d.y[i]
+		}
+	}
+	return true
+}
+
+// tupleDeltas are one tuple's deltas of every point, and the points it
+// names.
+type tupleDeltas struct {
+	x, y    []float32
+	touched []bool
+}
+
+// read reads the deltas of points, all of them when nil, from body.
+func (d *tupleDeltas) read(body []byte, points []int) bool {
+	n := len(d.x)
+	count := n
+	if points != nil {
+		count = len(points)
+	}
+	xs, body, ok := deltas(body, count)
+	if !ok {
+		return false
+	}
+	ys, _, ok := deltas(body, count)
+	if !ok {
+		return false
+	}
+	clear(d.x)
+	clear(d.y)
+	clear(d.touched)
+	for i := range count {
+		p := i
+		if points != nil {
+			p = points[i]
+		}
+		if p < n {
+			d.x[p], d.y[p], d.touched[p] = xs[i], ys[i], true
 		}
 	}
 	return true

@@ -135,7 +135,7 @@ func (s FontSource) Reads() bool {
 //nolint:gochecknoglobals // a lookup table
 var ignoredFaceDescriptors = map[string]bool{
 	"font-width": true, "font-variant": true,
-	"font-variation-settings": true, "font-named-instance": true, "font-language-override": true,
+	propFontVariations: true, "font-named-instance": true, "font-language-override": true,
 	"subscript-position-override": true, "subscript-size-override": true,
 	"superscript-position-override": true, "superscript-size-override": true,
 }
