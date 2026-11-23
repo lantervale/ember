@@ -256,6 +256,9 @@ type matcher struct {
 	// both nil when no sheet has any.
 	off   [][]bool
 	ranks [][]int32
+	// at is, for each longhand of the last cascade, where its winner
+	// stands in the matched list.
+	at []int
 	// env holds the containers' sizes @container rules are answered
 	// for, and self is set while a pseudo-element is matched, whose
 	// container may be its element.
@@ -407,14 +410,19 @@ func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction)
 		m.long = make([]*Declaration, len(order))
 	}
 	clear(m.long)
+	if m.at == nil {
+		m.at = make([]int, len(order))
+	}
 	m.custom = m.custom[:0]
 	rtl := directionIn(list, dir) == style.RTL
-	for _, a := range list {
+	reverts := false
+	for k, a := range list {
 		d := a.decl
 		if strings.HasPrefix(d.Name, "--") {
 			m.custom = append(m.custom, d)
 			continue
 		}
+		reverts = reverts || revertOf(d) != ""
 		mirror := rtl && d.inline
 		if long, ok := shorthands[d.Name]; ok {
 			for _, l := range long {
@@ -422,7 +430,7 @@ func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction)
 					l = mirrored(l)
 				}
 				if pseudo == "" || takesProperty(pseudo, l) {
-					m.long[orderIndex[l]] = d
+					m.long[orderIndex[l]], m.at[orderIndex[l]] = d, k
 				}
 			}
 			continue
@@ -432,7 +440,14 @@ func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction)
 			name = mirrored(name)
 		}
 		if pseudo == "" || takesProperty(pseudo, name) {
-			m.long[orderIndex[name]] = d
+			m.long[orderIndex[name]], m.at[orderIndex[name]] = d, k
+		}
+	}
+	if reverts {
+		for i, d := range m.long {
+			if d != nil && revertOf(d) != "" {
+				m.long[i] = rolledBack(list, m.at[i], order[i])
+			}
 		}
 	}
 	return cascaded{longhands: m.long, custom: m.custom, rtl: rtl}
@@ -457,6 +472,48 @@ func directionIn(list []applied, dir style.Direction) style.Direction {
 		return dir
 	}
 	return dir
+}
+
+// revertOf is revert or revert-layer when d's value is that keyword
+// alone, "" otherwise.
+func revertOf(d *Declaration) string {
+	if v := items(d.Value); len(v) == 1 && isWord(v[0], kwRevert, kwRevertLayer) {
+		return strings.ToLower(v[0].Text)
+	}
+	return ""
+}
+
+// rolledBack is the declaration of the longhand name that wins once
+// list[at], a revert or a revert-layer, is rolled back: the cascade of the
+// user agent's origin under a revert of the author's, of the layers
+// under its own for a revert-layer, nil when nothing is left, which
+// leaves the longhand unset.
+func rolledBack(list []applied, at int, name string) *Declaration {
+	a := list[at]
+	for k := at - 1; k >= 0; k-- {
+		b := list[k]
+		if !setsLonghand(b.decl, name) || !survives(a, b) {
+			continue
+		}
+		if revertOf(b.decl) != "" {
+			a = b
+			continue
+		}
+		return b.decl
+	}
+	return nil
+}
+
+// survives reports whether b, ranked under a, is left by a's rollback.
+func survives(a, b applied) bool {
+	if revertOf(a.decl) == kwRevertLayer && b.level == a.level && (b.layer != a.layer || b.inline != a.inline) {
+		return true
+	}
+	return (a.level == authorNormal || a.level == authorImportant) && b.level == agentNormal
+}
+
+func setsLonghand(d *Declaration, name string) bool {
+	return d.Name == name || slices.Contains(shorthands[d.Name], name)
 }
 
 // declared reports whether the last cascade has a declaration of the

@@ -29,7 +29,7 @@ type line struct {
 // word separator.
 type spacing struct{ letter, word float32 }
 
-func spacingOf(st *style.Computed) spacing { return spacing{st.LetterSpacing, st.WordGap()} }
+func spacingOf(st *style.Computed) spacing { return spacing{st.LetterGap(), st.WordGap()} }
 
 // after is the room s adds after r.
 func (s spacing) after(r rune) float32 {

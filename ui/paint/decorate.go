@@ -1700,13 +1700,13 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 			if tc.A <= 0 {
 				continue
 			}
-			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, smoothingOf(st))
+			o := p.textOptions(face, st.Font.Size, st.LetterGap(), tc, smoothingOf(st))
 			for _, f := range b.Lines {
 				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Shown(), st, o)
 			}
 		}
 	}
-	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
+	opts := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	if ink != c {
 		p.recoloured(e, st, face, parts, c, ink)
 		p.decorations(e, st, style.LineThrough, alpha)
@@ -1722,34 +1722,52 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 // by st's word-spacing: whole without one, else word by word, each where
 // layout measured it.
 func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
+	runs := st.Font.SmallCaps(text)
+	if runs == nil {
+		p.wordsIn(at, text, st, st.Font, opts)
+		return
+	}
+	for _, r := range runs {
+		o := opts
+		if r.Font.Size != st.Font.Size {
+			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
+		}
+		at.X = p.wordsIn(at, r.Text, st, r.Font, o)
+	}
+}
+
+// wordsIn is words in font f, a part of st's text small capitals cut, and
+// returns where the text after it starts.
+func (p *painter) wordsIn(at geom.Vec2, text string, st *style.Computed, f style.Font, opts []twod.TextOption) float32 {
 	gap := st.WordGap()
 	if gap == 0 {
 		p.s.Text(at, text, opts...)
-		return
+		return at.X + p.advance(st, f, text, opts)
 	}
 	for len(text) > 0 {
 		i := strings.IndexFunc(text, style.WordSeparator)
 		if i < 0 {
 			p.s.Text(at, text, opts...)
-			return
+			return at.X + p.advance(st, f, text, opts)
 		}
 		if i > 0 {
 			p.s.Text(at, text[:i], opts...)
-			at.X += p.advance(st, text[:i], opts)
+			at.X += p.advance(st, f, text[:i], opts)
 		}
 		_, n := utf8.DecodeRuneInString(text[i:])
-		at.X += p.advance(st, text[i:i+n], opts) + gap
+		at.X += p.advance(st, f, text[i:i+n], opts) + gap
 		text = text[i+n:]
 	}
+	return at.X
 }
 
-// advance is how far s takes the text after it, its letters spaced: by
-// layout's fonts, or without them by the face opts draw it in.
-func (p *painter) advance(st *style.Computed, s string, opts []twod.TextOption) float32 {
+// advance is how far s in f takes the text after it, its letters spaced:
+// by layout's fonts, or without them by the face opts draw it in.
+func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []twod.TextOption) float32 {
 	if p.fonts == nil {
 		return twod.Measure(s, opts...).X
 	}
-	return p.fonts.Advance(st.Font, s) + st.LetterSpacing*float32(utf8.RuneCountInString(s))
+	return p.fonts.Advance(f, s) + st.LetterGap()*float32(utf8.RuneCountInString(s))
 }
 
 // selectionColors are the ::selection of the element st styles: its
@@ -1786,7 +1804,7 @@ func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text 
 // recoloured draws a text run whose selected parts take the colour ink:
 // each line's text in c outside its part and in ink inside it.
 func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts []Selected, c, ink color.Color) {
-	plain := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
+	plain := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	for i, f := range e.b.Lines {
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
@@ -1821,7 +1839,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(part.clip)
-			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, smoothingOf(st)))
+			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterGap(), part.ink, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}

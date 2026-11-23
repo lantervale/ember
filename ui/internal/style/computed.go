@@ -47,6 +47,7 @@ func Initial() Computed {
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
 			Orphans:    2, Widows: 2,
+			TabSize: TabSize{Spaces: 8},
 		},
 		Look: Look{
 			Opacity: 1, Visible: true, TransformOrigin: Size[Length]{Percent(50), Percent(50)},
@@ -382,6 +383,9 @@ type Font struct {
 	Stretch float32
 	// Synthesis is what font-synthesis forbids making up.
 	Synthesis FontSynthesis
+	// Caps is font-variant-caps, which measuring and drawing synthesise
+	// (SmallCaps).
+	Caps FontCaps
 }
 
 // FontSynthesis is the faces font-synthesis forbids making up from
@@ -513,10 +517,10 @@ const (
 	PreLine
 )
 
-// WordSpacing is word-spacing: Px points after each word separator, and
-// Percent of the font size, which a child inherits as a percentage of
-// its own.
-type WordSpacing struct{ Px, Percent float32 }
+// Spacing is letter-spacing or word-spacing: Px points after each
+// character or word separator, and Percent of the font size, which a child
+// inherits as a percentage of its own.
+type Spacing struct{ Px, Percent float32 }
 
 // WordSeparator reports whether word-spacing follows r: a space or a
 // no-break space, the two Chrome widens.
@@ -526,15 +530,21 @@ func WordSeparator(r rune) bool { return r == ' ' || r == '\u00a0' }
 // font.
 func (t *Text) WordGap() float32 { return t.WordSpacing.Px + t.WordSpacing.Percent*t.Font.Size/100 }
 
+// LetterGap is the room letter-spacing adds after each character in t's
+// font.
+func (t *Text) LetterGap() float32 {
+	return t.LetterSpacing.Px + t.LetterSpacing.Percent*t.Font.Size/100
+}
+
 // Spacing is the room letter-spacing and word-spacing add to s: the one
 // after each character, the other after each word separator.
 func (t *Text) Spacing(s string) float32 {
-	word := t.WordGap()
+	word, letter := t.WordGap(), t.LetterGap()
 	if word == 0 {
-		if t.LetterSpacing == 0 {
+		if letter == 0 {
 			return 0
 		}
-		return t.LetterSpacing * float32(utf8.RuneCountInString(s))
+		return letter * float32(utf8.RuneCountInString(s))
 	}
 	n, seps := 0, 0
 	for _, r := range s {
@@ -543,14 +553,36 @@ func (t *Text) Spacing(s string) float32 {
 			seps++
 		}
 	}
-	return t.LetterSpacing*float32(n) + word*float32(seps)
+	return letter*float32(n) + word*float32(seps)
+}
+
+// FontCaps is font-variant-caps.
+type FontCaps uint8
+
+const (
+	NormalCaps FontCaps = iota
+	SmallCaps
+	AllSmallCaps
+	PetiteCaps
+	AllPetiteCaps
+	Unicase
+	TitlingCaps
+)
+
+// FontVariant is font-variant's longhands but its capitals (Font.Caps),
+// kept as written, their keywords in the order CSS lists them, "" for
+// normal. They change nothing drawn: ui applies no OpenType feature of a
+// face.
+type FontVariant struct {
+	Ligatures, Numeric, EastAsian, Alternates, Position string
 }
 
 type Text struct {
 	Font          Font
+	FontVariant   FontVariant
 	LineHeight    LineHeight
-	LetterSpacing float32
-	WordSpacing   WordSpacing
+	LetterSpacing Spacing
+	WordSpacing   Spacing
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace
@@ -644,7 +676,64 @@ type Text struct {
 	// BreakAnywhere is overflow-wrap: anywhere, whose breaks also count
 	// in min-content widths.
 	BreakAnywhere bool
+	WordBreak     WordBreak
+	LineBreak     LineBreak
+	TabSize       TabSize
+	// InkThrough is text-decoration-skip-ink: none: underlines and
+	// overlines go through the glyphs' ink, which they otherwise skip.
+	InkThrough bool
 }
+
+// WordBreak is word-break: where lines may break inside words.
+type WordBreak uint8
+
+const (
+	WordBreakNormal WordBreak = iota
+	// BreakAll breaks between any two letters, as between ideographs.
+	BreakAll
+	// KeepAll breaks no word of letters, ideographs neither.
+	KeepAll
+	// WordBreakBreakWord is break-word, the old name of overflow-wrap:
+	// anywhere.
+	WordBreakBreakWord
+)
+
+// LineBreak is line-break. Its values but anywhere differ only on the
+// punctuation of Chinese and Japanese, where ui breaks as normal.
+type LineBreak uint8
+
+const (
+	LineBreakAuto LineBreak = iota
+	LineBreakLoose
+	LineBreakNormal
+	LineBreakStrict
+	// LineBreakAnywhere breaks between any two characters.
+	LineBreakAnywhere
+)
+
+// TabSize is tab-size: Spaces spaces of the text's font, or Px points
+// when Length.
+type TabSize struct {
+	Spaces, Px float32
+	Length     bool
+}
+
+// TabStop is the distance between t's tab stops, space the advance of a
+// space in its font.
+func (t *Text) TabStop(space float32) float32 {
+	if t.TabSize.Length {
+		return t.TabSize.Px
+	}
+	return t.TabSize.Spaces * space
+}
+
+// WrapsAnywhere reports whether a word too wide for its line breaks
+// where it must: overflow-wrap or word-break: break-word.
+func (t *Text) WrapsAnywhere() bool { return t.BreakWord || t.WordBreak == WordBreakBreakWord }
+
+// MinAnywhere reports whether those breaks also count in min-content
+// widths: overflow-wrap: anywhere, word-break: break-word.
+func (t *Text) MinAnywhere() bool { return t.BreakAnywhere || t.WordBreak == WordBreakBreakWord }
 
 type BorderStyle uint8
 
