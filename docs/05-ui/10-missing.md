@@ -173,12 +173,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| an animated picture off-screen, or in no element shown | plays on, where Chrome pauses it; it begins when it lands, where Chrome begins it when first painted ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
-| an animation of more than 2^25 pixels in all its frames | plays the frames before that, where Chrome decodes them as they show |
-| a GIF frame reaching past the picture's size | no picture, and a warning (`gif: frame bounds larger than image bounds`), where Chrome cuts the frame |
+| an animated picture out of view under a transform, or in a box paint can't bound (`Box.Loose`), or with `EMBER_UI_CULL=off` | plays on, as paint draws it, where Chrome stands it still when none of it shows; one scrolled out of the viewport or of a scroll container stands still as in Chrome ([decision 0167](../99-decisions/0167-pictures-load-play-and-choose-again-when-a-desktop-chrome-does.md)) |
+| an animation out of view for more than one play of a picture played a number of times | counts the plays it missed as one, as Chrome is assumed to; only one played for ever is compared |
 | AVIF | no picture, and a warning; `web.Images` does not ask for it: no reader in pure Go ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
 | a `source` of AVIF (`type="image/avif"`) | passed over, where Chrome takes it: the next source, or the `img`'s own pictures |
-| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where a desktop Chrome waits for it to near the viewport; headless Chrome, the reference, asks for them all before the load event, so no margin can be checked ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
+| `loading="lazy"` on a slow network | asked for within Chrome's margins on a fast one, 1250 points along the page and 625 across, where Chrome widens them on 3G and slower |
+| `loading="lazy"` in an `iframe` | near its own Document's viewport, where Chrome measures it against the page's; an `iframe`'s own `loading` is not read |
+| the order Chrome asks for pictures in | by `fetchpriority` alone, six at a time; Chrome also lets a few low ones through while the page is laid out, raises those in view and starts what its parser found first, so that only a high picture going before the rest is compared |
 | the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
 | an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |
 | an `svg` element whose markup changes every frame | each state is one more picture the Document keeps |
