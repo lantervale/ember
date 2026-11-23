@@ -21,7 +21,10 @@ func TestAMarkersCursorShowsOverTheMarker(t *testing.T) {
 	}
 	b := item.Box()
 	assert.Equal(t, platform.CursorHand, cursor(geom.V2(b.X-12, b.Y+11)), "over the bullet outside")
+	assert.Equal(t, platform.CursorHand, cursor(geom.V2(b.X-9.5, b.Y+11)), "just past the bullet")
+	assert.Equal(t, platform.CursorArrow, cursor(geom.V2(b.X-4, b.Y+11)), "between the bullet and the text")
 	assert.Equal(t, platform.CursorArrow, cursor(geom.V2(b.X+20, b.Y+b.H/2)), "over the item's text")
 	b = inside.Box()
 	assert.Equal(t, platform.CursorHand, cursor(geom.V2(b.X+1, b.Y+11)), "over the bullet inside")
+	assert.Equal(t, platform.CursorHand, cursor(geom.V2(b.X+12, b.Y+2)), "past the bullet inside, on its line")
 }

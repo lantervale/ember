@@ -948,6 +948,11 @@ type Text struct {
 	// ExactText draws them at their exact coverage, without stem
 	// darkening, as -webkit-font-smoothing: antialiased does in Chrome.
 	ExactText bool
+	// SubpixelText is -webkit-font-smoothing: subpixel-antialiased, drawn
+	// as auto: Chrome shapes it apart from text of another smoothing.
+	SubpixelText bool
+	// TextRendering is text-rendering, which draws nothing differently.
+	TextRendering TextRendering
 	// Ellipsis is text-overflow: ellipsis.
 	Ellipsis bool
 	// EllipsisStart cuts the start of the text rather than its end, as a
@@ -979,7 +984,7 @@ type Text struct {
 	TextBoxTrim  TextBoxTrim
 	TextBoxEdge  TextBoxEdge
 	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:
-	// normal; both read and computed, laid out as their initial values.
+	// normal.
 	SpacingTrim SpacingTrim
 	Autospace   bool
 	// KeywordSizes is interpolate-size: allow-keywords.
@@ -1808,6 +1813,16 @@ const (
 	WidthPercent
 	// WidthAuto is the slice's own size.
 	WidthAuto
+)
+
+// TextRendering is text-rendering.
+type TextRendering uint8
+
+const (
+	TextRenderingAuto TextRendering = iota
+	OptimizeSpeed
+	OptimizeLegibility
+	GeometricPrecision
 )
 
 // ImageRendering is image-rendering.

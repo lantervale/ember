@@ -51,8 +51,10 @@ type Face struct {
 	TTF  []byte
 	font *sfnt.Font
 	upem float32
-	// shaper is the face's layout tables, read when it is first shaped.
+	// shaper is the face's layout tables, read when it is first shaped;
+	// han what text-spacing-trim reads of its glyphs, by character.
 	shaper *shape.Font
+	han    map[rune]hanGlyph
 	// vertical is the face's vertical metrics, read when it first sets a
 	// character upright in a vertical line.
 	vertical *vertical
@@ -83,6 +85,8 @@ type Set struct {
 	shapedCount int
 	run         []shape.Glyph
 	ids         []byte
+	// counted counts the glyphs measures count, each its own part's (Carets).
+	counted int
 	// uprights are the clusters set upright in vertical lines so far.
 	uprights map[uprightKey]uprightSet
 	// scale is device pixels per point, 0 for 1.
@@ -321,6 +325,7 @@ func (s *Set) advanceIn(f style.Font, text, before, after string, own part) floa
 			w += s.advance(f, text[start:at], before+text[:start], text[at:]+after, own.in(start))
 			if own.has(at) {
 				w += f.Size
+				s.counted++
 			}
 			start = at + len(c)
 		}
@@ -406,6 +411,7 @@ func (s *Set) advance(f style.Font, text, before, after string, own part) float3
 			if ok {
 				if own.has(i) {
 					other += a
+					s.counted++
 				}
 				w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
 				run = run[:0]

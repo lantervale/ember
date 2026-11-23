@@ -646,9 +646,13 @@ func (t *Transitions) build(n *dom.Node, a *nodeAnim) {
 }
 
 // carry shows c as the colour of n's children that inherit it, and of
-// theirs.
+// theirs, its ::marker's among them.
 func (t *Transitions) carry(n *dom.Node, c color.Color) {
-	for _, k := range n.Flow() {
+	kids := n.Flow()
+	if g := dom.Data(n).MarkerNode; g != nil {
+		kids = append(slices.Clip(kids), g)
+	}
+	for _, k := range kids {
 		if k.IsText() {
 			continue
 		}

@@ -1,6 +1,7 @@
 package css
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,13 +14,27 @@ const listItem = "list-item"
 
 // counter is one counter in scope: made on an element depth deep, it
 // reaches that element's descendants and the siblings after it with
-// theirs. step is what a list item adds to a list-item counter: -1 in a
-// reversed ol.
+// theirs, unless it is nested in a counter of its name its parent has:
+// then, as in Chrome and CSS Lists' inheritance of counters, the
+// element's descendants alone.
 type counter struct {
-	name  string
+	name   string
+	depth  int
+	value  int
+	nested bool
+}
+
+// list numbers the markers of the items of an ol, a ul or a menu, apart
+// from the list-item counter as Chrome does: from its start, a reversed
+// ol's from its number of items, and an item's value attribute numbers
+// its marker alone. An item outside any list is numbered among those of
+// its parent, owner. step is what an item adds: -1 in a reversed ol;
+// last is the number before the next item's.
+type list struct {
+	owner *dom.Node
 	depth int
-	value int
 	step  int
+	last  int
 }
 
 // counting walks the tree in document order with the counters in scope
@@ -28,6 +43,7 @@ type counter struct {
 type counting struct {
 	r     *restyler
 	stack []counter
+	lists []list
 	// quotes is how many quotes are open.
 	quotes int
 }
@@ -58,7 +74,11 @@ func (c *counting) element(n *dom.Node, depth int) {
 	}
 	c.apply(n, st, depth)
 	if st.ListItem {
-		c.item(n, data, st)
+		c.item(n, data, st, c.number(n, st, depth))
+	}
+	if isList(n.Tag()) {
+		start, step := listStart(n, true)
+		c.lists = append(c.lists, list{owner: n, depth: depth, step: step, last: start})
 	}
 	if g := data.Before; g != nil {
 		c.generated(n, g, depth+1)
@@ -71,8 +91,9 @@ func (c *counting) element(n *dom.Node, depth int) {
 	if g := data.After; g != nil {
 		c.generated(n, g, depth+1)
 	}
-	for len(c.stack) > 0 && c.stack[len(c.stack)-1].depth > depth {
-		c.stack = c.stack[:len(c.stack)-1]
+	c.leave(depth)
+	for len(c.lists) > 0 && c.lists[len(c.lists)-1].depth >= depth {
+		c.lists = c.lists[:len(c.lists)-1]
 	}
 }
 
@@ -83,20 +104,32 @@ func (c *counting) generated(origin, g *dom.Node, depth int) {
 	st := gd.Style
 	c.apply(nil, st, depth)
 	if st.ListItem {
-		c.item(g, gd, st)
+		ordinal := 0
+		if i := c.find(listItem); i >= 0 {
+			ordinal = c.stack[i].value
+		}
+		c.item(g, gd, st, ordinal)
 	}
 	if c.r.fill(g, st, c.text(st)) {
 		flagLayout(origin)
+	}
+	c.leave(depth)
+}
+
+// leave ends the scope of the counters made inside a box depth deep, and
+// of those the box made inside its parent's own.
+func (c *counting) leave(depth int) {
+	for k := len(c.stack); k > 0; k-- {
+		if top := c.stack[k-1]; top.depth < depth || top.depth == depth && !top.nested {
+			return
+		}
+		c.stack = c.stack[:k-1]
 	}
 }
 
 // item gives a list item its number and its ::marker its text: its
 // content's, or the marker string of its list-style-type.
-func (c *counting) item(n *dom.Node, data *dom.Pipeline, st *style.Computed) {
-	ordinal := 0
-	if i := c.find(listItem); i >= 0 {
-		ordinal = c.stack[i].value
-	}
+func (c *counting) item(n *dom.Node, data *dom.Pipeline, st *style.Computed, ordinal int) {
 	text, has := "", false
 	switch m := data.Marker; {
 	case m != nil && m.Content.Kind != style.ContentNormal:
@@ -116,6 +149,48 @@ func (c *counting) item(n *dom.Node, data *dom.Pipeline, st *style.Computed) {
 	}
 }
 
+// number is the number of a list item's marker, n depth deep: a
+// counter-set of list-item, else its value attribute, else the number
+// before it in its list and its step, which a counter-increment of
+// list-item replaces, together with its counter-reset.
+func (c *counting) number(n *dom.Node, st *style.Computed, depth int) int {
+	l := c.listOf(n, depth)
+	if v, ok := lastOf(st.CounterSet, listItem); ok {
+		l.last = v
+		return v
+	}
+	if v, ok := intAttr(n, "value"); ok && n.Tag() == dom.Li {
+		l.last = v
+		return v
+	}
+	step := l.step
+	if namesListItem(st.CounterIncrement) {
+		step, _ = lastOf(st.CounterReset, listItem)
+		for _, r := range st.CounterIncrement {
+			if r.Name == listItem {
+				step += r.Value
+			}
+		}
+	}
+	l.last += step
+	return l.last
+}
+
+// listOf is the list numbering an item n depth deep: the innermost list
+// round it, else its parent's own.
+func (c *counting) listOf(n *dom.Node, depth int) *list {
+	for i := len(c.lists) - 1; i >= 0; i-- {
+		if isList(c.lists[i].owner.Tag()) {
+			return &c.lists[i]
+		}
+	}
+	if k := len(c.lists); k > 0 && c.lists[k-1].owner == n.Parent() {
+		return &c.lists[k-1]
+	}
+	c.lists = append(c.lists, list{owner: n.Parent(), depth: depth - 1, step: 1})
+	return &c.lists[len(c.lists)-1]
+}
+
 // flagLayout flags n for layout after the tree was styled.
 func flagLayout(n *dom.Node) {
 	dom.Data(n).Dirty |= dom.DirtyLayout
@@ -126,32 +201,24 @@ func flagLayout(n *dom.Node) {
 
 // apply runs a box's counter properties, in CSS's order: resets, then
 // increments, then sets. n is the element, nil for a pseudo-element's
-// box: a list resets list-item, and a list item adds to it, unless the
-// property names that counter itself.
+// box: a list resets list-item, and a list item adds to it its list's
+// step, unless the box's counter properties name list-item themselves.
+// An item's value attribute numbers its marker, not the counter.
 func (c *counting) apply(n *dom.Node, st *style.Computed, depth int) {
-	if n != nil && isList(n.Tag()) && !names(st.CounterReset, listItem) {
-		value, step := listStart(n)
-		c.reset(listItem, value, depth)
-		c.stack[c.find(listItem)].step = step
+	own := n != nil && (namesListItem(st.CounterReset) || namesListItem(st.CounterIncrement) ||
+		namesListItem(st.CounterSet))
+	if n != nil && !own && isList(n.Tag()) {
+		start, _ := listStart(n, false)
+		c.reset(listItem, start, depth)
 	}
 	for _, r := range st.CounterReset {
 		c.reset(r.Name, r.Value, depth)
 	}
-	if st.ListItem && n != nil && !names(st.CounterIncrement, listItem) {
-		at := c.touch(listItem, depth)
-		step := c.stack[at].step
-		if step == 0 {
-			step = 1
-		}
-		c.stack[at].value += step
+	if n != nil && !own && st.ListItem {
+		c.stack[c.touch(listItem, depth)].value += c.listOf(n, depth).step
 	}
 	for _, r := range st.CounterIncrement {
 		c.stack[c.touch(r.Name, depth)].value += r.Value
-	}
-	if n != nil && n.Tag() == dom.Li && st.ListItem {
-		if v, ok := intAttr(n, "value"); ok {
-			c.stack[c.touch(listItem, depth)].value = v
-		}
 	}
 	for _, r := range st.CounterSet {
 		c.stack[c.touch(r.Name, depth)].value = r.Value
@@ -162,11 +229,12 @@ func (c *counting) apply(n *dom.Node, st *style.Computed, depth int) {
 // its name in scope, or, where a sibling before it made the innermost,
 // that one again.
 func (c *counting) reset(name string, value, depth int) {
-	if i := c.find(name); i >= 0 && c.stack[i].depth == depth {
-		c.stack[i].value, c.stack[i].step = value, 0
+	i := c.find(name)
+	if i >= 0 && c.stack[i].depth == depth {
+		c.stack[i].value = value
 		return
 	}
-	c.stack = append(c.stack, counter{name: name, depth: depth, value: value})
+	c.stack = append(c.stack, counter{name: name, depth: depth, value: value, nested: i >= 0})
 }
 
 // touch is the innermost counter name's place, made at 0 when none is
@@ -188,25 +256,32 @@ func (c *counting) find(name string) int {
 	return -1
 }
 
-func names(list []style.Counter, name string) bool {
-	for _, c := range list {
-		if c.Name == name {
-			return true
+// namesListItem reports whether list names the list-item counter.
+func namesListItem(list []style.Counter) bool {
+	return slices.ContainsFunc(list, func(c style.Counter) bool { return c.Name == listItem })
+}
+
+// lastOf is the value the last of list naming name gives it.
+func lastOf(list []style.Counter, name string) (int, bool) {
+	for i := len(list) - 1; i >= 0; i-- {
+		if list[i].Name == name {
+			return list[i].Value, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 func isList(tag dom.Tag) bool { return tag == dom.Ol || tag == dom.Ul || tag == dom.Menu }
 
-// listStart is what a list resets list-item to, and what its items add:
+// listStart is what a list numbers its items from, and what each adds:
 // one under its start attribute, counting up, or one over it counting
-// down for a reversed ol, which starts from the number of its items
-// when it has no start.
-func listStart(list *dom.Node) (int, int) {
+// down for a reversed ol. A reversed ol with no start numbers its
+// markers from its number of items, and its list-item counter, as
+// Chrome's when it first counts, from 0.
+func listStart(list *dom.Node, markers bool) (int, int) {
 	start, given := intAttr(list, "start")
 	if _, reversed := list.Attr("reversed"); reversed && list.Tag() == dom.Ol {
-		if !given {
+		if !given && markers {
 			start = listItems(list)
 		}
 		return start + 1, -1
