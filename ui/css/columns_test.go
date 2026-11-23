@@ -57,6 +57,20 @@ func TestColumnsShorthand(t *testing.T) {
 	}
 }
 
+func TestColumnSpan(t *testing.T) {
+	d, c := el(dom.Div, "d"), el(dom.P, "c")
+	Compute(page(with(d, c)), []*Sheet{sheet(t, "#d { column-span: all }")})
+	if !styleOf(d).ColumnSpanAll {
+		t.Error("column-span: all spans the columns")
+	}
+	if styleOf(c).ColumnSpanAll {
+		t.Error("column-span is not inherited")
+	}
+	if s := columnsOf(t, "column-span: all; column-span: none"); s.ColumnSpanAll {
+		t.Error("column-span: none spans one column")
+	}
+}
+
 func TestColumnRule(t *testing.T) {
 	s := columnsOf(t, "column-rule: 2px dashed #00f")
 	if s.ColumnRuleWidth != 2 || s.ColumnRuleStyle != style.BorderDashed || s.ColumnRuleColor != hex("#00f") {
@@ -109,7 +123,7 @@ func TestColumnValuesRefused(t *testing.T) {
 		"columns: 1 2px 3":         "columns",
 		"column-fill: balance-all": "",
 		"column-rule: 2px 3px":     "",
-		"column-span: all":         "column-span: all is not supported",
+		"column-span: some":        "",
 		"orphans: 0":               "orphans",
 		"widows: 1.5":              "",
 		"break-inside: sometimes":  "",

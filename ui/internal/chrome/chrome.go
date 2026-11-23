@@ -658,6 +658,15 @@ addEventListener("load", () => document.fonts.ready.then(() => {
 
 var evalJSON = regexp.MustCompile(`<script type="application/json" id="ember-eval">(.*?)</script>`)
 
+// StylesAfterScaled is StylesAfter on a display of scale device pixels
+// per point.
+func StylesAfterScaled(d *ui.Document, size geom.Vec2, scale float32, props []string,
+	script string) ([]map[string]string, error) {
+	deviceScale = scale
+	defer func() { deviceScale = 1 }()
+	return StylesAfter(d, size, props, script)
+}
+
 // EvalScaled is Eval on a display of scale device pixels per point.
 func EvalScaled(d *ui.Document, size geom.Vec2, scale float32, expr string) ([]byte, error) {
 	deviceScale = scale

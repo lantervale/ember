@@ -26,7 +26,8 @@ func TestEveryLonghandDeclaresHowItAnimates(t *testing.T) {
 func TestWhatAKeyframeAndATransitionTake(t *testing.T) {
 	for name, want := range map[string]bool{
 		"width": true, "font-size": true, "margin": true, "border": true, "text-align": true,
-		"display": false, "animation-name": false, "animation": false, "transition": false, "--x": false,
+		"display": true, "transition-behavior": false, "animation-name": false, "animation": false,
+		"transition": false, "--x": false,
 	} {
 		if animates(name) != want {
 			t.Errorf("animates(%s) = %v", name, !want)
@@ -140,7 +141,7 @@ func TestNumbersAndIntegers(t *testing.T) {
 		t    float32
 		want int
 	}{{0, 3, 0.35, 1}, {0, 3, 0.5, 2}, {0, -3, 0.5, -1}, {0, -3, 0.501, -2}, {400, 700, 0.35, 505}} {
-		if v, _ := integers(math.MinInt, math.MaxInt).lerp(c.a, c.b, c.t); v != c.want {
+		if v, _ := integers(math.MinInt).lerp(c.a, c.b, c.t); v != c.want {
 			t.Errorf("%d to %d at %v: %d, want %d", c.a, c.b, c.t, v, c.want)
 		}
 	}
@@ -150,16 +151,25 @@ func TestNumbersAndIntegers(t *testing.T) {
 	if v, _ := ratios.lerp(1, 4, 0.35); !nearf(v, 1.6245) {
 		t.Errorf("aspect-ratio by its logarithm: %v", v)
 	}
-	for _, c := range [][3]float32{{0, 10, 3}, {1, 11, 4}, {0, 0.5, 1}} {
-		if v, _ := widths.lerp(c[0], c[1], 0.35); v != c[2] {
-			t.Errorf("width %v to %v: %v, want %v", c[0], c[1], v, c[2])
+	if v, _ := widths.lerp(10, 0, 1.5); v != 0 {
+		t.Errorf("a width under none: %v", v)
+	}
+}
+
+func TestWidthsSnapToDevicePixels(t *testing.T) {
+	for _, c := range []struct {
+		dppx, v float32
+		least   bool
+		want    float32
+	}{
+		{1, 4.7, true, 4}, {2, 4.7, true, 4.5}, {1, 0.2, true, 1}, {2, 0.2, true, 0.5}, {2, 0, true, 0},
+		{1, -3.7, false, -3}, {2, -3.7, false, -3.5}, {2, 0.3, false, 0}, {3, 1, true, 1}, {0, 2.5, false, 2},
+		{0.8, 2, true, 2},
+	} {
+		m := &measures{dppx: c.dppx}
+		if got := m.snap(c.v, c.least); !nearf(got, c.want) {
+			t.Errorf("%v at %v dppx: %v, want %v", c.v, c.dppx, got, c.want)
 		}
-	}
-	if v, _ := offsets.lerp(0, -10, 0.35); v != -3 {
-		t.Errorf("outline-offset towards zero: %v", v)
-	}
-	if v, _ := spacings.lerp([2]float32{}, [2]float32{10, 20}, 0.35); v != [2]float32{3, 7} {
-		t.Errorf("border-spacing in whole points: %v", v)
 	}
 }
 

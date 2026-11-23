@@ -34,6 +34,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
 | `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
 | an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
+| shaping right-to-left scripts: Arabic's joined forms, ligatures | each letter drawn in its own form, where Chrome joins them |
+| selecting, the caret and `text-overflow` in text shown right to left | a selection and the caret measure a right-to-left run from its left, and the ellipsis cuts a line's right end |
+| mirroring the characters of right-to-left text but brackets (`<`, `>`, `«`…) | drawn as they are, where Chrome mirrors every Bidi_Mirrored character |
+| the text and the arrow of a text field, a `select` or a button of direction `rtl` | laid out as left-to-right controls |
 
 ## Generated content
 
@@ -51,10 +55,15 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `column-span: all` | refused: put the element before the columns |
+| `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
-| columns right to left | left to right only |
+| columns right to left | left to right only, their content laid out right to left in each |
+| a table's background round a collapsed column | drawn over the table's box, where Chrome draws it as wide as before the column was taken out |
+| a scroller of direction `rtl` | scrolls from its left, where Chrome starts it at its right end; its bar is on its left, as Chrome's |
+| collapsed borders of a table of direction `rtl` | each cell's left border still wins its left edge, where Chrome resolves its start edge first |
+| logical properties in `@keyframes` and `transition-property` under `direction: rtl` | the left side's |
+| a float of direction `rtl` beside a block that avoids floats, a block's own `text-align` of `-webkit-left` under rtl | not compared with Chrome |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
 | a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
@@ -72,9 +81,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `position: relative`, `opacity` on an inline element holding blocks | its lines move and fade, the blocks inside it do not |
 | an empty inline element after a `br` that ends its block | its box of no size stands on the `br`'s line, where Chrome puts it a line lower |
 | a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
-| `bdo`, a `font` element's attributes | read, and they do nothing |
+| a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
-| a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |
+| an absolutely positioned element right in a block after its text (`<div>text<span style="position: absolute">`) | at the start of the line, where Chrome puts it after the text; inside an inline element it stands after the text |
 
 ## Backgrounds and borders
 
@@ -94,13 +103,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | an `@import` inserted with `InsertRule` after other rules | followed, where Chrome refuses the insertion |
-| an animated or transitioned `font-weight` | moves in whole numbers, where Chrome keeps quarters |
-| an animated border, outline or column-rule width, `outline-offset`, `border-spacing` | snapped to whole points, where Chrome snaps to device pixels: steps of half a point on a dense screen |
 | an animated `border-image-slice` from a percentage to a number, `border-image-width` from a length to a percentage | interpolates the numbers and flips, where Chrome flips and makes a `calc()` |
 | an animated `background-image`, `mask-image` or `border-image-source` between two pictures | flips halfway, where Chrome cross-fades them |
-| `display` in a keyframe, `transition-behavior: allow-discrete` | dropped with a warning, and not read |
-| an element's own transition of a property it inherits, while an ancestor's transition moves it | follows the ancestor's moving value, where Chrome runs it on to the end value |
-| `animation-composition`, `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
+| `content-visibility` and `overlay`, in a transition or anywhere | not read |
+| `@starting-style` of an element whose ancestor leaves `display: none`, or nested in a style rule | not read: only the element's own leaving, and top-level rules |
+| an element's own transition of a property it inherits, while a transition above its parent moves it | follows the moving value, where Chrome runs it on to the end value |
+| `animation-composition: add` or `accumulate` on a property other than lengths, numbers, colours, `transform`, `box-shadow`, `filter` and `font-weight` (positions, sizes, grid tracks, `clip-path`…) | replaces, where Chrome adds |
+| `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
 | `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
 | `prefers-color-scheme` and `prefers-reduced-motion` on Linux and the web | no preference: neither says its scheme or its reduced motion yet, so a Document given `ui.Preferences` answers light and no preference there ([decision 0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)) |
 | `<meta name="color-scheme">` | not read: ui reads no page's `head`; a program reading a page puts `:where(:root) { color-scheme: … }` in a sheet of its own ([decision 0126](../99-decisions/0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md)) |
@@ -139,7 +148,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `scroll-state()` container queries and `container-type: scroll-state` | refused, with a warning: the condition never holds |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
-| `direction`, `word-break`, `font-variant`, `revert` | refused |
+| `word-break`, `font-variant`, `revert` | refused |
 
 ## Windows
 
@@ -195,8 +204,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `text`, `clip-path`, `mask`, `filter`, `pattern`, `image`, `marker`, `symbol`, a nested `svg`, animation | not drawn, and named in a warning; `clip-path` is the commonest in real logos |
-| a `transform` on the root, `!important` in a style, a UTF-16 file | ignored, ignored, rejected |
+| `filter`, `foreignObject`, `textPath`, `mix-blend-mode`, `vector-effect`, animation | not drawn, and named in a warning |
+| a `clip-path` or a `mask` of a basic shape or another file, `clip-path` on the shapes inside a `clipPath` | the first two named in a warning and not applied, the last ignored |
+| the letters of `text` | Go's faces, the monospace one for a family naming one, whatever font the file asks for (Chrome's sans-serif differs by a few levels on average); no `letter-spacing`, `word-spacing`, `textLength`, `text-decoration`, `dominant-baseline`, vertical text, ligatures or shaping of complex scripts |
+| an `image` of a file | not fetched, and named in a warning: only `data:` addresses are drawn |
+| an SVG `image` sized by its own `width` and `height` with no `viewBox`, under a `preserveAspectRatio` other than the default | fitted from its own size as if it had a view box of it |
+| a UTF-16 file | rejected |
 | hairline strokes, dashes along curves | differ a little from Chrome's |
 | `currentColor` in an `img` or a `url()`, `image-rendering: pixelated` | black, as in Chrome, where only an `svg` element takes the page's colour; ignored |
 | an SVG as a twod texture | by hand: `svg.LoadPicture`, `Rasterise`, `twod.NewTexture` |

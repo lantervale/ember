@@ -1,6 +1,7 @@
 package css
 
 import (
+	"math"
 	"unique"
 
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -21,6 +22,8 @@ type measures struct {
 	root          *dom.Node
 	// used are the relative units read since the tree was last styled whole.
 	used uint32
+	// dppx is the device pixels a point the widths snap to.
+	dppx float32
 	// dark is whether the Document prefers the dark scheme, and
 	// prefersRead whether an element took its scheme from it since then.
 	dark, prefersRead bool
@@ -39,6 +42,20 @@ func (m *measures) fontUnits(f style.Font) FontUnits {
 		return FontUnits{Ex: f.Size / 2, Ch: f.Size / 2, Cap: f.Size, Ic: f.Size, Line: 1.2 * f.Size}
 	}
 	return m.font(f)
+}
+
+// snap is v towards zero to a whole device pixel, a whole point on a
+// display of fewer; a width under one is one when least is set, as
+// Chrome snaps border widths.
+func (m *measures) snap(v float32, least bool) float32 {
+	d := float32(1)
+	if m != nil {
+		d = max(m.dppx, 1)
+	}
+	if least && v > 0 && v*d < 1 {
+		return 1 / d
+	}
+	return float32(math.Trunc(float64(v*d))) / d
 }
 
 func (m *measures) viewport() (float32, float32) {

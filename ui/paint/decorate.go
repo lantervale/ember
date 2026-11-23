@@ -139,6 +139,20 @@ func (p *painter) columnBackground(col *box.Box, at geom.Vec2, c color.Color) {
 	}
 }
 
+// hiddenEmpty reports a cell that empty-cells: hide leaves undrawn: its borders apart
+// and nothing in it, white space aside; an element, even an empty one, is something.
+func hiddenEmpty(b *box.Box, st *style.Computed) bool {
+	if !st.EmptyCellsHide || partOf(b) != style.TableCell || sharesBorders(b) {
+		return false
+	}
+	for _, c := range b.Children {
+		if c.Kind != box.TextRun || len(c.Lines) > 0 {
+			return false
+		}
+	}
+	return b.Node == nil || !slices.ContainsFunc(b.Node.Children(), func(c *dom.Node) bool { return !c.IsText() })
+}
+
 // sharesBorders reports a table that collapses its borders, or a cell of one: the table
 // draws them all, over its cells.
 func sharesBorders(b *box.Box) bool {
@@ -340,6 +354,9 @@ func (p *painter) decorate(e entry, alpha float32) {
 		}
 		return
 	}
+	if hiddenEmpty(b, st) {
+		return
+	}
 	radius := radiiOf(st, framed(b))
 	if len(ps) > 1 {
 		radius = radii{}
@@ -392,11 +409,11 @@ func (p *painter) decorate(e entry, alpha float32) {
 
 // columnRules draws a multi-column container's column-rule in the middle
 // of each gap between two columns holding content, as high as the
-// columns, as a border of its style would be drawn.
+// columns, row by row, as a border of its style would be drawn.
 func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	c := e.b.Columns
 	w := st.ColumnRuleWidth
-	if c == nil || c.Count < 2 || st.ColumnRuleStyle == style.BorderNone || w <= 0 {
+	if c == nil || st.ColumnRuleStyle == style.BorderNone || w <= 0 {
 		return
 	}
 	var rule style.Computed
@@ -411,9 +428,11 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	}
 	b := e.b
 	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
-	for k := 1; k < c.Count; k++ {
-		x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
-		p.border(p.snap(geom.Rect{X: x, Y: top, W: w, H: c.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
+	for _, r := range c.Rows {
+		for k := 1; k < r.Count; k++ {
+			x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
+			p.border(p.snap(geom.Rect{X: x, Y: top + r.Top, W: w, H: r.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
+		}
 	}
 }
 
@@ -1683,7 +1702,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 			}
 			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, smoothingOf(st))
 			for _, f := range b.Lines {
-				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Text, st, o)
+				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Shown(), st, o)
 			}
 		}
 	}
@@ -1694,7 +1713,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		return
 	}
 	for _, f := range b.Lines {
-		p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, st, opts)
+		p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 	}
 	p.decorations(e, st, style.LineThrough, alpha)
 }
@@ -1772,7 +1791,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
 		if k < 0 {
-			p.words(at, f.Text, st, plain)
+			p.words(at, f.Shown(), st, plain)
 			continue
 		}
 		// room above and below a line for what its glyphs draw outside it
@@ -1802,7 +1821,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(part.clip)
-			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, smoothingOf(st)))
+			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}

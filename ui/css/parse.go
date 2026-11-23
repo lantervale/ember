@@ -59,6 +59,9 @@ type Declaration struct {
 	// base is where the sheet it came from is, for relative urls; nil
 	// for a style attribute's.
 	base *origin
+	// inline is set on a logical declaration of an inline side, written
+	// as its left one: an element of direction rtl takes it as the right.
+	inline bool
 }
 
 // origin is where a sheet is: its directory in its file system, or the
@@ -111,6 +114,9 @@ type Rule struct {
 	// in is the sheet an @import brought it from, nil for its sheet's
 	// own.
 	in *Sheet
+	// starting is set in an @starting-style rule: it applies only to the
+	// style a transition starts from where an element had none.
+	starting bool
 }
 
 // Keyframes is an @keyframes rule: what the animations naming it run
@@ -212,6 +218,11 @@ func (s *Sheet) String() string {
 		for _, m := range r.media {
 			b.WriteString("@media " + s.media[m].text + " { ")
 		}
+		closing := len(r.media) + len(r.containers)
+		if r.starting {
+			b.WriteString("@starting-style { ")
+			closing++
+		}
 		for _, c := range r.containers {
 			b.WriteString("@container " + c.text + " { ")
 		}
@@ -227,7 +238,7 @@ func (s *Sheet) String() string {
 			b.WriteString(d.String())
 			b.WriteString(";")
 		}
-		b.WriteString(" }" + strings.Repeat(" }", len(r.media)+len(r.containers)) + "\n")
+		b.WriteString(" }" + strings.Repeat(" }", closing) + "\n")
 	}
 	for _, k := range s.Keyframes {
 		for _, m := range k.media {
@@ -361,6 +372,7 @@ type scope struct {
 	media      []int
 	containers []*containerRule
 	layer      int
+	starting   bool
 }
 
 // rules reads rules up to the end of the sheet, or of the block they
@@ -399,7 +411,7 @@ func (p *parser) item(in scope) bool {
 func (p *parser) styleRule(in scope) {
 	if r, ok := p.rule(); ok {
 		p.begun = true
-		r.media, r.containers, r.layer = in.media, in.containers, in.layer
+		r.media, r.containers, r.layer, r.starting = in.media, in.containers, in.layer, in.starting
 		p.sheet.Rules = append(p.sheet.Rules, r)
 	}
 }
@@ -432,6 +444,8 @@ func (p *parser) atRule(t Token, in scope) {
 		p.container(t, in)
 	case name == atKeyframes:
 		p.keyframes(t, in)
+	case name == "starting-style":
+		p.startingStyle(t, in)
 	case name == "counter-style":
 		p.counterStyle(t, in)
 	case name == "supports" && p.browser:
@@ -510,6 +524,17 @@ func (p *parser) container(t Token, in scope) {
 		return
 	}
 	in.containers = append(slices.Clip(in.containers), r)
+	p.block(in)
+}
+
+// startingStyle reads an @starting-style rule: its rules style where a
+// transition starts from on an element that had no style.
+func (p *parser) startingStyle(t Token, in scope) {
+	if _, block := p.prelude(); !block {
+		p.warnf(t.Pos, "@starting-style has no { block }")
+		return
+	}
+	in.starting = true
 	p.block(in)
 }
 
@@ -593,7 +618,7 @@ func (p *parser) keyframe(sel, block []Component) []Keyframe {
 // animates reports whether a keyframe may set the property name: one of
 // its longhands takes part in animations.
 func animates(name string) bool {
-	if name == propAnimationTiming {
+	if name == propAnimationTiming || name == propAnimationComposition {
 		return true
 	}
 	if strings.HasPrefix(name, "--") {
@@ -926,7 +951,9 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		}
 	}
 	if as, ok := logical[d.Name]; ok {
-		d.Name = as
+		d.Name, d.inline = as, horizontal(as)
+	} else if inlineShorthands[d.Name] {
+		d.inline = true
 	}
 	if d.Name == "page-break-inside" {
 		// the old name, its auto and avoid break-inside's too

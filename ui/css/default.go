@@ -47,6 +47,13 @@ details, summary, dialog, hr, pre, ul, ol, menu, dl, dt, dd, h5, h6, blockquote,
 hgroup, search, center, fieldset, legend { display: block; }
 li { display: list-item; }
 [hidden] { display: none; }
+[dir]:dir(ltr), bdi:dir(ltr) { direction: ltr; }
+[dir]:dir(rtl), bdi:dir(rtl) { direction: rtl; }
+address, blockquote, center, div, figure, figcaption, footer, form, header, hr, legend, main, p, pre, search,
+article, aside, nav, section, hgroup, h1, h2, h3, h4, h5, h6, summary, ul, ol, menu, li, dl, dt, dd, table, caption,
+colgroup, col, thead, tbody, tfoot, tr, td, th, [dir], bdi { unicode-bidi: isolate; }
+bdo, bdo[dir] { unicode-bidi: isolate-override; }
+textarea[dir="auto" i], pre[dir="auto" i] { unicode-bidi: plaintext; }
 input[type="hidden" i] { display: none !important; }
 table { display: table; border-spacing: 2px; }
 thead { display: table-header-group; }
@@ -67,7 +74,7 @@ h3 { margin: 1em 0; }
 h4 { margin: 1.33em 0; }
 h5 { margin: 1.67em 0; }
 h6 { margin: 2.33em 0; }
-ul, ol, menu { margin: 1em 0; padding-left: 40px; }
+ul, ol, menu { margin: 1em 0; padding-inline-start: 40px; }
 ul, menu { list-style-type: disc; }
 ol { list-style-type: decimal; }
 ul ul, ul menu, ol ul, ol menu, menu ul, menu menu { list-style-type: circle; }
@@ -76,7 +83,7 @@ menu ul, ol menu menu, menu ul ul, menu ul menu, menu ol ul, menu ol menu, menu 
 list-style-type: square; }
 ul ul, ul ol, ul menu, ol ul, ol ol, ol menu, menu ul, menu ol, menu menu { margin-top: 0; margin-bottom: 0; }
 dl { margin: 1em 0; }
-dd { margin-left: 40px; }
+dd { margin-inline-start: 40px; }
 blockquote, figure { margin: 1em 40px; }
 hr { margin: 0.5em auto; border: 1px inset gray; color: gray; overflow: hidden; }
 h1 { font-size: 2em; }

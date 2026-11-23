@@ -260,3 +260,74 @@ func TestCollapsedBordersMatchChrome(t *testing.T) {
 		t.Run(name, func(t *testing.T) { chrome.Match(t, d, geom.V2(640, 400)) })
 	}
 }
+
+func TestCollapsedRowsAndColumnsMatchChrome(t *testing.T) {
+	const sheet = `table { border-spacing: 4px 6px; } td { padding: 2px 6px; border: 1px solid #000; }
+.x { visibility: collapse; } .w { width: 300px; }`
+	td := func(text string, args ...ui.Arg) *ui.Node { return ui.Td(append([]ui.Arg{ui.Text(text)}, args...)...) }
+	grid := func(table ...ui.Arg) *ui.Node {
+		return ui.Table(append(table,
+			ui.Tbody(ui.Tr(td("one"), td("two two"), td("three")), ui.Tr(td("four"), td("five"), td("six")),
+				ui.Tr(td("seven", ui.Attr("rowspan", "2")), td("eight eight eight", ui.Attr("colspan", "2"))),
+				ui.Tr(td("x"), td("y"))))...)
+	}
+	cols := func(classes ...string) *ui.Node {
+		g := ui.Colgroup()
+		for _, c := range classes {
+			g.Append(ui.Col(ui.Class(c)))
+		}
+		return g
+	}
+	cases := map[string]*ui.Document{
+		"a column":                   styled(sheet, grid(cols("", "x", ""))),
+		"the first and last columns": styled(sheet, grid(cols("x", "", "x"))),
+		"a column group": styled(sheet,
+			grid(ui.Colgroup(ui.Col()), ui.Colgroup(ui.Class("x"), ui.Col(), ui.Col()))),
+		"a column of a sized table":  styled(sheet, grid(ui.Class("w"), cols("", "x", ""))),
+		"a column of a shrunk table": styled(sheet, ui.Div(ui.Style("float: left"), grid(cols("", "x", "")))),
+		"rows": styled(sheet,
+			ui.Table(ui.Tbody(ui.Tr(ui.Class("x"), td("one"), td("two")), ui.Tr(td("three"), td("four")),
+				ui.Tr(ui.Class("x"), td("five"), td("six")), ui.Tr(td("seven"), td("eight")),
+				ui.Tr(ui.Class("x"), td("nine"), td("ten"))))),
+		"a row a cell spans": styled(sheet, ui.Table(ui.Tbody(
+			ui.Tr(td("tall", ui.Attr("rowspan", "3")), td("a")), ui.Tr(ui.Class("x"), td("b")), ui.Tr(td("c"))))),
+		"a row group": styled(sheet,
+			ui.Table(ui.Thead(ui.Tr(td("head"), td("h"))), ui.Tbody(ui.Class("x"), ui.Tr(td("one"), td("two"))),
+				ui.Tbody(ui.Tr(td("three"), td("four"))))),
+		"a framed table's column group and row group": styled(sheet+` .f { border: 3px solid; padding: 5px; }`,
+			ui.Table(ui.Class("f"), ui.Colgroup(ui.Col()), ui.Colgroup(ui.Class("x"), ui.Col(), ui.Col()),
+				ui.Tbody(ui.Tr(td("one"), td("two two"), td("three")))),
+			ui.Table(ui.Class("f"), ui.Col(), ui.Col(ui.Class("x")), ui.Tbody(ui.Class("x"), ui.Tr(td("a"), td("b"))),
+				ui.Tbody(ui.Tr(ui.Class("x"), td("a"), td("b")), ui.Tr(ui.Class("x"), td("a"), td("b")),
+					ui.Tr(td("a"), td("b"))))),
+		"a row and a column of a sized table": styled(sheet,
+			ui.Table(ui.Class("w"), ui.Style("height: 120px"), cols("", "x"),
+				ui.Tbody(ui.Tr(td("one"), td("two")), ui.Tr(ui.Class("x"), td("three"), td("four")),
+					ui.Tr(td("five"), td("six"))))),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) { chrome.Match(t, d, geom.V2(640, 400)) })
+	}
+}
+
+func TestAPercentageWidthOnACellSpanningColumnsMatchesChrome(t *testing.T) {
+	const sheet = `table { border-spacing: 0; width: 400px; margin-bottom: 8px; } td { padding: 0; } .a { width: auto; }
+.s { border-spacing: 4px; } .s td { padding: 2px 5px; border: 1px solid; }`
+	td := func(text, width string, args ...ui.Arg) *ui.Node {
+		args = append(args, ui.Text(text))
+		if width != "" {
+			args = append(args, ui.Style("width: "+width))
+		}
+		return ui.Td(args...)
+	}
+	span := ui.Attr("colspan", "2")
+	d := styled(sheet,
+		ui.Table(ui.Tbody(ui.Tr(td("aa", "50%", span), td("b", "")), ui.Tr(td("c", ""), td("dddd", ""), td("e", "")))),
+		ui.Table(ui.Tbody(ui.Tr(td("aa", "75%", span), td("b", "10%")), ui.Tr(td("c", "20%"), td("dddd", ""), td("e", "")))),
+		ui.Table(ui.Class("a"), ui.Tbody(ui.Tr(td("aa", "50%", span), td("a longer cell", "")),
+			ui.Tr(td("c", ""), td("dd", ""), td("e", "")))),
+		ui.Table(ui.Class("s"), ui.Tbody(ui.Tr(td("three wide", "60%", ui.Attr("colspan", "3")), td("x", "")),
+			ui.Tr(td("a", ""), td("bb", ""), td("ccc", ""), td("d", "")))),
+	)
+	chrome.Match(t, d, geom.V2(640, 400))
+}

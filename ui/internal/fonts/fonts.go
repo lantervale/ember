@@ -178,7 +178,7 @@ func (s *Set) pick(f style.Font) *Face {
 	}
 	var best *Face
 	score := func(c *Face) int {
-		d := c.Weight - f.Weight
+		d := c.Weight - int(f.Weight)
 		if d < 0 {
 			d = -d
 		}
@@ -380,7 +380,7 @@ func (s *Set) FallbackMetrics(f style.Font, text string) (box.Metrics, bool) {
 			continue
 		}
 		if g, _ := fb.font.GlyphIndex(&s.buf, r); g != 0 {
-			return s.Metrics(style.Font{Family: []string{fb.Family}, Size: f.Size, Weight: fb.Weight}), true
+			return s.Metrics(style.Font{Family: []string{fb.Family}, Size: f.Size, Weight: float32(fb.Weight)}), true
 		}
 	}
 	return box.Metrics{}, false
