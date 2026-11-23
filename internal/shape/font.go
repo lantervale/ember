@@ -2,9 +2,10 @@
 // as HarfBuzz does for Chrome: GSUB's substitutions (ligatures, small
 // capitals, figures, the joined forms of Arabic letters…) and GPOS's
 // kerning, marks placed on their bases and cursive attachment, for the
-// features a run asks for and those its script's shaper has on. It is
-// pure Go and reads the tables itself; the reordering of Indic and other
-// complex scripts is left out.
+// features a run asks for and those its script's shaper has on, with
+// HarfBuzz's Indic, Khmer, Myanmar and Universal Shaping Engine
+// reordering the syllables of the scripts they shape. It is pure Go and
+// reads the tables itself.
 package shape
 
 import (
@@ -85,12 +86,20 @@ func (l *layout) lists(t Tag) bool {
 
 // Parse reads the layout tables of ttf, src's file: what it lacks or
 // cannot read does nothing.
-func Parse(src *sfnt.Font, ttf []byte) *Font {
+func Parse(src *sfnt.Font, ttf []byte) *Font { return ParseFont(src, ttf, 0) }
+
+// ParseFont is Parse for the index-th font of file, a collection, or
+// the font file itself.
+func ParseFont(src *sfnt.Font, file []byte, index int) *Font {
 	f := &Font{src: src, upem: int32(src.UnitsPerEm()), plans: map[planKey]*Plan{}}
-	d := data(ttf)
+	d := data(file)
+	at := 0
+	if Tag(d.u32(0)) == MakeTag("ttcf") {
+		at = int(d.u32(12 + 4*index))
+	}
 	tables := map[Tag]data{}
-	for i := range int(d.u16(4)) {
-		rec := 12 + 16*i
+	for i := range int(d.u16(at + 4)) {
+		rec := at + 12 + 16*i
 		off, n := int(d.u32(rec+8)), int(d.u32(rec+12))
 		if off <= 0 || n <= 0 || off+n > len(d) {
 			continue
@@ -191,12 +200,13 @@ func readLookup(t data, gpos bool) *lookup {
 	if lk.flag&useMarkSet != 0 {
 		lk.markSet = t.u16(6 + 2*n)
 	}
+	extension := lk.kind == ext
 	for i := range n {
 		sub := t.sub(6 + 2*i)
 		if sub == nil {
 			continue
 		}
-		if lk.kind == ext {
+		if extension {
 			if sub.u16(0) != 1 {
 				continue
 			}
@@ -232,16 +242,10 @@ func (lk *lookup) firstGlyphs(s data) {
 	cov.eachCovered(lk.first.add)
 }
 
-// ignores reports whether lk passes over glyph g, as its flag says.
-func (f *Font) ignores(lk *lookup, g uint16) bool { return f.skips(lk.flag, lk.markSet, g) }
-
-// skips reports whether a lookup of flag, and markSet where the flag
-// says to use one, passes over glyph g.
-func (f *Font) skips(flag, markSet uint16, g uint16) bool {
-	if flag&(ignoreBase|ignoreLigatures|ignoreMarks|useMarkSet|markAttachType) == 0 {
-		return false
-	}
-	switch f.glyphClasses.class(g) {
+// skipsClass reports whether a lookup of flag, and markSet where the
+// flag says to use one, passes over glyph g of class.
+func (f *Font) skipsClass(flag, markSet uint16, g, class uint16) bool {
+	switch class {
 	case baseGlyph:
 		return flag&ignoreBase != 0
 	case ligatureGlyph:

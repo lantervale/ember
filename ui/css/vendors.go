@@ -89,7 +89,6 @@ const (
 	ownChrome = "Chrome's own, with no plain property"
 	ownUI     = "a property of ui under this very name"
 	ownAxis   = "one axis of the plain property, which has no such longhand"
-	ownMask   = "Chrome's own masks, kept apart from mask and its longhands"
 	ownBreak  = "takes always, which the break-* property it sets refuses"
 )
 
@@ -141,9 +140,9 @@ var webkit = vendor{
 		"border-image":      "fills the middle without the fill word, where border-image leaves it empty",
 		"box-align":         ownUI, "box-direction": ownUI, "box-flex": ownUI,
 		"box-ordinal-group": ownUI, "box-orient": ownUI, "box-pack": ownUI,
-		"mask-box-image": ownMask, "mask-box-image-outset": ownMask,
-		"mask-box-image-repeat": ownMask, "mask-box-image-slice": ownMask, "mask-box-image-source": ownMask,
-		"mask-box-image-width": ownMask, "mask-position-x": ownMask, "mask-position-y": ownMask,
+		"mask-box-image": ownUI, "mask-box-image-outset": ownUI,
+		"mask-box-image-repeat": ownUI, "mask-box-image-slice": ownUI, "mask-box-image-source": ownUI,
+		"mask-box-image-width": ownUI, "mask-position-x": ownUI, "mask-position-y": ownUI,
 		"perspective-origin-x": ownAxis, "perspective-origin-y": ownAxis, "transform-origin-x": ownAxis,
 		"transform-origin-y": ownAxis, "transform-origin-z": ownAxis,
 		"border-horizontal-spacing": ownChrome, "border-vertical-spacing": ownChrome,

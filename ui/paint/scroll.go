@@ -260,10 +260,11 @@ func (p *painter) styledBars(l Bars, alpha float32) {
 	p.part(l.Parts.Corner, l.Corner, alpha)
 }
 
-// part paints a scrollbar's part of style st in r, as an element's box:
-// its shadows, backgrounds and borders.
+// part paints a scrollbar's or a control's part of style st in r, as an
+// element's box: its shadows, backgrounds and borders. A hit test meets no
+// part: the pointer is on the element the part is of.
 func (p *painter) part(st *style.Computed, r geom.Rect, alpha float32) {
-	if st == nil || r.W <= 0 || r.H <= 0 || st.Display == style.DisplayNone {
+	if p.probing || st == nil || r.W <= 0 || r.H <= 0 || st.Display == style.DisplayNone {
 		return
 	}
 	b := &box.Box{Kind: box.Element, Style: st, Size: geom.V2(r.W, r.H),
@@ -317,6 +318,9 @@ type Pointer struct {
 	Shift bool
 	// Hover is the pointer over the container, nothing covering it.
 	Hover bool
+	// Page is how far a click on a track pages on each axis, the view's
+	// length where zero.
+	Page geom.Vec2
 }
 
 // Scrolling is a scroll container's drag of its thumbs, kept between
@@ -345,14 +349,14 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 			if l.VThumb.Contains(p.At) {
 				s.dragV, s.grab = true, p.At.Y-l.VThumb.Y
 			} else if l.VThumb.H > 0 {
-				offset.Y += page(p.At.Y < l.VThumb.Y, l.View.H)
+				offset.Y += page(p.At.Y < l.VThumb.Y, orView(p.Page.Y, l.View.H))
 			}
 		case l.H && l.HTrack.Contains(p.At):
 			took = true
 			if l.HThumb.Contains(p.At) {
 				s.dragH, s.grab = true, p.At.X-l.HThumb.X
 			} else if l.HThumb.W > 0 {
-				offset.X += page(p.At.X < l.HThumb.X, l.View.W)
+				offset.X += page(p.At.X < l.HThumb.X, orView(p.Page.X, l.View.W))
 			}
 		}
 	}
@@ -375,6 +379,13 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 
 // Dragging reports whether a thumb is being dragged.
 func (s *Scrolling) Dragging() bool { return s.dragV || s.dragH }
+
+func orView(v, otherwise float32) float32 {
+	if v == 0 {
+		return otherwise
+	}
+	return v
+}
 
 func page(back bool, by float32) float32 {
 	if back {

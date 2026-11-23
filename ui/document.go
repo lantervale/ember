@@ -70,8 +70,12 @@ type Document struct {
 	fetch    ImageFetcher
 	fetching fetches
 	choices  choices
-	// playing are the animated pictures, by url.
-	playing map[string]*playing
+	// playing are the animated pictures, by url, and drawnPictures those the
+	// last paint drew.
+	playing       map[string]*playing
+	drawnPictures map[string]bool
+	// prioritized are the imgs that say their fetchpriority.
+	prioritized []*Node
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -148,8 +152,13 @@ type Document struct {
 	framedAt []*Document
 	shield   bool
 	idle     *input.State
+	// lists are the select lists of Documents in d's frames shown over
+	// it, d in a window (frame_lists.go).
+	lists frameLists
 	// wheel is how many times the wheel's turn d scrolls by (wheel.go).
 	wheel float32
+	// instant is whether the user's scrolls move at once (scrollmotion.go).
+	instant bool
 }
 
 // DocumentOption configures a Document.
@@ -168,6 +177,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 	d.html.Append(d.body)
 	dom.Data(d.html).Root = true
 	d.trans.MeasureFonts(d.fontUnits)
+	d.trans.MeasureInk(d.fonts.Ink)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)
@@ -364,6 +374,10 @@ func (d *Document) Body() *Node { return d.body }
 // show their state before styling, so their pseudo-classes restyle them
 // the same frame.
 func (d *Document) Layout(size geom.Vec2) {
+	d.fetching.mu.Lock()
+	d.fetching.holding = true
+	d.fetching.mu.Unlock()
+	defer d.fetchQueued()
 	d.landImages()
 	d.landFonts()
 	d.landSheets()
@@ -392,6 +406,13 @@ func (d *Document) Layout(size geom.Vec2) {
 			return
 		}
 		d.replay.repaint = true
+		if d.nearing(size) {
+			d.choosePictures(media, false)
+			d.style()
+			d.lay(size)
+			d.requery(size)
+			return
+		}
 		if d.trans.RequeryScroll(d.scrollState) {
 			d.style()
 			d.lay(size)
@@ -409,6 +430,7 @@ func (d *Document) Layout(size geom.Vec2) {
 		d.requery(size)
 	}
 	if d.choosePictures(media, true) {
+		d.choosePictures(media, false)
 		d.style()
 		d.lay(size)
 	}
@@ -536,6 +558,7 @@ func (d *Document) style() {
 	} else {
 		d.controls, d.forms = d.controls[:0], d.forms[:0]
 		d.choices.imgs, d.choices.stale = d.choices.imgs[:0], true
+		d.prioritized = d.prioritized[:0]
 		d.html.Walk(func(n *Node) bool {
 			if dom.Data(n).Dirty&dom.DirtyTree != 0 {
 				d.restructure = true
@@ -572,11 +595,17 @@ func (d *Document) noteImg(n *Node) {
 	if n.Tag() != dom.Img {
 		return
 	}
+	if _, ok := n.Attr("fetchpriority"); ok {
+		d.prioritized = append(d.prioritized, n)
+	}
 	if !choosesPicture(n) {
 		dom.Unchoose(n)
 		return
 	}
 	d.choices.imgs = append(d.choices.imgs, n)
+	if dom.Data(n).Dirty&dom.DirtyTree != 0 {
+		delete(d.choices.dppx, n)
+	}
 	if s := dom.ChosenSource(n); s != nil && dom.Data(s).Dirty&dom.DirtyStyle != 0 {
 		dom.Data(n).Dirty |= dom.DirtyStyle | dom.DirtyLayout
 	}
@@ -633,6 +662,17 @@ func init() {
 // it: at the window's size, or at c.Size() when an element hosting the
 // document draws it in its own space.
 func (d *Document) Draw(c *twod.Canvas) {
+	d.draw(c)
+	if d.framed == nil {
+		d.drawLists(c)
+	} else {
+		d.showLists()
+	}
+}
+
+// window takes the scale, the focus and the selection colours of the
+// window d is drawn in, repainting where one changed.
+func (d *Document) window(c *twod.Canvas) {
 	if win := c.Window(); win != nil {
 		d.fonts.SetScale(win.ContentScale() * d.Zoom() * d.outerZoom())
 		if d.inactive != !win.Focused() {
@@ -642,12 +682,17 @@ func (d *Document) Draw(c *twod.Canvas) {
 	if h := d.systemHighlight(); h != d.highlight {
 		d.highlight, d.replay.repaint = h, true
 	}
+}
+
+func (d *Document) draw(c *twod.Canvas) {
+	d.window(c)
 	animating := d.tick(c)
 	if (animating || d.replay.animating) && d.tree != nil {
 		d.tree.Inked = false
 	}
 	size := d.drawSize(c)
 	d.viewport = geom.Rect{W: size.X, H: size.Y}
+	d.placeLists(c, size)
 	d.Layout(size)
 	if d.follow(c) {
 		d.Layout(size)
@@ -665,6 +710,10 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.replay.invalidated = false
 	switch {
 	case why != "":
+	case live.Any() && d.replay.inPlace && d.replayAround(c):
+		count(c, replayedAround)
+		d.replay.replayedLast = true
+		return
 	case live.Any() && d.replay.inPlace && live.Timed():
 		why = repaintLive
 	case live.Any() && d.replay.inPlace && invalidated:
@@ -684,16 +733,36 @@ func (d *Document) Draw(c *twod.Canvas) {
 	count(c, why)
 	m := c.Mark()
 	apart := !d.replay.inPlace
-	d.painted++
-	d.unsettled = false
+	d.paintBegins()
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
-		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight}
+		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight,
+		Lists: d.listsFrame(), ListsApart: d.framed != nil}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
-	d.replay.recorded = c.Keep(m, &d.replay.last)
+	d.keep(c, m, apart)
 	d.paintApart(c, apart)
 	d.replay.inPlace = live.Covered()
 	d.replay.replayedLast = false
 	d.replay.repaint, d.replay.size, d.replay.scale = d.unsettled, size, d.fonts.Scale()
+}
+
+// paintBegins counts a paint, which settles the Document and notes the
+// animations it draws afresh.
+func (d *Document) paintBegins() {
+	d.painted++
+	d.unsettled = false
+	clear(d.drawnPictures)
+}
+
+// keep records what d painted since m to replay: round the live parts
+// it drew in their place where something covers them (decision 0166),
+// whole otherwise.
+func (d *Document) keep(c *twod.Canvas, m twod.Mark, apart bool) {
+	live := &d.replay.live
+	if gaps := live.Gaps(); !apart && len(gaps) > 0 && live.Covered() {
+		d.replay.recorded = c.KeepAround(m, gaps, &d.replay.last)
+		return
+	}
+	d.replay.recorded = c.Keep(m, &d.replay.last)
 }
 
 // tick moves the document's clock to the World's real time and steps its

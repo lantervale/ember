@@ -1953,19 +1953,10 @@ func (c *inlineContent) settle(p *pendingAlign, e *extent, shift float32) {
 // fit them, and ignores them under any other line-height.
 func (t *tree) fallbackMetrics(p piece, st *style.Computed) (box.Metrics, bool) {
 	ff, ok := t.fonts.(box.FallbackFonts)
-	if !ok || p.kind != word || !st.LineHeight.Normal || isASCII(p.text) {
+	if !ok || p.kind != word || !st.LineHeight.Normal {
 		return box.Metrics{}, false
 	}
 	return ff.FallbackMetrics(st.Font, p.text)
-}
-
-func isASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= utf8.RuneSelf {
-			return false
-		}
-	}
-	return true
 }
 
 // measure is the inline content's size and baselines, Taffy's measure function for text.
@@ -2035,7 +2026,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 		shown, order := c.ordered(l)
 		if spanLines != nil {
 			t.spanRects(c, l, shown, order, start, perGap, y, lb,
-				map[*box.Box]geom.Rect{}, make([]bool, len(c.spans)), spanLines)
+				map[*box.Box]geom.Rect{}, make([]bool, len(c.spans)), spanLines, nil)
 		}
 		at := l.pen(c.unit, start)
 		for _, p := range shown {
@@ -2132,20 +2123,20 @@ func (t *tree) writeText(n *node) {
 		content = cs.width
 	}
 	t.sizeAtomics(c, def(content), size{content, none})
-	runRects, spanRects, spanLines := t.writeLines(n, c, inset, content)
+	runRects, spanRects, spanLines, hidden := t.writeLines(n, c, inset, content)
 	origin := func(b *box.Box) geom.Vec2 {
 		if r, ok := spanRects[b]; ok {
 			return geom.Vec2{X: r.X, Y: r.Y}
 		}
 		return geom.Vec2{}
 	}
-	placeSpans(c, spanRects, spanLines, origin, size{content, none})
+	placeSpans(c, spanRects, spanLines, hidden, origin, size{content, none})
 	t.attachInline(n, c, runRects, origin)
 }
 
 // placeSpans gives each span its box from the rectangles its lines took.
 func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]geom.Rect,
-	origin func(*box.Box) geom.Vec2, cb size) {
+	hidden map[*box.Box]int, origin func(*box.Box) geom.Vec2, cb size) {
 	for _, s := range c.spans {
 		r := spanRects[s.box]
 		o := origin(s.parent)
@@ -2154,7 +2145,7 @@ func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines ma
 		s.box.Margin = box.Edges{Top: s.margin.t, Right: s.margin.r, Bottom: s.margin.b, Left: s.margin.l}
 		s.box.Border = box.Edges{Top: s.border.t, Right: s.border.r, Bottom: s.border.b, Left: s.border.l}
 		s.box.Padding = box.Edges{Top: s.padding.t, Right: s.padding.r, Bottom: s.padding.b, Left: s.padding.l}
-		s.box.Fragments = s.box.Fragments[:0]
+		s.box.Fragments, s.box.Hidden = s.box.Fragments[:0], hidden[s.box]
 		for _, f := range spanLines[s.box] {
 			s.box.Fragments = append(s.box.Fragments, geom.Rect{X: f.X - r.X, Y: f.Y - r.Y, W: f.W, H: f.H})
 		}
@@ -2214,9 +2205,9 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 }
 
 // writeLines writes each line's fragments into its runs' boxes, and returns the rectangles
-// the runs and spans took.
+// the runs and spans took, and how many of each span's lines are past a line-clamp's last.
 func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32) ([]geom.Rect,
-	map[*box.Box]geom.Rect, map[*box.Box][]geom.Rect) {
+	map[*box.Box]geom.Rect, map[*box.Box][]geom.Rect, map[*box.Box]int) {
 	f := n.final
 	ellipsis := n.st.Ellipsis && n.st.Overflow.Width != style.Visible
 	runRects := make([]geom.Rect, len(c.runs))
@@ -2224,6 +2215,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 	spanRects := make(map[*box.Box]geom.Rect)
 	spanSeen := make([]bool, len(c.spans))
 	spanLines := make(map[*box.Box][]geom.Rect)
+	hidden := make(map[*box.Box]int)
 	c.back = nil
 	ls := c.lines(content)
 	y := t.textTop(n, ls, inset.t, f.size.h-inset.vertical()-f.scrollbar.h)
@@ -2243,10 +2235,15 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		if c.firstOn {
 			t.backOf(c, n, geom.Rect{X: x, Y: y, W: l.width, H: lh}, lb)
 		}
-		t.spanRects(c, l, pieces, order, x, perGap, y, lb, spanRects, spanSeen, spanLines)
+		past := n.clamp.shown > 0 && li >= n.clamp.shown && n.clamp.hides
+		var hides map[*box.Box]int
+		if past {
+			hides = hidden
+		}
+		t.spanRects(c, l, pieces, order, x, perGap, y, lb, spanRects, spanSeen, spanLines, hides)
 		cut, cutStart := false, false
 		switch {
-		case n.clamp.shown > 0 && li >= n.clamp.shown && n.clamp.hides:
+		case past:
 			pieces = nil
 		case n.clamp.ellipsis && li == n.clamp.shown-1 && len(c.runs) > 0:
 			// the clamp's last line makes room for its ellipsis, aligned with it
@@ -2266,7 +2263,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		c.useFirst(was)
 		y = flowY + lh
 	}
-	return runRects, spanRects, spanLines
+	return runRects, spanRects, spanLines, hidden
 }
 
 // writeRuns writes the fragments of a line's pieces into their runs' boxes, the line
@@ -2404,7 +2401,7 @@ func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left,
 // line's start) to its end edge (or the line's end), over its content area plus vertical
 // padding and border. The pieces are the line's before any ellipsis, as Chrome's boxes are.
 func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, x, perGap, y,
-	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]geom.Rect) {
+	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]geom.Rect, hidden map[*box.Box]int) {
 	at := make([]float32, len(pieces)+1)
 	walk := l.pen(c.unit, x)
 	for i, p := range pieces {
@@ -2450,6 +2447,9 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, 
 		rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
 		seen[k] = true
 		lines[sp.box] = append(lines[sp.box], r)
+		if hidden != nil {
+			hidden[sp.box]++
+		}
 	}
 }
 

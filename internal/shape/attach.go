@@ -89,10 +89,7 @@ func (b *buffer) markToBase(lig bool, s data, i int) bool {
 	if s.u16(0) != 1 || mk < 0 {
 		return false
 	}
-	j := i - 1
-	for j >= 0 && b.f.isMark(b.glyphs[j].ID) {
-		j--
-	}
+	j := b.base(i, func(k int) bool { return lig || b.accepts(k) || s.sub(4).coverage(b.glyphs[k].ID) >= 0 })
 	if j < 0 {
 		return false
 	}
@@ -118,6 +115,34 @@ func (b *buffer) markToBase(lig bool, s data, i int) bool {
 	return b.attachMark(marks, mk, attach, 2+2*comp*classes, i, j)
 }
 
+// base is the glyph before mark i a mark attaches to, as HarfBuzz looks
+// for it: the nearest one not a mark, nor a default ignorable character
+// passed over, that has the lookup's mask and that accept takes; -1
+// for none.
+func (b *buffer) base(i int, accept func(k int) bool) int {
+	for k := i - 1; k >= 0; k-- {
+		g := &b.glyphs[k]
+		if b.isMark(k) || g.mask&b.mask == 0 || b.ignorable(g) && (b.autoZWJ || g.Char != zwj) {
+			continue
+		}
+		if accept(k) {
+			return k
+		}
+	}
+	return -1
+}
+
+// accepts reports whether a mark may sit on glyph k: not a glyph after
+// the first of a multiple substitution's, unless a mark lies between.
+func (b *buffer) accepts(k int) bool {
+	g := b.glyphs[k]
+	if g.props&multiplied == 0 || compOf(g) == 0 || k == 0 || b.isMark(k-1) {
+		return true
+	}
+	p := b.glyphs[k-1]
+	return p.props&multiplied == 0 || g.lig != p.lig || compOf(g) != compOf(p)+1
+}
+
 // markToMark places mark i on the mark before it the lookup does not
 // pass over, as subtable s of a mark-to-mark attachment, when both sit
 // on one base or one component of a ligature.
@@ -127,11 +152,8 @@ func (b *buffer) markToMark(lk *lookup, s data, i int) bool {
 		return false
 	}
 	flag := lk.flag &^ (ignoreBase | ignoreLigatures | ignoreMarks)
-	j := i - 1
-	for j >= 0 && b.f.skips(flag, lk.markSet, b.glyphs[j].ID) {
-		j--
-	}
-	if j < 0 || !b.f.isMark(b.glyphs[j].ID) {
+	j := b.seekBy(flag, lk.markSet, i, -1, false, nil)
+	if j < 0 || !b.isMark(j) {
 		return false
 	}
 	m1, m2 := b.glyphs[i], b.glyphs[j]
@@ -178,7 +200,7 @@ func (b *buffer) attachMark(marks data, mk int, anchors data, row int, i, j int)
 func (b *buffer) zeroMarks(adjust bool) {
 	for i := range b.glyphs {
 		g := &b.glyphs[i]
-		if !b.f.isMark(g.ID) {
+		if !b.isMark(i) {
 			continue
 		}
 		if adjust {

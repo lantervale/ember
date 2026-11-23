@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -70,6 +71,35 @@ li::first-letter { font-size: 22px; }
 			ui.Text(" "), ui.Span(ui.Text("picture"))),
 	)
 	r := chrome.Match(t, d, geom.V2(400, 900))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+func TestInitialLettersMatchChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; width: 360px; }
+p { margin: 0 0 12px; }
+.i3::first-letter { initial-letter: 3; }
+.i2::first-letter { initial-letter: 2; color: #a00; }
+.raise::first-letter { initial-letter: 3 2; }
+.up::first-letter { initial-letter: 2 raise; }
+.boxed::first-letter { initial-letter: 2; padding: 2px 4px; margin-right: 4px; border: 2px solid #357; }
+.tall { line-height: 26px; }
+.tall::first-letter { initial-letter: 3 drop; }
+.half::first-letter { initial-letter: 2.5; }
+.large { font-size: 20px; line-height: 1.5; }
+.large::first-letter { initial-letter: 4; }
+`))
+	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "half", "large"} {
+		d.Body().Append(ui.P(append([]ui.Arg{ui.Class(c), ui.Text("Down ")}, words(prose+" "+prose)...)...))
+	}
+	// Chrome on Linux and Windows rounds a letter's ink out to whole
+	// pixels, so its box is up to a pixel wider on each side than ui's
+	// and macOS's; each first line keeps more room than that.
+	within := float32(chrome.Tolerance)
+	if runtime.GOOS != "darwin" {
+		within = 2
+	}
+	r := chrome.MatchWithin(t, d, geom.V2(400, 1400), within)
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 

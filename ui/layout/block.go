@@ -34,7 +34,7 @@ type blockItem struct {
 
 func blockEstablishesBFC(st *style.Computed) bool {
 	return isScrollContainer(st) || st.AlignContent != style.AlignNormal || st.FlowRoot || st.Table || st.Multicol() ||
-		st.ContainerType != style.ContainerNormal || st.LineClamp > 0
+		st.ContainerType != style.ContainerNormal || st.LineClamp > 0 || st.ClampAuto
 }
 
 // standsBesideFloats reports a block-level box the floats never overlap though it is no
@@ -143,8 +143,20 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		rInset.t = 0
 	}
 
+	clamp := clampFor(n, in.clamp)
+	if clamp.lines == style.ClampByHeight {
+		clamp.lines = linesHeld(or(known.h, maxSize.h), func(lines int) (float32, int) {
+			trial := clamp
+			trial.lines = lines
+			c := newRootContext()
+			c.setContentInset(inset.l, inset.r)
+			r := t.blockChildren(computeSize, items, outerW, percentH, inset.l, rInset,
+				rBorder, rPadding, st, ownCollapse, isScrollContainer(st), c, trial)
+			return fmax(r.height, c.floatHeight+rInset.b), r.lines
+		})
+	}
 	res := t.blockChildren(in.run, items, outerW, percentH, inset.l, rInset,
-		rBorder, rPadding, st, ownCollapse, isScrollContainer(st), ctx, clampFor(n, in.clamp))
+		rBorder, rPadding, st, ownCollapse, isScrollContainer(st), ctx, clamp)
 	if ctx.root || newBFC {
 		res.height = fmax(res.height, ctx.floatHeight+rInset.b)
 	}
@@ -489,8 +501,14 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	activeHasClearance := false
 	hasActive := ctx.active(committed)
 	// left is the lines the clamp leaves the blocks to come, and clampEnd where the block
-	// holding its last line ends: this block's content ends there.
+	// holding its last line ends: this block's content ends there. A line-clamp that hides
+	// what follows ends it below that block's bottom margin, as Chrome: clampHeld is what
+	// stood committed and active after it.
 	left, clampEnd := clamp.lines, none
+	var clampHeld struct {
+		committed, floats float32
+		active            marginSet
+	}
 	lastInFlow := -1
 	for i, it := range items {
 		if !outOfFlow(it.position) && it.float == style.FloatNone {
@@ -509,6 +527,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		gutter := size{g.x, g.y}
 
 		if it.float != style.FloatNone {
+			if run == performLayout {
+				it.node.discarded = clamp.hides && some(clampEnd)
+			}
 			hasActive = true
 			// A float with an auto width shrinks to fit: the room left, between its
 			// min-content and max-content widths.
@@ -759,6 +780,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			left -= lo.lines
 			if lo.clamped {
 				left, clampEnd = 0, loc.y-insetOffset.y+finalSize.h
+				clampHeld.floats = ctx.floatHeight
 			}
 		}
 		if collapsingWithFirst && (pushedBelow || hasClearance) {
@@ -793,8 +815,18 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			committed = fmax(committed+active.resolve(), rBorder.t) + rPadding.t
 			active = marginSet{}
 		}
+		if lo.clamped && in.clamp.lines > 0 {
+			clampHeld.committed, clampHeld.active = committed, active
+		}
 		yForAbsolute = committed + active.resolve()
 		ctx.commitStrut()
+	}
+	if some(clampEnd) {
+		// the floats after the clamp make the block no taller, as Chrome's
+		ctx.floatHeight = clampHeld.floats
+	}
+	if some(clampEnd) && clamp.hides {
+		committed, active, activeHasClearance = clampHeld.committed, clampHeld.active, false
 	}
 	lastBottom := active
 	bottomOffset := lastBottom.resolve()
@@ -805,7 +837,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		bottomOffset = 0
 	}
 	committed += rInset.b + bottomOffset
-	if some(clampEnd) {
+	if some(clampEnd) && !clamp.hides {
 		committed, lastBottom = clampEnd+rInset.b, marginSet{}
 	}
 	return blockResult{

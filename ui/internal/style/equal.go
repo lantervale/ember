@@ -38,7 +38,7 @@ func (b *Box) equal(o *Box) bool {
 		b.BoxSizing == o.BoxSizing &&
 		b.Position == o.Position &&
 		b.StaticInline == o.StaticInline &&
-		b.Float == o.Float &&
+		b.Float == o.Float && b.InitialLetter == o.InitialLetter &&
 		b.Clear == o.Clear &&
 		b.VerticalAlign == o.VerticalAlign &&
 		b.VerticalShift == o.VerticalShift &&
@@ -73,6 +73,8 @@ func (b *Box) equal(o *Box) bool {
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
 		b.NoEllipsis == o.NoEllipsis &&
+		b.ClampAuto == o.ClampAuto &&
+		b.ClampLegacy == o.ClampLegacy &&
 		b.WebkitBox == o.WebkitBox &&
 		b.BoxVertical == o.BoxVertical &&
 		b.WebkitLineClamp == o.WebkitLineClamp &&
@@ -193,6 +195,8 @@ func (c *Content) equal(o *Content) bool {
 //nolint:cyclop,gocyclo // one comparison a field
 func (l *Look) equal(o *Look) bool {
 	return l.Background == o.Background &&
+		l.Appearance == o.Appearance &&
+		l.Parts.Equal(o.Parts) &&
 		l.Scrollbar.Equal(o.Scrollbar) &&
 		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
 		l.ScrollbarColored == o.ScrollbarColored &&
@@ -207,11 +211,15 @@ func (l *Look) equal(o *Look) bool {
 		sameSliceFunc(l.MaskImages, o.MaskImages, (*Image).equal) &&
 		sameSlice(l.MaskSizes, o.MaskSizes) &&
 		sameSlice(l.MaskRepeats, o.MaskRepeats) &&
-		sameSlice(l.MaskPositions, o.MaskPositions) &&
+		sameSlice(l.MaskPositionsX, o.MaskPositionsX) &&
+		sameSlice(l.MaskPositionsY, o.MaskPositionsY) &&
 		sameSlice(l.MaskOrigins, o.MaskOrigins) &&
 		sameSlice(l.MaskClips, o.MaskClips) &&
 		sameSlice(l.MaskModes, o.MaskModes) &&
 		sameSlice(l.MaskComposites, o.MaskComposites) &&
+		l.MaskBoxImage.Image.equal(&o.MaskBoxImage.Image) &&
+		l.MaskBoxImage.Width == o.MaskBoxImage.Width && l.MaskBoxImage.Outset == o.MaskBoxImage.Outset &&
+		l.MaskBoxImage.Repeat == o.MaskBoxImage.Repeat &&
 		l.ClipPath.Equal(&o.ClipPath) &&
 		l.ImageRendering == o.ImageRendering &&
 		l.ObjectFit == o.ObjectFit &&

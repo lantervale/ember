@@ -101,6 +101,23 @@ func TestACanvasInvalidatedByItsOwnClickDrawsAgain(t *testing.T) {
 	assert.Greater(t, draws, n, "the click's Invalidate draws it again")
 }
 
+func TestAFadedCanvasReplaysItsDrawingInItsPicture(t *testing.T) {
+	draws := 0
+	cv := Canvas(func(c *twod.Canvas) {
+		draws++
+		c.Rect(geom.Rect{W: 10, H: 10}, color.Hex("#ff0000"))
+	}, Attr("width", "80"), Attr("height", "40"))
+	d, _, frames := quietDoc(t, geom.V2(290, 190), Div(Style("opacity: 0.5"), cv, Text("faded")))
+	n := draws
+	frames(3)
+	assert.Equal(t, n, draws, "its drawing kept")
+	assert.True(t, d.replay.replayedLast, "the page replayed round the faded group")
+	d.Invalidate(cv)
+	frames(1)
+	assert.Equal(t, n+1, draws)
+	assert.True(t, d.replay.replayedLast)
+}
+
 func TestACoveredCanvasRepaintsTheDocumentOnlyWhenInvalidated(t *testing.T) {
 	draws := 0
 	cv := Canvas(func(*twod.Canvas) { draws++ }, Attr("width", "80"), Attr("height", "40"))
@@ -112,9 +129,9 @@ func TestACoveredCanvasRepaintsTheDocumentOnlyWhenInvalidated(t *testing.T) {
 	d.Invalidate(cv)
 	frames(1)
 	assert.Equal(t, n+1, draws)
-	assert.False(t, d.replay.replayedLast, "the box over it is painted again over the new drawing")
+	assert.True(t, d.replay.replayedLast, "the page replayed round the new drawing, the box over it")
 	frames(2)
-	assert.True(t, d.replay.replayedLast, "and then it replays again")
+	assert.True(t, d.replay.replayedLast)
 	assert.Equal(t, n+1, draws)
 }
 

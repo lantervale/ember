@@ -22,10 +22,14 @@ func init() {
 	animated.Register("FLIP", func(data []byte) (*animated.Picture, error) {
 		c := animated.NewCanvas(4, 2, 2)
 		for _, v := range data[4:] {
-			for i := 0; i < len(c.Pix); i += 4 {
-				c.Pix[i], c.Pix[i+1], c.Pix[i+2], c.Pix[i+3] = v, v, v, 255
+			if err := c.Add(100*time.Millisecond, func(img *image.NRGBA) (func(), error) {
+				for i := 0; i < len(img.Pix); i += 4 {
+					img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = v, v, v, 255
+				}
+				return animated.Keep, nil
+			}); err != nil {
+				return nil, err
 			}
-			c.Show(100 * time.Millisecond)
 		}
 		return c.Picture(), nil
 	})
@@ -51,6 +55,8 @@ func TestAnAnimatedPictureMovesWithTheClockForEveryElementShowingIt(t *testing.T
 		d.clock = s
 		d.replay.repaint = false
 		d.animate()
+		clear(d.drawnPictures)
+		d.paintImage("walk.flip")
 		return grey(tex.Image)
 	}
 	assert.Equal(t, uint8(0x10), at(5), "it begins on the first frame drawn")
@@ -76,9 +82,45 @@ func TestAFetchedAnimationIsDecodedOffTheFrameAndPlays(t *testing.T) {
 	d.Layout(geom.V2(200, 100))
 	assert.Equal(t, geom.V2(4, 2), geom.V2(img.Box().W, img.Box().H))
 	d.clock = 0
+	d.paintImage("https://art.test/walk.flip")
 	d.animate()
 	d.clock = 0.15
 	d.animate()
 	assert.Equal(t, uint8(0x20), grey(d.image("https://art.test/walk.flip").Image))
 	assert.Empty(t, d.Warnings())
+}
+
+// shows has the Document's clock at s, and walk.flip drawn there when
+// drawn, as a paint draws it or culls it out of view; it is the frame of
+// walk.flip shown.
+func shows(d *Document, s float32, drawn bool) uint8 {
+	const url = "walk.flip"
+	d.clock = s
+	d.animate()
+	clear(d.drawnPictures)
+	if drawn {
+		d.paintImage(url)
+	}
+	return grey(d.image(url).Image)
+}
+
+func TestAnAnimationBeginsWhenFirstDrawnAndMovesOnlyWhileDrawn(t *testing.T) {
+	files := fstest.MapFS{"walk.flip": {Data: []byte("FLIP\x10\x20\x30\x40")}}
+	d := NewDocument(Images(files))
+	d.Body().Append(Img(Attr("src", "walk.flip")))
+	d.Layout(geom.V2(200, 100))
+	assert.Equal(t, uint8(0x10), shows(d, 3, false), "out of view since it landed")
+	assert.Equal(t, uint8(0x10), shows(d, 4, true), "it begins when first drawn")
+	assert.Equal(t, uint8(0x20), shows(d, 4.15, true))
+	assert.Equal(t, uint8(0x20), shows(d, 4.2, false), "out of view")
+	assert.Equal(t, uint8(0x20), shows(d, 4.32, false), "it stays where it left")
+	assert.Equal(t, uint8(0x20), shows(d, 4.33, true), "drawn again, once more as it left")
+	assert.Equal(t, uint8(0x40), shows(d, 4.34, true), "then in step within its play")
+	assert.Equal(t, uint8(0x40), shows(d, 4.35, false))
+	assert.Equal(t, uint8(0x40), shows(d, 4.55, true))
+	assert.Equal(t, uint8(0x10), shows(d, 4.56, true), "back past its play, the next begins")
+	assert.Equal(t, uint8(0x10), shows(d, 4.6, true))
+	assert.Equal(t, uint8(0x20), shows(d, 4.67, true))
+	assert.Equal(t, uint8(0x40), shows(d, 4.99, true))
+	assert.Equal(t, uint8(0x40), shows(d, 5.5, true), "played twice, its last frame stays")
 }

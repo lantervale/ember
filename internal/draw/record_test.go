@@ -213,3 +213,71 @@ func BenchmarkReplay(b *testing.B) {
 	}
 	b.ReportMetric(float64(len(c.Indices)), "indices")
 }
+
+// gapped draws a page whose middle part, the button, is a gap: a live
+// part drawn in its place between two recorded ranges.
+func gapped(c *List, img *render.Texture, button func(*List)) (Mark, Mark, Mark) {
+	m := c.Mark()
+	c.Rect(geom.Rect{X: 10, Y: 10, W: 200, H: 40}, color.RGB(0.2, 0.2, 0.2))
+	c.PushClip(geom.Rect{X: 10, Y: 10, W: 120, H: 40})
+	from := c.Mark()
+	button(c)
+	to := c.Mark()
+	c.Text(geom.V2(14, 30), "Handgloves 12", Style{Size: 15, Baseline: true})
+	c.PopClip()
+	c.Image(geom.Rect{X: 120, Y: 60, W: 24, H: 24}, img, geom.Rect{W: 1, H: 1}, color.White)
+	return m, from, to
+}
+
+func button(c *List) {
+	c.RoundRect(geom.Rect{X: 20, Y: 20, W: 80, H: 24}, 4, color.RGB(0.8, 0.6, 0.2))
+	c.Text(geom.V2(30, 38), "Save", Style{Size: 13, Baseline: true})
+}
+
+func TestARecordingAroundAGapReplaysWithTheGapDrawnAgain(t *testing.T) {
+	img := picture()
+	var want List
+	want.Rect(geom.Rect{W: 4, H: 4}, color.White)
+	m, from, to := gapped(&want, img, button)
+	var parts [2]Recording
+	require.True(t, want.RecordRange(m, from, &parts[0]))
+	require.True(t, want.RecordRange(to, want.Mark(), &parts[1]))
+	want.Rect(geom.Rect{X: 300, W: 4, H: 4}, color.White)
+
+	var c List
+	c.Rect(geom.Rect{W: 4, H: 4}, color.White)
+	filled := 0
+	require.True(t, c.ReplayAround(parts[:], func(gap int) {
+		filled++
+		assert.Equal(t, 0, gap)
+		c.PushClip(geom.Rect{X: 10, Y: 10, W: 120, H: 40})
+		button(&c)
+		c.PopClip()
+	}))
+	c.Rect(geom.Rect{X: 300, W: 4, H: 4}, color.White)
+	assert.Equal(t, 1, filled)
+	assert.Equal(t, want.Vertices, c.Vertices)
+	assert.Equal(t, want.Indices, c.Indices)
+	assert.Equal(t, want.Batches, c.Batches, "the gap's batches between the parts', merged as drawn")
+}
+
+func TestAGapLeavingAnotherStateTakesTheReplayBack(t *testing.T) {
+	img := picture()
+	var rec List
+	m, from, to := gapped(&rec, img, button)
+	var parts [2]Recording
+	require.True(t, rec.RecordRange(m, from, &parts[0]))
+	require.True(t, rec.RecordRange(to, rec.Mark(), &parts[1]))
+
+	var c List
+	c.Rect(geom.Rect{W: 4, H: 4}, color.White)
+	before := c.Mark()
+	open := c.Batches[0]
+	assert.False(t, c.ReplayAround(parts[:], func(int) {
+		button(&c)
+		c.SetModulate(color.RGBA(1, 1, 1, 0.5))
+	}), "the gap left the list modulated")
+	assert.Equal(t, before.vertices, len(c.Vertices))
+	assert.Equal(t, before.indices, len(c.Indices))
+	assert.Equal(t, []Batch{open}, c.Batches, "nothing of the replay stays")
+}

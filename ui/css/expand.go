@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -89,14 +90,16 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandContainer(v, out)
 	case shortBackground:
 		err = expandBackground(v, out)
+	case propMaskPosition:
+		err = expandMaskPosition(v, out)
 	case shortMask:
 		err = expandMask(v, out)
 	case kwBorder:
 		err = expandBorder(long, v, out)
 	case "border-inline", "border-block":
 		err = expandSides(long, v, out)
-	case shortBorderImage:
-		err = expandBorderImage(v, out)
+	case shortBorderImage, shortMaskBox:
+		err = expandBorderImage(name, long, v, out)
 	case shortTransition:
 		err = expandTransition(v, out)
 	case shortAnimation:
@@ -306,9 +309,10 @@ func expandGridLines(long []string, v []Component, out map[string][]Component) e
 	return nil
 }
 
-// expandImageSlice reads border-image's slice from v[i], then its width
-// and outset after slashes, and returns where it stopped.
-func expandImageSlice(v []Component, i int, out map[string][]Component) (int, error) {
+// expandImageSlice reads a border image's slice from v[i] into long[1],
+// then its width and outset after slashes into long[2] and long[3], and
+// returns where it stopped.
+func expandImageSlice(long []string, v []Component, i int, out map[string][]Component) (int, error) {
 	j := i
 	for j < len(v) && (v[j].Kind == Number || v[j].Kind == Percentage || isWord(v[j], "fill")) {
 		j++
@@ -316,9 +320,9 @@ func expandImageSlice(v []Component, i int, out map[string][]Component) (int, er
 	if err := checkImageSlice(v[i:j]); err != nil {
 		return i, err
 	}
-	out["border-image-slice"] = v[i:j]
+	out[long[1]] = v[i:j]
 	i = j
-	for _, l := range []string{propBorderImageWidth, propBorderImageOutset} {
+	for k, l := range long[2:4] {
 		if i >= len(v) || !isSlash(v[i]) {
 			break
 		}
@@ -329,46 +333,53 @@ func expandImageSlice(v []Component, i int, out map[string][]Component) (int, er
 		}
 		if j > i {
 			out[l] = v[i:j]
-		} else if l == propBorderImageOutset || j >= len(v) || !isSlash(v[j]) {
-			return i, fmt.Errorf("expected %s after '/'", strings.TrimPrefix(l, "border-image-"))
+		} else if k == 1 || j >= len(v) || !isSlash(v[j]) {
+			return i, fmt.Errorf("expected %s after '/'", [...]string{"a width", "an outset"}[k])
 		}
 		i = j
 	}
 	return i, nil
 }
 
-func expandBorderImage(v []Component, out map[string][]Component) error {
+func expandBorderImage(name string, long []string, v []Component, out map[string][]Component) error {
+	source, slice, repeat := long[0], long[1], long[4]
 	i := 0
 	for i < len(v) {
 		c := v[i]
 		switch {
 		case isWord(c, kwNone) || urlTerm(c) == nil:
-			if out["border-image-source"] != nil {
-				return fmt.Errorf("border-image has two sources")
+			if out[source] != nil {
+				return fmt.Errorf("%s has two sources", name)
 			}
-			out["border-image-source"] = []Component{c}
+			out[source] = []Component{c}
 			i++
 		case isWord(c, "stretch", "repeat", "round", "space"):
-			if out["border-image-repeat"] != nil {
-				return fmt.Errorf("border-image has two repeats")
+			if out[repeat] != nil {
+				return fmt.Errorf("%s has two repeats", name)
 			}
 			j := i + 1
 			if j < len(v) && isWord(v[j], "stretch", "repeat", "round", "space") {
 				j++
 			}
-			out["border-image-repeat"] = v[i:j]
+			out[repeat] = v[i:j]
 			i = j
 		case c.Kind == Number || c.Kind == Percentage || isWord(c, "fill"):
-			if out["border-image-slice"] != nil {
-				return fmt.Errorf("border-image has two slices")
+			if out[slice] != nil {
+				return fmt.Errorf("%s has two slices", name)
 			}
 			var err error
-			if i, err = expandImageSlice(v, i, out); err != nil {
+			if i, err = expandImageSlice(long, v, i, out); err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("bad border-image part %q", c.String())
+			return fmt.Errorf("bad %s part %q", name, c.String())
 		}
+	}
+	if name == shortMaskBox && out[slice] != nil && !slices.ContainsFunc(out[slice], func(c Component) bool {
+		return isWord(c, "fill")
+	}) {
+		// Chrome's shorthand always fills the middle.
+		out[slice] = append(slices.Clone(out[slice]), word("fill"))
 	}
 	return nil
 }
@@ -739,7 +750,7 @@ func maskLayer(v []Component, out map[string][]Component) error {
 		if err := checkMaskPosition(pos); err != nil {
 			return err
 		}
-		out["mask-position"] = pos
+		out[propMaskPositionX], out[propMaskPositionY] = maskAxes(pos)
 	}
 	return maskOriginAndClip(boxes, out)
 }

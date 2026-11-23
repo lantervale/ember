@@ -95,8 +95,8 @@ func TestStartingStyleRulesApplyToNothingElse(t *testing.T) {
 
 func TestANestedStartingStyleStartsItsRulesSelectors(t *testing.T) {
 	s := sheet(t, `div.a, p { opacity: 1; @starting-style { opacity: 0.2 } color: red }`)
-	if len(s.Rules) != 2 || !s.Rules[1].starting || s.Rules[0].starting || len(s.Rules[0].Decls) != 2 ||
-		len(s.Rules[1].Selectors) != 2 {
+	if len(s.Rules) != 3 || !s.Rules[1].starting || s.Rules[0].starting || s.Rules[2].starting ||
+		len(s.Rules[1].Selectors) != 2 || len(s.Rules[2].Selectors) != 2 || s.Rules[2].Decls[0].Name != "color" {
 		t.Fatalf("read as %s", s.String())
 	}
 	tr, root, _, sheets := animationPage(t,
