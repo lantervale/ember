@@ -180,6 +180,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | the white space of a custom property's value, unregistered or of syntax `*` (`--a:  a   b`) | one space where the value had several, where Chrome keeps it as written |
 | an `@property` rule inside `@media` or `@supports`, and `@property` in a style attribute's sheet | registered whatever the condition says |
 | animation-composition `add` and `accumulate` on a custom property | replace |
+| a custom function's typed result or parameter holding a unit of the font, called in `font-size` (`font-size: --f(2em)`) | computed against the parent's font, no cycle looked for; unchecked against Chrome |
 | `@container` inside `@function` | dropped with a warning |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 
