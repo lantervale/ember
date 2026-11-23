@@ -22,10 +22,10 @@ func (c claims) take(p style.Position) bool {
 
 // containingBlockClaims is which out-of-flow boxes a node of style st
 // lays out: the absolute ones when it is positioned, and the fixed ones
-// too when it is filtered or filters its backdrop, as Chrome does.
+// too when it holds them, as Chrome does.
 func containingBlockClaims(st *style.Computed) claims {
-	filtered := st.Filtered()
-	return claims{absolute: st.Position != style.Static || filtered, fixed: filtered}
+	holds := st.HoldsFixed()
+	return claims{absolute: st.Position != style.Static || holds, fixed: holds}
 }
 
 func alignInLine(container span, s float32, e staticEdge) float32 {
@@ -435,7 +435,7 @@ func (t *tree) performOOF(n *node, candidates []oofCandidate, area size, offset 
 		}
 		loc := point{lb.layout.location.x - offset.x, lb.layout.location.y - offset.y}
 		overflow = overflow.union(overflowContribution(loc, lb.layout.size,
-			lb.layout.overflow.rect, lb.layout.border, lb.overflow, c.node.st, container, rect{}))
+			lb.layout.overflow.rect, lb.layout.border, lb.overflow, c.node, container, rect{}))
 	}
 	return hoisted, unclaimed, overflow
 }

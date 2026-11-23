@@ -122,11 +122,11 @@ type overflowContainer struct {
 	padding  rect
 }
 
-// overflowContribution is what a child of border box s at loc adds to its
-// container's scrollable overflow: its box and, where it lets it show,
-// its own overflow, turned by st's transforms.
+// overflowContribution is what a child n of border box s at loc adds to
+// its container's scrollable overflow: its box and, where it lets it
+// show, its own overflow, turned by its transforms.
 func overflowContribution(loc point, s size, childOverflow rect, border rect,
-	overflow style.Size[style.Overflow], st *style.Computed, c overflowContainer, margin rect) rect {
+	overflow style.Size[style.Overflow], n *node, c overflowContainer, margin rect) rect {
 	childOverflow = rect{
 		l: childOverflow.l + border.l, r: childOverflow.r + border.l,
 		t: childOverflow.t + border.t, b: childOverflow.b + border.t,
@@ -152,8 +152,8 @@ func overflowContribution(loc point, s size, childOverflow rect, border rect,
 		startY = fmin(0, childOverflow.t)
 	}
 	r := rect{l: startX, r: endW, t: startY, b: endH}
-	if st != nil && st.Transformed() {
-		r = transformedBounds(st, r, s)
+	if n != nil && n.st.Transformed() {
+		r = transformedBounds(n.st, standsIn(n), r, s)
 	}
 	r = rect{l: loc.x + r.l, r: loc.x + r.r, t: loc.y + r.t, b: loc.y + r.b}
 	unreachableX := r.r <= 0
@@ -184,15 +184,29 @@ func overflowContribution(loc point, s size, childOverflow rect, border rect,
 }
 
 // transformedBounds is the rect round r, in the space of a border box of
-// size s, once st's transforms turn it.
-func transformedBounds(st *style.Computed, r rect, s size) rect {
-	m := st.TransformAt(geom.Vec2{}, geom.V2(s.w, s.h))
+// size s in the frame of mode, once st's transforms turn it on the page.
+func transformedBounds(st *style.Computed, mode style.WritingMode, r rect, s size) rect {
+	page := s
+	if mode.Vertical() {
+		page = s.across()
+	}
+	r = fromRect(turnRect(rectOf(r), s, mode))
+	m := st.TransformAt(geom.Vec2{}, geom.V2(page.w, page.h))
 	out := rect{l: float32(math.Inf(1)), r: float32(math.Inf(-1)), t: float32(math.Inf(1)), b: float32(math.Inf(-1))}
 	for _, p := range [4]geom.Vec2{{X: r.l, Y: r.t}, {X: r.r, Y: r.t}, {X: r.l, Y: r.b}, {X: r.r, Y: r.b}} {
 		q := m.Xform(p)
 		out = rect{l: fmin(out.l, q.X), r: fmax(out.r, q.X), t: fmin(out.t, q.Y), b: fmax(out.b, q.Y)}
 	}
-	return out
+	return fromRect(unturnRect(rectOf(out), page, mode))
+}
+
+// standsIn is the frame n is laid out and placed in: its parent's
+// content's, or that of the containing block that placed it.
+func standsIn(n *node) style.WritingMode {
+	if n.placer != nil {
+		return frameOf(n.placer)
+	}
+	return outerFrame(n.parent, n.box.Style)
 }
 
 func finalizeOverflow(r rect, s size, reversed [2]bool, scroll bool) overflowRect {

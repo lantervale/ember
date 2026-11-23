@@ -86,14 +86,17 @@ func unique(ns []*node) []*node {
 // scrollable is the size of what a viewport showing port of the root n
 // scrolls: port, or as far right and down as the root's margin box, what
 // overflows the root, and the absolute boxes the initial containing block
-// placed reach. A fixed box stays in the viewport and adds nothing.
+// placed reach, the root and its overflow as its transforms turn them. A fixed
+// box stays in the viewport and adds nothing.
 func scrollable(n *node, port size) size {
 	u := n.unrounded
 	at := u.location
-	r := at.x + u.size.w + fmax(u.margin.r, 0)
-	b := at.y + u.size.h + fmax(u.margin.b, 0)
-	r = fmax(r, at.x+u.border.l+u.overflow.rect.r)
-	b = fmax(b, at.y+u.border.t+u.overflow.rect.b)
+	reach := rect{r: fmax(u.size.w, u.border.l+u.overflow.rect.r), b: fmax(u.size.h, u.border.t+u.overflow.rect.b)}
+	if n.st.Transformed() {
+		reach = transformedBounds(n.st, style.HorizontalTB, reach, u.size)
+	}
+	r := at.x + reach.r + fmax(u.margin.r, 0)
+	b := at.y + reach.b + fmax(u.margin.b, 0)
 	for _, h := range n.hoisted {
 		if h.st.Position != style.Absolute || h.st.Display == style.DisplayNone {
 			continue

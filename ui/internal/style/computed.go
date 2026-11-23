@@ -1423,6 +1423,11 @@ func (s *Computed) Transformed() bool {
 	return len(s.Transform) > 0 || s.Translate.Set || s.Rotate.Set || s.Scale.Set
 }
 
+// HoldsFixed reports whether the element is the containing block of its
+// fixed descendants, and of its absolute ones even unpositioned: when it
+// is transformed, or filters itself or its backdrop.
+func (s *Computed) HoldsFixed() bool { return s.Transformed() || s.Filtered() }
+
 // TransformAt is the transform of a border box of size at at: translate,
 // rotate, scale, then transform's functions, about the transform origin.
 func (s *Computed) TransformAt(at, size geom.Vec2) geom.Transform2D {

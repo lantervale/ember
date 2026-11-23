@@ -778,37 +778,46 @@ func identity(op style.TransformOp) style.TransformOp {
 	return style.TransformOp{Kind: op.Kind}
 }
 
-// lerpTransform interpolates function by function when both lists have
-// the same functions (none stands for the other's identities), and
-// otherwise as decomposed matrices. A list it can't make a matrix of
-// (a percentage translation) switches at the end.
+// lerpTransform interpolates as CSS Transforms 2 says and Chrome does:
+// the shorter list (none being one of no functions) takes the identities
+// of the longer one's last functions, the functions both lists start with
+// alike interpolate one by one, and what follows the first that differ as
+// decomposed matrices. Where a matrix can't be made (a percentage
+// translation), the lists switch at the end.
 func lerpTransform(a, b []style.TransformOp, t float32) []style.TransformOp {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
-	if len(a) == 0 {
-		a = identities(b)
+	pa, pb := padded(a, b), padded(b, a)
+	same := 0
+	for same < len(pa) && pa[same].Kind == pb[same].Kind {
+		same++
 	}
-	if len(b) == 0 {
-		b = identities(a)
+	out := make([]style.TransformOp, same, same+1)
+	for i := range same {
+		out[i] = lerpOp(pa[i], pb[i], t)
 	}
-	if sameKinds(a, b) {
-		out := make([]style.TransformOp, len(a))
-		for i := range a {
-			out[i] = lerpOp(a[i], b[i], t)
-		}
+	if same == len(pa) {
 		return out
 	}
-	ma, okA := toMatrix(a)
-	mb, okB := toMatrix(b)
+	ma, okA := toMatrix(pa[same:])
+	mb, okB := toMatrix(pb[same:])
 	if !okA || !okB {
 		if t < 1 {
-			return a
+			return pa
 		}
-		return b
+		return pb
 	}
 	m := recompose(decompose(ma).lerp(decompose(mb), t))
-	return []style.TransformOp{{Kind: style.Matrix, A: m}}
+	return append(out, style.TransformOp{Kind: style.Matrix, A: m})
+}
+
+// padded is a with the identities of other's functions past its end.
+func padded(a, other []style.TransformOp) []style.TransformOp {
+	if len(a) >= len(other) {
+		return a
+	}
+	return append(slices.Clone(a), identities(other[len(a):])...)
 }
 
 func identities(ops []style.TransformOp) []style.TransformOp {

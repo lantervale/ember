@@ -97,33 +97,17 @@ func TestIndividualTransformsAreHitAsInChrome(t *testing.T) {
 		}
 		return ""
 	}
-	// Chrome hits a turned box up to about a pixel and a half past its
-	// edges, as it does under transform: a point that close counts as Chrome's.
-	near := func(p geom.Vec2, id string) bool {
-		for _, o := range []geom.Vec2{{X: -2}, {X: 2}, {Y: -2}, {Y: 2}} {
-			if hit(p.Add(o)) == id {
-				return true
-			}
-		}
-		return false
-	}
-	hits, differ, edges := map[string]int{}, 0, 0
+	hits, differ := map[string]int{}, 0
 	for i, pt := range points {
 		p := geom.V2(pt[0], pt[1])
-		got := hit(p)
 		hits[want[i]]++
-		switch {
-		case got == want[i]:
-		case near(p, want[i]):
-			edges++
-		default:
+		if got := hit(p); got != want[i] {
 			differ++
 			if differ <= 20 {
 				t.Errorf("at %v: ember %q, Chrome %q", p, got, want[i])
 			}
 		}
 	}
-	t.Logf("%d points, %d within two pixels of the edge Chrome hits past", len(points), edges)
 	assert.Zero(t, differ, "points hit apart from Chrome, of %d", len(points))
 	for _, c := range turnedCells {
 		assert.Positive(t, hits[c+"-in"], "Chrome hits %s's child somewhere", c)

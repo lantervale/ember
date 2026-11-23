@@ -142,6 +142,22 @@ button { transition: transform 1s linear }
 	}
 }
 
+func TestTransformListsShareTheirCommonStart(t *testing.T) {
+	rotate := func(deg float32) style.TransformOp {
+		return style.TransformOp{Kind: style.Rotate, A: [6]float32{deg * math.Pi / 180}}
+	}
+	move := style.TransformOp{Kind: style.Translate, X: style.Px(10), Y: style.Px(0)}
+	ops := lerpTransform([]style.TransformOp{rotate(10)}, []style.TransformOp{rotate(30), move}, 0.5)
+	if len(ops) != 2 || !nearf(ops[0].A[0], 20*math.Pi/180) || ops[1].Kind != style.Translate || !nearf(ops[1].X.Px, 5) {
+		t.Errorf("the shorter list takes the longer's identities: %+v", ops)
+	}
+	skew := style.TransformOp{Kind: style.Skew, A: [6]float32{0.2}}
+	ops = lerpTransform([]style.TransformOp{rotate(10), move}, []style.TransformOp{rotate(30), skew}, 0.5)
+	if len(ops) != 2 || ops[0].Kind != style.Rotate || !nearf(ops[0].A[0], 20*math.Pi/180) || ops[1].Kind != style.Matrix {
+		t.Errorf("functions alike interpolate, the rest as a matrix: %+v", ops)
+	}
+}
+
 func TestMatrixRoundTrip(t *testing.T) {
 	for _, m := range [][6]float32{{1, 0, 0, 1, 0, 0}, {2, 1, -0.5, 3, 7, -8}, {-1, 0, 0, 1, 0, 0},
 		{0.866, 0.5, -1, 1.732, 3, 4}} {

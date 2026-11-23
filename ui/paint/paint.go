@@ -769,7 +769,7 @@ func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
 		return inner
 	}
 	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
-		if as := shown(a); as.Filtered() || st.Position == style.Absolute && as.Position != style.Static {
+		if as := shown(a); as.HoldsFixed() || st.Position == style.Absolute && as.Position != style.Static {
 			break
 		}
 		if inner.by == a {

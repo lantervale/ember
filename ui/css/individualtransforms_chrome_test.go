@@ -112,3 +112,36 @@ div { width: 100px; height: 20px; translate: 5px; rotate: 5deg; scale: 2 }
 		})
 	}
 }
+
+// TestAdditiveTransformAnimationsMissingAKeyframeMatchChrome adds to and
+// accumulates on the element's own translate, rotate, scale and
+// transform from keyframes that leave out the first or the last, so
+// lists of different lengths meet, as they do between keyframes that
+// share only their first functions.
+func TestAdditiveTransformAnimationsMissingAKeyframeMatchChrome(t *testing.T) {
+	src := `@keyframes to { to { translate: 30px 10px; rotate: 90deg; scale: 0.5 3;
+  transform: rotate(20deg) translate(10px) } }
+@keyframes from { from { translate: 30px 10px; rotate: 90deg; scale: 0.5 3;
+  transform: rotate(20deg) translate(10px) } }
+@keyframes p { from { transform: rotate(10deg) translate(5px) }
+  to { transform: rotate(40deg) skewX(20deg) scale(2) } }
+@keyframes mid { 50% { translate: 30px 10px; rotate: 90deg; scale: 0.5 3;
+  transform: rotate(20deg) translate(10px) } }
+div { width: 100px; height: 20px; translate: 5px; rotate: 30deg; scale: 2; transform: rotate(10deg) }
+.none { translate: none; rotate: none; scale: none; transform: none }
+.ta { animation: to 1s linear; animation-composition: add }
+.tc { animation: to 1s linear; animation-composition: accumulate }
+.fa { animation: from 1s linear; animation-composition: add }
+.fc { animation: from 1s linear; animation-composition: accumulate }
+.ma { animation: mid 1s linear; animation-composition: add } .p { animation: p 1s linear }`
+	for _, at := range []float32{0.1, 0.35, 0.65, 0.9} {
+		t.Run(fmt.Sprint(at), func(t *testing.T) {
+			build := func(body *dom.Node) {
+				for _, c := range []string{"ta", "tc", "fa", "fc", "ma", "p"} {
+					body.Append(ui.Div(ui.Class(c)), ui.Div(ui.Class(c, "none")))
+				}
+			}
+			matchMovedAt(t, src, build, individualTransforms, at, 1)
+		})
+	}
+}
