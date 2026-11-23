@@ -230,7 +230,7 @@ func (x *ctx) call(c Component) ([]Component, bool) {
 		return nil, false
 	}
 	if !f.returns.universal {
-		x.fontRead = x.fontRead || fontRelative(v)
+		x.readFont(v)
 		text, typed := x.typed(f.returns, v)
 		if !typed {
 			return nil, false
@@ -271,7 +271,7 @@ func (x *ctx) argument(prm funcParam, arg []Component, given bool) []Component {
 	if prm.syntax.universal {
 		return v
 	}
-	x.fontRead = x.fontRead || fontRelative(v)
+	x.readFont(v)
 	text, typed := x.typed(prm.syntax, v)
 	if !typed {
 		return nil

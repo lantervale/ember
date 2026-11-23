@@ -379,22 +379,6 @@ func (g *registry) inherited(parent map[string]string, root bool) map[string]str
 	return out
 }
 
-// fontRelative reports whether v has a unit of the element's font.
-func fontRelative(v []Component) bool {
-	for _, c := range v {
-		if c.Kind == Dimension {
-			u := strings.ToLower(c.Unit)
-			if r, ok := relativeUnits[u]; u == "em" || ok && 1<<r&fontUnits != 0 && r < unitRex {
-				return true
-			}
-		}
-		if fontRelative(c.Args) {
-			return true
-		}
-	}
-	return false
-}
-
 // typed is v computed as the first part of s it matches, written as
 // getComputedStyle writes it; false when it matches none.
 func (x *ctx) typed(s syntax, v []Component) (string, bool) {
@@ -637,9 +621,7 @@ func (x *ctx) registered(r *registration, v []Component, ok bool) (string, bool)
 		kw = globalKeyword(v)
 	}
 	if kw == "" {
-		if fontRelative(v) {
-			x.fontRead = true
-		}
+		x.readFont(v)
 		if out, typed := x.typed(r.syntax, v); typed {
 			return out, true
 		}
