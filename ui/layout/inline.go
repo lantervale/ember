@@ -1722,7 +1722,8 @@ func isASCII(s string) bool {
 // measure is the inline content's size and baselines, Taffy's measure function for text.
 // Lines break at the available width; content wider than that (a word that breaks only
 // with overflow-wrap, or not at all) widens the size it reports, not the lines.
-func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) (size, float32, float32) {
+func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, clamp int) (size, float32, float32,
+	int) {
 	minW, maxW := t.contentWidths(c, parent)
 	w := known.w
 	lineW := w
@@ -1746,7 +1747,11 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) 
 	}
 	var h float32
 	first, last := none, none
-	for i, l := range c.lines(lineW) {
+	ls := c.lines(lineW)
+	for i, l := range ls {
+		if clamp > 0 && i == clamp {
+			break
+		}
 		lh, lb := t.lineBox(c, l)
 		h += l.push
 		if i == 0 {
@@ -1758,7 +1763,7 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) 
 	if some(known.h) {
 		h = known.h
 	}
-	return size{w, h}, first, last
+	return size{w, h}, first, last, len(ls)
 }
 
 // placeText lays the text out at the owner's content width and places its atomic inlines.
@@ -1973,7 +1978,20 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		}
 		t.spanRects(c, l, pieces, order, x, perGap, y, lb, spanRects, spanSeen, spanLines)
 		cut, cutStart := false, false
-		if ellipsis && l.width > l.avail && len(c.runs) > 0 {
+		switch {
+		case n.clamp.shown > 0 && li >= n.clamp.shown && n.clamp.hides:
+			pieces = nil
+		case n.clamp.ellipsis && li == n.clamp.shown-1 && len(c.runs) > 0:
+			// the clamp's last line makes room for its ellipsis, aligned with it
+			pieces, cut = t.ellipsize(c, pieces, l.avail)
+			w := newPen(c.unit, 0)
+			for _, p := range pieces {
+				w.step(p, 0)
+			}
+			ends := c.runs[pieces[len(pieces)-1].run].st
+			off, perGap = c.align(n.st, l, true, l.avail-w.end()-t.fonts.Advance(ends.Font, "…"))
+			x = inset.l + l.x + off
+		case ellipsis && l.width > l.avail && len(c.runs) > 0:
 			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
 		t.writeRuns(c, pieces, geom.Rect{X: x, Y: y, H: lh}, lb, perGap, [2]bool{cutStart, cut}, runRects, seen)

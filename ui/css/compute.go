@@ -1078,6 +1078,9 @@ func (x *ctx) finish(root bool) {
 	if x.toViewport {
 		x.propagateOverflow(root)
 	}
+	if c.WebkitBox {
+		x.webkitBox()
+	}
 	switch x.parent.Display {
 	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
 		if !root {
@@ -1122,6 +1125,33 @@ func (x *ctx) snapWidths() {
 	c.ColumnRuleWidth = x.env.snap(c.ColumnRuleWidth, true)
 	c.OutlineOffset = x.env.snap(c.OutlineOffset, false)
 	c.BorderSpacing = [2]float32{x.env.snap(c.BorderSpacing[0], false), x.env.snap(c.BorderSpacing[1], false)}
+}
+
+// webkitBox lays display: -webkit-box out as Chrome does: a vertical one
+// clamping its lines as flow-root, any other as flex along its orient.
+func (x *ctx) webkitBox() {
+	c := x.c
+	switch {
+	case c.BoxVertical && c.WebkitLineClamp > 0:
+		if c.Display == style.InlineFlex {
+			c.Display = style.InlineBlock
+		} else {
+			c.Display = style.Block
+		}
+		c.FlowRoot = true
+	case c.BoxVertical:
+		c.Direction = style.Column
+	default:
+		c.Direction = style.Row
+	}
+}
+
+// clampOf is a line-clamp's count, 0 for none.
+func clampOf(_ *ctx, v []Component) int {
+	if v[0].Kind == Number {
+		return int(v[0].Num)
+	}
+	return 0
 }
 
 func blockified(d style.Display) style.Display {
@@ -1467,6 +1497,7 @@ var displays = map[string]style.Display{
 	"table-row": style.Block, "table-cell": style.Block, "table-row-group": style.Block,
 	"table-header-group": style.Block, "table-footer-group": style.Block, "table-column": style.Block,
 	"table-column-group": style.Block, "table-caption": style.Block,
+	"-webkit-box": style.FlexDisplay, "-webkit-inline-box": style.InlineFlex,
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -1549,7 +1580,7 @@ func cornerOf(x *ctx, v []Component) style.Size[style.Length] {
 
 func inheritDisplay(dst, src *style.Computed) {
 	dst.Display, dst.ListItem, dst.FlowRoot, dst.Table = src.Display, src.ListItem, src.FlowRoot, src.Table
-	dst.TablePart = src.TablePart
+	dst.TablePart, dst.WebkitBox = src.TablePart, src.WebkitBox
 }
 
 // boxed reports whether display at t between a's and b's is b's: as
@@ -1590,6 +1621,7 @@ var props = func() map[string]prop {
 				x.c.FlowRoot = isWord(v[0], "flow-root")
 				x.c.Table = isWord(v[0], "table") || isWord(v[0], "inline-table")
 				x.c.TablePart = tableParts[strings.ToLower(v[0].Text)]
+				x.c.WebkitBox = isWord(v[0], "-webkit-box", "-webkit-inline-box")
 			},
 			inherit: inheritDisplay,
 			anim: anim{kind: discrete, lerp: func(dst, a, b *style.Computed, t float32) bool {
@@ -1748,6 +1780,11 @@ var props = func() map[string]prop {
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }, flips[bool]()),
 		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
 		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
+		"line-clamp":   field(func(c *style.Computed) *int { return &c.LineClamp }, clampOf, flips[int]()),
+		"-webkit-line-clamp": field(func(c *style.Computed) *int { return &c.WebkitLineClamp }, clampOf,
+			flips[int]()),
+		"-webkit-box-orient": field(func(c *style.Computed) *bool { return &c.BoxVertical },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "vertical", "block-axis") }, flips[bool]()),
 		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 		"widows": field(func(c *style.Computed) *int { return &c.Widows },

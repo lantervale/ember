@@ -131,7 +131,7 @@ func TestValidate(t *testing.T) {
 		"background": {"url(x.png) / cover", "url(x.png) center /", "center / cover / contain", "/ cover center",
 			"center / red", "center / 10px 20px 30px", "center / cover 10px", "url(x.png) center no-repeat / cover"},
 		"resize":  {"auto", "12px"},
-		"display": {"ruby", "flex grid", "-webkit-box"},
+		"display": {"ruby", "flex grid", "-webkit-flex"},
 		"width":   {"-1px", "1fr", "12", "red"},
 		"padding": {"-2px", "1px 2px 3px 4px 5px"},
 		"margin":  {"1px / 2px"},

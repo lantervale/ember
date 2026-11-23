@@ -219,6 +219,29 @@ type Box struct {
 	// nil for none: the names an @container rule picks the element by.
 	ContainerType  ContainerType
 	ContainerNames []string
+	// LineClamp is line-clamp: the lines a block container shows, 0 for
+	// none, an ellipsis ending the last when more follows, the content
+	// after it not drawn.
+	LineClamp int
+	// WebkitBox is display: -webkit-box or -webkit-inline-box, laid out
+	// as flex, or as flow-root clamped to WebkitLineClamp lines when
+	// BoxVertical (-webkit-box-orient: vertical) and that is set: Chrome's
+	// line clamp, which draws the content after the clamp.
+	WebkitBox       bool
+	BoxVertical     bool
+	WebkitLineClamp int
+}
+
+// Clamp is how many lines the box shows, 0 for all, and whether the
+// content after them is still drawn.
+func (b *Box) Clamp() (int, bool) {
+	switch {
+	case b.LineClamp > 0:
+		return b.LineClamp, false
+	case b.WebkitBox && b.BoxVertical && b.WebkitLineClamp > 0:
+		return b.WebkitLineClamp, true
+	}
+	return 0, false
 }
 
 // ContainerType is container-type: whether an element is a query

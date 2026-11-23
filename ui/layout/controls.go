@@ -238,7 +238,7 @@ func (t *tree) measureControl(n *node, known size) (size, float32, float32) {
 func (t *tree) textareaText(n *node, s size, pb rect, gutter point) (size, point) {
 	wrap := func(g point) size {
 		box := size{fmax(s.w-pb.horizontal()-g.x, 0), fmax(s.h-pb.vertical()-g.y, 0)}
-		m, _, _ := t.measure(n.inline, size{none, none}, spaces{w: def(box.w), h: maxContentSpace}, size{box.w, none})
+		m, _, _, _ := t.measure(n.inline, size{none, none}, spaces{w: def(box.w), h: maxContentSpace}, size{box.w, none}, 0)
 		return m.mMax(box)
 	}
 	m := wrap(gutter)

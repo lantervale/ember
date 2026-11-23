@@ -70,6 +70,27 @@ type input struct {
 	// probe is a layout run only to read the node's first baseline, as a
 	// baseline-aligned grid row does, cached apart from its final layout.
 	probe bool
+	// clamp is what a line clamp asks of a block in its flow.
+	clamp clampIn
+}
+
+// clampIn is what a line clamp asks of a block in the flow of the box clamping its lines:
+// the lines left before the clamp, 0 for none, and whether content follows the block in
+// that box.
+type clampIn struct {
+	lines int
+	more  bool
+	// hides is set when the content after the clamp is not drawn, as line-clamp's;
+	// -webkit-line-clamp's is.
+	hides bool
+}
+
+// clampFor is the clamp n's lines follow: its own line-clamp's, or in's.
+func clampFor(n *node, in clampIn) clampIn {
+	if lines, keeps := n.st.Clamp(); lines > 0 {
+		return clampIn{lines: lines, hides: !keeps}
+	}
+	return in
 }
 
 // marginSet is Taffy's CollapsibleMarginSet.
@@ -176,6 +197,10 @@ type output struct {
 	collapsesThrough        bool
 	oof                     []oofCandidate
 	area                    *oofArea
+	// lines is how many of the lines a clamp left the box took, and clamped whether the
+	// clamp fell in it: its height then ends below the clamp's line.
+	lines   int
+	clamped bool
 }
 
 func sizeOutput(s size) output {

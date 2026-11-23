@@ -46,6 +46,7 @@ type cacheKey struct {
 	parent          uint64
 	knownIsDefinite bools
 	mode            cacheMode
+	clamp           clampIn
 }
 
 func keyOf(in input) cacheKey {
@@ -66,7 +67,8 @@ func keyOf(in input) cacheKey {
 			w: in.knownIsDefinite.w || !some(in.known.w),
 			h: in.knownIsDefinite.h || !some(in.known.h),
 		},
-		mode: modeOf(in),
+		mode:  modeOf(in),
+		clamp: in.clamp,
 	}
 }
 
@@ -133,7 +135,7 @@ func (c *cache) get(in input) (output, bool) {
 				continue
 			}
 			if e.key.knownAvail == key.knownAvail && e.key.knownIsDefinite == key.knownIsDefinite && e.key.mode == key.mode &&
-				e.key.xParent() == key.xParent() && e.key.sizeValidFor(key) {
+				e.key.clamp == key.clamp && e.key.xParent() == key.xParent() && e.key.sizeValidFor(key) {
 				c.recent |= 1 << i
 				return sizeOutput(e.size), true
 			}
@@ -157,7 +159,8 @@ func (c *cache) store(in input, out output) {
 		o := out
 		c.final, c.finalKey = &o, key
 	case in.run == computeSize:
-		if out.collapsesThrough || out.topMargin != (marginSet{}) || out.bottomMargin != (marginSet{}) {
+		if out.collapsesThrough || out.topMargin != (marginSet{}) || out.bottomMargin != (marginSet{}) ||
+			in.clamp.lines > 0 {
 			return
 		}
 		c.empty = false

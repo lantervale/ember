@@ -405,23 +405,24 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 	// --run-all-compositor-stages-before-draw: headless shoots when the
 	// virtual time runs out, before its tiles are rasterized on a loaded
 	// machine, which left pages half drawn.
-	cmd := exec.CommandContext( //nolint:gosec // the Chrome found on this machine, run on our own page
-		ctx,
-		browser(),
-		"--headless=new",
+	args := []string{"--headless=new",
 		"--disable-gpu",
 		"--run-all-compositor-stages-before-draw",
 		fmt.Sprintf("--force-device-scale-factor=%g", deviceScale),
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--disable-extensions",
-		"--user-data-dir="+filepath.Join(dir, "profile"),
+		"--user-data-dir=" + filepath.Join(dir, "profile"),
 		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)),
 		blinkSettings(m),
 		"--virtual-time-budget=10000",
 		action,
-		"file://"+file,
-	)
+		"file://" + file,
+	}
+	if len(features) > 0 {
+		args = append([]string{"--enable-blink-features=" + strings.Join(features, ",")}, args...)
+	}
+	cmd := exec.CommandContext(ctx, browser(), args...) //nolint:gosec // the Chrome found on this machine, run on our own page
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -488,6 +489,19 @@ func MatchScaled(t testing.TB, d *ui.Document, size geom.Vec2, scale float32) Re
 	deviceScale = scale
 	fonts.Of(d).SetScale(scale)
 	defer func() { deviceScale = 1; fonts.Of(d).SetScale(1) }()
+	return Match(t, d, size)
+}
+
+// features are the Blink features Chrome runs with besides its own;
+// none unless MatchWith sets them.
+var features []string //nolint:gochecknoglobals // set for the length of one MatchWith
+
+// MatchWith is Match on a Chrome running with the Blink features named
+// on, those it ships behind a flag: CSSLineClamp for line-clamp.
+func MatchWith(t testing.TB, d *ui.Document, size geom.Vec2, feature ...string) Report {
+	t.Helper()
+	features = feature
+	defer func() { features = nil }()
 	return Match(t, d, size)
 }
 

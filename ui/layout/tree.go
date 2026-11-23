@@ -270,6 +270,18 @@ type node struct {
 	// node's place in the flow of the multi-column container it is in, nil outside one.
 	columns *columnSet
 	frag    *flowFrag
+	// clamp is what a line clamp left of the node's lines in its last layout, and
+	// discarded is set when the node follows the last line a line-clamp shows.
+	clamp     clampOut
+	discarded bool
+}
+
+// clampOut is what a line clamp leaves of a node's lines: how many it shows, 0 for all,
+// whether the last of them ends in an ellipsis, and whether those after are not drawn.
+type clampOut struct {
+	shown    int
+	ellipsis bool
+	hides    bool
 }
 
 func (n *node) context() context {
@@ -957,6 +969,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w, Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
+	b.Discarded = n.discarded
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
 	}
