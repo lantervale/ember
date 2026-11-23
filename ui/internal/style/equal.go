@@ -37,6 +37,7 @@ func (b *Box) equal(o *Box) bool {
 		b.TablePart == o.TablePart &&
 		b.BoxSizing == o.BoxSizing &&
 		b.Position == o.Position &&
+		b.StaticInline == o.StaticInline &&
 		b.Float == o.Float &&
 		b.Clear == o.Clear &&
 		b.VerticalAlign == o.VerticalAlign &&
@@ -65,7 +66,11 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
-		sameSlice(b.ContainerNames, o.ContainerNames)
+		sameSlice(b.ContainerNames, o.ContainerNames) &&
+		b.LineClamp == o.LineClamp &&
+		b.WebkitBox == o.WebkitBox &&
+		b.BoxVertical == o.BoxVertical &&
+		b.WebkitLineClamp == o.WebkitLineClamp
 }
 
 func (g *Grid) equal(o *Grid) bool {

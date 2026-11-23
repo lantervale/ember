@@ -401,6 +401,8 @@ func lengthCSS(l style.Length) string {
 		return "max-content"
 	case style.None:
 		return "none"
+	case style.Stretch:
+		return "stretch"
 	case style.Fr:
 		return num(l.Px) + "fr"
 	case style.FitContent:

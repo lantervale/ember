@@ -20,6 +20,7 @@ const (
 	kwMinContent    = "min-content"
 	kwMaxContent    = "max-content"
 	kwFitContent    = "fit-content"
+	kwStretch       = "stretch"
 	kwContent       = "content"
 	kwAuto          = "auto"
 	kwMiddle        = "middle"

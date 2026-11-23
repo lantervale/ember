@@ -71,12 +71,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
 | the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone | measured without the subgrid's rows: a percentage height or an aspect ratio there counts as on no row |
 | `opacity` on an inline element holding blocks | its lines fade, the blocks inside it do not |
-| an absolutely positioned box inside an inline element `position: relative` moves | placed where the element stood before it moved |
-| an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's |
+| an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's; one with alt text stands by its bottom too, where Chrome's stands on that text's line, which ui cannot tell from a picture still loading, whose landing lays nothing out |
 | a `summary`'s marker in a font without ▸ | measured with ui's fallback face for the triangle, where Chrome on macOS takes 1.06em whatever the font: about 3 points narrower at 16px |
 | a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
-| an absolutely positioned element right in a block after its text (`<div>text<span style="position: absolute">`) | at the start of the line, where Chrome puts it after the text; inside an inline element it stands after the text |
+| a `br` ending the last line a `-webkit-line-clamp` or `line-clamp` shows | no wider than before, where Chrome's is as wide as the ellipsis drawn in its place |
+| `line-clamp`'s longhands (`max-lines`, `block-ellipsis`, `continue`) and its values but a number and `none` | refused; past its last line the inline elements' backgrounds and borders, the floats and the positioned boxes are still drawn, and what it doesn't draw still takes the pointer |
+| `stretch` in `min-width`, `max-width`, `min-height`, `max-height`, on a flex or a grid item, a table cell or a column | read, and taken as `auto` (`none` for a maximum) |
 
 ## Backgrounds and borders
 
@@ -109,7 +110,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `prefers-contrast`, `forced-colors`, a touch-only device from the system | the program's answers alone (`ui.PrefersContrast`, `ui.ForcedColors`, `ui.TouchOnly`): no system is read for them ([decision 0139](../99-decisions/0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md)) |
 | `forced-colors: active` | answers the query, where Chrome also forces the system's colours on the page |
 | `ex`, `ch` and the font's other units in a media query's length | measured in ui's initial font (Go, 16px), where Chrome measures in its default font (Times on macOS): a bound between the two is answered otherwise |
-| a corner or a centre in `-webkit-linear-gradient()`, `-webkit-gradient()`, the prefixed repeating gradients, `display: -webkit-box` and `-webkit-line-clamp`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
+| a corner or a centre in `-webkit-linear-gradient()`, `-webkit-gradient()`, the prefixed repeating gradients | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
+| `-webkit-box-pack`, `-webkit-box-align`, `-webkit-box-flex`, `-webkit-box-direction`, `-webkit-box-ordinal-group` | keep their warning: a `-webkit-box` that clamps no lines is laid out as `flex` along its orient, its inline children each an item, where Chrome's old flexbox keeps them on one line |
 | a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
 | a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
 | `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |
