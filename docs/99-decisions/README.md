@@ -210,6 +210,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0207 | [A resizer writes the box's size into its style, and parts restyle as Chrome's bars](0207-a-resizer-writes-the-boxs-size-into-its-style-and-parts-restyle-as-chromes-bars.md) | api |
 | 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
 | 0210 | [Marks of vertical lines are measured in their flow, and a fallback stands by its own metrics](0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md) | rendering |
+| 0211 | [A face's chws spaces its pairs, and vertical text trims by vhal](0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md) | rendering |
 | 0215 | [A subgrid's axes are its grid's by their frames](0215-a-subgrids-axes-are-its-grids-by-their-frames.md) | rendering |
 
 ## Writing one

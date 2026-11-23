@@ -10,8 +10,8 @@ func valueSize(f uint16) int { return 2 * bits.OnesCount16(f) }
 
 // add adds the value record of format f at at in d, the table its
 // devices' offsets are from, to glyph i: its placements to the offsets
-// and its horizontal advance to the advance, each moved by its device's
-// delta at the plan's instance.
+// and its advances to the advances, each moved by its device's delta at
+// the plan's instance.
 func (b *buffer) add(i int, d data, at int, f uint16) {
 	g := &b.glyphs[i]
 	for bit := uint16(1); bit <= 0x80; bit <<= 1 {
@@ -30,6 +30,8 @@ func (b *buffer) add(i int, d data, at int, f uint16) {
 			g.YOffset += v
 		case 0x04, 0x40:
 			g.Advance += v
+		case 0x08, 0x80:
+			g.YAdvance += v
 		}
 	}
 }
