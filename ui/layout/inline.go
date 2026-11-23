@@ -74,6 +74,8 @@ type inlineContent struct {
 	firstPieces []piece
 	firstOn     bool
 	firstInWord bool
+	// allFirst keeps the first line's styles on every line, as the content is measured.
+	allFirst bool
 	// back is the box painting the first line's background, nil without one.
 	back *box.Box
 	// height is the owner's content height its atomic inlines' percentages are of, none
@@ -169,8 +171,10 @@ type inlineSpan struct {
 	// noStart and noEnd are set on a part of an element blocks cut that is not its
 	// first or not its last: it has no edge there.
 	noStart, noEnd bool
-	// lineSt is the span's style on its block's first line.
-	lineSt *style.Computed
+	// lineSt is the span's style on its block's first line, and lineMargin, lineBorder and
+	// linePadding its edges there.
+	lineSt                              *style.Computed
+	lineMargin, lineBorder, linePadding rect
 }
 
 type pieceKind uint8
@@ -420,15 +424,24 @@ func (c *inlineContent) lineStyle(e *dom.Node, st *style.Computed) *style.Comput
 	return st
 }
 
-// letterOf is the ::first-letter node that takes text's first letter, and where the
-// letter ends in its text, nil when none does.
-func letterOf(text *dom.Node) (*dom.Node, int) {
+// letterNode is the ::first-letter node that takes text's first letter, nil for none.
+func letterNode(text *dom.Node) *dom.Node {
 	g := dom.Data(text).Letter
 	if g == nil || dom.Data(g).Style == nil || dom.Data(g).Letter != text {
+		return nil
+	}
+	return g
+}
+
+// letterOf is the ::first-letter node that takes the first letter of text, which shows
+// shown, and where the letter ends in shown, nil when none does.
+func letterOf(text *dom.Node, shown string) (*dom.Node, int) {
+	g := letterNode(text)
+	if g == nil {
 		return nil, 0
 	}
 	end := dom.Data(text).LetterEnd
-	if end > len(text.Text()) {
+	if kids := g.Children(); end > len(shown) || len(kids) != 1 || !strings.HasSuffix(shown[:end], kids[0].Text()) {
 		return nil, 0
 	}
 	return g, end
@@ -442,7 +455,7 @@ func (t *tree) gatherText(c *inlineContent, parent *box.Box, n *dom.Node) {
 		st = styleOf(p)
 	}
 	text, skip := Translated(n, t.translate), int32(0)
-	if g, end := letterOf(n); g != nil && text == n.Text() {
+	if g, end := letterOf(n, text); g != nil {
 		t.gather(c, parent, []item{{element: g}})
 		skip = int32(utf8.RuneCountInString(text[:end])) //nolint:gosec // a text node's length
 		if text = text[end:]; text == "" {
@@ -659,6 +672,9 @@ func (c *inlineContent) swapStyles() {
 	}
 	for _, sp := range c.spans {
 		sp.st, sp.lineSt = sp.lineSt, sp.st
+		sp.margin, sp.lineMargin = sp.lineMargin, sp.margin
+		sp.border, sp.lineBorder = sp.lineBorder, sp.border
+		sp.padding, sp.linePadding = sp.linePadding, sp.padding
 	}
 }
 
@@ -1057,28 +1073,23 @@ func (c *inlineContent) fills() bool {
 // margin box.
 func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 	for _, sp := range c.spans {
-		sp.margin = edges(sp.st.Margin, parent.w)
-		sp.padding = edges(sp.st.Padding, parent.w)
-		b := sp.st.Border
-		sp.border = rect{l: b.Left, r: b.Right, t: b.Top, b: b.Bottom}
-		left, right := sp.noStart, sp.noEnd
-		if sp.st.Dir == style.RTL {
-			left, right = right, left
-		}
-		if left {
-			sp.margin.l, sp.border.l, sp.padding.l = 0, 0, 0
-		}
-		if right {
-			sp.margin.r, sp.border.r, sp.padding.r = 0, 0, 0
+		sp.margin, sp.border, sp.padding = sp.edgesIn(sp.st, parent.w)
+		if c.firstPieces != nil {
+			sp.lineMargin, sp.lineBorder, sp.linePadding = sp.edgesIn(sp.lineSt, parent.w)
 		}
 	}
 	for i := range c.pieces {
 		if p := &c.pieces[i]; p.kind == edge {
-			start, end := startSides(c.spans[p.span])
+			sp := c.spans[p.span]
+			start, end := startSides(sp.st, sp.margin, sp.border, sp.padding)
+			lineStart, lineEnd := start, end
+			if c.firstPieces != nil {
+				lineStart, lineEnd = startSides(sp.lineSt, sp.lineMargin, sp.lineBorder, sp.linePadding)
+			}
 			if p.start {
-				c.resize(i, start)
+				c.resizeEdge(i, start, lineStart)
 			} else {
-				c.resize(i, end)
+				c.resizeEdge(i, end, lineEnd)
 			}
 		}
 	}
@@ -1144,14 +1155,27 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 	var minW, maxW float32
 	// A percentage of the width being found is no width yet.
 	parent.w = none
+	// Chrome measures every line of a block whose first line is styled in the first
+	// line's styles.
+	was := c.useFirst(true)
+	defer c.useFirst(was)
+	unbroken := func() []line {
+		if !c.firstOn {
+			return c.lines(unbounded)
+		}
+		c.allFirst = true
+		defer func() { c.allFirst = false }()
+		b := breaker{c: c}
+		return b.breakAll(unbounded)
+	}
 	t.sizeAtomics(c, maxContentSpace, parent)
-	for _, l := range c.lines(unbounded) {
+	for _, l := range unbroken() {
 		maxW = max(maxW, l.x+l.width)
 	}
 	t.sizeAtomics(c, minContentSpace, parent)
 	c.compress()
 	if !c.anyWraps() {
-		for _, l := range c.lines(unbounded) {
+		for _, l := range unbroken() {
 			minW = max(minW, l.x+l.width)
 		}
 		return minW, maxW
@@ -1703,7 +1727,9 @@ func (b *breaker) breakAll(width float32) []line {
 		var ended bool
 		if i, ended = b.one(i, b.cur.avail); ended {
 			b.open(i, 0, width, 0)
-			c.useFirst(false)
+			if !c.allFirst {
+				c.useFirst(false)
+			}
 		}
 	}
 	return b.close()
@@ -1795,6 +1821,37 @@ func (c *inlineContent) lines(width float32) []line {
 		c.broken, c.brokenAt = out, width
 	}
 	return out
+}
+
+// edgesIn are the margin, border and padding of sp in style st, resolved against basis,
+// none at a side where an element blocks cut has no edge.
+func (sp *inlineSpan) edgesIn(st *style.Computed, basis float32) (rect, rect, rect) {
+	m, p := edges(st.Margin, basis), edges(st.Padding, basis)
+	b := rect{l: st.Border.Left, r: st.Border.Right, t: st.Border.Top, b: st.Border.Bottom}
+	left, right := sp.noStart, sp.noEnd
+	if st.Dir == style.RTL {
+		left, right = right, left
+	}
+	if left {
+		m.l, b.l, p.l = 0, 0, 0
+	}
+	if right {
+		m.r, b.r, p.r = 0, 0, 0
+	}
+	return m, b, p
+}
+
+// resizeEdge gives the edge piece i width w, and line as the other styles measure it:
+// the first line's where the pieces stand in their own, their own otherwise.
+func (c *inlineContent) resizeEdge(i int, w, line float32) {
+	if c.firstPieces != nil && c.firstPieces[i].width != line {
+		c.firstPieces[i].width = line
+		c.broken, c.unbroken = nil, nil
+	}
+	if p := &c.pieces[i]; p.width != w {
+		p.width = w
+		c.broken, c.unbroken = nil, nil
+	}
 }
 
 // resize gives piece i width w, as the first line measures it too, forgetting the lines

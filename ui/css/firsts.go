@@ -204,7 +204,7 @@ func (r *restyler) letterOf(n *dom.Node, data *dom.Pipeline, rem float32) {
 	var text *dom.Node
 	end := 0
 	if r.firstLetter && r.may(n, "first-letter") {
-		text, end, _ = letterIn(n)
+		text, end, _ = letterIn(n, r.textOf)
 	}
 	if text != nil && dom.Data(text).Letter != nil && dom.Data(text).Letter != data.FirstLetter {
 		// a block inside takes it with its own
@@ -225,7 +225,10 @@ func (r *restyler) letterOf(n *dom.Node, data *dom.Pipeline, rem float32) {
 		}
 		return
 	}
-	letter := strings.TrimLeft(text.Text()[:end], " \t\n\r\f")
+	letter := r.textOf(text)[:end]
+	if dom.Data(text.Parent()).Style.WhiteSpace.Collapse() != style.Preserve {
+		letter = strings.TrimLeft(letter, " \t\n\r\f")
+	}
 	if st.InitialLetter.Size > 0 {
 		r.dropCap(st, data.Style, letter)
 	}
@@ -273,19 +276,28 @@ func (r *restyler) dropLetter(n *dom.Node, data *dom.Pipeline) {
 	relayout(n)
 }
 
+// textOf is text node n's text as it is shown: a translation's.
+func (r *restyler) textOf(n *dom.Node) string {
+	if r.shown != nil {
+		return r.shown(n)
+	}
+	return n.Text()
+}
+
 // letterIn finds the text node n's first letter is in, and where the
-// letter ends in it, as Chrome looks for it: in the first text of its
-// flow, through inline elements, ::before and the first block inside,
-// past floats and positioned elements; a picture, a control, an inline
-// block or a br before any text has none taken. stop is set once the
-// search is over, found or not.
-func letterIn(n *dom.Node) (*dom.Node, int, bool) {
+// letter ends in what textOf says it shows, as Chrome looks for it: in
+// the first text of its flow, through inline elements, ::before and the
+// first block inside, past floats and positioned elements; a picture, a
+// control, an inline block or a br before any text has none taken. stop
+// is set once the search is over, found or not.
+func letterIn(n *dom.Node, textOf func(*dom.Node) string) (*dom.Node, int, bool) {
 	for _, k := range n.Flow() {
 		if k.IsText() {
-			if strings.TrimLeft(k.Text(), " \t\n\r\f") == "" {
+			s := textOf(k)
+			if strings.TrimLeft(s, " \t\n\r\f") == "" {
 				continue
 			}
-			if end := letterEnd(k.Text()); end > 0 {
+			if end := letterEnd(s); end > 0 {
 				return k, end, true
 			}
 			return nil, 0, true
@@ -299,7 +311,7 @@ func letterIn(n *dom.Node) (*dom.Node, int, bool) {
 			st.Display == style.InlineGrid:
 			return nil, 0, true
 		case st.Display == style.Inline || st.Display == style.Contents || blockContainer(st):
-			if t, end, stop := letterIn(k); stop {
+			if t, end, stop := letterIn(k, textOf); stop {
 				return t, end, true
 			}
 		default:
