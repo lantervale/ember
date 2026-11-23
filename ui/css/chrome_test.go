@@ -133,10 +133,11 @@ var compared = map[string]func(s *style.Computed) string{
 		return []string{"none", "uppercase", "lowercase", "capitalize"}[s.TextTransform]
 	},
 	"white-space": func(s *style.Computed) string {
-		return []string{"normal", "nowrap", "pre", "pre-wrap", "pre-line", "preserve-breaks nowrap"}[s.WhiteSpace]
+		return []string{"normal", "nowrap", "pre", "pre-wrap", "pre-line", "preserve-breaks nowrap", "break-spaces",
+			"break-spaces nowrap"}[s.WhiteSpace]
 	},
 	"white-space-collapse": func(s *style.Computed) string {
-		return []string{"collapse", "preserve", "preserve-breaks"}[s.WhiteSpace.Collapse()]
+		return []string{"collapse", "preserve", "preserve-breaks", "break-spaces"}[s.WhiteSpace.Collapse()]
 	},
 	"text-wrap-mode": wrapMode,
 	"text-wrap-style": func(s *style.Computed) string {

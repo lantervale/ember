@@ -36,6 +36,13 @@ func TestWritesTheTreeWithItsAttributes(t *testing.T) {
 	assert.NotContains(t, got, "</input>")
 }
 
+func TestACarriageReturnIsWrittenAsAReference(t *testing.T) {
+	d := ui.NewDocument()
+	d.Body().Append(ui.Pre(ui.Text("a\rb\r\nc")))
+	assert.Contains(t, written(t, d), "<pre>a&#13;b&#13;\nc</pre>",
+		"a parser turns a carriage return it reads into a newline")
+}
+
 func TestWritesATablesCaptionAndFooter(t *testing.T) {
 	d := ui.NewDocument()
 	d.Body().Append(ui.Table(ui.Caption(ui.Text("Scores")), ui.Tbody(ui.Tr(ui.Td(ui.Text("12")))),
