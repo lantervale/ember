@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30">
+  <rect width="30" height="30" fill="#fed"/>
+  <g fill="none" stroke="#333">
+    <rect x="2" y="2" width="11" height="11" stroke-width="1" vector-effect="non-scaling-stroke"/>
+    <rect x="17" y="2" width="11" height="11" stroke-width="1"/>
+    <path d="M2 17 L13 28 M2 28 L13 17" stroke="#c33" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+    <g transform="translate(17 17) scale(.25 .5)"><circle cx="22" cy="11" r="20" stroke="#36c" stroke-width="3" vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/></g>
+  </g>
+</svg>
