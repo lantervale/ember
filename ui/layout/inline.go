@@ -159,6 +159,8 @@ type inlineSpan struct {
 	shift  float32
 	line   int
 	extent extent
+	// holds is the stamp of the last line the span holds an atomic inline on.
+	holds int
 	// noStart and noEnd are set on a part of an element blocks cut that is not its
 	// first or not its last: it has no edge there.
 	noStart, noEnd bool
@@ -206,6 +208,9 @@ type piece struct {
 	// stop is a tab's distance between tab stops, none for a carriage return, and least
 	// the room it takes at the least.
 	stop, least float32
+	// unspaced marks a gap whose first space starts the content's text, and so takes no
+	// word-spacing.
+	unspaced bool
 }
 
 const zeroWidthSpace = "\u200b"
@@ -567,6 +572,31 @@ func (c *inlineContent) rootStyle() *style.Computed {
 	return c.owner.st
 }
 
+// unspace takes word-spacing off gap p when its first space starts the content's text.
+func (c *inlineContent) unspace(p *piece, st *style.Computed) {
+	if p.kind == gap && p.text[0] == ' ' && st.WordGap() != 0 && c.first() {
+		p.width -= st.WordGap()
+		p.unspaced = true
+	}
+}
+
+// first reports whether the next piece starts the text of content whose block collapses
+// its spaces: Chrome adds no word-spacing to a space an element inside keeps there, where
+// a block keeping its own spaces widens it as any other.
+func (c *inlineContent) first() bool {
+	if !collapses(c.owner.st.WhiteSpace) {
+		return false
+	}
+	for _, p := range c.pieces {
+		switch p.kind {
+		case word, gap, newline, atomic, marker, tab:
+			return false
+		case breakHere, edge, emergency, anchor:
+		}
+	}
+	return true
+}
+
 // cutRun cuts run i's text into pieces, afterSpace saying whether a collapsible space
 // came last before it, and reports the same after it. levels are its characters' bidi
 // levels, nil for none: a word is cut where they change, its parts glued.
@@ -593,6 +623,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		if kind == word || kind == gap {
 			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) + r.st.Spacing(s)
 		}
+		c.unspace(&p, r.st)
 		c.pieces = append(c.pieces, p)
 	}
 	for at, ch := range collapsedBlanks(r.text, ws) {
@@ -1683,6 +1714,7 @@ func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
 		}
 		*into = into.with(sp.extent, shift)
 	}
+	t.whereTheyStood(c, lo, hi, &root)
 	t.alignPending(c, -1, &root)
 	if !c.moved {
 		return root.above + root.below, root.above
@@ -1709,6 +1741,40 @@ func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
 		}
 	}
 	return root.above + root.below, root.above
+}
+
+// whereTheyStood counts in root, as Chrome does, each span of the line inside a top or
+// bottom aligned one that makes a box of its own in Chrome's fragments (one holding an
+// atomic inline, or with a background, a border, padding or a margin): by its line height,
+// where the shifts between the two put it from the line's baseline, as if the top or
+// bottom box stood on it.
+func (t *tree) whereTheyStood(c *inlineContent, lo, hi int, root *extent) {
+	for k := lo; k <= hi; k++ {
+		sp := c.spans[k]
+		if sp.line != c.stamp || (sp.holds != c.stamp && !ownBox(sp)) {
+			continue
+		}
+		var shift float32
+		j := k
+		for ; j >= 0; j = c.spans[j].up {
+			at := c.spans[j].st.VerticalAlign
+			if at == style.AlignTop || at == style.AlignBottom {
+				break
+			}
+			shift += c.spans[j].shift
+		}
+		if j < 0 || j == k || shift == 0 {
+			continue
+		}
+		h, base := t.lineHeight(c, sp.st)
+		*root = root.with(extent{base, h - base}, shift)
+	}
+}
+
+// ownBox reports whether sp paints something of its own round its text.
+func ownBox(sp *inlineSpan) bool {
+	return sp.margin != (rect{}) || sp.border != (rect{}) || sp.padding != (rect{}) || sp.st.Background.A > 0 ||
+		len(sp.st.BackgroundImages) > 0
 }
 
 // openBoxes starts line l's alignment: each span open on it takes its line height, stamped
@@ -1745,6 +1811,9 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 		}
 		r := c.runs[p.run]
 		if a := r.atomic; a != nil {
+			if k >= 0 {
+				c.spans[k].holds = c.stamp
+			}
 			top := a.margin.t + a.baseline
 			e := extent{top, a.height + a.margin.vertical() - top}
 			if shift, ok := t.shiftOf(c, r.st, c.styleAt(k), e); ok {
@@ -2223,6 +2292,7 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		var start float32
 		var from int32
 		var rtl bool
+		unspaced := pieces[i].unspaced
 		text, start, from, rtl, i = runText(&walk, pieces, i, perGap)
 		end := walk.end()
 		if i < len(pieces) && isText(pieces[i].kind) && pieces[i].run == run {
@@ -2230,7 +2300,7 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		}
 		r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
 		frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart, cut[1] && i == len(pieces))
-		frag.Start, frag.RTL = from+c.runs[run].skip, rtl
+		frag.Start, frag.RTL, frag.Unspaced = from+c.runs[run].skip, rtl, unspaced
 		if c.firstOn {
 			frag.Style = c.runs[run].st
 		}

@@ -320,6 +320,23 @@ func (s *Set) fallbackAdvance(c *Face, r rune, size float32) (float32, bool) {
 	return float32(a) / 64 * size / fb.upem, true
 }
 
+// spaceAdvance is the advance of a space character c lacks at size, as
+// draw.SpaceAdvance has Chrome draw it in c.
+func (s *Set) spaceAdvance(c *Face, r rune, size float32) (float32, bool) {
+	size *= c.Look.adjust()
+	return draw.SpaceAdvance(r, size, func(r rune) (float32, bool) {
+		g, err := c.font.GlyphIndex(&s.buf, r)
+		if err != nil || g == 0 {
+			return 0, false
+		}
+		a, err := c.font.GlyphAdvance(&s.buf, g, fixed.I(int(c.upem)), font.HintingNone)
+		if err != nil {
+			return 0, false
+		}
+		return float32(a) / 64 * size / c.upem, true
+	})
+}
+
 // advance is text's width in f's face, shaped with f's features, the
 // fallback's characters in it.
 func (s *Set) advance(f style.Font, text string) float32 {
@@ -337,7 +354,11 @@ func (s *Set) advance(f style.Font, text string) float32 {
 			continue
 		}
 		if g == 0 {
-			if a, ok := s.fallbackAdvance(c, r, f.Size); ok {
+			a, ok := s.fallbackAdvance(c, r, f.Size)
+			if !ok {
+				a, ok = s.spaceAdvance(c, r, f.Size)
+			}
+			if ok {
 				other += a
 				w += s.shaped(c, script, f.Features, run, nil)
 				run = run[:0]

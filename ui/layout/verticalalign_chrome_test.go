@@ -137,8 +137,8 @@ td { width: 70px; padding: 2px; }
 		t.Run(name, func(t *testing.T) {
 			r := chrome.Match(t, d, geom.V2(800, 1400))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
-			matchText(t, d, geom.V2(800, 1400), 0.5)
-			matchSpanFragments(t, d, geom.V2(800, 1400), 0.5)
+			matchText(t, d, geom.V2(800, 1400))
+			matchSpanFragments(t, d, geom.V2(800, 1400))
 		})
 	}
 }
