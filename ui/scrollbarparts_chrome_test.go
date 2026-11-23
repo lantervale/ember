@@ -121,7 +121,9 @@ func TestGuttersBoundTheSidewaysScrollAsChromes(t *testing.T) {
 }
 
 // In a vertical writing mode a stable gutter is the horizontal bar's, at
-// the block end, and both-edges keeps one at the top as well.
+// the block end, and both-edges keeps one at the top as well; scrolled
+// sideways to its end, a box with a vertical bar too stops where
+// Chrome's does.
 func TestVerticalGuttersAsChromes(t *testing.T) {
 	const sheet = `.s { width: 120px; height: 80px; overflow: auto; margin: 4px; position: relative;
   writing-mode: vertical-rl; }
@@ -130,6 +132,7 @@ func TestVerticalGuttersAsChromes(t *testing.T) {
 .both { scrollbar-gutter: stable both-edges; }
 .stable { scrollbar-gutter: stable; }
 .wide > div:first-child { width: 200px; }
+.long > div:nth-child(2) { height: 200px; }
 .lr { writing-mode: vertical-lr; }
 .styled::-webkit-scrollbar { width: 9px; height: 11px; }
 .flex { display: flex; }`
@@ -143,6 +146,11 @@ func TestVerticalGuttersAsChromes(t *testing.T) {
 		{[]string{"stable", "styled"}, geom.Vec2{}}, {[]string{"both", "flex"}, geom.Vec2{}},
 		{[]string{"both", "wide"}, geom.V2(-1e6, 0)}, {[]string{"stable", "wide"}, geom.V2(-1e6, 0)},
 		{[]string{"both", "wide", "lr"}, geom.V2(1e6, 0)}, {[]string{"stable", "wide", "lr"}, geom.V2(1e6, 0)},
+		{[]string{"both", "wide", "long"}, geom.V2(-1e6, 0)}, {[]string{"both", "wide", "long", "lr"}, geom.V2(1e6, 0)},
+		{[]string{"both", "wide", "long", "styled"}, geom.V2(-1e6, 1e6)},
+		{[]string{"stable", "wide", "long"}, geom.V2(-1e6, 0)}, {[]string{"both", "long", "styled"}, geom.V2(0, 1e6)},
+		{[]string{"long", "styled"}, geom.V2(0, 1e6)}, {[]string{"long", "styled"}, geom.V2(0, 0)},
+		{[]string{"long"}, geom.V2(0, 1e6)}, {[]string{"long"}, geom.V2(0, 0)},
 	} {
 		s := ui.Div(ui.Class(append([]string{"s"}, c.classes...)...), ui.Div(), ui.Div(), ui.Div(ui.Class("abs")))
 		d.Body().Append(s)

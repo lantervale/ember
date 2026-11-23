@@ -337,10 +337,23 @@ type FallbackFonts interface {
 
 // HanFonts is Fonts that knows what text-spacing-trim reads of a
 // full-width punctuation mark's glyph: HanGlyph is r's glyph in the face
-// drawing it in f.
+// drawing it in f, standing upright in a vertical line when upright, its
+// trim then the face's vhal.
 type HanFonts interface {
-	HanGlyph(f style.Font, r rune) HanGlyph
+	HanGlyph(f style.Font, r rune, upright bool) HanGlyph
 }
+
+// ContextualHanFonts is HanFonts that knows a face's own contextual
+// spacing (chws), which Chrome spaces full-width punctuation by in place
+// of its rules: HanPair is what it does to a in fa and b in fb side by
+// side, ok false unless one face with chws draws both at one size.
+type ContextualHanFonts interface {
+	HanPair(fa style.Font, a rune, fb style.Font, b rune) (HanAdjust, HanAdjust, bool)
+}
+
+// HanAdjust is how far a face's spacing moves a glyph and what it takes
+// off its advance, in points.
+type HanAdjust struct{ Shift, Narrow float32 }
 
 // HanGlyph is what text-spacing-trim reads of a glyph, in points at its
 // size.

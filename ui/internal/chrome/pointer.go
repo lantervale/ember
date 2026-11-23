@@ -110,6 +110,10 @@ func WithinPointing(t testing.TB, pkg, name string, w, h int, path []Pointer, th
 	}))
 	defer srv.Close()
 	s := Open(t, srv.URL, size, float32(a.Bounds().Dx())/float32(w))
+	// The page drawn before the pointer moves: what Chrome builds at its
+	// first frame, such as a box's styled bars, then takes the moves as
+	// they come.
+	s.Eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`, nil)
 	s.Point(path)
 	s.Eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`, nil)
 	b := s.Shot()

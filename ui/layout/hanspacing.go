@@ -130,11 +130,14 @@ type hanTrim struct{ shift, space float32 }
 
 // hanChar is a character of a word that text-spacing-trim or
 // text-autospace spaces: the bytes [at, end) of its text (its marks
-// with it), its trim, and the room text-autospace adds after it.
+// with it), its trim, and the room text-autospace adds after it. ahead
+// is the part of its trim a face's chws gives it for the character after
+// it, which a line ending after it drops.
 type hanChar struct {
 	at, end int
 	hanTrim
-	auto float32
+	ahead hanTrim
+	auto  float32
 }
 
 // hanSpacing is what text-spacing-trim and text-autospace do to a word:
@@ -159,6 +162,21 @@ func (h *hanSpacing) char(at, end int) *hanChar {
 	h.chars = append(h.chars, hanChar{at: at, end: end})
 	return &h.chars[len(h.chars)-1]
 }
+
+// adjust adds what a face's chws does to c's glyph to its trim, for the
+// character after it when ahead.
+func (c *hanChar) adjust(a box.HanAdjust, ahead bool) {
+	c.shift += a.Shift
+	c.space += a.Narrow
+	if ahead {
+		c.ahead.shift += a.Shift
+		c.ahead.space += a.Narrow
+	}
+}
+
+// ended is c's trim at a line's end, without what it has for the
+// character after it.
+func (c hanChar) ended() hanTrim { return hanTrim{c.shift - c.ahead.shift, c.space - c.ahead.space} }
 
 // room is what h adds to its word's width within a line.
 func (h *hanSpacing) room() float32 {
@@ -188,10 +206,10 @@ func (h *hanSpacing) closes(n int) (float32, bool) {
 		return 0, false
 	}
 	c := h.chars[len(h.chars)-1]
-	if c.end != n || c.space <= h.closing.space {
+	if c.end != n || c.ended().space <= h.closing.space {
 		return 0, false
 	}
-	return h.closing.space - c.space, true
+	return h.closing.space - c.ended().space, true
 }
 
 // placed is h as a line places its word of n bytes, the line starting
@@ -209,6 +227,8 @@ func (h *hanSpacing) placed(n int, start lineStart, end, closed bool) (*hanSpaci
 	}
 	if end && len(out.chars) > 0 && out.chars[len(out.chars)-1].end == n {
 		c := &out.chars[len(out.chars)-1]
+		d -= c.ahead.space
+		c.hanTrim, c.ahead = c.ended(), hanTrim{}
 		if trim, ok := h.closes(n); ok && closed {
 			d += trim
 			c.hanTrim = h.closing
@@ -236,15 +256,19 @@ func (h *hanSpacing) startTrim(start lineStart) hanTrim {
 }
 
 // endRoom is how much wider a line ending after h's word of n bytes
-// sets it, where the line's break drops the room text-autospace adds
-// after its last character: a break inside the text of its own element,
-// which Chrome shapes again, where it keeps the room at an element's
-// end.
+// sets it: without the trim a face's chws gives its last character for
+// the next, and where the line's break drops it, the room text-autospace
+// adds after it: a break inside the text of its own element, which
+// Chrome shapes again, where it keeps the room at an element's end.
 func (h *hanSpacing) endRoom(n int, drops bool) float32 {
-	if h == nil || !drops || len(h.chars) == 0 || h.chars[len(h.chars)-1].end != n {
+	if h == nil || len(h.chars) == 0 || h.chars[len(h.chars)-1].end != n {
 		return 0
 	}
-	return -h.chars[len(h.chars)-1].auto
+	c := h.chars[len(h.chars)-1]
+	if !drops {
+		return -c.ahead.space
+	}
+	return -c.ahead.space - c.auto
 }
 
 // leadWord is the word piece k a line starts with, -1 for none, and how
@@ -425,6 +449,27 @@ func fragmentSpacing(pieces []piece) []box.Spacing {
 	return out
 }
 
+// LineSpacing is the room text-spacing-trim and text-autospace give
+// text, set on one line of style st that starts its block, by byte as a
+// Fragment's Spacing: what an input's caret and selection measure
+// through, its text laid out as the input lays it out.
+func LineSpacing(fonts box.Fonts, st *style.Computed, text string) []box.Spacing {
+	if !mayHan(text) {
+		return nil
+	}
+	pre := *st
+	pre.WhiteSpace = style.Pre
+	owner := &node{box: &box.Box{Kind: box.Element, Style: st}, st: st}
+	c := &inlineContent{owner: owner, runs: []*textRun{{box: &box.Box{Kind: box.TextRun, Style: st}, parent: owner.box,
+		st: &pre, span: -1, text: text}}, unit: unitsPerPoint(fonts), height: none}
+	c.cut(fonts)
+	var out []box.Spacing
+	for _, l := range c.lines(unbounded) {
+		out = append(out, fragmentSpacing(c.shown(l))...)
+	}
+	return out
+}
+
 // mayHan reports whether text has a character text-spacing-trim or
 // text-autospace may space: ideographs and the punctuation round them,
 // curly quotes and middle dots.
@@ -447,6 +492,7 @@ func mayHan(text string) bool {
 // each property, its glyph, the word piece and the entry it is in, and
 // its run's style.
 type hanSpaced struct {
+	r     rune
 	trim  hanClass
 	space spaceClass
 	g     box.HanGlyph
@@ -467,6 +513,7 @@ func (c *inlineContent) spaceHan(fonts box.Fonts) {
 	if !ok || !c.hanText() {
 		return
 	}
+	cf, _ := fonts.(box.ContextualHanFonts)
 	var last hanSpaced
 	have := false
 	for k := range c.pieces {
@@ -486,7 +533,7 @@ func (c *inlineContent) spaceHan(fonts box.Fonts) {
 			continue
 		}
 		st := c.runs[p.run].st
-		if st.Mode.Vertical() {
+		if st.Mode.Vertical() && (!st.Stands() || st.Combine) {
 			have = false
 			continue
 		}
@@ -498,7 +545,7 @@ func (c *inlineContent) spaceHan(fonts box.Fonts) {
 			}
 			cur := readHan(hf, st, r, k, at)
 			if have {
-				c.pair(last, cur)
+				c.pair(cf, last, cur)
 			}
 			if at == 0 {
 				c.opening(cur)
@@ -519,12 +566,12 @@ func (c *inlineContent) spaceHan(fonts box.Fonts) {
 // readHan is character r of style st, at byte at of word piece k, as
 // the spacing pass reads it.
 func readHan(hf box.HanFonts, st *style.Computed, r rune, k, at int) hanSpaced {
-	cur := hanSpaced{space: spaceClassOf(r), piece: k, at: at, end: at + utf8.RuneLen(r), st: st}
-	if r == softHyphenChar || unicode.Is(unicode.Cf, r) {
+	cur := hanSpaced{r: r, space: spaceClassOf(r), piece: k, at: at, end: at + utf8.RuneLen(r), st: st}
+	if r == softHyphenChar || unicode.Is(unicode.Cf, r) || st.Stands() && st.Orientation == style.OrientUpright {
 		cur.space = spaceOther
 	}
 	if glyphClassed(r) || unicode.In(r, unicode.Ps, unicode.Pe) {
-		cur.g = hf.HanGlyph(st.Font, r)
+		cur.g = hf.HanGlyph(st.Font, r, st.Stands() && style.Upright(r, st.Orientation))
 	}
 	cur.trim = hanClassOf(r, cur.g)
 	return cur
@@ -593,11 +640,15 @@ func (c *inlineContent) extend(ch hanSpaced) {
 
 // pair spaces characters last and cur, side by side: the room
 // text-autospace adds after last, and the trim of whichever of the two
-// text-spacing-trim sets half wide.
-func (c *inlineContent) pair(last, cur hanSpaced) {
+// text-spacing-trim sets half wide, or, where their face has chws, what
+// it does to them, as Chrome hands it the pair.
+func (c *inlineContent) pair(cf box.ContextualHanFonts, last, cur hanSpaced) {
 	if last.st.Autospace && cur.st.Autospace && last.space != spaceOther && cur.space != spaceOther &&
 		last.space != cur.space {
 		c.han(last.piece).char(last.at, last.end).auto = last.st.Font.Size / 8
+	}
+	if c.faceSpaces(cf, last, cur) {
+		return
 	}
 	switch {
 	case trimsCurrent(cur.trim, last.trim):
@@ -609,6 +660,32 @@ func (c *inlineContent) pair(last, cur hanSpaced) {
 			c.han(last.piece).char(last.at, last.end).hanTrim = hanTrim{last.g.Shift, last.g.Narrow}
 		}
 	}
+}
+
+// faceSpaces spaces characters last and cur as their face's chws does,
+// and reports whether it did: one face with chws draws both, neither
+// under space-all.
+func (c *inlineContent) faceSpaces(cf box.ContextualHanFonts, last, cur hanSpaced) bool {
+	if cf == nil || last.trim == hanOther && cur.trim == hanOther ||
+		last.st.SpacingTrim == style.SpaceAll || cur.st.SpacingTrim == style.SpaceAll {
+		return false
+	}
+	a, b, ok := cf.HanPair(last.st.Font, last.r, cur.st.Font, cur.r)
+	if !ok {
+		return false
+	}
+	if a != (box.HanAdjust{}) {
+		c.han(last.piece).char(last.at, last.end).adjust(a, true)
+	}
+	if b != (box.HanAdjust{}) {
+		c.han(cur.piece).char(cur.at, cur.end).adjust(b, false)
+	}
+	if h := c.pieces[last.piece].han; h != nil && (trimsCurrent(cur.trim, last.trim) || trimsLast(cur.trim, last.trim)) {
+		// Chrome leaves a pair its rules space to the face, which a line's
+		// end parts, so it trims no closing bracket there.
+		h.closing = hanTrim{}
+	}
+	return true
 }
 
 // quoteBreaks calls fn with each byte of text a line may break at by

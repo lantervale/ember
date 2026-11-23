@@ -206,7 +206,11 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0201 | [An optgroup is a label row of a select's list](0201-an-optgroup-is-a-label-row-of-a-selects-list.md) | api |
 | 0202 | [A select with multiple or a size is a listbox of rows in the page](0202-a-select-with-multiple-or-a-size-is-a-listbox-of-rows-in-the-page.md) | api |
 | 0204 | [A positioned box is laid out in its containing block's frame](0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md) | rendering |
+| 0206 | [A select's type-ahead and a listbox's autoscroll follow Chrome's](0206-a-selects-type-ahead-and-a-listboxs-autoscroll-follow-chromes.md) | api |
+| 0207 | [A resizer writes the box's size into its style, and parts restyle as Chrome's bars](0207-a-resizer-writes-the-boxs-size-into-its-style-and-parts-restyle-as-chromes-bars.md) | api |
 | 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
+| 0210 | [Marks of vertical lines are measured in their flow, and a fallback stands by its own metrics](0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md) | rendering |
+| 0211 | [A face's chws spaces its pairs, and vertical text trims by vhal](0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md) | rendering |
 | 0212 | [A picture takes its natural size in its own writing mode](0212-a-picture-takes-its-natural-size-in-its-own-writing-mode.md) | rendering |
 
 ## Writing one
