@@ -1,6 +1,7 @@
 package css
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"strings"
@@ -66,6 +67,8 @@ type Transitions struct {
 	probed  int
 	// scratch is where a transition's ends are tried for interpolating.
 	scratch style.Computed
+	// defined are the custom properties RegisterProperty registered.
+	defined []*registration
 }
 
 // nodeAnim is one element's running transitions and the style it shows.
@@ -80,6 +83,8 @@ type nodeAnim struct {
 	// is set.
 	after  style.Computed
 	ending bool
+	// customs are the transitions of custom properties, by name.
+	customs map[string]*run
 }
 
 // run is one transition, between the values of its longhand in two
@@ -121,7 +126,7 @@ func (t *Transitions) SetMedia(m Media) bool {
 	if m == t.media {
 		return false
 	}
-	t.media = m
+	t.media, t.env.media = m, m
 	resized := t.env.width != m.Width || t.env.height != m.Height
 	flipped := t.env.dark != m.Dark
 	rescaled := t.env.dppx != m.Resolution
@@ -137,7 +142,7 @@ func (t *Transitions) SetMedia(m Media) bool {
 	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
 		t.off, t.stale, t.rekey = off, true, true
 		t.startOff = rulesOff(t.all, m, true)
-	} else if resized && t.env.used&viewportUnits != 0 || flipped && t.env.prefersRead || rescaled ||
+	} else if t.env.mediaRead || resized && t.env.used&viewportUnits != 0 || flipped && t.env.prefersRead || rescaled ||
 		blurred && t.env.inactiveRead {
 		t.stale = true
 	}
@@ -202,6 +207,27 @@ func (t *Transitions) SetSheets(sheets []*Sheet) {
 	t.off, t.ranks, t.queries = mediaOff(t.all, t.media), layerRanks(t.all), containerQueries(t.all)
 	t.starts = startingRules(t.all)
 	t.startOff = rulesOff(t.all, t.media, true)
+	t.env.props = newRegistry(t.all, t.defined)
+}
+
+// RegisterProperty registers a custom property as CSS.registerProperty
+// does, over any @property rule of its name: the whole tree is styled
+// again at the next Compute. A name registered so before, or a
+// definition whose syntax or initial value is invalid, is an error.
+func (t *Transitions) RegisterProperty(def PropertyDefinition) error {
+	if slices.ContainsFunc(t.defined, func(r *registration) bool { return r.name == def.Name }) {
+		return fmt.Errorf("css: %s is already registered", def.Name)
+	}
+	r, err := register(def)
+	if err != nil {
+		return fmt.Errorf("css: %s: %w", def.Name, err)
+	}
+	t.defined = append(t.defined, r)
+	if t.all != nil {
+		t.env.props = newRegistry(t.all, t.defined)
+		t.stale, t.rekey = true, true
+	}
+	return nil
 }
 
 // Compute restyles root as css.Compute does, starting a transition for
@@ -271,10 +297,14 @@ func (t *Transitions) Step(dt float32) bool {
 				delete(a.runs, i)
 			}
 		}
+		for _, r := range a.customs {
+			r.elapsed += dt
+			restyle(n)
+		}
 	}
 	t.refresh()
 	for _, a := range t.nodes {
-		running = running || len(a.runs) > 0
+		running = running || len(a.runs) > 0 || len(a.customs) > 0
 	}
 	return running
 }
@@ -347,6 +377,7 @@ func (t *Transitions) transition(n *dom.Node, next *style.Computed) []override {
 			a.runs[i] = nr
 		}
 	}
+	a = t.customTransitions(n, a, old, next)
 	if a == nil {
 		return nil
 	}
@@ -361,10 +392,97 @@ func (t *Transitions) transition(n *dom.Node, next *style.Computed) []override {
 			delete(a.runs, i)
 		}
 	}
+	for name, r := range a.customs {
+		over = append(over, r.customOverride(t, name))
+		if r.over() {
+			delete(a.customs, name)
+		}
+	}
 	if a.ending = len(over) > 0; a.ending {
 		a.after = *next
 	}
 	return over
+}
+
+// customTransitions starts, retargets or cancels the transitions of
+// the custom properties next's transition list names, as their values
+// go from old's, or from where a running one shows them, to next's: a
+// registered property of a type that moves interpolates, any other
+// flips halfway, under allow-discrete only. It returns a, made when a
+// transition starts.
+func (t *Transitions) customTransitions(n *dom.Node, a *nodeAnim, old, next *style.Computed) *nodeAnim {
+	var names []string
+	for _, tr := range next.Transitions {
+		if strings.HasPrefix(tr.Property, "--") && !slices.Contains(names, tr.Property) {
+			names = append(names, tr.Property)
+		}
+	}
+	if a != nil {
+		for name := range a.customs {
+			if !slices.Contains(names, name) {
+				delete(a.customs, name)
+			}
+		}
+	}
+	for _, name := range names {
+		var r *run
+		if a != nil {
+			r = a.customs[name]
+		}
+		tr, ok := transitionFor(next.Transitions, name, false)
+		to, toOK := next.Vars[name]
+		switch {
+		case r != nil && sameVar(r.to, name, to, toOK):
+			continue
+		case r == nil && sameVar(old, name, to, toOK):
+			continue
+		}
+		from, fromOK := old.Vars[name]
+		if r != nil {
+			o := r.customOverride(t, name)
+			from, fromOK = o.text, !o.unset
+		}
+		reg := t.env.props.get(name)
+		moves := fromOK && toOK && reg != nil && reg.moves(reg.current(from, old), reg.current(to, next))
+		if !ok || !moves && !tr.Discrete {
+			if a != nil {
+				delete(a.customs, name)
+			}
+			continue
+		}
+		start := *old
+		start.Vars = map[string]string{}
+		if fromOK {
+			start.Vars[name] = from
+		}
+		end := *next
+		nr := &run{from: &start, to: &end, factor: 1, delay: tr.Delay, length: tr.Duration, easing: easing(tr.Easing)}
+		if a == nil {
+			a = &nodeAnim{runs: map[int]*run{}}
+			t.nodes[n] = a
+		}
+		if a.customs == nil {
+			a.customs = map[string]*run{}
+		}
+		a.customs[name] = nr
+	}
+	return a
+}
+
+// sameVar reports whether s's custom property name is v, or unset as v.
+func sameVar(s *style.Computed, name, v string, ok bool) bool {
+	w, has := s.Vars[name]
+	return has == ok && w == v
+}
+
+// customOverride is what r, a transition of the custom property name,
+// sets on Style now: its start while it waits out its delay.
+func (r *run) customOverride(t *Transitions, name string) override {
+	e := float32(0)
+	if r.elapsed >= r.delay {
+		e = r.easing(r.progress())
+	}
+	return t.customOverride(name, r.from, r.to, e)
 }
 
 // after is the style n's transitions on Style run to, nil while none
@@ -476,7 +594,7 @@ func (t *Transitions) refresh() {
 
 // own reports whether n shows a transition or an animation of its own.
 func (t *Transitions) own(n *dom.Node, a *nodeAnim) bool {
-	return len(a.runs) > 0 || t.anims[n] != nil && len(t.anims[n].paints) > 0
+	return len(a.runs) > 0 || len(a.customs) > 0 || t.anims[n] != nil && len(t.anims[n].paints) > 0
 }
 
 // ownColor reports whether n shows a colour transition or animation of

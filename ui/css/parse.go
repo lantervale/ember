@@ -200,6 +200,10 @@ type Sheet struct {
 	imports []Import
 	base    *Sheet
 	spliced []splice
+	// properties are its @property rules, and functions its @function
+	// rules, in order.
+	properties []*registration
+	functions  []*customFunction
 }
 
 // anonymous begins the name a layer without one goes by.
@@ -279,6 +283,12 @@ func (s *Sheet) String() string {
 			b.WriteString("@media " + s.media[m].text + " { ")
 		}
 		b.WriteString(cs.String() + strings.Repeat(" }", len(cs.media)) + "\n")
+	}
+	for _, r := range s.properties {
+		b.WriteString(r.written + "\n")
+	}
+	for _, f := range s.functions {
+		b.WriteString(f.written + "\n")
 	}
 	return b.String()
 }
@@ -703,7 +713,7 @@ func (p *parser) nestable(name string) bool {
 	switch name {
 	case atMedia, kwContainer, "starting-style", kwScope:
 		return true
-	case "supports", atLayer:
+	case atSupports, atLayer:
 		return p.browser
 	}
 	return false
@@ -741,7 +751,11 @@ func (p *parser) atRule(t Token, in scope) {
 		p.counterStyle(t, in)
 	case name == propPositionTry:
 		p.positionTry(t)
-	case name == "supports" && p.browser:
+	case name == "property":
+		p.propertyRule(t)
+	case name == "function":
+		p.functionRule(t)
+	case name == atSupports && p.browser:
 		p.supports(t, in)
 	case name == atLayer && p.browser:
 		p.layer(t, in)
@@ -915,7 +929,7 @@ func animates(name string) bool {
 		return true
 	}
 	if strings.HasPrefix(name, "--") {
-		return false
+		return true
 	}
 	return slices.ContainsFunc(longhandsOf(name), func(l string) bool {
 		p, ok := props[l]

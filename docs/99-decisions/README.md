@@ -176,6 +176,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0171 | [Thai, Hangul and Hebrew are shaped as HarfBuzz, and a run between the text round it](0171-thai-hangul-and-hebrew-are-shaped-as-harfbuzz-and-a-run-between-the-text-round-it.md) | rendering |
 | 0172 | [Colour fonts are drawn in pure Go, as pictures of their glyphs](0172-colour-fonts-are-drawn-in-pure-go-as-pictures-of-their-glyphs.md) | rendering |
 | 0173 | [Anchors are read from the last layout and laid out again until they settle](0173-anchors-are-read-from-the-last-layout-and-laid-out-again-until-they-settle.md) | rendering |
+| 0174 | [Registered custom properties and the functions a cascade substitutes](0174-registered-custom-properties-and-the-functions-a-cascade-substitutes.md) | api |
 | 0175 | [Relative snaps keep their unsnapped axes, and a held track pages on](0175-relative-snaps-keep-their-unsnapped-axes-and-a-held-track-pages-on.md) | api |
 
 ## Writing one

@@ -165,6 +165,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `overscroll-behavior` on a touch's scroll, `overscroll-behavior: none`'s bounce | ui scrolls by no touch and bounces nothing: `contain` and `none` stop the chain alike |
 | `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
+| `calc-size()` and `interpolate-size: allow-keywords`, a transition or an animation to or from `auto` | refused with a warning, and a size keyword flips halfway: a box's size from layout is no value the cascade can hold yet ([decision 0174](../99-decisions/0174-registered-custom-properties-and-the-functions-a-cascade-substitutes.md)) |
+| a registered `<transform-list>` interpolated between lists of other functions, a `<length-percentage>` or `<transform-function>` holding `min()` or another function over a percentage | flips halfway, and the value is unset, where Chrome interpolates the matrices and keeps the function |
+| a registered `<color>` in a space other than sRGB (`oklch(…)`), `<image>` and `<url>` values | computed as `rgb()`, and written as given, where Chrome keeps the colour's space and makes the url absolute |
+| the white space of a custom property's value, unregistered or of syntax `*` (`--a:  a   b`) | one space where the value had several, where Chrome keeps it as written |
+| an `@property` rule inside `@media` or `@supports`, and `@property` in a style attribute's sheet | registered whatever the condition says |
+| animation-composition `add` and `accumulate` on a custom property | replace |
+| `@container` inside `@function` | dropped with a warning |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 
 ## Windows
