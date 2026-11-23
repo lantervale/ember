@@ -119,8 +119,19 @@ func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 			fn(item{pic: tex, advance: f.size, clusters: 1})
 			return
 		}
+		for _, r := range c {
+			if sc, ok := shape.ScriptOf(r); ok {
+				if sc != script {
+					flush()
+					script = sc
+				}
+				break
+			}
+		}
 		g := f.glyph(first)
-		if g.idx == 0 || f.plan(g.face, script, features).Inert() {
+		if g.idx == 0 && len(f.layouts) > 0 && f.layouts[0].Decomposes(first) {
+			g.face = 0
+		} else if g.idx == 0 || f.plan(g.face, script, features).Inert() {
 			flush()
 			fn(item{r: first, g: g, advance: g.advance, clusters: 1})
 			return
@@ -131,7 +142,7 @@ func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 		}
 		run = append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true})
 		for _, r := range c[utf8.RuneLen(first):] {
-			if idx, err := f.sources[face].GlyphIndex(&f.buf, r); err == nil && idx != 0 {
+			if idx, err := f.sources[face].GlyphIndex(&f.buf, r); err == nil && (idx != 0 || r == zwj || r == zwnj) {
 				run = append(run, pending{r: r, g: g, idx: idx, cluster: clusters})
 			}
 		}
@@ -140,6 +151,12 @@ func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 	flush()
 	f.pending = run
 }
+
+// The joiners a run keeps when its face lacks them, for its shaping.
+const (
+	zwnj = 0x200C
+	zwj  = 0x200D
+)
 
 // mirrored is s with each character that has a mirror image drawn as
 // it, as text right to left draws it (UAX #9, L4).

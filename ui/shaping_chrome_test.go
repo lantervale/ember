@@ -76,3 +76,43 @@ func TestTextRightToLeftMixesArabicAndLatinAsInChrome(t *testing.T) {
 		[2]string{"word-spacing: 6px", "بسم سلام بتب"},
 	)
 }
+
+// syllabic lays out spans of devanagari.ttf, a subset of Noto Sans
+// Devanagari, each with its declarations, against Chrome.
+func syllabic(t *testing.T, sheet string, spans ...[2]string) {
+	t.Helper()
+	d := ui.NewDocument(ui.FetchFonts(foundry(t)), ui.CSS(`
+@font-face { font-family: Deva; src: url(devanagari.ttf); }
+div { margin: 0 0 4px; }
+span { display: inline-block; font: 24px Deva, monospace; }
+`+sheet))
+	for _, s := range spans {
+		d.Body().Append(ui.Div(ui.Span(ui.Style(s[0]), ui.Text(s[1]))))
+	}
+	size := geom.V2(700, 900)
+	landed(t, d, size)
+	r := chrome.Match(t, d, size)
+	assert.Empty(t, d.Warnings())
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+func TestDevanagariSyllablesAreReorderedAndFormedAsInChrome(t *testing.T) {
+	syllabic(t, "",
+		[2]string{"", "नमस्ते दुनिया"},
+		[2]string{"", "हिन्दी कि र्कि"},
+		[2]string{"", "क्षत्रिय प्रकाश श्री स्त्री"},
+		[2]string{"", "धर्म द्ध ज्ञान पृथ्वी"},
+		[2]string{"", "क्\u200dष क्\u200cष"},
+		[2]string{"", "क़ ड़ ॐ १२३"},
+		[2]string{"", "Hello नमस्ते, world"},
+		[2]string{`font-feature-settings: "half" 0`, "क्षत्रिय स्त्री"},
+		[2]string{`font-feature-settings: "rphf" 0`, "धर्म र्कि"},
+	)
+}
+
+func TestVowelSignsWithoutABaseTakeADottedCircleAsInChrome(t *testing.T) {
+	syllabic(t, "",
+		[2]string{"", "ि ा"},
+		[2]string{"", "अा कि"},
+	)
+}

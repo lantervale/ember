@@ -10,10 +10,12 @@ func (b *buffer) single(s data, i int) bool {
 	switch s.u16(0) {
 	case 1:
 		g.ID += s.u16(4)
+		g.props |= substituted
 		return true
 	case 2:
 		if k < int(s.u16(4)) {
 			g.ID = s.u16(6 + 2*k)
+			g.props |= substituted
 			return true
 		}
 	}
@@ -34,6 +36,16 @@ func (b *buffer) multiple(s data, i int) (int, bool) {
 	if !b.replace(i, ids) {
 		return i, false
 	}
+	for n := range ids {
+		g := &b.glyphs[i+n]
+		g.props |= substituted
+		if len(ids) > 1 {
+			g.props |= multiplied
+			if g.lig == 0 {
+				g.ligated, g.comp = false, uint8(min(n, 15))
+			}
+		}
+	}
 	return i + len(ids), true
 }
 
@@ -50,6 +62,7 @@ func (b *buffer) alternate(s data, i int, value uint32) bool {
 		return false
 	}
 	g.ID = set.u16(2 + 2*int(value-1))
+	g.props |= substituted
 	return true
 }
 
@@ -73,8 +86,8 @@ func (b *buffer) ligature(lk *lookup, s data, i int) bool {
 		at[0] = i
 		j := i
 		for c := 1; c < count; c++ {
-			j = b.next(lk, j)
-			if j < 0 || b.glyphs[j].ID != lig.u16(4+2*(c-1)) || b.glyphs[j].mask&b.mask == 0 {
+			want := lig.u16(4 + 2*(c-1))
+			if j = b.seek(lk, j, 1, false, func(g *Glyph) bool { return g.ID == want }); j < 0 {
 				break
 			}
 			// A mark on a component of a ligature joins only marks on the same one.
@@ -104,11 +117,11 @@ func (b *buffer) ligature(lk *lookup, s data, i int) bool {
 func (b *buffer) ligate(at []int, id uint16) {
 	marks := true
 	for _, k := range at[1:] {
-		marks = marks && b.f.isMark(b.glyphs[k].ID)
+		marks = marks && b.isMark(k)
 	}
 	first := &b.glyphs[at[0]]
-	baseLig := marks && b.f.glyphClasses.class(first.ID) == baseGlyph
-	markLig := marks && b.f.isMark(first.ID)
+	baseLig := marks && b.class(at[0]) == baseGlyph
+	markLig := marks && b.isMark(at[0])
 	isLig := !baseLig && !markLig
 	var lig uint8
 	if isLig {
@@ -128,6 +141,7 @@ func (b *buffer) ligate(at []int, id uint16) {
 		first.lig, first.comp, first.ligated = lig, total, true
 	}
 	first.ID = id
+	first.props = first.props&^multiplied | substituted | formed
 	onto := func(g *Glyph) {
 		this := compOf(*g)
 		if this == 0 {
@@ -200,6 +214,7 @@ func (b *buffer) reverse(lk *lookup, i int) {
 			continue
 		}
 		b.glyphs[i].ID = s.u16(subs + 2 + 2*k)
+		b.glyphs[i].props |= substituted
 		return
 	}
 }
@@ -212,13 +227,13 @@ func (b *buffer) around(lk *lookup, first, last int, backCov func(int) data, bac
 	aheadCov func(int) data, ahead int) bool {
 	j := first
 	for n := range back {
-		if j = b.prev(lk, j); j < 0 || backCov(n).coverage(b.glyphs[j].ID) < 0 {
+		if j = b.seek(lk, j, -1, true, func(g *Glyph) bool { return backCov(n).coverage(g.ID) >= 0 }); j < 0 {
 			return false
 		}
 	}
 	j = last
 	for n := range ahead {
-		if j = b.next(lk, j); j < 0 || aheadCov(n).coverage(b.glyphs[j].ID) < 0 {
+		if j = b.seek(lk, j, 1, true, func(g *Glyph) bool { return aheadCov(n).coverage(g.ID) >= 0 }); j < 0 {
 			return false
 		}
 	}

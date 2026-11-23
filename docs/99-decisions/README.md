@@ -166,6 +166,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0161 | [SVG filters run in the element's own space, with every primitive Chrome draws](0161-svg-filters-run-in-the-elements-own-space-with-every-primitive-chrome-draws.md) | assets |
 | 0162 | [A copy puts the selection's markup beside its text](0162-a-copy-puts-the-selections-markup-beside-its-text.md) | api |
 | 0163 | [Scrolls snap and glide as Chrome's strategies, on the Document's clock](0163-scrolls-snap-and-glide-as-chromes-strategies-on-the-documents-clock.md) | api |
+| 0164 | [Indic, Khmer, Myanmar and USE scripts are shaped by HarfBuzz's syllabic shapers](0164-indic-khmer-myanmar-and-use-scripts-are-shaped-by-harfbuzzs-syllabic-shapers.md) | rendering |
 | 0166 | [A page replays round its covered live parts, and a framed list shows over the window](0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md) | rendering |
 
 ## Writing one
