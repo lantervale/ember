@@ -175,7 +175,7 @@ var webkit = vendor{
 	values: map[string]string{
 		"calc": "calc", "min-content": "min-content", "max-content": "max-content",
 		"fit-content": "fit-content", "fill-available": "stretch", "flex": "flex", "inline-flex": "inline-flex",
-		"grab": "grab",
+		"grab":     "grab",
 		"grabbing": "grabbing",
 	},
 	otherValues: warned,
