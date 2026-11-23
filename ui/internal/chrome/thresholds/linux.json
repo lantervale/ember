@@ -95,5 +95,6 @@
   "viewport-end": 0.0079,
   "viewport-top": 0.0071,
   "webkit-masks": 0.002,
-  "word-spacing": 0.0133
+  "word-spacing": 0.0133,
+  "writing-modes": 0.013
 }

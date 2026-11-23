@@ -59,9 +59,10 @@ type Declaration struct {
 	// base is where the sheet it came from is, for relative urls; nil
 	// for a style attribute's.
 	base *origin
-	// inline is set on a logical declaration of an inline side, written
-	// as its left one: an element of direction rtl takes it as the right.
-	inline bool
+	// flow is set on a logical declaration, named as in horizontal
+	// left-to-right lines: an element of another writing-mode or of
+	// direction rtl gives its value to the physical longhand it stands for.
+	flow bool
 	// logical is the name a logical declaration was written with.
 	logical string
 }
@@ -1208,9 +1209,9 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 	}
 	if as, ok := logical[d.Name]; ok {
 		d.logical = d.Name
-		d.Name, d.inline = as, horizontal(as)
-	} else if inlineShorthands[d.Name] {
-		d.inline = true
+		d.Name, d.flow = as, true
+	} else if flowShorthands[d.Name] {
+		d.flow = true
 	}
 	if d.Name == "page-break-inside" {
 		// the old name, its auto and avoid break-inside's too

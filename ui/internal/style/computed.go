@@ -827,6 +827,12 @@ type Text struct {
 	// takes part in the bidi algorithm of the text round it.
 	Dir  Direction
 	Bidi UnicodeBidi
+	// Mode is writing-mode, Orientation text-orientation, and Combine set
+	// for text-combine-upright: all, the element's text set across one
+	// character's room of a vertical line.
+	Mode        WritingMode
+	Orientation TextOrientation
+	Combine     bool
 	// TextIndent is text-indent: how far the first line of a block's text
 	// starts in from its edge, out when negative; a percentage is of the
 	// block's width.

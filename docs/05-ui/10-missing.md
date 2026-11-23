@@ -42,6 +42,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without its ligatures and kerning, where Chrome's HarfBuzz reads them; most of the Mac's faces have GSUB and GPOS too |
 | a variable font's GPOS values at an instance (their device and variation deltas) and its GSUB feature variations (`rvrn` by axis) | the default instance's kerning and substitutions, the glyphs' advances the instance's |
 | ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole (joined forms do join across the edge, the text round a run shaping it); a pre-base matra after a letter of another element takes `init` as at a word's start; a space's pair kerning with the words beside it is Chrome's |
+| selecting text of vertical lines: a drag, a double click, a caret placed by the pointer, the selection drawn | the characters found and the selection drawn as if the lines ran across, the selection not drawn on them |
+| a face's vertical metrics (`vhea`, `vmtx`, `VORG`) and its vertical alternates (`vert`, `vrt2`): the CJK brackets and punctuation turned or moved for vertical lines | a standing character takes its font's ascent and descent, drawn as in a horizontal line; the faces ui ships have none |
+| UTR #50's orientation of each character under `text-orientation: mixed` | the CJK scripts, fullwidth forms and CJK symbols stand, all else turns: the symbols and the pictographs UTR #50 stands (emoji, ©, §) are turned |
+| inline elements of several font sizes on a vertical line | aligned on their alphabetic baseline, where Chrome aligns vertical text on its central baseline |
+| the vertical alignment of an inline-block in a `vertical-lr` line taller than it | placed as in `vertical-rl`, from the line's right, where Chrome places it from its left |
 
 ## Generated content
 
@@ -86,6 +91,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-clamp: auto` whose last line fits but the padding below it in its block doesn't | the blocks after the clamp laid out whole, where Chrome's keep the clamp it first tried, one line lower |
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
+| a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
+| an absolutely positioned box of a vertical box whose containing block is outside it, in another frame (a box of `vertical-rl` in a page of horizontal lines) | placed as its containing block's frame had it, sideways, where Chrome places it in that block's writing mode |
+| a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |
+| `position: sticky` in vertical writing modes | not checked against Chrome |
+| a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |
+| the rules between columns of a multi-column box of vertical lines | drawn as if its columns stood side by side |
 
 ## Backgrounds and borders
 
@@ -156,7 +167,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `container-type: anchored` | refused with a warning |
 | `@position-try` inside `@media`, `@container` or `@supports` | applies whatever the condition says |
-| `anchor()`'s `start` and `end`, and `position-area`'s logical keywords | read the positioned box's own direction, where Chrome reads its containing block's writing mode; no vertical writing modes |
+| `anchor()`'s `start` and `end`, and `position-area`'s logical keywords, in a box of another writing mode or direction than its containing block | read the positioned box's own writing mode and direction, where Chrome reads its containing block's |
 | `position-visibility: anchors-valid` | read, and hides nothing |
 | an anchored box placed in a grid area of its containing block | its anchors are measured from the containing block's padding box, not the grid area |
 | a box anchored to a scrolled anchor | laid out again on the frame the scroll moves its anchor: right, but a layout where Chrome moves it by the scroll |

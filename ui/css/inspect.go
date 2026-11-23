@@ -343,14 +343,14 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 	} else {
 		above = nil
 	}
-	casc := in.m.cascade(in.m.matched(n, t.all, in.inline), parent.Dir)
+	casc := in.m.cascade(in.m.matched(n, t.all, in.inline), parent)
 	root := n
 	for root.Parent() != nil && dom.Data(root.Parent()).Style != nil {
 		root = root.Parent()
 	}
 	c := *dom.Data(n).Style
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: dom.Data(root).Style.Font.Size, env: &t.env,
-		root: root == n, node: n, rtl: casc.rtl}
+		root: root == n, node: n, flow: casc.flow}
 	x.customs(casc.custom)
 	x.em, x.sized, x.lined = c.Font.Size, true, true
 

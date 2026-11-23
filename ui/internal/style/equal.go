@@ -128,6 +128,9 @@ func (t *Text) equal(o *Text) bool {
 		t.TextAlign == o.TextAlign &&
 		t.Dir == o.Dir &&
 		t.Bidi == o.Bidi &&
+		t.Mode == o.Mode &&
+		t.Orientation == o.Orientation &&
+		t.Combine == o.Combine &&
 		t.WhiteSpace == o.WhiteSpace &&
 		t.TextIndent == o.TextIndent &&
 		t.PlaceholderColor == o.PlaceholderColor &&

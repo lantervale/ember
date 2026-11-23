@@ -38,7 +38,7 @@ func (r *restyler) generate(n *dom.Node, data *dom.Pipeline, rem float32) {
 // generated is the style of n's ::before or ::after, nil when its
 // content makes no box.
 func (r *restyler) generated(n *dom.Node, parent *style.Computed, rem float32, name string) *style.Computed {
-	casc := r.pm.cascadeFor(r.pm.matchedFor(n, r.sheets, nil, name), name, parent.Dir)
+	casc := r.pm.cascadeFor(r.pm.matchedFor(n, r.sheets, nil, name), name, parent)
 	if casc.longhands[orderIndex["content"]] == nil {
 		return nil
 	}
@@ -285,6 +285,6 @@ func (r *restyler) fill(g *dom.Node, st *style.Computed, counting func(style.Con
 func (r *restyler) anonymous(n *dom.Node, parent *style.Computed) *style.Computed {
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: parent.Font.Size, env: r.env, node: n}
-	x.cascaded(r.pm.cascade(r.pm.matched(n, r.sheets[:1], nil), parent.Dir), false)
+	x.cascaded(r.pm.cascade(r.pm.matched(n, r.sheets[:1], nil), parent), false)
 	return &c
 }

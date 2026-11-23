@@ -4,6 +4,7 @@ package layout_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -224,6 +225,42 @@ func TestTextBoxTrimsAsChrome(t *testing.T) {
 			r := chrome.Match(t, d, geom.V2(800, 600))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 			matchText(t, d, geom.V2(800, 600))
+		})
+	}
+}
+
+// spanned is text with each word in a span of its own, so the boxes show
+// which line each word stands on.
+func spanned(style, text string) *ui.Node {
+	args := []ui.Arg{ui.Style(style)}
+	for i, w := range strings.Fields(text) {
+		if i > 0 {
+			args = append(args, ui.Text(" "))
+		}
+		args = append(args, ui.Span(ui.Text(w)))
+	}
+	return ui.P(args...)
+}
+
+func TestVerticalLinesWrapAsChrome(t *testing.T) {
+	cases := map[string]*ui.Document{
+		"balance": page(
+			spanned("writing-mode: vertical-rl; height: 200px; text-wrap: balance", shortText),
+			spanned("writing-mode: vertical-lr; height: 260px; text-wrap: balance", middleText),
+		),
+		"pretty": page(
+			spanned("writing-mode: vertical-rl; height: 200px; text-wrap: pretty",
+				"The keep's lantern swings over the gate all night long"),
+		),
+		"soft hyphens": page(
+			ui.P(ui.Style("writing-mode: vertical-rl; height: 90px"), ui.Text(soft)),
+			ui.P(ui.Style("writing-mode: vertical-rl; height: 100px; hyphenate-character: '='"), ui.Text(soft)),
+		),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 		})
 	}
 }

@@ -45,13 +45,13 @@ func TestWhatAKeyframeAndATransitionTake(t *testing.T) {
 
 func TestATransitionOfAShorthandCoversItsLonghands(t *testing.T) {
 	list := []style.Transition{{Property: "margin", Duration: 1}, {Property: "border-color", Duration: 2}}
-	if tr, ok := transitionFor(list, "margin-left", false); !ok || tr.Duration != 1 {
+	if tr, ok := transitionFor(list, "margin-left", flow{}); !ok || tr.Duration != 1 {
 		t.Error("margin covers margin-left")
 	}
-	if tr, ok := transitionFor(list, "border-top-color", false); !ok || tr.Duration != 2 {
+	if tr, ok := transitionFor(list, "border-top-color", flow{}); !ok || tr.Duration != 2 {
 		t.Error("border-color covers border-top-color")
 	}
-	if _, ok := transitionFor(list, "border-top-width", false); ok {
+	if _, ok := transitionFor(list, "border-top-width", flow{}); ok {
 		t.Error("border-color doesn't cover border-top-width")
 	}
 }

@@ -99,7 +99,12 @@ func (t *tree) anchorsFor(out *box.Tree, b *box.Box, idx *anchorIndex) *anchorsO
 	origin := cbOrigin(cb, st.Position)
 	at := func(a *box.Box) rect {
 		r := a.Rect()
-		return rect{l: r.X - origin.X, r: r.X + r.W - origin.X, t: r.Y - origin.Y, b: r.Y + r.H - origin.Y}
+		r.X, r.Y = r.X-origin.X, r.Y-origin.Y
+		if cb != nil && cb.Style != nil && cb.Style.Mode.Vertical() {
+			// the containing block lays its boxes out in its own frame
+			r = unturnRect(r, size{cb.Size.X, cb.Size.Y}, cb.Style.Mode)
+		}
+		return fromRect(r)
 	}
 	res := &anchorsOf{named: map[string]rect{}}
 	for _, name := range names(st) {
