@@ -34,6 +34,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a listbox's keys scrolling it | at once, by the least that shows the option reached, where Chrome scrolls smoothly to it |
 | a listbox's selected rows under forced colours | Chrome's grey, light blue and dark scheme colours of the default sheet, never the system's `SelectedItem` |
 | a bare `select` dropdown's height under `ui.BrowserSheets()` | a point taller than Chrome's |
+| the width of "Wand" in a bold `select` under `ui.BrowserSheets()` | half a point wider than Chrome's; the listbox geometry test names its option "Staff" to step round it |
 | an open select's `optgroup` labels and indented options | drawn bold and behind four spaces in ui's own list; not compared: Chrome on macOS shows the list as a native menu no screenshot takes |
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
 | `word-spacing`, `letter-spacing` and `-webkit-font-smoothing` in an open select's list | drawn and measured with them, as the select's own text; not compared: Chrome on macOS shows the list as a native menu no screenshot takes |
