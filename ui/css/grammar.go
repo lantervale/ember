@@ -98,6 +98,8 @@ const (
 	allowNumber
 	allowFlex
 	noLength
+	allowAnchor
+	allowAnchorSize
 )
 
 // dimTerm accepts a length (0 included) unless flags say noLength, and
@@ -119,6 +121,9 @@ func dimTerm(flags int) term {
 			return fmt.Errorf("fr is only for grid tracks")
 		case d.HasPercent() && flags&allowPercent == 0:
 			return fmt.Errorf("a percentage is not allowed here")
+		case anchored(d, flags):
+			return fmt.Errorf("%q: anchor() goes only in insets, anchor-size() in insets, sizes and margins",
+				c.String())
 		case flags&nonNegative != 0 && c.Kind != Function && c.Num < 0:
 			return fmt.Errorf("%q can't be negative", c.String())
 		}
@@ -131,6 +136,9 @@ var (
 	length        = dimTerm(0)
 	lengthPercent = dimTerm(allowPercent)
 	sizeLP        = dimTerm(allowPercent | nonNegative)
+	insetLP       = dimTerm(allowPercent | allowAnchor | allowAnchorSize)
+	marginLP      = dimTerm(allowPercent | allowAnchorSize)
+	anchorSizeLP  = dimTerm(allowPercent | nonNegative | allowAnchorSize)
 	number        = dimTerm(allowNumber | nonNegative | noLength)
 	intrinsic     = words("min-content", "max-content", "fit-content")
 	boxSizes      = words("min-content", "max-content", "fit-content", "stretch")
@@ -340,24 +348,31 @@ func splitOn(v []Component, sep func(Component) bool) [][]Component {
 
 //nolint:gochecknoglobals,goconst // the properties' grammar
 var checks = map[string]check{
-	"container-type": checkContainerType,
-	"container-name": checkContainerName,
+	"container-type":         checkContainerType,
+	"container-name":         checkContainerName,
+	"anchor-name":            checkDashedList(false),
+	"anchor-scope":           checkDashedList(true),
+	"position-anchor":        checkPositionAnchor,
+	"position-area":          checkPositionArea,
+	"position-try-order":     checkTryOrder,
+	"position-try-fallbacks": checkTryFallbacks,
+	"position-visibility":    checkPositionVisibility,
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
 		"contents", "list-item", "flow-root", "table", "inline-table", "table-row", "table-cell", "table-row-group",
 		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption",
 		"-webkit-box", "-webkit-inline-box")),
 	"box-sizing": single(words("content-box", "border-box")),
-	"width":      single(either(sizeLP, words("auto"), boxSizes)),
-	"height":     single(either(sizeLP, words("auto"), boxSizes)),
-	"min-width":  single(either(sizeLP, words("auto"), boxSizes)),
-	"min-height": single(either(sizeLP, words("auto"), boxSizes)),
-	"max-width":  single(either(sizeLP, words("none"), boxSizes)),
-	"max-height": single(either(sizeLP, words("none"), boxSizes)),
+	"width":      single(either(anchorSizeLP, words("auto"), boxSizes)),
+	"height":     single(either(anchorSizeLP, words("auto"), boxSizes)),
+	"min-width":  single(either(anchorSizeLP, words("auto"), boxSizes)),
+	"min-height": single(either(anchorSizeLP, words("auto"), boxSizes)),
+	"max-width":  single(either(anchorSizeLP, words("none"), boxSizes)),
+	"max-height": single(either(anchorSizeLP, words("none"), boxSizes)),
 
-	"margin-top":     single(either(lengthPercent, words("auto"))),
-	"margin-right":   single(either(lengthPercent, words("auto"))),
-	"margin-bottom":  single(either(lengthPercent, words("auto"))),
-	"margin-left":    single(either(lengthPercent, words("auto"))),
+	"margin-top":     single(either(marginLP, words("auto"))),
+	"margin-right":   single(either(marginLP, words("auto"))),
+	"margin-bottom":  single(either(marginLP, words("auto"))),
+	"margin-left":    single(either(marginLP, words("auto"))),
 	"padding-top":    single(sizeLP),
 	"padding-right":  single(sizeLP),
 	"padding-bottom": single(sizeLP),
@@ -393,13 +408,13 @@ var checks = map[string]check{
 	"flex-wrap":      single(words("nowrap", "wrap", "wrap-reverse")),
 	"flex-direction": single(words("row", "row-reverse", "column", "column-reverse")),
 	"align-items":    single(words(alignWords...)),
-	"align-self":     single(words(append([]string{"auto"}, alignWords...)...)),
+	"align-self":     single(words(append([]string{"auto", "anchor-center"}, alignWords...)...)),
 	"align-content": single(words("normal", "stretch", "center", "start", "end", "flex-start", "flex-end",
 		"space-between", "space-around", "space-evenly", "baseline")),
 	"justify-content": single(words("normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "left",
 		"right", "space-between", "space-around", "space-evenly")),
 	"justify-items": single(words(append([]string{"legacy", "left", "right"}, alignWords...)...)),
-	"justify-self":  single(words(append([]string{"auto", "left", "right"}, alignWords...)...)),
+	"justify-self":  single(words(append([]string{"auto", "left", "right", "anchor-center"}, alignWords...)...)),
 
 	"grid-template-columns":     checkTracks,
 	"grid-template-rows":        checkTracks,
@@ -441,10 +456,10 @@ var checks = map[string]check{
 		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
 			"-webkit-baseline-middle"))),
 	"clear":   single(words("none", "left", "right", "both", "inline-start", "inline-end")),
-	"top":     single(either(lengthPercent, words("auto"))),
-	"right":   single(either(lengthPercent, words("auto"))),
-	"bottom":  single(either(lengthPercent, words("auto"))),
-	"left":    single(either(lengthPercent, words("auto"))),
+	"top":     single(either(insetLP, words("auto"))),
+	"right":   single(either(insetLP, words("auto"))),
+	"bottom":  single(either(insetLP, words("auto"))),
+	"left":    single(either(insetLP, words("auto"))),
 	"z-index": single(either(integer, words("auto"))),
 
 	"font-family": checkFontFamily,
@@ -1342,4 +1357,10 @@ func pair(v []Component) (Component, Component, bool) {
 		return Component{}, Component{}, false
 	}
 	return v[0], v[1], true
+}
+
+// anchored reports whether d holds an anchor function flags don't allow.
+func anchored(d Dim, flags int) bool {
+	anchor, size := d.anchors()
+	return anchor && flags&allowAnchor == 0 || size && flags&allowAnchorSize == 0
 }

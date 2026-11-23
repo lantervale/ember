@@ -67,6 +67,7 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), as: as})
 		out.faces, out.Keyframes = append(out.faces, in.faces...),
 			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...)
+		out.PositionTries = append(out.PositionTries, in.PositionTries...)
 		out.CounterStyles, out.media = append(out.CounterStyles,
 			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...)
 	}
@@ -107,6 +108,7 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 	}
 	out.faces, out.Keyframes, out.CounterStyles = append(out.faces, s.faces...), append(out.Keyframes, s.Keyframes...),
 		append(out.CounterStyles, s.CounterStyles...)
+	out.PositionTries = append(out.PositionTries, s.PositionTries...)
 	return out
 }
 

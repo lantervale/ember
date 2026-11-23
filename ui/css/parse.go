@@ -152,6 +152,7 @@ type Sheet struct {
 	Rules         []Rule
 	Keyframes     []Keyframes
 	CounterStyles []CounterStyle
+	PositionTries []PositionTry
 	faces         []FontFace
 	once          sync.Once
 	index         *index
@@ -259,6 +260,13 @@ func (s *Sheet) String() string {
 			b.WriteString(" }")
 		}
 		b.WriteString(" }" + strings.Repeat(" }", len(k.media)) + "\n")
+	}
+	for _, pt := range s.PositionTries {
+		b.WriteString("@position-try " + pt.Name + " {")
+		for _, d := range pt.Decls {
+			b.WriteString(" " + d.String() + ";")
+		}
+		b.WriteString(" }\n")
 	}
 	for _, cs := range s.CounterStyles {
 		for _, m := range cs.media {
@@ -464,6 +472,8 @@ func (p *parser) atRule(t Token, in scope) {
 		p.startingStyle(t, in)
 	case name == "counter-style":
 		p.counterStyle(t, in)
+	case name == "position-try":
+		p.positionTry(t)
 	case name == "supports" && p.browser:
 		p.supports(t, in)
 	case name == "layer" && p.browser:

@@ -43,8 +43,11 @@ var mathOps = map[string]style.CalcOp{
 // rem(), the trigonometric sin() to atan2(), the exponential pow() to
 // exp(), and abs() and sign(), typed as CSS Values 4 types them.
 func parseMath(name string, args []Component) (Dim, error) {
-	if name == fnCalc {
+	switch name {
+	case fnCalc:
 		return parseCalc(args)
+	case "anchor", "anchor-size":
+		return parseAnchor(name == "anchor-size", args)
 	}
 	parts := splitOn(args, func(c Component) bool { return c.Kind == Comma })
 	op, ok := mathOps[name]

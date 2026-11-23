@@ -260,9 +260,11 @@ type oofBoxLayout struct {
 	overflow style.Size[style.Overflow]
 }
 
-// layoutOOFBox sizes and places one absolutely positioned box in its containing block.
-func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
-	containerOverflow style.Size[style.Overflow], gridOwner *node) oofBoxLayout {
+// placeOOFBox sizes and places one absolutely positioned box in its containing block, and
+// reports whether its margin box fits in imcb, an inset-modified containing block in the
+// padding box at offset, when given.
+func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
+	containerOverflow style.Size[style.Overflow], gridOwner *node, imcb *rect) (oofBoxLayout, bool) {
 	n := c.node
 	st := n.st
 	if gridOwner != nil && gridOwner.grid != nil {
@@ -354,7 +356,14 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 		margin:    rect{l: hm.start, r: hm.end, t: vm.start, b: vm.end},
 	}
 	n.unrounded = layout
-	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}
+	fits := true
+	if imcb != nil {
+		const slack = 0.01
+		l, t := layout.location.x-offset.x-hm.start, layout.location.y-offset.y-vm.start
+		r, b := l+hm.start+final.w+hm.end, t+vm.start+final.h+vm.end
+		fits = l >= imcb.l-slack && r <= imcb.r+slack && t >= imcb.t-slack && b <= imcb.b+slack
+	}
+	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}, fits
 }
 
 // performOOF lays out the candidates this containing block claims, and the ones they

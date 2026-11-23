@@ -73,6 +73,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandFlex(v, out)
 	case "flex-flow":
 		err = expandAnyOrder(long, v, out)
+	case "position-try":
+		err = expandPositionTry(v, out)
 	case "grid-column", "grid-row":
 		err = expandGridLines(long, v, out)
 	case "grid-area":

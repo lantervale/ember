@@ -43,6 +43,7 @@ func (b *Box) equal(o *Box) bool {
 		b.VerticalAlign == o.VerticalAlign &&
 		b.VerticalShift == o.VerticalShift &&
 		b.Inset == o.Inset &&
+		b.Anchoring.equal(&o.Anchoring) &&
 		b.Size == o.Size &&
 		b.MinSize == o.MinSize &&
 		b.MaxSize == o.MaxSize &&

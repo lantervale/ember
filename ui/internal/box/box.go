@@ -218,6 +218,9 @@ func (b *Box) ContentRect() geom.Rect {
 // Tree is a laid-out tree and each element's principal box. Root is the
 // root element's box, or the Viewport box holding it.
 type Tree struct {
+	// Anchored are the elements anchors place, whose places a scroll
+	// moving their anchors changes: only a layout brings them up to date.
+	Anchored []*dom.Node
 	Root *Box
 	// Of is each node's box. A retained layout updates one map in place, so it holds the
 	// latest layout's alone: Written are the nodes that layout gave a box, or whose kept

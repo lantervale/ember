@@ -86,6 +86,9 @@ type mathTerm struct {
 	factor float64
 	op     style.CalcOp
 	args   []Dim
+	// anchor is an anchor() or anchor-size() term's, whose args are its
+	// fallback, if any.
+	anchor style.AnchorFn
 }
 
 // relUnit is a unit a font or the viewport measures.
@@ -317,7 +320,7 @@ func (d Dim) Absolute(u *Units) Dim {
 	for _, t := range terms {
 		args := make([]Dim, len(t.args))
 		vals := make([]float64, len(t.args))
-		known := true
+		known := !isAnchor(t.op)
 		for i, a := range t.args {
 			args[i] = a.Absolute(u)
 			var ok bool
@@ -325,7 +328,7 @@ func (d Dim) Absolute(u *Units) Dim {
 			known = known && ok
 		}
 		if !known {
-			d.terms = append(d.terms, mathTerm{factor: t.factor, op: t.op, args: args})
+			d.terms = append(d.terms, mathTerm{factor: t.factor, op: t.op, args: args, anchor: t.anchor})
 			continue
 		}
 		d.addValue(t.factor * t.op.Apply(vals))
@@ -346,9 +349,30 @@ func (d Dim) Resolve(basis float64) float64 {
 		for i, a := range t.args {
 			vals[i] = a.Resolve(basis)
 		}
+		if isAnchor(t.op) {
+			if len(vals) > 0 {
+				v += t.factor * vals[0]
+			}
+			continue
+		}
 		v += t.factor * t.op.Apply(vals)
 	}
 	return v
+}
+
+func isAnchor(op style.CalcOp) bool { return op == style.CalcAnchor || op == style.CalcAnchorSize }
+
+// anchors reports whether d holds an anchor() and an anchor-size().
+func (d Dim) anchors() (anchor, size bool) {
+	for _, t := range d.terms {
+		anchor = anchor || t.op == style.CalcAnchor
+		size = size || t.op == style.CalcAnchorSize
+		for _, a := range t.args {
+			x, y := a.anchors()
+			anchor, size = anchor || x, size || y
+		}
+	}
+	return anchor, size
 }
 
 // absoluteUnits are the absolute lengths in CSS pixels.

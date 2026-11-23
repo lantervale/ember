@@ -70,6 +70,9 @@ var properties = map[string]property{
 	"bottom": {initial: "auto"}, "left": {initial: "auto"},
 	"z-index":        {initial: "auto"},
 	"container-type": {initial: "normal"}, "container-name": {initial: "none"},
+	"anchor-name": {initial: "none"}, "anchor-scope": {initial: "none"}, "position-anchor": {initial: "normal"},
+	"position-area": {initial: "none"}, "position-try-fallbacks": {initial: "none"},
+	"position-try-order": {initial: "normal"}, "position-visibility": {initial: "anchors-visible"},
 
 	"font-family":               {inherited: true, initial: "sans-serif"},
 	"font-size":                 {inherited: true, initial: "medium"},
@@ -243,6 +246,7 @@ var shorthands = map[string][]string{
 	"outline":       {"outline-color", "outline-style", "outline-width"},
 	"columns":       {"column-width", "column-count"},
 	"container":     {"container-name", "container-type"},
+	"position-try":  {"position-try-order", "position-try-fallbacks"},
 	"column-rule":   {"column-rule-width", "column-rule-style", "column-rule-color"},
 	shortStroke:     {"-webkit-text-stroke-width", "-webkit-text-stroke-color"},
 	"grid": {"grid-template-rows", "grid-template-columns", "grid-template-areas", "grid-auto-rows", "grid-auto-columns",

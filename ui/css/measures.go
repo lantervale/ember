@@ -153,7 +153,7 @@ func calcSteps(steps []style.CalcStep, d Dim) []style.CalcStep {
 		for _, a := range t.args {
 			steps = calcSteps(steps, a)
 		}
-		steps = append(steps, style.CalcStep{Op: t.op, N: len(t.args)})
+		steps = append(steps, style.CalcStep{Op: t.op, N: len(t.args), Anchor: t.anchor})
 		if t.factor != 1 {
 			steps = append(steps, style.CalcStep{Op: style.CalcScale, Px: t.factor})
 		}

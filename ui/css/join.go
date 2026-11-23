@@ -158,6 +158,7 @@ func Join(name, media string, sheets []*Sheet) (*Sheet, []Warning) {
 		out.Keyframes = append(out.Keyframes, keyframesWithin(s.Keyframes, within, base)...)
 		out.faces = append(out.faces, s.faces...)
 		out.CounterStyles = append(out.CounterStyles, counterStylesWithin(s.CounterStyles, within, base)...)
+		out.PositionTries = append(out.PositionTries, s.PositionTries...)
 	}
 	return out, warns
 }

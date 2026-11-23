@@ -22,6 +22,7 @@ type CalcStep struct {
 	Op          CalcOp
 	N           int
 	Px, Percent float64
+	Anchor      AnchorFn
 }
 
 // CalcOp is a step of a Calc, and what a math function does to its
@@ -56,6 +57,10 @@ const (
 	CalcSqrt
 	CalcExp
 	CalcLog
+	// CalcAnchor and CalcAnchorSize are anchor() and anchor-size(): the
+	// step's Anchor says which, its fallback, if any, its one argument.
+	CalcAnchor
+	CalcAnchorSize
 )
 
 // NewCalc is the Calc of steps.
@@ -72,14 +77,28 @@ func NewCalc(steps []CalcStep) Calc {
 		if s.Op != CalcPush && s.Op != CalcScale {
 			b = binary.LittleEndian.AppendUint32(b, uint32(s.N)) //nolint:gosec // a count of arguments
 		}
+		if s.Op.anchored() {
+			b = s.Anchor.append(b)
+		}
 	}
 	return Calc{code: string(b)}
 }
 
 // At is the value against ref, the length 100% stands for: NaN is 0 and
-// an infinity the longest length, as at the top of a calc().
+// an infinity the longest length, as at the top of a calc(). An anchor()
+// or anchor-size() is its fallback, 0 without one.
 func (c *Calc) At(ref float32) float32 {
+	v, _ := c.AtAnchors(ref, nil)
+	return v
+}
+
+// AtAnchors is At with each anchor() and anchor-size() what anchor makes
+// of it, its fallback where anchor can't resolve it; ok is false when one
+// resolves to nothing and has no fallback, which makes the whole value
+// invalid, as CSS Anchor Positioning has it.
+func (c *Calc) AtAnchors(ref float32, anchor func(AnchorFn) (float32, bool)) (float32, bool) {
 	var fixed [16]float64
+	ok := true
 	stack := fixed[:0]
 	code := c.code
 	f64 := func() float64 {
@@ -101,12 +120,90 @@ func (c *Calc) At(ref float32) float32 {
 		}
 		n := int(binary.LittleEndian.Uint32([]byte(code[:4])))
 		code = code[4:]
+		if op.anchored() {
+			var fn AnchorFn
+			fn, code = readAnchor(code)
+			v, found := float32(0), false
+			if anchor != nil {
+				v, found = anchor(fn)
+			}
+			switch {
+			case found:
+				stack = append(stack[:len(stack)-n], float64(v))
+			case n == 0:
+				ok = false
+				stack = append(stack, 0)
+			}
+			continue
+		}
 		of := stack[len(stack)-n:]
 		v := op.Apply(of)
 		stack = append(stack[:len(stack)-n], v)
 	}
-	return Finite(stack[0], MaxLength)
+	return Finite(stack[0], MaxLength), ok
 }
+
+// Anchored reports whether c holds an anchor() or an anchor-size().
+func (c *Calc) Anchored() bool {
+	found := false
+	c.walk(func(op CalcOp, fn AnchorFn) { found = found || op.anchored() })
+	return found
+}
+
+// Anchors calls f with each anchor() and anchor-size() in c.
+func (c *Calc) Anchors(f func(AnchorFn)) {
+	c.walk(func(op CalcOp, fn AnchorFn) {
+		if op.anchored() {
+			f(fn)
+		}
+	})
+}
+
+// Mapped is c with each anchor() and anchor-size() what f makes of it.
+func (c *Calc) Mapped(f func(AnchorFn) AnchorFn) Calc {
+	var b []byte
+	code := c.code
+	for len(code) > 0 {
+		op := CalcOp(code[0])
+		size := 1 + 4
+		if op == CalcPush {
+			size = 1 + 16
+		} else if op == CalcScale {
+			size = 1 + 8
+		}
+		b = append(b, code[:size]...)
+		code = code[size:]
+		if op.anchored() {
+			var fn AnchorFn
+			fn, code = readAnchor(code)
+			b = f(fn).append(b)
+		}
+	}
+	return Calc{code: string(b)}
+}
+
+func (c *Calc) walk(f func(CalcOp, AnchorFn)) {
+	code := c.code
+	for len(code) > 0 {
+		op := CalcOp(code[0])
+		switch op {
+		case CalcPush:
+			code = code[1+16:]
+			continue
+		case CalcScale:
+			code = code[1+8:]
+			continue
+		}
+		code = code[1+4:]
+		var fn AnchorFn
+		if op.anchored() {
+			fn, code = readAnchor(code)
+		}
+		f(op, fn)
+	}
+}
+
+func (op CalcOp) anchored() bool { return op == CalcAnchor || op == CalcAnchorSize }
 
 // Finite is v at the top of a calc(): NaN is 0, and an infinity or a
 // value past limit is limit, signed.

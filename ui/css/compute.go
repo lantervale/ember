@@ -546,6 +546,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	}
 	r.transitOf(x, n)
 	x.cascaded(casc, root)
+	r.tries(x, &c, casc, root)
 	if closedSlot(n) {
 		c.Display = style.DisplayNone
 	}
@@ -1626,6 +1627,7 @@ var (
 		"space-between": style.AlignSpaceBetween, "space-around": style.AlignSpaceAround,
 		"space-evenly": style.AlignSpaceEvenly, "self-start": style.AlignStart, "self-end": style.AlignEnd,
 		"left": style.AlignStart, "right": style.AlignEnd, "legacy": style.AlignNormal,
+		"anchor-center": style.AlignAnchorCenter,
 	}
 	borderStyles = map[string]style.BorderStyle{
 		"none": style.BorderNone, "hidden": style.BorderNone, "solid": style.BorderSolid,
@@ -2403,6 +2405,7 @@ var props = func() map[string]prop {
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}}
 	m["border-image-outset"] = noop
 	maps.Copy(m, contentProps())
+	maps.Copy(m, anchorProps())
 	maps.Copy(m, snapProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
