@@ -63,13 +63,32 @@ type Pipeline struct {
 	// boxes (NewGenerated), nil while the pseudo-element generates none.
 	// css keeps them; export never writes them.
 	Before, After *Node
+	// FirstLine is the style of what the element holds on the first line
+	// of a block that has a ::first-line style: on that block, the style
+	// of its own text there; on an inline element or a ::before or ::after
+	// node inside it, the element's style on that line, inheriting from
+	// the first line's. A block whose first line is its parent's takes it
+	// too. nil elsewhere; css keeps it.
+	FirstLine *style.Computed
+	// LineBack is, on a block whose first line has a background, the node
+	// of the box that paints it behind the line (NewGenerated).
+	LineBack *Node
+	// FirstLetter is the node of a block's ::first-letter box while one is
+	// styled (NewGenerated). Letter is, on that node, the text node whose
+	// first letter it takes, and on that text node, the node; LetterEnd is
+	// where the letter, the punctuation round it and the spaces before it
+	// end in the text, in bytes. The node holds a text node of the letter.
+	FirstLetter, Letter *Node
+	LetterEnd           int
 	// Ordinal is a list item's number, the value of the list-item counter
 	// on it, and Counted that css worked it out.
 	Ordinal int
 	Counted bool
 	// Counts is set on the root once something in its tree counts: css
-	// then keeps the counters of the whole tree.
-	Counts bool
+	// then keeps the counters of the whole tree. Firsts is set on it while
+	// some sheet styles a ::first-line or a ::first-letter, or did: css
+	// then keeps them through the tree.
+	Counts, Firsts bool
 	// Language is the root's: the Document's language (SetLanguage).
 	Language string
 	// Marker is the style of a list item's ::marker when a rule styles it,
