@@ -303,10 +303,15 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	carets, _ := d.fonts.Carets(st.Font, text, frag.Lead, frag.Trail, frag.Before, frag.After)
 	var room float32
 	last := rune(-1)
+	han := b.Lines[k].Spacing
 	n := 0
-	for _, r := range text {
-		if n > 0 {
+	for i, r := range text {
+		if i > 0 {
 			room += sp.after(last)
+			for len(han) > 0 && han[0].At < i {
+				room += han[0].Space
+				han = han[1:]
+			}
 			f.xs = append(f.xs, carets[n]+room)
 		}
 		last = r
