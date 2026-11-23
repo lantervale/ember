@@ -87,7 +87,7 @@ func TestColourPrimitivesChangeEachPixel(t *testing.T) {
 		{"a multiply", `<feFlood flood-color="#ff0" result="y"/><feBlend in="SourceGraphic" in2="y" mode="multiply"/>`,
 			redPx},
 		{"source alpha", `<feMerge><feMergeNode in="SourceAlpha"/></feMerge>`, blackPx},
-		{"a primitive not drawn", `<feTurbulence baseFrequency=".1"/>`, clearPx},
+		{"a lighting with no light", `<feDiffuseLighting/>`, clearPx},
 	} {
 		img := draw(t, `<filter id="f">`+c.filter+`</filter>
 			<rect x="30" y="30" width="40" height="40" fill="red" filter="url(#f)"/>`)

@@ -3,6 +3,8 @@ package svg
 import (
 	"image/color"
 	"math"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -445,6 +447,9 @@ func (b *builder) primitive(n *node, f *Filter, c filterContext, results map[str
 	if p.Region.Empty() {
 		p.Kind = Clear
 	}
+	if p.Kind == FeImage {
+		p.Items = b.feImage(props, &st, f.Transform, p.Region)
+	}
 	if name := strings.TrimSpace(props["result"]); name != "" {
 		results[name] = Input(len(f.Primitives))
 	}
@@ -504,6 +509,30 @@ func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, 
 		}
 	case "feTile":
 		p.Kind = Tile
+	case "feTurbulence":
+		p.Kind, p.In = Turbulence, nil
+		var ok bool
+		if p.Noise, ok = noise(props, c); !ok {
+			p.Kind = Clear
+		}
+	case "feConvolveMatrix":
+		p.Kind = ConvolveMatrix
+		var ok bool
+		if p.Convolve, ok = convolve(props); !ok {
+			p.Kind = Clear
+		}
+	case "feDisplacementMap":
+		p.Kind = DisplacementMap
+		p.In = append(p.In, b.input(props["in2"], f, results))
+		p.Scale = num("scale", 0)
+		if c.boxed {
+			p.Scale *= c.bbox.W
+		}
+		p.Channels = [2]uint8{channel(props["xChannelSelector"]), channel(props["yChannelSelector"])}
+	case "feDiffuseLighting", "feSpecularLighting":
+		b.lighting(p, n, props, st, c)
+	case "feImage":
+		p.Kind, p.In = FeImage, nil
 	default:
 		p.Kind, p.In = Clear, nil
 		b.unsupported(n.name)
@@ -540,6 +569,37 @@ func (b *builder) combining(p *Primitive, n *node, props map[string]string, f *F
 		return false
 	}
 	return true
+}
+
+// feImage is what an feImage draws in its region r of the filter's
+// space, which m takes to the picture's: an element of the file, drawn
+// as a use would, moved to the region's corner, or a picture of a data:
+// URL fitted into r. Nothing is fetched.
+func (b *builder) feImage(props map[string]string, st *style, m Matrix, r Box) []Item {
+	href := strings.TrimSpace(props["href"])
+	var items []Item
+	if !strings.HasPrefix(href, "#") {
+		num := func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+		_ = b.image(map[string]string{
+			"href": href, "x": num(r.X), "y": num(r.Y), "width": num(r.W), "height": num(r.H),
+			"preserveAspectRatio": props["preserveAspectRatio"],
+		}, st, m, &items)
+		return items
+	}
+	ref := b.target(href)
+	if ref == nil || slices.Contains(b.using, ref) {
+		return nil
+	}
+	inherited := b.base
+	if ref.parent != nil {
+		inherited = b.inherited(ref.parent)
+	}
+	b.using = append(b.using, ref)
+	if err := b.walk(ref, inherited, m.Mul(translate(r.X, r.Y)), &items, 0); err != nil {
+		items = nil
+	}
+	b.using = b.using[:len(b.using)-1]
+	return items
 }
 
 // colorMatrix is an feColorMatrix's matrix: its type's, from its values.

@@ -60,7 +60,12 @@ func (f *Filter) reach(m Matrix) int {
 			total += moved(p.Offset, m).len()
 		case Morphology:
 			total += math.Max(p.Radius.X*s.X, p.Radius.Y*s.Y)
-		case Clear, Flood, ColorMatrix, ComponentTransfer, Composite, Merge, Blend, Tile:
+		case DisplacementMap:
+			total += math.Abs(p.Scale) / 2 * math.Max(s.X, s.Y)
+		case ConvolveMatrix:
+			total += float64(max(p.Convolve.Order[0], p.Convolve.Order[1]))
+		case Clear, Flood, ColorMatrix, ComponentTransfer, Composite, Merge, Blend, Tile, Turbulence,
+			DiffuseLighting, SpecularLighting, FeImage:
 		}
 	}
 	if !(total < maxReach) {
@@ -173,7 +178,7 @@ func (d *drawer) filteredTurned(g *Group, clip image.Rectangle, depth int, own M
 func (d *drawer) run(layer *image.RGBA, f *Filter) {
 	m := d.view.Mul(f.Transform)
 	box := layer.Rect
-	fr := &filterRun{box: box, w: box.Dx(), m: m, results: make([]*fbuf, len(f.Primitives))}
+	fr := &filterRun{box: box, w: box.Dx(), m: m, view: d.view, unit: d.unit, results: make([]*fbuf, len(f.Primitives))}
 	fr.src = &fbuf{pix: make([]float32, 4*box.Dx()*box.Dy()), area: box}
 	for y := range box.Dy() {
 		row := layer.Pix[y*layer.Stride:][:4*box.Dx()]
@@ -234,9 +239,12 @@ func (d *drawer) run(layer *image.RGBA, f *Filter) {
 
 // filterRun is one filter running over a box of pixels.
 type filterRun struct {
-	box     image.Rectangle
-	w       int
-	m       Matrix
+	box image.Rectangle
+	w   int
+	m   Matrix
+	// view and unit are the drawer's, what an feImage draws through.
+	view    Matrix
+	unit    float64
 	src     *fbuf
 	srcLin  *fbuf
 	alpha   *fbuf
@@ -247,6 +255,29 @@ type filterRun struct {
 
 func (fr *filterRun) blank(linear bool, area image.Rectangle) *fbuf {
 	return &fbuf{pix: make([]float32, 4*fr.w*fr.box.Dy()), linear: linear, area: area.Intersect(fr.box)}
+}
+
+// ownSpace is whether what in names is in linear light as it was made.
+func (fr *filterRun) ownSpace(in Input) bool {
+	if in >= 0 && int(in) < len(fr.results) && fr.results[in] != nil {
+		return fr.results[in].linear
+	}
+	return false
+}
+
+// drawn is items drawn over the run's box, encoded in sRGB.
+func (fr *filterRun) drawn(items []Item, area image.Rectangle) *fbuf {
+	out := fr.blank(false, area)
+	if len(items) == 0 || out.area.Empty() {
+		return out
+	}
+	layer := image.NewRGBA(fr.box)
+	sub := &drawer{view: fr.view, unit: fr.unit}
+	sub.items(layer, out.area, items, 1, 0)
+	for i, v := range layer.Pix {
+		out.pix[i] = float32(v) / 255
+	}
+	return out
 }
 
 // input is what in names, in linear light or not.
@@ -385,6 +416,17 @@ func (fr *filterRun) primitive(p *Primitive, f *Filter) *fbuf {
 			tile = pixelArea(f.Region, fr.m).Intersect(fr.box)
 		}
 		fr.tile(out.pix, src.pix, tile)
+	case Turbulence:
+		fr.turbulence(out, p)
+	case ConvolveMatrix:
+		fr.convolve(out, in(0), p)
+	case DisplacementMap:
+		out.linear = fr.ownSpace(p.In[0])
+		fr.displace(out, fr.input(p.In[0], out.linear), in(1), p)
+	case DiffuseLighting, SpecularLighting:
+		fr.light(out, in(0), p)
+	case FeImage:
+		out = fr.convert(fr.drawn(p.Items, area), p.LinearRGB)
 	}
 	fr.crop(out)
 	return out
