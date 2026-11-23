@@ -173,6 +173,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0168 | [Nested rules and @scope rules are read as flat rules of the sheet](0168-nested-rules-and-scope-rules-are-read-as-flat-rules-of-the-sheet.md) | api |
 | 0169 | [The user's scrolls glide on Chrome's curves, and two-axis snaps land where both areas show](0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md) | api |
 | 0170 | [What columns cut and a line clamp hides follow Chrome's ends](0170-what-columns-cut-and-a-line-clamp-hides-follow-chromes-ends.md) | rendering |
+| 0172 | [Colour fonts are drawn in pure Go, as pictures of their glyphs](0172-colour-fonts-are-drawn-in-pure-go-as-pictures-of-their-glyphs.md) | rendering |
 | 0174 | [Registered custom properties and the functions a cascade substitutes](0174-registered-custom-properties-and-the-functions-a-cascade-substitutes.md) | api |
 
 ## Writing one

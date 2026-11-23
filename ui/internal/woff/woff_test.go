@@ -291,8 +291,8 @@ func TestSfntUnwrapsWhatItIsGiven(t *testing.T) {
 	if _, err := Sfnt([]byte("<html>not a font</html>")); !errors.Is(err, errNoFont) {
 		t.Errorf("a page of HTML: %v, want %v", err, errNoFont)
 	}
-	if _, err := Sfnt([]byte("ttcf\x00\x01\x00\x00")); !errors.Is(err, errCollection) {
-		t.Errorf("a collection: %v, want %v", err, errCollection)
+	if _, err := Sfnt([]byte("ttcf\x00\x01\x00\x00")); !errors.Is(err, errShort) {
+		t.Errorf("a cut collection: %v, want %v", err, errShort)
 	}
 }
 

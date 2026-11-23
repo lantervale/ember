@@ -68,7 +68,8 @@ func TestTheSourcesUIReads(t *testing.T) {
 		{FontSource{URL: "a", Format: "collection"}, false},
 		{FontSource{URL: "a", Format: "svg"}, false},
 		{FontSource{URL: "a.woff2", Format: "woff2", Tech: []string{"variations"}}, true},
-		{FontSource{URL: "a.woff2", Format: "woff2", Tech: []string{"color-colrv1"}}, false},
+		{FontSource{URL: "a.woff2", Format: "woff2", Tech: []string{"color-colrv1"}}, true},
+		{FontSource{URL: "a.woff2", Format: "woff2", Tech: []string{"color-svg"}}, false},
 		{FontSource{Local: "Arial"}, true},
 		{FontSource{URL: "data:font/woff2;base64,d09GMg=="}, true},
 	} {
