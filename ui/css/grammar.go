@@ -56,7 +56,7 @@ func globalKeyword(v []Component) string {
 
 func hasVar(cs []Component) bool {
 	for _, c := range cs {
-		if c.Kind == Function && strings.EqualFold(c.Text, "var") || hasVar(c.Args) {
+		if c.Kind == Function && (strings.EqualFold(c.Text, "var") || strings.EqualFold(c.Text, "env")) || hasVar(c.Args) {
 			return true
 		}
 	}
@@ -366,9 +366,13 @@ var checks = map[string]check{
 	"z-index": single(either(integer, words("auto"))),
 
 	"font-family": checkFontFamily,
-	// the widths the font shorthand may name, none of them drawn
+	// the widths the font shorthand may name
 	"font-stretch-word": single(words("ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
 		"semi-expanded", "expanded", "extra-expanded", "ultra-expanded")),
+	"font-stretch": single(either(dimTerm(allowPercent|noLength|nonNegative), words("normal", "ultra-condensed",
+		"extra-condensed", "condensed", "semi-condensed", "semi-expanded", "expanded", "extra-expanded",
+		"ultra-expanded"))),
+	"font-synthesis": checkFontSynthesis,
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
 	"font-style":     single(words("normal", "italic", "oblique")),
@@ -489,7 +493,8 @@ func fontWeightNumber(c Component) error {
 func timeTerm(nonNeg bool) term {
 	return func(c Component) error {
 		d, err := duration(c)
-		if err == nil && nonNeg && d < 0 {
+		// A math function's negative duration is clamped to 0, not refused.
+		if err == nil && nonNeg && d < 0 && c.Kind != Function {
 			return fmt.Errorf("%q can't be negative", c.String())
 		}
 		return err

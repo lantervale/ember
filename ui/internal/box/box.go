@@ -92,8 +92,9 @@ type Box struct {
 	// padding edges: overflow: scroll's, and auto's once the content overflows.
 	Scrollbar geom.Vec2
 	// Sticky is how far position: sticky moved the box from its place in the
-	// flow, or how far a fixed box moved to stay put in a scrolled Viewport;
-	// Pos includes it.
+	// flow, or how far a fixed or absolutely positioned box moved to stay put
+	// in a scrolled Viewport and in the scrolled elements between it and its
+	// containing block; Pos includes it.
 	Sticky geom.Vec2
 	// Escapes is set on an absolutely or fixed positioned box and on each
 	// box above it up to its containing block: what it draws lies where

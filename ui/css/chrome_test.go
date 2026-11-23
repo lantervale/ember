@@ -43,7 +43,8 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-style": func(s *style.Computed) string {
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
-	"font-family": func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
 	"text-decoration-skip-ink": func(s *style.Computed) string {
 		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
 	},
@@ -760,7 +761,7 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   font-family: "Go Mono", monospace; font-size: larger; font-weight: 300; font-style: italic;
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
   white-space: pre-wrap; overflow-wrap: break-word; text-overflow: ellipsis; visibility: hidden; cursor: grab;
-  text-transform: capitalize;
+  text-transform: capitalize; font-stretch: semi-condensed;
 }
 .l {
   background-color: rgb(1 2 3 / 0.25); border: 2px dashed steelblue; border-left: 4px dotted;

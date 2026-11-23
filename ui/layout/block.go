@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -347,10 +349,25 @@ func relativeOffset(it *blockItem, parent size) point {
 	if it.position != style.Relative {
 		return point{}
 	}
-	st := it.node.st
+	return insetOffset(it.node.st, parent)
+}
+
+// insetOffset is how far position: relative moves a box of style st in a containing block
+// of size parent.
+func insetOffset(st *style.Computed, parent size) point {
 	l, r := resolve(st.Inset.Left, parent.w), resolve(st.Inset.Right, parent.w)
 	tp, b := resolve(st.Inset.Top, parent.h), resolve(st.Inset.Bottom, parent.h)
 	return point{or(l, or(-r, 0)), or(tp, or(-b, 0))}
+}
+
+// inlineOffset is how far position: relative moves an inline element of style st, nothing
+// for another position.
+func inlineOffset(st *style.Computed, parent size) geom.Vec2 {
+	if st.Position != style.Relative {
+		return geom.Vec2{}
+	}
+	o := insetOffset(st, parent)
+	return geom.Vec2{X: o.x, Y: o.y}
 }
 
 func collapsibleIf(same bool) [2]bool { return [2]bool{same, same} }
@@ -373,11 +390,33 @@ func (t *tree) blockContentWidth(items []*blockItem, availW space) float32 {
 			w = t.measureChildSize(it.node, known, noSize, spaces{itemAvail, minContentSpace},
 				inherentSize, horizontal, collapsibleIf(it.inSameBFC))
 		}
+		if st := it.node.st; it.node.replaced && (st.Size.Width.IsPercent || st.MaxSize.Width.IsPercent) {
+			// A picture as wide as a share of the width being found gives way to it:
+			// none of it at the box's narrowest, as Chrome's.
+			switch availW.kind {
+			case minContent:
+				w = 0
+			case definite:
+				w = fmin(w, availW.v-marginX)
+			case maxContent:
+			}
+		}
 		w = fmax(w, it.pbSum.w) + marginX
 		if it.float != style.FloatNone {
 			floats.add(w, sideOf(it.float), it.clear)
 			continue
 		}
+		if run := floats.leading(); run > 0 && availW.kind != minContent && it.node.inline != nil &&
+			it.node.box.Kind == box.AnonymousBlock {
+			// The floats before text are on its lines, as Chrome's inline formatting
+			// context holds them: side by side with it.
+			wide := w + run
+			if availW.definite() {
+				wide = fmax(fmin(wide, availW.v), w)
+			}
+			w = wide
+		}
+		floats.run = [2]float32{}
 		maxW = fmax(maxW, w)
 	}
 	return fmax(maxW, floats.result())

@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -170,4 +171,70 @@ func pixels(s string) (float64, bool) {
 	}
 	f, err := strconv.ParseFloat(v, 64)
 	return f, err == nil
+}
+
+// TestStyleQueriesOnStandardPropertiesNeverHoldAsInChromes has Chrome lay
+// out style() queries of standard properties beside one of a custom
+// property: Chrome reads them and holds none, as ui, which warns.
+func TestStyleQueriesOnStandardPropertiesNeverHoldAsInChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+.c { color: rgb(255, 0, 0); display: block; padding-left: 4px; container-type: inline-size; --x: 1 }
+.a { width: 10px; height: 10px }
+@container style(--x: 1) { .a { padding-right: 17px } }
+@container style(color: rgb(255, 0, 0)) { .a { width: 11px } }
+@container style(display: block) { .a { margin-left: 13px } }
+@container style(padding-left: 4px) { .a { margin-top: 14px } }
+@container style(display) { .a { padding-top: 16px } }
+@container style(--x: 1) and style(padding-left: 4px) { .a { margin-bottom: 15px } }
+@container style(--x: 1) or style(padding-left: 4px) { .a { height: 12px } }
+`))
+	d.Body().Append(ui.Div(ui.Class("c"), ui.Div(ui.Class("a"))))
+	chrome.Match(t, d, geom.V2(400, 300))
+	assert.Len(t, d.Warnings(), 6)
+}
+
+// TestKeyframesInAContainerRuleHoldWhateverTheContainerAsChromes has
+// Chrome read @keyframes inside @container rules, whose conditions it
+// never asks: the last of a name wins wherever it stands. ui's sheet,
+// written out, keeps no @container round them, so Chrome reads the sheet
+// as written.
+func TestKeyframesInAContainerRuleHoldWhateverTheContainerAsChromes(t *testing.T) {
+	sheet := `
+.c { container-type: inline-size; width: 300px }
+.n { container-type: inline-size; width: 50px }
+@container (width > 100px) { @keyframes k { from { left: 9px } to { left: 9px } } }
+@container (width > 10000px) { @keyframes k2 { from { left: 99px } to { left: 99px } } }
+@keyframes k3 { from { left: 1px } to { left: 1px } }
+@container (width > 10000px) { @keyframes k3 { from { left: 2px } to { left: 2px } } }
+@container (width > 100px) { @keyframes k4 { from { left: 3px } to { left: 3px } } }
+@keyframes k4 { from { left: 4px } to { left: 4px } }
+.a, .b, .e, .f { position: relative; height: 2px; animation: k 1000s }
+.b { animation-name: k2 }
+.e { animation-name: k3 }
+.f { animation-name: k4 }`
+	d := ui.NewDocument(ui.CSS(sheet))
+	for _, c := range []string{"c", "n"} {
+		d.Body().Append(ui.Div(ui.Class(c), ui.Div(ui.Class("a")), ui.Div(ui.Class("b")), ui.Div(ui.Class("e")),
+			ui.Div(ui.Class("f"))))
+	}
+	raw, err := chrome.Eval(ui.NewDocument(), geom.V2(400, 300), `
+const st = document.createElement("style");
+st.textContent = `+strconv.Quote(sheet)+`;
+document.head.appendChild(st);
+const parts = '<div class="a"></div><div class="b"></div><div class="e"></div><div class="f"></div>';
+document.body.innerHTML = '<div class="c">' + parts + '</div><div class="n">' + parts + '</div>';
+return [...document.querySelectorAll(".a, .b, .e, .f")].map(e => e.getBoundingClientRect().left);`)
+	require.NoError(t, err)
+	var want []float32
+	require.NoError(t, json.Unmarshal(raw, &want))
+	d.Layout(geom.V2(400, 300))
+	var got []float32
+	d.HTML().Walk(func(n *ui.Node) bool {
+		if n.HasClass("a") || n.HasClass("b") || n.HasClass("e") || n.HasClass("f") {
+			got = append(got, n.Box().X)
+		}
+		return true
+	})
+	assert.Equal(t, want, got)
+	assert.Empty(t, d.Warnings())
 }

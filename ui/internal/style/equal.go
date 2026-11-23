@@ -92,7 +92,7 @@ func (f Font) Equal(o Font) bool {
 	return sameSlice(f.Family, o.Family) &&
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
-		f.Italic == o.Italic &&
+		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
 		f.Caps == o.Caps
 }
 
@@ -204,7 +204,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Visible == o.Visible &&
 		l.Collapse == o.Collapse &&
 		l.PointerNone == o.PointerNone &&
-		l.AppDrag == o.AppDrag &&
+		l.AppRegion == o.AppRegion &&
 		l.Cursor == o.Cursor &&
 		l.UserSelect == o.UserSelect &&
 		sameSlice(l.Transform, o.Transform) &&

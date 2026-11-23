@@ -7,8 +7,12 @@
 // masks), 24 (from the bottom, from the top) and 32 bits: alpha bits no
 // header names (opaque), none at all, the masks of a V4 header, masks
 // without alpha, the alpha mask of a V5 header without compression, and
-// a V4 header's alpha all zero (nothing shows). The files are written
-// here, by icotest.
+// a V4 header's alpha all zero (nothing shows). Then pictures run-length
+// encoded, in bytes and in nibbles, in an icon and in a bitmap, whose
+// runs skip pixels (black in Chrome) and stop where they would leave the
+// picture; two cursors; and last an icon of 12 and 24 pixels shown at 12
+// points, where Chrome shows the larger, scaled down. The files are
+// written here, by icotest.
 package main
 
 import (
@@ -29,8 +33,11 @@ img { display: block; width: 48px; height: 48px; image-rendering: pixelated; }
 `
 
 const (
-	side = 12
+	side    = 12
+	icoKind = "ico"
 
+	rle8      = 1
+	rle4      = 2
 	bitfields = 3
 	headerV4  = 108
 	headerV5  = 124
@@ -87,6 +94,61 @@ func bitmap(bpp int, at func(x, y int) uint32) icotest.Bitmap {
 	return b
 }
 
+// runs8 is the picture run-length encoded in bytes, a row a run each
+// side and an end of line, then the end of the bitmap.
+func runs8() []byte {
+	var out []byte
+	for i := range side {
+		y := side - 1 - i
+		out = append(out, side/2, byte(index(0, y)), side/2, byte(index(side-1, y)), 0, 0) //nolint:gosec // 0 to 3
+	}
+	return append(out, 0, 1)
+}
+
+// runs4 is the picture run-length encoded in nibbles, its top rows two
+// colours striped by the runs' alternating nibbles.
+func runs4() []byte {
+	var out []byte
+	for i := range side {
+		y := side - 1 - i
+		l, r := byte(index(0, y)), byte(index(side-1, y)) //nolint:gosec // 0 to 3
+		if y < 2 {
+			r = 3
+		}
+		out = append(out, side/2, l<<4|l, side/2, r<<4|l, 0, 0)
+	}
+	return append(out, 0, 1)
+}
+
+// skips is a bitmap in runs of bytes that leaves pixels out, which show
+// nothing: one row in absolute runs (one odd, padded) ended early by an
+// end of line, a move over pixels and up a row, then the end of the
+// bitmap halfway up.
+func skips() []byte {
+	return []byte{
+		0, 5, 0, 1, 2, 3, 0, 0, 0, 3, 1, 1, 1, 0, 0, 0,
+		4, 2, 0, 2, 3, 1, 3, 3, 0, 0,
+		side, 1, 0, 0,
+		0, 2, 2, 0, side - 2, 3, 0, 0,
+		0, 1,
+	}
+}
+
+// nibbleSkips is skips in nibbles: an absolute run of three, an end of
+// line, a move, the end of the bitmap.
+func nibbleSkips() []byte {
+	return []byte{
+		0, 3, 0x12, 0x30, 5, 0x21, 0, 0,
+		side, 0x33, 0, 2, 3, 1, 4, 0x10, 0, 0,
+		0, 1,
+	}
+}
+
+func coded(comp uint32, bpp int, runs []byte) icotest.Bitmap {
+	b := icotest.Bitmap{W: side, H: side, BPP: bpp, Comp: comp, Palette: palette(), Runs: runs}
+	return b
+}
+
 func flat(size, bpp int, c uint32) icotest.Entry {
 	return icotest.Bitmap{W: size, H: size, BPP: bpp, At: func(int, int) uint32 { return c }}.Entry()
 }
@@ -103,6 +165,10 @@ func icons() [][]byte {
 		icotest.ICO(icotest.Entry{W: side, H: side, BPP: 32, Data: icotest.PNG(side, side, color.NRGBA{40, 80, 200, 128})}),
 		icotest.ICO(flat(8, 32, 0xffc82828), bitmap(8, index).Entry(), flat(10, 32, 0xff2850c8)),
 		icotest.ICO(flat(side, 4, 0), bitmap(32, faded).Entry(), flat(side, 24, 0x28a03c)),
+		icotest.ICO(coded(rle8, 8, runs8()).Entry()),
+		icotest.ICO(coded(rle4, 4, runs4()).Entry()),
+		icotest.CUR(bitmap(8, index).Entry()),
+		icotest.CUR(flat(8, 32, 0xffc82828), bitmap(32, faded).Entry()),
 	)
 }
 
@@ -123,6 +189,7 @@ func bitmaps() [][]byte {
 	for _, b := range []icotest.Bitmap{
 		bitmap(1, bit), bitmap(4, index), bitmap(8, index), bitmap(16, packed(5, 5, 5)), high, bitmap(24, bgr), top,
 		bitmap(32, faded), bitmap(32, bgr), v4, swapped, v5, blank,
+		coded(rle8, 8, runs8()), coded(rle4, 4, runs4()), coded(rle8, 8, skips()), coded(rle4, 4, nibbleSkips()),
 	} {
 		out = append(out, b.File())
 	}
@@ -132,12 +199,19 @@ func bitmaps() [][]byte {
 func main() {
 	files := fstest.MapFS{"page.css": {Data: []byte(sheet)}}
 	d := ui.NewDocument(ui.Stylesheet(files, "page.css"))
-	for kind, pictures := range map[string][][]byte{"ico": icons(), "bmp": bitmaps()} {
+	for kind, pictures := range map[string][][]byte{icoKind: icons(), "bmp": bitmaps()} {
+		if kind == icoKind {
+			n := len(pictures) - 2
+			for i, data := range pictures[n:] {
+				files[fmt.Sprintf("%02d.cur", i)] = &fstest.MapFile{Data: data}
+			}
+			pictures = pictures[:n]
+		}
 		for i, data := range pictures {
 			files[fmt.Sprintf("%02d.%s", i, kind)] = &fstest.MapFile{Data: data}
 		}
 	}
-	for _, kind := range []string{"ico", "bmp"} {
+	for _, kind := range []string{icoKind, "cur", "bmp"} {
 		for i := 0; ; i++ {
 			name := fmt.Sprintf("%02d.%s", i, kind)
 			if _, ok := files[name]; !ok {
@@ -146,5 +220,7 @@ func main() {
 			d.Body().Append(ui.Img(ui.Attr("src", name)))
 		}
 	}
-	pages.Run(d, 492, 204)
+	files["small.ico"] = &fstest.MapFile{Data: icotest.ICO(bitmap(8, index).Entry(), flat(2*side, 32, 0xffc82828))}
+	d.Body().Append(ui.Img(ui.Attr("src", "small.ico"), ui.Style("width: 12px; height: 12px")))
+	pages.Run(d, 492, 264)
 }

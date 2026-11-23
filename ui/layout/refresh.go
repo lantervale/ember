@@ -30,7 +30,8 @@ func Refresh(t *box.Tree, _ *dom.Node) bool {
 // collectLive refreshes every box below b, as a fresh layout leaves them, and gathers
 // the live ones and their offsets into t.
 func collectLive(b *box.Box, t *box.Tree) {
-	moves := isSticky(b) || held(b) != nil
+	_, past := scrolledPast(b)
+	moves := isSticky(b) || held(b) != nil || past
 	if scrollsItself(b) || moves {
 		refreshBox(b)
 	}
@@ -78,8 +79,35 @@ func held(b *box.Box) *box.Box {
 	return top
 }
 
+// scrolledPast is how far the elements that scroll between b, absolutely or fixed
+// positioned, and its containing block scrolled, which b stays put in as Chrome's, and
+// whether there is such an element. The root's scroll is the viewport's, which held
+// answers for.
+func scrolledPast(b *box.Box) (geom.Vec2, bool) {
+	if b.Kind != box.Element || b.Style == nil ||
+		b.Style.Position != style.Absolute && b.Style.Position != style.FixedPosition {
+		return geom.Vec2{}, false
+	}
+	var by geom.Vec2
+	past := false
+	for a := b.Parent; a != nil && a.Parent != nil && a.Kind == box.Element; a = a.Parent {
+		st := a.Style
+		if st == nil {
+			continue
+		}
+		if st.Filtered() || isFixed(a) || b.Style.Position == style.Absolute && st.Position != style.Static {
+			break
+		}
+		if isScrollContainer(st) {
+			by, past = by.Add(a.Scroll), true
+		}
+	}
+	return by, past
+}
+
 // refreshBox brings b's scroll offset up to date, and how far it moved as
-// a sticky box, or as a fixed one in a viewport that scrolled.
+// a sticky box, as a fixed one in a viewport that scrolled, or as one the elements it
+// is placed past scrolled.
 func refreshBox(b *box.Box) {
 	if scrollsItself(b) {
 		b.Scroll = clampScroll(b)
@@ -90,6 +118,9 @@ func refreshBox(b *box.Box) {
 		moved, ok = stickyOffset(b), true
 	} else if v := held(b); v != nil {
 		moved, ok = v.Scroll, true
+	}
+	if by, past := scrolledPast(b); past {
+		moved, ok = moved.Add(by), true
 	}
 	if ok {
 		b.Pos = b.Pos.Sub(b.Sticky).Add(moved)

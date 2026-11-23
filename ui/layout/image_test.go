@@ -86,6 +86,34 @@ func TestAMissingImageIsSizedAsChromesBrokenImage(t *testing.T) {
 	assert.Equal(t, geom.V2(60, 40), layImages(el(dom.P, block, sized))[sized], "a size it's given holds")
 }
 
+func TestAGridKeepsAPicturesSizeButWhereToldToStretch(t *testing.T) {
+	grid := func(edit func(*style.Computed), kids ...*dom.Node) *dom.Node {
+		return el(dom.Div, func(st *style.Computed) {
+			st.Display = style.GridDisplay
+			st.Size = style.Size[style.Length]{Width: style.Px(200), Height: style.Px(100)}
+			if edit != nil {
+				edit(st)
+			}
+		}, kids...)
+	}
+	kept := img("tile.png", nil)
+	wide := img("tile.png", func(st *style.Computed) { st.JustifySelf = style.AlignStretch })
+	sizes := layImages(el(dom.Div, block, grid(nil, kept), grid(nil, wide)))
+	assert.Equal(t, geom.V2(40, 20), sizes[kept], "normal is start for a replaced box")
+	assert.Equal(t, geom.V2(200, 100), sizes[wide], "stretched across, its ratio gives its height")
+}
+
+func TestAPictureOfAPercentageWidthGivesWayToAShrunkBox(t *testing.T) {
+	i := img("tile.png", func(st *style.Computed) {
+		st.Display = style.Block
+		st.Size.Width = style.Length{Kind: style.Fixed, Percent: 100, IsPercent: true}
+	})
+	f := el(dom.Div, func(st *style.Computed) { st.Display = style.Block; st.Float = style.FloatLeft }, i, text("HH"))
+	sizes := layImages(el(dom.Div, width(30), f))
+	assert.Equal(t, geom.V2(30, 15), sizes[i], "the float is as wide as its room, not the picture's")
+	assert.Equal(t, float32(30), sizes[f].X)
+}
+
 func TestAnImageInAFlexRow(t *testing.T) {
 	i := img("tile.png", func(st *style.Computed) { st.Size.Height = style.Px(30) })
 	row := el(dom.Div, func(st *style.Computed) { st.Display = style.FlexDisplay; st.AlignItems = style.AlignStart }, i)

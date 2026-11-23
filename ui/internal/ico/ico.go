@@ -11,12 +11,15 @@ import (
 
 const (
 	// dirHeader is the length of what an ICO file starts with: a zero,
-	// its kind (1, an icon) and how many pictures it holds.
+	// its kind (1, an icon, 2 a cursor) and how many pictures it holds.
 	dirHeader = 6
 	// dirEntry is the length of what the file says of each picture.
 	dirEntry = 16
 
 	pngSignature = "\x89PNG\r\n\x1a\n"
+
+	icon   = 1
+	cursor = 2
 )
 
 var (
@@ -26,11 +29,13 @@ var (
 	errPNGSize = errors.New("ico: the PNG picture has no size")
 )
 
-// Decode reads an ICO file: the largest of its pictures, the one of
-// the most bits a pixel among those of that size. A picture is a PNG
-// file, or a bitmap as a BMP file's, of 1, 4, 8, 16, 24 or 32 bits a
-// pixel; the bitmap's AND mask cuts it where it has no alpha, and one
-// of 32 bits whose alpha is zero everywhere is cut by the mask too.
+// Decode reads an ICO file, or a CUR file, a cursor's, which is one of
+// another kind: the largest of its pictures, the one of the most bits a
+// pixel among those of that size, as Chrome shows it whatever the size
+// it is shown at. A picture is a PNG file, or a bitmap as a BMP file's,
+// of 1, 4, 8, 16, 24 or 32 bits a pixel, run-length encoded or not; the
+// bitmap's AND mask cuts it where it has no alpha, and one of 32 bits
+// whose alpha is zero everywhere is cut by the mask too.
 func Decode(r io.Reader) (image.Image, error) {
 	data, err := readAll(r)
 	if err != nil {
@@ -97,7 +102,8 @@ func best(data []byte) ([]byte, error) {
 	if len(data) < dirHeader {
 		return nil, errShort
 	}
-	if binary.LittleEndian.Uint16(data) != 0 || binary.LittleEndian.Uint16(data[2:]) != 1 {
+	kind := binary.LittleEndian.Uint16(data[2:])
+	if binary.LittleEndian.Uint16(data) != 0 || kind != icon && kind != cursor {
 		return nil, errNoICO
 	}
 	n := int(binary.LittleEndian.Uint16(data[4:]))
@@ -117,7 +123,7 @@ func best(data []byte) ([]byte, error) {
 			return nil, errEntry
 		}
 		entry := data[at : at+size]
-		a, bpp := side(e[0])*side(e[1]), depthOf(e, entry)
+		a, bpp := side(e[0])*side(e[1]), depthOf(e, entry, kind == cursor)
 		if pic == nil || a > area || a == area && bpp > depth {
 			pic, area, depth = entry, a, bpp
 		}
@@ -135,8 +141,9 @@ func side(b byte) int {
 
 // depthOf is the bits a pixel of an entry: what the directory says, or,
 // where it says nothing, what the picture does (a PNG counting as 32).
-func depthOf(e, pic []byte) int {
-	if bpp := int(binary.LittleEndian.Uint16(e[6:])); bpp != 0 {
+// A cursor's directory says its hotspot there, so the picture says it.
+func depthOf(e, pic []byte, cursor bool) int {
+	if bpp := int(binary.LittleEndian.Uint16(e[6:])); bpp != 0 && !cursor {
 		return bpp
 	}
 	if isPNG(pic) {

@@ -84,6 +84,18 @@ func TestParseColor(t *testing.T) {
 		{"oklch(1 0 0)", "rgb(255, 255, 255)"},
 		{"oklch(0 0 0 / 0.5)", "rgba(0, 0, 0, 0.5)"},
 		{"oklch(0.5198 0.1769 142.5deg)", "rgb(0, 128, 0)"},
+		{"hsl(120 100% 25%)", "rgb(0, 128, 0)"},
+		{"hsla(240, 100%, 50%, 0.5)", "rgba(0, 0, 255, 0.5)"},
+		{"hwb(0 60% 60%)", "rgb(128, 128, 128)"},
+		{"lab(50 40 -20)", "rgb(171, 90, 154)"},
+		{"color(srgb 0.2 0.4 0.6)", "rgb(51, 102, 153)"},
+		{"color(display-p3 0.3 0.5 0.7)", "rgb(57, 129, 183)"},
+		{"rgb(calc(255 / 2) calc(10 + 20) 0)", "rgb(128, 30, 0)"},
+		{"rgb(from #336699 b g r / 0.5)", "rgba(153, 102, 51, 0.5)"},
+		{"hsl(from blue calc(h + 120) s l)", "rgb(255, 0, 0)"},
+		{"color-mix(in srgb, red 30%, blue)", "rgb(77, 0, 179)"},
+		{"color-mix(in oklch longer hue, red, blue)", "rgb(0, 147, 0)"},
+		{"color-mix(in srgb, red 10%, blue 30%)", "rgba(64, 0, 191, 0.4)"},
 	}
 	for _, c := range cases {
 		got, err := parseColor(valueOf(t, c.src))
@@ -95,7 +107,8 @@ func TestParseColor(t *testing.T) {
 
 func TestParseColorErrors(t *testing.T) {
 	for _, src := range []string{"reddish", "#12", "#ggg", "rgb(1, 2)", "rgb(1 2 3 4)", "rgb(1, 2%, 3)", "rgb(1 2, 3)",
-		"oklch(1, 0, 0)", "hsl(0 0% 0%)", "12px"} {
+		"oklch(1, 0, 0)", "hsl(0, 0, 0)", "hwb(0, 0%, 0%)", "rgb(from red r g)", "color(foo 1 1 1)",
+		"color-mix(in srgb, red)", "color-mix(in srgb longer hue, red, blue)", "12px"} {
 		if _, err := parseColor(valueOf(t, src)); err == nil {
 			t.Errorf("%q: no error", src)
 		}
@@ -111,6 +124,17 @@ func TestAngleAndDuration(t *testing.T) {
 	}
 	if d, _ := duration(valueOf(t, "150ms")); d != 0.15 {
 		t.Errorf("ms: %v", d)
+	}
+	if d, _ := duration(valueOf(t, "calc(1s + 100ms)")); !near(d, 1.1) {
+		t.Errorf("calc(): %v", d)
+	}
+	if d, _ := duration(valueOf(t, "max(2s, 300ms * 10)")); !near(d, 3) {
+		t.Errorf("max(): %v", d)
+	}
+	for _, src := range []string{"3", "calc(1s + 1px)", "calc(1s * 1s)"} {
+		if _, err := duration(valueOf(t, src)); err == nil {
+			t.Errorf("%s accepted as a duration", src)
+		}
 	}
 	if _, err := duration(valueOf(t, "3")); err == nil {
 		t.Error("unitless duration accepted")

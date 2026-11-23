@@ -382,7 +382,7 @@ func expandTransition(v []Component, out map[string][]Component) error {
 			switch {
 			case timingFunction(c) == nil && one["transition-timing-function"].Kind == EOF:
 				one["transition-timing-function"] = c
-			case c.Kind == Dimension && timeTerm(false)(c) == nil:
+			case c.Kind != Ident && timeTerm(false)(c) == nil:
 				switch {
 				case one["transition-duration"].Kind == EOF:
 					if timeTerm(true)(c) != nil {
@@ -508,7 +508,7 @@ func expandAnimation(v []Component, out map[string][]Component) error {
 // which longhands are still free.
 func animationPart(c Component, free func(string) bool) (string, error) {
 	switch {
-	case c.Kind == Dimension && timeTerm(false)(c) == nil:
+	case c.Kind != Ident && timeTerm(false)(c) == nil:
 		switch {
 		case free(propAnimationDuration):
 			if timeTerm(true)(c) != nil {
@@ -728,7 +728,7 @@ func maskOriginAndClip(boxes []Component, out map[string][]Component) error {
 	return nil
 }
 
-// expandFont splits the font shorthand: style, small-caps and weight in any order, a
+// expandFont splits the font shorthand: style, small-caps, weight and stretch in any order, a
 // size, a line height after a slash, then the families. What it leaves
 // out is reset, as CSS says.
 func expandFont(v []Component, out map[string][]Component) error {
@@ -739,8 +739,10 @@ func expandFont(v []Component, out map[string][]Component) error {
 		case isWord(v[i], "normal"):
 		case out[propCaps] == nil && isWord(v[i], "small-caps"):
 			out[propCaps] = one
-		case checks["font-stretch-word"](one) == nil:
+		case isWord(v[i], "small-caps"):
 			return fmt.Errorf("font: %s is not supported", v[i].String())
+		case out["font-stretch"] == nil && checks["font-stretch-word"](one) == nil:
+			out["font-stretch"] = one
 		case out["font-style"] == nil && checks["font-style"](one) == nil:
 			out["font-style"] = one
 		case out["font-weight"] == nil && checks["font-weight"](one) == nil:

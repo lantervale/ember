@@ -139,6 +139,11 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
 | 0135 | [Small capitals and skipped ink are synthesised from the face's outlines](0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md) | rendering |
 | 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
+| 0137 | [A box placed past a scroller is moved back as it scrolls](0137-a-box-placed-past-a-scroller-is-moved-back-as-it-scrolls.md) | api |
+| 0138 | [Animated pictures play as one texture per address](0138-animated-pictures-play-as-one-texture-per-address.md) | assets |
+| 0139 | [Colours in any space are worked out in sRGB as the cascade reads them](0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md) | api |
+| 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
+| 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
 
 ## Writing one
 

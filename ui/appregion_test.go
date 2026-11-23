@@ -136,3 +136,31 @@ func TestADragPressLeavesTheFocusAndClicksNothing(t *testing.T) {
 	assert.True(t, h.doc.Focused(button), "the focus stays where it was, as under a system title bar")
 	assert.Empty(t, h.clicks)
 }
+
+func TestAHeaderPadsItselfByEnvTitleBarArea(t *testing.T) {
+	win := platform.NewWindow(platform.Size(400, 300), platform.OwnTitleBar())
+	win.SyncTitleBar(platform.TitleBarArea{Left: 78, Right: 12, Height: 28})
+	doc := ui.NewDocument(ui.CSS(`body { margin: 0 }
+#bar { margin-left: env(titlebar-area-x, 0px); margin-top: env(titlebar-area-y, 5px);
+  width: env(titlebar-area-width, 100px); height: env(titlebar-area-height, 40px) }
+#safe { width: calc(env(safe-area-inset-left, 9px) + 10px); height: env(keyboard-inset-height, 9px) }`))
+	bar, safe := ui.Header(ui.ID("bar")), ui.Div(ui.ID("safe"))
+	doc.Body().Append(bar, safe)
+	win.Add(doc)
+	w := ember.New().AddEntities(win)
+	w.RunFrames(2)
+	assert.Equal(t, geom.Rect{X: 78, W: 310, H: 28}, bar.Box(), "between the system's buttons, as tall as its bar")
+	assert.Equal(t, geom.V2(10, 0), geom.V2(safe.Box().W, safe.Box().H), "no notch, no keyboard: 0px")
+
+	win.SyncTitleBar(platform.TitleBarArea{})
+	w.RunFrames(2)
+	assert.Equal(t, geom.Rect{Y: 5, W: 100, H: 40}, bar.Box(), "fullscreen, the values are undefined: the fallbacks")
+}
+
+func TestNoneInADragRegionTakesItsBoxOut(t *testing.T) {
+	h := newHeader(t)
+	h.doc.AddSheet(`#label { app-region: none }`)
+	h.w.RunFrames(2)
+	h.press(150, 20)
+	assert.Zero(t, h.bar.drags, "none set computes no-drag, as in Chrome")
+}

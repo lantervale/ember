@@ -393,7 +393,7 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 	case automation.ActSet:
 		d.actSet(n, m, a.Value)
 	case automation.ActContext:
-		d.events = append(d.events, ContextClicked{Node: n})
+		d.events = append(d.events, ContextClicked{Node: n, At: n.Box().Center()})
 	case automation.ActDrag:
 		id, _ := a.Value.(string)
 		if target := byPath(id); target != nil && handles(target, EventDrop) {

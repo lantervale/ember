@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui/css"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // Preferences has the Document's sheets answer prefers-color-scheme and
@@ -81,6 +83,83 @@ func (d *Document) SetReducedMotion(on bool) {
 	}
 }
 
+// Contrast is the contrast a Document answers prefers-contrast with.
+type Contrast uint8
+
+const (
+	ContrastNoPreference Contrast = iota
+	ContrastMore
+	ContrastLess
+	ContrastCustom
+)
+
+func (c Contrast) String() string {
+	switch c {
+	case ContrastMore:
+		return "more"
+	case ContrastLess:
+		return "less"
+	case ContrastCustom:
+		return "custom"
+	case ContrastNoPreference:
+	}
+	return "no-preference"
+}
+
+// PrefersContrast has the Document's sheets answer prefers-contrast with
+// c, where a page that asks draws its borders and text stronger or
+// softer. Nothing on any system says it yet: without it, a Document
+// answers no-preference, or as its host in an iframe.
+func PrefersContrast(c Contrast) DocumentOption { return func(d *Document) { d.contrast = c } }
+
+// Contrast is what the Document answers prefers-contrast with: its own,
+// else its host's in an iframe.
+func (d *Document) Contrast() Contrast {
+	if d.contrast == ContrastNoPreference && d.framed != nil {
+		return d.framed.host.Contrast()
+	}
+	return d.contrast
+}
+
+// SetContrast changes the answer from the next layout, which styles the
+// tree again where a rule asks.
+func (d *Document) SetContrast(c Contrast) { d.contrast = c }
+
+// ForcedColors has the Document's sheets answer forced-colors: active,
+// as on a system whose high-contrast theme forces its own colours. It
+// answers the query only: ui forces no colour itself.
+func ForcedColors() DocumentOption { return func(d *Document) { d.forced = true } }
+
+// ForcedColors reports whether the Document answers forced-colors:
+// active: as the program said, or its host in an iframe.
+func (d *Document) ForcedColors() bool {
+	return d.forced || d.framed != nil && d.framed.host.ForcedColors()
+}
+
+// SetForcedColors changes the answer from the next layout.
+func (d *Document) SetForcedColors(on bool) { d.forced = on }
+
+// TouchOnly has the Document answer as on a device with a touchscreen and
+// no mouse: pointer and any-pointer coarse, hover and any-hover none.
+// Without it a mouse is always there to hover, beside the finger a
+// Document notes on its screen (hover: none while it points).
+func TouchOnly() DocumentOption { return func(d *Document) { d.touchOnly = true } }
+
+// TouchOnly reports whether the Document answers as on a device with no
+// mouse: as the program said, or its host in an iframe.
+func (d *Document) TouchOnly() bool {
+	return d.touchOnly || d.framed != nil && d.framed.host.TouchOnly()
+}
+
+// SetTouchOnly changes the answer from the next layout.
+func (d *Document) SetTouchOnly(on bool) { d.touchOnly = on }
+
+// initialFont is the font media queries measure their font units in:
+// font's initial value.
+//
+//nolint:gochecknoglobals // a constant font
+var initialFont = style.Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400}
+
 // medium is what the Document answers the media features that aren't
 // its viewport's with. The pointer is its window's, the outermost
 // Document's.
@@ -89,7 +168,12 @@ func (d *Document) medium() css.Media {
 	for top.framed != nil {
 		top = top.framed.host
 	}
-	return css.Media{Dark: d.ColorScheme() == platform.AppearanceDark, ReducedMotion: d.ReducedMotion(), Touch: top.touch}
+	m := css.Media{Dark: d.ColorScheme() == platform.AppearanceDark, ReducedMotion: d.ReducedMotion(),
+		ForcedColors: d.ForcedColors(), Touch: top.touch, TouchOnly: d.TouchOnly(), Font: d.fontUnits(initialFont)}
+	if c := d.Contrast(); c != ContrastNoPreference {
+		m.Contrast = c.String()
+	}
+	return m
 }
 
 // notePointer records whether the pointer last used is a finger on the
@@ -105,4 +189,22 @@ func (d *Document) notePointer(in *input.State) {
 	if in.LastDevice() == input.MouseDevice {
 		d.touch = false
 	}
+}
+
+// titleBarArea is what env(titlebar-area-*) reads in a viewport of size
+// points: the part of its window's title bar the system leaves the
+// Document, between its buttons, in the Document's points; none for a
+// Document in an iframe, or in a window whose system keeps its title bar
+// above the content (decision 0142).
+func (d *Document) titleBarArea(size geom.Vec2) css.TitleBarArea {
+	win := d.owner.win
+	if d.framed != nil || win == nil {
+		return css.TitleBarArea{}
+	}
+	a := win.TitleBarArea()
+	if a.Height <= 0 {
+		return css.TitleBarArea{}
+	}
+	z := d.Zoom()
+	return css.TitleBarArea{X: a.Left / z, Width: max(size.X-(a.Left+a.Right)/z, 0), Height: a.Height / z}
 }

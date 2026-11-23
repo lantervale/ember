@@ -42,6 +42,9 @@ const (
 	EventAnimationIteration
 	EventAnimationEnd
 	EventAnimationCancel
+	EventPointerDown
+	EventPointerMove
+	EventPointerUp
 )
 
 // Event is what a callback is told: the event's type and element, and
@@ -62,8 +65,10 @@ type Event struct {
 	Text    string
 	Command bool
 	Pad     input.GamepadButton
-	// At is a window's top-left once moved (Move), Size its size once
-	// resized (Resize), and Folded whether it folded (Fold).
+	// At is a window's top-left once moved (Move), or the pointer's place
+	// in the Document's points (Context, PointerDown, PointerMove,
+	// PointerUp); Size is a window's size once resized (Resize), and Folded
+	// whether it folded (Fold).
 	At     geom.Vec2
 	Size   geom.Vec2
 	Folded bool
@@ -76,9 +81,13 @@ type Event struct {
 	// AnimationEnd, AnimationCancel).
 	Animation string
 	Elapsed   float32
+	// Button is the mouse button pressed or released (PointerDown,
+	// PointerUp).
+	Button input.MouseButton
 
-	// stopped is where StopPropagation tells the dispatch to go no higher.
-	stopped *bool
+	// stopped is where StopPropagation tells the dispatch to go no higher,
+	// and prevented where PreventDefault keeps a text field from a key.
+	stopped, prevented *bool
 }
 
 // StopPropagation keeps a bubbling Back or key from reaching the handlers
@@ -89,13 +98,24 @@ func (e Event) StopPropagation() {
 	}
 }
 
+// PreventDefault keeps a focused text field from the key its OnKey heard,
+// as a page's keydown preventDefault: no character typed, no caret moved,
+// no Enter submitted, no Tab or Escape leaving it (decision 0142). Other
+// events have no default it holds back.
+func (e Event) PreventDefault() {
+	if e.prevented != nil {
+		*e.prevented = true
+	}
+}
+
 // bubbles reports whether t runs on the element's ancestors too, innermost
-// first, as a DOM keydown or contextmenu does: Back and keys, which land on
-// the focused element (decision 0060), and a right click (decision 0062).
-// Every other event stays on its element.
+// first, as a DOM keydown, contextmenu or pointerdown does: Back and keys,
+// which land on the focused element (decision 0060), a right click
+// (decision 0062) and the pointer's presses, moves and releases (decision
+// 0142). Every other event stays on its element.
 func bubbles(t EventType) bool {
 	return t == EventBack || t == EventKey || t == EventContext || t == EventSelectionChange ||
-		t == EventRightDragSelect
+		t == EventRightDragSelect || t >= EventPointerDown && t <= EventPointerUp
 }
 
 // OnClick runs fn after each Clicked on the element.
@@ -121,6 +141,10 @@ func OnSort[F Handler](fn F) Arg { return on(EventSort, fn) }
 
 // OnKey runs fn after each KeyPressed on the element or one inside it, the
 // focused element's handlers first, then each ancestor's (decision 0060).
+// In a focused text field it hears every key pressed or repeated, before
+// the field acts on it, as a page's keydown: e.PreventDefault() keeps the
+// field from it (decision 0142). Those keys are the field's, and emit no
+// KeyPressed.
 func OnKey[F Handler](fn F) Arg { return on(EventKey, fn) }
 
 // OnBack runs fn after each BackPressed on the element or one inside it,
@@ -132,7 +156,8 @@ func OnBack[F Handler](fn F) Arg { return on(EventBack, fn) }
 
 // OnContextMenu runs fn after each right click on the element or one
 // inside it, innermost first, as the DOM's contextmenu, which opens no menu
-// by itself (decision 0062).
+// by itself (decision 0062); on macOS a click with Control held is one
+// too. e.At is where the pointer was (decision 0142).
 func OnContextMenu[F Handler](fn F) Arg { return on(EventContext, fn) }
 
 // OnDrop makes the element a drop target: fn runs when a Draggable element
@@ -160,6 +185,23 @@ func OnPointerEnter[F Handler](fn F) Arg { return on(EventPointerEnter, fn) }
 // OnPointerLeave runs fn when the pointer leaves the element and all of
 // its children.
 func OnPointerLeave[F Handler](fn F) Arg { return on(EventPointerLeave, fn) }
+
+// OnPointerDown runs fn when a mouse button is pressed over the element or
+// one inside it, innermost first, as pointerdown: e.Button is the button,
+// e.At the pointer's place in the Document's points. The press goes on to
+// focus, click or select as ever. A callback may hold the pointer with
+// Document.SetPointerCapture (decision 0142).
+func OnPointerDown[F Handler](fn F) Arg { return on(EventPointerDown, fn) }
+
+// OnPointerMove runs fn when the pointer moves over the element or one
+// inside it, innermost first, as pointermove; while an element holds the
+// pointer (SetPointerCapture), on that element wherever the pointer is.
+func OnPointerMove[F Handler](fn F) Arg { return on(EventPointerMove, fn) }
+
+// OnPointerUp runs fn when a mouse button is released over the element or
+// one inside it, innermost first, as pointerup; while an element holds the
+// pointer, on that element wherever the pointer is.
+func OnPointerUp[F Handler](fn F) Arg { return on(EventPointerUp, fn) }
 
 // OnMove runs fn after each WindowMoved of the window.
 func OnMove[F Handler](fn F) Arg { return on(EventMove, fn) }
@@ -231,17 +273,22 @@ func wrap[F Handler](fn F) func(*world.World, Event) {
 }
 
 // dispatch runs the callbacks of the element an emitted event is about,
-// in the order they were added, when it is still in the Document.
-func (d *Document) dispatch(w *world.World, raw any) {
+// in the order they were added, when it is still in the Document, and
+// reports whether one prevented its default. While they run, the element
+// is the one a SetValue answers at once.
+func (d *Document) dispatch(w *world.World, raw any) bool {
 	e, ok := eventOf(raw)
 	if _, body := raw.(bodyBack); body {
 		e, ok = Event{Type: EventBack, Node: d.body}, true
 	}
 	if !ok || e.Node == nil || !d.holds(e.Node) {
-		return
+		return false
 	}
-	stopped := false
-	e.stopped = &stopped
+	stopped, prevented := false, false
+	e.stopped, e.prevented = &stopped, &prevented
+	was := d.answering
+	d.answering = e.Node
+	defer func() { d.answering = was }()
 	for n := e.Node; n != nil && !stopped; n = n.Parent() {
 		if n != e.Node && !d.holds(n) {
 			continue
@@ -254,9 +301,10 @@ func (d *Document) dispatch(w *world.World, raw any) {
 			}
 		}
 		if !bubbles(e.Type) {
-			return
+			break
 		}
 	}
+	return prevented
 }
 
 // bodyBack is a Back pressed with nothing focused: no World event, as
@@ -330,7 +378,7 @@ func eventOf(raw any) (Event, bool) {
 	case WindowFolded:
 		return Event{Type: EventFold, Node: e.Node, Folded: e.Folded}, true
 	case ContextClicked:
-		return Event{Type: EventContext, Node: e.Node}, true
+		return Event{Type: EventContext, Node: e.Node, At: e.At}, true
 	case Dropped:
 		return Event{Type: EventDrop, Node: e.Target, Dragged: e.Dragged}, true
 	case DragEnded:
@@ -347,6 +395,18 @@ func eventOf(raw any) (Event, bool) {
 		return Event{Type: EventAnimationEnd, Node: e.Node, Animation: e.Name, Elapsed: e.Elapsed}, true
 	case AnimationCanceled:
 		return Event{Type: EventAnimationCancel, Node: e.Node, Animation: e.Name, Elapsed: e.Elapsed}, true
+	}
+	return pointerEventOf(raw)
+}
+
+func pointerEventOf(raw any) (Event, bool) {
+	switch e := raw.(type) {
+	case PointerPressed:
+		return Event{Type: EventPointerDown, Node: e.Node, At: e.At, Button: e.Button}, true
+	case PointerMoved:
+		return Event{Type: EventPointerMove, Node: e.Node, At: e.At}, true
+	case PointerReleased:
+		return Event{Type: EventPointerUp, Node: e.Node, At: e.At, Button: e.Button}, true
 	}
 	return Event{}, false
 }

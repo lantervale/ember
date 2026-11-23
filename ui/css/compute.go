@@ -183,7 +183,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	}
 	r.env.root = root
 	if stale {
-		r.env.used, r.env.prefersRead = 0, false
+		r.env.used, r.env.prefersRead, r.env.titleBarRead = 0, false, false
 	} else if r.anchors && dom.Data(root).Style != nil {
 		r.anchor(root)
 	}
@@ -429,7 +429,8 @@ type ctx struct {
 //
 //nolint:gochecknoglobals,goconst // a fixed list
 var leading = []string{
-	propDirection, propColorScheme, "font-family", "font-style", "font-weight", propFontSize, "line-height", "color",
+	propDirection, propColorScheme, "font-family", "font-style", "font-weight", "font-stretch", propFontSize,
+	"line-height", "color",
 }
 
 // colored are the longhands whose values take colours, where a system
@@ -831,6 +832,12 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 				return nil, false
 			}
 			out = append(out, fb...)
+		case c.Kind == Function && strings.EqualFold(c.Text, "env"):
+			val, ok := x.envValue(c)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, val...)
 		case len(c.Args) > 0:
 			args, ok := x.substitute(c.Args)
 			if !ok {
@@ -843,6 +850,26 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 		}
 	}
 	return out, true
+}
+
+// envValue is what env() c stands for: its variable, else its fallback,
+// false when it has neither.
+func (x *ctx) envValue(c Component) ([]Component, bool) {
+	args := trim(c.Args)
+	if len(args) == 0 || args[0].Kind != Ident {
+		return nil, false
+	}
+	rest := trim(args[1:])
+	if len(rest) > 0 && rest[0].Kind != Comma {
+		return nil, false
+	}
+	if val, ok := x.env.variable(args[0].Text); ok {
+		return val, true
+	}
+	if len(rest) == 0 {
+		return nil, false
+	}
+	return x.substitute(trim(rest[1:]))
 }
 
 // apply computes one longhand from its winning declaration, or from
@@ -1147,7 +1174,7 @@ func (x *ctx) animations() {
 		a := style.Animation{Name: n[0].Text, Easing: at(1, i).String(), Iterations: float32(math.Inf(1))}
 		dur, _ := duration(at(0, i))
 		delay, _ := duration(at(2, i))
-		a.Duration, a.Delay = float32(dur), float32(delay)
+		a.Duration, a.Delay = float32(max(dur, 0)), float32(delay)
 		if c := at(3, i); c.Kind == Number {
 			a.Iterations = float32(c.Num)
 		}
@@ -1199,7 +1226,7 @@ func transitionList(trans [5][]Component) []style.Transition {
 	for i, p := range props {
 		t := style.Transition{Property: strings.ToLower(p[0].Text)}
 		dur, _ := duration(lists[1][i%len(lists[1])][0])
-		t.Duration = float32(dur)
+		t.Duration = float32(max(dur, 0))
 		t.Easing = lists[2][i%len(lists[2])][0].String()
 		delay, _ := duration(lists[3][i%len(lists[3])][0])
 		t.Delay = float32(delay)
@@ -1418,11 +1445,18 @@ func (x *ctx) color(c Component) color.Color {
 	if isWord(c, kwCurrentColor) {
 		return x.c.Color
 	}
-	return linear(c)
+	return linear(c, x.c.Color)
 }
 
-func linear(c Component) color.Color {
-	s, _ := parseColor(c)
+// linear is the colour c, currentcolor in it standing for cur.
+func linear(c Component, cur color.Color) color.Color {
+	var s Color
+	if c.Kind == Function {
+		in := cur.SRGB()
+		s, _ = colorIn(c, &Color{float64(in[0]), float64(in[1]), float64(in[2]), float64(cur.A)})
+	} else {
+		s, _ = parseColor(c)
+	}
 	l := color.FromSRGB([3]float32{float32(s.R), float32(s.G), float32(s.B)})
 	l.A = float32(s.A)
 	return l
@@ -1790,6 +1824,26 @@ var props = func() map[string]prop {
 		"font-style": field(func(c *style.Computed) *bool { return &c.Font.Italic }, func(_ *ctx, v []Component) bool {
 			return !isWord(v[0], "normal")
 		}, flips[bool]()),
+		"font-stretch": field(func(c *style.Computed) *float32 { return &c.Font.Stretch },
+			func(_ *ctx, v []Component) float32 {
+				if w, ok := fontStretch(v[0]); ok {
+					return w
+				}
+				return 100
+			}, numbers(0, math.MaxFloat32)),
+		"font-synthesis": field(func(c *style.Computed) *style.FontSynthesis { return &c.Font.Synthesis },
+			func(_ *ctx, v []Component) style.FontSynthesis {
+				no := style.NoSyntheticBold | style.NoSyntheticItalic
+				for _, c := range v {
+					switch {
+					case isWord(c, "weight"):
+						no &^= style.NoSyntheticBold
+					case isWord(c, "style"):
+						no &^= style.NoSyntheticItalic
+					}
+				}
+				return no
+			}, flips[style.FontSynthesis]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {
@@ -1799,9 +1853,13 @@ var props = func() map[string]prop {
 				case v[0].Kind == Number:
 					return style.LineHeight{Factor: float32(v[0].Num)}
 				case v[0].Kind == Function:
-					if d, _ := parseDim(v[0]); d.typ == typeNumber {
-						return style.LineHeight{Factor: x.number(v[0], float64(x.em))}
+					d, _ := parseDim(v[0])
+					d = signPercents(d)
+					v := style.Finite(d.Absolute(x.units(&d)).Resolve(float64(x.em)), math.MaxFloat32)
+					if d.typ == typeNumber {
+						return style.LineHeight{Factor: v}
 					}
+					return style.LineHeight{Px: max(v, 0)}
 				}
 				l := x.length(v[0])
 				return style.LineHeight{Px: l.At(x.em)}
@@ -1828,7 +1886,7 @@ var props = func() map[string]prop {
 				if isWord(v[0], "currentcolor") {
 					return x.parent.Color
 				}
-				return linear(v[0])
+				return linear(v[0], x.parent.Color)
 			}, colors,
 		).painted(),
 		propColorScheme: field(func(c *style.Computed) *style.ColorScheme { return &c.ColorScheme },
@@ -1921,8 +1979,9 @@ var props = func() map[string]prop {
 		},
 		"pointer-events": field(func(c *style.Computed) *bool { return &c.PointerNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
-		"app-region": field(func(c *style.Computed) *bool { return &c.AppDrag },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "drag") }, flips[bool]()),
+		"app-region": keyword(func(c *style.Computed) *style.AppRegion { return &c.AppRegion },
+			map[string]style.AppRegion{"drag": style.AppRegionDrag, "no-drag": style.AppRegionNoDrag,
+				"none": style.AppRegionNoDrag}),
 		"user-select": field(func(c *style.Computed) *style.UserSelect { return &c.UserSelect },
 			func(_ *ctx, v []Component) style.UserSelect {
 				switch strings.ToLower(v[0].Text) {
@@ -2200,7 +2259,7 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 			c, auto := get(x.c)
 			*auto = isWord(v[0], "auto", kwCurrentColor)
 			if !*auto {
-				*c = linear(v[0])
+				*c = linear(v[0], x.c.Color)
 			}
 		},
 		inherit: func(dst, src *style.Computed) {
