@@ -197,8 +197,10 @@ type painter struct {
 	clip  *clip
 	held  int
 	floor *clip
-	// pictures is how many pictures paint has begun and not ended.
+	// pictures is how many pictures paint has begun and not ended, paged
+	// whether one of them is the whole page's.
 	pictures int
+	paged    bool
 	// spread is how far the filters of the elements painted round what
 	// is painted now draw it past where it is: so much more of it shows.
 	spread float32
@@ -290,6 +292,7 @@ func paintOn(s Surface, t *box.Tree, opts []Option, whole bool) int {
 	if grouped = grouped && t.Grouped; grouped {
 		on.BeginPicture()
 		p.pictures++
+		p.paged = true
 	}
 	p.canvasBackground(t.Root)
 	p.page(t.Root)

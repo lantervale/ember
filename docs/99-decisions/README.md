@@ -136,6 +136,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0132 | [Border sides are mitered pieces smoothed by their own geometry](0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md) | rendering |
 | 0133 | [A masked element is a picture cut by the picture of its mask](0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md) | rendering |
 | 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
+| 0141 | [Keys and the arrows cross a frame; the frame fades and moves with its iframe](0141-keys-and-the-arrows-cross-a-frame-the-frame-fades-and-moves-with-its-iframe.md) | api |
 
 ## Writing one
 

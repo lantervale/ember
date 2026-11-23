@@ -231,18 +231,27 @@ func wrap[F Handler](fn F) func(*world.World, Event) {
 }
 
 // dispatch runs the callbacks of the element an emitted event is about,
-// in the order they were added, when it is still in the Document.
+// in the order they were added, when it is still in the Document. A key
+// or a Back no callback of a framed Document stopped goes on from its
+// iframe in the Document round it (decision 0141).
 func (d *Document) dispatch(w *world.World, raw any) {
 	e, ok := eventOf(raw)
 	if _, body := raw.(bodyBack); body {
 		e, ok = Event{Type: EventBack, Node: d.body}, true
 	}
-	if !ok || e.Node == nil || !d.holds(e.Node) {
+	if !ok || e.Node == nil {
 		return
 	}
 	stopped := false
 	e.stopped = &stopped
-	for n := e.Node; n != nil && !stopped; n = n.Parent() {
+	d.bubble(w, e)
+}
+
+func (d *Document) bubble(w *world.World, e Event) {
+	if !d.holds(e.Node) {
+		return
+	}
+	for n := e.Node; n != nil && !*e.stopped; n = n.Parent() {
 		if n != e.Node && !d.holds(n) {
 			continue
 		}
@@ -256,6 +265,10 @@ func (d *Document) dispatch(w *world.World, raw any) {
 		if !bubbles(e.Type) {
 			return
 		}
+	}
+	if f := d.framed; f != nil && !*e.stopped && (e.Type == EventKey || e.Type == EventBack) {
+		e.Node = f.n
+		f.host.bubble(w, e)
 	}
 }
 

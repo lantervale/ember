@@ -120,9 +120,14 @@ func buildCanvas(n *node, e *dom.Node) {
 
 // buildFrame makes an iframe a replaced box of 300 by 150 whose sides
 // don't hold each other: its width and height attributes are hints css
-// reads, as Chrome's.
+// reads, as Chrome's. With an aspect-ratio and no natural size of its
+// own it fills its line, as a picture of proportions alone.
 func buildFrame(n *node) {
 	n.replaced, n.sized = true, true
+	if r := aspectRatio(n.st); some(r) {
+		n.natural, n.shape = size{}, box.Intrinsic{Ratio: r}
+		return
+	}
 	n.natural = size{defaultWidth, defaultHeight}
 	n.shape = box.Intrinsic{Width: defaultWidth, Height: defaultHeight}
 }
@@ -154,12 +159,16 @@ func (n *node) naturalRatio() float32 {
 // and adds nothing to its block's own width.
 func (n *node) fills() bool { return n.sized && fillsRoom(n.shape) }
 
+// framed reports a replaced box of no natural size whose proportions are its
+// aspect-ratio's: they hold between the boxes box-sizing names.
+func (n *node) framed() bool { return n.fills() && aspectRatio(n.st) == n.shape.Ratio }
+
 // fillsRoom reports a picture that has proportions and asks for no size.
 func fillsRoom(in box.Intrinsic) bool { return in.Ratio > 0 && in.Width <= 0 && in.Height <= 0 }
 
 // naturalIn is the natural size of a replaced node in the room avail: a picture that
 // fills takes it.
-func (n *node) naturalIn(avail space, pb float32) size {
+func (n *node) naturalIn(avail space, pb size) size {
 	if n.fills() {
 		return n.filled(avail, pb)
 	}
@@ -167,12 +176,16 @@ func (n *node) naturalIn(avail space, pb float32) size {
 }
 
 // filled is the natural size of an img that fills, in avail less its
-// padding and border.
-func (n *node) filled(avail space, pb float32) size {
+// padding and border. A ratio the box's aspect-ratio gives holds
+// between the boxes box-sizing names.
+func (n *node) filled(avail space, pb size) size {
 	if avail.kind != definite {
 		return size{}
 	}
-	w := max(avail.v-pb, 0)
+	w := max(avail.v-pb.w, 0)
+	if n.framed() && !contentBox(n.st) {
+		return size{w, max(avail.v/n.shape.Ratio-pb.h, 0)}
+	}
 	return size{w, w / n.shape.Ratio}
 }
 

@@ -71,9 +71,9 @@ func (d *Document) Frame(n *Node) *Document { return frameOf(n) }
 // SetFrame has the iframe n show child from the next frame, nil for
 // nothing: the Document it showed is let go of. A Document shows in one
 // iframe at a time. An iframe taken out of its Document lets go of the
-// one it showed too, at the Document's next frame: put back in it within
-// the frame it keeps it; later, or put in another Document, it shows
-// nothing until SetFrame.
+// one it showed too, at the Document's next frame: put back in it, or in
+// another Document, within the frame it keeps it; later it shows nothing
+// until SetFrame.
 func (d *Document) SetFrame(n *Node, child *Document) {
 	if n == nil || n.IsText() || n.Tag() != dom.Iframe {
 		return
@@ -106,8 +106,8 @@ func (d *Document) FramePoint(n *Node, at geom.Vec2) (geom.Vec2, bool) {
 // itself is not drawn.
 func (d *Document) FrameShown(n *Node) bool {
 	child := frameOf(n)
-	return child != nil && child.framed != nil && child.framed.n == n && child.drawnOnce && d.drawnOnce &&
-		child.drawn == d.drawn
+	return child != nil && child.framed != nil && child.framed.host == d && child.framed.n == n &&
+		child.drawnOnce && d.drawnOnce && child.drawn == d.drawn
 }
 
 func frameOf(n *Node) *Document {
@@ -216,10 +216,10 @@ func (d *Document) syncFrames() {
 	}
 	for i, n := range d.frames {
 		child, placed := d.framedAt[i], slices.Contains(shown, n)
-		if !placed || frameOf(n) != child {
+		if (!placed || frameOf(n) != child) && child.framed != nil && child.framed.host == d {
 			child.unframe(n)
 		}
-		if !placed && frameOf(n) == child {
+		if !placed && frameOf(n) == child && !inDocument(n) {
 			dom.Data(n).Frame = nil
 		}
 	}
@@ -249,6 +249,15 @@ func (d *Document) syncFrames() {
 			})
 		}
 	}
+}
+
+// inDocument reports whether n is in a Document's tree, as an iframe moved
+// from one to another is.
+func inDocument(n *Node) bool {
+	for n.Parent() != nil {
+		n = n.Parent()
+	}
+	return n.Tag() == dom.HTML && dom.Data(n).Root
 }
 
 // askedOf tells the Document around d, if any, that a Focus was given
@@ -287,6 +296,46 @@ func (d *Document) tab(back bool) {
 			child.focus.Blur()
 			return child.focus.Tab(back)
 		})
+	}
+}
+
+// leaveFrame moves the focus out of d, in an iframe, towards dir when
+// nothing of d lies that way: to what lies that way of the iframe in the
+// Document round it, into the Document of an iframe found there.
+func (d *Document) leaveFrame(dir geom.Vec2) {
+	f := d.framed
+	if f == nil || f.host.focused() != f.n {
+		return
+	}
+	host := f.host
+	if !host.moveFocus(func() bool { return host.focus.MoveFrom(f.n.Box(), dir) }) {
+		host.leaveFrame(dir)
+		return
+	}
+	d.moveFocus(func() bool {
+		d.focus.Blur()
+		return true
+	})
+	host.enterFrame(dir)
+}
+
+// enterFrame moves the focus into the Document of the iframe an arrow or
+// a stick focused in d, to its target nearest the side it came in by.
+func (d *Document) enterFrame(dir geom.Vec2) {
+	n := d.focused()
+	child := frameOf(n)
+	if child == nil || child.framed == nil || child.framed.host != d {
+		return
+	}
+	d.focus.Set(n, false)
+	v := child.viewport
+	from := geom.Rect{X: v.X - dir.X*v.W, Y: v.Y - dir.Y*v.H, W: v.W, H: v.H}
+	if child.moveFocus(func() bool {
+		child.focus.Blur()
+		return child.focus.MoveFrom(from, dir)
+	}) {
+		child.framed.entered = true
+		child.enterFrame(dir)
 	}
 }
 

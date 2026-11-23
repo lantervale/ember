@@ -161,18 +161,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a select's list, a menu, a tooltip or a dialog of a Document in an `iframe`, where it passes the frame's box | cut at the box: the top layer is the framed Document's own |
-| a modal dialog in a framed Document | holds that Document's input, not the page's round it |
-| the arrows, a pad's stick and Back (Escape) across a frame | stay in the Document that has the focus: only Tab walks in and out |
-| an `OnKey` or `OnBack` of the page round a frame, for a key pressed inside it | not heard: keys bubble inside one Document |
+| a select's list of a Document in an `iframe`, where it passes the frame's box | cut at the box, where Chrome shows its list whole over the page; a menu, a tooltip or a dialog are cut there as in Chrome, the top layer being each Document's own |
 | a selection running from a page into its frame, and select all over both | each Document selects its own text, one at a time |
-| `opacity` below 1 on an ancestor of an `iframe` | doesn't fade it, as a canvas |
-| an element lying over an `iframe` | the page is painted each frame while it does, where it replays with nothing over the frame |
-| `aspect-ratio` on an `iframe` with neither a width nor a height | 300 wide and the ratio's height, where Chrome fills the line |
-| a percentage `height` on an inline `iframe`, `canvas` or `img` | read as `auto`; made a block, it is the share of its container |
+| an element lying over an `iframe`, or an `opacity` below 1 on it or round it | the page is painted each frame while it does, where it replays with nothing over the frame: the framed Document is drawn in the page's paint, which a replay skips |
+| `aspect-ratio` on a flex item `iframe` with neither a width nor a height | no width, where Chrome gives it its container's |
 | `scrolling="no"`, `allowtransparency`, `loading`, `sandbox`, `allow`, `name` | not read: what a frame may do is the program's |
-| a black `border: 2px inset` on an `iframe` | drawn as on any box, where Chrome keeps the greys of its default border |
-| an `iframe` moved to another Document | lets go of what it showed, as one taken out: `SetFrame` there shows it again |
 | a panic of a framed Document outside its own frame: a call the program makes on it, a fetch it started | the program's own, with or without `ui.Guarded()` |
 | a control taken out of its Document (a field, a canvas, an `iframe`) | its node and state stay held by the Document until the Document goes; an `iframe` lets go of what it showed |
 

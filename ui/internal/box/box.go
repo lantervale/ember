@@ -102,6 +102,10 @@ type Box struct {
 	// with (mix-blend-mode), or the backdrop root an element under it
 	// filters what lies behind it up to (backdrop-filter).
 	Group bool
+	// Canvas is set with Ink on an element that is or holds a canvas or
+	// an iframe, which draw in their own colours: opacity fades it as one
+	// picture.
+	Canvas bool
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Picture is the address of the picture a Marker shows, its item's

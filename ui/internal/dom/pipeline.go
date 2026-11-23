@@ -115,6 +115,9 @@ type Pipeline struct {
 	Frame   any
 	Guarded bool
 	Broken  error
+	// Root marks the html element of a Document, which an iframe moved
+	// into keeps what it showed.
+	Root bool
 	// Handlers are the node's callbacks (decision 0057), kept by ui.
 	Handlers any
 	// Follow is the entity the node follows on screen, kept by ui.
