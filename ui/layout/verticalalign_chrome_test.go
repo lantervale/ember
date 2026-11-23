@@ -142,3 +142,27 @@ td { width: 70px; padding: 2px; }
 		})
 	}
 }
+
+// An inline-block of blocks stands on the baseline of its last line, however deep, as
+// Chrome's: past a block with no lines, after a block that ends without one, and
+// overflowing its own height; a scroll container among them gives its bottom.
+func TestAnInlineBlockOfBlocksStandsOnItsLastLineAsChromes(t *testing.T) {
+	block := func(style string, kids ...ui.Arg) *ui.Node {
+		return ui.Label(append([]ui.Arg{ui.Style("display: block; " + style)}, kids...)...)
+	}
+	ib := ui.Style("display: inline-block; width: 60px")
+	d := aligning("p { font-size: 16px; } .s { font-size: 10px; }",
+		ui.P(ui.Text("Hxg"), ui.Label(ib, block("", ui.Text("one")), block("", ui.Text("two"))), ui.Text("end")),
+		ui.P(ui.Text("Hxg"), ui.Label(ib, block("", ui.Text("one")), block("height: 20px")), ui.Text("end")),
+		ui.P(ui.Text("Hxg"), ui.Label(ib, block("", block("", ui.Text("a"))), block("", block("", ui.Text("b"),
+			ui.Span(ui.Class("s"), ui.Text("small"))))), ui.Text("end")),
+		ui.P(ui.Text("Hxg"), ui.Label(ui.Style("display: inline-block; width: 60px; height: 10px"),
+			block("", ui.Text("one")), block("", ui.Text("two"))), ui.Text("end")),
+		ui.P(ui.Text("Hxg"), ui.Label(ib, block("", ui.Text("one")), block("overflow: hidden", ui.Text("two"))),
+			ui.Text("end")),
+		ui.P(ui.Text("Hxg"), ui.Label(ib, block("overflow: hidden; height: 30px", ui.Text("one")),
+			block("height: 20px")), ui.Text("end")),
+	)
+	r := chrome.Match(t, d, geom.V2(400, 400))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

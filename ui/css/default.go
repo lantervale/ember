@@ -240,8 +240,8 @@ input[type="range"] {
   width: 129px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff); overflow: visible;
 }
 input[type="range"]:-ember-native { height: 16px; }
-progress { width: 160px; height: 16px; color: light-dark(#0075ff, #99c8ff); }
-meter { width: 80px; height: 16px; }
+progress { width: 160px; height: 16px; color: light-dark(#0075ff, #99c8ff); vertical-align: -0.2em; }
+meter { width: 80px; height: 16px; vertical-align: -0.2em; }
 /* The parts of a range, a progress and a meter drawn from their CSS, as Chrome's sheet styles them. */
 input[type="range"]::-webkit-slider-thumb { appearance: auto; }
 progress::-webkit-progress-bar { background-color: gray; }

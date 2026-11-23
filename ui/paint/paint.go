@@ -528,6 +528,18 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	for _, c := range l.floats {
 		p.stack(c, alpha, true)
 	}
+	// A control laid out round its parts draws them under its generated
+	// content, as Chrome's shadow tree.
+	if marked(e.b) && parted(e.b) {
+		p.use(e.clip)
+		p.marks(e, alpha)
+	}
+	for _, c := range l.flow {
+		if marked(c.b) && parted(c.b) {
+			p.use(c.clip)
+			p.marks(c, alpha)
+		}
+	}
 	for _, c := range l.flow {
 		switch c.b.Kind {
 		case box.TextRun:
@@ -541,15 +553,15 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 				p.use(c.clip)
 				p.lineBreak(c, alpha)
 			}
-		case box.AnonymousBlock, box.Viewport:
+		case box.AnonymousBlock, box.Viewport, box.ControlPart:
 		}
 	}
-	if marked(e.b) {
+	if marked(e.b) && !parted(e.b) {
 		p.use(e.clip)
 		p.marks(e, alpha)
 	}
 	for _, c := range l.flow {
-		if marked(c.b) {
+		if marked(c.b) && !parted(c.b) {
 			p.use(c.clip)
 			p.marks(c, alpha)
 		}

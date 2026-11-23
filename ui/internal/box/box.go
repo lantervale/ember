@@ -27,6 +27,10 @@ const (
 	// its Style the root's Viewport. Node is the root element, which
 	// keeps its scroll offset.
 	Viewport
+	// ControlPart is the inner element of a progress or a meter, or the
+	// slider container of a range, among the control's ::before and
+	// ::after: the box its parts are drawn in. Node is nil.
+	ControlPart
 )
 
 // Edges is a resolved margin, border or padding, in points.
@@ -64,6 +68,9 @@ type Fragment struct {
 	// is shaped between, where a letter of Text may join theirs; empty
 	// elsewhere. Where Lead or Trail is set, they are the text round them.
 	Before, After string
+	// Spacing is the room text-spacing-trim and text-autospace give
+	// characters of Text, in Rect, by their byte, in order; nil for none.
+	Spacing []Spacing
 	// Lead and Trail are the text beside Text on its line that Chrome
 	// shapes as one with it, the runs on either side sharing its font and
 	// spacing across edges that take no room: Text draws the glyphs whose
@@ -313,6 +320,47 @@ type InkFonts interface {
 // line to fit them, not the inline box holding them.
 type FallbackFonts interface {
 	FallbackMetrics(f style.Font, text string) (Metrics, bool)
+}
+
+// HanFonts is Fonts that knows what text-spacing-trim reads of a
+// full-width punctuation mark's glyph: HanGlyph is r's glyph in the face
+// drawing it in f.
+type HanFonts interface {
+	HanGlyph(f style.Font, r rune) HanGlyph
+}
+
+// HanGlyph is what text-spacing-trim reads of a glyph, in points at its
+// size.
+type HanGlyph struct {
+	// Halt is set when the face has the halt feature, which sets
+	// full-width punctuation half its width: Shift is how far it moves
+	// this glyph and Narrow how much it takes off its advance (both
+	// negative, 0 for a glyph it leaves).
+	Halt          bool
+	Shift, Narrow float32
+	// Ink is where the glyph's ink stands in its advance: InkLeft in its
+	// left half, InkCentred in its middle half, else InkElsewhere; Full
+	// is set when the advance is an em.
+	Ink  Ink
+	Full bool
+}
+
+// Ink is where a glyph's ink stands in its advance.
+type Ink uint8
+
+const (
+	InkElsewhere Ink = iota
+	InkLeft
+	InkCentred
+)
+
+// Spacing is the room text-spacing-trim and text-autospace give a
+// character of a Fragment's Text, the one starting at byte At: its glyph
+// is drawn Shift from where the pen stands, and the pen moves Space
+// further than its advance after it.
+type Spacing struct {
+	At           int
+	Shift, Space float32
 }
 
 // VerticalFonts is Fonts that knows its faces' vertical metrics (vhea, vmtx, VORG):

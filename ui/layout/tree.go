@@ -282,6 +282,9 @@ type node struct {
 	pendingOOF []oofCandidate
 	control    controlKind
 	role       tableRole
+	// slider marks a range laid out as Chrome's: a row of its ::before, its
+	// slider container and its ::after.
+	slider bool
 	// cell marks a table's cell, an element or an anonymous one; lowered is how far its
 	// content stands below its content box's top to have its first line on its row's
 	// baseline.
@@ -351,6 +354,8 @@ func (n *node) context() context {
 		return contextTable
 	case len(n.kids) == 0 || n.inline != nil:
 		return contextLeaf
+	case n.slider:
+		return contextFlex
 	}
 	switch n.st.Display {
 	case style.FlexDisplay, style.InlineFlex:
@@ -387,6 +392,10 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		return n
 	}
 	n := t.element(e, parent)
+	if k := controlPartOf(e); k != noPart {
+		t.buildParts(n, k)
+		return n
+	}
 	if k := controlOf(e); k != noControl {
 		t.buildControl(n, k)
 		return n
@@ -596,10 +605,12 @@ func (t *tree) adopt(n *node, parent *node) {
 // buildChildren gives n its in-flow children: elements, and the text between them either
 // as n's own inline content or wrapped in anonymous blocks.
 func (t *tree) buildChildren(n *node, children []*dom.Node) {
-	container := n.st.Display
-	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
-		container == style.GridDisplay || container == style.InlineGrid
-	items := spaced(n, inFlexOrGrid, t.lift(n, t.flatten(n, children)))
+	t.buildItems(n, spaced(n, n.flexOrGrid(), t.lift(n, t.flatten(n, children))))
+}
+
+// buildItems gives n its in-flow children from items.
+func (t *tree) buildItems(n *node, items []item) {
+	inFlexOrGrid := n.flexOrGrid()
 	if !inFlexOrGrid && !hasBlockChild(items) {
 		t.buildInline(n, items)
 		return
@@ -637,6 +648,11 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			run = append(run, it)
 			continue
 		}
+		if it.part != nil {
+			flush()
+			n.kids, inFlow = append(n.kids, it.part), true
+			continue
+		}
 		st := styleOf(it.element)
 		if !inFlexOrGrid && it.cut == nil && partOf(it.element) != style.NoTablePart {
 			parts, next := tableParts(items, i)
@@ -651,7 +667,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.kids = append(n.kids, t.build(it.element, n))
 			continue
 		}
-		if (!inFlexOrGrid || n.st.WebkitBox) && !elementBlockLevel(it.element) {
+		if (!inFlexOrGrid || n.st.WebkitBox || n.slider) && !elementBlockLevel(it.element) {
 			run = append(run, it)
 			continue
 		}
@@ -660,6 +676,18 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 		inFlow = inFlow || st.Display != style.DisplayNone && !outOfFlow(st.Position)
 	}
 	flush()
+	n.noteFloats()
+}
+
+// flexOrGrid reports a node that lays its children out as flex or grid items.
+func (n *node) flexOrGrid() bool {
+	d := n.st.Display
+	return n.slider || d == style.FlexDisplay || d == style.InlineFlex || d == style.GridDisplay ||
+		d == style.InlineGrid
+}
+
+// noteFloats sets holdsFloats where a float is among n's kids or under one of them.
+func (n *node) noteFloats() {
 	for _, k := range n.kids {
 		if k.st.Float != style.FloatNone || k.holdsFloats {
 			n.holdsFloats = true
@@ -765,6 +793,8 @@ func onlyCollapsibleSpace(run []item) bool {
 type item struct {
 	element *dom.Node
 	text    *dom.Node
+	// part is a control's part, built already (buildParts).
+	part *node
 	// cut is set on a part of an inline element blocks cut: inside are the children of
 	// the element the part holds, first and last say which of its parts it is.
 	cut         *cutInline
@@ -982,7 +1012,7 @@ func elementBlockLevel(e *dom.Node) bool { return isBlockLevel(styleOf(e)) }
 // that is block-level, as a float is, or an inline element with a float inside.
 func hasBlockChild(items []item) bool {
 	for _, it := range items {
-		if it.text != nil && floatedLetter(it.text) {
+		if it.text != nil && floatedLetter(it.text) || it.part != nil {
 			return true
 		}
 		if it.element != nil {
@@ -1028,13 +1058,14 @@ func floatInside(e *dom.Node) bool {
 }
 
 // anonymous is the block wrapping inline content in a flex, grid or block container: it
-// inherits the text properties and nothing else.
+// inherits the text properties and nothing else, text-box-trim being none of them.
 func (t *tree) anonymous(parent *node) *node {
 	st := t.anonymousStyles[parent.st]
 	if st == nil {
 		s := style.Initial()
 		s.Display = style.Block
 		s.Text = parent.st.Text
+		s.TextBoxTrim = style.TrimNone
 		st = &s
 		if t.anonymousStyles == nil {
 			t.anonymousStyles = map[*style.Computed]*style.Computed{}

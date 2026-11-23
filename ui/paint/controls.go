@@ -105,6 +105,27 @@ func content(e entry) geom.Rect {
 	return c
 }
 
+// parted reports a control laid out round a ControlPart box.
+func parted(b *box.Box) bool {
+	for _, k := range b.Children {
+		if k.Kind == box.ControlPart {
+			return true
+		}
+	}
+	return false
+}
+
+// partRect is where e's ControlPart box lies, between its ::before and
+// its ::after, else its content box c.
+func partRect(e entry, c geom.Rect) geom.Rect {
+	for _, k := range e.b.Children {
+		if k.Kind == box.ControlPart {
+			return geom.Rect{X: e.at.X + k.Pos.X, Y: e.at.Y + k.Pos.Y, W: k.Size.X, H: k.Size.Y}
+		}
+	}
+	return c
+}
+
 func (p *painter) marks(e entry, alpha float32) {
 	n, st := e.b.Node, shown(e.b)
 	if !st.Visible {
@@ -136,6 +157,8 @@ func (p *painter) marks(e entry, alpha float32) {
 			}
 		case "range":
 			if !own {
+				part := partRect(e, c)
+				c.X, c.W = part.X, part.W
 				p.rangeParts(c, st, float32(p.rangeAt(n).Fraction()), alpha)
 				return
 			}
@@ -148,6 +171,9 @@ func (p *painter) marks(e entry, alpha float32) {
 	case dom.Progress:
 		p.progress(e, c, st, alpha)
 	case dom.Meter:
+		if !own {
+			c = partRect(e, c)
+		}
 		p.meter(n, c, st, alpha)
 	case dom.Img, dom.Svg:
 		p.img(e, alpha)
@@ -222,6 +248,7 @@ func (p *painter) progress(e entry, c geom.Rect, st *style.Computed, alpha float
 	f, known := progressOf(p.machine(n), n)
 	if !st.Appearance.Native() {
 		parts := partsOf(st)
+		c = partRect(e, c)
 		if !known {
 			p.barParts(c, parts.Inner, parts.Bar, nil, 0, st.Dir == style.RTL, false, alpha)
 			return

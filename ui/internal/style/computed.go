@@ -979,7 +979,7 @@ type Text struct {
 	TextBoxTrim  TextBoxTrim
 	TextBoxEdge  TextBoxEdge
 	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:
-	// normal; both read and computed, laid out as their initial values.
+	// normal.
 	SpacingTrim SpacingTrim
 	Autospace   bool
 	// KeywordSizes is interpolate-size: allow-keywords.
