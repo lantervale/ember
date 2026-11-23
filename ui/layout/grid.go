@@ -26,9 +26,8 @@ func (t *tree) grid(n *node, in input) output {
 		preferred = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
 	}
 	g := n.ownGutter()
-	inset := padding.add(border)
-	inset.b += g.y
-	inset.r += g.x
+	ge := gutterEdges(st, g)
+	inset := padding.add(border).add(ge)
 	alignContent := gridAlignContent(st.AlignContent)
 	justifyContent := gridAlignContent(st.JustifyContent)
 	alignItems, justifyItems := st.AlignItems, st.JustifyItems
@@ -205,13 +204,15 @@ func (t *tree) grid(n *node, in input) output {
 	}
 
 	inlineWithoutScrollbar := fmax(borderBox.w-pbSize.w, 0)
-	inlineGutter := fmin(g.x, inlineWithoutScrollbar)
-	alignTracks(contentBox.w, span{padding.l, padding.r + inlineGutter}, span{border.l, border.r}, columns, justifyContent)
+	startGutter := fmin(ge.l, inlineWithoutScrollbar)
+	endGutter := fmin(ge.r, inlineWithoutScrollbar-startGutter)
+	alignTracks(contentBox.w, span{padding.l + startGutter, padding.r + endGutter}, span{border.l, border.r}, columns,
+		justifyContent)
 	alignTracks(contentBox.h, span{padding.t, padding.b}, span{border.t, border.b}, rows, alignContent)
 	handTracks(items, horizontal, columns, gaps[horizontal], true)
 	handTracks(items, vertical, rows, gaps[vertical], true)
 
-	paddingBoxInset := border.add(rect{r: g.x, b: g.y})
+	paddingBoxInset := border.add(ge)
 	container := overflowContainer{
 		scroll:  isScrollContainer(st),
 		size:    size{borderBox.w - paddingBoxInset.horizontal(), 0},
@@ -260,11 +261,11 @@ func (t *tree) grid(n *node, in input) output {
 		}
 		var area rect
 		if claimsHere.take(k.st.Position) {
-			area = staticGridArea(colLines, rowLines, k.st, finalRows, finalCols, rows, columns, border, g, borderBox)
+			area = staticGridArea(colLines, rowLines, k.st, finalRows, finalCols, rows, columns, border, ge, borderBox)
 		} else {
 			area = rect{
-				l: border.l + padding.l,
-				r: borderBox.w - border.r - padding.r - g.x,
+				l: border.l + padding.l + ge.l,
+				r: borderBox.w - border.r - padding.r - ge.r,
 				t: border.t + padding.t,
 				b: borderBox.h - border.b - padding.b - g.y,
 			}
@@ -541,7 +542,7 @@ func gridRelativeOffset(pos style.Position, inset span) float32 {
 }
 
 func staticGridArea(colLines, rowLines gridLines, st *style.Computed, rowCounts, colCounts trackCounts,
-	rows, columns []gridTrack, border rect, gutter point, borderBox size) rect {
+	rows, columns []gridTrack, border, gutter rect, borderBox size) rect {
 	axisIndexes := func(p ozLines, counts trackCounts) (int, int, bool, bool) {
 		s, e, okS, okE := p.resolveAbsolute()
 		var si, ei int
@@ -570,7 +571,8 @@ func staticGridArea(colLines, rowLines gridLines, st *style.Computed, rowCounts,
 	}
 	cs, ce, okCS, okCE := axisIndexes(colLines.placement(st.Column), colCounts)
 	rs, re, okRS, okRE := axisIndexes(rowLines.placement(st.Row), rowCounts)
-	r := rect{l: border.l, r: borderBox.w - border.r - gutter.x, t: border.t, b: borderBox.h - border.b - gutter.y}
+	r := rect{l: border.l + gutter.l, r: borderBox.w - border.r - gutter.r,
+		t: border.t, b: borderBox.h - border.b - gutter.b}
 	if okCS {
 		r.l = startEdge(columns, cs)
 	}

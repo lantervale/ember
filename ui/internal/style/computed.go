@@ -210,6 +210,9 @@ type Box struct {
 	// GutterStable is scrollbar-gutter: stable: the vertical bar's room is
 	// kept whenever the box clips, whether its content overflows or not.
 	GutterStable bool
+	// GutterBothEdges is stable's both-edges: the same room kept at the
+	// inline start too, never drawn in.
+	GutterBothEdges bool
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool

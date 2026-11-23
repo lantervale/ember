@@ -81,6 +81,7 @@
   "rounded-dashes": 0.0024,
   "rounded-styles": 0.002,
   "scrollbar-parts": 0.0005,
+  "scrollbar-gutter": 0.003,
   "control-parts": 0.002,
   "scrolled": 0.0152,
   "selection": 0.008,

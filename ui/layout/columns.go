@@ -217,8 +217,7 @@ func (t *tree) columns(n *node, in input) output {
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
 	border := n.borders()
-	g := n.ownGutter()
-	gutter := rect{r: g.x, b: g.y}
+	gutter := gutterEdges(st, n.ownGutter())
 	pbSize := padding.add(border).sum()
 	inset := padding.add(border).add(gutter)
 	adj := boxSizingAdjustment(st, pbSize)
