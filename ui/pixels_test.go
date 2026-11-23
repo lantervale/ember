@@ -94,6 +94,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/inline-opacity", 420, 240, 0.002},
 		{"./internal/pages/table-collapse", 520, 240, 0.0022},
 		{"./internal/pages/generated", 640, 440, 0.0025},
+		{"./internal/pages/optgroups", 520, 100, 0.016},
 		{"./internal/pages/selection", 560, 560, 0.004},
 		{"./internal/pages/selection-marks", 420, 560, 0.0065},
 		{"./internal/pages/field-selection", 320, 60, 0.004},

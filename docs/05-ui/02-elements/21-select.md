@@ -11,7 +11,7 @@ ui.Select(ui.Placeholder("Pick one"),
 
 | Attribute | |
 |---|---|
-| its [`option`](22-option.md) children | what it offers; the chosen one's text shows; `doc.Selected(n)`, `doc.SetSelected(n, i)`, `doc.Value(n)` |
+| its [`option`](22-option.md) children, and those of its [`optgroup`](88-optgroup.md) children | what it offers, in order across groups; the chosen one's text shows; `doc.Selected(n)`, `doc.SetSelected(n, i)`, `doc.Value(n)` |
 | `ui.Placeholder(s)` | a ui extension: it starts with nothing chosen and shows `s`, dimmed |
 | `ui.Disabled()` | takes no press and no focus; `:disabled` |
 
@@ -23,7 +23,7 @@ ui.Select(ui.Placeholder("Pick one"),
 | `select` | `padding-right: 20px; background-image: url(ui:select-arrow); background-repeat: no-repeat; background-position: right 6px center` |
 | `select:disabled` | grey text, border at 30%, `opacity: 0.7` |
 
-Its width is its widest option's, its placeholder counted while it shows. Open, its highlighted option takes its `accent-color`.
+Its width is its widest option's, an option of a group behind four spaces, its placeholder counted while it shows. Open, its highlighted option takes its `accent-color`.
 
 | Event | When |
 |---|---|

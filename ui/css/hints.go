@@ -151,7 +151,7 @@ func hints(n *dom.Node) []Declaration {
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small, dom.Abbr,
 		dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Center, dom.Big, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.PictureElement, dom.Source:
+		dom.PictureElement, dom.Source, dom.Optgroup:
 		return nil
 	}
 	if src.Len() == 0 {
