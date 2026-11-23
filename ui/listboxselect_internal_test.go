@@ -115,3 +115,23 @@ func TestEnterGoesPastAListBox(t *testing.T) {
 	assert.Equal(t, []int{4}, l.doc.SelectedOptions(l.sel), "Down from Staff to Shield, past the disabled Bow")
 	assert.Equal(t, 1, l.changed)
 }
+
+func TestAPressScrollsAListBoxsPartlyHiddenOptionIntoView(t *testing.T) {
+	l := newListed(t)
+	shield := dom.Options(l.sel)[4]
+	r, o := l.sel.Box(), shield.Box()
+	l.doc.SetScroll(l.sel, geom.V2(0, o.Y+o.H/2-(r.Y+r.H-1)))
+	l.w.RunFrames(1)
+	o = shield.Box()
+	assert.InDelta(t, r.Y+r.H-1, o.Y+o.H/2, 0.01, "Shield starts half hidden")
+	in := l.win.Input()
+	in.SetMouse(geom.V2(o.X+10, r.Y+r.H-3))
+	l.w.RunFrames(2)
+	in.SetMouseButton(input.MouseLeft, true)
+	l.w.RunFrames(2)
+	o = shield.Box()
+	assert.InDelta(t, r.Y+r.H-1, o.Y+o.H, 0.01, "the press scrolls it by the least that shows it")
+	in.SetMouseButton(input.MouseLeft, false)
+	l.w.RunFrames(1)
+	assert.Equal(t, []int{4}, l.doc.SelectedOptions(l.sel))
+}

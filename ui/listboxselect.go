@@ -62,16 +62,21 @@ type listHold struct {
 }
 
 // pressListBox begins a press at at on the listbox lb, which took the
-// focus.
+// focus, and scrolls the option it took into view, as Chrome does at its
+// next frame unless a drag moved on first.
 func (d *Document) pressListBox(in *input.State, lb *Node, at geom.Vec2) {
 	s := d.listBox(lb)
 	if s == nil {
 		return
 	}
 	f := inputfeed.Of(in)
-	s.Press(optionUnder(lb, d.hovered), f.RawDown(int(input.KeyShift)), d.commandHeld(f))
+	i := optionUnder(lb, d.hovered)
+	s.Press(i, f.RawDown(int(input.KeyShift)), d.commandHeld(f))
 	d.listPressed, d.listHeld = lb, listHold{at: at, scrolledAt: d.clock}
 	d.sync(lb, s)
+	if i >= 0 && s.Active == i {
+		d.revealOption(lb, i)
+	}
 }
 
 // dragListBox scrolls the held listbox while the pointer at is near or
