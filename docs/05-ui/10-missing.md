@@ -98,7 +98,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an animated `border-image-slice` from a percentage to a number, `border-image-width` from a length to a percentage | interpolates the numbers and flips, where Chrome flips and makes a `calc()` |
 | an animated `background-image`, `mask-image` or `border-image-source` between two pictures | flips halfway, where Chrome cross-fades them |
 | `content-visibility` and `overlay`, in a transition or anywhere | not read |
-| `@starting-style` of an element whose ancestor leaves `display: none` | not read: only the element's own leaving; nested in a style rule, its declarations are read, but no other nesting |
+| `@starting-style` of an element whose ancestor leaves `display: none` | not read: only the element's own leaving |
+| the rules nested in a style rule as objects of their own (a style rule's `cssRules`, `CSSNestedDeclarations`), an `@scope`'s | read and applied, but `Sheet.Rules`, `InsertRule` and `DeleteRule` reach the top-level rules only, each with all it holds |
+| an `@scope` of no start, in a `style` element's sheet | rooted at the root element, where Chrome roots it at the `style` element's parent; ui's sheets have no element |
+| an `@scope` of no start nested in a style rule (`.a { @scope to (.b) { … } }`) | rooted at the root element, where Chrome roots it at the style rule's elements |
+| `:scope` in an `:is()`, `:not()` or `:where()` inside a `:has()` | the element the `:has()` is on, where Chrome reads the `@scope`'s root or the root element |
+| a rule nested in a rule of pseudo-elements (`.a::before { &:hover { … } }`) | matches nothing, as `:is()` of a pseudo-element; its declarations after a nested rule apply, as in Chrome |
 | an element's own transition of a property it inherits, while a transition above its parent moves it | follows the moving value, where Chrome runs it on to the end value |
 | `animation-composition: add` or `accumulate` on a property other than lengths, numbers, colours, `transform`, `box-shadow`, `filter` and `font-weight` (positions, sizes, grid tracks, `clip-path`…) | replaces, where Chrome adds |
 | `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |

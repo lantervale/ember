@@ -34,6 +34,7 @@ The presentational attributes of old pages style their element as Chrome reads t
 | `:first-child`, `:last-child`, `:only-child`, `:nth-child()`, `:nth-last-child()`, `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()`, `:nth-last-of-type()`, `:root`, `:empty` | structure; `:empty` is an element with no element in it and no text but empty text (a space is text, as in Chrome) |
 | `:not()`, `:is()`, `:where()` | a list of selectors: `:is()` and `:not()` weigh as their most specific one, `:where()` nothing; a selector `:is()` or `:where()` cannot read is left out of its list, as in Chrome |
 | `:has()` | relative selectors from the element: `.card:has(img)`, `li:has(> a)`, `h2:has(+ p)`, `:has(~ .x)`, weighing as their most specific one. As in Chrome, a `:has()` in another, a pseudo-element or an empty one drops the rule; a change below or after an element restyles it where its `:has()` reads what changed (decision [0113](../99-decisions/0113-has-flags-its-anchors-before-the-cascade.md)) |
+| `&`, `:scope` | in a nested rule, the rule it stands in, weighing as `:is()` of its list ([nesting](#nesting-and-scope)); `:scope` is an `@scope`'s root, weighing as a class, and the root element elsewhere, as `&` outside any rule |
 | `:link`, `:any-link`, `:visited` | an element with an `href`; nothing is visited, ui keeping no history, so a `:visited` rule is kept and matches nothing |
 | `::before`, `::after`, `::marker`, `::first-line`, `::first-letter`, `::placeholder`, `::selection`, `::backdrop` | pseudo-elements, last in their selector: `li:nth-child(2)::before`, `a:hover::after` ([below](#pseudo-elements)) |
 
@@ -215,7 +216,7 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | `filter: url()`, `backdrop-filter: url()` | the filter functions |
 | `mix-blend-mode: plus-darker`, as Chrome refuses it | the other blend modes |
 | repeating gradients, colour hints | a gradient's plain stops |
-| at-rules but `@import`, `@font-face`, `@media`, `@container`, `@keyframes` and `@starting-style` | not supported |
+| at-rules but `@import`, `@font-face`, `@media`, `@container`, `@scope`, `@keyframes` and `@starting-style` | not supported |
 
 ## Animations
 
@@ -475,6 +476,28 @@ A container's size doesn't come from what it holds, as in Chrome: an `inline-siz
 | `scroll-state(stuck: top)`, `scroll-state(scrollable: y)`, `scroll-state(scrolled: bottom)`, `scroll-state(snapped: x)`, alone or joined by `and`, `or`, `not` inside | a `container-type: scroll-state` container's scroll state (with `size` or `inline-size` too): the sides a sticky container is stuck to, the sides a scroll container can still scroll toward and those its last scroll by the user or `ScrollBy` went toward on each axis (`top`… `left`, `block-start`… `inline-end`, `x`, `y`, `block`, `inline`; `none` before any), the axes a snap area is snapped on by its container (`x`, `y`, `block`, `inline`, `both`, `none`), answered after each layout and each scroll |
 
 A malformed condition (`@container none (…)`, a name after the query) drops the rule, as Chrome drops it. `doc.MatchedRules(n)` names the `@container` rules a match stands in.
+
+## Nesting and scope
+
+```css
+.card {
+	padding: 8px;
+	&:hover { border-color: #e0a040; }
+	> h2 { font-size: 18px; }
+	@media (width < 500px) { padding: 4px; }
+	color: #ccc;
+}
+@scope (.panel) to (.slot) {
+	:scope { border: 1px solid #335; }
+	img { width: 100%; }
+}
+```
+
+A style rule holds rules as Chrome reads CSS Nesting ([decision 0168](../99-decisions/0168-nested-rules-and-scope-rules-are-read-as-flat-rules-of-the-sheet.md)): a nested selector is relative to its rule, after a descendant combinator or the one it begins with (`> h2`, `+ p`), unless it names `&`, which stands for the rule anywhere in a compound or in a function (`&.on`, `.dark &`, `:not(&)`, `& + &`) and weighs as `:is()` of the rule's list, so `.a, #b { .x { } }` weighs as an id. A type selector after `&` (`&span`) drops the rule, as in Chrome; `span&` is the way. Declarations after a nested rule stand there in the order, weighing as the rule's own selector where it matches, as Chrome's `CSSNestedDeclarations`. `@media`, `@container`, `@starting-style` and `@scope`, and under [browser sheets](#browser-sheets) `@supports` and `@layer` with a block, nest in style rules and in each other, their declarations those of the rule round them; any other at-rule there is dropped with a warning. Outside any rule, `&` is `:scope`, the root element.
+
+An `@scope` rule's rules apply from each element its start matches, the root, down to the elements its end (after `to`) matches, which it leaves out with all under them: its selectors are relative to `:where(:scope)`, so `img` there is an `img` under the root weighing as `img` alone, and `:scope` (a class's weight) or `&` (no weight) is the root itself, with which a selector may reach above it (`body :scope .x`). Its start is relative to the rule it stands in (`.card { @scope (.slot) { … } }` roots at `.card .slot`, and an `@scope` in another at an element in that one's scope), its end to its own root. Where two declarations weigh the same, the one whose root is nearer the element wins, before the order: a theme scoped to the nearest panel wins over one scoped to the page. An `@scope` of no start is rooted at the root element, as a sheet of no `style` element.
+
+A sheet holding nested rules is written back as it was written (`Sheet.Rules`, an exported page); a run-time sheet inserts and deletes a whole top-level rule, with all it holds ([sheets changed while a Document shows](#sheets-changed-while-a-document-shows)). `TestNestedRulesStyleAsChromes`, `TestScopeRulesStyleAsChromes` and `TestScopesAndNestedRulesRestyleAsChromes` compare their styles with Chrome's.
 
 ## Where a sheet came from
 

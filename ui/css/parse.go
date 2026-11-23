@@ -123,6 +123,23 @@ type Rule struct {
 	// starting is set in an @starting-style rule: it applies only to the
 	// style a transition starts from where an element had none.
 	starting bool
+	// scoped is the innermost @scope rule it stands in: it applies to an
+	// element in the scope of one of that rule's roots.
+	scoped *scopeRule
+	// nest is, from 1, the place in its sheet's nests of the outermost
+	// rule holding others it was read from, 0 for none.
+	nest int
+}
+
+// nest is a style rule with rules nested in it, or an @scope rule, as
+// written: the first rule read from it stands in its media, containers,
+// @starting-style and @scope rules, and as many more of each as it
+// opened itself before that rule.
+type nest struct {
+	text              string
+	media, containers int
+	starting          bool
+	scopes            int
 }
 
 // Keyframes is an @keyframes rule: what the animations naming it run
@@ -161,6 +178,9 @@ type Sheet struct {
 	// the order they are first named; one without a name begins with
 	// anonymous.
 	layers []string
+	// nests are its style rules with rules nested in them, and its
+	// @scope rules, which it writes back as they were written.
+	nests []nest
 	// browser is whether it was read as a browser reads it (Browser), src
 	// its text then, and from the address it came from (From).
 	browser bool
@@ -220,31 +240,15 @@ func (s *Sheet) String() string {
 		return s.src
 	}
 	var b strings.Builder
+	written := make([]bool, len(s.nests))
 	for _, r := range s.Rules {
-		for _, m := range r.media {
-			b.WriteString("@media " + s.media[m].text + " { ")
-		}
-		closing := len(r.media) + len(r.containers)
-		if r.starting {
-			b.WriteString("@starting-style { ")
-			closing++
-		}
-		for _, c := range r.containers {
-			b.WriteString("@container " + c.text + " { ")
-		}
-		for i, sel := range r.Selectors {
-			if i > 0 {
-				b.WriteString(", ")
+		if r.nest > 0 {
+			if written[r.nest-1] {
+				continue
 			}
-			b.WriteString(sel.String())
+			written[r.nest-1] = true
 		}
-		b.WriteString(" {")
-		for _, d := range r.Decls {
-			b.WriteString(" ")
-			b.WriteString(d.String())
-			b.WriteString(";")
-		}
-		b.WriteString(" }" + strings.Repeat(" }", closing) + "\n")
+		s.writeRule(&b, r)
 	}
 	for _, k := range s.Keyframes {
 		for _, m := range k.media {
@@ -267,6 +271,50 @@ func (s *Sheet) String() string {
 		b.WriteString(cs.String() + strings.Repeat(" }", len(cs.media)) + "\n")
 	}
 	return b.String()
+}
+
+// writeRule writes r in the rules it stands in; the first rule read from
+// a nest stands for the whole nest, as written.
+func (s *Sheet) writeRule(b *strings.Builder, r Rule) {
+	var n nest
+	if r.nest > 0 {
+		n = s.nests[r.nest-1]
+		r.media, r.containers = r.media[:len(r.media)-n.media], r.containers[:len(r.containers)-n.containers]
+		r.starting = r.starting && !n.starting
+		for range n.scopes {
+			r.scoped = r.scoped.parent
+		}
+	}
+	for _, m := range r.media {
+		b.WriteString("@media " + s.media[m].text + " { ")
+	}
+	closing := len(r.media) + len(r.containers)
+	if r.starting {
+		b.WriteString("@starting-style { ")
+		closing++
+	}
+	for _, c := range r.containers {
+		b.WriteString("@container " + c.text + " { ")
+	}
+	for _, sr := range r.scoped.chain() {
+		b.WriteString("@scope " + sr.text + " { ")
+		closing++
+	}
+	if r.nest > 0 {
+		b.WriteString(n.text + strings.Repeat(" }", closing) + "\n")
+		return
+	}
+	for i, sel := range r.Selectors {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(sel.String())
+	}
+	b.WriteString(" {")
+	for _, d := range r.Decls {
+		b.WriteString(" " + d.String() + ";")
+	}
+	b.WriteString(" }" + strings.Repeat(" }", closing) + "\n")
 }
 
 // Warning is something a sheet says that ui drops: a syntax error, an
@@ -370,23 +418,29 @@ type parser struct {
 	// and begun is whether a rule an @import must come before was read.
 	depth int
 	begun bool
-	// starting are the declarations of the @starting-style rules nested
-	// in the style rule being read, which apply to its selectors.
-	starting [][]Declaration
+	// holding counts the rules holding others being read, one inside the
+	// other: style rules, and @scope rules out of any.
+	holding int
 }
 
-// scope is the @media and @container rules and the @layer a rule stands
-// in.
+// scope is the @media, @container and @scope rules and the @layer a
+// rule stands in, and the style rule it is nested in.
 type scope struct {
 	media      []int
 	containers []*containerRule
 	layer      int
 	starting   bool
+	scoped     *scopeRule
+	nest       *nesting
 }
 
 // rules reads rules up to the end of the sheet, or of the block they
 // stand in.
 func (p *parser) rules(in scope) {
+	if in.nest != nil {
+		p.nestedRules(in, nil)
+		return
+	}
 	for p.item(in) {
 	}
 }
@@ -417,34 +471,241 @@ func (p *parser) item(in scope) bool {
 	return true
 }
 
+// styleRule reads a style rule and the rules nested in it. The
+// outermost one, when it nests any, keeps its text for String.
 func (p *parser) styleRule(in scope) {
-	p.starting = p.starting[:0]
-	if r, ok := p.rule(); ok {
-		p.begun = true
-		r.media, r.containers, r.layer, r.starting = in.media, in.containers, in.layer, in.starting
-		p.sheet.Rules = append(p.sheet.Rules, r)
-		for _, decls := range p.starting {
-			nested := r
-			nested.Decls, nested.starting = decls, true
-			p.sheet.Rules = append(p.sheet.Rules, nested)
-		}
+	start, pos := p.i, p.peek().Pos
+	prelude, ok := p.selectorPrelude()
+	if !ok {
+		return
 	}
-	p.starting = p.starting[:0]
+	sels, written, ok := p.selectors(prelude, in.nest)
+	if !ok {
+		p.skipBlock()
+		return
+	}
+	p.begun = true
+	from, outer := len(p.sheet.Rules), p.holding == 0
+	inner := in
+	inner.nest = &nesting{sels: sels, written: written}
+	p.depth++
+	p.holding++
+	nested := p.nestedRules(inner, &Rule{Selectors: sels, Pos: pos})
+	p.holding--
+	p.depth--
+	if outer && nested {
+		p.written(start, from, in)
+	}
 }
 
-func (p *parser) atRule(t Token, in scope) {
+// written keeps the text of the tokens from start on as the nest of the
+// rules from from on, read in in.
+func (p *parser) written(start, from int, in scope) {
+	if from == len(p.sheet.Rules) {
+		return
+	}
+	var text strings.Builder
+	for _, t := range p.toks[start:p.i] {
+		text.WriteString(t.String())
+	}
+	first := p.sheet.Rules[from]
+	n := nest{text: strings.TrimSpace(text.String()), media: len(first.media) - len(in.media),
+		containers: len(first.containers) - len(in.containers), starting: first.starting && !in.starting,
+		scopes: len(first.scoped.chain()) - len(in.scoped.chain())}
+	p.sheet.nests = append(p.sheet.nests, n)
+	for i := from; i < len(p.sheet.Rules); i++ {
+		p.sheet.Rules[i].nest = len(p.sheet.nests)
+	}
+}
+
+// selectorPrelude reads a style rule's selectors up to its block, which
+// it enters.
+func (p *parser) selectorPrelude() ([]Component, bool) {
+	pos := p.peek().Pos
+	var prelude []Component
+	for {
+		switch k := p.peek().Kind; {
+		case k == EOF || k == RBrace && p.depth > 0:
+			p.warnf(pos, "rule has no { block }")
+			return nil, false
+		case k == LBrace:
+			p.next()
+			return prelude, true
+		}
+		prelude = append(prelude, p.component())
+	}
+}
+
+// selectors reads a style rule's selector list, a nested rule's relative
+// to the rule it stands in; written is the list as read, which an & of
+// the rules nested in it stands for.
+func (p *parser) selectors(prelude []Component, n *nesting) ([]Selector, []Component, bool) {
+	prelude = n.resolve(prelude)
+	if p.browser {
+		var kept bool
+		if prelude, kept = vendorSelectors(prelude); !kept {
+			return nil, nil, false
+		}
+		if prelude = matched(prelude); prelude == nil {
+			return nil, nil, false
+		}
+	}
+	sels, err := parseSelectors(prelude)
+	if err != nil {
+		p.warnf(err.Pos, "%s; rule dropped", err.Msg)
+		return nil, nil, false
+	}
+	return sels, trim(prelude), true
+}
+
+// nestedRules reads the block of a style rule, or of a group rule in
+// one, up to its end. lead, the style rule, takes the declarations
+// before anything nested; a run of them after a nested rule is a rule of
+// its own in its place, of the selectors of the rule it stands in, as
+// Chrome's CSSNestedDeclarations. It reports whether anything was
+// nested.
+func (p *parser) nestedRules(in scope, lead *Rule) bool {
+	var decls []Declaration
+	nested := false
+	flush := func() {
+		switch {
+		case lead != nil:
+			lead.Decls = p.taken(lead.Selectors, decls)
+			p.add(*lead, in)
+			lead = nil
+		case len(decls) > 0:
+			p.add(Rule{Selectors: in.nest.sels, Decls: p.taken(in.nest.sels, decls), Pos: decls[0].Pos}, in)
+		}
+		decls = nil
+	}
+	for {
+		switch t := p.peek(); t.Kind {
+		case EOF:
+			flush()
+			return nested
+		case RBrace:
+			p.next()
+			flush()
+			return nested
+		case Whitespace, Semicolon, CDO, CDC:
+			p.next()
+		case AtKeyword:
+			p.next()
+			name, ok := p.atName(t)
+			if !ok || !p.nestable(name) {
+				if ok {
+					p.warnf(t.Pos, "@%s is not supported inside a style rule", t.Text)
+				}
+				p.skipAtRule()
+				continue
+			}
+			flush()
+			nested = true
+			p.atRule(t, in)
+		case Ident, Function, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Colon, Comma,
+			LBracket, RBracket, LParen, RParen, LBrace:
+			if d, ok := p.nestedDeclaration(); ok {
+				decls = append(decls, d...)
+				continue
+			}
+			flush()
+			nested = true
+			p.styleRule(in)
+		}
+	}
+}
+
+// add puts r in the sheet, in what in stands for.
+func (p *parser) add(r Rule, in scope) {
+	r.media, r.containers, r.layer, r.starting, r.scoped = in.media, in.containers, in.layer, in.starting, in.scoped
+	p.sheet.Rules = append(p.sheet.Rules, r)
+}
+
+// nestedDeclaration reads a declaration where a nested rule may stand
+// instead. What holds a { block } is a rule, which it leaves unread and
+// reports false for, unless it reads as a declaration whose value is
+// that block alone, or a custom property's.
+func (p *parser) nestedDeclaration() ([]Declaration, bool) {
+	start := p.i
+	var part []Component
+	block := false
+	for k := p.peek().Kind; k != EOF && k != Semicolon && k != RBrace; k = p.peek().Kind {
+		c := p.component()
+		block = block || c.Kind == LBrace
+		part = append(part, c)
+	}
+	if block {
+		rest := trim(part[1:])
+		value := []Component(nil)
+		if part[0].Kind == Ident && len(rest) > 0 && rest[0].Kind == Colon {
+			value = trim(rest[1:])
+		}
+		custom := part[0].Kind == Ident && strings.HasPrefix(part[0].Text, "--")
+		if value == nil || !custom && (len(value) != 1 || value[0].Kind != LBrace) {
+			p.i = start
+			return nil, false
+		}
+	}
+	if p.peek().Kind == Semicolon {
+		p.next()
+	}
+	return p.declarations(part), true
+}
+
+// taken are the declarations of decls a rule of sels takes: a rule of
+// pseudo-elements alone says which of its declarations none of them
+// takes; in a rule shared with elements those are left out of the
+// pseudo-element's cascade without a word, as in Chrome.
+func (p *parser) taken(sels []Selector, decls []Declaration) []Declaration {
+	if len(sels) == 0 || pseudoCount(sels) != len(sels) {
+		return decls
+	}
+	kept := decls[:0]
+	for _, d := range decls {
+		if !slices.ContainsFunc(sels, func(s Selector) bool { return takesDeclared(s.PseudoElement, d.Name) }) {
+			p.warnf(d.Pos, "::%s does not take %s", sels[0].PseudoElement, d.Name)
+			continue
+		}
+		kept = append(kept, d)
+	}
+	return kept
+}
+
+// atName is the name of an at-rule as ui reads it, a vendor's as the
+// plain one it stands for; false for one a browser's sheet drops.
+func (p *parser) atName(t Token) (string, bool) {
 	name := strings.ToLower(t.Text)
 	if v, rest := vendorOf(name); v != nil && p.browser {
 		as, other := v.atRule(rest)
 		if as == "" && other == dropped {
-			p.skipAtRule()
-			return
+			return "", false
 		}
 		if as != "" {
 			name = as
 		}
 	}
-	if name != "import" && name != "charset" && name != "layer" {
+	return name, true
+}
+
+// nestable reports whether the at-rule name may stand in a style rule:
+// the conditional and grouping rules, which hold declarations and rules.
+func (p *parser) nestable(name string) bool {
+	switch name {
+	case atMedia, kwContainer, "starting-style", kwScope:
+		return true
+	case "supports", atLayer:
+		return p.browser
+	}
+	return false
+}
+
+func (p *parser) atRule(t Token, in scope) {
+	name, read := p.atName(t)
+	if !read {
+		p.skipAtRule()
+		return
+	}
+	if name != "import" && name != "charset" && name != atLayer {
 		p.begun = true
 	}
 	switch {
@@ -454,7 +715,7 @@ func (p *parser) atRule(t Token, in scope) {
 		if f, ok := p.fontFace(t.Pos); ok {
 			p.sheet.faces = append(p.sheet.faces, f)
 		}
-	case name == "media":
+	case name == atMedia:
 		p.media(t, in)
 	case name == kwContainer:
 		p.container(t, in)
@@ -462,11 +723,13 @@ func (p *parser) atRule(t Token, in scope) {
 		p.keyframes(t, in)
 	case name == "starting-style":
 		p.startingStyle(t, in)
+	case name == kwScope:
+		p.scope(t, in)
 	case name == "counter-style":
 		p.counterStyle(t, in)
 	case name == "supports" && p.browser:
 		p.supports(t, in)
-	case name == "layer" && p.browser:
+	case name == atLayer && p.browser:
 		p.layer(t, in)
 	default:
 		p.warnf(t.Pos, "@%s is not supported", t.Text)
@@ -691,7 +954,8 @@ func supportedIn(c Component) bool {
 	asked := parser{browser: true}
 	switch {
 	case c.Kind == Function && strings.EqualFold(c.Text, "selector"):
-		sels, ok := vendorSelectors(slices.Clone(c.Args))
+		var outside *nesting
+		sels, ok := vendorSelectors(outside.resolve(slices.Clone(c.Args)))
 		if !ok {
 			return false
 		}
@@ -725,6 +989,8 @@ func (p *parser) layer(t Token, in scope) {
 		names = append(names, name)
 	}
 	switch {
+	case !block && in.nest != nil:
+		p.warnf(t.Pos, "@layer without a block is dropped inside a style rule, as in Chrome")
 	case !block:
 		for _, name := range names {
 			p.declare(in.layer, name)
@@ -812,60 +1078,6 @@ func (p *parser) skipAtRule() {
 	}
 }
 
-func (p *parser) rule() (Rule, bool) {
-	pos := p.peek().Pos
-	var prelude []Component
-	for {
-		switch p.peek().Kind {
-		case EOF:
-			p.warnf(pos, "rule has no { block }")
-			return Rule{}, false
-		case RBrace:
-			if p.depth > 0 {
-				p.warnf(pos, "rule has no { block }")
-				return Rule{}, false
-			}
-		case LBrace:
-			block := p.component()
-			if p.browser {
-				var kept bool
-				if prelude, kept = vendorSelectors(prelude); !kept {
-					return Rule{}, false
-				}
-				if prelude = matched(prelude); prelude == nil {
-					return Rule{}, false
-				}
-			}
-			sels, err := parseSelectors(prelude)
-			if err != nil {
-				p.warnf(err.Pos, "%s; rule dropped", err.Msg)
-				return Rule{}, false
-			}
-			decls := p.declarations(block.Args)
-			if pseudoCount(sels) == len(sels) {
-				// A rule of pseudo-elements alone says which of its
-				// declarations none of them takes; in a rule shared with
-				// elements those are left out of the pseudo-element's cascade
-				// without a word, as in Chrome.
-				kept := decls[:0]
-				for _, d := range decls {
-					if !slices.ContainsFunc(sels, func(s Selector) bool { return takesDeclared(s.PseudoElement, d.Name) }) {
-						p.warnf(d.Pos, "::%s does not take %s", sels[0].PseudoElement, d.Name)
-						continue
-					}
-					kept = append(kept, d)
-				}
-				decls = kept
-			}
-			return Rule{Selectors: sels, Decls: decls, Pos: pos}, true
-		case Ident, Function, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension,
-			Whitespace, CDO, CDC, Colon, Semicolon, Comma, LBracket, RBracket, LParen, RParen:
-			// nothing special for these tokens
-		}
-		prelude = append(prelude, p.component())
-	}
-}
-
 func (p *parser) component() Component {
 	t := p.next()
 	var closer Kind
@@ -924,10 +1136,6 @@ func (p *parser) declarations(block []Component) []Declaration {
 				out = append(out, d)
 			}
 		case AtKeyword:
-			if strings.EqualFold(c.Text, "starting-style") && len(trim(part[1:])) == 1 && part[len(part)-1].Kind == LBrace {
-				p.starting = append(p.starting, p.declarations(part[len(part)-1].Args))
-				continue
-			}
 			p.warnf(c.Pos, "@%s is not supported", c.Text)
 		case EOF, Function, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Whitespace, CDO, CDC,
 			Colon, Semicolon, Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
