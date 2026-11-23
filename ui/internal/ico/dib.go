@@ -51,7 +51,6 @@ var (
 	errNoSize      = errors.New("ico: the picture has no size")
 	errHeader      = errors.New("ico: the bitmap header is none this reader knows")
 	errDepth       = errors.New("ico: the bitmap's bits per pixel are none this reader knows")
-	errRLE         = errors.New("ico: run-length encoded bitmaps are not read")
 	errCompression = errors.New("ico: the bitmap's compression is none this reader knows")
 	errPalette     = errors.New("ico: the bitmap's palette is larger than its bits per pixel allow")
 	errOffset      = errors.New("ico: the bitmap's pixels start outside the file")
@@ -86,8 +85,14 @@ type dib struct {
 	icon     bool
 	channels [4]channel
 	palette  [256][3]uint8
-	// pix is where the rows start in the bitmap's bytes.
-	pix int
+	// pix is where the rows start in the bitmap's bytes, and mask where
+	// an icon's AND mask does.
+	pix, mask int
+	// coded is a run-length encoded bitmap's compression, compRLE8 or
+	// compRLE4, and runs is where its runs end: its rows are runs in
+	// place of pixels.
+	coded uint32
+	runs  int
 }
 
 // stride is the bytes of a row of w pixels of bpp bits, a multiple of
@@ -112,6 +117,9 @@ func readDIB(data []byte, pix int) (*dib, error) {
 		return nil, errShort
 	}
 	d := &dib{icon: pix < 0, bpp: int(binary.LittleEndian.Uint16(data[14:]))}
+	if comp := binary.LittleEndian.Uint32(data[16:]); comp == compRLE8 || comp == compRLE4 {
+		d.coded = comp
+	}
 	if err := d.setSize(int32(binary.LittleEndian.Uint32(data[4:])), int32(binary.LittleEndian.Uint32(data[8:]))); err != nil { //nolint:gosec,lll // signed fields
 		return nil, err
 	}
@@ -135,7 +143,12 @@ func readDIB(data []byte, pix int) (*dib, error) {
 	if d.pix < after || d.pix > len(data) {
 		return nil, errOffset
 	}
-	need := stride(d.w, d.bpp) * d.h
+	if d.coded != 0 {
+		d.setRuns(data)
+		return d, nil
+	}
+	d.mask = d.pix + stride(d.w, d.bpp)*d.h
+	need := d.mask - d.pix
 	if d.icon && d.bpp != 32 {
 		need += stride(d.w, 1) * d.h
 	}
@@ -145,11 +158,22 @@ func readDIB(data []byte, pix int) (*dib, error) {
 	return d, nil
 }
 
+// setRuns finds where a run-length encoded bitmap's runs end: where its
+// header's image size says, else at the end of data. An icon's AND mask
+// follows them, when they leave room for it.
+func (d *dib) setRuns(data []byte) {
+	d.runs = len(data)
+	if size := uint64(binary.LittleEndian.Uint32(data[20:])); size != 0 && uint64(d.pix)+size <= uint64(len(data)) {
+		d.runs = d.pix + int(size)
+	}
+	d.mask = d.runs
+}
+
 // setSize takes the header's width and height: a height below zero is
 // rows from the top, and an icon's is twice its picture's.
 func (d *dib) setSize(w, h int32) error {
 	if h < 0 {
-		if h == math.MinInt32 || d.icon {
+		if h == math.MinInt32 || d.icon || d.coded != 0 {
 			return errHeader
 		}
 		d.topDown, h = true, -h
@@ -181,7 +205,9 @@ func (d *dib) setChannels(data []byte, size int) (int, error) {
 			return 0, errHeader
 		}
 	case compRLE8, compRLE4:
-		return 0, errRLE
+		if comp == compRLE8 && d.bpp != 8 || comp == compRLE4 && d.bpp != 4 {
+			return 0, errHeader
+		}
 	default:
 		return 0, errCompression
 	}
@@ -193,7 +219,7 @@ func (d *dib) setChannels(data []byte, size int) (int, error) {
 	}
 	after := size
 	switch {
-	case comp == compRGB:
+	case comp == compRGB, d.coded != 0:
 		switch {
 		case d.bpp != 32:
 		case d.icon:
@@ -263,6 +289,13 @@ func (d *dib) config() image.Config {
 // mask, as an icon without alpha bits is.
 func (d *dib) decode(data []byte) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, d.w, d.h))
+	if d.coded != 0 {
+		d.decodeRuns(data[d.pix:d.runs], img)
+		if d.icon {
+			d.cut(data, img)
+		}
+		return img
+	}
 	rows := stride(d.w, d.bpp)
 	alpha := false
 	for y := range d.h {
@@ -333,7 +366,7 @@ func (d *dib) masked(row, out []byte) bool {
 // end without one, and is then left whole.
 func (d *dib) cut(data []byte, img *image.NRGBA) {
 	rows := stride(d.w, 1)
-	mask := data[d.pix+stride(d.w, d.bpp)*d.h:]
+	mask := data[d.mask:]
 	if len(mask) < rows*d.h {
 		return
 	}

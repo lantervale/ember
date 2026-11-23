@@ -29,6 +29,7 @@ import (
 //nolint:gochecknoinits // registers the formats on import, as the image packages above do
 func init() {
 	image.RegisterFormat("ico", "\x00\x00\x01\x00", ico.Decode, ico.DecodeConfig)
+	image.RegisterFormat("cur", "\x00\x00\x02\x00", ico.Decode, ico.DecodeConfig)
 	image.RegisterFormat("bmp", "BM????\x00\x00\x00\x00", ico.DecodeBMP, ico.DecodeBMPConfig)
 }
 
