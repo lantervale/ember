@@ -1779,6 +1779,16 @@ func (p *painter) text(e entry, alpha float32) {
 	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
 		return
 	}
+	if st.Mode.Vertical() {
+		p.verticalText(e, alpha)
+		return
+	}
+	p.horizontalText(e, alpha)
+}
+
+// horizontalText is text for a run of horizontal lines.
+func (p *painter) horizontalText(e entry, alpha float32) {
+	b, st := e.b, shown(e.b)
 	var parts []Selected
 	if p.sel != nil {
 		parts = p.sel.Parts(b)

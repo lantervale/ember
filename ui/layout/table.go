@@ -164,7 +164,7 @@ func (t *tree) buildTable(n *node, children []*dom.Node) {
 
 // buildGroup is the node of the row group c with its rows.
 func (t *tree) buildGroup(c *dom.Node, parent *node) *node {
-	if k := t.kept(c); k != nil {
+	if k := t.kept(c, parent); k != nil {
 		t.adopt(k, parent)
 		return k
 	}
@@ -188,7 +188,7 @@ func (t *tree) buildGroup(c *dom.Node, parent *node) *node {
 
 // buildRow is the node of the row r with its cells.
 func (t *tree) buildRow(r *dom.Node, parent *node) *node {
-	if k := t.kept(r); k != nil {
+	if k := t.kept(r, parent); k != nil {
 		t.adopt(k, parent)
 		return k
 	}

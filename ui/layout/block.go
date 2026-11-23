@@ -334,7 +334,7 @@ func (t *tree) blockItems(n *node, inner size) []*blockItem {
 		pbSum := padding.add(border).sum()
 		adj := boxSizingAdjustment(st, pbSum)
 		same := st.Display == style.Block && !outOfFlow(st.Position) && st.Float == style.FloatNone &&
-			!blockEstablishesBFC(st) && !standsBesideFloats(k)
+			!blockEstablishesBFC(st) && !standsBesideFloats(k) && k.inner == nil
 		items = append(items, &blockItem{
 			node:        k,
 			order:       order,
@@ -607,14 +607,19 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
-		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table
+		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across
 		if shrinks && widthStyle.Kind == style.Auto {
 			widthStyle = style.Length{Kind: style.FitContent}
 		}
 		keywordW := none
+		availH := maxContentSpace
+		if it.node.across && some(percentH) {
+			// an orthogonal flow's lines are as long as the height its container gives
+			availH = def(fmax(percentH-nonAuto.vertical(), 0))
+		}
 		switch k, s := resolveSizingKeyword(widthStyle, stretchW, innerW); k {
 		case keywordMeasure:
-			keywordW = t.measureChildSize(it.node, noSize, parent, spaces{s, maxContentSpace},
+			keywordW = t.measureChildSize(it.node, noSize, parent, spaces{s, availH},
 				inherentSize, horizontal, collapsibleIf(it.inSameBFC))
 		case keywordExact:
 			keywordW = s.v
@@ -633,7 +638,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			known:           known,
 			knownIsDefinite: bools{true, true},
 			parent:          parent,
-			avail:           spaces{def(stretchW), maxContentSpace},
+			avail:           spaces{def(stretchW), availH},
 			collapsible:     collapsibleIf(it.inSameBFC),
 		}
 		if left > 0 && it.inSameBFC {

@@ -79,6 +79,8 @@ type inlineContent struct {
 	// height is the owner's content height its atomic inlines' percentages are of, none
 	// where it depends on the content.
 	height float32
+	// lineBoxes are the tops and bottoms of the lines last written.
+	lineBoxes []span
 }
 
 // inlineOOF is an absolutely positioned (or fixed) element inside inline content: its
@@ -341,9 +343,10 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 		}
 		first, inner := len(c.runs), len(c.spans)
 		t.gather(c, b, inside)
-		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs),
+		mode := frameOf(c.owner)
+		s := &inlineSpan{box: b, parent: parent, st: t.turned(st, mode), first: first, end: len(c.runs),
 			noStart: it.cut != nil && !it.first, noEnd: it.cut != nil && !it.last}
-		s.lineSt = c.lineStyle(it.element, st)
+		s.lineSt = t.turned(c.lineStyle(it.element, st), mode)
 		for i := first; i < len(c.runs); i++ {
 			s.runs = append(s.runs, i)
 		}
@@ -2198,13 +2201,18 @@ func (t *tree) writeText(n *node) {
 	}
 	t.sizeAtomics(c, def(content), size{content, none})
 	runRects, spanRects, spanLines, hidden := t.writeLines(n, c, inset, content)
+	cb := size{content, none}
+	if mode := frameOf(n); mode.Vertical() {
+		turnLines(c, n.final.size, mode, runRects, spanRects, spanLines)
+		cb = cb.across()
+	}
 	origin := func(b *box.Box) geom.Vec2 {
 		if r, ok := spanRects[b]; ok {
 			return geom.Vec2{X: r.X, Y: r.Y}
 		}
 		return geom.Vec2{}
 	}
-	placeSpans(c, spanRects, spanLines, hidden, origin, size{content, none})
+	placeSpans(c, spanRects, spanLines, hidden, origin, cb)
 	t.attachInline(n, c, runRects, origin)
 }
 
@@ -2214,11 +2222,13 @@ func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines ma
 	for _, s := range c.spans {
 		r := spanRects[s.box]
 		o := origin(s.parent)
-		s.box.Pos = geom.Vec2{X: r.X - o.X, Y: r.Y - o.Y}.Add(inlineOffset(s.st, cb))
+		s.box.Pos = geom.Vec2{X: r.X - o.X, Y: r.Y - o.Y}.Add(inlineOffset(s.box.Style, cb))
 		s.box.Size = geom.Vec2{X: r.W, Y: r.H}
-		s.box.Margin = box.Edges{Top: s.margin.t, Right: s.margin.r, Bottom: s.margin.b, Left: s.margin.l}
-		s.box.Border = box.Edges{Top: s.border.t, Right: s.border.r, Bottom: s.border.b, Left: s.border.l}
-		s.box.Padding = box.Edges{Top: s.padding.t, Right: s.padding.r, Bottom: s.padding.b, Left: s.padding.l}
+		mode := frameOf(c.owner)
+		m, b, p := pageEdges(s.margin, mode), pageEdges(s.border, mode), pageEdges(s.padding, mode)
+		s.box.Margin = box.Edges{Top: m.t, Right: m.r, Bottom: m.b, Left: m.l}
+		s.box.Border = box.Edges{Top: b.t, Right: b.r, Bottom: b.b, Left: b.l}
+		s.box.Padding = box.Edges{Top: p.t, Right: p.r, Bottom: p.b, Left: p.l}
 		s.box.Fragments, s.box.Hidden = s.box.Fragments[:0], hidden[s.box]
 		for _, f := range spanLines[s.box] {
 			s.box.Fragments = append(s.box.Fragments, geom.Rect{X: f.X - r.X, Y: f.Y - r.Y, W: f.W, H: f.H})
@@ -2262,10 +2272,14 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 		if r.box.Node != nil {
 			t.place(r.box.Node, r.box)
 		}
+		across := rr.Y
+		if r.box.Style.Mode.Vertical() {
+			across = rr.X
+		}
 		for j := range r.box.Lines {
 			r.box.Lines[j].Rect.X -= rr.X
 			r.box.Lines[j].Rect.Y -= rr.Y
-			r.box.Lines[j].Baseline -= rr.Y
+			r.box.Lines[j].Baseline -= across
 		}
 		if len(r.box.Lines) > 0 {
 			r.box.Baseline = r.box.Lines[0].Baseline
@@ -2291,6 +2305,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 	spanLines := make(map[*box.Box][]geom.Rect)
 	hidden := make(map[*box.Box]int)
 	c.back = nil
+	c.lineBoxes = c.lineBoxes[:0]
 	ls := c.lines(content)
 	y := t.textTop(n, ls, inset.t, f.size.h-inset.vertical()-f.scrollbar.h)
 	for li, l := range ls {
@@ -2334,6 +2349,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		}
 		t.writeRuns(c, pieces, geom.Rect{X: x, Y: y, H: lh}, lb, l.indent, perGap, [2]bool{cutStart, cut}, runRects,
 			seen)
+		c.lineBoxes = append(c.lineBoxes, span{y, y + lh})
 		c.useFirst(was)
 		y = flowY + lh
 	}

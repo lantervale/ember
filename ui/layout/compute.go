@@ -329,6 +329,9 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 	if in.run == performHiddenLayout {
 		return t.hidden(n)
 	}
+	if n.inner != nil && !n.inside {
+		return t.turnedLayout(n, in)
+	}
 	key := in
 	if !n.readsParent {
 		key.parent = noSize

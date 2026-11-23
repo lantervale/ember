@@ -46,6 +46,8 @@ type Retained struct {
 	// anchors are the anchors of the elements placed by them, where the
 	// last layout placed them.
 	anchors *anchoring
+	// turns are the styles the last layout turned into vertical frames.
+	turns map[turnKey]*style.Computed
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -131,7 +133,10 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 		t.gen = k.gen + 1
 		t.replaced, t.gone = k.replaced[:0], k.gone[:0]
 		k.nodes, k.of, k.gen, k.unit = t.nodes, t.out.Of, t.gen, unitsPerPoint(fonts)
+		t.prevTurns = k.turns
+		defer func() { k.turns = t.turns }()
 	}
+	t.icb = avail.values()
 	r := t.build(root, nil)
 	defer t.sweep()
 	if r == nil {
@@ -220,6 +225,10 @@ type tree struct {
 	// the last layout placed the anchors of the elements that read them.
 	implicit func(*dom.Node) *dom.Node
 	anchors  *anchoring
+	// turns are the styles turned into vertical frames in this layout, and prevTurns
+	// those of the last, which it takes again; icb is the initial containing block.
+	turns, prevTurns map[turnKey]*style.Computed
+	icb              size
 }
 
 type context uint8
@@ -236,9 +245,15 @@ const (
 // node is one box as the algorithms see it: an element, or an anonymous block around
 // inline content.
 type node struct {
-	box  *box.Box
-	st   *style.Computed
-	kids []*node
+	box *box.Box
+	// st is the node's style in the frame of its parent's content, and inner, when not
+	// the same, in its own, which it lays its content out with (turnedLayout); across is
+	// set when the two frames' lines run on other axes, and inside while its own layout
+	// runs.
+	st                    *style.Computed
+	inner                 *style.Computed
+	across, inside        bool
+	kids                  []*node
 	// inline is the text the node lays out in lines, when its content is inline.
 	inline *inlineContent
 
@@ -363,7 +378,7 @@ func styleOf(n *dom.Node) *style.Computed {
 // build makes the node of an element and its subtree, nil for display: contents (whose
 // children the parent takes).
 func (t *tree) build(e *dom.Node, parent *node) *node {
-	if n := t.kept(e); n != nil {
+	if n := t.kept(e, parent); n != nil {
 		t.adopt(n, parent)
 		return n
 	}
@@ -393,13 +408,14 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 }
 
 // kept is e's node from the last layout when nothing under e changed since.
-func (t *tree) kept(e *dom.Node) *node {
+func (t *tree) kept(e *dom.Node, parent *node) *node {
 	n := t.prevNodes[e]
 	if n == nil {
 		return nil
 	}
 	d := dom.Data(e)
-	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.st != d.Style || !e.SameFlow(n.children) {
+	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.box.Style != d.Style ||
+		n.st != t.turned(styleOf(e), frameOf(parent)) || !e.SameFlow(n.children) {
 		return nil
 	}
 	return n
@@ -411,13 +427,14 @@ func (t *tree) kept(e *dom.Node) *node {
 func (t *tree) element(e *dom.Node, parent *node) *node {
 	st := styleOf(e)
 	old := t.prevNodes[e]
-	if n := old; n != nil && n.st == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
+	if n := old; n != nil && n.box.Style == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
 		e.SameFlow(n.children) {
 		t.retire(n, false)
 		b := n.box
 		*b = box.Box{Kind: box.Element, Node: e, Style: st, Children: b.Children[:0]}
 		*n = node{box: b, st: st, parent: parent, fresh: true, readsParent: n.readsParent,
 			kids: n.kids[:0], children: n.children, gutter: n.gutter, reached: t.gen}
+		t.frame(n, st, frameOf(parent))
 		t.place(e, b)
 		t.nodes[e] = n
 		return n
@@ -425,6 +442,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 	b := &box.Box{Kind: box.Element, Node: e, Style: st}
 	t.place(e, b)
 	n := &node{box: b, st: st, parent: parent, fresh: true, readsParent: readsParent(st), reached: t.gen}
+	t.frame(n, st, frameOf(parent))
 	if t.nodes != nil {
 		if old != nil {
 			t.retire(old, true)
@@ -1033,7 +1051,8 @@ func (t *tree) write(n *node, parent *node) {
 // parent placed it this time: an atomic inline keeps its place in a kept span otherwise.
 func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b := n.box
-	f := n.final
+	outer := frameOf(parent)
+	f := turnPlaced(n.final, outer, style.HorizontalTB)
 	rewrite := t.keep == nil || n.fresh || n.performed == t.gen
 	n.fresh = false
 	b.Size = geom.Vec2{X: f.size.w, Y: f.size.h}
@@ -1044,6 +1063,11 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		}
 		at := n.absolute
 		b.Pos = geom.Vec2{X: at.x - origin.x, Y: at.y - origin.y}
+		if outer.Vertical() {
+			r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: n.final.size.w, H: n.final.size.h},
+				parent.final.size, outer)
+			b.Pos = geom.Vec2{X: r.X, Y: r.Y}
+		}
 		b.Sticky = geom.Vec2{}
 	}
 	b.Margin = box.Edges{Top: f.margin.t, Right: f.margin.r, Bottom: f.margin.b, Left: f.margin.l}
@@ -1058,6 +1082,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
 	}
+	n.final = turnPlaced(n.final, outer, frameOf(n))
 	if !rewrite {
 		for _, c := range n.kids {
 			t.writeIn(c, n, false)
