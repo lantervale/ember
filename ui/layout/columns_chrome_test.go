@@ -400,8 +400,8 @@ table { border-spacing: 0; background: #cdf; } td { padding: 0; vertical-align: 
 				ui.Tr(ui.Td(ui.Style("padding: 4px; border: 2px solid"), forced(1, 3)),
 					ui.Td(ui.Style("padding: 4px; border: 2px solid"), rows("", 5))))),
 		),
-		"a forced break beside a framed item that ends first": styled(`body { font-size: 12px; line-height: 16px; } p { margin: 0; }
-.m { columns: 2; column-gap: 24px; padding: 6px; } .br { break-before: column; }
+		"a forced break beside a framed item that ends first": styled(`body { font-size: 12px; line-height: 16px; }
+p { margin: 0; } .m { columns: 2; column-gap: 24px; padding: 6px; } .br { break-before: column; }
 .f { display: flex; gap: 8px; } .f > div { flex: 1; padding: 4px; border: 2px solid; }`,
 			ui.Div(ui.Class("m"), ui.Div(ui.Class("f"),
 				ui.Div(ui.P(ui.Text("a")), ui.P(ui.Text("b")), ui.P(ui.Class("br"), ui.Text("c")), ui.P(ui.Text("d"))),

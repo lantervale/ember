@@ -324,15 +324,7 @@ func (t *tree) columns(n *node, in input) output {
 			case some(room):
 				h = filledHeight(room, flowH, some(styled.h))
 			}
-			fill = fillColumns(units, flowY, h)
-			cols := len(fill.starts)
-			for _, b := range beside {
-				cols = max(cols, fill.beside(b, h))
-			}
-			for len(fill.starts) < cols {
-				// columns past the flow's end show the positioned boxes alone
-				fill.starts = append(fill.starts, fmax(fill.starts[len(fill.starts)-1], flowY+flowH))
-			}
+			fill = fillBeside(units, beside, flowY, flowY+flowH, h)
 			starts = fill.starts
 			cs.addLanes(fill.lanes, len(cs.starts))
 		}
@@ -1470,6 +1462,20 @@ func (f *filled) side(u *flowUnit, s, h float32) float32 {
 	return end
 }
 
+// fillBeside is fillColumns with the positioned boxes beside the flow, which ends at end,
+// filled after it: the columns past the flow's end show them alone.
+func fillBeside(units []flowUnit, beside []lane, top, end, h float32) filled {
+	f := fillColumns(units, top, h)
+	cols := len(f.starts)
+	for _, b := range beside {
+		cols = max(cols, f.beside(b, h))
+	}
+	for len(f.starts) < cols {
+		f.starts = append(f.starts, fmax(f.starts[len(f.starts)-1], end))
+	}
+	return f
+}
+
 // beside cuts b, a positioned box beside the flow, in columns of height h from the one
 // its top shows in, where its own content allows. It returns how many columns the flow
 // would need to show it.
@@ -1521,10 +1527,10 @@ func (c *columnSet) addLanes(lanes map[*node]laneCut, first int) {
 }
 
 // balancedHeight is the least column height that puts the flow of units, flowH high
-// from top, and the positioned boxes beside it in count columns, found as Chrome finds it: from the flow's height shared
-// among the columns, no less than its content runs ask where breaks are forced nor than
-// the tallest unit, grown by the least shortage a
-// fill reports until the columns are few enough and no break they take breaks a rule.
+// from top, and the positioned boxes beside it in count columns, found as Chrome finds
+// it: from the flow's height shared among the columns, no less than its content runs ask
+// where breaks are forced nor than the tallest unit, grown by the least shortage a fill
+// reports until the columns are few enough and no break they take breaks a rule.
 func balancedHeight(units []flowUnit, beside []lane, top, flowH float32, count int) float32 {
 	steps := unitCount(units) + 1
 	for _, b := range beside {
@@ -1681,10 +1687,7 @@ func keepFlow(n, m *node, cs *columnSet, flow, moved point) {
 	first := cs.at(at.y)
 	last := first
 	if breaks {
-		last = cs.last(first, at.y+h-trailingSpacing(n))
-		if some(stretched) {
-			last = max(last, lc.last)
-		}
+		last = lastColumn(cs, lc, first, at.y+h-trailingSpacing(n))
 	}
 	if tail := trailingSpacing(n); last > first && tail > 0 {
 		// The spacing below the last row gives way at the column's end, as a margin.
@@ -1707,11 +1710,7 @@ func keepFlow(n, m *node, cs *columnSet, flow, moved point) {
 	}
 	*f = flowFrag{cols: cs, y: at.y, col: first, pieces: f.pieces[:0]}
 	if last > first {
-		ends := contentEnds(n, cs, at, first, last)
-		if lc.own > 0 {
-			ends = stretchEnds(n, cs, lc, first, last)
-		}
-		origin = f.cut(at, n.unrounded.size.w, h, first, last, origin, ends)
+		origin = f.cut(at, n.unrounded.size.w, h, first, last, origin, cutEnds(n, cs, lc, at, first, last))
 	}
 	f.oy = origin.y
 	n.absolute = point{m.absolute.x + origin.x + moved.x, m.absolute.y + origin.y + moved.y}
@@ -1771,6 +1770,25 @@ func contentEnds(n *node, cs *columnSet, at point, first, last int) []float32 {
 		}
 	}
 	return ends
+}
+
+// lastColumn is the last column showing something of a box columns cut as a lane as l,
+// from column first, its content ending at bottom: the last of the row when stretched.
+func lastColumn(cs *columnSet, l laneCut, first int, bottom float32) int {
+	last := cs.last(first, bottom)
+	if some(l.end) {
+		last = max(last, l.last)
+	}
+	return last
+}
+
+// cutEnds are where n, cut as a lane as l, ends in each column from first to last but
+// the last, as contentEnds or stretchEnds have it.
+func cutEnds(n *node, cs *columnSet, l laneCut, at point, first, last int) []float32 {
+	if l.own > 0 {
+		return stretchEnds(n, cs, l, first, last)
+	}
+	return contentEnds(n, cs, at, first, last)
 }
 
 // stretchEnds are where a flex or grid item stretched past its content by a break beside
