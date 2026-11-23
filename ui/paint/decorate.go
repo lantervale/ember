@@ -1728,7 +1728,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
 		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
 		for _, f := range b.Lines {
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 		return
 	}
@@ -1785,7 +1785,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		p.recoloured(e, st, face, parts, c, ink)
 	} else {
 		for _, f := range b.Lines {
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 	}
 	p.decorations(e, st, style.LineThrough, alpha)
@@ -1808,7 +1808,7 @@ func (p *painter) shadows(e entry, st *style.Computed, face *twod.Face, f box.Fr
 				continue
 			}
 			o := p.textOptions(face, st.Font.Size, st.LetterGap(), tc, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Shown(), st, o)
+			p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), &f, st, o)
 		}
 	}
 }
@@ -1841,10 +1841,15 @@ func (p *painter) selectionDecorations(e entry, st *style.Computed, parts []Sele
 	}
 }
 
-// words draws text from at as opts draw it, each word separator widened
-// by st's word-spacing: whole without one, else word by word, each where
-// layout measured it.
-func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
+// words draws fragment f's text from at as opts draw it, each word
+// separator widened by st's word-spacing but a space starting its block's
+// text: whole without one, else word by word, each where layout measured
+// it.
+func (p *painter) words(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
+	text := f.Shown()
+	if f.Unspaced && !f.RTL {
+		at.X -= st.WordGap()
+	}
 	runs := st.Font.SmallCaps(text)
 	if runs == nil {
 		p.wordsIn(at, text, st, st.Font, opts)
@@ -1936,7 +1941,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
 		if k < 0 {
-			p.words(at, f.Shown(), st, plain)
+			p.words(at, &f, st, plain)
 			continue
 		}
 		for j, clip := range p.partClips(e, st, f, parts[k]) {
@@ -1948,7 +1953,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(clip)
-			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterGap(), drawn, smoothingOf(st)))
+			p.words(at, &f, st, p.textOptions(face, st.Font.Size, st.LetterGap(), drawn, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}
@@ -2049,17 +2054,22 @@ func textOptions(face *twod.Face, size, tracking float32, c color.Color, how smo
 		made = map[textKey][]twod.TextOption{}
 		*kept = made
 	}
-	o := []twod.TextOption{
+	o := smoothed([]twod.TextOption{
 		twod.Typeface(face), twod.FontSize(size), twod.Tracking(tracking), twod.Baseline(), twod.Color(c),
-	}
+	}, how)
+	made[k] = o
+	return o
+}
+
+// smoothed is o drawing its glyphs as how says.
+func smoothed(o []twod.TextOption, how smoothing) []twod.TextOption {
 	switch how {
 	case smoothNone:
-		o = append(o, twod.Pixelated())
+		return append(o, twod.Pixelated())
 	case smoothExact:
-		o = append(o, twod.ExactCoverage())
+		return append(o, twod.ExactCoverage())
 	case smoothDarkened:
 	}
-	made[k] = o
 	return o
 }
 

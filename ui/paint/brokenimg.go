@@ -55,10 +55,10 @@ func (p *painter) brokenImage(e entry, alpha float32) {
 // second row show; here it starts below the box.
 func (p *painter) altText(e entry, box geom.Rect, alt string, alpha float32) {
 	st := shown(e.b)
-	opts := []twod.TextOption{
+	opts := smoothed([]twod.TextOption{
 		twod.Typeface(p.faceOf(st.Font)), twod.FontSize(st.Font.Size),
 		twod.Color(fade(st.Color, alpha)), twod.Tracking(st.LetterGap()),
-	}
+	}, smoothingOf(st))
 	if p.fonts == nil {
 		p.s.Text(geom.V2(box.X+BrokenIcon, box.Y), alt, opts...)
 		return
@@ -67,21 +67,22 @@ func (p *painter) altText(e entry, box geom.Rect, alt string, alpha float32) {
 	lh := m.Ascent + m.Descent + m.LineGap
 	row := max(lh, BrokenIcon)
 	x, y, line := float32(BrokenIcon), float32(0), ""
+	draw := func() { p.wordsIn(geom.V2(box.X+x, box.Y+y), line, st, st.Font, opts) }
 	for _, w := range strings.Fields(alt) {
 		next := w
 		if line != "" {
 			next = line + " " + w
 		}
-		if x+p.fonts.Advance(st.Font, next) > box.W && (line != "" || x > 0) {
+		if x+p.fonts.Advance(st.Font, next)+st.Spacing(next) > box.W && (line != "" || x > 0) {
 			if line != "" {
-				p.s.Text(geom.V2(box.X+x, box.Y+y), line, opts...)
+				draw()
 			}
 			x, y, row, next = 0, y+row, lh, w
 		}
 		line = next
 	}
 	if line != "" {
-		p.s.Text(geom.V2(box.X+x, box.Y+y), line, opts...)
+		draw()
 	}
 }
 

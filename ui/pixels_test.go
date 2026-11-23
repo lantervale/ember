@@ -58,7 +58,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/radial", 440, 160, 0.0007},
 		{"./internal/pages/pixel-crisp", 160, 104, 0.0013},
 		{"./internal/pages/field-case", 420, 200, 0.0035},
-		{"./internal/pages/broken-image", 420, 160, 0.006},
+		{"./internal/pages/broken-image", 420, 280, 0.006},
 		{"./internal/pages/rowspan-rows", 460, 160, 0.0002},
 		{"./internal/pages/rounded-clip", 560, 330, 0.0028},
 		{"./internal/pages/table-caption", 420, 160, 0.003},

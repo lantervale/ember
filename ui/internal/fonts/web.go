@@ -558,6 +558,12 @@ func (s *Set) chainAdvance(ch *Chain, size float32, text string) float32 {
 				of = nil
 				continue
 			}
+			if a, ok := s.spaceAdvance(ch.first(), r, size); ok {
+				flush()
+				of = nil
+				w += a
+				continue
+			}
 			c = ch.base
 		}
 		if c != of {

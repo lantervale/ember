@@ -126,7 +126,7 @@ func TestTextOfAFractionalSizeKeepsItsOwnAdvances(t *testing.T) {
 		last, lastWhole := rects[len(rects)-1], rw[len(rw)-1]
 		ratio := size / float32(math.Round(float64(size)))
 		assert.InDelta(t, lastWhole.X*ratio, last.X, 0.5, "%v points: the last letter where its own size puts it", size)
-		assert.InDelta(t, lastWhole.H*ratio, last.H, 1e-2, "and as tall as its size")
+		assert.InDelta(t, lastWhole.H*ratio, last.H, 1.0/oversample, "and as tall as its size, to an atlas pixel")
 	}
 }
 
@@ -137,6 +137,34 @@ func TestTextOfAFractionalSizeIsDrawnAtItsSizeUnderAScale(t *testing.T) {
 	rects, _ := quads(&c)
 	require.Len(t, rects, 11)
 	assert.InDelta(t, 2*10*unrounded(t, 'i', 13.44), rects[10].X-rects[0].X, 0.51, "ten advances of 13.44 points")
-	assert.Equal(t, float32(27), c.Batches[len(c.Batches)-1].Atlas.size,
-		"rasterized at the whole size nearest what the screen shows")
+	assert.Equal(t, float32(26.875), c.Batches[len(c.Batches)-1].Atlas.size,
+		"rasterized at the size a face keeps nearest what the screen shows, 26.88")
+}
+
+func TestTextOfAFractionalSizeIsRasterizedAtItsOwnSize(t *testing.T) {
+	for _, size := range []float32{13.44, 13.333333, 10.5625} {
+		var c List
+		c.Text(geom.V2(0.3, 0.1), "Handgloves", Style{Size: size})
+		atlas := c.Batches[len(c.Batches)-1].Atlas
+		assert.InDelta(t, size, atlas.size, 0.5/sizeSteps, "%v points: glyphs of that size, not %v's scaled", size,
+			math.Round(float64(size)))
+		rects, _ := quads(&c)
+		require.NotEmpty(t, rects)
+		g := atlas.glyph('H')
+		assert.InDelta(t, g.size.Y*size/atlas.size, rects[0].H, 1e-4)
+		assert.InDelta(t, g.size.Y, rects[0].H, 0.02, "drawn within a hair of 1:1")
+	}
+	assert.Same(t, Regular.Size(13.44), Regular.Size(13.45), "sizes a sixteenth of a point apart share a font")
+}
+
+func TestASpaceTheFaceLacksTakesTheRoomChromeGivesIt(t *testing.T) {
+	f := Regular.Size(16)
+	x := f.Measure("x").X
+	assert.InDelta(t, 2*x+16, f.Measure("x x").X, 1e-3, "an em space, an em")
+	assert.InDelta(t, 2*x+3.2, f.Measure("x x").X, 1e-3, "a thin space, a fifth of one")
+	assert.InDelta(t, 2*x+f.Measure(" ").X/2, f.Measure("x x").X, 1e-3, "a narrow one, half a space")
+	var c List
+	c.Text(geom.Vec2{}, "  ", Style{Size: 16})
+	rects, _ := quads(&c)
+	assert.Empty(t, rects, "and draws nothing, where a '?' stood")
 }

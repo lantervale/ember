@@ -48,6 +48,13 @@ func (s *Set) Intercepts(f style.Font, text string, letter, word, top, bottom fl
 					face, g = fb, fg
 				}
 			}
+			if face == c {
+				if a, ok := s.spaceAdvance(c, r, f.Size); ok {
+					x += a + letter
+					prev = 0
+					continue
+				}
+			}
 		}
 		fscale, fppem := f.Size/face.upem, fixed.I(int(face.upem))
 		if prev != 0 && face == c {

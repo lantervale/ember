@@ -10,7 +10,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | the default selection colour on Windows and Linux, focused or not | macOS's blue everywhere, and its grey in an inactive window: the machines here run Chrome on macOS only, which can't say what the others draw |
 | a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
-| text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a selected tab or carriage return in text that keeps them | the selection is drawn on the text around it, not over the tab's room |
 | `word-break: break-all` between two elements (`ab<b>cd</b>`), and between a letter and punctuation other than a hyphen | no break where the element changes; elsewhere ui breaks between two letters or digits and before a hyphen, which Chrome's table may differ from round brackets and marks |
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
@@ -24,17 +23,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | small capitals in a text field, a select's list and a broken picture's alt text | drawn as `normal` there |
 | a face with its own small capitals (`smcp`) | synthesised from its capitals all the same, where Chrome draws the face's own ([decision 0135](../99-decisions/0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md)) |
 | text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time, 27 of the 47 pixel pages with text measured further from Chrome at that scale and none nearer, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
-| `-webkit-font-smoothing` on the options of an open `select` and on a picture's alt text | not read: drawn with the default smoothing |
-| a `top` or `bottom` aligned inline box holding a shifted one (`sub`, a length…) | the line is sized from the boxes as the outer one aligns them; Chrome also counts the inner box where it stood before, a few points more |
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
 | some installed fonts | `ui.SystemFonts()` skips a file it cannot read; nothing waits for the scan in the public API |
-| a span ending a centred line | up to 3 points narrower than Chrome's |
 | a control's own font, colour and line height under `ui.BrowserSheets()` | a `button`, `input`, `select` or `textarea` takes its parent's `font`, `color` and `line-height`, where Chrome's sheet starts each from its own (13.33px Arial, a textarea's monospace, `FieldText`, `normal`); so does `option` its `white-space` and `optgroup` its weight |
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
-| `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
-| `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
+| `word-spacing`, `letter-spacing` and `-webkit-font-smoothing` in an open select's list | drawn and measured with them, as the select's own text; not compared: Chrome on macOS shows the list as a native menu no screenshot takes |
 | `font-variant-ligatures`, `-numeric`, `-east-asian`, `-alternates`, `-position` on a face that has the features (`tnum`, `liga`, `sups`…) | read and kept, drawn as `normal`: ui applies no OpenType feature, where Chrome does; with the Go faces, which have none, both draw alike |
-| an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
+| a space Go and Go Mono lack that Chrome draws in a face of the system (U+3000, U+1680) | a missing glyph's room, where Chrome takes the system face's, and its line grows to that face's height |
 | shaping right-to-left scripts: Arabic's joined forms, ligatures | each letter drawn in its own form, where Chrome joins them |
 | selecting, the caret and `text-overflow` in text shown right to left | a selection and the caret measure a right-to-left run from its left, and the ellipsis cuts a line's right end |
 | mirroring the characters of right-to-left text but brackets (`<`, `>`, `«`…) | drawn as they are, where Chrome mirrors every Bidi_Mirrored character |

@@ -97,6 +97,9 @@ func ourLines(d *ui.Document, size geom.Vec2) ([][]chromeLine, []*dom.Node) {
 				lead := strings.TrimSuffix(f.Text, strings.TrimLeft(f.Text, " "))
 				trail := strings.TrimPrefix(f.Text, strings.TrimRight(f.Text, " "))
 				lw := fs.Advance(font, lead) + b.Style.Spacing(lead)
+				if f.Unspaced && lead != "" {
+					lw -= b.Style.WordGap()
+				}
 				tw := fs.Advance(font, trail) + b.Style.Spacing(trail)
 				r := [4]float32{o.X + f.Rect.X + lw, o.Y + f.Baseline - ascent, f.Rect.W - lw - tw, 0}
 				if n := len(ls); n > 0 && ls[n-1].Rect[1] == r[1] {
