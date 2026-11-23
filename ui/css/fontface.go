@@ -238,7 +238,18 @@ func (p *parser) fontFaceDescriptor(f *FontFace, name Component, raw, v []Compon
 		} else {
 			p.warnf(v[0].Pos, "unicode-range: expected U+26, U+0-7F or U+4??, with commas between")
 		}
-	case "font-stretch":
+	default:
+		if !p.fontFaceLook(f, descriptor, raw, v) && (!p.browser || !ignoredFaceDescriptors[descriptor]) {
+			p.warnf(name.Pos, "@font-face: %q is not supported", name.Text)
+		}
+	}
+}
+
+// fontFaceLook reads a descriptor of how the face is drawn into f, and
+// reports whether descriptor is one.
+func (p *parser) fontFaceLook(f *FontFace, descriptor string, raw, v []Component) bool {
+	switch descriptor {
+	case propFontStretch:
 		if lo, hi, ok := fontFaceStretch(v); ok {
 			f.Stretch, f.StretchMax = lo, hi
 		} else {
@@ -254,7 +265,7 @@ func (p *parser) fontFaceDescriptor(f *FontFace, name Component, raw, v []Compon
 		at := map[string]*float32{"ascent-override": &f.Ascent, "descent-override": &f.Descent,
 			"line-gap-override": &f.LineGap}[descriptor]
 		switch {
-		case len(v) == 1 && isWord(v[0], "normal"):
+		case len(v) == 1 && isWord(v[0], kwNormal):
 			*at = -1
 		case len(v) == 1 && v[0].Kind == Percentage && v[0].Num >= 0:
 			*at = float32(v[0].Num / 100)
@@ -269,10 +280,9 @@ func (p *parser) fontFaceDescriptor(f *FontFace, name Component, raw, v []Compon
 				"with commas between")
 		}
 	default:
-		if !p.browser || !ignoredFaceDescriptors[descriptor] {
-			p.warnf(name.Pos, "@font-face: %q is not supported", name.Text)
-		}
+		return false
 	}
+	return true
 }
 
 // fontSources reads a src descriptor's list. An entry that is no url()
@@ -424,7 +434,7 @@ func familyName(v []Component) string {
 //
 //nolint:gochecknoglobals // a lookup table
 var stretches = map[string]float32{
-	"ultra-condensed": 50, "extra-condensed": 62.5, "condensed": 75, "semi-condensed": 87.5, "normal": 100,
+	"ultra-condensed": 50, "extra-condensed": 62.5, "condensed": 75, "semi-condensed": 87.5, kwNormal: 100,
 	"semi-expanded": 112.5, "expanded": 125, "extra-expanded": 150, "ultra-expanded": 200,
 }
 
@@ -444,7 +454,7 @@ func fontStretch(c Component) (float32, bool) {
 // fontSynthesisWords are the faces font-synthesis may let be made up.
 //
 //nolint:gochecknoglobals // a lookup table
-var fontSynthesisWords = []string{"weight", "style", "small-caps", "position"}
+var fontSynthesisWords = strings.Fields("weight style small-caps position")
 
 func checkFontSynthesis(v []Component) error {
 	if len(v) == 1 && isWord(v[0], "none") {

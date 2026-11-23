@@ -68,7 +68,8 @@ func TestAFacesMetricsAreItsOverridesScaledBySizeAdjust(t *testing.T) {
 	s := Builtin()
 	own := loaded(t, s, Descriptors{Family: "Own", Weight: 400, WeightMax: 400}, goregular.TTF)
 	over := loaded(t, s, Descriptors{Family: "Over", Weight: 400, WeightMax: 400, Look: Look{
-		SizeAdjust: 2, Ascent: Override{Set: true, Of: 0.5}, Descent: Override{Set: true}, LineGap: Override{Set: true, Of: 0.25},
+		SizeAdjust: 2, Ascent: Override{Set: true, Of: 0.5}, Descent: Override{Set: true},
+		LineGap: Override{Set: true, Of: 0.25},
 	}}, goregular.TTF)
 	m := s.metricsOf(over, 20)
 	assert.InDelta(t, 20, m.Ascent, 0.01)

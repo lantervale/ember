@@ -204,7 +204,7 @@ func TestAFacesWidthMetricsAndFeaturesAreRead(t *testing.T) {
 	}
 	for _, bad := range []string{`font-stretch: 10px`, `size-adjust: 1.2`, `ascent-override: -5%`,
 		`font-feature-settings: liga`, `font-feature-settings: "ligature"`, `font-feature-settings: "kern" -1`} {
-		if _, warns := faceOf(t, `@font-face { font-family: M; src: url(m.woff2); `+bad+` }`); warns == "" {
+		if _, bw := faceOf(t, `@font-face { font-family: M; src: url(m.woff2); `+bad+` }`); bw == "" {
 			t.Errorf("%s: no warning", bad)
 		}
 	}

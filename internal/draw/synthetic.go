@@ -62,44 +62,55 @@ func (f *Font) synthetic(face int, idx sfnt.GlyphIndex, x fixed.Int26_6, l Look)
 	if dr.Empty() {
 		return image.Rectangle{}, nil, false
 	}
-	mask := image.NewAlpha(image.Rect(0, 0, dr.Dx(), dr.Dy()))
-	var rast vector.Rasterizer
-	one := image.NewAlpha(mask.Rect)
-	trace := func(dx, dy float32) {
-		ox, oy := dx-float32(dr.Min.X), dy-float32(dr.Min.Y)
-		rast.Reset(dr.Dx(), dr.Dy())
-		for _, s := range segs {
-			var p [3][2]float32
-			for i, a := range s.Args[:segmentArgs(s.Op)] {
-				q := pt(a)
-				p[i] = [2]float32{q[0] + ox, q[1] + oy}
-			}
-			switch s.Op {
-			case sfnt.SegmentOpMoveTo:
-				rast.MoveTo(p[0][0], p[0][1])
-			case sfnt.SegmentOpLineTo:
-				rast.LineTo(p[0][0], p[0][1])
-			case sfnt.SegmentOpQuadTo:
-				rast.QuadTo(p[0][0], p[0][1], p[1][0], p[1][1])
-			case sfnt.SegmentOpCubeTo:
-				rast.CubeTo(p[0][0], p[0][1], p[1][0], p[1][1], p[2][0], p[2][1])
-			}
-		}
-		rast.ClosePath()
-		clear(one.Pix)
-		rast.Draw(one, one.Rect, image.Opaque, image.Point{})
-		for i, v := range one.Pix {
-			mask.Pix[i] = max(mask.Pix[i], v)
-		}
-	}
-	trace(0, 0)
+	t := tracer{segs: segs, pt: pt, dr: dr, mask: image.NewAlpha(image.Rect(0, 0, dr.Dx(), dr.Dy()))}
+	t.one = image.NewAlpha(t.mask.Rect)
+	t.trace(0, 0)
 	if r > 0 {
 		for i := range boldRing {
 			a := 2 * math.Pi * float64(i) / boldRing
-			trace(r*float32(math.Cos(a)), r*float32(math.Sin(a)))
+			t.trace(r*float32(math.Cos(a)), r*float32(math.Sin(a)))
 		}
 	}
-	return dr, mask, true
+	return dr, t.mask, true
+}
+
+// tracer draws a glyph's outline, its points placed by pt, into mask,
+// keeping the most coverage each pixel has had.
+type tracer struct {
+	segs      sfnt.Segments
+	pt        func(fixed.Point26_6) [2]float32
+	dr        image.Rectangle
+	mask, one *image.Alpha
+	rast      vector.Rasterizer
+}
+
+// trace draws the outline moved by (dx, dy).
+func (t *tracer) trace(dx, dy float32) {
+	ox, oy := dx-float32(t.dr.Min.X), dy-float32(t.dr.Min.Y)
+	t.rast.Reset(t.dr.Dx(), t.dr.Dy())
+	for _, s := range t.segs {
+		var p [3][2]float32
+		for i, a := range s.Args[:segmentArgs(s.Op)] {
+			q := t.pt(a)
+			p[i] = [2]float32{q[0] + ox, q[1] + oy}
+		}
+		switch s.Op {
+		case sfnt.SegmentOpMoveTo:
+			t.rast.MoveTo(p[0][0], p[0][1])
+		case sfnt.SegmentOpLineTo:
+			t.rast.LineTo(p[0][0], p[0][1])
+		case sfnt.SegmentOpQuadTo:
+			t.rast.QuadTo(p[0][0], p[0][1], p[1][0], p[1][1])
+		case sfnt.SegmentOpCubeTo:
+			t.rast.CubeTo(p[0][0], p[0][1], p[1][0], p[1][1], p[2][0], p[2][1])
+		}
+	}
+	t.rast.ClosePath()
+	clear(t.one.Pix)
+	t.rast.Draw(t.one, t.one.Rect, image.Opaque, image.Point{})
+	for i, v := range t.one.Pix {
+		t.mask.Pix[i] = max(t.mask.Pix[i], v)
+	}
 }
 
 // segmentArgs is how many points a segment of op takes.

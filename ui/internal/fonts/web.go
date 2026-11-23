@@ -335,10 +335,10 @@ const boldThreshold = 600
 // slanted, as the family has no such face: a bold one where f is at
 // least 600 and c lighter than that, an italic one where f is italic
 // and c is not, unless font-synthesis forbids it.
-func (c *Face) Synthetic(f style.Font) (bold, italic bool) {
-	bold = f.Weight >= boldThreshold && max(c.Weight, c.WeightMax) < boldThreshold &&
+func (c *Face) Synthetic(f style.Font) (bool, bool) {
+	bold := f.Weight >= boldThreshold && max(c.Weight, c.WeightMax) < boldThreshold &&
 		f.Synthesis&style.NoSyntheticBold == 0
-	italic = f.Italic && !c.Italic && f.Synthesis&style.NoSyntheticItalic == 0
+	italic := f.Italic && !c.Italic && f.Synthesis&style.NoSyntheticItalic == 0
 	return bold, italic
 }
 
