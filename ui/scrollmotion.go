@@ -6,6 +6,7 @@ import (
 
 	"github.com/lantervale/ember/ease"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/paint"
@@ -217,4 +218,88 @@ func (d *Document) userAim(b *box.Box) geom.Vec2 {
 		return s.glide.to
 	}
 	return b.Scroll
+}
+
+// trackRepeatDelay is how long a click on a scrollbar's track is held
+// before it scrolls on, and trackRepeatRate the pages a second it then
+// scrolls, as Chromium's ScrollbarController (kInitialAutoscrollTimerDelay,
+// kAutoscrollMultiplier: a page every 50 ms).
+const (
+	trackRepeatDelay = 0.25
+	trackRepeatRate  = 20
+)
+
+// trackHold is a click held on node's track on axis: after the delay it
+// scrolls on way at speed points a second while the pointer stays on the
+// track beyond the thumb, and snaps once let go from where it began.
+type trackHold struct {
+	node  *Node
+	axis  int
+	way   float32
+	speed float32
+	since float32
+	moved bool
+	began geom.Vec2
+}
+
+// newTrackHold is the hold of a click at clock paging node by by, page
+// points a page on each axis.
+func newTrackHold(node *Node, by, page geom.Vec2, clock float32) *trackHold {
+	h := &trackHold{node: node, way: 1, since: clock + trackRepeatDelay}
+	if by.Y == 0 {
+		h.axis = 0
+	} else {
+		h.axis = 1
+	}
+	if axisOf(by, h.axis) < 0 {
+		h.way = -1
+	}
+	h.speed = axisOf(page, h.axis) * trackRepeatRate
+	return h
+}
+
+// holdTrack scrolls on the container whose track the pointer, at at,
+// holds, until the thumb reaches it; let go, it snaps as a scrollBy from
+// where the repeat began.
+func (d *Document) holdTrack(in *input.State, at geom.Vec2) {
+	h := d.trackHeld
+	b := d.scroller(h.node)
+	if b == nil || !in.Down(input.MouseLeft) {
+		d.trackHeld = nil
+		if b != nil && h.moved {
+			s := d.scrollerOf(h.node)
+			to := d.snap(b, h.began, b.Scroll, snapAhead)
+			d.glideTo(b, s, b.Scroll, paint.BarsOf(b, origin(b)).Clamp(to), true)
+		}
+		return
+	}
+	d.unsettled = true
+	now := d.clock
+	if now < h.since {
+		return
+	}
+	dt := now - h.since
+	h.since = now
+	bars := paint.BarsOf(b, origin(b))
+	track, thumb := bars.HTrack, bars.HThumb
+	p, lo, hi := at.X, thumb.X, thumb.X+thumb.W
+	if h.axis == 1 {
+		track, thumb = bars.VTrack, bars.VThumb
+		p, lo, hi = at.Y, thumb.Y, thumb.Y+thumb.H
+	}
+	if !track.Contains(at) || h.way > 0 && hi > p || h.way < 0 && lo < p {
+		return
+	}
+	s := d.scrollerOf(h.node)
+	if s.glide != nil {
+		return
+	}
+	if !h.moved {
+		h.moved, h.began = true, bars.Scroll
+	}
+	off := bars.Scroll
+	setAxis(&off, h.axis, axisOf(off, h.axis)+h.way*h.speed*dt)
+	off = bars.Clamp(off)
+	d.noteScrolled(s, bars.Scroll, off)
+	d.setScroll(b, off)
 }

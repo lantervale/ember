@@ -175,6 +175,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0170 | [What columns cut and a line clamp hides follow Chrome's ends](0170-what-columns-cut-and-a-line-clamp-hides-follow-chromes-ends.md) | rendering |
 | 0171 | [Thai, Hangul and Hebrew are shaped as HarfBuzz, and a run between the text round it](0171-thai-hangul-and-hebrew-are-shaped-as-harfbuzz-and-a-run-between-the-text-round-it.md) | rendering |
 | 0172 | [Colour fonts are drawn in pure Go, as pictures of their glyphs](0172-colour-fonts-are-drawn-in-pure-go-as-pictures-of-their-glyphs.md) | rendering |
+| 0175 | [Relative snaps keep their unsnapped axes, and a held track pages on](0175-relative-snaps-keep-their-unsnapped-axes-and-a-held-track-pages-on.md) | api |
 
 ## Writing one
 
