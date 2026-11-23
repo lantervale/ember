@@ -1181,6 +1181,9 @@ const (
 	Saturate
 	Sepia
 	DropShadow
+	// FilterURL is url(#id): the filter element of that id in an svg
+	// element of the Document, Ref its id.
+	FilterURL
 )
 
 // Filter is one filter function: blur(Amount px), hue-rotate(Amount
@@ -1190,6 +1193,7 @@ type Filter struct {
 	Kind   FilterKind
 	Amount float32
 	Shadow Shadow
+	Ref    string
 }
 
 // CurrentColorFields is a set of colours given as currentColor.

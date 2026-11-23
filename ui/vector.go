@@ -9,8 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/fx"
 	"github.com/lantervale/ember/ui/paint"
 )
 
@@ -358,3 +361,35 @@ func (d *Document) ImageIntrinsic(url string) (box.Intrinsic, bool) {
 }
 
 var _ box.IntrinsicImages = (*Document)(nil)
+
+// filterGraphs is a picture of shapes whose filter elements an element
+// outside it can name: ui/svg's.
+type filterGraphs interface {
+	FilterGraph(id string, w, h float32) (*fx.Graph, bool)
+}
+
+// svgFilter is the filter element id names in the first svg element of d
+// holding one, read for an element of size points; nil for none.
+func (d *Document) svgFilter(id string, size geom.Vec2) *fx.Graph {
+	var g *fx.Graph
+	d.html.Walk(func(n *dom.Node) bool {
+		if g != nil || n.IsText() {
+			return false
+		}
+		if n.Tag() != dom.Svg {
+			return true
+		}
+		url, ok := dom.Picture(n)
+		if !ok {
+			return false
+		}
+		d.image(url)
+		if v, has := d.vectors[url]; has {
+			if f, can := v.pic.(filterGraphs); can {
+				g, _ = f.FilterGraph(id, size.X, size.Y)
+			}
+		}
+		return false
+	})
+	return g
+}

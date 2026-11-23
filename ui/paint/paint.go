@@ -20,6 +20,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/fx"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -168,6 +169,13 @@ type Vector interface {
 	Texture(w, h int, scale float32) *twod.Texture
 }
 
+// Filters finds the filter element an element's filter: url(#id) names,
+// read for an element of size points, nil for none: one in an svg element
+// of the Document.
+func Filters(graph func(id string, size geom.Vec2) *fx.Graph) Option {
+	return func(p *painter) { p.graph = graph }
+}
+
 // Vectors finds by name the pictures Images has no texture for because
 // they are drawn from shapes, nil for any other: each is drawn at the
 // size it is shown at, in device pixels.
@@ -182,6 +190,7 @@ type painter struct {
 	fonts   box.Fonts
 	image   func(string) *twod.Texture
 	vector  func(string) Vector
+	graph   func(id string, size geom.Vec2) *fx.Graph
 	control func(*dom.Node) any
 	sel     Selection
 	// inactive and system are Frame's Inactive and Highlight.

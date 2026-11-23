@@ -946,15 +946,19 @@ var filterAmounts = map[string]bool{
 	"sepia": true,
 }
 
-// checkFilter takes none or filter functions; a url() to an SVG filter is
-// refused, as nothing reads one.
+// checkFilter takes none or filter functions and url()s to a filter
+// element of the Document; one to another file is refused, as ui fetches
+// none.
 func checkFilter(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
 	}
 	for _, c := range v {
-		if c.Kind == URL || c.Kind == Function && strings.EqualFold(c.Text, "url") {
-			return fmt.Errorf("url() filters are not read")
+		if ref, ok := filterURL(c); ok {
+			if !strings.HasPrefix(ref, "#") || len(ref) == 1 {
+				return fmt.Errorf("a url() filter in another file is not fetched: name a filter element of the page")
+			}
+			continue
 		}
 		if c.Kind != Function {
 			return fmt.Errorf("expected a filter function, found %q", c.String())
@@ -1295,4 +1299,18 @@ func pair(v []Component) (Component, Component, bool) {
 		return Component{}, Component{}, false
 	}
 	return v[0], v[1], true
+}
+
+// filterURL is the address of a url() in a filter list.
+func filterURL(c Component) (string, bool) {
+	switch {
+	case c.Kind == URL:
+		return strings.TrimSpace(c.Text), true
+	case c.Kind == Function && strings.EqualFold(c.Text, "url"):
+		if a := items(c.Args); len(a) == 1 && a[0].Kind == String {
+			return strings.TrimSpace(a[0].Text), true
+		}
+		return "", true
+	}
+	return "", false
 }

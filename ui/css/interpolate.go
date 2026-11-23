@@ -699,7 +699,7 @@ var filters = interp[[]style.Filter]{lerp: lerpFilters, equal: slices.Equal[[]st
 // same functions sum function by function (from each's neutral value),
 // and others are put after too.
 func addFilters(a, b []style.Filter, accumulate bool) ([]style.Filter, bool) {
-	if !accumulate || !sameFilterKinds(a, b) {
+	if !accumulate || !sameFilterKinds(a, b) || slices.ContainsFunc(a, isFilterURL) {
 		return slices.Concat(a, b), true
 	}
 	out := make([]style.Filter, len(a))
@@ -713,6 +713,8 @@ func addFilters(a, b []style.Filter, accumulate bool) ([]style.Filter, bool) {
 	}
 	return out, true
 }
+
+func isFilterURL(f style.Filter) bool { return f.Kind == style.FilterURL }
 
 func sameFilterKinds(a, b []style.Filter) bool {
 	return slices.EqualFunc(a, b, func(x, y style.Filter) bool { return x.Kind == y.Kind })
@@ -734,10 +736,10 @@ func lerpFilters(a, b []style.Filter, t float32) ([]style.Filter, bool) {
 		default:
 			x, y = neutralFilter(b[i].Kind), b[i]
 		}
-		if x.Kind != y.Kind {
+		if x.Kind != y.Kind || x.Kind == style.FilterURL && x.Ref != y.Ref {
 			return a, false
 		}
-		out[i] = style.Filter{Kind: x.Kind, Amount: lerpf(x.Amount, y.Amount, t)}
+		out[i] = style.Filter{Ref: x.Ref,Kind: x.Kind, Amount: lerpf(x.Amount, y.Amount, t)}
 		if x.Kind == style.DropShadow {
 			out[i].Shadow = style.Shadow{
 				X: lerpf(x.Shadow.X, y.Shadow.X, t), Y: lerpf(x.Shadow.Y, y.Shadow.Y, t),
@@ -753,7 +755,7 @@ func neutralFilter(kind style.FilterKind) style.Filter {
 	switch kind {
 	case style.Brightness, style.Contrast, style.OpacityFilter, style.Saturate:
 		return style.Filter{Kind: kind, Amount: 1}
-	case style.Blur, style.Grayscale, style.HueRotate, style.Invert, style.Sepia, style.DropShadow:
+	case style.Blur, style.Grayscale, style.HueRotate, style.Invert, style.Sepia, style.DropShadow, style.FilterURL:
 	}
 	return style.Filter{Kind: kind}
 }

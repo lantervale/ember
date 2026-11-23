@@ -127,8 +127,17 @@ func (p *painter) backdropFilter(on Pictures, e entry, st *style.Computed, back 
 		X: (box.X - at.X) / at.W, Y: (box.Y - at.Y) / at.H,
 		Z: (box.X + box.W - at.X) / at.W, W: (box.Y + box.H - at.Y) / at.H,
 	}
+	if urlFilters(st.BackdropFilters) {
+		if back = p.backdropGraphs(on, e, st.BackdropFilters, back, xf); back == nil {
+			return
+		}
+	}
 	var fx []*render.Effect
 	for _, f := range st.BackdropFilters {
+		if f.Kind == style.FilterURL {
+			fx = nil
+			break
+		}
 		if f.Kind == style.Blur {
 			fx = mirroredBlur(on, fx, f.Amount*p.pixelsUnder(xf), edges)
 			continue

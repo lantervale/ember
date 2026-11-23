@@ -161,6 +161,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0157 | [Arabic is joined, and marks attached, by HarfBuzz's stages and masks](0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) | rendering |
 | 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
 | 0159 | [A pattern is read as JavaScript, and a form is submitted by its button](0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md) | api |
+| 0165 | [A filter element runs on the GPU over an element's picture, and a drop cap is a trimmed float](0165-a-filter-element-runs-on-the-gpu-over-an-elements-picture-and-a-drop-cap-is-a-trimmed-float.md) | rendering |
 
 ## Writing one
 

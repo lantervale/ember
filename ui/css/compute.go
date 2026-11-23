@@ -2880,6 +2880,10 @@ func (x *ctx) filters(v []Component) []style.Filter {
 	}
 	out := make([]style.Filter, 0, len(v))
 	for _, c := range v {
+		if ref, ok := filterURL(c); ok {
+			out = append(out, style.Filter{Kind: style.FilterURL, Ref: strings.TrimPrefix(ref, "#")})
+			continue
+		}
 		f := style.Filter{Kind: filterKinds[strings.ToLower(c.Text)], Amount: 1}
 		args := items(c.Args)
 		switch f.Kind {
@@ -2912,6 +2916,7 @@ func (x *ctx) filters(v []Component) []style.Filter {
 			if len(args) > 0 {
 				f.Amount = x.num(args[0])
 			}
+		case style.FilterURL:
 		}
 		out = append(out, f)
 	}

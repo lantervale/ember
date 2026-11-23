@@ -78,6 +78,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/mask-composite", 460, 260, 0.0004},
 		{"./internal/pages/webkit-masks", 380, 180, 0.001},
 		{"./internal/pages/backdrop-filter", 560, 360, 0.001},
+		{"./internal/pages/url-filters", 500, 410, 0.0045},
 		{"./internal/pages/background-blend", 600, 260, 0.0012},
 		{"./internal/pages/svg-pictures", 860, 640, 0.0008},
 		{"./internal/pages/multicol", 640, 440, 0.0046},
