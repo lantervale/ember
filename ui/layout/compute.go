@@ -398,19 +398,19 @@ func (n *node) fitGutter(out output) bool {
 	r := out.overflow.rect
 	const slack = 0.01
 	changed := false
-	fit := func(auto bool, room *float32, overflows bool) {
+	fit := func(auto bool, room *float32, bar float32, overflows bool) {
 		switch {
 		case !auto:
 		case *room == 0 && overflows:
-			*room = st.ScrollbarWidth
+			*room = bar
 			changed = true
 		case *room != 0 && !overflows:
 			*room = 0
 			changed = true
 		}
 	}
-	fit(st.Overflow.Height == style.OverflowAuto, &n.gutter.w, r.b > port.h+slack)
-	fit(st.Overflow.Width == style.OverflowAuto, &n.gutter.h, r.r > port.w+slack)
+	fit(st.Overflow.Height == style.OverflowAuto && !st.GutterStable, &n.gutter.w, st.ScrollbarWidth, r.b > port.h+slack)
+	fit(st.Overflow.Width == style.OverflowAuto, &n.gutter.h, st.ScrollbarHeight, r.r > port.w+slack)
 	return changed
 }
 

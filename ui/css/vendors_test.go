@@ -163,14 +163,16 @@ func TestWebkitValues(t *testing.T) {
 
 func TestWebkitSelectors(t *testing.T) {
 	for src, want := range map[string]string{
-		"input::-webkit-input-placeholder { color: #f00 }":         "input::placeholder { color: #f00; }\n",
-		"a:-webkit-any-link { color: #f00 }":                       "a:any-link { color: #f00; }\n",
-		"::-webkit-scrollbar { width: 8px }":                       "",
-		"p, ::-webkit-scrollbar-thumb:vertical, a { color: #f00 }": "p, a { color: #f00; }\n",
-		"::-webkit-search-decoration, p { color: #f00 }":           "p { color: #f00; }\n",
-		"input:-webkit-autofill, p { color: #f00 }":                "p { color: #f00; }\n",
-		"p:-webkit-full-screen { color: #f00 }":                    "",
-		"p:-webkit-read-only, a { color: #f00 }":                   "",
+		"input::-webkit-input-placeholder { color: #f00 }": "input::placeholder { color: #f00; }\n",
+		"a:-webkit-any-link { color: #f00 }":               "a:any-link { color: #f00; }\n",
+		"::-webkit-scrollbar { width: 8px }":               "*::-webkit-scrollbar { width: 8px; }\n",
+		"p, ::-webkit-scrollbar-thumb:vertical, a { color: #f00 }": "p, *::-webkit-scrollbar-thumb:vertical, " +
+			"a { color: #f00; }\n",
+		"::-webkit-scrollbar-button, p { color: #f00 }":  "p { color: #f00; }\n",
+		"::-webkit-search-decoration, p { color: #f00 }": "p { color: #f00; }\n",
+		"input:-webkit-autofill, p { color: #f00 }":      "p { color: #f00; }\n",
+		"p:-webkit-full-screen { color: #f00 }":          "",
+		"p:-webkit-read-only, a { color: #f00 }":         "",
 	} {
 		s, warns := asBrowser(src)
 		if got := plainRules(s); got != want || warns != "" {

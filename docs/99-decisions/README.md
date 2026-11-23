@@ -154,6 +154,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
 | 0151 | [Stroked text is a font of its own, its glyphs' outlines stroked on the CPU](0151-stroked-text-is-a-font-of-its-own-glyphs-outlines.md) | rendering |
 | 0152 | [The old attributes of tables, rules and fonts are hints as Chrome's](0152-the-old-attributes-of-tables-rules-and-fonts-are-hints-as-chromes.md) | api |
+| 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
 
 ## Writing one
 

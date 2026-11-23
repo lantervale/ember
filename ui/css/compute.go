@@ -547,6 +547,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
+	r.scrollbars(&c, n, rem)
 	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
 		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
 		r.counts = true
@@ -1053,14 +1054,14 @@ func (x *ctx) propagateOverflow(root bool) {
 	v.ScrollbarNone = c.ScrollbarNone
 	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
 		if v.ScrollbarOverlay = x.overlay; !x.overlay {
-			v.ScrollbarWidth = 15
+			v.ScrollbarWidth, v.ScrollbarHeight = barGutter, barGutter
 		}
 	}
 	c.Viewport = &v
 	if own {
 		c.OverflowPropagated = true
 		c.Overflow = style.Size[style.Overflow]{}
-		c.ScrollbarWidth, c.ScrollbarOverlay = 0, false
+		c.ScrollbarWidth, c.ScrollbarHeight, c.ScrollbarOverlay = 0, 0, false
 	}
 }
 
@@ -1092,9 +1093,10 @@ func (x *ctx) finish(root bool) {
 		return o
 	}
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
-		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto) && !c.ScrollbarNone {
+		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto ||
+		c.GutterStable && scrolls(oy)) && !c.ScrollbarNone {
 		if c.ScrollbarOverlay = x.overlay; !x.overlay {
-			c.ScrollbarWidth = 15
+			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
 	if scrolls(ox) && !scrolls(oy) {
@@ -2045,6 +2047,9 @@ var props = func() map[string]prop {
 				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
+		"scrollbar-gutter": field(func(c *style.Computed) *bool { return &c.GutterStable },
+			func(_ *ctx, v []Component) bool { return !isWord(v[0], "auto") }, flips[bool]()),
+		"scrollbar-color": scrollbarColor(),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
@@ -2354,6 +2359,26 @@ func followFilterColor(filters []style.Filter, c color.Color) []style.Filter {
 
 // autoColor is a colour whose auto (and currentColor) follow the element's own
 // color, inherited as the keyword.
+// scrollbarColor is scrollbar-color: the thumb's colour and the track's,
+// or none set for auto. It changes at once, as Chrome's discrete one.
+func scrollbarColor() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			c := x.c
+			c.ScrollbarColored = len(v) == 2
+			c.ScrollbarThumb, c.ScrollbarTrack = color.Color{}, color.Color{}
+			if c.ScrollbarColored {
+				c.ScrollbarThumb, c.ScrollbarTrack = linear(v[0], c.Color), linear(v[1], c.Color)
+			}
+		},
+		inherit: func(dst, src *style.Computed) {
+			dst.ScrollbarColored, dst.ScrollbarThumb, dst.ScrollbarTrack =
+				src.ScrollbarColored, src.ScrollbarThumb, src.ScrollbarTrack
+		},
+		anim: anim{kind: discrete},
+	}
+}
+
 func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 	return prop{
 		set: func(x *ctx, v []Component) {

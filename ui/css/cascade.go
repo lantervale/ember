@@ -268,6 +268,9 @@ type matcher struct {
 	// an img's width and height: the author's, under every rule of the
 	// sheets.
 	hints []Declaration
+	// part is the state of the scrollbar part being matched: a selector
+	// asking for states it is not in holds nothing.
+	part partState
 }
 
 // matched lists the declarations that apply to e, least important first.
@@ -369,6 +372,9 @@ func (m *matcher) try(s *Sheet, es []entry, e *dom.Node, off []bool) {
 // active reports whether sel holds as the window stands: one with
 // :window-inactive only while it is inactive, which the cascade then reads.
 func (m *matcher) active(sel Selector) bool {
+	if sel.part&^m.part != 0 {
+		return false
+	}
 	if !sel.inactive {
 		return true
 	}

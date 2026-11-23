@@ -106,7 +106,28 @@ Content is cut between blocks and between lines. A margin at a cut is dropped, a
 
 Limits: only a child of the container spans, where Chrome also spans a block deeper in; Chrome also cuts flex containers and tables between their rows, and ui keeps them whole; a positioned box is never cut; columns go left to right only.
 
-A box whose `overflow` is `auto` or `scroll` shows a scrollbar in a gutter of 15 points beside its content, kept always for `scroll` and once the content overflows for `auto`; `scrollbar-width: none` scrolls with no bar and no gutter, and `thin` is as `auto`. No CSS draws the bar over the content: that is the Document's [`ui.OverlayScrollbars()`](01-document.md), for all its boxes.
+A box whose `overflow` is `auto` or `scroll` shows a scrollbar in a gutter of 15 points beside its content, kept always for `scroll` and once the content overflows for `auto`; `scrollbar-width: none` scrolls with no bar and no gutter, and `thin` is as `auto`. `scrollbar-gutter: stable` keeps the vertical bar's gutter whenever the box clips (`hidden` too), whether its content overflows or not. `scrollbar-color: thumb track` draws ui's thumbs in the first colour on gutters filled with the second. No CSS draws the bar over the content: that is the Document's [`ui.OverlayScrollbars()`](01-document.md), for all its boxes.
+
+A sheet styles a box's bars as real pages do, through Chrome's `::-webkit-scrollbar` and its parts ([decision 0158](../99-decisions/0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md)). Once a rule styles the box's `::-webkit-scrollbar`, and its `scrollbar-color` and `scrollbar-width` are `auto`, its bars are drawn from its sheets alone, each part a box of its own with backgrounds, borders, rounded corners and shadows, as in Chrome:
+
+```css
+.list::-webkit-scrollbar { width: 10px; height: 10px; background-color: #2b2722; }
+.list::-webkit-scrollbar-track { margin: 4px 0; border-radius: 5px; background-color: #3a332c; }
+.list::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 5px; background: #ad9773 padding-box; }
+.list::-webkit-scrollbar-thumb:horizontal { background-color: #6b8f5a; }
+.list::-webkit-scrollbar-corner { background-color: transparent; }
+```
+
+| Part | |
+|---|---|
+| `::-webkit-scrollbar` | each bar: its `width` is the vertical bar's gutter, its `height` the horizontal one's (15 points when `auto`); `display: none` leaves the box no bar and no gutter |
+| `::-webkit-scrollbar-track` | along the bar, less its `margin` at the bar's two ends |
+| `::-webkit-scrollbar-track-piece` | the track before the thumb (`:start`) and after it (`:end`) |
+| `::-webkit-scrollbar-thumb` | as thick as the bar, as long as the share of the content in view, no shorter than its `min-height` (`min-width` across), 26 points when that is `auto`; none where it doesn't fit the track |
+| `::-webkit-scrollbar-corner` | where the two bars meet: white unless a rule styles it |
+| `::-webkit-scrollbar-button`, `::-webkit-resizer` | read, match nothing: ui's bars have no buttons and boxes no resizer |
+
+A part's rule may end with the pseudo-classes Chrome gives them: `:vertical` and `:horizontal`, `:start` and `:end`, `:enabled`, `:no-button` and `:corner-present` (the box scrolls both ways) hold where Chrome's do; `:hover`, `:active`, `:window-inactive`, `:disabled` and the buttons' `:decrement`, `:increment`, `:single-button`, `:double-button` never hold. The parts are read in every sheet, with or without `ui.BrowserSheets()`.
 
 A program scrolls by an element ([decision 0111](../99-decisions/0111-a-program-scrolls-a-document-by-an-element.md)). `doc.ScrollIntoView(n)` scrolls every box round `n` by the least that shows it, as `scrollIntoView({block: "nearest"})`; `doc.ScrollToStart(n)` puts its top at the top of each, as far as each scrolls, as `scrollIntoView()` and a browser going to a fragment. Both wait for an element not laid out yet. `doc.Scroll(n)` is how far a box's content is scrolled and `doc.SetScroll(n, off)` scrolls it there, in the Document's own points before its zoom, kept within what the box scrolls; with a scrolling viewport, below, the viewport's scroll is `doc.HTML()`'s. An offset set before the first layout holds from it, so a page can be shown where it was left.
 
@@ -329,7 +350,8 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 | `::scroll-marker`, `::scroll-marker-group`, `::scroll-button()`, `::column` | matches nothing: no scroll markers or buttons, a column is no box |
 | `::checkmark`, `::picker()`, `::picker-icon` | matches nothing: a select is drawn whole |
 | `::permission-icon` | matches nothing: no permission element |
-| a vendor's (`::-webkit-scrollbar`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
+| `::-webkit-scrollbar`, `::-webkit-scrollbar-track`, `::-webkit-scrollbar-track-piece`, `::-webkit-scrollbar-thumb`, `::-webkit-scrollbar-corner` | a scroll container's styled bars (above, beside `overflow`); `::-webkit-scrollbar-button` and `::-webkit-resizer` match nothing |
+| any other vendor's (`::-webkit-slider-thumb`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
 | any other name | refused: unknown, as Chrome drops the rule |
 
 A pseudo-element's rule that sets a property it does not take keeps its other declarations and warns of that one. Nothing may follow a pseudo-element in a selector: `::before:hover` and `li::marker::before` are refused as Chrome refuses them; `::before::marker` and `::after::marker` are read as Chrome reads them, and so is `::selection:window-inactive`, the one pseudo-class after a pseudo-element; `:window-inactive` elsewhere matches nothing, as in Chrome.

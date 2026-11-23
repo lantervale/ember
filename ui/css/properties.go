@@ -126,9 +126,11 @@ var properties = map[string]property{
 	// around it: the same regions, read off the element under the pointer
 	"app-region": {inherited: true, initial: "none"},
 	// inherited, as Chrome has it: an element with no rule takes its parent's
-	"user-select":     {inherited: true, initial: "auto"},
-	"text-overflow":   {initial: "clip"},
-	"scrollbar-width": {initial: "auto"},
+	"user-select":      {inherited: true, initial: "auto"},
+	"text-overflow":    {initial: "clip"},
+	"scrollbar-width":  {initial: "auto"},
+	"scrollbar-color":  {inherited: true, initial: "auto"},
+	"scrollbar-gutter": {initial: "auto"},
 
 	"background-color":    {initial: "transparent"},
 	"background-image":    {initial: "none"}, // layers of url() or gradients, no repeating ones

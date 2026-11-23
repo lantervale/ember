@@ -2,6 +2,7 @@ package css
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -197,6 +198,30 @@ func repeated(t term, most int) check {
 		}
 		return nil
 	}
+}
+
+// checkScrollbarColor takes auto, or the thumb's colour then the track's.
+func checkScrollbarColor(v []Component) error {
+	if len(v) == 1 && isWord(v[0], "auto") {
+		return nil
+	}
+	if len(v) != 2 {
+		return errors.New("expected auto, or two colours: the thumb's then the track's")
+	}
+	return repeated(colorTerm, 2)(v)
+}
+
+// checkScrollbarGutter takes auto, or stable with both-edges in either
+// order.
+func checkScrollbarGutter(v []Component) error {
+	switch {
+	case len(v) == 1 && isWord(v[0], "auto", "stable"):
+		return nil
+	case len(v) == 2 && (isWord(v[0], "stable") && isWord(v[1], "both-edges") ||
+		isWord(v[0], "both-edges") && isWord(v[1], "stable")):
+		return nil
+	}
+	return errors.New("expected auto, or stable with both-edges")
 }
 
 // checkBackgroundSize takes cover or contain alone, or a width then a
@@ -429,6 +454,8 @@ var checks = map[string]check{
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
 	"text-overflow":     single(words("clip", "ellipsis")),
 	"scrollbar-width":   single(words("auto", "thin", "none")),
+	"scrollbar-color":   checkScrollbarColor,
+	"scrollbar-gutter":  checkScrollbarGutter,
 	"list-style-type":   checkListStyle,
 	"list-style-image":  checkListImage,
 	"content":           checkContent,

@@ -190,6 +190,12 @@ type Box struct {
 	// ScrollbarWidth is the gutter, in points, that overflow: scroll reserves
 	// across the scrolling axis (scrollbar-width: none is 0).
 	ScrollbarWidth float32
+	// ScrollbarHeight is the gutter overflow-x: scroll reserves along the
+	// bottom: ScrollbarWidth but where ::-webkit-scrollbar's height differs.
+	ScrollbarHeight float32
+	// GutterStable is scrollbar-gutter: stable: the vertical bar's room is
+	// kept whenever the box clips, whether its content overflows or not.
+	GutterStable bool
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
@@ -974,6 +980,13 @@ const (
 )
 
 type Look struct {
+	// Scrollbar is the parts of a scroll container's bars its sheets style,
+	// nil where they keep ui's own look.
+	Scrollbar *ScrollbarParts
+	// ScrollbarThumb and ScrollbarTrack are scrollbar-color's, set where
+	// ScrollbarColored.
+	ScrollbarThumb, ScrollbarTrack color.Color
+	ScrollbarColored               bool
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
 	Background color.Color

@@ -88,6 +88,16 @@ var pseudoElements = map[string]pseudoElement{
 	"details-content": {status: pseudoRefused,
 		why: "::details-content is not supported: a details' content has no box of its own in ui"},
 
+	// A scroll container's bars, as Chrome draws them once its
+	// ::-webkit-scrollbar is styled (decision 0158).
+	webkitScrollbar:            {},
+	scrollbarTrack:             {},
+	scrollbarTrackPiece:        {},
+	scrollbarThumb:             {},
+	scrollbarCorner:            {},
+	"-webkit-scrollbar-button": {status: pseudoUnmatched},
+	"-webkit-resizer":          {status: pseudoUnmatched},
+
 	"part":                           {status: pseudoUnmatched, form: formFunction},
 	"slotted":                        {status: pseudoUnmatched, form: formFunction},
 	"highlight":                      {status: pseudoUnmatched, form: formFunction},
@@ -134,6 +144,97 @@ func tableName(name string) string {
 		return kwMarker
 	}
 	return name
+}
+
+// The parts of a scroll container's bars.
+const (
+	webkitScrollbar     = "-webkit-scrollbar"
+	scrollbarTrack      = "-webkit-scrollbar-track"
+	scrollbarTrackPiece = "-webkit-scrollbar-track-piece"
+	scrollbarThumb      = "-webkit-scrollbar-thumb"
+	scrollbarCorner     = "-webkit-scrollbar-corner"
+)
+
+// partState is the states of a scrollbar's part that its pseudo-classes
+// ask for (::-webkit-scrollbar-thumb:vertical): a selector holds where
+// the part is in each.
+type partState uint16
+
+const (
+	partVertical partState = 1 << iota
+	partHorizontal
+	partStart
+	partEnd
+	partCornerPresent
+	partEnabled
+	partNoButton
+	// The states no part of ui's bars is ever in: hovered and pressed
+	// parts, buttons, an inactive window's bars.
+	partHover
+	partActive
+	partDecrement
+	partIncrement
+	partSingleButton
+	partDoubleButton
+	partDisabled
+	partWindowInactive
+)
+
+//nolint:gochecknoglobals,goconst // lookup table
+var partStates = map[string]partState{
+	"vertical": partVertical, "horizontal": partHorizontal, "start": partStart, "end": partEnd,
+	"corner-present": partCornerPresent, "enabled": partEnabled, "no-button": partNoButton, "hover": partHover,
+	"active": partActive, "decrement": partDecrement, "increment": partIncrement, "single-button": partSingleButton,
+	"double-button": partDoubleButton, "disabled": partDisabled, "window-inactive": partWindowInactive,
+}
+
+// String is the pseudo-classes asking for s, in the order of partState.
+func (s partState) String() string {
+	var b strings.Builder
+	for st := partVertical; st <= partWindowInactive; st <<= 1 {
+		if s&st == 0 {
+			continue
+		}
+		for name, v := range partStates {
+			if v == st {
+				b.WriteString(":" + name)
+			}
+		}
+	}
+	return b.String()
+}
+
+// ownPart reports whether name is a vendor's pseudo-element ui styles
+// under that name, as written: a part of Chrome's scrollbars.
+func ownPart(name string) bool {
+	pe, ok := pseudoElements[name]
+	return ok && pe.status == 0 && strings.HasPrefix(name, "-")
+}
+
+// scrollbarPart reports whether name is a part of a scrollbar, which
+// takes the pseudo-classes of partStates.
+func scrollbarPart(name string) bool {
+	return strings.HasPrefix(name, webkitScrollbar) || name == "-webkit-resizer"
+}
+
+// partStatesOf is cs without the pseudo-classes that follow a scrollbar's
+// part, and the states they ask for; cs as it is when it ends with none.
+func partStatesOf(cs []Component) ([]Component, partState) {
+	var want partState
+	n := len(cs)
+	for n >= 3 && cs[n-2].Kind == Colon && cs[n-3].Kind != Colon && cs[n-1].Kind == Ident {
+		st, ok := partStates[strings.ToLower(cs[n-1].Text)]
+		if !ok {
+			break
+		}
+		want |= st
+		n -= 2
+	}
+	if want == 0 || n < 3 || cs[n-2].Kind != Colon || cs[n-3].Kind != Colon || cs[n-1].Kind != Ident ||
+		!scrollbarPart(strings.ToLower(cs[n-1].Text)) {
+		return cs, 0
+	}
+	return cs[:n], want
 }
 
 // beforeMarker and afterMarker name the ::marker of a ::before or an

@@ -576,7 +576,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 			continue
 		}
 		p.use(c.clip)
-		BarsOf(c.b, c.at).paint(p.s, alpha)
+		p.bars(BarsOf(c.b, c.at), alpha)
 	}
 	p.endFilters(filters, e.clip)
 	p.endMask(mask, e, st)

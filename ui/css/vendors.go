@@ -182,7 +182,8 @@ var webkit = vendor{
 
 	elements: map[string]string{"input-placeholder": "placeholder"},
 	// Chrome takes any ::-webkit- name as a pseudo-element, most of them
-	// parts of its own controls and bars, which ui draws its own way.
+	// parts of its own controls, which ui draws its own way; the parts ui
+	// styles too are in pseudoElements under their prefixed names.
 	otherElements: unmatched,
 	classes:       map[string]string{"any-link": "any-link"},
 	never:         []string{"autofill", "drag", "full-page-media", "full-screen", "full-screen-ancestor"},
@@ -360,6 +361,8 @@ func vendorSelector(sel []Component) treatment {
 		switch as, ok := aliases[rest]; {
 		case ok:
 			sel[at].Text = as
+		case element && ownPart(strings.ToLower(sel[at].Text)):
+			// left for the selector's own check
 		case !element && slices.Contains(v.never, rest):
 			result = unmatched
 		case !element && slices.Contains(v.ownClasses, rest):
