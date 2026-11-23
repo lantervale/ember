@@ -961,6 +961,10 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 // Chrome's.
 const markerGap = 7
 
+// rtlMarkerPull is how much nearer its content Chrome draws the bullet or the picture of
+// a right-to-left item than the mirror of a left-to-right one's.
+const rtlMarkerPull = 3.5
+
 // listMarker gives a list item its ::marker box, outside the item beside its first line:
 // the marker string css worked out, its ::marker's content or its counter style's,
 // ending where the item's content starts, a bullet or the list-style-image Chrome's
@@ -983,6 +987,8 @@ func (t *tree) listMarker(n *node) {
 	}
 	m := &box.Box{Kind: box.Marker, Node: e, Style: st}
 	left := n.final.border.l + n.final.padding.l
+	rtl := n.st.Dir == style.RTL
+	right := n.final.size.w - n.final.border.r - n.final.padding.r
 	ascent := float32(math.Round(float64(t.fonts.Metrics(st.Font).Ascent)))
 	baseline := at.Y + line.Baseline
 	text := ""
@@ -994,10 +1000,16 @@ func (t *tree) listMarker(n *node) {
 	switch {
 	case pictured:
 		m.Pos = geom.Vec2{X: left - picture.X - markerGap, Y: baseline - picture.Y}
+		if rtl {
+			m.Pos.X = right + markerGap - rtlMarkerPull
+		}
 		m.Size, m.Picture = picture, n.st.ListImage
 	case text != "":
 		w := t.fonts.Advance(st.Font, text) + st.Spacing(text)
 		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
+		if rtl {
+			m.Pos.X, text = right, visualText(text, 1)
+		}
 		m.Size = geom.Vec2{X: w, Y: line.Rect.H}
 		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}
 	case data.HasMarkerText:
@@ -1007,6 +1019,9 @@ func (t *tree) listMarker(n *node) {
 		side := float32(math.Floor(float64((offset + 1) / 2)))
 		top := float32(math.Floor(float64(3 * (ascent - offset) / 2)))
 		m.Pos = geom.Vec2{X: left - offset - markerGap, Y: baseline - ascent + top}
+		if rtl {
+			m.Pos.X = right + offset + markerGap - rtlMarkerPull - side
+		}
 		m.Size = geom.Vec2{X: side, Y: side}
 	default:
 		return

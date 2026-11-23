@@ -59,6 +59,9 @@ type Declaration struct {
 	// base is where the sheet it came from is, for relative urls; nil
 	// for a style attribute's.
 	base *origin
+	// inline is set on a logical declaration of an inline side, written
+	// as its left one: an element of direction rtl takes it as the right.
+	inline bool
 }
 
 // origin is where a sheet is: its directory in its file system, or the
@@ -948,7 +951,9 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		}
 	}
 	if as, ok := logical[d.Name]; ok {
-		d.Name = as
+		d.Name, d.inline = as, horizontal(as)
+	} else if inlineShorthands[d.Name] {
+		d.inline = true
 	}
 	if d.Name == "page-break-inside" {
 		// the old name, its auto and avoid break-inside's too

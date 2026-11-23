@@ -325,7 +325,7 @@ func (p *painter) marker(e entry, alpha float32) {
 		// a list item's number, or its ::marker's content
 		for _, f := range e.b.Lines {
 			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterSpacing, ink, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, st, opts)
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 		return
 	case st.ListStyle == style.ListDisc:

@@ -130,6 +130,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0125 | [A subgrid's items size its grid's tracks, hoisted to its lines](0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md) | rendering |
 | 0126 | [An element is drawn in the scheme its color-scheme allows](0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md) | api |
 | 0127 | [A first line is laid out in its own styles](0127-a-first-line-is-laid-out-in-its-own-styles.md) | api |
+| 0128 | [Right to left is a mirror of the layout, and bidi orders each line](0128-right-to-left-is-a-mirror-of-the-layout-and-bidi-orders-each-line.md) | api |
 | 0129 | [Spanners cut the flow in parts, each laid out alone](0129-spanners-cut-the-flow-in-parts-each-laid-out-alone.md) | api |
 | 0130 | [A mixed element reads its group so far as a picture](0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md) | rendering |
 | 0131 | [Discrete values and composition move as Chrome's](0131-discrete-values-and-composition-move-as-chromes.md) | rendering |

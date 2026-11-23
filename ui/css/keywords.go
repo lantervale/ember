@@ -83,6 +83,10 @@ const (
 	propVisibility           = "visibility"
 	propTransitionBehavior   = "transition-behavior"
 	atKeyframes              = "keyframes"
+	propDirection            = "direction"
+	shortMarginInline        = "margin-inline"
+	shortInsetInline         = "inset-inline"
+	shortPaddingInline       = "padding-inline"
 
 	propTextDecorationStyle     = "text-decoration-style"
 	propTextDecorationColor     = "text-decoration-color"
