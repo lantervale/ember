@@ -2194,7 +2194,7 @@ func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left,
 		kept, cut := t.ellipsize(c, pieces, content)
 		return kept, x, cut, false
 	}
-	pieces = t.ellipsizeStart(c, pieces, content)
+	pieces = t.ellipsizeStart(c, pieces, content, n.st.EllipsisStart)
 	w := newPen(c.unit, 0)
 	for _, p := range pieces {
 		w.step(p, 0)
@@ -2284,9 +2284,10 @@ func (t *tree) ellipsize(c *inlineContent, pieces []piece, width float32) ([]pie
 }
 
 // ellipsizeStart drops the line's start until an ellipsis and the rest fit in width, the
-// ellipsis a word of the first run kept. The line then ends at the box's end, as Chrome's
+// ellipsis a word of the first run kept, a space after it dropped when trim says so, as
+// truncate-start's isolated text has none there. The line then ends at the box's end, as Chrome's
 // right-to-left cut leaves its room before the ellipsis.
-func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32) []piece {
+func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32, trim bool) []piece {
 	last := pieces[len(pieces)-1].run
 	room := width - t.fonts.Advance(c.runs[last].st.Font, "…")
 	used := float32(0)
@@ -2306,7 +2307,7 @@ func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32) [
 		break
 	}
 	out = append(out, pieces[i:]...)
-	for len(out) > 0 && out[0].kind == gap {
+	for trim && len(out) > 0 && out[0].kind == gap {
 		out = out[1:]
 	}
 	run := last

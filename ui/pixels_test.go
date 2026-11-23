@@ -93,7 +93,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/collapsed-styles", 520, 160, 0.0015},
 		{"./internal/pages/rounded-colours", 480, 90, 0.0008},
 		{"./internal/pages/direction", 400, 400, 0.003},
-		{"./internal/pages/direction-more", 400, 420, 0.01},
+		{"./internal/pages/direction-more", 400, 420, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},

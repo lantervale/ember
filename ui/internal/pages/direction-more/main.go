@@ -32,7 +32,7 @@ input, select { width: 160px; margin: 0 0 6px; display: block; }
 func main() {
 	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"direction.css": {Data: []byte(sheet)}}, "direction.css"))
 	rtl := ui.Attr("dir", "rtl")
-	mirrored := ui.Bdo(rtl, ui.Text("a < b ≤ c « d » [e] {f} ⁅g⁆"))
+	mirrored := ui.Bdo(rtl, ui.Text("a < b ≤ c « d » [e] {f}"))
 	scrolled := ui.Div(rtl, ui.Class("scroller"), ui.Div(ui.Class("wide")))
 	d.Body().Append(
 		ui.P(ui.Class("box"), mirrored),

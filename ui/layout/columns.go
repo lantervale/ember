@@ -752,6 +752,10 @@ func keepColumns(m *node) {
 		m.frag = &flowFrag{}
 	}
 	*m.frag = flowFrag{cols: cs, pieces: m.frag.pieces[:0]}
+	if len(cs.places) > 0 {
+		// its own lines show where each column is, its origin standing where it is
+		m.frag.ox = -cs.places[0].x
+	}
 	for _, c := range m.kids {
 		if !outOfFlow(c.st.Position) || c.st.Display == style.DisplayNone {
 			keepFlow(c, m, point{}, point{})

@@ -213,7 +213,7 @@ func (c *inlineContent) levelEdges() {
 func (c *inlineContent) nextLevel(i int) (bidi.Level, bool) {
 	for _, p := range c.pieces[i+1:] {
 		switch p.kind {
-		case word, gap, atomic, newline:
+		case word, gap, atomic, newline, tab:
 			return p.level, true
 		case edge, breakHere, emergency, marker, anchor:
 		}

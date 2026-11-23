@@ -152,6 +152,7 @@ background: #cfc; } .m { padding: 5px; border: 2px solid; }`,
 		"columns right to left": styled(base+` p { margin: 0; } .m { position: relative; }
 .s { column-span: all; background: #cfc; } .abs { position: absolute; width: 10px; height: 10px; background: #f00; }`,
 			m("direction: rtl", rows("", 3), rows("", 4)),
+			m("direction: rtl; column-count: 3", ui.Text(prose(3))),
 			m("direction: rtl; column-count: 3; padding: 4px 9px 4px 2px; border-left: 5px solid", words("", prose(3))),
 			m("direction: rtl; columns: 3 100px; column-gap: 7px", rows("", 3), ui.Div(ui.Class("s"), ui.Text("across")),
 				rows("", 5)),
