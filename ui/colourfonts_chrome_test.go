@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,7 +35,15 @@ span { display: inline-block; font: 30px Layered, monospace; }
 	)
 	size := geom.V2(600, 400)
 	landed(t, d, size)
-	r := chrome.Match(t, d, size)
+	// Chrome on Windows gives a font of bitmap strikes whole-pixel
+	// advances: "ABC abc" in Struck and in Bitmapped are 147 points
+	// there, 146.72 as on macOS, Linux and in ui, so the second span
+	// ends 0.56 points further.
+	within := float32(chrome.Tolerance)
+	if runtime.GOOS == "windows" {
+		within = 1
+	}
+	r := chrome.MatchWithin(t, d, size, within)
 	assert.Empty(t, d.Warnings())
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
