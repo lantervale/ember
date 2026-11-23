@@ -108,7 +108,7 @@ type restyler struct {
 	// hasStates are the states the :has() read, and empty is set when
 	// some selector reads :empty, whose change on an element restyles it.
 	anchors, hasBeside, empty bool
-	hasStates                 dom.State
+	hasStates, hasAwayStates  dom.State
 	// computed counts the elements whose style was worked out.
 	computed *int
 	// la and lb are scratch styles for comparing what layout or
@@ -176,6 +176,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.anchors = r.anchors || len(x.has) > 0
 		r.hasBeside = r.hasBeside || slices.ContainsFunc(x.has, func(h hasRead) bool { return h.beside })
 		r.hasStates |= x.hasStates
+		r.hasAwayStates |= x.hasAwayStates
 		r.empty = r.empty || x.empty
 	}
 	if r.env == nil {
@@ -218,10 +219,13 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	}
 	dirty := data.Dirty
 	moved := movedStates(n)
+	if dirMoved(n, data) {
+		force, deep = true, true
+	}
 	inherits := false
-	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) ||
-		r.empty && moved&dom.Empty != 0 {
+	if force || deep || r.unstyled(n, data, moved) {
 		inherits = r.restyle(n, data, parent, rem)
+		data.StyledDir = autoDirection(n)
 	}
 	data.StyledState = n.State()
 	data.Dirty &^= dom.DirtyStyle | dom.DirtyTree | dom.DirtyState
@@ -258,6 +262,20 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 		data.Dirty &^= dom.DirtyDescendant
 	}
 	return below || data.Dirty&dom.DirtyLayout != 0
+}
+
+// unstyled reports whether n, of pipeline data, whose states moved, needs
+// its style worked out again for itself.
+func (r *restyler) unstyled(n *dom.Node, data *dom.Pipeline, moved dom.State) bool {
+	return data.Dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) || r.empty && moved&dom.Empty != 0
+}
+
+// dirMoved reports whether n, of dir="auto" or a bdi, reads another
+// direction from the text below it than when it was styled: what :dir()
+// answers in its subtree changed.
+func dirMoved(n *dom.Node, data *dom.Pipeline) bool {
+	return data.StyledDir != "" && data.Dirty&(dom.DirtyDescendant|dom.DirtyTree) != 0 &&
+		autoDirection(n) != data.StyledDir
 }
 
 // children visits n's children, whose parent's style is parent, and
@@ -731,6 +749,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 			px.lined = true
 		}
 	}
+	px.transitions()
 	ps.FollowColor(ps.Color)
 	ps.TextShadows = followColor(ps.TextShadows, ps.Color)
 	return &ps, true
@@ -3014,6 +3033,9 @@ func (r *restyler) anchor(n *dom.Node) {
 	if movedStates(n)&r.hasStates != 0 || tree && slices.ContainsFunc(data.Changed, r.readInHas) {
 		r.flagAround(n, false)
 	}
+	if movedStates(n)&r.hasAwayStates != 0 || tree && slices.ContainsFunc(data.Changed, r.readAwayInHas) {
+		r.flagUnder(n)
+	}
 	if data.Dirty&dom.DirtyDescendant == 0 {
 		return
 	}
@@ -3071,6 +3093,32 @@ func (r *restyler) flag(a *dom.Node, beside bool) {
 			}
 		}
 	}
+}
+
+// flagUnder flags for their :has() the elements under e's parent, the
+// elements after e and theirs included, where an :is() in a :has() reads
+// what changed on e above or before them.
+func (r *restyler) flagUnder(e *dom.Node) {
+	top := e
+	if p := e.Parent(); p != nil {
+		top = p
+	}
+	top.Walk(func(a *dom.Node) bool {
+		if a.IsText() || dom.Data(a).Style == nil {
+			return false
+		}
+		r.flag(a, false)
+		if r.hasBeside {
+			r.flag(a, true)
+		}
+		return true
+	})
+}
+
+// readAwayInHas reports whether an :is() in some :has() reads the class,
+// id or attribute a dom.Pipeline.Changed key names away from its subject.
+func (r *restyler) readAwayInHas(key string) bool {
+	return slices.ContainsFunc(r.sheets, func(s *Sheet) bool { return s.indexed().hasAway[key] })
 }
 
 // readInHas reports whether some :has() reads the class, id or attribute

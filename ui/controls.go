@@ -270,9 +270,8 @@ func (d *Document) SetValue(n *Node, v string) {
 				d.typing = nil
 			}
 			t.SetValue(v)
-			if d.uses[n]&edited != 0 {
-				d.uses[n] &^= edited
-			}
+			d.used(n, set)
+			d.uses[n] &^= edited
 		}
 	}
 	d.sync(n, d.machine(n))

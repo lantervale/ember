@@ -11,8 +11,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a stroke's mitre at a sharp corner between two short curves of a glyph | the curves are stroked as straight pieces, and the mitre can reach a little further than Chrome's |
 | the default selection colour on Windows and Linux, focused or not | the system's colours under `ui.Preferences` (Windows' `Highlight` and `HighlightText`, KDE's selection colours), blended with white as Chrome on macOS blends its own: the machines here run Chrome on macOS only, which can't say what the others draw; GNOME's accent colour is not read, an inactive window's selection there is Chrome's macOS grey, and without `ui.Preferences` macOS's blue everywhere ([decision 0155](../99-decisions/0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md)) |
 | a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
+| the spaces after a word on Windows, in a field's double click, Control+Shift+Right and a drag by words | the word alone, where Chrome on Windows takes the spaces after it as a page's double click does |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
-| text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a selected tab or carriage return in text that keeps them | the selection is drawn on the text around it, not over the tab's room |
 | `word-break: break-all` between two elements (`ab<b>cd</b>`), and between a letter and punctuation other than a hyphen | no break where the element changes; elsewhere ui breaks between two letters or digits and before a hyphen, which Chrome's table may differ from round brackets and marks |
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
@@ -25,17 +25,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `text-decoration-skip-ink: all` | as `auto`: line-throughs go through the ink, where `all` skips it there too |
 | small capitals in a text field, a select's list and a broken picture's alt text | drawn as `normal` there |
 | a face with its own small capitals (`smcp`) | synthesised from its capitals all the same, where Chrome draws the face's own ([decision 0135](../99-decisions/0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md)) |
-| text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time, 27 of the 47 pixel pages with text measured further from Chrome at that scale and none nearer, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
-| `-webkit-font-smoothing` on the options of an open `select` and on a picture's alt text | not read: drawn with the default smoothing |
-| a `top` or `bottom` aligned inline box holding a shifted one (`sub`, a length…) | the line is sized from the boxes as the outer one aligns them; Chrome also counts the inner box where it stood before, a few points more |
+| text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time (each quad a texel longer right and below), 27 of the 44 pixel pages with text measured further from Chrome at that scale and 2 nearer, none changed at two pixels a point, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
 | some installed fonts | `ui.SystemFonts()` skips a file it cannot read; nothing waits for the scan in the public API |
-| a span ending a centred line | up to 3 points narrower than Chrome's |
 | `optgroup` | ui has no such element: an option's group label, which Chrome draws in bold, is the page's own element |
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
-| `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
-| `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
-| an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
+| `word-spacing`, `letter-spacing` and `-webkit-font-smoothing` in an open select's list | drawn and measured with them, as the select's own text; not compared: Chrome on macOS shows the list as a native menu no screenshot takes |
+| a space Go and Go Mono lack that Chrome draws in a face of the system (U+3000, U+1680) | a missing glyph's room, where Chrome takes the system face's, and its line grows to that face's height |
 | Arabic in a face without `init`, `medi` and `fina` (only the presentation forms of its cmap) | each letter in its own form, where Chrome's HarfBuzz joins it with those forms; Mongolian's variation selectors and `stch` too |
 | Indic, Khmer, Myanmar and the USE scripts' reordering, a mark placed by its combining class in a face whose GPOS does not place it, a precomposed character a face lacks drawn from its decomposition | left out ([decision 0157](../99-decisions/0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) shapes Arabic, Hebrew and the joining scripts); a character the face lacks breaks the run, so letters on either side of it are not joined |
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without its ligatures and kerning, where Chrome's HarfBuzz reads them; most of the Mac's faces have GSUB and GPOS too |
@@ -56,7 +52,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `scrollbar-gutter: both-edges`, the content under an empty stable gutter | read: the gutter is kept at the end only, and nothing is drawn in it, where Chrome keeps one at each edge and draws the content under the gutter while no bar shows |
 | `scrollbar-color` | ui's own thumbs in its first colour on gutters of its second, where Chrome draws its system bars in them, overlay ones on macOS |
 | a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
-| `::marker` with `cursor`, transitions | read, and they change nothing |
+| where a `::marker` takes the pointer, its own `cursor` shown | over its bullet's box, where Chrome's is its text's: the bullet and the space after it, the line's height |
+| a list item's colour transition under a `::marker` a rule styles | the marker shows the item's end colour, where Chrome's follows the item's |
 | `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
 | a counter style's text in a font of its own, and its glyphs a face lacks | the complex predefined styles write their CJK, Korean and Ethiopic characters through the face's fallbacks, which ui has none of unless `ui.SystemFonts()` finds them |
 | a marker inside a right-to-left item | laid out as at the start of a left-to-right line; not compared with Chrome |
@@ -92,6 +89,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `-webkit-text-stroke` | refused |
 | a scaled picture's tile seams, the gaps of `background-repeat: space` | each tile keeps its own edge, where Chrome blends across: about a pixel row; a gap of a fraction of a pixel is a whole pixel or none, where Chrome blends it |
 | a `border-image-slice` of `100%` without `fill` | the picture drawn whole over the border box, where Chrome draws its corners alone |
+| the round dots of a dotted side over three device pixels wide; the squares of one one or three pixels wide | the dots a shade darker at their smoothed edge than Chrome's; the squares laid out as measured on sides two pixels wide, unchecked at the other widths |
 
 ## Sheets
 
@@ -101,7 +99,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an animated `border-image-slice` from a percentage to a number, `border-image-width` from a length to a percentage | interpolates the numbers and flips, where Chrome flips and makes a `calc()` |
 | an animated `background-image`, `mask-image` or `border-image-source` between two pictures | flips halfway, where Chrome cross-fades them |
 | `content-visibility` and `overlay`, in a transition or anywhere | not read |
-| `@starting-style` of an element whose ancestor leaves `display: none`, or nested in a style rule | not read: only the element's own leaving, and top-level rules |
+| `@starting-style` of an element whose ancestor leaves `display: none` | not read: only the element's own leaving; nested in a style rule, its declarations are read, but no other nesting |
 | an element's own transition of a property it inherits, while a transition above its parent moves it | follows the moving value, where Chrome runs it on to the end value |
 | `animation-composition: add` or `accumulate` on a property other than lengths, numbers, colours, `transform`, `box-shadow`, `filter` and `font-weight` (positions, sizes, grid tracks, `clip-path`…) | replaces, where Chrome adds |
 | `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
@@ -137,11 +135,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `-webkit-mask-position-x` and `-y`, `-webkit-mask-box-image` and its longhands | refused with a warning: ui's `mask-position` has no axis of its own, and draws no nine-patch mask |
 | a masked element under a rotation or a skew | hit in its border box, where Chrome reaches about half a pixel further |
 | a masked element on a surface other than `twod.Canvas` | drawn unmasked, but for the one-colour icon |
-| a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |
-| `:dir()` on an element of `dir="auto"` whose text changes below it (a field typed in excepted) | answered from the text as it stood when the element was last restyled |
-| a `pattern` Go's `regexp` cannot read (a lookahead, a backreference) | constrains nothing, where Chrome reads it as JavaScript does |
-| an email address whose domain is not in ASCII letters | invalid, where Chrome turns the domain to punycode first |
-| `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
+| a `pattern` of a property of strings (`\p{RGI_Emoji}`), an emoji or case-mapping property (`\p{Emoji}`, `\p{Cased}`), a script's short name (`\p{sc=Grek}`) or `Script_Extensions`, or a group name used twice | constrains nothing, where Chrome reads it ([decision 0159](../99-decisions/0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md)) |
+| a typed email's `Value` | the address as typed, where Chrome's value holds its domain in punycode |
+| a form's submission | Chrome's validation bubble is not shown, and nothing is sent: `action`, `method`, `formaction`, `target` are the program's to read |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `container-type: anchored` | refused with a warning |
 | a scroll by the user gliding, `scroll-snap-type` on both axes snapping to one area on both (Chrome's mutual snap), snapping a selection's drag | the wheel, the keys and a held thumb move at once, the keys to their snap position too (the wheel and the thumb glide to theirs), each axis picks its own nearest area, and a drag past an edge never snaps, where Chrome glides the user's scrolls as the system says, prefers an area aligned on both axes and snaps once a drag ends |
@@ -218,7 +214,7 @@ Things built and tested, with a part no test against Chrome covers yet.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
 - `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone; the computed values are compared with Chrome's.
 - Pointer and key callbacks, `doc.Blur()`, the title tooltip and `env(titlebar-area-*)` with a title bar: headless Chrome is not driven by input and has no window controls overlay, so they are tested in ember alone; `env()` without an overlay is compared with Chrome.
-- `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so they are tested in ember alone; Chrome is asked only that nothing matches them before.
+- `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so a change is tested in ember alone; Chrome is asked that nothing matches them before, and what they match once a script submits the forms. Enter's implicit submission is tested in ember alone.
 - The picture `sizes="auto"` chooses: Chrome chooses it once the page is laid out, and takes a denser one already in its cache, so what it shows changes from run to run; the box is compared with Chrome's, the choice is tested in ember alone.
 - Choosing a picture again as the viewport or the pixels a point change, the one shown kept until the one chosen lands: headless Chrome is neither resized nor moved to another screen, so it is tested in ember alone.
 - A selection inside a transformed box other than a translation, and under a Document `Zoom`.
@@ -226,4 +222,3 @@ Things built and tested, with a part no test against Chrome covers yet.
 - A percentage `top` on a relative child inside columns.
 - The largest raster of an SVG (8192 pixels a side) against the device's own limit.
 - The Linux and Windows thresholds of the pixel pages added since `word-spacing`: those of `iframe`, `table-model`, `background-boxes`, `word-spacing`, `vertical-align` and `font-smoothing` are what the runners measured once, their text drawn differently there.
-- The `mitres` page on the macOS and Linux runners, where Chrome's screenshot has the page's background and none of its boxes: it is compared on a desktop Mac and on the Windows runner only.

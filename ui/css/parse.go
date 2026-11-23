@@ -370,6 +370,9 @@ type parser struct {
 	// and begun is whether a rule an @import must come before was read.
 	depth int
 	begun bool
+	// starting are the declarations of the @starting-style rules nested
+	// in the style rule being read, which apply to its selectors.
+	starting [][]Declaration
 }
 
 // scope is the @media and @container rules and the @layer a rule stands
@@ -415,11 +418,18 @@ func (p *parser) item(in scope) bool {
 }
 
 func (p *parser) styleRule(in scope) {
+	p.starting = p.starting[:0]
 	if r, ok := p.rule(); ok {
 		p.begun = true
 		r.media, r.containers, r.layer, r.starting = in.media, in.containers, in.layer, in.starting
 		p.sheet.Rules = append(p.sheet.Rules, r)
+		for _, decls := range p.starting {
+			nested := r
+			nested.Decls, nested.starting = decls, true
+			p.sheet.Rules = append(p.sheet.Rules, nested)
+		}
 	}
+	p.starting = p.starting[:0]
 }
 
 func (p *parser) atRule(t Token, in scope) {
@@ -901,6 +911,10 @@ func (p *parser) declarations(block []Component) []Declaration {
 		end := i
 		for end < len(block) && block[end].Kind != Semicolon {
 			end++
+			if c.Kind == AtKeyword && block[end-1].Kind == LBrace {
+				// a nested at-rule ends with its block
+				break
+			}
 		}
 		part := block[i:end]
 		i = end
@@ -910,6 +924,10 @@ func (p *parser) declarations(block []Component) []Declaration {
 				out = append(out, d)
 			}
 		case AtKeyword:
+			if strings.EqualFold(c.Text, "starting-style") && len(trim(part[1:])) == 1 && part[len(part)-1].Kind == LBrace {
+				p.starting = append(p.starting, p.declarations(part[len(part)-1].Args))
+				continue
+			}
 			p.warnf(c.Pos, "@%s is not supported", c.Text)
 		case EOF, Function, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Whitespace, CDO, CDC,
 			Colon, Semicolon, Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:

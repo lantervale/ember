@@ -603,6 +603,7 @@ func (d *Document) fire(n *Node, e control.Events) {
 		d.events = append(d.events, Edited{n})
 		d.typing = n
 		d.used(n, edited)
+		d.uses[n] &^= set
 		if v, _ := n.Attr("dir"); strings.EqualFold(v, "auto") {
 			dom.Invalidate(n, "[dir")
 		}
@@ -614,6 +615,9 @@ func (d *Document) fire(n *Node, e control.Events) {
 	if e.Has(control.Submitted) {
 		d.events = append(d.events, Submitted{n})
 		d.used(n, changed)
+		if n.Tag() == dom.Input {
+			defer d.implicitSubmit(n)
+		}
 	}
 	if e.Has(control.Changed) || e.Has(control.Submitted) {
 		d.typing = nil
@@ -699,6 +703,7 @@ func (d *Document) click(n *Node) {
 		d.fire(n, e)
 		if e.Has(control.Clicked) {
 			d.dialogClick(n)
+			d.submitClick(n)
 		}
 	case *control.Checkbox:
 		d.fire(n, m.Click())
@@ -775,7 +780,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.cover(c)
 	}
 	if !d.edgeCursor(c, at) {
-		d.cssCursor(c)
+		d.cssCursor(c, hit)
 		d.selectionCursor(c, hit, at)
 	}
 	d.pointerEvents(in, at, n)
@@ -1203,17 +1208,31 @@ func (d *Document) releaseOpened(o *Node, list *control.Select, pick paint.Pick)
 	}
 }
 
-// cssCursor shows the CSS cursor of the element under the pointer, the arrow for auto.
-func (d *Document) cssCursor(c *twod.Canvas) {
-	n := firstOf(d.hovered)
-	if n == nil {
-		return
+// cssCursor shows the CSS cursor of the element under the pointer, or of
+// its ::marker there, the arrow for auto.
+func (d *Document) cssCursor(c *twod.Canvas, hit *box.Box) {
+	if cur, ok := cssCursors[d.cursorAt(hit)]; ok {
+		c.ShowCursor(cur)
 	}
-	if st := dom.Data(n).Style; st != nil {
-		if cur, ok := cssCursors[st.Cursor]; ok {
-			c.ShowCursor(cur)
+}
+
+// cursorAt is the cursor property of what the pointer is over: the box
+// hit's ::marker, else the hovered element.
+func (d *Document) cursorAt(hit *box.Box) string {
+	for b := hit; b != nil; b = b.Parent {
+		if b.Kind == box.Marker && b.Style != nil {
+			return b.Style.Cursor
+		}
+		if b.Node != nil && !b.Node.IsText() {
+			break
 		}
 	}
+	if n := firstOf(d.hovered); n != nil {
+		if st := dom.Data(n).Style; st != nil {
+			return st.Cursor
+		}
+	}
+	return ""
 }
 
 var cssCursors = map[string]platform.Cursor{ //nolint:gochecknoglobals // a read-only table
@@ -1513,6 +1532,7 @@ func (d *Document) intent(n *Node, m any, i control.Intent) bool {
 		d.fire(n, e)
 		if _, button := m.(*control.Button); button && e.Has(control.Clicked) {
 			d.dialogClick(n)
+			d.submitClick(n)
 		}
 		return true
 	}

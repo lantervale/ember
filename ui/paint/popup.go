@@ -75,7 +75,7 @@ func (p *painter) place(pp popup) menu {
 	w := b.Size.X
 	if p.fonts != nil {
 		for _, o := range pp.m.Options {
-			w = max(w, p.fonts.Advance(st.Font, o.Text())+2*optionPad+2*l.border)
+			w = max(w, p.fonts.Advance(st.Font, o.Text())+st.Spacing(o.Text())+2*optionPad+2*l.border)
 		}
 	}
 	vp := p.viewport
@@ -157,8 +157,9 @@ func (p *painter) drawList(pp popup, l menu) {
 		if o.Disabled {
 			ink = fade(ink, dimmed)
 		}
-		p.s.Text(geom.V2(row.X+optionPad, row.Y+2), o.Text(),
-			twod.Typeface(face), twod.FontSize(st.Font.Size), twod.Color(ink), twod.Tracking(st.LetterGap()))
+		p.wordsIn(geom.V2(row.X+optionPad, row.Y+2), o.Text(), st, st.Font, smoothed([]twod.TextOption{
+			twod.Typeface(face), twod.FontSize(st.Font.Size), twod.Color(ink), twod.Tracking(st.LetterGap()),
+		}, smoothingOf(st)))
 	}
 	p.s.PopClip()
 }
