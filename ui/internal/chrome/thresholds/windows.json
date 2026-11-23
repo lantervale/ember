@@ -72,6 +72,7 @@
   "table-collapse": 0.0042,
   "table-model": 0.005,
   "text-properties": 0.018,
+  "text-sizes": 0.016,
   "top-layer": 0.0045,
   "translated": 0.0072,
   "vertical-align": 0.0103,
