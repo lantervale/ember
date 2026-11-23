@@ -146,10 +146,19 @@ func listen(ls *listeners, canvas js.Value, in *input.State) {
 	})
 	on(canvas, "contextmenu", func(e js.Value) { e.Call("preventDefault") })
 	on(canvas, "wheel", func(e js.Value) {
-		// GLFW reports lines, up and left positive; a wheel's notch is
-		// about 100 pixels in Chrome, a line about 16.
-		unit := map[int]float64{0: 100, 1: 3, 2: 0.3}[e.Get("deltaMode").Int()]
-		in.AddWheel(geom.V2(float32(-e.Get("deltaX").Float()/unit), float32(-e.Get("deltaY").Float()/unit)))
+		delta := geom.V2(float32(e.Get("deltaX").Float()), float32(e.Get("deltaY").Float()))
+		var legacy geom.Vec2
+		if v := e.Get("wheelDeltaY"); v.Truthy() {
+			legacy.Y = float32(v.Float())
+		}
+		if v := e.Get("wheelDeltaX"); v.Truthy() {
+			legacy.X = float32(v.Float())
+		}
+		if v, precise := wheelTurn(e.Get("deltaMode").Int(), delta, legacy); precise {
+			in.AddPreciseWheel(v)
+		} else {
+			in.AddWheel(v)
+		}
 		e.Call("preventDefault")
 	})
 }
