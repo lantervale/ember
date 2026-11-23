@@ -83,6 +83,9 @@ type style struct {
 	bold       bool
 	italic     bool
 	anchor     textAnchor
+	// letterSpacing and wordSpacing are added after each character, and
+	// after each space.
+	letterSpacing, wordSpacing float64
 }
 
 type builder struct {
@@ -282,6 +285,20 @@ var properties = map[string]func(st *style, v string, ctx lengthContext){ //noli
 	"text-anchor": func(st *style, v string, _ lengthContext) {
 		if a, ok := map[string]textAnchor{"start": anchorStart, "middle": anchorMiddle, "end": anchorEnd}[v]; ok {
 			st.anchor = a
+		}
+	},
+	"letter-spacing": func(st *style, v string, ctx lengthContext) {
+		if v == valNormal {
+			st.letterSpacing = 0
+		} else if l, ok := length(v, ctx); ok {
+			st.letterSpacing = l
+		}
+	},
+	"word-spacing": func(st *style, v string, ctx lengthContext) {
+		if v == valNormal {
+			st.wordSpacing = 0
+		} else if l, ok := length(v, ctx); ok {
+			st.wordSpacing = l
 		}
 	},
 	"paint-order": func(st *style, v string, _ lengthContext) {
@@ -536,9 +553,15 @@ func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) e
 	isolated := blend != BlendNormal || strings.TrimSpace(props["isolation"]) == "isolate"
 	filter := strings.TrimSpace(props["filter"])
 	filtered := filter != "" && filter != none
-	clip, cyclicClip := b.reference(props["clip-path"], "clip-path", "clipPath")
+	var clip *node
+	var cyclicClip bool
+	shapeClip := strings.TrimSpace(props["clip-path"])
+	if shapeClip == none || strings.HasPrefix(shapeClip, "url(") {
+		clip, cyclicClip = b.reference(shapeClip, "clip-path", "clipPath")
+		shapeClip = ""
+	}
 	mask, cyclicMask := b.reference(props["mask"], "mask", "mask")
-	clipped, masked := clip != nil, mask != nil
+	clipped, masked := clip != nil || shapeClip != "", mask != nil
 	if opacity == 0 || cyclicClip || cyclicMask {
 		return nil
 	}
@@ -567,7 +590,11 @@ func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) e
 		}
 	}
 	var err error
-	if clipped {
+	if shapeClip != "" {
+		if group.Clip = b.shapeClip(shapeClip, &st, m, group.Items, bbox); group.Clip == nil {
+			b.unsupported("clip-path")
+		}
+	} else if clipped {
 		if group.Clip, err = b.clipPath(clip, m, bbox); err != nil {
 			return err
 		}

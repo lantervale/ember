@@ -27,7 +27,7 @@ func samples(t *testing.T, css string) fstest.MapFS {
 	t.Helper()
 	files := fstest.MapFS{
 		"page.css": {Data: []byte(css)}, "bare.svg": {Data: []byte(bare)},
-		"filter.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><filter id="f"/>` +
+		"filter.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><filter id="f"><feTurbulence/></filter>` +
 			`<rect width="24" height="24" filter="url(#f)"/></svg>`)},
 		"object.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><foreignObject/></svg>`)},
 	}
@@ -97,7 +97,7 @@ func TestWhatAnSVGUsesThatIsNotDrawnIsAWarningNamingTheFile(t *testing.T) {
 		texts = append(texts, w.Error())
 	}
 	assert.ElementsMatch(t, []string{
-		"ui: image filter.svg: image/svg+xml is not drawn: filter",
+		"ui: image filter.svg: image/svg+xml is not drawn: feTurbulence",
 		"ui: image object.svg: image/svg+xml is not drawn: foreignObject",
 	}, texts)
 }

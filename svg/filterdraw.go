@@ -55,9 +55,7 @@ func (f *Filter) reach(m Matrix) int {
 			total += moved(p.Offset, m).len()
 		case Morphology:
 			total += math.Max(p.Radius.X*s.X, p.Radius.Y*s.Y)
-		case Tile:
-			total = maxReach
-		case Clear, Flood, ColorMatrix, ComponentTransfer, Composite, Merge, Blend:
+		case Clear, Flood, ColorMatrix, ComponentTransfer, Composite, Merge, Blend, Tile:
 		}
 	}
 	if !(total < maxReach) {
