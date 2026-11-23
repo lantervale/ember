@@ -8,6 +8,7 @@ import (
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/textedit"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/dom"
 )
@@ -31,27 +32,31 @@ p:first-child::selection:window-inactive { background-color: #ff0000 }`, p, plai
 }
 
 func TestADoubleClickTakesAWordInlineElementsCut(t *testing.T) {
-	p := ui.P(ui.Text("a wo"), ui.B(ui.Text("rd")), ui.Text(" sp"), ui.I(ui.Text("l"), ui.Span(ui.Text("it"))),
-		ui.Text("s and"), ui.Br(), ui.Text("x"))
-	l := selectableDoc(t, "", p)
-	double := func(n *ui.Node, i int) string {
-		l.doc.Select(ui.Position{Node: n, Offset: i}, ui.Position{Node: n, Offset: i + 1})
-		r := l.doc.SelectionRects()[0]
-		l.doc.ClearSelection()
-		at := geom.V2(r.X+0.5, r.Y+r.H/2)
-		l.frames(30)
-		l.down(at)
-		l.up()
-		l.down(at)
-		l.up()
-		return l.doc.Selection().Text
+	spaces := map[textedit.Platform]string{textedit.Mac: "", textedit.Others: "", textedit.Windows: " "}
+	for platform, spaced := range spaces {
+		ui.SetPlatform(t, platform)
+		p := ui.P(ui.Text("a wo"), ui.B(ui.Text("rd")), ui.Text(" sp"), ui.I(ui.Text("l"), ui.Span(ui.Text("it"))),
+			ui.Text("s and"), ui.Br(), ui.Text("x"))
+		l := selectableDoc(t, "", p)
+		double := func(n *ui.Node, i int) string {
+			l.doc.Select(ui.Position{Node: n, Offset: i}, ui.Position{Node: n, Offset: i + 1})
+			r := l.doc.SelectionRects()[0]
+			l.doc.ClearSelection()
+			at := geom.V2(r.X+0.5, r.Y+r.H/2)
+			l.frames(30)
+			l.down(at)
+			l.up()
+			l.down(at)
+			l.up()
+			return l.doc.Selection().Text
+		}
+		kids := p.Children()
+		assert.Equal(t, "word"+spaced, double(kids[0], 3), "pressed on its first part, platform %d", platform)
+		assert.Equal(t, "word"+spaced, double(textOf(kids[1]), 1), "and on its last")
+		assert.Equal(t, "splits"+spaced, double(kids[2], 2), "through elements nested")
+		assert.Equal(t, "splits"+spaced, double(textOf(kids[3].Children()[1]), 1))
+		assert.Equal(t, "and", double(kids[4], 3), "a br ends a word's stretch")
 	}
-	kids := p.Children()
-	assert.Equal(t, "word", double(kids[0], 3), "pressed on its first part")
-	assert.Equal(t, "word", double(textOf(kids[1]), 1), "and on its last")
-	assert.Equal(t, "splits", double(kids[2], 2), "through elements nested")
-	assert.Equal(t, "splits", double(textOf(kids[3].Children()[1]), 1))
-	assert.Equal(t, "and", double(kids[4], 3), "a br ends a word's stretch")
 }
 
 func TestAnEmptyLinesBreakIsMarkedASpaceWide(t *testing.T) {

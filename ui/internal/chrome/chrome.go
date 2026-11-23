@@ -289,27 +289,32 @@ const dumpDOM = "--dump-dom"
 // minWidth is the narrowest window headless Chrome keeps.
 const minWidth = 500
 
-// minNarrowHeight is the shortest window a narrow page's picture is taken
-// in: Chrome for Testing on CI runners drew only the first line of narrow,
-// short pages (160×104, 480×120). Wide pages keep their window, where a
-// modal dialog centres as in ui.
+// minNarrowHeight is the shortest window the picture of a narrow or a
+// short page is taken in: Chrome for Testing on CI runners drew only the
+// top hundred device pixels or so of such pages (160×104, 480×120, and
+// 560×140 on every runner), the rest left blank. Other pages keep their
+// window, where a modal dialog centres and a fixed background lies as in
+// ui.
 const minNarrowHeight = 500
+
+// shortHeight is the height under which a page is short; pages 160 tall
+// were drawn whole.
+const shortHeight = 160
 
 // fit makes page lay out in a viewport of size as ui's does: the root
 // never shows a scrollbar, and a page smaller than the window it opens in
 // keeps its size on the root. It returns the window to open: at least
-// minWidth wide, and for a narrow page's picture minNarrowHeight tall,
-// cropped back to size. The page of a Document whose viewport scrolls
-// (export.ScrollingViewport) is left as it is, so it needs a viewport at
-// least minWidth wide to dump its boxes; its picture is taken in a frame.
+// minWidth wide, and for a narrow or short page's picture minNarrowHeight
+// tall, cropped back to size. The page of a Document whose viewport
+// scrolls (export.ScrollingViewport) is left as it is, so it needs a
+// viewport at least minWidth wide to dump its boxes; its picture is taken
+// in a frame.
 func fit(page []byte, size geom.Vec2, shot bool) ([]byte, geom.Vec2) {
 	rule := "html { scrollbar-width: none; }"
 	window := size
-	if size.X < minWidth {
-		window.X = minWidth
-		if shot {
-			window.Y = max(window.Y, minNarrowHeight)
-		}
+	window.X = max(window.X, minWidth)
+	if shot && (size.X < minWidth || size.Y < shortHeight) {
+		window.Y = max(window.Y, minNarrowHeight)
 	}
 	if bytes.Contains(page, []byte(" "+export.ScrollingViewport)) {
 		if shot {

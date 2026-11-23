@@ -60,6 +60,9 @@ func (d *Document) pressSelection(at geom.Vec2, extend bool) {
 		d.point(s.anchor, p)
 	case s.unit == byCharacter:
 		d.point(p, p)
+	case s.unit == byWord:
+		s.base[0], s.base[1] = d.wordSpan(p, d.platform == textedit.Windows)
+		d.point(s.base[0], s.base[1])
 	default:
 		s.base[0], s.base[1] = d.unitAt(p)
 		d.point(s.base[0], s.base[1])

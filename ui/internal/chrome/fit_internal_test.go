@@ -9,13 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestANarrowPagesPictureOpensAWindowAtLeastFiveHundredPointsEachWay(t *testing.T) {
+func TestANarrowOrShortPagesPictureOpensAWindowAtLeastFiveHundredPointsEachWay(t *testing.T) {
 	page := []byte("<html><head></head><body></body></html>")
 	for _, c := range []struct {
 		size, window geom.Vec2
 	}{
 		{geom.V2(160, 104), geom.V2(500, 500)},
-		{geom.V2(520, 80), geom.V2(520, 80)},
+		{geom.V2(520, 80), geom.V2(520, 500)},
+		{geom.V2(560, 140), geom.V2(560, 500)},
+		{geom.V2(640, 160), geom.V2(640, 160)},
 		{geom.V2(420, 160), geom.V2(500, 500)},
 		{geom.V2(640, 520), geom.V2(640, 520)},
 	} {
