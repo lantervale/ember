@@ -210,6 +210,9 @@ type Box struct {
 	// GutterStable is scrollbar-gutter: stable: the vertical bar's room is
 	// kept whenever the box clips, whether its content overflows or not.
 	GutterStable bool
+	// GutterBothEdges is stable's both-edges: the same room kept at the
+	// inline start too, never drawn in.
+	GutterBothEdges bool
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
@@ -718,6 +721,20 @@ const (
 	HyphensAuto
 )
 
+// SkipInk is text-decoration-skip-ink: where underlines and overlines
+// leave a gap round the glyphs' ink they cross.
+type SkipInk uint8
+
+const (
+	// SkipInkAuto skips the ink of every glyph but those of CJK and Hangul
+	// characters, slashes and the low line, as Chrome.
+	SkipInkAuto SkipInk = iota
+	// SkipInkNone goes through the ink.
+	SkipInkNone
+	// SkipInkAll skips the ink of every glyph.
+	SkipInkAll
+)
+
 // TextBoxTrim is text-box-trim: which ends of a block's text lose the
 // room above their glyphs' edge (TextBoxEdge).
 type TextBoxTrim uint8
@@ -968,11 +985,9 @@ type Text struct {
 	WordBreak     WordBreak
 	LineBreak     LineBreak
 	TabSize       TabSize
-	// InkThrough is text-decoration-skip-ink: none: underlines and
-	// overlines go through the glyphs' ink, which they otherwise skip.
-	InkThrough bool
-	WrapStyle  WrapStyle
-	Hyphens    Hyphens
+	SkipInk       SkipInk
+	WrapStyle     WrapStyle
+	Hyphens       Hyphens
 	// HyphenChar is hyphenate-character's string when HyphenChosen,
 	// else it is auto.
 	HyphenChar   string

@@ -55,6 +55,7 @@ func (b *Box) equal(o *Box) bool {
 		b.ScrollbarWidth == o.ScrollbarWidth &&
 		b.ScrollbarHeight == o.ScrollbarHeight &&
 		b.GutterStable == o.GutterStable &&
+		b.GutterBothEdges == o.GutterBothEdges &&
 		b.ScrollbarNone == o.ScrollbarNone &&
 		b.ScrollbarOverlay == o.ScrollbarOverlay &&
 		b.Viewport.Equal(o.Viewport) &&
@@ -186,7 +187,7 @@ func (t *Text) equal(o *Text) bool {
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
 		t.TabSize == o.TabSize &&
-		t.InkThrough == o.InkThrough &&
+		t.SkipInk == o.SkipInk &&
 		t.WrapStyle == o.WrapStyle &&
 		t.Hyphens == o.Hyphens &&
 		t.HyphenChar == o.HyphenChar &&

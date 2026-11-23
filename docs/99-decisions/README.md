@@ -137,7 +137,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0132 | [Border sides are mitered pieces smoothed by their own geometry](0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md) | rendering |
 | 0133 | [A masked element is a picture cut by the picture of its mask](0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md) | rendering |
 | 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
-| 0135 | [Small capitals and skipped ink are synthesised from the face's outlines](0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md) | rendering |
+| 0135 | [Small capitals and skipped ink are synthesised from the face's outlines](0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md) (superseded by 0182) | rendering |
 | 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
 | 0137 | [A box placed past a scroller is moved back as it scrolls](0137-a-box-placed-past-a-scroller-is-moved-back-as-it-scrolls.md) | api |
 | 0138 | [Animated pictures play as one texture per address](0138-animated-pictures-play-as-one-texture-per-address.md) | assets |
@@ -181,6 +181,10 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0176 | [Vertical writing modes are laid out turned into their own frame](0176-vertical-writing-modes-are-laid-out-turned-into-their-own-frame.md) | rendering |
 | 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
 | 0178 | [Spaces break-spaces keeps are units of a line, and break-all reads letters as ideographs](0178-spaces-break-spaces-keeps-are-units-of-a-line-and-break-all-reads-letters-as-ideographs.md) | api |
+| 0179 | [A collapsed column narrows a stretched table, but a flex row's](0179-a-collapsed-column-narrows-a-stretched-table-but-a-flex-rows.md) | api |
+| 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
+| 0182 | [Skipped ink follows the glyphs drawn and Chrome's table of characters](0182-skipped-ink-follows-the-glyphs-drawn-and-chromes-table-of-characters.md) | rendering |
+| 0186 | [A variable font's layout is shaped at its instance](0186-a-variable-fonts-layout-is-shaped-at-its-instance.md) | rendering |
 
 ## Writing one
 

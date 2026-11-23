@@ -184,9 +184,8 @@ func (p *Plan) ShapeIn(run []Glyph, before, after string) []Glyph {
 	ppem := fixed.I(int(f.upem))
 	for i := range b.glyphs {
 		g := &b.glyphs[i]
-		a, err := f.src.GlyphAdvance(&f.buf, sfnt.GlyphIndex(g.ID), ppem, font.HintingNone)
-		if err == nil {
-			g.Advance = int32(a >> 6)
+		if a, ok := b.advance(g.ID); ok {
+			g.Advance = a
 		}
 		g.XOffset, g.YOffset, g.attach, g.cursive = 0, 0, 0, false
 	}

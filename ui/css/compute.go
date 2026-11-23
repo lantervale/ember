@@ -1204,8 +1204,9 @@ func (x *ctx) propagateOverflow(root bool) {
 	v.Display, v.Font = style.Block, c.Font
 	v.Overflow = style.Size[style.Overflow]{Width: of(c.Overflow.Width), Height: of(c.Overflow.Height)}
 	v.ScrollbarNone = c.ScrollbarNone
+	v.ScrollbarColored, v.ScrollbarThumb, v.ScrollbarTrack = c.ScrollbarColored, c.ScrollbarThumb, c.ScrollbarTrack
 	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
-		if v.ScrollbarOverlay = x.overlay; !x.overlay {
+		if v.ScrollbarOverlay = x.overlay || v.ScrollbarColored; !v.ScrollbarOverlay {
 			v.ScrollbarWidth, v.ScrollbarHeight = barGutter, barGutter
 		}
 	}
@@ -1247,7 +1248,7 @@ func (x *ctx) finish(root bool) {
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
 		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto ||
 		c.GutterStable && scrolls(oy)) && !c.ScrollbarNone {
-		if c.ScrollbarOverlay = x.overlay; !x.overlay {
+		if c.ScrollbarOverlay = x.overlay || c.ScrollbarColored; !c.ScrollbarOverlay {
 			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
@@ -2284,8 +2285,8 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
-		"text-decoration-skip-ink": keyword(func(c *style.Computed) *bool { return &c.InkThrough },
-			map[string]bool{"auto": false, "all": false, "none": true}),
+		"text-decoration-skip-ink": keyword(func(c *style.Computed) *style.SkipInk { return &c.SkipInk },
+			map[string]style.SkipInk{"auto": style.SkipInkAuto, "all": style.SkipInkAll, "none": style.SkipInkNone}),
 		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
 			func(x *ctx, v []Component) style.TabSize {
 				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
@@ -2301,9 +2302,8 @@ var props = func() map[string]prop {
 				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
-		"scrollbar-gutter": field(func(c *style.Computed) *bool { return &c.GutterStable },
-			func(_ *ctx, v []Component) bool { return !isWord(v[0], "auto") }, flips[bool]()),
-		"scrollbar-color": scrollbarColor(),
+		"scrollbar-gutter": scrollbarGutter(),
+		"scrollbar-color":  scrollbarColor(),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
@@ -2595,6 +2595,20 @@ func followFilterColor(filters []style.Filter, c color.Color) []style.Filter {
 
 // autoColor is a colour whose auto (and currentColor) follow the element's own
 // color, inherited as the keyword.
+// scrollbarGutter is scrollbar-gutter: stable, and both-edges beside it.
+func scrollbarGutter() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			x.c.GutterStable = !isWord(v[0], "auto")
+			x.c.GutterBothEdges = len(v) == 2
+		},
+		inherit: func(dst, src *style.Computed) {
+			dst.GutterStable, dst.GutterBothEdges = src.GutterStable, src.GutterBothEdges
+		},
+		anim: anim{kind: discrete},
+	}
+}
+
 // scrollbarColor is scrollbar-color: the thumb's colour and the track's,
 // or none set for auto. It changes at once, as Chrome's discrete one.
 func scrollbarColor() prop {

@@ -166,6 +166,7 @@ type flexConstants struct {
 	paddingBoxInset         rect
 	padding                 rect
 	scrollbarGutter         point
+	gutter                  rect
 	isScrollContainer       bool
 	gap                     size
 	alignItems              style.Align
@@ -381,16 +382,9 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 		justify.keyword = style.AlignFlexStart
 	}
 	gutter := n.ownGutter()
-	inset := padding.add(border)
-	inset.b += gutter.y
-	inset.r += gutter.x
-	paddingBoxInset := border.add(rect{r: gutter.x, b: gutter.y})
-	innerPadding := rect{
-		l: inset.l - border.l,
-		r: inset.r - border.r - gutter.x,
-		t: inset.t - border.t,
-		b: inset.b - border.b - gutter.y,
-	}
+	ge := gutterEdges(st, gutter)
+	inset := padding.add(border).add(ge)
+	paddingBoxInset := border.add(ge)
 	inner := known.mSub(inset.sum())
 	hasMain := knownIsDefinite.get(d.main()) && some(known.get(d.main()))
 	hasCross := knownIsDefinite.get(d.cross()) && some(known.get(d.cross()))
@@ -406,8 +400,9 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 		border:                  border,
 		contentBoxInset:         inset,
 		paddingBoxInset:         paddingBoxInset,
-		padding:                 innerPadding,
+		padding:                 padding,
 		scrollbarGutter:         gutter,
+		gutter:                  ge,
 		isScrollContainer:       isScrollContainer(st),
 		gap:                     size{resolveOrZero(st.Gap.Width, gapBasis.w), resolveOrZero(st.Gap.Height, gapBasis.h)},
 		alignItems:              normalToStretch(st.AlignItems),
@@ -1408,8 +1403,8 @@ func (t *tree) flexFinalPass(lines []*flexLine, c *flexConstants) rect {
 	}
 	if c.isScrollContainer {
 		overflow = overflow.union(rect{
-			r: c.contentBoxInset.r - c.border.r - c.scrollbarGutter.x,
-			b: c.contentBoxInset.b - c.border.b - c.scrollbarGutter.y,
+			r: c.contentBoxInset.r - c.border.r - c.gutter.r,
+			b: c.contentBoxInset.b - c.border.b - c.gutter.b,
 		})
 	}
 	return overflow

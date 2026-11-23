@@ -62,7 +62,7 @@ var compared = map[string]func(s *style.Computed) string{
 		return strings.Join(parts, ", ")
 	},
 	"text-decoration-skip-ink": func(s *style.Computed) string {
-		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
+		return [...]string{"auto", "none", "all"}[s.SkipInk]
 	},
 	"tab-size": func(s *style.Computed) string {
 		if s.TabSize.Length {
