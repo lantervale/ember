@@ -32,7 +32,7 @@ func read(decl string, opts ...ParseOption) string {
 }
 
 func TestWebkitPropertiesAreReadAsTheirPlainOnes(t *testing.T) {
-	if len(webkit.same) != 74 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 2 {
+	if len(webkit.same) != 73 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 3 {
 		t.Errorf("-webkit-: %d of the same name, %d renamed, %d its own, %d its own read as plain ones",
 			len(webkit.same), len(webkit.renamed), len(webkit.own), len(webkit.legacy))
 	}
@@ -72,12 +72,15 @@ func TestWebkitsOwnPropertiesStayAsWritten(t *testing.T) {
 		}
 	}
 	for _, decl := range []string{"-webkit-font-smoothing: none", "-webkit-line-clamp: 2",
-		"-webkit-box-orient: vertical", "display: -webkit-box", "display: -webkit-inline-box"} {
+		"-webkit-box-orient: vertical", "display: -webkit-box", "display: -webkit-inline-box",
+		"-webkit-box-pack: center", "-webkit-box-align: baseline", "-webkit-box-direction: reverse",
+		"-webkit-box-flex: 1.5", "-webkit-box-ordinal-group: 2"} {
 		if got := read(decl, Browser()); got != decl+" | " {
 			t.Errorf("ui's own: %s", got)
 		}
 	}
-	if got := read("-webkit-box-pack: center", Browser()); !strings.Contains(got, `"-webkit-box-pack" is not supported`) {
+	got := read("-webkit-box-reflect: below", Browser())
+	if !strings.Contains(got, `"-webkit-box-reflect" is not supported`) {
 		t.Errorf("Chrome's own keeps its warning: %s", got)
 	}
 }

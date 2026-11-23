@@ -68,11 +68,19 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
+		b.ContainerScrollState == o.ContainerScrollState &&
+		b.Snap == o.Snap &&
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
+		b.NoEllipsis == o.NoEllipsis &&
 		b.WebkitBox == o.WebkitBox &&
 		b.BoxVertical == o.BoxVertical &&
-		b.WebkitLineClamp == o.WebkitLineClamp
+		b.WebkitLineClamp == o.WebkitLineClamp &&
+		b.BoxPack == o.BoxPack &&
+		b.BoxAlign == o.BoxAlign &&
+		b.BoxReverse == o.BoxReverse &&
+		b.BoxFlex == o.BoxFlex &&
+		b.BoxOrdinal == o.BoxOrdinal
 }
 
 func (g *Grid) equal(o *Grid) bool {
@@ -152,6 +160,8 @@ func (t *Text) equal(o *Text) bool {
 		t.ListStyle == o.ListStyle &&
 		t.ListName == o.ListName &&
 		t.ListImage == o.ListImage &&
+		t.ListGradient.equal(o.ListGradient) &&
+		t.ListInside == o.ListInside &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
 		t.EmptyCellsHide == o.EmptyCellsHide &&

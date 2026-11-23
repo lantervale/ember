@@ -87,7 +87,7 @@ func TestColourPrimitivesChangeEachPixel(t *testing.T) {
 		{"a multiply", `<feFlood flood-color="#ff0" result="y"/><feBlend in="SourceGraphic" in2="y" mode="multiply"/>`,
 			redPx},
 		{"source alpha", `<feMerge><feMergeNode in="SourceAlpha"/></feMerge>`, blackPx},
-		{"a primitive not drawn", `<feTurbulence baseFrequency=".1"/>`, clearPx},
+		{"a lighting with no light", `<feDiffuseLighting/>`, clearPx},
 	} {
 		img := draw(t, `<filter id="f">`+c.filter+`</filter>
 			<rect x="30" y="30" width="40" height="40" fill="red" filter="url(#f)"/>`)
@@ -226,6 +226,74 @@ func TestClipPathsOfBasicShapes(t *testing.T) {
 	expect(t, img, "outside it", 50, 50, clearPx, 0)
 }
 
+func TestAFilterUnderARotationWorksInTheElementsOwnSpace(t *testing.T) {
+	img := draw(t, `<filter id="f" x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="4 0"/></filter>
+		<rect x="30" y="40" width="40" height="20" fill="red" transform="rotate(90 50 50)" filter="url(#f)"/>`)
+	if a := img.RGBAAt(50, 28).A; a == 0 || a == 255 {
+		t.Errorf("blurred along the element's x, now the picture's y: alpha %d past the end", a)
+	}
+	expect(t, img, "not along its y", 38, 50, clearPx, 0)
+	expect(t, img, "the middle", 50, 50, redPx, 2)
+	img = draw(t, `<filter id="f" x="-1" y="-1" width="3" height="3">`+
+		`<feMorphology operator="dilate" radius="6 0"/></filter>
+		<rect x="40" y="40" width="20" height="20" fill="red" transform="rotate(45 50 50)" filter="url(#f)"/>`)
+	expect(t, img, "thickened along the element's x", 60, 60, redPx, 0)
+	expect(t, img, "and not along its y", 40, 60, clearPx, 0)
+	img = draw(t, `<filter id="f" x="0" y="0" width="1" height="1"><feFlood flood-color="blue"/></filter>
+		<rect x="40" y="40" width="20" height="20" fill="red" transform="rotate(45 50 50)" filter="url(#f)"/>`)
+	expect(t, img, "a region turned with it", 50, 37, bluePx, 0)
+	expect(t, img, "its corner", 40, 40, clearPx, 0)
+}
+
+func TestInputsChromeDoesNotDrawAreTheResultBefore(t *testing.T) {
+	for _, name := range []string{"BackgroundImage", "BackgroundAlpha", "FillPaint", "StrokePaint"} {
+		img := draw(t, `<filter id="f" x="-1" y="-1" width="3" height="3"><feOffset dx="10"/>`+
+			`<feMerge><feMergeNode in="`+name+`"/></feMerge></filter>
+			<rect x="30" y="30" width="20" height="20" fill="red" filter="url(#f)"/>`)
+		expect(t, img, name+" after an offset", 55, 40, redPx, 0)
+		expect(t, img, name+" after an offset, moved off", 35, 40, clearPx, 0)
+		img = draw(t, `<filter id="f"><feMerge><feMergeNode in="`+name+`"/></feMerge></filter>
+			<rect x="30" y="30" width="20" height="20" fill="red" stroke="blue" filter="url(#f)"/>`)
+		expect(t, img, name+" first", 40, 40, redPx, 0)
+	}
+}
+
+func TestCSSFunctionsAfterAFilterElementWorkInItsColourSpace(t *testing.T) {
+	const defs = `<filter id="t" x="0" y="0" width="1" height="1"><feOffset/></filter>` +
+		`<filter id="s" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB"><feOffset/></filter>`
+	img := draw(t, defs+`<rect x="0" y="0" width="40" height="40" fill="#c63" style="filter: url(#t) grayscale(1)"/>
+		<rect x="50" y="0" width="40" height="40" fill="#c63" style="filter: url(#s) grayscale(1)"/>
+		<rect x="0" y="50" width="20" height="20" fill="#c63" style="filter: url(#t) drop-shadow(20px 0 0 #036)"/>
+		<rect x="50" y="50" width="20" height="20" fill="#c63"
+			style="filter: url(#t) grayscale(0) drop-shadow(20px 0 0 #036)"/>`)
+	expect(t, img, "grey in linear light", 20, 20, color.RGBA{131, 131, 131, 255}, 1)
+	expect(t, img, "grey in sRGB", 70, 20, color.RGBA{120, 120, 120, 255}, 1)
+	expect(t, img, "a shadow whose colour is taken as linear", 30, 60, color.RGBA{0, 124, 170, 255}, 1)
+	expect(t, img, "after a function after the filter", 80, 60, color.RGBA{0, 124, 170, 255}, 1)
+}
+
+func TestABasicShapesCornersTakeRadiiOfTheirOwn(t *testing.T) {
+	for _, c := range []struct {
+		clip            string
+		round, straight [2]int
+	}{
+		{"inset(0 round 0 20px)", [2]int{68, 31}, [2]int{31, 31}},
+		{"inset(0 round 0 0 20px)", [2]int{68, 68}, [2]int{68, 31}},
+		{"inset(0 round 0 0 0 20px)", [2]int{31, 68}, [2]int{68, 68}},
+		{"inset(0 round 20px 0 0 0)", [2]int{31, 31}, [2]int{31, 68}},
+		{"inset(0 round 0 50% / 0 10%)", [2]int{68, 31}, [2]int{31, 31}},
+		{"xywh(0 0 100% 100% round 40px 0)", [2]int{35, 35}, [2]int{68, 31}},
+	} {
+		img := draw(t, `<rect x="30" y="30" width="40" height="40" fill="red" style="clip-path: `+c.clip+`"/>`)
+		expect(t, img, c.clip+", a round corner", c.round[0], c.round[1], clearPx, 0)
+		expect(t, img, c.clip+", a straight one", c.straight[0], c.straight[1], redPx, 0)
+	}
+	img := draw(t, `<rect x="30" y="30" width="40" height="40" fill="red"
+		style="clip-path: inset(0 round 30px 30px 0 0)"/>`)
+	expect(t, img, "radii past a side are scaled down together", 32, 46, redPx, 0)
+	expect(t, img, "to meet", 31, 31, clearPx, 0)
+}
+
 func TestTextSpacingDecorationsAndPaths(t *testing.T) {
 	width := func(body string) int {
 		img := draw(t, body)
@@ -272,6 +340,16 @@ func TestTextSpacingDecorationsAndPaths(t *testing.T) {
 	}
 	if ink == 0 {
 		t.Error("nothing set along the path")
+	}
+	img = draw(t, `<path id="p" d="M10 50 H90" pathLength="10"/>
+		<text font-size="10" fill="blue"><textPath href="#p" startOffset="5" method="stretch" side="right"
+			spacing="auto">ll</textPath></text>`)
+	for x := range 100 {
+		for y := range 100 {
+			if img.RGBAAt(x, y).A > 0 && (x < 49 || y > 51) {
+				t.Fatalf("an offset of the path's own length, method, side and spacing as Chrome: ink at (%d, %d)", x, y)
+			}
+		}
 	}
 	img = draw(t, `<path id="p" d="M10 50 H20"/>
 		<text font-size="20" fill="blue"><textPath href="#p">mmmmmm</textPath></text>`)

@@ -129,6 +129,9 @@ func (r *restyler) markerOf(n *dom.Node, data, origin *dom.Pipeline, rem float32
 		x := &ctx{c: data.Style, em: data.Style.Font.Size, rem: rem, env: r.env, sized: true, lined: true}
 		st, _ = x.pseudo(r.pm, n, r.sheets, name)
 	}
+	if name == kwMarker {
+		st = r.markerTransit(n, data, st)
+	}
 	if !data.Marker.Equal(st) {
 		data.Marker = st
 		data.Dirty |= dom.DirtyLayout
@@ -153,6 +156,43 @@ func (r *restyler) markerOf(n *dom.Node, data, origin *dom.Pipeline, rem float32
 		data.Dirty |= dom.DirtyLayout
 		origin.Dirty |= dom.DirtyLayout
 	}
+}
+
+// markerTransit keeps the node standing for n's ::marker while st, its
+// style, is set, runs its transitions on it, and returns st with what
+// those on Style set on it; those on what paint reads show in the node's
+// Shown.
+func (r *restyler) markerTransit(n *dom.Node, data *dom.Pipeline, st *style.Computed) *style.Computed {
+	if st == nil {
+		data.MarkerNode = nil
+		return nil
+	}
+	g := data.MarkerNode
+	if g == nil {
+		g = dom.NewGenerated(n, dom.Marker)
+		data.MarkerNode = g
+	}
+	gd := dom.Data(g)
+	old := gd.Style
+	if r.transit != nil && old != nil && (r.transits(g) || anyTransition(st.Transitions)) {
+		if over := r.transit(g, st); len(over) > 0 {
+			c := *st
+			for _, o := range over {
+				o.apply(&c)
+			}
+			st = &c
+		}
+	}
+	if old.Equal(st) {
+		return old
+	}
+	gd.Style = st
+	if r.changed != nil {
+		r.changed(g, old, st)
+	} else {
+		gd.Shown = st
+	}
+	return st
 }
 
 // contentText is the text of content, its pictures left out; counting

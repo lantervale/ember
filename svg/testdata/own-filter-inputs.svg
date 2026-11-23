@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="g"><stop offset="0" stop-color="#c33"/><stop offset="1" stop-color="#36c"/></linearGradient>
+    <filter id="bg"><feOffset dx="3" dy="3"/><feMerge><feMergeNode in="BackgroundImage"/></feMerge></filter>
+    <filter id="ba"><feFlood flood-color="#2a7"/><feComposite in2="BackgroundAlpha" operator="in"/></filter>
+    <filter id="fp"><feMerge><feMergeNode in="FillPaint"/></feMerge></filter>
+    <filter id="sp"><feComposite in="StrokePaint" in2="SourceAlpha" operator="in"/></filter>
+    <filter id="wrap" x="0" y="0" width="1" height="1"><feGaussianBlur stdDeviation="4" edgeMode="wrap"/></filter>
+    <filter id="t" x="0" y="0" width="1" height="1"><feOffset/></filter>
+    <filter id="s" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB"><feOffset/></filter>
+  </defs>
+  <rect x="4" y="4" width="24" height="24" fill="#c33" filter="url(#bg)"/>
+  <rect x="34" y="4" width="24" height="24" fill="#c33" filter="url(#ba)"/>
+  <circle cx="76" cy="16" r="10" fill="url(#g)" stroke="#06c" stroke-width="4" filter="url(#fp)"/>
+  <circle cx="104" cy="16" r="10" fill="#e60" stroke="#06c" stroke-width="4" filter="url(#sp)"/>
+  <g filter="url(#wrap)"><rect x="4" y="40" width="40" height="30" fill="#36c"/><rect x="4" y="40" width="14" height="30" fill="#c33"/></g>
+  <rect x="54" y="40" width="26" height="26" fill="#c63" style="filter: url(#t) grayscale(1)"/>
+  <rect x="88" y="40" width="26" height="26" fill="#c63" style="filter: url(#s) hue-rotate(90deg)"/>
+  <rect x="4" y="80" width="20" height="20" fill="#c63" style="filter: url(#t) drop-shadow(8px 8px 0 #036)"/>
+  <rect x="44" y="80" width="20" height="20" fill="#c63" style="filter: url(#s) drop-shadow(8px 8px 1px #036)"/>
+  <rect x="84" y="80" width="20" height="20" fill="#c63" style="filter: url(#t) invert(.3) drop-shadow(6px 6px 0 #036)"/>
+</svg>

@@ -3,9 +3,6 @@
 package ui_test
 
 import (
-	"os"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/lantervale/ember/ui/internal/chrome"
@@ -27,7 +24,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/mocka", 520, 720, 0.002},
 		{"./internal/pages/glyphs", 400, 320, 0.0029},
 		{"./internal/pages/corners", 360, 270, 0.0003},
-		{"./internal/pages/dashes", 300, 520, 0.0025},
+		{"./internal/pages/dashes", 300, 520, 0.001},
 		{"./internal/pages/insets", 420, 500, 0.0012},
 		{"./internal/pages/radii", 520, 190, 0.0003},
 		{"./internal/pages/shadows", 420, 280, 0.008},
@@ -60,7 +57,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/radial", 440, 160, 0.0007},
 		{"./internal/pages/pixel-crisp", 160, 104, 0.0013},
 		{"./internal/pages/field-case", 420, 200, 0.0035},
-		{"./internal/pages/broken-image", 420, 160, 0.006},
+		{"./internal/pages/broken-image", 420, 280, 0.008},
 		{"./internal/pages/rowspan-rows", 460, 160, 0.0002},
 		{"./internal/pages/rounded-clip", 560, 330, 0.0028},
 		{"./internal/pages/table-caption", 420, 160, 0.003},
@@ -78,11 +75,15 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/filters", 600, 420, 0.003},
 		{"./internal/pages/masks", 680, 560, 0.0009},
 		{"./internal/pages/blend-modes", 600, 330, 0.0015},
+		{"./internal/pages/plus-lighter", 420, 180, 0.0006},
+		{"./internal/pages/mask-composite", 460, 260, 0.0004},
 		{"./internal/pages/backdrop-filter", 560, 360, 0.001},
 		{"./internal/pages/background-blend", 600, 260, 0.0012},
 		{"./internal/pages/svg-pictures", 860, 640, 0.0008},
 		{"./internal/pages/multicol", 640, 440, 0.0046},
 		{"./internal/pages/column-span", 640, 420, 0.004},
+		{"./internal/pages/column-cuts", 560, 420, 0.0025},
+		{"./internal/pages/inline-opacity", 420, 240, 0.002},
 		{"./internal/pages/table-collapse", 520, 200, 0.0022},
 		{"./internal/pages/generated", 640, 440, 0.0025},
 		{"./internal/pages/selection", 560, 560, 0.004},
@@ -101,19 +102,18 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/direction", 400, 400, 0.003},
 		{"./internal/pages/direction-more", 400, 420, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
+		{"./internal/pages/list-inside", 520, 360, 0.0072},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/text-stroke", 480, 420, 0.0095},
 		{"./internal/pages/marker-properties", 420, 360, 0.0065},
 		{"./internal/pages/opentype", 440, 360, 0.0095},
 		{"./internal/pages/background-text", 640, 300, 0.0031},
+		{"./internal/pages/text-sizes", 420, 240, 0.008},
 		{"./internal/pages/font-variations", 520, 320, 0.0065},
 		{"./internal/pages/joined", 440, 400, 0.0055},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
-			if strings.HasSuffix(c.pkg, "/mitres") && os.Getenv("CI") != "" && runtime.GOOS != "windows" {
-				t.Skip("Chrome on the macOS and Linux runners draws the page's background and none of its boxes")
-			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <rect x="15" y="15" width="30" height="30" fill="#c33" stroke="#36c" stroke-width="10" style="mask: linear-gradient(to right, black, transparent)"/>
+  <rect x="75" y="15" width="30" height="30" fill="#c33" stroke="#36c" stroke-width="10" style="mask: linear-gradient(to right, black, transparent) no-repeat"/>
+  <rect x="15" y="75" width="30" height="30" fill="#c33" stroke="#36c" stroke-width="10" style="mask-image: linear-gradient(45deg, black 30%, transparent 30% 60%, black 60%)"/>
+  <rect x="75" y="75" width="30" height="30" fill="#c33" stroke="#36c" stroke-width="10" style="mask-image: radial-gradient(closest-side, black 60%, transparent); mask-origin: stroke-box"/>
+  <rect x="55" y="5" width="10" height="110" fill="#2a7" style="mask-image: repeating-linear-gradient(black 0 6px, transparent 6px 10px)"/>
+  <rect x="2" y="55" width="116" height="10" fill="#93c" style="mask: radial-gradient(ellipse at 30% 50%, white, black) luminance"/>
+</svg>

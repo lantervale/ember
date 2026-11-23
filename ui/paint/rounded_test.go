@@ -107,7 +107,7 @@ func TestADashedOutlineIsDrawnAsADashedBorderOutsideTheBox(t *testing.T) {
 		s.OutlineStyle, s.OutlineWidth, s.OutlineColor = style.BorderDashed, 2, color.RGB(0, 0, 0)
 	})), Scale(1))
 	assert.Empty(t, r.of("border"), "no solid ring")
-	dashes := r.of("rect")
+	dashes := r.of("round")
 	require.NotEmpty(t, dashes)
 	assert.Equal(t, geom.V2(8, 8), geom.V2(dashes[0].Rect.X, dashes[0].Rect.Y), "from the outline's corner")
 }

@@ -86,12 +86,11 @@ type vendor struct {
 
 // Why a -webkit- property is in webkit.own.
 const (
-	ownChrome  = "Chrome's own, with no plain property"
-	ownUI      = "a property of ui under this very name"
-	ownOldFlex = "the old flexbox of display: -webkit-box, with no plain property"
-	ownAxis    = "one axis of the plain property, which has no such longhand"
-	ownMask    = "Chrome's own masks, kept apart from mask and its longhands"
-	ownBreak   = "takes always, which the break-* property it sets refuses"
+	ownChrome = "Chrome's own, with no plain property"
+	ownUI     = "a property of ui under this very name"
+	ownAxis   = "one axis of the plain property, which has no such longhand"
+	ownMask   = "Chrome's own masks, kept apart from mask and its longhands"
+	ownBreak  = "takes always, which the break-* property it sets refuses"
 )
 
 // webkit is -webkit-, the prefix Chrome itself reads. Its property tables
@@ -112,7 +111,7 @@ var webkit = vendor{
 		border-top-right-radius box-shadow box-sizing clip-path column-count column-gap column-rule
 		column-rule-color column-rule-style column-rule-width column-span column-width columns filter flex
 		flex-basis flex-direction flex-flow flex-grow flex-shrink flex-wrap font-feature-settings
-		hyphenate-character justify-content mask-clip mask-composite mask-image mask-origin mask-repeat mask-size
+		hyphenate-character justify-content mask-clip mask-image mask-origin mask-repeat mask-size
 		opacity order
 		perspective perspective-origin print-color-adjust shape-image-threshold shape-margin shape-outside
 		text-emphasis text-emphasis-color text-emphasis-position text-emphasis-style text-size-adjust transform
@@ -140,8 +139,8 @@ var webkit = vendor{
 		"font-smoothing": ownUI, "text-fill-color": ownUI, "text-stroke": ownUI, "text-stroke-color": ownUI,
 		"text-stroke-width": ownUI,
 		"border-image":      "fills the middle without the fill word, where border-image leaves it empty",
-		"box-align":         ownOldFlex, "box-direction": ownOldFlex, "box-flex": ownOldFlex,
-		"box-ordinal-group": ownOldFlex, "box-orient": ownUI, "box-pack": ownOldFlex,
+		"box-align":         ownUI, "box-direction": ownUI, "box-flex": ownUI,
+		"box-ordinal-group": ownUI, "box-orient": ownUI, "box-pack": ownUI,
 		"mask-box-image": ownMask, "mask-box-image-outset": ownMask,
 		"mask-box-image-repeat": ownMask, "mask-box-image-slice": ownMask, "mask-box-image-source": ownMask,
 		"mask-box-image-width": ownMask, "mask-position-x": ownMask, "mask-position-y": ownMask,
@@ -155,13 +154,10 @@ var webkit = vendor{
 		"user-drag": ownChrome, "user-modify": ownChrome, "writing-mode": ownChrome,
 	},
 	legacy: map[string]string{
-		"mask":          "a shorthand of Chrome's own longhands, which take three-value positions and refuse no-clip",
+		"mask": "a shorthand of Chrome's own longhands, which take three-value positions and refuse no-clip",
+		"mask-composite": "takes the compositing operators (copy, destination-in…), which mask-composite keeps " +
+			"as written",
 		"mask-position": "a shorthand of -webkit-mask-position-x and -y, which take three-value positions",
-	},
-	// Chrome reads -webkit-mask-composite's compositing words, the four
-	// that are mask-composite's as theirs; the others stay refused.
-	words: map[string]map[string]string{
-		"mask-composite": {"source-over": "add", "source-in": "intersect", "source-out": "subtract", "xor": "exclude"},
 	},
 	// Safari's and old Chrome's (-webkit-touch-callout,
 	// -webkit-overflow-scrolling…): today's Chrome knows none of them.

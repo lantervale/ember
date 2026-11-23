@@ -124,8 +124,8 @@ func TestSpacesAtLineEdgesMatchChrome(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := chrome.Match(t, d, geom.V2(800, 600))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
-			matchText(t, d, geom.V2(800, 600), 0.5)
-			matchSpanFragments(t, d, geom.V2(800, 600), 0.5)
+			matchText(t, d, geom.V2(800, 600))
+			matchSpanFragments(t, d, geom.V2(800, 600))
 		})
 	}
 }

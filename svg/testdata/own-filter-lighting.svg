@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <filter id="emboss"><feGaussianBlur in="SourceAlpha" stdDeviation="2"/><feDiffuseLighting surfaceScale="4" lighting-color="#fc8"><feDistantLight azimuth="225" elevation="40"/></feDiffuseLighting><feComposite in2="SourceAlpha" operator="in"/></filter>
+    <filter id="shine"><feGaussianBlur in="SourceAlpha" stdDeviation="2"/><feSpecularLighting surfaceScale="3" specularExponent="12"><fePointLight x="10" y="50" z="30"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/><feComposite in="SourceGraphic" operator="arithmetic" k2="1" k3="1"/></filter>
+    <filter id="spot" x="0" y="0" width="1" height="1"><feDiffuseLighting><feSpotLight x="20" y="0" z="40" pointsAtX="40" pointsAtY="50" specularExponent="4" limitingConeAngle="30"/></feDiffuseLighting></filter>
+    <filter id="point" x="0" y="0" width="1" height="1"><feDiffuseLighting lighting-color="#8cf" diffuseConstant="1.2"><fePointLight x="90" y="90" z="20"/></feDiffuseLighting></filter>
+    <filter id="bevel" primitiveUnits="objectBoundingBox"><feGaussianBlur in="SourceAlpha" stdDeviation=".05"/><feSpecularLighting surfaceScale="5" specularConstant=".8" specularExponent="20" lighting-color="#ffe"><fePointLight x=".2" y="-.2" z=".5"/></feSpecularLighting><feComposite in2="SourceAlpha" operator="in"/><feComposite in="SourceGraphic" operator="arithmetic" k2="1" k3="1"/></filter>
+  </defs>
+  <circle cx="22" cy="22" r="16" fill="#c33" filter="url(#emboss)"/>
+  <circle cx="22" cy="60" r="16" fill="#36c" filter="url(#shine)"/>
+  <rect x="44" y="4" width="72" height="52" filter="url(#spot)"/>
+  <rect x="64" y="64" width="52" height="52" filter="url(#point)"/>
+  <rect x="4" y="84" width="50" height="30" rx="8" fill="#2a7" filter="url(#bevel)"/>
+</svg>

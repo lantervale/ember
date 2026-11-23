@@ -8,8 +8,8 @@ an `img`, at 256×256 on white and on grey, 48×48 and 200×120; `chrome.txt` ho
 
 Written for ember in this repository and given to the public domain under
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): every `own-*.svg`, and the pictures their `data:`
-addresses hold. `own-text.svg`, `own-texts.svg` and `own-text-spacing.svg` are set in Go's faces where Chrome sets them in its own, so their
-thresholds are what the other letters cost.
+addresses hold. `own-text.svg`, `own-texts.svg`, `own-text-spacing.svg` and `own-text-path-length.svg` are set in
+Go's faces where Chrome sets them in its own, so their thresholds are what the other letters cost.
 
 ## From others
 

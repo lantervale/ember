@@ -697,6 +697,12 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 				of = nil
 				continue
 			}
+			if a, ok := s.spaceAdvance(ch.first(), r, f.Size); ok {
+				flush()
+				of = nil
+				w += a
+				continue
+			}
 			c = ch.base
 		}
 		if c != of {

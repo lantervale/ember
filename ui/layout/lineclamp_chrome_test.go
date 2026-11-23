@@ -80,6 +80,8 @@ p { margin: 4px 0 } .three { line-clamp: 3 } .s { height: 10px; padding: 5px }`
 			ui.Div(ui.Class("c"), ui.P(ui.Text("first")), ui.P(ui.Text("second")))),
 		"sizes of its own": styled(sheet, ui.Div(ui.Class("c", "s"), ui.Text(long)),
 			ui.Div(ui.Class("c"), ui.Style("display: inline-block"), ui.Text(long))),
+		"no ellipsis": styled(sheet+` .n { line-clamp: 2 no-ellipsis } .k { line-clamp: no-ellipsis 2 }`,
+			ui.Div(ui.Class("c", "n"), ui.Span(ui.Text(long))), ui.Div(ui.Class("c", "k"), ui.Text(long))),
 	}
 	for name, d := range cases {
 		t.Run(name, func(t *testing.T) {
