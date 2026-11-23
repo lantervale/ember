@@ -69,6 +69,7 @@ const (
 	propFontWeight           = "font-weight"
 	propFontStyle            = "font-style"
 	propFontStretch          = "font-stretch"
+	propFontVariations       = "font-variation-settings"
 	propBreakInside          = "break-inside"
 	propWidth                = "width"
 	propHeight               = "height"

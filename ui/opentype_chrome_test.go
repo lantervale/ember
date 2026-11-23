@@ -91,3 +91,26 @@ func TestAFacesFeatureSettingsShapeItsTextAsInChrome(t *testing.T) {
 		[2]string{"font-family: Capitals, monospace; font-variant-ligatures: common-ligatures", "office"},
 	)
 }
+
+func TestAVariableFaceIsShapedAtItsInstanceAsInChrome(t *testing.T) {
+	featured(t, `
+@font-face { font-family: Varied; src: url(features-variable.ttf); font-weight: 100 900; font-stretch: 50% 150%; }
+.varied { font-family: Varied, monospace; }`,
+		[2]string{"font-family: Varied, monospace; font-weight: 800", "office affinity AVATAR To"},
+		[2]string{"font-family: Varied, monospace; font-weight: 300; font-stretch: 130%", "office AVATAR"},
+		[2]string{`font-family: Varied, monospace; font-variation-settings: "wght" 650`, "Small Caps office"},
+		[2]string{"font-family: Varied, monospace; font-weight: 700; font-variant-caps: all-small-caps",
+			"All Small 1/2"},
+		[2]string{"font-family: Varied, monospace; font-weight: 700; font-variant-numeric: tabular-nums",
+			"0123 1010"},
+	)
+}
+
+func TestRealSmallCapitalsIgnoreFontSynthesisAsInChrome(t *testing.T) {
+	featured(t, "",
+		[2]string{"font-variant-caps: small-caps; font-synthesis: none", "Real Small Caps"},
+		[2]string{"font-variant-caps: all-small-caps; font-synthesis: weight style", "Real Small Caps"},
+		[2]string{"font-variant-caps: unicase; font-synthesis: none", "Unicase Text"},
+		[2]string{"font-variant-caps: small-caps; font-synthesis: none; font-family: Go, monospace", "Left As It Is"},
+	)
+}

@@ -1516,6 +1516,11 @@ var (
 		"inset": style.BorderInset, "outset": style.BorderOutset,
 		"groove": style.BorderGroove, "ridge": style.BorderRidge, "double": style.BorderDouble,
 	}
+	outlineStyles = func() map[string]style.BorderStyle {
+		m := maps.Clone(borderStyles)
+		m["auto"] = style.BorderAuto
+		return m
+	}()
 	overflows = map[string]style.Overflow{
 		"visible": style.Visible, "hidden": style.Hidden, "clip": style.Clip,
 		"scroll": style.Scroll, "auto": style.OverflowAuto,
@@ -1845,17 +1850,24 @@ var props = func() map[string]prop {
 			}, numbers(0, math.MaxFloat32)),
 		"font-synthesis": field(func(c *style.Computed) *style.FontSynthesis { return &c.Font.Synthesis },
 			func(_ *ctx, v []Component) style.FontSynthesis {
-				no := style.NoSyntheticBold | style.NoSyntheticItalic
+				no := style.NoSyntheticBold | style.NoSyntheticItalic | style.NoSyntheticSmallCaps
 				for _, c := range v {
 					switch {
 					case isWord(c, "weight"):
 						no &^= style.NoSyntheticBold
 					case isWord(c, "style"):
 						no &^= style.NoSyntheticItalic
+					case isWord(c, "small-caps"):
+						no &^= style.NoSyntheticSmallCaps
 					}
 				}
 				return no
 			}, flips[style.FontSynthesis]()),
+		propFontVariations: field(func(c *style.Computed) *[]style.FontVariation { return &c.Font.Variations },
+			func(_ *ctx, v []Component) []style.FontVariation {
+				out, _ := fontVariations(v)
+				return out
+			}, flips[[]style.FontVariation]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {
@@ -2148,7 +2160,7 @@ var props = func() map[string]prop {
 		"box-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.Shadows },
 			(*ctx).shadows, shadows).painted(),
 		"outline-width": field(func(c *style.Computed) *float32 { return &c.OutlineWidth }, borderWidthOf, widths),
-		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, borderStyles),
+		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, outlineStyles),
 		"outline-color": currentField(style.OutlineCurrent,
 			func(c *style.Computed) *color.Color { return &c.OutlineColor }).painted(),
 		"outline-offset": field(func(c *style.Computed) *float32 { return &c.OutlineOffset },

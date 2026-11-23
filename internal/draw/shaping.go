@@ -123,7 +123,13 @@ func (f *Font) shapeRun(face int, run []pending, script shape.Tag, features stri
 	}
 	shaped := f.shaped(p, glyphs)
 	scale := f.size * f.looks[face].scale() / float32(f.sources[face].UnitsPerEm())
+	v := f.looks[face].varied()
 	for i, sg := range shaped {
+		advance := float32(sg.Advance)
+		if v != nil {
+			// GPOS's values stay the default instance's; the advance is the instance's.
+			advance += v.Font.Advance(sg.ID, v.Coords) - v.Font.Advance(sg.ID, nil)
+		}
 		c := run[sg.Cluster]
 		next := int32(len(run)) //nolint:gosec // a run of a line
 		if i+1 < len(shaped) {
@@ -131,7 +137,7 @@ func (f *Font) shapeRun(face int, run []pending, script shape.Tag, features stri
 		}
 		fn(item{
 			r: c.r, g: c.g, shaped: sg.ID != uint16(c.g.idx), idx: sfnt.GlyphIndex(sg.ID),
-			advance:  float32(sg.Advance) * scale,
+			advance:  advance * scale,
 			offset:   geom.V2(float32(sg.XOffset)*scale, -float32(sg.YOffset)*scale),
 			clusters: max(int(next-sg.Cluster), 0),
 		})

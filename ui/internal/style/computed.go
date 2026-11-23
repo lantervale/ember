@@ -392,6 +392,16 @@ type Font struct {
 	// font-variant's longhands but its capitals, font-kerning,
 	// letter-spacing and font-feature-settings, in that order.
 	Features string
+	// Variations are font-variation-settings' axes, in order, a later
+	// one of a tag winning; none for normal.
+	Variations []FontVariation
+}
+
+// FontVariation is a place on one axis of a variable font: a tag, such
+// as "wght", and a value in the axis's units.
+type FontVariation struct {
+	Tag   string
+	Value float32
 }
 
 // FontSynthesis is the faces font-synthesis forbids making up from
@@ -404,6 +414,9 @@ const (
 	NoSyntheticBold FontSynthesis = 1 << iota
 	// NoSyntheticItalic leaves an italic the family lacks upright.
 	NoSyntheticItalic
+	// NoSyntheticSmallCaps leaves the small capitals font-variant-caps
+	// asks for drawn as the letters are.
+	NoSyntheticSmallCaps
 )
 
 // LineHeight is normal, a factor of the font size, or points.
@@ -798,6 +811,9 @@ const (
 	// BorderDouble draws a side as two solid lines, each about a third of
 	// its width, and solid where it is too thin to show the gap.
 	BorderDouble
+	// BorderAuto is outline-style: auto, the focus ring; a border never
+	// takes it.
+	BorderAuto
 )
 
 // Shadow is one box-shadow.

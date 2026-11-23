@@ -9,6 +9,7 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	"github.com/lantervale/ember/internal/shape"
+	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -40,12 +41,27 @@ func (c *Face) layout() *shape.Font {
 // joined is features with the face's own among them (shape.Splice).
 func (c *Face) joined(features string) string { return shape.Splice(features, c.Look.Features) }
 
-// shaped is the advance of run, glyphs of c, in c's units: shaped with
-// the features, in script, when its layout does anything to them,
-// else the sum of their advances.
-func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph) int32 {
+// shapedRun is a run shaped: its width in its face's units at the
+// default instance, and the glyphs it is drawn with.
+type shapedRun struct {
+	width  int32
+	glyphs []uint16
+}
+
+// shaped is the advance of run, glyphs of c, in c's units at instance
+// at of a variable font (nil for its default): shaped with the
+// features, in script, when its layout does anything to them, else the
+// sum of their advances. GPOS's values stay the default instance's.
+func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph, at varfont.Coords) float32 {
 	p := c.layout().Plan(script, c.joined(features))
 	if !p.Touches(run) {
+		if at != nil {
+			var w float32
+			for _, g := range run {
+				w += c.web.vf.Advance(g.ID, at)
+			}
+			return w
+		}
 		ppem := fixed.I(int(c.upem))
 		var w fixed.Int26_6
 		for _, g := range run {
@@ -53,28 +69,34 @@ func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Gly
 				w += a
 			}
 		}
-		return int32(w >> 6)
+		return float32(w >> 6)
 	}
 	ids := s.ids[:0]
 	for _, g := range run {
 		ids = append(ids, byte(g.ID>>8), byte(g.ID&0xff))
 	}
 	s.ids = ids
-	if w, ok := s.shapedRuns[p][string(ids)]; ok {
-		return w
+	r, ok := s.shapedRuns[p][string(ids)]
+	if !ok {
+		for _, g := range p.Shape(run) {
+			r.width += g.Advance
+			r.glyphs = append(r.glyphs, g.ID)
+		}
+		if s.shapedRuns == nil || s.shapedCount >= maxShaped {
+			s.shapedRuns, s.shapedCount = map[*shape.Plan]map[string]shapedRun{}, 0
+		}
+		if s.shapedRuns[p] == nil {
+			s.shapedRuns[p] = map[string]shapedRun{}
+		}
+		s.shapedRuns[p][string(ids)] = r
+		s.shapedCount++
 	}
-	var w int32
-	for _, g := range p.Shape(run) {
-		w += g.Advance
+	w := float32(r.width)
+	if at != nil {
+		for _, g := range r.glyphs {
+			w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
+		}
 	}
-	if s.shapedRuns == nil || s.shapedCount >= maxShaped {
-		s.shapedRuns, s.shapedCount = map[*shape.Plan]map[string]int32{}, 0
-	}
-	if s.shapedRuns[p] == nil {
-		s.shapedRuns[p] = map[string]int32{}
-	}
-	s.shapedRuns[p][string(ids)] = w
-	s.shapedCount++
 	return w
 }
 
@@ -167,6 +189,10 @@ func (s *Set) Caps(f style.Font, text string) style.Font {
 	switch {
 	case feats == "":
 		return f
+	case f.Caps == style.Unicase && feats != "unic" && f.Synthesis&style.NoSyntheticSmallCaps != 0:
+		// Nothing made up: the lowercase takes the face's small capitals,
+		// as Chrome draws it.
+		feats = "smcp"
 	case f.Caps == style.Unicase && feats != "unic":
 		// What is not lowercase takes them, the rest as it is (SmallCaps).
 		f.Caps = style.UnicaseFeatures

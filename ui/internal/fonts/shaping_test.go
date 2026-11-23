@@ -9,8 +9,26 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/internal/draw"
+	"github.com/lantervale/ember/internal/varfont/varfonttest"
 	"github.com/lantervale/ember/ui/internal/style"
 )
+
+func TestAVariableFaceIsShapedAtItsInstance(t *testing.T) {
+	s, featuredTTF := featured(t)
+	ttf := varfonttest.Build(varfonttest.Options{Source: featuredTTF})
+	loaded(t, s, Descriptors{Family: "Varied", Weight: 400, WeightMax: 400, AutoWeight: true,
+		Stretch: 100, StretchMax: 100, AutoStretch: true}, ttf)
+	plain := style.Font{Family: []string{"Varied"}, Size: 20, Weight: 400}
+	bold := plain
+	bold.Weight = 900
+	unshaped := bold
+	unshaped.Features = "-liga"
+	// office is o, ffi, c, e shaped: four glyphs, each grown on either side.
+	grown := float32(2 * varfonttest.Bolder * 20.0 / 2048)
+	assert.InDelta(t, s.Advance(plain, "office")+4*grown, s.Advance(bold, "office"), 1e-3)
+	assert.InDelta(t, s.Advance(unshaped, "office")-units(569+569+505-1383, 20)-2*grown, s.Advance(bold, "office"),
+		1e-3, "the ligature, at the instance")
+}
 
 // featured is the builtin set with Featured, Go with ligatures, small
 // capitals, figures and kerning (internal/shape/testdata).

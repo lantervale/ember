@@ -34,6 +34,15 @@ type Face struct {
 	// Stretch is the width the face is of, as a percentage of the normal
 	// one, to StretchMax for a variable font's; 0 for 100.
 	Stretch, StretchMax float32
+	// AutoWeight and AutoStretch are a face of an @font-face that gives
+	// no weight or width: normal, or a variable font's own.
+	AutoWeight, AutoStretch bool
+	// Display is how the face of the web shows while its file is on its
+	// way, period where it is in it, and expired whether it is past its
+	// swap period without its file.
+	Display Display
+	period  period
+	expired bool
 	// Ranges are the characters the face draws, all without any.
 	Ranges []Range
 	// Look is how its @font-face has the face measured and drawn.
@@ -63,7 +72,7 @@ type Set struct {
 	// shapedRuns are the widths of runs shaped so far, by plan and
 	// glyphs, shapedCount of them; run and ids are the glyphs of the run
 	// being measured.
-	shapedRuns  map[*shape.Plan]map[string]int32
+	shapedRuns  map[*shape.Plan]map[string]shapedRun
 	shapedCount int
 	run         []shape.Glyph
 	ids         []byte
@@ -319,7 +328,7 @@ func (s *Set) advance(f style.Font, text string) float32 {
 	}
 	c := s.Face(f)
 	script := shape.Script(text)
-	var w int32
+	var w float32
 	var other float32
 	run := s.run[:0]
 	for i, r := range text {
@@ -330,16 +339,16 @@ func (s *Set) advance(f style.Font, text string) float32 {
 		if g == 0 {
 			if a, ok := s.fallbackAdvance(c, r, f.Size); ok {
 				other += a
-				w += s.shaped(c, script, f.Features, run)
+				w += s.shaped(c, script, f.Features, run, nil)
 				run = run[:0]
 				continue
 			}
 		}
 		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i)}) //nolint:gosec // a glyph index and a text offset
 	}
-	w += s.shaped(c, script, f.Features, run)
+	w += s.shaped(c, script, f.Features, run, nil)
 	s.run = run
-	return float32(w)*f.Size/c.upem + other
+	return w*f.Size/c.upem + other
 }
 
 // Fallback is the face that draws what a face lacks: Go Mono, whose

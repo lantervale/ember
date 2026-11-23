@@ -12,9 +12,7 @@ Each one is either closed or kept on purpose, with its reason, before M3.
 |---|---|---|---|
 | Elliptical corners (`border-radius: a / b`) | each corner is round, the smaller of its two radii; corners differ freely (pixel case `internal/pages/radii`) | an elliptical corner shape in the shader | open |
 | Group `opacity` | multiplies the alpha of every colour in the subtree, so overlapping children show through each other | drawing the subtree into a pass and compositing it once | open |
-| `border-style: dashed` and `dotted` on a rounded box | square boxes are dashed and dotted as Chrome lays them (pixel case `internal/pages/dashes`); a rounded box's dashed or dotted border is drawn solid | dashes along the corner arcs | open |
 | Antialiasing of a rounded inset shadow's outer arc | the shadow is clipped to the rounded padding box by polygon, so its arc edge is hard; a border drawn over it usually hides it (pixel case `internal/pages/insets`) | coverage at the arc, or a rounded clip | open |
-| Rounded border with sides that differ | square rects, one per side, ignoring the radius | per-side strokes of the rounded outline | open |
 | Clips of hoisted positioned descendants | every ancestor's overflow clip applies, including those outside their containing block | clipping only by the ancestors up to the containing block | open |
 | Sharp shadow under a translucent rounded box | blurred shadows and sharp ones of square boxes are clipped to outside the border box as Chrome's (pixel case `internal/pages/insets`); a sharp shadow of a rounded box is one fill that shows through it | the sharp shadow as a mesh clipped by the rounded border box | open |
 | Caret blink restarts on a move | the caret blinks on the half-second from `Time`, as the old ember/ui's did, even mid-typing | the caret's last move from the control | open |
