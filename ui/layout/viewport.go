@@ -46,11 +46,16 @@ func (t *tree) viewportOf(root *dom.Node) *style.Computed {
 // viewport lays the root out in a viewport of size whole that scrolls, st its
 // style: in what its scrollbars leave of it, the initial containing block,
 // an overflow: auto bar taking its room once the page overflows that way
-// and the root laid out again, as fitGutter does a box's. It returns the
-// bars' room and the size of what scrolls.
-func (t *tree) viewport(n *node, whole size, st *style.Computed) (size, size) {
+// and the root laid out again, as fitGutter does a box's. A root of a
+// vertical writing mode is laid out across it. It returns the bars' room,
+// the size of what scrolls and where its scrolling starts: below zero on
+// the side the root's blocks or lines start from when that is the right or
+// the bottom, as Chrome's.
+func (t *tree) viewport(n *node, whole size, st *style.Computed) (size, size, point) {
 	always := scrollbarGutter(st)
+	mode := frameOf(n)
 	var auto, content size
+	var start point
 	if t.keep != nil {
 		auto = t.keep.viewportGutter
 	}
@@ -58,8 +63,13 @@ func (t *tree) viewport(n *node, whole size, st *style.Computed) (size, size) {
 		port := whole
 		port.w = fmax(port.w-always.x-auto.w, 0)
 		port.h = fmax(port.h-always.y-auto.h, 0)
-		t.root(n, spaces{def(port.w), def(port.h)})
-		content = scrollable(n, port)
+		t.icb = port
+		if mode.Vertical() {
+			t.root(n, spaces{def(port.h), def(port.w)})
+		} else {
+			t.root(n, spaces{def(port.w), def(port.h)})
+		}
+		content, start = scrollable(n, port, mode)
 		if pass == 2 || !fitViewport(st, &auto, content, port) {
 			break
 		}
@@ -68,7 +78,7 @@ func (t *tree) viewport(n *node, whole size, st *style.Computed) (size, size) {
 	if t.keep != nil {
 		t.keep.viewportGutter = auto
 	}
-	return size{always.x + auto.w, always.y + auto.h}, content
+	return size{always.x + auto.w, always.y + auto.h}, content, start
 }
 
 // unique is ns without the nodes that come twice, as laying the root out
@@ -83,11 +93,16 @@ func unique(ns []*node) []*node {
 	return out
 }
 
-// scrollable is the size of what a viewport showing port of the root n
-// scrolls: port, or as far right and down as the root's margin box, what
-// overflows the root, and the absolute boxes the initial containing block
-// placed reach. A fixed box stays in the viewport and adds nothing.
-func scrollable(n *node, port size) size {
+// scrollable is the size of what a viewport showing port of the root n, laid
+// out in the frame of mode, scrolls and where it starts on the page: port, or
+// as far as the root's margin box, what overflows the root, and the absolute
+// boxes the initial containing block placed reach towards the end of its
+// lines and blocks. A fixed box stays in the viewport and adds nothing.
+func scrollable(n *node, port size, mode style.WritingMode) (size, point) {
+	in := port
+	if mode.Vertical() {
+		in = port.across()
+	}
 	u := n.unrounded
 	at := u.location
 	r := at.x + u.size.w + fmax(u.margin.r, 0)
@@ -102,7 +117,8 @@ func scrollable(n *node, port size) size {
 		r = fmax(r, at.x+hu.location.x+hu.size.w+fmax(hu.margin.r, 0))
 		b = fmax(b, at.y+hu.location.y+hu.size.h+fmax(hu.margin.b, 0))
 	}
-	return size{fmax(port.w, r), fmax(port.h, b)}
+	page := turnRect(geom.Rect{W: fmax(in.w, r), H: fmax(in.h, b)}, in, mode)
+	return size{page.W, page.H}, point{fmin(page.X, 0), fmin(page.Y, 0)}
 }
 
 // fitViewport reports whether the viewport's overflow: auto bars no longer
@@ -129,8 +145,8 @@ func fitViewport(st *style.Computed, auto *size, content, port size) bool {
 
 // viewportBox is the box of the viewport, holding the root's: a scroll
 // container of size whole, whose Node is the root element, which keeps its
-// scroll offset.
-func (t *tree) viewportBox(root *box.Box, st *style.Computed, whole, gutter, content size) *box.Box {
+// scroll offset, scrolling from start.
+func (t *tree) viewportBox(root *box.Box, st *style.Computed, whole, gutter, content size, start point) *box.Box {
 	b := &box.Box{}
 	if t.keep != nil {
 		if t.keep.viewport == nil {
@@ -140,9 +156,10 @@ func (t *tree) viewportBox(root *box.Box, st *style.Computed, whole, gutter, con
 	}
 	*b = box.Box{
 		Kind: box.Viewport, Node: root.Node, Style: st, Children: b.Children[:0],
-		Size:      geom.Vec2{X: whole.w, Y: whole.h},
-		Content:   geom.Vec2{X: content.w, Y: content.h},
-		Scrollbar: geom.Vec2{X: gutter.w, Y: gutter.h},
+		Size:        geom.Vec2{X: whole.w, Y: whole.h},
+		Content:     geom.Vec2{X: content.w, Y: content.h},
+		ScrollStart: geom.Vec2{X: start.x, Y: start.y},
+		Scrollbar:   geom.Vec2{X: gutter.w, Y: gutter.h},
 	}
 	b.Append(root)
 	return b

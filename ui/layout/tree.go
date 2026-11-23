@@ -51,6 +51,8 @@ type Retained struct {
 	anchors *anchoring
 	// turns are the styles the last layout turned into vertical frames.
 	turns map[turnKey]*style.Computed
+	// rootStyles is the root's style as the last layout took it.
+	rootStyles rootStyles
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -139,20 +141,21 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 		t.prevTurns = k.turns
 		defer func() { k.turns = t.turns }()
 	}
-	t.icb = avail.values()
+	t.icb, t.rootEl = avail.values(), root
 	r := t.build(root, nil)
 	defer t.sweep()
 	if r == nil {
 		return t.out, nil, t
 	}
 	port := t.viewportOf(root)
-	if !avail.values().both() || frameOf(r).Vertical() {
+	if !avail.values().both() {
 		port = nil
 	}
 	var gutter, content size
+	var start point
 	switch {
 	case port != nil:
-		gutter, content = t.viewport(r, avail.values(), port)
+		gutter, content, start = t.viewport(r, avail.values(), port)
 	case frameOf(r).Vertical():
 		// the initial containing block takes the root's writing mode
 		t.root(r, avail.across())
@@ -168,7 +171,7 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 	t.write(r, nil)
 	r.box.Parent = nil
 	if port != nil {
-		t.out.Root = t.viewportBox(r.box, port, avail.values(), gutter, content)
+		t.out.Root = t.viewportBox(r.box, port, avail.values(), gutter, content, start)
 	}
 	t.out.Live, t.out.Applied = t.out.Live[:0], t.out.Applied[:0]
 	collectLive(t.out.Root, t.out)
@@ -238,6 +241,10 @@ type tree struct {
 	// those of the last, which it takes again; icb is the initial containing block.
 	turns, prevTurns map[turnKey]*style.Computed
 	icb              size
+	// rootEl is the root element, and rootStyles its style with its body's
+	// writing mode and direction, outside a retained layout.
+	rootEl     *dom.Node
+	rootStyles rootStyles
 }
 
 type context uint8
@@ -400,6 +407,48 @@ func styleOf(n *dom.Node) *style.Computed {
 	return &s
 }
 
+// styleFor is e's style as layout takes it: the root's with the writing mode
+// and direction of its body, as CSS Writing Modes has the root use them, one
+// copy while the two styles are the same.
+func (t *tree) styleFor(e *dom.Node) *style.Computed {
+	st := styleOf(e)
+	if e != t.rootEl {
+		return st
+	}
+	body := bodyOf(e)
+	if body == nil {
+		return st
+	}
+	b := styleOf(body)
+	if b.Mode == st.Mode && b.Dir == st.Dir {
+		return st
+	}
+	k := &t.rootStyles
+	if t.keep != nil {
+		k = &t.keep.rootStyles
+	}
+	if k.own != st || k.on.Mode != b.Mode || k.on.Dir != b.Dir {
+		c := *st
+		c.Mode, c.Dir = b.Mode, b.Dir
+		k.own, k.on = st, &c
+	}
+	return k.on
+}
+
+// rootStyles holds the root's style own as on, with its body's writing mode and
+// direction.
+type rootStyles struct{ own, on *style.Computed }
+
+// bodyOf is root's first body child, nil for none.
+func bodyOf(root *dom.Node) *dom.Node {
+	for _, c := range root.Children() {
+		if !c.IsText() && c.Tag() == dom.Body {
+			return c
+		}
+	}
+	return nil
+}
+
 // build makes the node of an element and its subtree, nil for display: contents (whose
 // children the parent takes).
 func (t *tree) build(e *dom.Node, parent *node) *node {
@@ -452,8 +501,8 @@ func (t *tree) kept(e *dom.Node, parent *node) *node {
 		return nil
 	}
 	d := dom.Data(e)
-	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.box.Style != d.Style ||
-		n.st != t.turned(styleOf(e), outerFrame(parent, styleOf(e))) || !e.SameFlow(n.children) {
+	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.box.Style != t.styleFor(e) ||
+		n.st != t.turned(t.styleFor(e), outerFrame(parent, t.styleFor(e))) || !e.SameFlow(n.children) {
 		return nil
 	}
 	return n
@@ -463,7 +512,7 @@ func (t *tree) kept(e *dom.Node, parent *node) *node {
 // again with its box and emptied, when e itself is unchanged and only something under it
 // did, else a new one.
 func (t *tree) element(e *dom.Node, parent *node) *node {
-	st := styleOf(e)
+	st := t.styleFor(e)
 	old := t.prevNodes[e]
 	if n := old; n != nil && n.box.Style == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
 		e.SameFlow(n.children) {
