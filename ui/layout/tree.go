@@ -250,10 +250,10 @@ type node struct {
 	// the same, in its own, which it lays its content out with (turnedLayout); across is
 	// set when the two frames' lines run on other axes, and inside while its own layout
 	// runs.
-	st                    *style.Computed
-	inner                 *style.Computed
-	across, inside        bool
-	kids                  []*node
+	st             *style.Computed
+	inner          *style.Computed
+	across, inside bool
+	kids           []*node
 	// inline is the text the node lays out in lines, when its content is inline.
 	inline *inlineContent
 
