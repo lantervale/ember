@@ -18,7 +18,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
-| `initial-letter` | refused with a warning, where Chrome sizes and sinks the first letter by lines: float a `::first-letter` for a drop cap |
+| `initial-letter` on an element (the first inline child of a block), `initial-letter-align`, and a drop cap in vertical text | not read: only a `::first-letter` is made a drop cap, its letter's ink measured in its first face |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
 | a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
 | a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
@@ -120,7 +120,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
 | a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
 | `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |
-| a `url()` filter, in `filter` or `backdrop-filter`, to an inline `svg` element's `filter` | refused with a warning: the svg package runs the filter for an SVG picture (decision 0150), not over an element's picture |
+| in a `filter` element named by `url(#id)` on an element: `feTile`, the `k1` term of `feComposite`'s arithmetic, and the primitives the svg package does not draw | a clear result, `k1` left out ([0165](../99-decisions/0165-a-filter-element-runs-on-the-gpu-over-an-elements-picture-and-a-drop-cap-is-a-trimmed-float.md)) |
+| a `filter` element named by `url(#id)` whose region reaches past a tenth of the element's box round it | drawn, but the element is culled by its box grown by a tenth, as the default region: scrolled almost out of view, what lies past that is not drawn |
+| a `url(#id)` filter's steps in linear light | each picture between them is 8 bits a channel, so the darks band a little where Chrome's stay smooth |
 | `mix-blend-mode: plus-lighter` over a backdrop seen through | added in encoded colours and drawn over the backdrop as the colour and alpha that make the sum: exact on an opaque backdrop, near it where the backdrop is translucent |
 | a backdrop filter inside an isolated group that is no backdrop root (`isolation: isolate`, a `z-index` holding a mixed element) | reads the group only, where Chrome reads on to the backdrop root ([decision 0130](../99-decisions/0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md)) |
 | a mixed element or a backdrop filter reaching the page | mixes with the Document's canvas, not with what the game drew under the Document |
@@ -134,7 +136,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |
-| `-webkit-mask-position-x` and `-y`, `-webkit-mask-box-image` and its longhands | refused with a warning: ui's `mask-position` has no axis of its own, and draws no nine-patch mask |
+| a gradient as `-webkit-mask-box-image`'s source | refused with a warning, as `border-image-source` refuses one: only a picture's `url()` is cut in nine |
 | a masked element under a rotation or a skew | hit in its border box, where Chrome reaches about half a pixel further |
 | a masked element on a surface other than `twod.Canvas` | drawn unmasked, but for the one-colour icon |
 | a `pattern` of a property of strings (`\p{RGI_Emoji}`), an emoji or case-mapping property (`\p{Emoji}`, `\p{Cased}`), a script's short name (`\p{sc=Grek}`) or `Script_Extensions`, or a group name used twice | constrains nothing, where Chrome reads it ([decision 0159](../99-decisions/0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md)) |

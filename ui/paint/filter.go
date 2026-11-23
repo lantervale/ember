@@ -6,6 +6,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/render"
 	"github.com/lantervale/ember/twod"
+	"github.com/lantervale/ember/ui/internal/fx"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -81,6 +82,10 @@ type filtering struct {
 	open    int
 	floor   *clip
 	spread  float32
+	// graphs are the filter elements the filters name, by their index,
+	// read for the element's border box at at, size large.
+	graphs   []*fx.Graph
+	at, size geom.Vec2
 }
 
 // beginFilters opens the pictures st's filters draw an element in, its
@@ -92,6 +97,18 @@ func (p *painter) beginFilters(e entry, st *style.Computed) *filtering {
 		return nil
 	}
 	f := &filtering{on: on, filters: st.Filters, floor: p.floor, spread: p.spread}
+	if urlFilters(st.Filters) {
+		graphs, found := p.graphs(e, st)
+		if !found {
+			return nil
+		}
+		f.graphs, f.at, f.size = graphs, e.at, e.b.Size
+		p.use(nil)
+		on.BeginPicture()
+		p.pictures++
+		p.floor, p.spread = e.clip, p.spread+graphReach(st.Filters, graphs, 0, e.b.Size)
+		return f
+	}
 	for i, fl := range st.Filters {
 		if fl.Kind == style.DropShadow && i < len(st.Filters)-1 {
 			f.open++
@@ -116,6 +133,10 @@ func (p *painter) endFilters(f *filtering, c *clip) {
 	p.use(nil)
 	p.floor, p.spread = f.floor, f.spread
 	p.pictures -= f.open + 1
+	if f.graphs != nil {
+		p.endGraphs(f, c)
+		return
+	}
 	xf := p.s.Transform()
 	scale := float32(math.Sqrt(math.Abs(float64(xf.X.X*xf.Y.Y - xf.X.Y*xf.Y.X))))
 	from := 0
@@ -170,15 +191,16 @@ func filterReach(filters []style.Filter) float32 {
 		case style.DropShadow:
 			d += max(abs(f.Shadow.X), abs(f.Shadow.Y)) + 1.5*f.Shadow.Blur
 		case style.Brightness, style.Contrast, style.Grayscale, style.HueRotate, style.Invert, style.OpacityFilter,
-			style.Saturate, style.Sepia:
+			style.Saturate, style.Sepia, style.FilterURL:
 		}
 	}
 	return d
 }
 
-// filterInk is r, what an element and its content draw, as filters
-// leave it: grown by each blur, joined by each drop shadow.
-func filterInk(r geom.Rect, filters []style.Filter) geom.Rect {
+// filterInk is r, what an element of size and its content draw, as
+// filters leave it: grown by each blur, joined by each drop shadow and
+// by the default region of a filter element, a tenth of size round it.
+func filterInk(r geom.Rect, filters []style.Filter, size geom.Vec2) geom.Rect {
 	for _, f := range filters {
 		switch f.Kind {
 		case style.Blur:
@@ -186,6 +208,8 @@ func filterInk(r geom.Rect, filters []style.Filter) geom.Rect {
 		case style.DropShadow:
 			s := grow(geom.Rect{X: r.X + f.Shadow.X, Y: r.Y + f.Shadow.Y, W: r.W, H: r.H}, 1.5*f.Shadow.Blur)
 			r = union(r, s)
+		case style.FilterURL:
+			r = union(r, geom.Rect{X: -0.1 * size.X, Y: -0.1 * size.Y, W: 1.2 * size.X, H: 1.2 * size.Y})
 		case style.Brightness, style.Contrast, style.Grayscale, style.HueRotate, style.Invert, style.OpacityFilter,
 			style.Saturate, style.Sepia:
 		}
@@ -214,7 +238,7 @@ func (p *painter) filterEffects(
 		e.SetVec4("uShadow", geom.Vec4{X: s[0] * c.A, Y: s[1] * c.A, Z: s[2] * c.A, W: c.A})
 		return blurEffects(on, append(fx, e), f.Shadow.Blur/2*pixels)
 	case style.Brightness, style.Contrast, style.Grayscale, style.HueRotate, style.Invert, style.OpacityFilter,
-		style.Saturate, style.Sepia:
+		style.Saturate, style.Sepia, style.FilterURL:
 	}
 	m := colorMatrix(f)
 	e := on.Effect(matrixShader)
@@ -278,7 +302,7 @@ func colorMatrix(f style.Filter) [4][5]float32 {
 		m[0] = [5]float32{0.213 + 0.787*cos - 0.213*sin, 0.715 - 0.715*cos - 0.715*sin, 0.072 - 0.072*cos + 0.928*sin}
 		m[1] = [5]float32{0.213 - 0.213*cos + 0.143*sin, 0.715 + 0.285*cos + 0.140*sin, 0.072 - 0.072*cos - 0.283*sin}
 		m[2] = [5]float32{0.213 - 0.213*cos - 0.787*sin, 0.715 - 0.715*cos + 0.715*sin, 0.072 + 0.928*cos + 0.072*sin}
-	case style.Blur, style.DropShadow:
+	case style.Blur, style.DropShadow, style.FilterURL:
 	}
 	return m
 }

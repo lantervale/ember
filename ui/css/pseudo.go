@@ -55,7 +55,8 @@ var (
 		"text-decoration-line", "text-decoration-style", "text-decoration-color", "text-decoration-thickness",
 		"background-color", "background-image", "background-repeat", "background-size", "background-position",
 		"background-attachment", "background-origin", "background-clip"}, fontProps...)
-	firstLetterProps = append([]string{"float", "margin-top", "margin-right", "margin-bottom", "margin-left",
+	firstLetterProps = append([]string{"float", propInitialLetter, "margin-top", "margin-right", "margin-bottom",
+		"margin-left",
 		"padding-top", "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width",
 		"border-bottom-width", "border-left-width", "border-top-style", "border-right-style", "border-bottom-style",
 		"border-left-style", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
