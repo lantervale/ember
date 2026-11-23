@@ -200,20 +200,32 @@ func repeated(t term, most int) check {
 	}
 }
 
-// checkLineClamp takes none, or a number of lines with no-ellipsis before or after it.
+// checkLineClamp takes none, or a number of lines and an ellipsis (auto or no-ellipsis), in
+// either order and either alone, then -webkit-legacy, as Chrome reads it.
 func checkLineClamp(v []Component) error {
-	switch {
-	case len(v) == 1 && isWord(v[0], "none"):
+	if len(v) == 1 && isWord(v[0], "none") {
 		return nil
-	case len(v) == 2 && isWord(v[0], "no-ellipsis"):
-		return positiveInteger(v[1])
-	case len(v) == 2:
-		if err := positiveInteger(v[0]); err != nil {
-			return err
-		}
-		return words("no-ellipsis")(v[1])
 	}
-	return single(positiveInteger)(v)
+	if len(v) > 1 && isWord(v[len(v)-1], "-webkit-legacy") {
+		v = v[:len(v)-1]
+	}
+	var count, auto, bare bool
+	for _, c := range v {
+		switch {
+		case !count && positiveInteger(c) == nil:
+			count = true
+		case !auto && isWord(c, "auto"):
+			auto = true
+		case !bare && isWord(c, "no-ellipsis"):
+			bare = true
+		default:
+			return fmt.Errorf("expected none, or a number of lines, auto or no-ellipsis, found %q", c.String())
+		}
+	}
+	if len(v) == 0 || len(v) > 2 {
+		return errors.New("expected one or two of a number of lines, auto and no-ellipsis")
+	}
+	return nil
 }
 
 // checkScrollbarColor takes auto, or the thumb's colour then the track's.
