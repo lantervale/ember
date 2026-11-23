@@ -21,7 +21,7 @@ func sheet(t *testing.T, src string) *Sheet {
 
 func styleOf(n *dom.Node) *style.Computed { return dom.Data(n).Style }
 
-func hex(s string) color.Color { return linear(value2(s)) }
+func hex(s string) color.Color { return linear(value2(s), color.Color{}) }
 
 func value2(src string) Component { return items(componentsOf(src))[0] }
 

@@ -736,8 +736,29 @@ func (t *tree) lift(owner *node, items []item) []item {
 }
 
 // placeCuts puts the box of each inline element blocks cut in n round its parts and its
-// blocks, once n's children are written.
+// blocks, once n's children are written, the blocks moved with the inline elements
+// position: relative moves. The box of each element counts its blocks where its own
+// offset alone moves them, as Chrome's.
 func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
+	cb := size{n.final.size.w - n.final.padding.horizontal() - n.final.border.horizontal(), none}
+	movedBy := func(e, upTo *dom.Node) geom.Vec2 {
+		var o geom.Vec2
+		for p := e.Parent(); p != nil && p != upTo && p != n.box.Node; p = p.Parent() {
+			if isInline(p) {
+				o = o.Add(inlineOffset(styleOf(p), cb))
+			}
+		}
+		return o
+	}
+	moved := map[*box.Box]bool{}
+	for _, c := range n.cuts {
+		for _, e := range c.blocks {
+			if b := of[e]; b != nil && b.Parent == n.box && !moved[b] {
+				moved[b] = true
+				b.Pos = b.Pos.Add(movedBy(e, nil))
+			}
+		}
+	}
 	for _, c := range n.cuts {
 		var r geom.Rect
 		found := false
@@ -754,12 +775,16 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 			}
 		}
 		for _, before := range c.empty {
-			r = unionRect(r, n.emptyPart(before), found)
+			at := n.emptyPart(before)
+			o := inlineOffset(c.box.Style, cb)
+			at.X, at.Y = at.X+o.X, at.Y+o.Y
+			r = unionRect(r, at, found)
 			found = true
 		}
 		for _, e := range c.blocks {
 			if b := of[e]; b != nil && b.Parent == n.box {
-				r = unionRect(r, geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: b.Size.X, H: b.Size.Y}, found)
+				at := b.Pos.Sub(movedBy(e, c.box.Node))
+				r = unionRect(r, geom.Rect{X: at.X, Y: at.Y, W: b.Size.X, H: b.Size.Y}, found)
 				found = true
 			}
 		}

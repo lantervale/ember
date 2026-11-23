@@ -59,6 +59,19 @@ func TestAPictureNoFileHoldsIsFetchedOffTheFrameAndShownOnceItLands(t *testing.T
 	assert.Empty(t, d.Warnings())
 }
 
+func TestAPictureOnItsWayTakesTheProportionsOfItsAttributes(t *testing.T) {
+	a := &asked{pictures: map[string][]byte{"https://art.test/view.png": picture(t, 250, 167)}}
+	view := Img(Attr("src", "https://art.test/view.png"), Attr("width", "250"), Attr("height", "167"))
+	d := NewDocument(FetchImages(a.fetch), CSS("img { width: 100%; height: auto; }"))
+	d.Body().Append(Div(Style("width: 300px"), view))
+
+	d.Layout(geom.V2(400, 400))
+	assert.InDelta(t, 200.4, view.Box().H, 0.01, "the room the attributes give, as Chrome's sheet")
+	d.fetching.Wait()
+	d.Layout(geom.V2(400, 400))
+	assert.InDelta(t, 200.4, view.Box().H, 0.01, "and the picture, landed, keeps it")
+}
+
 func TestABackgroundIsFetchedWhenItIsFirstPainted(t *testing.T) {
 	a := &asked{pictures: map[string][]byte{"wall.png": picture(t, 8, 8)}}
 	d := NewDocument(CSS(`body { background-image: url(wall.png); }`), FetchImages(a.fetch))

@@ -29,6 +29,9 @@ var (
 	// with no ::selection rule: Chrome's on macOS with the blue accent,
 	// #b3d7fe over white, measured over black and white.
 	pageSelection = color.Hex("#80bcfd99")
+	// inactiveSelection is pageSelection while the window is inactive:
+	// macOS's unemphasized #dcdcdc, made translucent as Chrome makes it.
+	inactiveSelection = color.Hex("#c4c4c499")
 	// meterColors are a meter's fill by region, Chrome's green, amber and
 	// red.
 	meterColors = map[control.Region]color.Color{
@@ -136,7 +139,7 @@ func (p *painter) marks(e entry, alpha float32) {
 		p.img(e, alpha)
 		if p.sel != nil && p.sel.Holds(e.b.Node) {
 			// a picture inside a selection is tinted with it, as Chrome's
-			back, _ := selectionColors(shown(e.b), color.Color{}, alpha)
+			back, _ := p.selectionColors(shown(e.b), color.Color{}, alpha)
 			p.s.Rect(p.snap(content(e)), back)
 		}
 	case dom.Canvas, dom.Iframe:
@@ -323,8 +326,8 @@ func (p *painter) marker(e entry, alpha float32) {
 	case disclosure:
 	case len(e.b.Lines) > 0 && (e.b.Node == nil || e.b.Node.Tag() != dom.Summary):
 		// a list item's number, or its ::marker's content
-		p.textShadows(e, st, p.faceOf(st.Font), alpha)
 		for _, f := range e.b.Lines {
+			p.shadows(e, st, p.faceOf(st.Font), f, st.TextShadows, st.Color, alpha)
 			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterSpacing, ink, smoothingOf(st))
 			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
@@ -442,6 +445,59 @@ func (p *painter) selection(e entry, alpha float32) {
 		}
 	}
 	p.s.PopClip()
+}
+
+// lineBreak draws the selection's mark on the line a br holds alone.
+func (p *painter) lineBreak(e entry, alpha float32) {
+	parts := p.sel.Parts(e.b)
+	if len(parts) == 0 || !shown(e.b).Visible {
+		return
+	}
+	back, _ := p.selectionColors(shown(e.b), color.Color{}, alpha)
+	for _, s := range parts {
+		r := p.snap(geom.Rect{X: e.at.X + s.Rect.X, Y: e.at.Y + s.Rect.Y, W: s.Rect.W, H: s.Rect.H})
+		if back.A > 0 && !p.culled(e, r) {
+			p.s.Rect(r, back)
+		}
+	}
+}
+
+// fieldParts are the parts of a focused text field's text run e its
+// selection covers, in the run's space as its fragments' are.
+func (p *painter) fieldParts(e entry) []Selected {
+	if e.b.Parent == nil {
+		return nil
+	}
+	t := p.editing(e.b.Parent)
+	if t == nil {
+		return nil
+	}
+	from, to := t.Editor.Selection()
+	if from == to {
+		return nil
+	}
+	l := t.Layout
+	var out []Selected
+	for line := l.Line(from); line <= l.Line(to); line++ {
+		row := geom.Rect{}
+		if r, ok := l.(rowed); ok {
+			row = r.Row(line)
+		} else if line < len(e.b.Lines) {
+			row = e.b.Lines[line].Rect
+		}
+		start, end := l.Span(line)
+		x0, x1 := row.X+l.X(max(from, start)), row.X+l.X(min(to, end))
+		if x1 <= x0 {
+			continue
+		}
+		for k, f := range e.b.Lines {
+			if f.Rect.Y < row.Y+row.H && row.Y < f.Rect.Y+f.Rect.H {
+				out = append(out, Selected{Line: k, Rect: geom.Rect{X: x0, Y: f.Rect.Y, W: x1 - x0, H: f.Rect.H}})
+				break
+			}
+		}
+	}
+	return out
 }
 
 // caretInk is caret-color, the text's colour when auto.

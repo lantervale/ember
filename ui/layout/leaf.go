@@ -191,7 +191,7 @@ func ratioHeight(w, ratio float32) float32 {
 // width its percentages are of, none for the width found here.
 func (t *tree) measureContent(n *node, known size, avail spaces, basis float32) (size, float32, float32) {
 	if n.replaced {
-		return measureReplaced(n, known), none, none
+		return measureReplaced(n, known, avail.w), none, none
 	}
 	if n.inline == nil {
 		return known.or(size{}), none, none

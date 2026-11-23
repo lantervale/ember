@@ -98,25 +98,6 @@ func lightDark(args []Component) (Component, Component, bool) {
 	return parts[0], parts[2], true
 }
 
-func parseLightDark(args []Component) (Color, error) {
-	light, dark, ok := lightDark(args)
-	if !ok {
-		return Color{}, fmt.Errorf("light-dark() takes two colours, separated by a comma")
-	}
-	for _, c := range []Component{light, dark} {
-		if isWord(c, kwCurrentColor) {
-			continue
-		}
-		if _, err := parseColor(c); err != nil {
-			return Color{}, fmt.Errorf("light-dark(): %w", err)
-		}
-	}
-	if isWord(light, kwCurrentColor) {
-		return Color{}, nil
-	}
-	return parseColor(light)
-}
-
 // inScheme is v, a value of a property that takes colours, with its
 // system colours and light-dark() resolved in the dark scheme or the
 // light one, as hex colours; v itself when it holds neither. Elsewhere a

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"slices"
 	"strings"
 	"sync"
 
@@ -59,6 +60,9 @@ type pageFonts struct {
 	// asked are the weight and style each file's first face is of, for
 	// its local() entries.
 	asked map[*fonts.File]css.FontFace
+	// rules are the faces of the @font-face rules read so far, by what
+	// each says, nil for one that gives none.
+	rules map[string]*fonts.Face
 
 	sync.WaitGroup
 	mu     sync.Mutex
@@ -81,34 +85,76 @@ type landedFont struct {
 	warns []error
 }
 
-// addFontFaces gives the Document the @font-face rules of a sheet:
-// each face's file is read from fsys, the sheet's file system, when it
-// holds it; otherwise, and for a sheet with none (fsys nil), it is
-// fetched when text needs it. A sheet added while the Document shows
-// gives its rules the same way.
-func (d *Document) addFontFaces(faces []css.FontFace, fsys fs.FS) {
-	for _, f := range faces {
-		if fsys != nil && d.readFontFace(f, fsys) {
+// addFontFaces gives the Document the @font-face rules of a sheet, and
+// their faces, nil for a rule that gives none: each face's file is read
+// from fsys, the sheet's file system, when it holds it; otherwise, and
+// for a sheet with none (fsys nil), it is fetched when text needs it. A
+// rule read before is the same face, its file read or fetched once.
+func (d *Document) addFontFaces(faces []css.FontFace, fsys fs.FS) []*fonts.Face {
+	p := &d.pageFonts
+	out := make([]*fonts.Face, len(faces))
+	for i, f := range faces {
+		key := fmt.Sprintf("%v", f)
+		if c, ok := p.rules[key]; ok {
+			out[i] = d.fonts.AddFace(faceDescriptors(f), c.File())
 			continue
 		}
-		sources := f.Readable()
-		if !d.fetchable(sources) {
-			if fsys != nil {
-				d.warn(fmt.Errorf("css: @font-face %q: no file %s", f.Family, f.Src))
-			} else {
-				d.warn(fmt.Errorf(
-					"css: @font-face %q in CSS has no file to read; load it with Stylesheet or fetch it with FetchFonts",
-					f.Family))
-			}
-			continue
+		out[i] = d.addFontFace(f, fsys)
+		if p.rules == nil {
+			p.rules = map[string]*fonts.Face{}
 		}
-		d.fonts.AddWeb(f.Family, f.Weight, f.WeightMax, f.Italic, fontRanges(f.Ranges), d.pageFonts.file(f, sources))
+		if out[i] != nil {
+			p.rules[key] = out[i]
+		}
 	}
+	return out
+}
+
+func (d *Document) addFontFace(f css.FontFace, fsys fs.FS) *fonts.Face {
+	if fsys != nil {
+		if c, held := d.readFontFace(f, fsys); held {
+			return c
+		}
+	}
+	sources := f.Readable()
+	if !d.fetchable(sources) {
+		if fsys != nil {
+			d.warn(fmt.Errorf("css: @font-face %q: no file %s", f.Family, f.Src))
+		} else {
+			d.warn(fmt.Errorf(
+				"css: @font-face %q in CSS has no file to read; load it with Stylesheet or fetch it with FetchFonts",
+				f.Family))
+		}
+		return nil
+	}
+	return d.fonts.AddFace(faceDescriptors(f), d.pageFonts.file(f, sources))
+}
+
+// faceDescriptors are what f says of its face, as the font set reads it.
+func faceDescriptors(f css.FontFace) fonts.Descriptors {
+	look := fonts.Look{SizeAdjust: f.SizeAdjust}
+	if look.SizeAdjust == 1 {
+		look.SizeAdjust = 0
+	}
+	for _, o := range []struct {
+		at *fonts.Override
+		of float32
+	}{{&look.Ascent, f.Ascent}, {&look.Descent, f.Descent}, {&look.LineGap, f.LineGap}} {
+		if o.of >= 0 {
+			*o.at = fonts.Override{Set: true, Of: o.of}
+		}
+	}
+	if kern, ok := f.Feature("kern"); ok && kern == 0 {
+		look.NoKern = true
+	}
+	return fonts.Descriptors{Family: f.Family, Weight: f.Weight, WeightMax: f.WeightMax, Italic: f.Italic,
+		Stretch: f.Stretch, StretchMax: f.StretchMax, Ranges: fontRanges(f.Ranges), Look: look}
 }
 
 // readFontFace adds f from the first of its files fsys holds, and
-// reports whether it held one; a file that is no font is a warning.
-func (d *Document) readFontFace(f css.FontFace, fsys fs.FS) bool {
+// reports whether it held one; a file that is no font is a warning, and
+// gives no face.
+func (d *Document) readFontFace(f css.FontFace, fsys fs.FS) (*fonts.Face, bool) {
 	for _, s := range f.Readable() {
 		if s.URL == "" {
 			continue
@@ -117,23 +163,44 @@ func (d *Document) readFontFace(f css.FontFace, fsys fs.FS) bool {
 		if err != nil {
 			continue
 		}
+		var c *fonts.Face
 		ttf, err := woff.Sfnt(data)
-		if err == nil && len(f.Ranges) == 0 && f.WeightMax == f.Weight {
-			err = d.fonts.Add(f.Family, f.Weight, f.Italic, ttf)
-		} else if err == nil {
+		if err == nil {
 			var parsed *sfnt.Font
 			if parsed, err = fonts.Parse(ttf); err == nil {
 				file := &fonts.File{}
-				d.fonts.AddWeb(f.Family, f.Weight, f.WeightMax, f.Italic, fontRanges(f.Ranges), file)
+				c = d.fonts.AddFace(faceDescriptors(f), file)
 				d.fonts.Loaded(file, ttf, parsed)
 			}
 		}
 		if err != nil {
 			d.warn(fmt.Errorf("ui: font %s: %w", s.URL, err))
 		}
-		return true
+		return c, true
 	}
-	return false
+	return nil, false
+}
+
+// takeFontFaces has the Document's text drawn with the faces of the
+// @font-face rules of its sheets as they now stand, in their order: a
+// rule inserted alone gives its face, and a sheet removed or disabled
+// takes its faces with it.
+func (d *Document) takeFontFaces() {
+	var faces []*fonts.Face
+	for _, s := range d.authored {
+		if s.disabled {
+			continue
+		}
+		for _, c := range d.addFontFaces(s.sheet().FontFaces(), s.fsys) {
+			if c != nil && !slices.Contains(faces, c) {
+				faces = append(faces, c)
+			}
+		}
+	}
+	if d.fonts.SetWeb(faces) {
+		d.relayout = true
+		d.remeasureFields()
+	}
 }
 
 // fetchable reports whether one of sources may give a font: a data
@@ -330,6 +397,9 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 		if df == nil {
 			continue
 		}
+		if look := drawLook(c, ch.Font()); look != (draw.Look{}) {
+			df = df.Styled(look)
+		}
 		if i == 0 {
 			df = df.Blank(ch.Loading())
 		}
@@ -356,6 +426,17 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 	}
 	p.chained[ch] = tf
 	return tf
+}
+
+// drawLook is how c is drawn in f: scaled by its size-adjust, unkerned
+// when its @font-face says so, and made bold or slanted where the
+// family has no such face.
+func drawLook(c *fonts.Face, f style.Font) draw.Look {
+	if !c.Web() {
+		return draw.Look{}
+	}
+	bold, italic := c.Synthetic(f)
+	return draw.Look{Scale: c.Look.SizeAdjust, Bold: bold, Oblique: italic, NoKern: c.Look.NoKern}
 }
 
 // drawFace is c as twod draws it, parsed once: TrueType or CFF

@@ -280,7 +280,7 @@ func vendorValues(value []Component) bool {
 			continue
 		}
 		v, rest := vendorOf(strings.ToLower(c.Text))
-		if v == nil {
+		if v == nil || v == &webkit && legacyGradient(c, rest) {
 			continue
 		}
 		as, ok := v.values[rest]

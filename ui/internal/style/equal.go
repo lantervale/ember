@@ -92,7 +92,7 @@ func (f Font) Equal(o Font) bool {
 	return sameSlice(f.Family, o.Family) &&
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
-		f.Italic == o.Italic
+		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -114,6 +114,10 @@ func (t *Text) equal(o *Text) bool {
 		t.HasSelection == o.HasSelection &&
 		t.SelectionText == o.SelectionText &&
 		t.HasSelectionText == o.HasSelectionText &&
+		sameSlice(t.SelectionShadows, o.SelectionShadows) &&
+		t.HasSelectionShadows == o.HasSelectionShadows &&
+		t.SelectionDecoration == o.SelectionDecoration &&
+		t.HasSelectionDecoration == o.HasSelectionDecoration &&
 		sameSlice(t.TextShadows, o.TextShadows) &&
 		t.TextDecoration == o.TextDecoration &&
 		sameSliceFunc(t.Decorations, o.Decorations, (*Decoration).equal) &&
@@ -200,7 +204,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Visible == o.Visible &&
 		l.Collapse == o.Collapse &&
 		l.PointerNone == o.PointerNone &&
-		l.AppDrag == o.AppDrag &&
+		l.AppRegion == o.AppRegion &&
 		l.Cursor == o.Cursor &&
 		l.UserSelect == o.UserSelect &&
 		sameSlice(l.Transform, o.Transform) &&
