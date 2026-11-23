@@ -9,6 +9,7 @@ import (
 	"image/color"
 	"image/gif"
 	"image/png"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -64,6 +65,17 @@ func flagAt(shot image.Image, x, y int) int {
 		}
 	}
 	return -1
+}
+
+// framesWithin are the frames a picture of n frames, each delay seconds,
+// playing from began, shows between from and to, give or take the frame
+// of Chrome's it is first drawn on.
+func framesWithin(began, from, to, delay float64, n int) []int {
+	var out []int
+	for i := max(int(math.Floor((from-0.05-began)/delay)), 0); i <= int(math.Floor((to-began)/delay)); i++ {
+		out = append(out, i%n)
+	}
+	return out
 }
 
 // runUntil runs w's frames until its real time reaches s seconds.
@@ -124,9 +136,13 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	for i, w := range want {
 		require.NotEqual(t, -1, w, "Chrome's frame at step %d", i)
 	}
-	// Chrome's own timing: below.gif first drawn shows its first frame;
-	// top.gif drawn again after its play's end its first; then in step.
-	assert.Equal(t, []int{0, 0, 2}, want, "Chrome's frames, shot between %v and %v", shotFrom, shotTo)
+	// Chrome's own timing: below.gif plays from when it is first drawn,
+	// top.gif drawn again after its play's end plays again from then, and
+	// comes back in step with that play.
+	for i, began := range []float64{scrolled[0], scrolled[1], scrolled[1]} {
+		assert.Contains(t, framesWithin(began, shotFrom[i], shotTo[i], 0.4, len(flags)), want[i],
+			"Chrome's frame at step %d, shot between %gs and %gs", i, shotFrom[i], shotTo[i])
+	}
 
 	mapFS := fstest.MapFS{}
 	for name, data := range files {
