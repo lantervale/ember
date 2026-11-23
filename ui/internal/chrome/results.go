@@ -58,6 +58,15 @@ func Within(t testing.TB, pkg string, w, h int, threshold float64) Diff {
 	return d
 }
 
+// WithinWith is Within on a Chrome running with the Blink features named
+// on, as MatchWith.
+func WithinWith(t testing.TB, pkg string, w, h int, threshold float64, feature ...string) Diff {
+	t.Helper()
+	features = feature
+	defer func() { features = nil }()
+	return Within(t, pkg, w, h, threshold)
+}
+
 // WithinZoomed is Within for a page at a Document zoom (PixelsZoomed).
 func WithinZoomed(t testing.TB, pkg string, w, h int, zoom float32, threshold float64) Diff {
 	t.Helper()

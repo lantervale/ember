@@ -118,6 +118,23 @@ func TestPagesLookLikeChrome(t *testing.T) {
 	}
 }
 
+// TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of
+// what Chrome ships behind a flag, turned on.
+func TestFlaggedPagesLookLikeChrome(t *testing.T) {
+	for _, c := range []struct {
+		pkg     string
+		w, h    int
+		mean    float64
+		feature string
+	}{
+		{"./internal/pages/line-clamp-past", 420, 360, 0.003, "CSSLineClamp"},
+	} {
+		t.Run(c.pkg, func(t *testing.T) {
+			chrome.WithinWith(t, c.pkg, c.w, c.h, c.mean, c.feature)
+		})
+	}
+}
+
 func TestZoomedPagesLookLikeChrome(t *testing.T) {
 	for _, c := range []struct {
 		pkg  string

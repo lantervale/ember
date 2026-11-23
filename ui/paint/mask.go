@@ -233,7 +233,7 @@ func (p *painter) maskLayer(on Pictures, e entry, st *style.Computed, l *style.M
 	b := e.b
 	ps := p.pieces(b, e.at)
 	radius := radiiOf(st, framed(b))
-	if len(ps) > 1 {
+	if len(b.Fragments) > 1 {
 		radius = radii{}
 	}
 	total, laid := float32(0), float32(0)

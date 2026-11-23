@@ -1195,7 +1195,7 @@ func (x *ctx) webkitBox() {
 	c := x.c
 	switch {
 	case !c.WebkitBox:
-	case c.BoxVertical && c.WebkitLineClamp > 0:
+	case c.BoxVertical && (c.WebkitLineClamp > 0 || c.ClampLegacy):
 		if c.Display == style.InlineFlex {
 			c.Display = style.InlineBlock
 		} else {
@@ -1885,15 +1885,20 @@ var props = func() map[string]prop {
 		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
 		"line-clamp": {
 			set: func(x *ctx, v []Component) {
-				x.c.LineClamp, x.c.NoEllipsis = 0, false
+				x.c.LineClamp, x.c.NoEllipsis, x.c.ClampAuto, x.c.ClampLegacy = 0, false, false, false
 				for _, c := range v {
 					if c.Kind == Number {
 						x.c.LineClamp = int(c.Num)
 					}
 					x.c.NoEllipsis = x.c.NoEllipsis || isWord(c, "no-ellipsis")
+					x.c.ClampLegacy = x.c.ClampLegacy || isWord(c, "-webkit-legacy")
 				}
+				x.c.ClampAuto = x.c.LineClamp == 0 && !isWord(v[0], "none")
 			},
-			inherit: func(dst, src *style.Computed) { dst.LineClamp, dst.NoEllipsis = src.LineClamp, src.NoEllipsis },
+			inherit: func(dst, src *style.Computed) {
+				dst.LineClamp, dst.NoEllipsis = src.LineClamp, src.NoEllipsis
+				dst.ClampAuto, dst.ClampLegacy = src.ClampAuto, src.ClampLegacy
+			},
 			anim:    anim{kind: discrete},
 		},
 		"-webkit-line-clamp": field(func(c *style.Computed) *int { return &c.WebkitLineClamp }, clampOf,

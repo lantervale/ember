@@ -34,6 +34,7 @@
   "collapsed-joins": 0.0005,
   "collapsed-styles": 0.0015,
   "column-cuts": 0.0045,
+  "line-clamp-past": 0.006,
   "inline-opacity": 0.004,
   "column-span": 0.0088,
   "dashes": 0.0025,

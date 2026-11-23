@@ -109,10 +109,34 @@ func textClamp(n *node, in clampIn) clampIn {
 
 // clampFor is the clamp n's lines follow: its own line-clamp's, or in's.
 func clampFor(n *node, in clampIn) clampIn {
-	if lines, keeps := n.st.Clamp(); lines > 0 {
+	if lines, keeps := n.st.Clamp(); lines != 0 {
 		return clampIn{lines: lines, hides: !keeps, bare: n.st.NoEllipsis && !keeps}
 	}
 	return in
+}
+
+// linesHeld is the lines a box clamping by its height (line-clamp: auto) shows: the most
+// that, clamped there, leave its border box no taller than limit, laid giving that height
+// and the lines laid for a clamp of so many, all of them for math.MaxInt32. It is 0 when
+// they all fit or nothing limits the box, and 1 when not even one does, as Chrome.
+func linesHeld(limit float32, laid func(lines int) (float32, int)) int {
+	if !some(limit) {
+		return 0
+	}
+	h, total := laid(math.MaxInt32)
+	if h <= limit+columnEpsilon {
+		return 0
+	}
+	held := 1
+	for lo, hi := 2, total-1; lo <= hi; {
+		mid := (lo + hi) / 2
+		if h, _ := laid(mid); h <= limit+columnEpsilon {
+			held, lo = mid, mid+1
+		} else {
+			hi = mid - 1
+		}
+	}
+	return held
 }
 
 // marginSet is Taffy's CollapsibleMarginSet.

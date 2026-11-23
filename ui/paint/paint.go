@@ -624,12 +624,16 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	see := p.sight(inner)
 	for _, c := range run {
 		at := origin.Add(c.Pos)
-		if c.Discarded || see.misses(c, at) {
+		if see.misses(c, at) {
 			continue
 		}
 		p.reached++
 		st := shown(c)
 		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
+		if c.Discarded {
+			p.collectPositioned(ce, outer)
+			continue
+		}
 		switch {
 		case p.modal(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
@@ -660,6 +664,23 @@ func (p *painter) collect(e entry, own, outer *layers) {
 			p.collect(ce, own, outer)
 		}
 	}
+}
+
+// collectPositioned collects into outer the positioned boxes under e, a box past a
+// line-clamp's last line: e and the rest it holds are never drawn, as Chrome's.
+func (p *painter) collectPositioned(e entry, outer *layers) {
+	var own, held layers
+	p.collect(e, &own, &held)
+	keep := func(to *[]entry, from []entry) {
+		for _, c := range from {
+			if shown(c.b).Position != style.Static {
+				*to = append(*to, c)
+			}
+		}
+	}
+	keep(&outer.negative, held.negative)
+	keep(&outer.positioned, held.positioned)
+	keep(&outer.positive, held.positive)
 }
 
 // placedClip is the clip of c, a child of the box inner is the clip in: inner, less,
