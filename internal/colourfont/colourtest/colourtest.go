@@ -252,7 +252,9 @@ func utf16BE(s string) []byte {
 
 func put8(b *bytes.Buffer, v uint8)   { b.WriteByte(v) }
 func put16(b *bytes.Buffer, v uint16) { b.Write(binary.BigEndian.AppendUint16(nil, v)) }
-func put24(b *bytes.Buffer, v uint32) { b.Write([]byte{byte(v >> 16), byte(v >> 8), byte(v)}) } //nolint:gosec // its bytes
+
+//nolint:gosec // its three bytes
+func put24(b *bytes.Buffer, v uint32) { b.Write([]byte{byte(v >> 16), byte(v >> 8), byte(v)}) }
 func put32(b *bytes.Buffer, v uint32) { b.Write(binary.BigEndian.AppendUint32(nil, v)) }
 
 func f2dot14(v float32) uint16 { return uint16(int16(math.Round(float64(v) * 16384))) } //nolint:gosec // -2 to 2
@@ -456,8 +458,8 @@ func sbix(strikes map[int]map[rune]Bitmap, numGlyphs int) []byte {
 		at := 4 + 4*(numGlyphs+1)
 		var data bytes.Buffer
 		for g := range numGlyphs + 1 {
-			put32(&s, uint32(at+data.Len()))                       //nolint:gosec // small
-			if bm, ok := byGlyph[uint16(g)]; ok && g < numGlyphs { //nolint:gosec // under numGlyphs
+			put32(&s, uint32(at+data.Len())) //nolint:gosec // small
+			if bm, ok := byGlyph[uint16(g)]; ok && g < numGlyphs {
 				put16(&data, uint16(int16(bm.X))) //nolint:gosec // small
 				put16(&data, uint16(int16(bm.Y))) //nolint:gosec // small
 				data.WriteString("png ")
