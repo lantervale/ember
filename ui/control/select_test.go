@@ -87,18 +87,53 @@ func TestClickingAnOptionChoosesItButNotADisabledOne(t *testing.T) {
 func TestTypingJumpsToTheNextOptionStartingSo(t *testing.T) {
 	s := fruits()
 	s.Do(control.Activate)
-	s.TypeAhead("c")
+	s.Type('c', 0)
 	assert.Equal(t, 2, s.Highlight)
-	s.TypeAhead("c")
+	s.Type('c', 2)
 	assert.Equal(t, 3, s.Highlight, "the same letter goes on to the next")
-	s.TypeAhead("C")
+	s.Type('C', 4)
 	assert.Equal(t, 2, s.Highlight, "and wraps, any case")
-	s.TypeAhead("b")
+	s.Type('b', 6)
 	assert.Equal(t, 2, s.Highlight, "disabled options are never highlighted")
 
 	closed := fruits()
-	assert.Equal(t, control.Input|control.Changed, closed.TypeAhead("c"), "closed, typing chooses")
+	assert.Equal(t, control.Input|control.Changed, closed.Type('c', 0), "closed, typing chooses")
 	assert.Equal(t, 2, closed.Selected)
+}
+
+// pantry holds the options Chrome's type-ahead was measured on.
+func pantry() *control.Select {
+	return control.NewSelect(
+		control.Option{Label: "Apple"}, control.Option{Label: "Avocado"}, control.Option{Label: "Banana"},
+		control.Option{Label: "Bx", Disabled: true}, control.Option{Label: "Blueberry"},
+		control.Option{Label: "Apricot"}, control.Option{Label: "  Cherry"}, control.Option{Label: "Ab"},
+		control.Option{Label: "aa"},
+	)
+}
+
+// TestTypingWithinASecondFindsWhatWasTyped follows Chrome's type-ahead:
+// letters typed within a second of each other find the option starting
+// with them all, from the selected one on; one letter repeated goes on to
+// the next option starting with it; leading spaces are passed over.
+func TestTypingWithinASecondFindsWhatWasTyped(t *testing.T) {
+	typed := func(text string, gap float32) []int {
+		s := pantry()
+		var at []int
+		for k, r := range []rune(text) {
+			s.Type(r, 10+float32(k)*gap)
+			at = append(at, s.Selected)
+		}
+		return at
+	}
+	assert.Equal(t, []int{1, 5, 7, 8, 0}, typed("aaaaa", 0.1), "one letter cycles")
+	assert.Equal(t, []int{1, 5}, typed("ap", 0.1), "a prefix, from the selected option")
+	assert.Equal(t, []int{1, 1}, typed("av", 0.1), "the selected option still starts so")
+	assert.Equal(t, []int{2, 4, 2}, typed("bbb", 1.1), "past a second, a letter alone, over disabled options")
+	assert.Equal(t, []int{1, 5}, typed("ap", 0.6), "within a second of the last letter")
+	assert.Equal(t, []int{6}, typed("c", 0), "leading spaces")
+	assert.Equal(t, []int{1, 7, 7}, typed("aba", 0.1), "nothing starts so: it stays")
+	assert.Equal(t, []int{1, 5, 5}, typed("aab", 0.1))
+	assert.Equal(t, []int{2, 4, 4, 4}, typed("blub", 0.1))
 }
 
 func TestADisabledSelectNeverOpens(t *testing.T) {
