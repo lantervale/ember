@@ -535,6 +535,19 @@ func MatchWith(t testing.TB, d *ui.Document, size geom.Vec2, feature ...string) 
 	return Match(t, d, size)
 }
 
+// tolerance is how far an edge may be from Chrome's; Tolerance unless
+// MatchWithin sets it.
+var tolerance float32 = Tolerance //nolint:gochecknoglobals // set for the length of one MatchWithin
+
+// MatchWithin is Match with edges allowed within within points of
+// Chrome's, for what Chrome lays out differently on one system.
+func MatchWithin(t testing.TB, d *ui.Document, size geom.Vec2, within float32) Report {
+	t.Helper()
+	tolerance = within
+	defer func() { tolerance = Tolerance }()
+	return Match(t, d, size)
+}
+
 // Report is what Match compared.
 type Report struct {
 	Boxes    int
@@ -579,7 +592,7 @@ func Match(t testing.TB, d *ui.Document, size geom.Vec2) Report {
 			}
 		}
 		r.MaxDelta = max(r.MaxDelta, delta)
-		if delta > Tolerance {
+		if delta > tolerance {
 			t.Errorf("%s: ember %v %v, Chrome %v %v", path(n), g, got, w, parts)
 		}
 	}
@@ -610,7 +623,7 @@ func Match(t testing.TB, d *ui.Document, size geom.Vec2) Report {
 			r.Boxes++
 			delta := edgeDelta(node.Box(), w)
 			r.MaxDelta = max(r.MaxDelta, delta)
-			if delta > Tolerance {
+			if delta > tolerance {
 				t.Errorf("%s: ember %v, Chrome %v", name, node.Box(), w)
 			}
 		}
