@@ -568,7 +568,10 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	for i := 0; i < len(items); i++ {
 		it := items[i]
 		if it.text != nil {
-			run = append(run, it)
+			// A -webkit-box drops the white space between its children, inline ones too.
+			if !n.st.WebkitBox || !inFlexOrGrid || !onlyCollapsibleSpace(items[i:i+1]) {
+				run = append(run, it)
+			}
 			continue
 		}
 		st := styleOf(it.element)
@@ -585,7 +588,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.kids = append(n.kids, t.build(it.element, n))
 			continue
 		}
-		if !inFlexOrGrid && !elementBlockLevel(it.element) {
+		if (!inFlexOrGrid || n.st.WebkitBox) && !elementBlockLevel(it.element) {
 			run = append(run, it)
 			continue
 		}

@@ -70,7 +70,12 @@ func (b *Box) equal(o *Box) bool {
 		b.LineClamp == o.LineClamp &&
 		b.WebkitBox == o.WebkitBox &&
 		b.BoxVertical == o.BoxVertical &&
-		b.WebkitLineClamp == o.WebkitLineClamp
+		b.WebkitLineClamp == o.WebkitLineClamp &&
+		b.BoxPack == o.BoxPack &&
+		b.BoxAlign == o.BoxAlign &&
+		b.BoxReverse == o.BoxReverse &&
+		b.BoxFlex == o.BoxFlex &&
+		b.BoxOrdinal == o.BoxOrdinal
 }
 
 func (g *Grid) equal(o *Grid) bool {

@@ -30,12 +30,13 @@ type Computed struct {
 func Initial() Computed {
 	return Computed{
 		Box: Box{
-			Display:   Inline,
-			BoxSizing: BorderBox,
-			MaxSize:   Size[Length]{Length{Kind: None}, Length{Kind: None}},
-			Margin:    All(Px(0)),
-			Padding:   All(Px(0)),
-			ZAuto:     true,
+			Display:    Inline,
+			BoxSizing:  BorderBox,
+			MaxSize:    Size[Length]{Length{Kind: None}, Length{Kind: None}},
+			Margin:     All(Px(0)),
+			Padding:    All(Px(0)),
+			ZAuto:      true,
+			BoxOrdinal: 1,
 		},
 		Flex: Flex{
 			Shrink: 1, AlignItems: AlignNormal, AlignContent: AlignNormal, JustifyContent: AlignNormal,
@@ -235,6 +236,15 @@ type Box struct {
 	WebkitBox       bool
 	BoxVertical     bool
 	WebkitLineClamp int
+	// BoxPack, BoxAlign and BoxReverse are -webkit-box-pack, -webkit-box-align and
+	// -webkit-box-direction: reverse, which a -webkit-box laid out as flex takes in place
+	// of justify-content, align-items and a reversed flex-direction; BoxFlex and
+	// BoxOrdinal are -webkit-box-flex and -webkit-box-ordinal-group, its items' flex-grow
+	// and flex-shrink both, and their order.
+	BoxPack, BoxAlign Align
+	BoxReverse        bool
+	BoxFlex           float32
+	BoxOrdinal        int
 }
 
 // Clamp is how many lines the box shows, 0 for all, and whether the

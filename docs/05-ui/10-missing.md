@@ -111,7 +111,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `forced-colors: active` | answers the query, where Chrome also forces the system's colours on the page |
 | `ex`, `ch` and the font's other units in a media query's length | measured in ui's initial font (Go, 16px), where Chrome measures in its default font (Times on macOS): a bound between the two is answered otherwise |
 | a corner or a centre in `-webkit-linear-gradient()`, `-webkit-gradient()`, the prefixed repeating gradients | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
-| `-webkit-box-pack`, `-webkit-box-align`, `-webkit-box-flex`, `-webkit-box-direction`, `-webkit-box-ordinal-group` | keep their warning: a `-webkit-box` that clamps no lines is laid out as `flex` along its orient, its inline children each an item, where Chrome's old flexbox keeps them on one line |
 | a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
 | a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
 | `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |

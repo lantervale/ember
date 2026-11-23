@@ -1127,7 +1127,8 @@ func (x *ctx) display(root bool) {
 	x.webkitBox()
 	switch x.parent.Display {
 	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
-		if !root {
+		// A -webkit-box's inline-level children stay inline, its lines wrapped in one item.
+		if !root && !x.parent.WebkitBox {
 			c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 			c.Float = style.FloatNone
 		}
@@ -1146,7 +1147,9 @@ func (x *ctx) display(root bool) {
 }
 
 // webkitBox lays display: -webkit-box out as Chrome does: a vertical one
-// clamping its lines as flow-root, any other as flex along its orient.
+// clamping its lines as flow-root, any other as flex along its orient and
+// direction on one line, packed and aligned by -webkit-box-pack and
+// -webkit-box-align alone.
 func (x *ctx) webkitBox() {
 	c := x.c
 	switch {
@@ -1158,10 +1161,16 @@ func (x *ctx) webkitBox() {
 			c.Display = style.Block
 		}
 		c.FlowRoot = true
-	case c.BoxVertical:
-		c.Direction = style.Column
 	default:
 		c.Direction = style.Row
+		if c.BoxVertical {
+			c.Direction = style.Column
+		}
+		if c.BoxReverse {
+			c.Direction++
+		}
+		c.Wrap = style.NoWrap
+		c.JustifyContent, c.AlignItems = c.BoxPack, c.BoxAlign
 	}
 }
 
@@ -1822,6 +1831,18 @@ var props = func() map[string]prop {
 			flips[int]()),
 		"-webkit-box-orient": field(func(c *style.Computed) *bool { return &c.BoxVertical },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "vertical", "block-axis") }, flips[bool]()),
+		"-webkit-box-pack": keyword(func(c *style.Computed) *style.Align { return &c.BoxPack },
+			map[string]style.Align{"start": style.AlignFlexStart, "end": style.AlignFlexEnd,
+				"center": style.AlignCenter, "justify": style.AlignSpaceBetween}),
+		"-webkit-box-align": keyword(func(c *style.Computed) *style.Align { return &c.BoxAlign },
+			map[string]style.Align{"start": style.AlignFlexStart, "end": style.AlignFlexEnd,
+				"center": style.AlignCenter, "baseline": style.AlignBaseline, "stretch": style.AlignStretch}),
+		"-webkit-box-direction": field(func(c *style.Computed) *bool { return &c.BoxReverse },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "reverse") }, flips[bool]()),
+		"-webkit-box-flex": field(func(c *style.Computed) *float32 { return &c.BoxFlex },
+			func(x *ctx, v []Component) float32 { return x.num(v[0]) }, numbers(0, math.MaxFloat32)),
+		"-webkit-box-ordinal-group": field(func(c *style.Computed) *int { return &c.BoxOrdinal },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 		"widows": field(func(c *style.Computed) *int { return &c.Widows },

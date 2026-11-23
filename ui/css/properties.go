@@ -59,8 +59,10 @@ var properties = map[string]property{
 	"orphans": {inherited: true, initial: "2"}, "widows": {inherited: true, initial: "2"},
 	"aspect-ratio": {initial: "auto"},
 	"line-clamp":   {initial: "none"}, "-webkit-line-clamp": {initial: "none"},
-	"-webkit-box-orient": {initial: "horizontal"},
-	"overflow-x":         {initial: "visible"}, "overflow-y": {initial: "visible"},
+	"-webkit-box-orient": {initial: "horizontal"}, "-webkit-box-pack": {initial: "start"},
+	"-webkit-box-align": {initial: "stretch"}, "-webkit-box-direction": {initial: "normal"},
+	"-webkit-box-flex": {initial: "0"}, "-webkit-box-ordinal-group": {initial: "1"},
+	"overflow-x": {initial: "visible"}, "overflow-y": {initial: "visible"},
 	"position": {initial: "static"},
 	"float":    {initial: "none"}, "clear": {initial: "none"},
 	"vertical-align": {initial: "baseline"},
@@ -249,14 +251,13 @@ var shorthands = map[string][]string{
 //
 //nolint:gochecknoglobals // unsupported properties' advice
 var outside = map[string]string{
-	"word-wrap":        "word-wrap is the old name of overflow-wrap",
-	"grid-gap":         "grid-gap is the old name of gap",
-	"grid-row-gap":     "grid-row-gap is the old name of row-gap",
-	"grid-column-gap":  "grid-column-gap is the old name of column-gap",
-	"-webkit-box-flex": "old flexbox is not supported; use flex",
-	"box-flex":         "old flexbox is not supported; use flex",
-	"zoom":             "zoom is not supported; use transform: scale()",
-	"clip":             "clip is not supported; use overflow: clip",
+	"word-wrap":       "word-wrap is the old name of overflow-wrap",
+	"grid-gap":        "grid-gap is the old name of gap",
+	"grid-row-gap":    "grid-row-gap is the old name of row-gap",
+	"grid-column-gap": "grid-column-gap is the old name of column-gap",
+	"box-flex":        "old flexbox is not supported; use flex",
+	"zoom":            "zoom is not supported; use transform: scale()",
+	"clip":            "clip is not supported; use overflow: clip",
 }
 
 // checkProperty returns why name can't be used, or "" when it can.
