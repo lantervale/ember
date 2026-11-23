@@ -1093,3 +1093,13 @@ func TestABorderStyleAloneIsAMediumBorder(t *testing.T) {
 		t.Errorf("one side's style: %v, want %v", got, want)
 	}
 }
+
+func TestOutlineStyleAutoIsTheFocusRing(t *testing.T) {
+	d := el(dom.Div, "d")
+	root := page(d)
+	Compute(root, []*Sheet{sheet(t, `#d { outline: auto 3px; }`)})
+	s := styleOf(d)
+	if s.OutlineStyle != style.BorderAuto || s.OutlineWidth != 3 {
+		t.Errorf("outline: %v %v", s.OutlineStyle, s.OutlineWidth)
+	}
+}

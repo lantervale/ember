@@ -83,3 +83,31 @@ func TestOnlyARoundedBorderSolidOrDoubleAlikeAllRoundIsARing(t *testing.T) {
 	dashed[1] = style.BorderDashed
 	assert.False(t, oneRing([4]float32{2, 2, 2, 2}, same, dashed))
 }
+
+func TestAnAutoOutlineIsChromesFocusRing(t *testing.T) {
+	blue := color.RGB8(52, 33, 230)
+	r := newRecorder()
+	Paint(r, tree(el(10, 10, 60, 40, func(s *style.Computed) {
+		s.OutlineStyle, s.OutlineWidth, s.OutlineOffset, s.OutlineColor = style.BorderAuto, 3, 2, blue
+	})), Scale(1))
+	rings := r.of("border")
+	require.Len(t, rings, 2, "a white ring under one of the outline's colour")
+	assert.Equal(t, color.RGB(1, 1, 1), rings[0].Color)
+	assert.Equal(t, geom.Rect{X: 6, Y: 6, W: 68, H: 48}, rings[0].Rect, "a third of the width outside the stroke")
+	assert.Equal(t, float32(3), rings[0].Width)
+	assert.Equal(t, blue, rings[1].Color)
+	assert.Equal(t, geom.Rect{X: 7, Y: 7, W: 66, H: 46}, rings[1].Rect, "two thirds of the width down the offset box")
+	assert.Equal(t, float32(2), rings[1].Width)
+	assert.Equal(t, float32(4), rings[1].Radius, "a square box's ring as round as the outline is wide, at its middle")
+}
+
+func TestADashedOutlineIsDrawnAsADashedBorderOutsideTheBox(t *testing.T) {
+	r := newRecorder()
+	Paint(r, tree(el(10, 10, 60, 40, func(s *style.Computed) {
+		s.OutlineStyle, s.OutlineWidth, s.OutlineColor = style.BorderDashed, 2, color.RGB(0, 0, 0)
+	})), Scale(1))
+	assert.Empty(t, r.of("border"), "no solid ring")
+	dashes := r.of("rect")
+	require.NotEmpty(t, dashes)
+	assert.Equal(t, geom.V2(8, 8), geom.V2(dashes[0].Rect.X, dashes[0].Rect.Y), "from the outline's corner")
+}

@@ -178,7 +178,7 @@ func lookOf(i int, w [4]float32, c color.Color, s style.BorderStyle, k float32) 
 		return look{s: s, bands: []ringBand{{none, cut(false), c}, {cut(true), whole, c}}}
 	case style.BorderDashed, style.BorderDotted:
 		return look{s: s, c: c, w: w[i]}
-	case style.BorderNone, style.BorderSolid:
+	case style.BorderNone, style.BorderAuto, style.BorderSolid:
 	}
 	return look{s: s, bands: []ringBand{{none, whole, c}}}
 }
@@ -193,7 +193,7 @@ func stylePriority(s style.BorderStyle) int {
 		return 2
 	case style.BorderSolid:
 		return 3
-	case style.BorderNone:
+	case style.BorderNone, style.BorderAuto:
 	}
 	return 0
 }

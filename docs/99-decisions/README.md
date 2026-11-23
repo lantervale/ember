@@ -144,6 +144,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0140 | [A Document's window focus is a state the cascade answers](0140-a-documents-window-focus-is-a-state-the-cascade-answers.md) | api |
 | 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
+| 0149 | [Rounded sides are bands of the ring cut to their side, as Chrome paints them](0149-rounded-sides-are-bands-of-the-ring-cut-to-their-side-as-chrome-paints-them.md) | rendering |
 
 ## Writing one
 

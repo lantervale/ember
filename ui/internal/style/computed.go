@@ -674,6 +674,9 @@ const (
 	// BorderDouble draws a side as two solid lines, each about a third of
 	// its width, and solid where it is too thin to show the gap.
 	BorderDouble
+	// BorderAuto is outline-style: auto, the focus ring; a border never
+	// takes it.
+	BorderAuto
 )
 
 // Shadow is one box-shadow.

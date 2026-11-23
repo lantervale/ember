@@ -92,6 +92,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/collapsed-joins", 600, 220, 0.0001},
 		{"./internal/pages/rounded-styles", 520, 150, 0.001},
 		{"./internal/pages/rounded-dashes", 560, 160, 0.0012},
+		{"./internal/pages/outline-styles", 520, 160, 0.001},
 		{"./internal/pages/direction", 400, 400, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},

@@ -55,6 +55,7 @@ func TestExpand(t *testing.T) {
 				"border-left-color": "currentcolor"}},
 		{"outline", "2px solid rgb(1 2 3)",
 			map[string]string{"outline-width": "2px", "outline-style": "solid", "outline-color": "rgb(1 2 3)"}},
+		{"outline", "auto 1px", map[string]string{"outline-width": "1px", "outline-style": "auto"}},
 		{"background", "url(a.png) #000", map[string]string{"background-image": "url(a.png)", "background-color": "#000"}},
 		{"border-image", "url(p.png) 8 fill / 8px round",
 			map[string]string{"border-image-source": "url(p.png)", "border-image-slice": "8 fill", "border-image-width": "8px",

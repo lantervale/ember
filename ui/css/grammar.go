@@ -429,7 +429,7 @@ var checks = map[string]check{
 	"object-position":       checkPosition,
 	"box-shadow":            checkBoxShadow,
 	"outline-width":         single(borderWidth),
-	"outline-style":         single(borderStyle),
+	"outline-style":         single(either(borderStyle, words("auto"))),
 	"outline-color":         single(colorTerm),
 	"outline-offset":        single(length),
 	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),

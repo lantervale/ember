@@ -75,7 +75,7 @@ func rank(s style.BorderStyle) int {
 		return 2
 	case style.BorderInset:
 		return 1
-	case style.BorderNone:
+	case style.BorderNone, style.BorderAuto:
 	}
 	return 0
 }

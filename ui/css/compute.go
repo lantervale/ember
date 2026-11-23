@@ -1504,6 +1504,11 @@ var (
 		"inset": style.BorderInset, "outset": style.BorderOutset,
 		"groove": style.BorderGroove, "ridge": style.BorderRidge, "double": style.BorderDouble,
 	}
+	outlineStyles = func() map[string]style.BorderStyle {
+		m := maps.Clone(borderStyles)
+		m["auto"] = style.BorderAuto
+		return m
+	}()
 	overflows = map[string]style.Overflow{
 		"visible": style.Visible, "hidden": style.Hidden, "clip": style.Clip,
 		"scroll": style.Scroll, "auto": style.OverflowAuto,
@@ -2109,7 +2114,7 @@ var props = func() map[string]prop {
 		"box-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.Shadows },
 			(*ctx).shadows, shadows).painted(),
 		"outline-width": field(func(c *style.Computed) *float32 { return &c.OutlineWidth }, borderWidthOf, widths),
-		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, borderStyles),
+		"outline-style": keyword(func(c *style.Computed) *style.BorderStyle { return &c.OutlineStyle }, outlineStyles),
 		"outline-color": currentField(style.OutlineCurrent,
 			func(c *style.Computed) *color.Color { return &c.OutlineColor }).painted(),
 		"outline-offset": field(func(c *style.Computed) *float32 { return &c.OutlineOffset },

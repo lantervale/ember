@@ -220,7 +220,7 @@ func (p *painter) collapsedBorders(e entry, alpha float32) {
 			}
 			p.s.Rect(a, first)
 			p.s.Rect(b, second)
-		case style.BorderNone, style.BorderSolid:
+		case style.BorderNone, style.BorderAuto, style.BorderSolid:
 			p.s.Rect(r, c)
 		}
 	}
@@ -423,7 +423,7 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 		rule.BorderStyle.Left = style.BorderRidge
 	case style.BorderOutset:
 		rule.BorderStyle.Left = style.BorderGroove
-	case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
+	case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
 		style.BorderRidge, style.BorderDouble:
 	}
 	b := e.b
@@ -1396,7 +1396,7 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		switch s.style {
 		case style.BorderDashed, style.BorderDotted:
 			p.dashes(s.rect, s.across, s.style == style.BorderDotted, s.c)
-		case style.BorderNone, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
+		case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
 			style.BorderRidge, style.BorderDouble:
 			p.s.Rect(s.rect, s.c)
 		}
@@ -1447,7 +1447,7 @@ func halves(s style.Sides[style.BorderStyle]) (style.Sides[style.BorderStyle], s
 		case style.BorderRidge:
 			split = true
 			return style.BorderOutset, style.BorderInset
-		case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
+		case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
 			style.BorderOutset, style.BorderDouble:
 		}
 		return x, x
@@ -1533,10 +1533,12 @@ func (p *painter) dashes(r geom.Rect, across, dotted bool, c color.Color) {
 	}
 }
 
-// outline paints an element's outline outside its border box.
+// outline paints an element's outline outside its border box: a solid or
+// double one as rings, any other as a border of its style all round would
+// be drawn there.
 func (p *painter) outline(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	ring := grow(inkOf(e, st), st.OutlineOffset+st.OutlineWidth)
+	ring := grow(inkOf(e, st), outlineReach(st))
 	if !outlined(b) || p.missed(e, ring) {
 		return
 	}
@@ -1553,24 +1555,28 @@ func (p *painter) outline(e entry, alpha float32) {
 	} else {
 		ps[0].rect = geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}
 	}
+	w := st.OutlineWidth
+	lined := style.Computed{BorderStyle: style.All(st.OutlineStyle), BorderColor: style.All(c)}
 	for _, pc := range ps {
 		r := p.snap(pc.rect)
 		out := geom.Rect{X: r.X - grow, Y: r.Y - grow, W: r.W + 2*grow, H: r.H + 2*grow}
-		ring := func(r geom.Rect, radius radii, w float32) {
-			if radius.uniform() {
-				p.s.Border(r, radius[0], w, c)
-			} else {
-				p.s.BorderCorners(r, radius, w, c)
+		switch st.OutlineStyle {
+		case style.BorderAuto:
+			p.focusRing(r, radius.grown(-grow), w, st.OutlineOffset, c)
+		case style.BorderDouble:
+			if outer, inner, ok := doubleCut(w, p.maskScale()); ok {
+				p.ring(out, radius, outer, c)
+				gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
+				p.ring(inside(out, gap), radius.inside(gap), w-inner, c)
+				continue
 			}
+			p.ring(out, radius, w, c)
+		case style.BorderNone, style.BorderSolid:
+			p.ring(out, radius, w, c)
+		case style.BorderDashed, style.BorderDotted, style.BorderInset, style.BorderOutset, style.BorderGroove,
+			style.BorderRidge:
+			p.border(out, box.Edges{Top: w, Right: w, Bottom: w, Left: w}, radius, &lined, 1)
 		}
-		w := st.OutlineWidth
-		if outer, inner, ok := doubleCut(w, p.maskScale()); ok && st.OutlineStyle == style.BorderDouble {
-			ring(out, radius, outer)
-			gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
-			ring(inside(out, gap), radius.inside(gap), w-inner)
-			continue
-		}
-		ring(out, radius, w)
 	}
 }
 

@@ -703,7 +703,7 @@ const inkMargin = 48
 func inkReach(st *style.Computed) float32 {
 	r := max(shadowReach(st.Shadows), st.Font.Size+shadowReach(st.TextShadows)) + filterReach(st.Filters)
 	if st.OutlineStyle != style.BorderNone {
-		r = max(r, st.OutlineWidth+max(st.OutlineOffset, 0))
+		r = max(r, outlineReach(st)-st.OutlineOffset+max(st.OutlineOffset, 0))
 	}
 	return r
 }

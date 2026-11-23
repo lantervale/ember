@@ -234,3 +234,37 @@ func (p *painter) ring(r geom.Rect, radius radii, w float32, c color.Color) {
 	}
 	p.s.BorderCorners(r, radius, w, c)
 }
+
+// outlineReach is how far past the border box st's outline is drawn: its
+// offset and its width, and a focus ring's two strokes past the offset.
+func outlineReach(st *style.Computed) float32 {
+	reach := st.OutlineOffset + st.OutlineWidth
+	if st.OutlineStyle == style.BorderAuto {
+		inner, outer := focusStrokes(st.OutlineWidth)
+		reach = max(reach, st.OutlineOffset+inner/2+outer)
+	}
+	return reach
+}
+
+// focusStrokes are how wide a focus ring's strokes are for an outline w
+// wide: two thirds of it and a third, rounded up.
+func focusStrokes(w float32) (float32, float32) {
+	return float32(math.Ceil(float64(2 * w / 3))), float32(math.Ceil(float64(w / 3)))
+}
+
+// focusRing paints outline-style: auto round the box r of corners radius,
+// as Chrome draws its focus ring for an outline w wide and offset out: a
+// stroke of c two thirds of w across, rounded up, down the box grown by
+// offset, its corners those of the box grown or else w round, and outside
+// it a white one a third of w across, rounded up.
+func (p *painter) focusRing(r geom.Rect, radius radii, w, offset float32, c color.Color) {
+	inner, outer := focusStrokes(w)
+	middle := radius.grown(offset)
+	for i := range middle {
+		if middle[i] <= 0 {
+			middle[i] = w
+		}
+	}
+	p.ring(grow(r, offset+inner/2+outer), middle.grown(inner/2+outer), inner+outer, color.RGB(1, 1, 1).Alpha(c.A))
+	p.ring(grow(r, offset+inner/2), middle.grown(inner/2), inner, c)
+}

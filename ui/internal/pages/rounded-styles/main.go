@@ -23,7 +23,7 @@ body { padding: 12px; margin: 0; }
 .row > .h { border: 8px ridge #3421e6; border-radius: 20px; }
 .row > .i { border-width: 6px; border-style: solid double; border-color: #e03c31; border-radius: 14px; }
 .row > .j { border-width: 4px 10px; border-style: inset; border-color: #2a9d4a; border-radius: 16px; }
-.row > .k { border-width: 9px; border-style: double; border-color: #3421e6; border-width: 9px 3px; border-radius: 14px; }
+.row > .k { border-style: double; border-color: #3421e6; border-width: 9px 3px; border-radius: 14px; }
 .row > .l { border-width: 6px; border-style: groove solid; border-color: #e0a030; border-radius: 10px 20px; }
 `
 

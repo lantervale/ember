@@ -670,7 +670,7 @@ func image(src string) string {
 }
 
 func borderStyle(b style.BorderStyle) string {
-	return []string{"none", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge", "double"}[b]
+	return []string{"none", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge", "double", "auto"}[b]
 }
 
 // TestTheBordersOfTwoSidesMatchChrome compares border-inline, border-block,
