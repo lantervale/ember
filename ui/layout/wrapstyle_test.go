@@ -58,3 +58,30 @@ func TestPrettyKeepsALongEnoughLastLine(t *testing.T) {
 	tr := lay(el(dom.Div, block, p), 200)
 	assert.Equal(t, []string{"aaaa bbbb", "cccc ddd"}, trimmed(lines(tr.Of[p])))
 }
+
+func TestSoftHyphensBreakWithAHyphen(t *testing.T) {
+	p := el(dom.P, width(50), text("aaa­bbb­c"))
+	tr := lay(el(dom.Div, block, p), 200)
+	ls := tr.Of[p].Children[0].Lines
+	assert.Equal(t, []string{"aaa", "bbbc"}, lines(tr.Of[p]), "the soft hyphens take no room and show nothing")
+	assert.Equal(t, "‐", ls[0].Hyphen)
+	assert.InDelta(t, 40, ls[0].Rect.W, 0.01, "the hyphen takes its room at the line's end")
+	assert.Empty(t, ls[1].Hyphen)
+}
+
+func TestHyphensNoneKeepsWordsWhole(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) { width(50)(st); st.Hyphens = style.HyphensNone }, text("aaa­bbb"))
+	tr := lay(el(dom.Div, block, p), 200)
+	assert.Equal(t, []string{"aaabbb"}, lines(tr.Of[p]))
+}
+
+func TestHyphenateCharacterIsShown(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) {
+		width(50)(st)
+		st.HyphenChar, st.HyphenChosen = "=>", true
+	}, text("aaa­bbb"))
+	tr := lay(el(dom.Div, block, p), 200)
+	l := tr.Of[p].Children[0].Lines[0]
+	assert.Equal(t, "=>", l.Hyphen)
+	assert.InDelta(t, 50, l.Rect.W, 0.01)
+}

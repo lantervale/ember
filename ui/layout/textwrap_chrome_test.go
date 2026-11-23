@@ -133,3 +133,45 @@ func sweep(wrap string) *ui.Document {
 	}
 	return page(ps...)
 }
+
+const soft = "Lan­tern­makers il­lu­mi­nate ex­tra­ordi­nar­ily lu­mi­nous " +
+	"ca­the­drals."
+
+func TestSoftHyphensBreakAsChrome(t *testing.T) {
+	cases := map[string]*ui.Document{
+		"manual": page(
+			ui.P(ui.Style("width: 90px"), ui.Text(soft)),
+			ui.P(ui.Style("width: 130px"), ui.Text(soft)),
+			ui.P(ui.Style("width: 400px"), ui.Text(soft)),
+		),
+		"none":                    page(ui.P(ui.Style("width: 90px; hyphens: none"), ui.Text(soft))),
+		"auto without a language": page(ui.P(ui.Style("width: 110px; hyphens: auto"), ui.Text(soft))),
+		"hyphenate-character": page(
+			ui.P(ui.Style("width: 100px; hyphenate-character: '='"), ui.Text(soft)),
+			ui.P(ui.Style("width: 100px; hyphenate-character: '\\2013\\2013'"), ui.Text(soft)),
+			ui.P(ui.Style("width: 100px; hyphenate-character: ''"), ui.Text(soft)),
+		),
+		"spans": page(
+			ui.P(ui.Style("width: 80px"), ui.Text("Lan­"), ui.Span(ui.Style("font-weight: bold"),
+				ui.Text("tern­makers")), ui.Text(" il­lu­mi­nate")),
+		),
+		"aligned and balanced": page(
+			ui.P(ui.Style("width: 120px; text-align: right"), ui.Text(soft)),
+			ui.P(ui.Style("width: 120px; text-align: justify"), ui.Text(soft)),
+			ui.P(ui.Style("width: 160px; text-wrap: balance"), ui.Text(soft)),
+			ui.P(ui.Style("width: 120px; text-wrap: pretty"), ui.Text(soft)),
+		),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+			matchText(t, d, geom.V2(800, 600))
+			if name != "spans" {
+				// Chrome gives a span's hyphen a rect of its own, an artefact of the
+				// fragment it makes for it, not a box.
+				matchSpanFragments(t, d, geom.V2(800, 600))
+			}
+		})
+	}
+}

@@ -187,6 +187,7 @@ func (t *Text) equal(o *Text) bool {
 		t.WrapStyle == o.WrapStyle &&
 		t.Hyphens == o.Hyphens &&
 		t.HyphenChar == o.HyphenChar &&
+		t.HyphenChosen == o.HyphenChosen &&
 		t.TextBoxTrim == o.TextBoxTrim &&
 		t.TextBoxEdge == o.TextBoxEdge &&
 		t.SpacingTrim == o.SpacingTrim &&

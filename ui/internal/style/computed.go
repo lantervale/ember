@@ -947,8 +947,10 @@ type Text struct {
 	InkThrough bool
 	WrapStyle  WrapStyle
 	Hyphens    Hyphens
-	// HyphenChar is hyphenate-character, "" for auto.
-	HyphenChar  string
+	// HyphenChar is hyphenate-character's string when HyphenChosen,
+	// else it is auto.
+	HyphenChar   string
+	HyphenChosen bool
 	TextBoxTrim TextBoxTrim
 	TextBoxEdge TextBoxEdge
 	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:

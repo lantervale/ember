@@ -2025,6 +2025,7 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 // right, each piece small capitals or a word gap cut placed from where
 // the fragment ends.
 func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
+	text := f.Text + f.Hyphen
 	p.around = [2]string{f.Before, f.After}
 	defer func() { p.around = [2]string{} }()
 	if !f.RTL {
@@ -2032,17 +2033,17 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 			// The space starting its block's text takes no word-spacing.
 			at.X -= st.WordGap()
 		}
-		p.words(at, f.Text, st, opts)
+		p.words(at, text, st, opts)
 		return
 	}
 	opts = append(slices.Clip(opts), twod.RightToLeft())
 	font := st.Font
 	if c, ok := p.fonts.(capsFonts); ok {
-		font = c.Caps(font, f.Text)
+		font = c.Caps(font, text)
 	}
-	runs := font.SmallCaps(f.Text)
+	runs := font.SmallCaps(text)
 	if runs == nil {
-		runs = []style.CapsRun{{Text: f.Text, Font: font}}
+		runs = []style.CapsRun{{Text: text, Font: font}}
 	} else {
 		p.around = [2]string{}
 	}

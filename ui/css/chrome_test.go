@@ -150,7 +150,7 @@ var compared = map[string]func(s *style.Computed) string{
 	},
 	"hyphens": func(s *style.Computed) string { return []string{"manual", "none", "auto"}[s.Hyphens] },
 	"hyphenate-character": func(s *style.Computed) string {
-		if s.HyphenChar == "" {
+		if !s.HyphenChosen {
 			return "auto"
 		}
 		return strconv.Quote(s.HyphenChar)

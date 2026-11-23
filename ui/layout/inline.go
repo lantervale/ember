@@ -193,6 +193,9 @@ const (
 	// tab is a tab of text that keeps it, as wide as it takes to reach the next tab stop,
 	// or a carriage return there, of no width.
 	tab
+	// softHyphen is a soft hyphen a line may break after, of no width but at the end of
+	// a line, where it shows its hyphen, hyphen wide.
+	softHyphen
 )
 
 // piece is a word, a space, a zero-width break opportunity, a forced break, an atomic
@@ -214,9 +217,30 @@ type piece struct {
 	// unspaced marks a gap whose first space starts the content's text, and so takes no
 	// word-spacing.
 	unspaced bool
+	// hyphen is a soft hyphen's width at a line's end; shows marks the one that ends
+	// the line it is shown in.
+	hyphen float32
+	shows  bool
 }
 
-const zeroWidthSpace = "\u200b"
+const (
+	zeroWidthSpace = "\u200b"
+	softHyphenChar = '\u00ad'
+)
+
+// unshown drops from s the characters that take no room and show nothing: zero-width
+// spaces and soft hyphens.
+func unshown(s string) string {
+	if !strings.ContainsAny(s, zeroWidthSpace+string(softHyphenChar)) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if r == softHyphenChar || string(r) == zeroWidthSpace {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 // blanks turns the whitespace that collapses like a space into one.
 var blanks = strings.NewReplacer("\t", " ", "\r", " ", "\f", " ") //nolint:gochecknoglobals // a Replacer built once
@@ -539,7 +563,7 @@ func (c *inlineContent) joinRuns(fonts box.Fonts) {
 		if !shape.JoinsAcross(before, after) {
 			continue
 		}
-		text := strings.ReplaceAll(p.text, zeroWidthSpace, "")
+		text := unshown(p.text)
 		p.width += cf.AdvanceIn(r.st.Font, text, before, after) - fonts.Advance(r.st.Font, text)
 	}
 }
@@ -657,7 +681,7 @@ func (c *inlineContent) first() bool {
 		switch p.kind {
 		case word, gap, newline, atomic, marker, tab:
 			return false
-		case breakHere, edge, emergency, anchor:
+		case breakHere, edge, emergency, anchor, softHyphen:
 		}
 	}
 	return true
@@ -687,7 +711,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		}
 		p := piece{kind: kind, run: i, text: s, at: from, level: level}
 		if kind == word || kind == gap {
-			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) + r.st.Spacing(s)
+			p.width = fonts.Advance(r.st.Font, unshown(s)) + r.st.Spacing(unshown(s))
 		}
 		c.unspace(&p, r.st)
 		c.pieces = append(c.pieces, p)
@@ -724,6 +748,11 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		case string(ch) == zeroWidthSpace:
 			emit(word)
 			c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
+		case ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
+			emit(word)
+			c.pieces = append(c.pieces, piece{kind: softHyphen, run: i, at: n - 1, level: level,
+				hyphen: hyphenWidth(fonts, r.st)})
+			afterSpace = false
 		default:
 			b.WriteRune(ch)
 			afterSpace = false
@@ -816,8 +845,8 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 	for at := 0; len(rest) > 0; {
 		g, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
 		at += len(g)
-		adv := fonts.Advance(st.Font, strings.ReplaceAll(s[:at], zeroWidthSpace, ""))
-		w := adv - prev + st.Spacing(g)
+		adv := fonts.Advance(st.Font, unshown(s[:at]))
+		w := adv - prev + st.Spacing(unshown(g))
 		prev = adv
 		switch {
 		case at == len(g):
@@ -849,6 +878,27 @@ func breaksAll(a, b string) bool {
 
 func letterLike(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
 
+// hyphenText is the hyphen st's text shows where a line breaks at a soft hyphen:
+// hyphenate-character's, else U+2010 where its face draws it and a hyphen-minus
+// where not, as Chrome's.
+func hyphenText(fonts box.Fonts, st *style.Computed) string {
+	if st.HyphenChosen {
+		return st.HyphenChar
+	}
+	if f, ok := fonts.(box.FallbackFonts); ok {
+		if _, other := f.FallbackMetrics(st.Font, "\u2010"); other {
+			return "-"
+		}
+	}
+	return "\u2010"
+}
+
+// hyphenWidth is the room hyphenText takes.
+func hyphenWidth(fonts box.Fonts, st *style.Computed) float32 {
+	h := hyphenText(fonts, st)
+	return fonts.Advance(st.Font, h) + st.Spacing(h)
+}
+
 // markerOf is the disclosure triangle list-style gives a ::marker, as
 // Chrome's text for it: "" for none.
 func markerOf(st *style.Computed) string {
@@ -875,7 +925,7 @@ func (c *inlineContent) afterWord() bool {
 			continue
 		case word:
 			return true
-		case gap, breakHere, newline, atomic, emergency, marker, anchor, tab:
+		case gap, breakHere, newline, atomic, emergency, marker, anchor, tab, softHyphen:
 		}
 		return false
 	}
@@ -947,12 +997,25 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		if c.runs[run].atomic != nil || c.runs[run].st.WordBreak == style.KeepAll && keeps(text[:pos], rest) {
 			continue
 		}
+		if r, _ := utf8.DecodeLastRuneInString(text[:pos]); r == softHyphenChar && c.hyphensOff(starts, pos-1) {
+			continue
+		}
 		if soft[run] == nil {
 			soft[run] = map[int]bool{}
 		}
 		soft[run][pos-starts[run]] = true
 	}
 	return soft
+}
+
+// hyphensOff reports whether the text at byte at of the runs, which start at starts,
+// has hyphens: none: its soft hyphens break nothing.
+func (c *inlineContent) hyphensOff(starts []int, at int) bool {
+	i := 0
+	for i+1 < len(starts) && starts[i+1] <= at {
+		i++
+	}
+	return c.runs[i].atomic == nil && c.runs[i].st.Hyphens == style.HyphensNone
 }
 
 // keeps reports whether word-break: keep-all keeps the break between before and after:
@@ -1108,6 +1171,11 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 			default:
 				cur = newPen(c.unit, 0)
 			}
+		case softHyphen:
+			if c.wrapsAt(i) {
+				minW = max(minW, cur.end()+p.hyphen)
+				cur = newPen(c.unit, 0)
+			}
 		case breakHere, newline, anchor, tab:
 			cur = newPen(c.unit, 0)
 		}
@@ -1145,6 +1213,8 @@ type line struct {
 	push     float32
 	// indent is the part of x text-indent is, which tab stops are not measured from.
 	indent float32
+	// hyphen is the soft hyphen the line breaks after, showing its hyphen, -1 for none.
+	hyphen int
 }
 
 // pen is a pen at x walking l, its tab stops measured from l's start.
@@ -1193,11 +1263,48 @@ func (c *inlineContent) wrapsAt(i int) bool {
 func (c *inlineContent) unitEnd(i int) int {
 	end := i + 1
 	if k := c.pieces[i].kind; k == word || k == edge || k == marker || k == anchor {
+		hyphen := false
 		for end < len(c.pieces) && glued(c.pieces[end].kind) {
+			// after a soft hyphen, only the ends of spans and anchors stay
+			if p := c.pieces[end]; hyphen && (p.kind != edge || p.start) && p.kind != anchor {
+				break
+			}
+			hyphen = hyphen || c.pieces[end].kind == softHyphen
 			end++
 		}
 	}
 	return end
+}
+
+// hyphenEnd is the soft hyphen a line ending before piece end ends at, -1 for none:
+// the last piece before end but span ends and anchors.
+func (c *inlineContent) hyphenEnd(end int) int {
+	for k := end - 1; k >= 0; k-- {
+		switch c.pieces[k].kind {
+		case edge:
+			if c.pieces[k].start {
+				return -1
+			}
+			continue
+		case anchor:
+			continue
+		case softHyphen:
+			if c.wrapsAt(k) {
+				return k
+			}
+		case word, gap, breakHere, newline, atomic, emergency, marker, tab:
+		}
+		return -1
+	}
+	return -1
+}
+
+// hyphenAt is the room the hyphen of a line ending before piece end takes.
+func (c *inlineContent) hyphenAt(end int) float32 {
+	if k := c.hyphenEnd(end); k >= 0 {
+		return c.pieces[k].hyphen
+	}
+	return 0
 }
 
 // opensOnSpace reports whether piece i is a span's start edge with a collapsible space
@@ -1218,7 +1325,7 @@ func (c *inlineContent) passes(p piece) bool {
 		return true
 	case gap:
 		return collapses(c.runs[p.run].st.WhiteSpace)
-	case word, atomic, newline, emergency, marker, tab:
+	case word, atomic, newline, emergency, marker, tab, softHyphen:
 	}
 	return false
 }
@@ -1289,6 +1396,13 @@ func (c *inlineContent) shown(l line) []piece {
 	for i := len(pieces) - 1; i >= 0 && c.passes(pieces[i]); i-- {
 		drop(i)
 	}
+	if l.hyphen >= l.from && l.hyphen < l.to {
+		if &out[0] == &pieces[0] {
+			out = slices.Clone(pieces)
+		}
+		p := &out[l.hyphen-l.from]
+		p.width, p.shows = p.hyphen, true
+	}
 	return out
 }
 
@@ -1313,7 +1427,7 @@ func (c *inlineContent) joined(at pen, end int) pen {
 // joins reports whether piece i is of a unit a line holds: not a break.
 func (c *inlineContent) joins(i int) bool {
 	switch c.pieces[i].kind {
-	case word, atomic, edge, marker, anchor:
+	case word, atomic, edge, marker, anchor, softHyphen:
 		return true
 	case gap, breakHere, newline, emergency, tab:
 	}
@@ -1363,13 +1477,18 @@ type breaker struct {
 
 func (b *breaker) finish(next int) {
 	b.cur.width = b.kept.end()
+	if !b.cur.forced {
+		if b.cur.hyphen = b.c.hyphenEnd(b.cur.to); b.cur.hyphen >= 0 {
+			b.cur.width += b.c.pieces[b.cur.hyphen].hyphen
+		}
+	}
 	b.out = append(b.out, b.cur)
 	b.open(next, 0, b.cur.avail, 0)
 }
 
 // open starts the breaker's next line at piece i, in room avail wide starting at x.
 func (b *breaker) open(i int, x, avail, push float32) {
-	b.cur = line{from: i, to: i, x: x, avail: avail, push: push, first: len(b.out) == 0 && b.c.hasFirst()}
+	b.cur = line{from: i, to: i, x: x, avail: avail, push: push, first: len(b.out) == 0 && b.c.hasFirst(), hyphen: -1}
 	b.at = newPen(b.c.unit, 0)
 	b.kept = b.at
 	b.pending, b.spaced = -1, -1
@@ -1418,7 +1537,7 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 			}
 		}
 		if !b.blank && !hung && b.wrapsBefore(i) {
-			if i == b.stop || next.end() > width || c.joined(next, end).end() > width {
+			if i == b.stop || next.end()+c.hyphenAt(end) > width || c.joined(next, end).end() > width {
 				b.finish(i)
 				return i, true
 			}
@@ -1483,7 +1602,7 @@ func (b *breaker) between(i int) bool {
 		return true
 	case breakHere:
 		return true
-	case newline, word, atomic, edge, emergency, marker, anchor:
+	case newline, word, atomic, edge, emergency, marker, anchor, softHyphen:
 	}
 	return false
 }
@@ -1666,7 +1785,7 @@ func (c *inlineContent) resize(i int, w float32) {
 }
 
 func glued(k pieceKind) bool {
-	return k == word || k == edge || k == emergency || k == marker || k == anchor
+	return k == word || k == edge || k == emergency || k == marker || k == anchor || k == softHyphen
 }
 
 // emergencyBreak finds where to cut the unbreakable pieces [from, end) that fit no line:
@@ -2375,6 +2494,7 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		var from int32
 		var rtl bool
 		unspaced := pieces[i].unspaced
+		first := i
 		text, start, from, rtl, i = runText(&walk, pieces, i, perGap)
 		end := walk.end()
 		if i < len(pieces) && isText(pieces[i].kind) && pieces[i].run == run {
@@ -2383,6 +2503,11 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
 		frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart, cut[1] && i == len(pieces))
 		frag.Start, frag.RTL, frag.Unspaced = from+c.runs[run].skip, rtl, unspaced
+		for _, p := range pieces[first:i] {
+			if p.shows {
+				frag.Hyphen = hyphenText(t.fonts, c.runs[run].st)
+			}
+		}
 		//nolint:gosec // a text node's length
 		if before, after := c.around(run, from, from+int32(utf8.RuneCountInString(text))); shape.JoinsAcross(before,
 			after) {
@@ -2448,7 +2573,7 @@ func runText(walk *pen, pieces []piece, i int, perGap float32) (string, float32,
 // cut before or after it.
 func (t *tree) fragment(st *style.Computed, text string, r geom.Rect, baseline float32,
 	cutBefore, cutAfter bool) box.Fragment {
-	frag := box.Fragment{Text: strings.ReplaceAll(text, zeroWidthSpace, ""), Rect: r, Baseline: baseline}
+	frag := box.Fragment{Text: unshown(text), Rect: r, Baseline: baseline}
 	if cutBefore {
 		frag.Ellipsis = true
 	}

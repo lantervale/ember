@@ -269,7 +269,7 @@ func (d *Document) mapOf(n *Node) *runMap {
 		for _, r := range f.Text {
 			// What layout dropped stands before the character it kept:
 			// the white space it collapsed and the zero-width spaces.
-			for i < len(m.src) && (m.src[i] == zeroWidthSpace || isBlank(m.src[i]) && r != ' ') {
+			for i < len(m.src) && (m.src[i] == zeroWidthSpace || m.src[i] == '\u00ad' || isBlank(m.src[i]) && r != ' ') {
 				i++
 			}
 			offs = append(offs, int32(min(i, len(m.src)))) //nolint:gosec // a text node's length

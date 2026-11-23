@@ -137,13 +137,17 @@ func textWrapProps() map[string]prop {
 		"hyphens": keyword(func(c *style.Computed) *style.Hyphens { return &c.Hyphens },
 			map[string]style.Hyphens{"manual": style.HyphensManual, "none": style.HyphensNone,
 				"auto": style.HyphensAuto}),
-		"hyphenate-character": field(func(c *style.Computed) *string { return &c.HyphenChar },
-			func(_ *ctx, v []Component) string {
-				if v[0].Kind == String {
-					return v[0].Text
+		"hyphenate-character": {
+			set: func(x *ctx, v []Component) {
+				x.c.HyphenChosen = v[0].Kind == String
+				x.c.HyphenChar = ""
+				if x.c.HyphenChosen {
+					x.c.HyphenChar = v[0].Text
 				}
-				return ""
-			}, flips[string]()),
+			},
+			inherit: func(dst, src *style.Computed) { dst.HyphenChar, dst.HyphenChosen = src.HyphenChar, src.HyphenChosen },
+			anim:    anim{kind: discrete},
+		},
 		"text-box-trim": keyword(func(c *style.Computed) *style.TextBoxTrim { return &c.TextBoxTrim },
 			map[string]style.TextBoxTrim{"none": style.TrimNone, "trim-start": style.TrimStart,
 				"trim-end": style.TrimEnd, "trim-both": style.TrimBoth}),

@@ -105,11 +105,13 @@ func (c *inlineContent) pretty(width float32, lines []line) []line {
 			continue
 		}
 		last := lines[end-1]
-		if last.width >= last.avail/3 {
-			continue
+		short := last.width < last.avail/3
+		if short {
+			cands, _ := c.candidates(lines, from, end)
+			short = !inside(cands, last)
 		}
-		cands, _ := c.candidates(lines, from, end)
-		if inside(cands, last) {
+		hyphenated := end-from >= 3 && lines[end-2].hyphen >= 0 && lines[end-3].hyphen >= 0
+		if !short && !hyphenated {
 			continue
 		}
 		if out, ok := c.optimize(width, lines, from, end, false); ok {
@@ -153,7 +155,9 @@ func (c *inlineContent) candidates(lines []line, from, end int) ([]candidate, bo
 				}
 			}
 		}
-		out = append(out, candidate{at: i, noBreak: at.at(), ifBreak: b.kept.end()})
+		hy := c.hyphenAt(i)
+		out = append(out, candidate{at: i, noBreak: at.at(), ifBreak: b.kept.end() + hy, hyphenated: hy > 0 ||
+			c.hyphenEnd(i) >= 0})
 	}
 	b.open(lines[from].from, 0, unbounded, 0)
 	i, ended := b.one(lines[from].from, unbounded)
@@ -175,15 +179,24 @@ func (c *inlineContent) optimize(width float32, lines []line, from, end int, bal
 	if !ok || len(cands) < 5 {
 		return nil, false
 	}
+	st := c.owner.st
+	justified := st.TextAlign == style.Justify
+	hyphen := width * st.Font.Size * 2
+	if justified {
+		hyphen = width * st.Font.Size / 2
+	}
+	for k := range cands {
+		if cands[k].hyphenated {
+			cands[k].penalty = hyphen
+		}
+	}
 	for k := len(cands) - 2; k >= 0; k-- {
 		cands[k].penalty += orphanPenalty
 		if !cands[k].hyphenated {
 			break
 		}
 	}
-	st := c.owner.st
-	justified := st.TextAlign == style.Justify
-	perLine := width * st.Font.Size * 4
+	perLine := hyphen * 2
 	if justified {
 		perLine = 0
 	}

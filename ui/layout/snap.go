@@ -38,7 +38,7 @@ type pen struct {
 func newPen(unit, x float32) pen { return pen{unit: unit, start: x, run: -1, origin: x} }
 
 func isText(k pieceKind) bool {
-	return k == word || k == gap || k == emergency || k == breakHere
+	return k == word || k == gap || k == emergency || k == breakHere || k == softHyphen
 }
 
 // at is where the next piece starts.

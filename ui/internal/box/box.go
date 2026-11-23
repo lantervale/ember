@@ -48,6 +48,9 @@ type Fragment struct {
 	Start int32
 	// Ellipsis is set when Text was cut and ends with "…".
 	Ellipsis bool
+	// Hyphen is shown after Text where its line breaks at a soft hyphen:
+	// hyphenate-character's string, its room in Rect.
+	Hyphen string
 	// RTL is set when Text is shown right to left: Shown has it from the left.
 	RTL bool
 	// Unspaced is set when Text starts with a space that starts its block's
