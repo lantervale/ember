@@ -297,9 +297,9 @@ func TestAPictureOfHighFetchPriorityIsAskedForFirstAsChromes(t *testing.T) {
 	chrome.Open(t, srv.URL, geom.V2(400, 300), 1)
 	asked := requests()
 	require.Len(t, asked, 22)
-	first := asked[:8]
-	assert.Contains(t, first, "/p20.png", "among the first eight Chrome asks for")
-	assert.Contains(t, first, "/p21.png", "among the first eight Chrome asks for")
+	first := asked[:12]
+	assert.Contains(t, first, "/p20.png", "in the first two rounds of six Chrome asks for, not the last")
+	assert.Contains(t, first, "/p21.png", "in the first two rounds of six Chrome asks for, not the last")
 
 	release := make(chan struct{})
 	var mu sync.Mutex
