@@ -1065,6 +1065,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	rewrite := t.keep == nil || n.fresh || n.performed == t.gen
 	n.fresh = false
 	b.Size = geom.Vec2{X: f.size.w, Y: f.size.h}
+	var framed geom.Vec2
 	if n.st.Display != style.DisplayNone && (placed || !n.atomic) {
 		origin := point{}
 		if parent != nil {
@@ -1072,6 +1073,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		}
 		at := n.absolute
 		b.Pos = geom.Vec2{X: at.x - origin.x, Y: at.y - origin.y}
+		framed = b.Pos
 		if outer.Vertical() {
 			r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: n.final.size.w, H: n.final.size.h}, in, outer)
 			b.Pos = geom.Vec2{X: r.X, Y: r.Y}
@@ -1089,6 +1091,14 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Discarded = n.discarded
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
+		if outer.Vertical() && b.Broken {
+			u := size{b.Size.X, b.Size.Y}
+			r := turnRect(geom.Rect{X: framed.X, Y: framed.Y, W: u.w, H: u.h}, in, outer)
+			b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
+			for i, p := range b.Fragments {
+				b.Fragments[i] = turnRect(p, u, outer)
+			}
+		}
 	}
 	n.final = turnPlaced(n.final, outer, frameOf(n))
 	if !rewrite {

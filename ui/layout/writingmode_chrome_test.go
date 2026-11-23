@@ -135,6 +135,16 @@ func TestVerticalFormattingContextsMatchChrome(t *testing.T) {
 .v { writing-mode: vertical-rl; }`,
 			ui.P(ui.Text("Across "), ui.Span(ui.Class("v"), ui.Text("down")), ui.Text(" across.")),
 		),
+		"a table in a vertical-rl box": styled(`
+.v { writing-mode: vertical-rl; height: 300px; }
+td { border: 1px solid; padding: 2px 4px; }`,
+			ui.Div(ui.Class("v"), ui.Table(ui.Tr(ui.Td(ui.Text("one")), ui.Td(ui.Text("two words"))),
+				ui.Tr(ui.Td(ui.Text("three")), ui.Td(ui.Text("four"))))),
+		),
+		"columns in a vertical-rl box": styled(`
+.v { writing-mode: vertical-rl; height: 300px; column-count: 2; column-gap: 10px; }`,
+			ui.Div(ui.Class("v"), words("margin: 0", sentence+" "+sentence)),
+		),
 		"a vertical-rl root": styled(`html { writing-mode: vertical-rl; } p { background: #ccc; }`,
 			words("", shortSentence), words("", "second paragraph")),
 		"inline elements of vertical lines": styled(`

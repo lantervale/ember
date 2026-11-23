@@ -2210,7 +2210,8 @@ func (t *tree) writeText(n *node) {
 	runRects, spanRects, spanLines, hidden := t.writeLines(n, c, inset, content)
 	cb := size{content, none}
 	if mode := frameOf(n); mode.Vertical() {
-		turnLines(c, n.final.size, mode, runRects, spanRects, spanLines)
+		// the box's size, cut by columns the union of its parts
+		turnLines(c, size{n.box.Size.Y, n.box.Size.X}, mode, runRects, spanRects, spanLines)
 		cb = cb.across()
 	}
 	origin := func(b *box.Box) geom.Vec2 {
