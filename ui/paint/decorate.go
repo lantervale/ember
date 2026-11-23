@@ -2021,12 +2021,18 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 		return
 	}
 	p.around, p.amid = [2]string{}, [2]string{}
+	// Text placed by its top (alt text, a select's list) sets its small
+	// capitals on the baseline of the rest.
+	top := p.fonts != nil && !twod.NewText("", opts...).Baseline()
 	for _, r := range runs {
-		o := opts
+		o, y := opts, at.Y
 		if r.Font.Size != st.Font.Size {
 			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
+			if top {
+				y += p.fonts.Metrics(st.Font).Ascent - p.fonts.Metrics(r.Font).Ascent
+			}
 		}
-		at.X = p.wordsIn(at, r.Text, st, r.Font, withFeatures(o, r.Font))
+		at.X = p.wordsIn(geom.V2(at.X, y), r.Text, st, r.Font, withFeatures(o, r.Font))
 	}
 }
 

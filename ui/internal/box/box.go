@@ -293,9 +293,10 @@ type WholeFonts interface {
 // stretches of x where the glyphs of text, drawn from 0 on its baseline
 // with letter points after each character and word after each word
 // separator, cross the band from top to bottom below the baseline, one a
-// glyph.
+// glyph; none for the glyphs of characters whose ink Chrome leaves whole
+// under text-decoration-skip-ink: all, or auto unless all (fonts.SkipsInk).
 type InkFonts interface {
-	Intercepts(f style.Font, text string, letter, word, top, bottom float32) [][2]float32
+	Intercepts(f style.Font, text string, letter, word, top, bottom float32, all bool) [][2]float32
 }
 
 // FallbackFonts is Fonts that draws some characters from other faces:

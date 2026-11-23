@@ -12,7 +12,11 @@ import (
 	"slices"
 	"sync"
 
+	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
+	"golang.org/x/image/math/fixed"
+
+	"github.com/lantervale/ember/internal/varfont"
 )
 
 // Tag is a four-letter OpenType tag.
@@ -43,6 +47,9 @@ type Font struct {
 	glyphClasses data
 	markClasses  data
 	markSets     data
+	// varStore is GDEF's store of the variations of GPOS's values, nil
+	// for none.
+	varStore *varfont.ItemStore
 	// uvs is cmap's subtable of variation sequences, nil for none.
 	uvs data
 	// kernTable is whether src has a kern table and GPOS no kern
@@ -62,6 +69,8 @@ type layout struct {
 	scripts data
 	feats   data
 	lookups data
+	// featVars are its feature variations, nil for none.
+	featVars data
 	// parsed are its lookups read so far, by index.
 	parsed map[uint16]*lookup
 }
@@ -72,6 +81,9 @@ func newLayout(t data, gpos bool) layout {
 		return l
 	}
 	l.scripts, l.feats, l.lookups = t.sub(4), t.sub(6), t.sub(8)
+	if t.u16(2) >= 1 {
+		l.featVars = t.at(int(t.u32(10)))
+	}
 	return l
 }
 
@@ -118,6 +130,11 @@ func ParseFont(src *sfnt.Font, file []byte, index int) *Font {
 		f.markClasses = gdef.sub(10)
 		if gdef.u32(0) >= 0x00010002 {
 			f.markSets = gdef.sub(12)
+		}
+		if gdef.u32(0) >= 0x00010003 {
+			if s, err := varfont.ReadItemStore(gdef, int(gdef.u32(14))); err == nil {
+				f.varStore = s
+			}
 		}
 	}
 	f.uvs = variationSequences(tables[MakeTag("cmap")])
@@ -290,6 +307,13 @@ func (f *Font) skipsClass(flag, markSet uint16, g, class uint16) bool {
 		}
 	}
 	return false
+}
+
+// defaultAdvance is glyph id's advance in font units at the default
+// instance.
+func (f *Font) defaultAdvance(id uint16) (int32, bool) {
+	a, err := f.src.GlyphAdvance(&f.buf, sfnt.GlyphIndex(id), fixed.I(int(f.upem)), font.HintingNone)
+	return int32(a >> 6), err == nil
 }
 
 // isMark reports whether GDEF classes glyph g as a mark.

@@ -95,11 +95,12 @@ const inkDilation = 13
 // that crosses it, by as much as the line is thick, as Chrome clips it.
 func (p *painter) skipping(st *style.Computed, f box.Fragment, r geom.Rect, dy, thick float32, draw func()) {
 	ink, ok := p.fonts.(box.InkFonts)
-	if st.InkThrough || !ok {
+	if st.SkipInk == style.SkipInkNone || !ok {
 		draw()
 		return
 	}
-	in := ink.Intercepts(st.Font, f.Text, st.LetterGap(), st.WordGap(), dy, dy+thick)
+	in := ink.Intercepts(st.Font, f.Text, st.LetterGap(), st.WordGap(), dy, dy+thick,
+		st.SkipInk == style.SkipInkAll)
 	if len(in) == 0 {
 		draw()
 		return

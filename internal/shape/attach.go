@@ -1,13 +1,5 @@
 package shape
 
-// anchor is the point, x then y, of anchor table a, false for none.
-func anchor(a data) (int32, int32, bool) {
-	if a == nil || a.u16(0) < 1 || a.u16(0) > 3 {
-		return 0, 0, false
-	}
-	return int32(int16(a.u16(2))), int32(int16(a.u16(4))), true //nolint:gosec // signed 16-bit fields
-}
-
 // cursive joins glyph i, by its entry, to the glyph before it lk does
 // not pass over, by that one's exit, as subtable s of a cursive
 // attachment has them: the one before ends where i starts, and the
@@ -19,7 +11,7 @@ func (b *buffer) cursive(lk *lookup, s data, i int) bool {
 	if s.u16(0) != 1 || k < 0 || k >= int(s.u16(4)) {
 		return false
 	}
-	entryX, entryY, ok := anchor(s.sub(6 + 4*k))
+	entryX, entryY, ok := b.anchor(s.sub(6 + 4*k))
 	if !ok {
 		return false
 	}
@@ -31,7 +23,7 @@ func (b *buffer) cursive(lk *lookup, s data, i int) bool {
 	if pk < 0 || pk >= int(s.u16(4)) {
 		return false
 	}
-	exitX, exitY, ok := anchor(s.sub(6 + 4*pk + 2))
+	exitX, exitY, ok := b.anchor(s.sub(6 + 4*pk + 2))
 	if !ok {
 		return false
 	}
@@ -180,11 +172,11 @@ func (b *buffer) attachMark(marks data, mk int, anchors data, row int, i, j int)
 		return false
 	}
 	class := int(marks.u16(2 + 4*mk))
-	mx, my, ok := anchor(marks.sub(2 + 4*mk + 2))
+	mx, my, ok := b.anchor(marks.sub(2 + 4*mk + 2))
 	if !ok {
 		return false
 	}
-	bx, by, ok := anchor(anchors.sub(row + 2*class))
+	bx, by, ok := b.anchor(anchors.sub(row + 2*class))
 	if !ok {
 		return false
 	}

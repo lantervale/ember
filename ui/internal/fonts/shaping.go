@@ -49,12 +49,19 @@ func (c *Face) layout() *shape.Font {
 // joined is features with the face's own among them (shape.Splice).
 func (c *Face) joined(features string) string { return shape.Splice(features, c.Look.Features) }
 
-// shapedRun is a run shaped: its width in its face's units at the
-// default instance, and the glyphs it is drawn with, each with its
-// advance and the glyph of the run its cluster starts at.
+// plan is c's plan for runs in script with features at instance at of
+// a variable font, nil for its default.
+func (c *Face) plan(script shape.Tag, features string, at varfont.Coords) *shape.Plan {
+	if at == nil {
+		return c.layout().Plan(script, c.joined(features))
+	}
+	return c.layout().PlanAt(script, c.joined(features), c.Variable(), at)
+}
+
+// shapedRun is a run shaped: its width in its face's units, and each of
+// its glyphs' advance and the glyph of the run its cluster starts at.
 type shapedRun struct {
 	width    int32
-	glyphs   []uint16
 	advances []int32
 	starts   []int32
 }
@@ -85,32 +92,21 @@ func (p part) covers(run []shape.Glyph) bool {
 // shaped is the advance of the glyphs own has of run, glyphs of c, in
 // c's units at instance at of a variable font (nil for its default):
 // shaped with the features, in script, when its layout does anything to
-// them, else the sum of their advances. GPOS's values stay the default
-// instance's.
+// them, else the sum of their advances.
 func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph, at varfont.Coords,
 	ctx context, own part) float32 {
-	p := c.layout().Plan(script, c.joined(features))
+	p := c.plan(script, features, at)
 	if !p.Touches(run) {
 		return s.unshaped(c, run, at, own)
 	}
 	r := s.shapedRun(p, run, ctx)
 	if own.covers(run) {
-		w := float32(r.width)
-		if at != nil {
-			for _, g := range r.glyphs {
-				w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
-			}
-		}
-		return w
+		return float32(r.width)
 	}
 	var w float32
-	for k, g := range r.glyphs {
-		if !own.has(int(run[r.starts[k]].Cluster)) {
-			continue
-		}
-		w += float32(r.advances[k])
-		if at != nil {
-			w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
+	for k, a := range r.advances {
+		if own.has(int(run[r.starts[k]].Cluster)) {
+			w += float32(a)
 		}
 	}
 	return w
@@ -160,7 +156,6 @@ func (s *Set) shapedRun(p *shape.Plan, run []shape.Glyph, ctx context) shapedRun
 	k := 0
 	for _, g := range p.ShapeIn(slices.Clone(run), ctx.before, ctx.after) {
 		r.width += g.Advance
-		r.glyphs = append(r.glyphs, g.ID)
 		r.advances = append(r.advances, g.Advance)
 		for k > 0 && run[k].Cluster > g.Cluster {
 			k--
@@ -222,7 +217,7 @@ func (s *Set) SpaceTies(f style.Font) bool {
 	if err != nil || g == 0 {
 		return false
 	}
-	return c.layout().Plan(shape.MakeTag("latn"), c.joined(f.Features)).Mentions(uint16(g))
+	return c.plan(shape.MakeTag("latn"), f.Features, c.Instance(f)).Mentions(uint16(g))
 }
 
 // capsFeatures are the features that draw f's capitals with c, as

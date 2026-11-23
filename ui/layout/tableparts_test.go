@@ -179,3 +179,53 @@ func TestColumnsWithoutCellsAreColumnsOfTheTable(t *testing.T) {
 	tr := lay(el(dom.Div, block, tb), 400)
 	assert.Equal(t, float32(2+12+2+40+2), tr.Of[tb].Size.X)
 }
+
+func TestAHeightGivenToATableCollapsingARowCountsFromBeforeTheCollapse(t *testing.T) {
+	gone := func(st *style.Computed) { st.Collapse = true }
+	for name, container := range map[string]func(*style.Computed){
+		"a flex column": func(st *style.Computed) { st.Display, st.Direction = style.FlexDisplay, style.Column },
+		"a flex row":    func(st *style.Computed) { st.Display, st.AlignItems = style.FlexDisplay, style.AlignFlexStart },
+		"a grid":        func(st *style.Computed) { st.Display = style.GridDisplay },
+	} {
+		t.Run(name, func(t *testing.T) {
+			tb := table(row(cell("H")), el(dom.Tr, gone, cell("H")), row(cell("H")))
+			tr := lay(el(dom.Div, block, el(dom.Div, container, tb)), 400)
+			assert.Equal(t, float32(2+12+2+12+2), tr.Of[tb].Size.Y, "the collapsed row and a spacing out, once")
+		})
+	}
+}
+
+func TestAStretchedTableNarrowsByItsCollapsedColumnButInAFlexRow(t *testing.T) {
+	gone := func(st *style.Computed) { st.Collapse = true }
+	for name, c := range map[string]struct {
+		container func(*style.Computed)
+		narrows   bool
+	}{
+		"a grid": {func(st *style.Computed) { st.Display = style.GridDisplay }, true},
+		"a flex column": {func(st *style.Computed) {
+			st.Display, st.Direction = style.FlexDisplay, style.Column
+		}, true},
+		"a flex row": {func(st *style.Computed) { st.Display = style.FlexDisplay }, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			middle := cell("HH")
+			shown := table(row(cell("H"), middle, cell("H")))
+			collapsed := table(el(dom.Col, nil), el(dom.Col, gone), row(cell("H"), cell("HH"), cell("H")))
+			wrap := func(tb *dom.Node) *dom.Node {
+				return el(dom.Div, func(st *style.Computed) {
+					c.container(st)
+					st.Size.Width = style.Px(200)
+				}, tb)
+			}
+			tr := lay(el(dom.Div, block, wrap(shown), wrap(collapsed)), 400)
+			full := tr.Of[shown].Size.X
+			if !c.narrows {
+				assert.Equal(t, full, tr.Of[collapsed].Size.X, "as wide as its container made it")
+				return
+			}
+			assert.Equal(t, float32(200), full)
+			assert.Equal(t, full-tr.Of[middle].Size.X-2, tr.Of[collapsed].Size.X,
+				"the column and a spacing taken out of the stretched width")
+		})
+	}
+}

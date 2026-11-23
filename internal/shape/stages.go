@@ -372,14 +372,15 @@ type planned struct {
 
 // plan is l's lookups of the features asked for that its language
 // system ls has, a stage after the other, in their list's order in
-// each; GPOS's in one stage.
-func (l *layout) plan(ls data, asked []request, masks map[Tag]uint32) []planned {
+// each, subst putting its features in the place of some; GPOS's in one
+// stage.
+func (l *layout) plan(ls, subst data, asked []request, masks map[Tag]uint32) []planned {
 	stages := map[Tag]request{}
 	for _, r := range asked {
 		stages[r.tag] = r
 	}
 	var out []planned
-	l.features(ls, func(tag Tag, f data, required bool) {
+	l.features(ls, subst, func(tag Tag, f data, required bool) {
 		r, ok := stages[tag]
 		mask := masks[tag]
 		switch {
