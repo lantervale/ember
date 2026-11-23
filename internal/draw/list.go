@@ -25,6 +25,9 @@ const (
 	// there, alpha included, unpremultiplied: the occluder picture's
 	// groups and heights.
 	Occlude
+	// Plus adds what is drawn to what is there, alpha too, premultiplied:
+	// two parts cut apart join as one.
+	Plus
 )
 
 // Shape kinds understood by the presenter's fragment shader.
@@ -149,6 +152,10 @@ type Batch struct {
 	// Mask, when set, is a pass whose alpha the batch shows through. A
 	// batch with a Mask has no Cut.
 	Mask *render.Texture
+	// Mix, when set, mixes the batch's picture with a backdrop, its second
+	// image, which ToBackdrop takes the List's points to 0–1 of.
+	Mix        Mix
+	ToBackdrop geom.Transform2D
 	// alone keeps the batch to itself: a pass's picture or a render
 	// texture, which the presenter must draw apart.
 	alone bool
@@ -451,10 +458,12 @@ func (r Rounded) IsZero() bool { return r == Rounded{} }
 
 // Cut is a picture whose alpha a batch is cut by: Mask, stretched over
 // what ToMask takes from the List's space to 0–1 on both axes; nothing
+// shows outside it. Inverted, it cuts by one less the alpha, and all
 // shows outside it. The zero Cut cuts nothing.
 type Cut struct {
-	Mask   *render.Texture
-	ToMask geom.Transform2D
+	Mask     *render.Texture
+	ToMask   geom.Transform2D
+	Inverted bool
 }
 
 // IsZero reports whether c cuts nothing.
@@ -496,6 +505,29 @@ func (c *List) PushClipMask(r geom.Rect, mask *render.Texture) {
 	}
 	c.clips[len(c.clips)-1].cut = Cut{Mask: mask, ToMask: toUnit}
 }
+
+// PushClipMaskInverted cuts drawing to one less mask's alpha stretched
+// over r, under any transform, until PopClip: what lies outside r shows,
+// within the current clip. It replaces a mask around it as PushClipMask
+// does.
+func (c *List) PushClipMaskInverted(r geom.Rect, mask *render.Texture) {
+	s := clipState{rect: geom.Rect{X: -unclipped, Y: -unclipped, W: 2 * unclipped, H: 2 * unclipped}}
+	if n := len(c.clips); n > 0 {
+		s = c.clips[n-1]
+	}
+	if mask != nil && r.W > 0 && r.H > 0 {
+		toUnit := geom.Transform2D{X: geom.V2(1/r.W, 0), Y: geom.V2(0, 1/r.H), Origin: geom.V2(-r.X/r.W, -r.Y/r.H)}
+		if c.transformed {
+			toUnit = toUnit.Mul(c.transform.Inverse())
+		}
+		s.cut = Cut{Mask: mask, ToMask: toUnit, Inverted: true}
+	}
+	c.clips = append(c.clips, s)
+}
+
+// unclipped is how far from the origin a clip that bounds nothing
+// reaches, past any surface.
+const unclipped = 1 << 20
 
 // PushClipRounded bounds drawing to r with its corners rounded by radii
 // (top-left, top-right, bottom-right, bottom-left), within the current
@@ -1196,8 +1228,12 @@ func (c *List) Shift(d geom.Vec2) {
 			c.Batches[i].Round.Rect.X += d.X
 			c.Batches[i].Round.Rect.Y += d.Y
 		}
+		back := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: d.Scale(-1)}
 		if cut := &c.Batches[i].Cut; !cut.IsZero() {
-			cut.ToMask = cut.ToMask.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: d.Scale(-1)})
+			cut.ToMask = cut.ToMask.Mul(back)
+		}
+		if b := &c.Batches[i]; b.Mix != 0 {
+			b.ToBackdrop = b.ToBackdrop.Mul(back)
 		}
 	}
 }

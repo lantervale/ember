@@ -4,6 +4,8 @@ package css_test
 
 import (
 	"encoding/json"
+	"regexp"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -43,6 +45,37 @@ func repeatCSS(r style.BackgroundRepeat) string {
 	return words[r.X] + " " + words[r.Y]
 }
 
+// gradients finds each gradient of a computed value, to be written by
+// its function's name alone.
+var gradients = regexp.MustCompile(`((?:linear|radial|conic)-gradient)\((?:[^()]|\([^()]*\))*\)`)
+
+// masksCSS writes each layer of s's mask as getComputedStyle does: the
+// longhands' lists as long as the pictures', a gradient by its name.
+func masksCSS(s *style.Computed) [8]string {
+	var parts [8][]string
+	boxes := [...]string{"border-box", "border-box", "padding-box", "content-box", "fill-box", "stroke-box", "view-box",
+		"no-clip"}
+	for i := range s.MaskLayers() {
+		l := s.MaskLayer(i)
+		img := image(l.Image.Source)
+		if g := l.Image.Gradient; g != nil {
+			img = [...]string{"linear-gradient", "conic-gradient", "radial-gradient"}[g.Kind]
+		}
+		mode := [...]string{"match-source", "alpha", "luminance"}[l.Mode]
+		composite := [...]string{"add", "subtract", "intersect", "exclude"}[l.Composite]
+		for k, v := range []string{img, positionCSS(l.Position.X, l.Position.FromRight) + " " +
+			positionCSS(l.Position.Y, l.Position.FromBottom), sizeCSS(l.Size), repeatCSS(l.Repeat), boxes[l.Origin],
+			boxes[l.Clip], mode, composite} {
+			parts[k] = append(parts[k], v)
+		}
+	}
+	var out [8]string
+	for k := range parts {
+		out[k] = strings.Join(parts[k], ", ")
+	}
+	return out
+}
+
 func TestMasksComputeAsInChrome(t *testing.T) {
 	fsys := fstest.MapFS{"m.css": {Data: []byte(`
 div { width: 20px; height: 20px; background-color: #36c; }
@@ -52,31 +85,45 @@ div { width: 20px; height: 20px; background-color: #36c; }
 .f { mask-image: url(img/panel.png); mask-position: right 2px bottom 4px; }
 .d { mask-image: url(img/panel.png); mask-size: contain; mask-repeat: repeat-y; mask-image: none; }
 .e { -webkit-mask-image: url(img/panel.png); -webkit-mask-size: cover; -webkit-mask-repeat: no-repeat; }
+.g { mask-image: url(img/panel.png), linear-gradient(#000, transparent), radial-gradient(#000, #fff 4px);
+  mask-repeat: space round, round; mask-mode: luminance, alpha; mask-origin: padding-box, content-box, fill-box;
+  mask-clip: no-clip, stroke-box; mask-composite: subtract, intersect, exclude; mask-position: 1px 2px, 30% bottom; }
+.h { mask: linear-gradient(red, blue) center / 10px no-repeat padding-box content-box subtract luminance,
+  url(img/panel.png) view-box; }
+.i { mask-mode: luminance; mask-composite: intersect; mask: url(img/panel.png) border-box no-clip; }
+.j { mask-image: url(img/panel.png); mask: none; }
+.k { -webkit-mask: conic-gradient(#000, #fff) 4px 5px / auto 6px repeat-y content-box; }
+.l { -webkit-mask-position: 3px 4px; -webkit-mask-clip: padding-box; -webkit-mask-origin: content-box; }
+.m { mask-composite: subtract; -webkit-mask-composite: xor; }
+.n { mask-image: none, url(img/panel.png); mask-size: 1px, 2px, 3px; }
 `)}}
 	d := ui.NewDocument(ui.Stylesheet(fsys, "m.css"), ui.BrowserSheets())
-	for _, class := range []string{"a", "b", "c", "d", "e", "f", ""} {
+	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", ""}
+	for _, class := range classes {
 		d.Body().Append(ui.Div(ui.Class(class)))
 	}
 	raw, err := chrome.Eval(d, geom.V2(800, 600), `return Array.from(document.body.querySelectorAll("div")).map(e => {
 		const s = getComputedStyle(e);
-		return [s.maskImage, s.maskSize, s.maskRepeat, s.maskPosition];
+		return [s.maskImage, s.maskPosition, s.maskSize, s.maskRepeat, s.maskOrigin, s.maskClip, s.maskMode,
+			s.maskComposite];
 	});`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var want [][4]string
+	var want [][8]string
 	if err = json.Unmarshal(raw, &want); err != nil {
 		t.Fatal(err)
 	}
+	legacy := strings.NewReplacer("source-over", "add", "source-in", "intersect", "source-out", "subtract",
+		"xor", "exclude")
 	d.Layout(geom.V2(800, 600))
 	for i, n := range d.Body().Children() {
-		s := dom.Data(n).Style
-		ours := [4]string{image(s.MaskImage.Source), sizeCSS(s.MaskSize), repeatCSS(s.MaskRepeat),
-			positionCSS(s.MaskPosition.X, s.MaskPosition.FromRight) + " " +
-				positionCSS(s.MaskPosition.Y, s.MaskPosition.FromBottom)}
+		ours := masksCSS(dom.Data(n).Style)
+		want[i][0] = gradients.ReplaceAllString(want[i][0], "$1")
+		want[i][7] = legacy.Replace(want[i][7])
 		for k := range ours {
 			if !same("", ours[k], want[i][k]) {
-				t.Errorf("div %d, value %d: ember %q, Chrome %q", i, k, ours[k], want[i][k])
+				t.Errorf("div %q, value %d: ember %q, Chrome %q", classes[i], k, ours[k], want[i][k])
 			}
 		}
 	}

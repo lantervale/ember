@@ -7,8 +7,9 @@ an `img`, at 256×256 on white and on grey, 48×48 and 200×120; `chrome.txt` ho
 ## ember's own work, CC0
 
 Written for ember in this repository and given to the public domain under
-[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): every `own-*.svg`. `own-clip.svg` and `own-text.svg`
-use what svg does not draw, and are here for the report of it; their thresholds are what leaving it out costs.
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): every `own-*.svg`, and the pictures their `data:`
+addresses hold. `own-text.svg` and `own-texts.svg` are set in Go's faces where Chrome sets them in its own, so their
+thresholds are what the other letters cost.
 
 ## From others
 

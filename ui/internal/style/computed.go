@@ -195,6 +195,9 @@ type Box struct {
 	// ColumnFillAuto is column-fill: auto: columns fill in turn, not
 	// balanced.
 	ColumnFillAuto bool
+	// ColumnSpanAll is column-span: all: a block of a multi-column
+	// container shown across all its columns, cutting them in rows.
+	ColumnSpanAll bool
 	// BreakInsideAvoid is break-inside: avoid; BreakBefore and BreakAfter
 	// are break-before and break-after between columns.
 	BreakInsideAvoid        bool
@@ -359,7 +362,7 @@ type Font struct {
 	// Family is font-family's list, generic names last.
 	Family []string
 	Size   float32
-	Weight int
+	Weight float32
 	Italic bool
 }
 
@@ -430,6 +433,46 @@ const (
 	BlockCenter
 )
 
+// Direction is direction.
+type Direction uint8
+
+const (
+	LTR Direction = iota
+	RTL
+)
+
+// UnicodeBidi is unicode-bidi.
+type UnicodeBidi uint8
+
+const (
+	BidiNormal UnicodeBidi = iota
+	BidiEmbed
+	BidiIsolate
+	BidiOverride
+	BidiIsolateOverride
+	BidiPlaintext
+)
+
+// Isolates reports whether u isolates its content from the text round it.
+func (u UnicodeBidi) Isolates() bool {
+	return u == BidiIsolate || u == BidiIsolateOverride || u == BidiPlaintext
+}
+
+// Overrides reports whether u orders its content by its direction alone.
+func (u UnicodeBidi) Overrides() bool { return u == BidiOverride || u == BidiIsolateOverride }
+
+// Resolve is a, start and end on the sides d puts them, left or right;
+// the others as they are.
+func (a TextAlign) Resolve(d Direction) TextAlign {
+	switch {
+	case a == Start && d == RTL, a == End && d == LTR:
+		return Right
+	case a == Start, a == End:
+		return Left
+	}
+	return a
+}
+
 type WhiteSpace uint8
 
 const (
@@ -481,6 +524,11 @@ type Text struct {
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace
+	// Dir is direction: the order of the inline flow, and the side
+	// each start and end stands on. Bidi is unicode-bidi, how the element
+	// takes part in the bidi algorithm of the text round it.
+	Dir  Direction
+	Bidi UnicodeBidi
 	// TextIndent is text-indent: how far the first line of a block's text
 	// starts in from its edge, out when negative; a percentage is of the
 	// block's width.
@@ -528,14 +576,21 @@ type Text struct {
 	// per depth; none when QuotesNone, the language's own when empty.
 	Quotes     []string
 	QuotesNone bool
-	// ListStyle is list-style-type: a summary's disclosure triangle, or
-	// none.
+	// ListStyle is list-style-type: a bullet, a summary's disclosure
+	// triangle, none, or the counter style or the string ListName names.
 	ListStyle ListStyle
+	ListName  string
+	// ListImage is list-style-image: the address of the picture a list
+	// item's marker shows in place of its list-style-type, "" for none.
+	ListImage string
 	// BorderSpacing is a table's border-spacing, across and down, in points.
 	BorderSpacing [2]float32
 	// BorderCollapse is border-collapse: collapse: a table's cells share
 	// their borders, the widest winning each edge.
 	BorderCollapse bool
+	// EmptyCellsHide is empty-cells: hide: a cell with nothing in it draws
+	// no border and no background, borders kept apart.
+	EmptyCellsHide bool
 	CaptionSide    CaptionSide
 	TableLayout    TableLayout
 	TextTransform  TextTransform
@@ -654,6 +709,9 @@ type Transition struct {
 	Property        string
 	Duration, Delay float32
 	Easing          string
+	// Discrete is transition-behavior: allow-discrete: the property
+	// transitions between values that don't interpolate, flipping.
+	Discrete bool
 }
 
 // Animation is one entry of the animation list: the @keyframes it runs,
@@ -666,7 +724,18 @@ type Animation struct {
 	Direction       AnimationDirection
 	Fill            AnimationFill
 	Paused          bool
+	Composite       Composite
 }
+
+// Composite is animation-composition: how an animation's values combine
+// with what is under them.
+type Composite uint8
+
+const (
+	ComposeReplace Composite = iota
+	ComposeAdd
+	ComposeAccumulate
+)
 
 type AnimationDirection uint8
 
@@ -705,14 +774,20 @@ type Look struct {
 	// background-clip's, the box it shows in (the border box when
 	// InitialBox).
 	BackgroundOrigins, BackgroundClips []BackgroundBox
-	// MaskImage is mask-image: the picture whose alpha is the shape the
-	// background colour is painted through (decision 0093), sized, tiled
-	// and placed in the border box by MaskSize, MaskRepeat and
-	// MaskPosition as a background image is by its own.
-	MaskImage    Image
-	MaskSize     BackgroundSize
-	MaskRepeat   BackgroundRepeat
-	MaskPosition BackgroundPosition
+	// BackgroundBlends are background-blend-mode's: how each layer mixes
+	// with the layers and the colour under it.
+	BackgroundBlends []BlendMode
+	// MaskImages are mask-image's layers, the first on top, and the other
+	// lists their longhands', read as the background's are (MaskLayer):
+	// the pictures whose alpha, or luminance, the element and all it holds
+	// show through (decision 0133).
+	MaskImages             []Image
+	MaskSizes              []BackgroundSize
+	MaskRepeats            []BackgroundRepeat
+	MaskPositions          []BackgroundPosition
+	MaskOrigins, MaskClips []BackgroundBox
+	MaskModes              []MaskMode
+	MaskComposites         []MaskComposite
 	// ClipPath is clip-path: the shape the element and all it holds are
 	// painted and hit in (decision 0119).
 	ClipPath ClipPath
@@ -746,8 +821,10 @@ type Look struct {
 	ColumnRuleStyle BorderStyle
 	ColumnRuleColor color.Color
 	Opacity         float32
-	// Visible is visibility: visible.
-	Visible bool
+	// Visible is visibility: visible, and Collapse visibility: collapse,
+	// which takes a table's row or column out with its room.
+	Visible  bool
+	Collapse bool
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool
@@ -763,8 +840,15 @@ type Look struct {
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
 	TransformOrigin Size[Length]
-	// Filters is filter's functions in order, none when empty.
-	Filters     []Filter
+	// Filters is filter's functions in order, none when empty, and
+	// BackdropFilters backdrop-filter's.
+	Filters         []Filter
+	BackdropFilters []Filter
+	// BlendMode is mix-blend-mode: how the element and its content, as one
+	// picture, mix with what is under them in the group they stack in, and
+	// Isolate is isolation: isolate, the element such a group.
+	BlendMode   BlendMode
+	Isolate     bool
 	Transitions []Transition
 	Animations  []Animation
 }
@@ -786,6 +870,44 @@ type TransformOp struct {
 	Kind TransformKind
 	X, Y Length
 	A    [6]float32
+}
+
+// BlendMode is how colours mix with those under them, as the
+// Compositing and Blending spec names its modes.
+type BlendMode uint8
+
+const (
+	BlendNormal BlendMode = iota
+	BlendMultiply
+	BlendScreen
+	BlendOverlay
+	BlendDarken
+	BlendLighten
+	BlendColorDodge
+	BlendColorBurn
+	BlendHardLight
+	BlendSoftLight
+	BlendDifference
+	BlendExclusion
+	BlendHue
+	BlendSaturation
+	BlendColor
+	BlendLuminosity
+)
+
+// Filtered reports whether the element filters itself or its backdrop,
+// which holds its absolute and fixed descendants.
+func (l *Look) Filtered() bool { return len(l.Filters) > 0 || len(l.BackdropFilters) > 0 }
+
+// BackgroundBlended reports whether a background layer mixes otherwise
+// than normally.
+func (l *Look) BackgroundBlended() bool {
+	for _, b := range l.BackgroundBlends {
+		if b != BlendNormal {
+			return true
+		}
+	}
+	return false
 }
 
 type FilterKind uint8
@@ -858,9 +980,9 @@ const (
 	AlignLength
 )
 
-// ListStyle is a list-style-type: a list item's bullet or number, drawn
-// outside its box, or a summary's disclosure triangle, first on its line.
-// ListDisc is CSS's initial value.
+// ListStyle is a list-style-type: a list item's bullet or marker string,
+// drawn outside its box, or a summary's disclosure triangle, first on its
+// line. ListDisc is CSS's initial value.
 type ListStyle uint8
 
 const (
@@ -870,12 +992,11 @@ const (
 	ListDisclosureOpen
 	ListCircle
 	ListSquare
-	ListDecimal
-	ListDecimalLeadingZero
-	ListLowerAlpha
-	ListUpperAlpha
-	ListLowerRoman
-	ListUpperRoman
+	// ListCounter writes the list item's number in the counter style
+	// ListName names, decimal among them.
+	ListCounter
+	// ListString is the string ListName.
+	ListString
 )
 
 // BackgroundAttachment is background-attachment.
@@ -901,6 +1022,43 @@ const (
 	UnderBorder
 	UnderPadding
 	UnderContent
+	// FillBox, StrokeBox and ViewBox are an SVG shape's boxes a mask may
+	// name: an element's content box for the first, its border box for
+	// the others.
+	FillBox
+	StrokeBox
+	ViewBox
+	// NoClip is mask-clip: no-clip, a mask shown wherever the element
+	// draws.
+	NoClip
+)
+
+// MaskMode is mask-mode: what of a mask layer's picture the element
+// shows through.
+type MaskMode uint8
+
+const (
+	// MaskMatchSource is a picture's alpha, as no layer of ui is an SVG
+	// mask element.
+	MaskMatchSource MaskMode = iota
+	MaskAlpha
+	// MaskLuminance is its colours' luminance times their alpha.
+	MaskLuminance
+)
+
+// MaskComposite is mask-composite: how a mask layer joins the layers
+// under it.
+type MaskComposite uint8
+
+const (
+	// CompositeAdd lays it over them.
+	CompositeAdd MaskComposite = iota
+	// CompositeSubtract keeps it where they are clear.
+	CompositeSubtract
+	// CompositeIntersect keeps it where they are opaque.
+	CompositeIntersect
+	// CompositeExclude keeps it and them where the other is clear.
+	CompositeExclude
 )
 
 // BackgroundPosition is background-position: X from the left edge, or from
@@ -983,6 +1141,7 @@ type BackgroundLayer struct {
 	Position     BackgroundPosition
 	Attachment   BackgroundAttachment
 	Origin, Clip BackgroundBox
+	Blend        BlendMode
 }
 
 // BackgroundLayers is how many layers the background has: one a
@@ -999,7 +1158,47 @@ func (l *Look) BackgroundLayer(i int) BackgroundLayer {
 		Attachment: layerItem(l.BackgroundAttachments, i, AttachScroll),
 		Origin:     layerItem(l.BackgroundOrigins, i, InitialBox),
 		Clip:       layerItem(l.BackgroundClips, i, InitialBox),
+		Blend:      layerItem(l.BackgroundBlends, i, BlendNormal),
 	}
+}
+
+// MaskLayer is one layer of a mask: its picture placed as a background
+// layer's is, in the border box by default, what of it shows and how it
+// joins the layers under it.
+type MaskLayer struct {
+	BackgroundLayer
+	Mode      MaskMode
+	Composite MaskComposite
+}
+
+// MaskLayers is how many layers the mask has, one for mask-image: none.
+func (l *Look) MaskLayers() int { return max(len(l.MaskImages), 1) }
+
+// MaskLayer is the mask's layer i, 0 on top.
+func (l *Look) MaskLayer(i int) MaskLayer {
+	return MaskLayer{
+		BackgroundLayer: BackgroundLayer{
+			Image:    layerItem(l.MaskImages, i, Image{}),
+			Size:     layerItem(l.MaskSizes, i, BackgroundSize{}),
+			Repeat:   layerItem(l.MaskRepeats, i, BackgroundRepeat{}),
+			Position: layerItem(l.MaskPositions, i, TopLeft),
+			Origin:   layerItem(l.MaskOrigins, i, InitialBox),
+			Clip:     layerItem(l.MaskClips, i, InitialBox),
+		},
+		Mode:      layerItem(l.MaskModes, i, MaskMatchSource),
+		Composite: layerItem(l.MaskComposites, i, CompositeAdd),
+	}
+}
+
+// Masked reports whether the element is masked: a layer of its mask has
+// a picture, there or not.
+func (l *Look) Masked() bool {
+	for i := range l.MaskImages {
+		if img := &l.MaskImages[i]; img.Source != "" || img.Gradient != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // HasBackgroundImage reports whether a layer has a picture.

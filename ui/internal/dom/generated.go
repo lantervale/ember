@@ -7,13 +7,16 @@ const (
 	NoPseudo Pseudo = iota
 	Before
 	After
+	FirstLetter
+	FirstLine
 )
 
 func (p Pseudo) String() string {
-	return [...]string{NoPseudo: "", Before: "before", After: "after"}[p]
+	return [...]string{NoPseudo: "", Before: "before", After: "after", FirstLetter: "first-letter",
+		FirstLine: "first-line"}[p]
 }
 
-// NewGenerated is the node of origin's ::before or ::after box: a span
+// NewGenerated is the node of origin's ::before, ::after, ::first-letter or ::first-line box: a span
 // whose parent is origin, not among origin's children, as a Shadow is.
 // css makes it, styles it and gives it the content's text nodes and
 // pictures as children; layout lays it out first or last among origin's

@@ -65,6 +65,9 @@ func marked(b *box.Box) bool {
 		return false
 	}
 	t := b.Node.Tag()
+	if _, replaced := dom.ContentPicture(b.Node); replaced {
+		return true
+	}
 	return t == dom.Input || t == dom.Textarea || t == dom.Progress || t == dom.Meter ||
 		t == dom.Select || t == dom.Img || t == dom.Svg || t == dom.Canvas || t == dom.Iframe
 }
@@ -102,6 +105,10 @@ func (p *painter) marks(e entry, alpha float32) {
 	}
 	ink := fade(st.Color, alpha)
 	c := content(e)
+	if _, replaced := dom.ContentPicture(n); replaced && n.Tag() != dom.Img {
+		p.img(e, alpha)
+		return
+	}
 	switch n.Tag() {
 	case dom.Input:
 		switch inputType(n) {
@@ -300,11 +307,17 @@ func (p *painter) marker(e entry, alpha float32) {
 	if !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
+	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	if e.b.Picture != "" {
+		if tex := p.find(style.Image{Source: e.b.Picture}, st); tex != nil {
+			p.s.Image(p.snap(r), tex, texels(tex), fade(color.White, alpha))
+		}
+		return
+	}
 	ink := fade(st.Color, alpha)
 	if ink.A <= 0 {
 		return
 	}
-	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
 	disclosure := st.ListStyle == style.ListDisclosureClosed || st.ListStyle == style.ListDisclosureOpen
 	switch {
 	case disclosure:
@@ -312,7 +325,7 @@ func (p *painter) marker(e entry, alpha float32) {
 		// a list item's number, or its ::marker's content
 		for _, f := range e.b.Lines {
 			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterSpacing, ink, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, st, opts)
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 		return
 	case st.ListStyle == style.ListDisc:

@@ -211,4 +211,24 @@ func (t *tally) DrawPicture(_ *twod.Picture, effects ...*render.Effect) {
 	t.add("picture shown", geom.Rect{}, values...)
 }
 
+func (t *tally) SumPicture(_ *twod.Picture, effects ...*render.Effect) {
+	values := make([]float32, 0, len(effects))
+	for _, e := range effects {
+		values = append(values, float32(len(e.Shader())))
+	}
+	t.add("picture summed", geom.Rect{}, values...)
+}
+
+func (t *tally) PushClipPicture(_ *twod.Picture, opts ...twod.MaskOption) {
+	t.push("picture's clip", geom.Rect{}, float32(len(opts)))
+}
+
+func (t *tally) DrawPictureOver(_, _ *twod.Picture, m twod.Mix, effects ...*render.Effect) {
+	values := []float32{float32(m)}
+	for _, e := range effects {
+		values = append(values, float32(len(e.Shader())))
+	}
+	t.add("picture mixed", geom.Rect{}, values...)
+}
+
 func (t *tally) Effect(shader string) *render.Effect { return render.NewEffect(shader) }

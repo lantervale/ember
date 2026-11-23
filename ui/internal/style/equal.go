@@ -60,6 +60,7 @@ func (b *Box) equal(o *Box) bool {
 		b.ColumnCount == o.ColumnCount &&
 		b.ColumnWidth == o.ColumnWidth &&
 		b.ColumnFillAuto == o.ColumnFillAuto &&
+		b.ColumnSpanAll == o.ColumnSpanAll &&
 		b.BreakInsideAvoid == o.BreakInsideAvoid &&
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
@@ -102,6 +103,8 @@ func (t *Text) equal(o *Text) bool {
 		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&
+		t.Dir == o.Dir &&
+		t.Bidi == o.Bidi &&
 		t.WhiteSpace == o.WhiteSpace &&
 		t.TextIndent == o.TextIndent &&
 		t.PlaceholderColor == o.PlaceholderColor &&
@@ -127,8 +130,11 @@ func (t *Text) equal(o *Text) bool {
 		sameSlice(t.Quotes, o.Quotes) &&
 		t.QuotesNone == o.QuotesNone &&
 		t.ListStyle == o.ListStyle &&
+		t.ListName == o.ListName &&
+		t.ListImage == o.ListImage &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
+		t.EmptyCellsHide == o.EmptyCellsHide &&
 		t.CaptionSide == o.CaptionSide &&
 		t.TableLayout == o.TableLayout &&
 		t.TextTransform == o.TextTransform &&
@@ -160,10 +166,15 @@ func (l *Look) equal(o *Look) bool {
 		sameSlice(l.BackgroundAttachments, o.BackgroundAttachments) &&
 		sameSlice(l.BackgroundOrigins, o.BackgroundOrigins) &&
 		sameSlice(l.BackgroundClips, o.BackgroundClips) &&
-		l.MaskImage.equal(&o.MaskImage) &&
-		l.MaskSize == o.MaskSize &&
-		l.MaskRepeat == o.MaskRepeat &&
-		l.MaskPosition == o.MaskPosition &&
+		sameSlice(l.BackgroundBlends, o.BackgroundBlends) &&
+		sameSliceFunc(l.MaskImages, o.MaskImages, (*Image).equal) &&
+		sameSlice(l.MaskSizes, o.MaskSizes) &&
+		sameSlice(l.MaskRepeats, o.MaskRepeats) &&
+		sameSlice(l.MaskPositions, o.MaskPositions) &&
+		sameSlice(l.MaskOrigins, o.MaskOrigins) &&
+		sameSlice(l.MaskClips, o.MaskClips) &&
+		sameSlice(l.MaskModes, o.MaskModes) &&
+		sameSlice(l.MaskComposites, o.MaskComposites) &&
 		l.ClipPath.Equal(&o.ClipPath) &&
 		l.ImageRendering == o.ImageRendering &&
 		l.ObjectFit == o.ObjectFit &&
@@ -185,6 +196,7 @@ func (l *Look) equal(o *Look) bool {
 		l.ColumnRuleColor == o.ColumnRuleColor &&
 		l.Opacity == o.Opacity &&
 		l.Visible == o.Visible &&
+		l.Collapse == o.Collapse &&
 		l.PointerNone == o.PointerNone &&
 		l.AppDrag == o.AppDrag &&
 		l.Cursor == o.Cursor &&
@@ -192,6 +204,9 @@ func (l *Look) equal(o *Look) bool {
 		sameSlice(l.Transform, o.Transform) &&
 		l.TransformOrigin == o.TransformOrigin &&
 		sameSlice(l.Filters, o.Filters) &&
+		sameSlice(l.BackdropFilters, o.BackdropFilters) &&
+		l.BlendMode == o.BlendMode &&
+		l.Isolate == o.Isolate &&
 		sameSlice(l.Transitions, o.Transitions) &&
 		sameSlice(l.Animations, o.Animations)
 }

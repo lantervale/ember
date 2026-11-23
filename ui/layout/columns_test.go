@@ -100,7 +100,7 @@ func TestColumnsBalanceBetweenBlocks(t *testing.T) {
 	assert.Equal(t, geom.Rect{W: 190, H: 30}, tr.Of[a].Rect())
 	assert.Equal(t, geom.Rect{Y: 35, W: 190, H: 30}, tr.Of[b].Rect())
 	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 50}, tr.Of[c].Rect())
-	assert.Equal(t, &box.Columns{Count: 2, Width: 190, Gap: 20, Height: 65}, tr.Of[m].Columns)
+	assert.Equal(t, &box.Columns{Width: 190, Gap: 20, Rows: []box.ColumnRow{{Count: 2, Height: 65}}}, tr.Of[m].Columns)
 }
 
 func TestAMarginAtAColumnBreakIsDropped(t *testing.T) {
@@ -177,6 +177,11 @@ func TestOrphansAndWidows(t *testing.T) {
 	h, hs = heights(multicol(2, nil, p), p)
 	assert.Equal(t, float32(20), h)
 	assert.Equal(t, []float32{20, 10}, hs, "three lines can't leave two and take two: the break is made anyway")
+
+	p = para(3, func(st *style.Computed) { st.Margin.Top, st.Margin.Bottom = style.Px(5), style.Px(5) })
+	h, hs = heights(multicol(2, nil, p), p)
+	assert.Equal(t, float32(25), h, "the columns grow past the margins rather than leave one line")
+	assert.Equal(t, []float32{20, 10}, hs)
 
 	p = para(7, nil)
 	h, hs = heights(multicol(3, nil, p), p)
@@ -262,7 +267,7 @@ func TestADefiniteHeightAndColumnFill(t *testing.T) {
 	m = multicol(2, func(st *style.Computed) { st.MinSize.Height = style.Px(50) }, p)
 	tr = lay(m, 600)
 	assert.Equal(t, float32(50), tr.Of[m].Size.Y)
-	assert.Equal(t, float32(30), tr.Of[m].Columns.Height, "a min-height leaves the columns balanced")
+	assert.Equal(t, float32(30), tr.Of[m].Columns.Rows[0].Height, "a min-height leaves the columns balanced")
 }
 
 func TestColumnsPastTheCountOverflowAtTheEnd(t *testing.T) {
@@ -323,7 +328,7 @@ func TestANestedMultiColumnContainerIsOneBox(t *testing.T) {
 	tr := lay(m, 600)
 	assert.Equal(t, geom.Rect{Y: 20, W: 190, H: 20}, tr.Of[inner].Rect())
 	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 20}, tr.Of[c].Rect())
-	assert.Equal(t, 2, tr.Of[inner].Columns.Count)
+	assert.Equal(t, 2, tr.Of[inner].Columns.Rows[0].Count)
 }
 
 func TestAMultiColumnContainerShrinksToItsColumns(t *testing.T) {
@@ -356,4 +361,18 @@ func TestARetainedLayoutMovesKeptTextToItsNewColumn(t *testing.T) {
 	assert.Equal(t, []geom.Rect{{Y: 20, W: 190, H: 10}, {X: 210, W: 190, H: 10}}, parts(tr.Of[b]),
 		"a kept paragraph is cut where the columns now break")
 	assert.Equal(t, []fragmentAt{{"H", 0, 20}, {"H", 210, 0}}, fragments(tr.Of[b]))
+}
+
+func TestASpannerHoldsAPositionedBoxWhereItsLineHasIt(t *testing.T) {
+	abs := el(dom.Span, func(st *style.Computed) {
+		st.Display, st.Position = style.Block, style.Absolute
+		st.Size.Width, st.Size.Height = style.Px(10), style.Px(10)
+	})
+	s := el(dom.Div, func(st *style.Computed) { st.Display, st.ColumnSpanAll = style.Block, true },
+		el(dom.Span, nil, text("HH"), abs))
+	m := multicol(2, func(st *style.Computed) { st.Position = style.Relative }, para(4, nil), s, para(2, nil))
+	tr := lay(m, 600)
+	assert.Equal(t, geom.Rect{Y: 20, W: 400, H: 10}, tr.Of[s].Rect(), "across the columns, below the first row")
+	assert.Equal(t, float32(20), tr.Of[abs].Rect().X, "after the text before it")
+	assert.Equal(t, float32(20), tr.Of[abs].Rect().Y)
 }

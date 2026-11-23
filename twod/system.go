@@ -522,6 +522,7 @@ func (u *Canvas) endEntries(front *draw.List, first int, pictures []picture) {
 		}
 	}
 	slices.Reverse(u.passes[first:])
+	u.placePictures(first)
 }
 
 // drawInto draws the entries of cam's window, but its fixed layers, into
@@ -535,6 +536,7 @@ func drawInto(u *Canvas, entries []entry, cam *Camera) {
 	defer func() {
 		u.list, u.pass = front, nil
 		slices.Reverse(u.passes[first:])
+		u.placePictures(first)
 	}()
 	u.start(cam.pass)
 	size := cam.pass.Screen

@@ -13,19 +13,36 @@ import (
 // of the used column width (the flow), then cuts that flow into columns: nothing is laid
 // out again per column, as every column is as wide as the others. Each node keeps one
 // layout, in the flow; where the cuts fall gives each box and each line the column it
-// shows in, applied when the boxes are placed (keepFlow) and written.
+// shows in, applied when the boxes are placed (keepFlow) and written. Blocks spanning
+// the columns (column-span: all) cut the flow in parts, each laid out on its own one
+// after the other in the flow: those between them as rows of columns, each balanced
+// alone, and the spanners at the container's width, as one column of their own.
 
 // columnEpsilon is the slack in comparing places in the flow, under Chrome's 1/64 px.
 const columnEpsilon = 0.01
 
 // columnSet is how a multi-column container's flow is cut: starts[k] is where column k
-// starts in the flow, down the container's border box.
+// starts in the flow, down the container's border box, and places[k] where it shows.
 type columnSet struct {
 	starts []float32
-	// left and top are where the first column starts in the border box; width and gap
-	// the used column width and gap, height the columns' height.
-	left, top          float32
-	width, gap, height float32
+	places []columnPlace
+	// rows are the rows of columns between the spanners, from the first column's top.
+	rows []columnRow
+	// top is where the first column starts in the border box; width and gap the used
+	// column width and gap, height the height of the columns and spanners down to the
+	// end of the last.
+	top, width, gap, height float32
+}
+
+// columnPlace is where a column shows in the container's border box: x from the first
+// column's left, top and bottom down it. A spanner shows as a column at x 0.
+type columnPlace struct{ x, top, bottom float32 }
+
+// columnRow is a row of count columns from the first, top down from the first column's
+// top and height high.
+type columnRow struct {
+	first, count int
+	top, height  float32
 }
 
 func (c *columnSet) pitch() float32 { return c.width + c.gap }
@@ -49,7 +66,7 @@ func (c *columnSet) last(k int, bottom float32) int {
 
 // shift is how far column k's part of the flow shows from where the flow has it.
 func (c *columnSet) shift(k int) point {
-	return point{float32(k) * c.pitch(), c.top - c.starts[k]}
+	return point{c.places[k].x, c.places[k].top - c.starts[k]}
 }
 
 // flowFrag is a node's place in the multi-column flow it is laid out in.
@@ -66,7 +83,8 @@ type flowFrag struct {
 // lineShift is how far a line at y down the node's border box shows from there.
 func (f *flowFrag) lineShift(y float32) (float32, float32) {
 	k := f.cols.at(f.y + y)
-	return float32(k-f.col) * f.cols.pitch(), f.cols.top + f.y - f.cols.starts[k] - f.oy
+	by := f.cols.shift(k)
+	return by.x - f.cols.places[f.col].x, by.y + f.y - f.oy
 }
 
 // columnar reports a node laid out as a multi-column container: a block container with
@@ -146,7 +164,10 @@ func (t *tree) flow(n *node, in input, w float32, avail space) output {
 
 // columns lays out a multi-column container: its content as one column of the used
 // width, cut into columns of one height, balanced unless column-fill or the container's
-// height says otherwise; the columns past the used count overflow at its end.
+// height says otherwise; the columns past the used count overflow at its end. Spanners
+// cut the content in rows of columns, each balanced, the last filled where it says so.
+//
+//nolint:funlen // the container's sizes, then its rows and spanners in turn
 func (t *tree) columns(n *node, in input) output {
 	st := n.st
 	ratio := aspectRatio(st)
@@ -169,9 +190,10 @@ func (t *tree) columns(n *node, in input) output {
 		return sizeOutput(styled)
 	}
 
+	parts := columnParts(n)
 	outerW := styled.w
 	if !some(outerW) {
-		outerW = mMax(mClamp(t.columnsWidth(n, in, inset), minSize.w, maxSize.w), pbSize.w)
+		outerW = mMax(mClamp(t.columnsWidth(n, in, inset, parts), minSize.w, maxSize.w), pbSize.w)
 	}
 	if in.run == computeSize && in.axis == axisHorizontal {
 		return sizeOutput(size{outerW, 0})
@@ -180,30 +202,66 @@ func (t *tree) columns(n *node, in input) output {
 	gap := columnGap(st, content)
 	count, width := usedColumns(st, content, gap)
 
-	inner := t.flow(n, in, width+inset.horizontal(), def(width))
-	flowH := max(0, inner.size.h-inset.vertical())
-	units := t.flowUnits(n, size{width + inset.horizontal(), inner.size.h}, inset)
-
 	limit := columnsLimit(styled.h, maxSize.h, inset.vertical())
-	cs := &columnSet{left: inset.l, top: inset.t, width: width, gap: gap}
-	switch {
-	case !st.ColumnFillAuto:
-		cs.height = mMin(balancedHeight(units, inset.t, flowH, count), limit)
-	case some(limit):
-		cs.height = filledHeight(limit, flowH, some(styled.h))
-	default:
-		cs.height = flowH
+	cs := &columnSet{top: inset.t, width: width, gap: gap}
+	var oof []oofCandidate
+	firstBaseline := none
+	flowY, y := inset.t, inset.t
+	for i, part := range parts {
+		w := width
+		if part.span {
+			w = content
+		}
+		inner := t.flowOf(n, part.kids, in, w+inset.horizontal(), def(w))
+		off := flowY - inset.t
+		for _, k := range part.kids {
+			k.unrounded.location.y += off
+		}
+		oof = append(oof, translateCandidates(inner.oof, point{0, off})...)
+		flowH := max(0, inner.size.h-inset.vertical())
+		h := flowH
+		var starts []float32
+		if !part.span && (part.flows() || len(parts) == 1) {
+			units := t.flowUnitsOf(n, part.kids, size{w + inset.horizontal(), inner.size.h}, inset)
+			room := none
+			if i == len(parts)-1 {
+				room = mMax(mSub(limit, y-inset.t), 0)
+			}
+			switch {
+			case !st.ColumnFillAuto || i < len(parts)-1:
+				h = mMin(balancedHeight(units, flowY, flowH, count), room)
+			case some(room):
+				h = filledHeight(room, flowH, some(styled.h))
+			}
+			starts, _, _ = fillColumns(units, flowY, h)
+		}
+		if k := len(cs.starts); starts != nil {
+			for j, start := range starts {
+				cs.starts = append(cs.starts, start)
+				cs.places = append(cs.places, columnPlace{x: float32(j) * cs.pitch(), top: y, bottom: y + h})
+			}
+			cs.rows = append(cs.rows, columnRow{first: k, count: len(starts), top: y - inset.t, height: h})
+		} else {
+			cs.starts = append(cs.starts, flowY)
+			cs.places = append(cs.places, columnPlace{top: y, bottom: y + h})
+		}
+		if !some(firstBaseline) && some(inner.firstBaseline) {
+			at := inner.firstBaseline + off
+			firstBaseline = at + cs.shift(cs.at(at)).y
+		}
+		flowY += flowH
+		y += h
 	}
-	cs.starts, _ = fillColumns(units, inset.t, cs.height)
+	cs.height = y - inset.t
 
 	final := size{outerW, mMax(or(styled.h, mClamp(cs.height+inset.vertical(), minSize.h, maxSize.h)), pbSize.h)}
 	scroll := isScrollContainer(st)
-	reach := cs.reach(padding, scroll)
+	reach := cs.reach(padding, scroll, content, len(parts) > 1)
 	areaInset := border.add(gutter)
 	out := output{
 		size:          final,
 		overflow:      finalizeOverflow(reach, final.sub(areaInset.sum()), [2]bool{}, scroll),
-		firstBaseline: inner.firstBaseline,
+		firstBaseline: firstBaseline,
 		lastBaseline:  none,
 		topMargin:     marginFrom(resolveOrZero(st.Margin.Top, in.parent.w)),
 		bottomMargin:  marginFrom(resolveOrZero(st.Margin.Bottom, in.parent.w)),
@@ -214,8 +272,70 @@ func (t *tree) columns(n *node, in input) output {
 	}
 	n.columns = cs
 	t.touchFlow(n)
-	out.oof = cs.positioned(inner.oof)
+	out.oof = cs.positioned(oof)
 	return out
+}
+
+// columnPart is a run of a multi-column container's children laid out together: the
+// blocks spanning the columns side by side (span), or what is between them.
+type columnPart struct {
+	kids []*node
+	span bool
+}
+
+// flows reports a part with something in the flow, which makes a row of columns.
+func (p columnPart) flows() bool {
+	return slices.ContainsFunc(p.kids, func(k *node) bool {
+		return k.st.Display != style.DisplayNone && !outOfFlow(k.st.Position)
+	})
+}
+
+// spans reports a child of a multi-column container spanning its columns: a block-level
+// box in the flow with column-span: all.
+func spans(k *node) bool {
+	st := k.st
+	return st.ColumnSpanAll && st.Float == style.FloatNone && !outOfFlow(st.Position) &&
+		(st.Display == style.Block || st.Display == style.FlexDisplay || st.Display == style.GridDisplay)
+}
+
+// columnParts cuts n's children at its spanners, every part in the flow's order; without
+// a spanner the one part is all of them. A part with no spanner and nothing in the flow
+// between two spanners goes with the spanners after it, so their margins collapse.
+func columnParts(n *node) []columnPart {
+	var parts []columnPart
+	for _, k := range n.kids {
+		span := spans(k)
+		last := len(parts) - 1
+		switch {
+		case last >= 0 && parts[last].span == span:
+			parts[last].kids = append(parts[last].kids, k)
+		case last >= 0 && span && !parts[last].flows() && last > 0:
+			parts[last-1].kids = append(append(parts[last-1].kids, parts[last].kids...), k)
+			parts = parts[:last]
+		default:
+			parts = append(parts, columnPart{kids: []*node{k}, span: span})
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, columnPart{})
+	}
+	return parts
+}
+
+// flowOf is flow with n holding kids alone.
+func (t *tree) flowOf(n *node, kids []*node, in input, w float32, avail space) output {
+	all := n.kids
+	n.kids = kids
+	defer func() { n.kids = all }()
+	return t.flow(n, in, w, avail)
+}
+
+// flowUnitsOf is flowUnits with n holding kids alone.
+func (t *tree) flowUnitsOf(n *node, kids []*node, s size, inset rect) []flowUnit {
+	all := n.kids
+	n.kids = kids
+	defer func() { n.kids = all }()
+	return t.flowUnits(n, s, inset)
 }
 
 // columnsLimit is the height a container's own height, else its max-height, leaves its
@@ -238,9 +358,16 @@ func filledHeight(limit, flowH float32, fixed bool) float32 {
 }
 
 // reach is how far the columns go right and down from the padding box's corner, the
-// padding after them counted where the container scrolls.
-func (c *columnSet) reach(padding rect, scroll bool) rect {
-	reach := rect{r: padding.l + float32(len(c.starts))*c.pitch() - c.gap, b: padding.t + c.height}
+// spanners as wide as the content box when there are some (spanned), the padding after
+// them counted where the container scrolls.
+func (c *columnSet) reach(padding rect, scroll bool, content float32, spanned bool) rect {
+	reach := rect{r: padding.l, b: padding.t + c.height}
+	if spanned {
+		reach.r += content
+	}
+	for _, row := range c.rows {
+		reach.r = fmax(reach.r, padding.l+float32(row.count)*c.pitch()-c.gap)
+	}
 	if scroll {
 		reach.r += padding.r
 		reach.b += padding.b
@@ -270,20 +397,31 @@ func (c *columnSet) positioned(flow []oofCandidate) []oofCandidate {
 
 // columnsWidth is the border box's width a multi-column container asks for when nothing
 // gives it one: its columns as wide as the content asks, or as column-width when wider,
-// no wider than the room when there is some.
-func (t *tree) columnsWidth(n *node, in input, inset rect) float32 {
+// and its spanners as wide as they ask, no wider than the room when there is some.
+func (t *tree) columnsWidth(n *node, in input, inset rect, parts []columnPart) float32 {
 	st := n.st
 	avail := in.avail.w
 	measure := maxContentSpace
 	if avail.kind == minContent {
 		measure = minContentSpace
 	}
-	column := max(0, t.flow(n, in, none, measure).size.w-inset.horizontal())
+	var flow, spanners []*node
+	for _, p := range parts {
+		if p.span {
+			spanners = append(spanners, p.kids...)
+		} else {
+			flow = append(flow, p.kids...)
+		}
+	}
+	column := max(0, t.flowOf(n, flow, in, none, measure).size.w-inset.horizontal())
 	if st.ColumnWidth.Kind != style.Auto {
 		column = max(column, st.ColumnWidth.Px)
 	}
 	count := float32(max(st.ColumnCount, 1))
 	w := count*column + (count-1)*columnGap(st, none) + inset.horizontal()
+	if len(spanners) > 0 {
+		w = max(w, t.flowOf(n, spanners, in, none, measure).size.w)
+	}
 	if avail.kind == definite {
 		w = fmin(w, fmax(avail.v, column+inset.horizontal()))
 	}
@@ -486,7 +624,7 @@ func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 
 // appealOf is the appeal of a break before unit i in a column that starts with unit
 // first: between lines it leaves at least orphans lines of the block in this column and
-// takes at least widows to the next.
+// takes at least widows to the next, or as many as orphans leave.
 func appealOf(units []flowUnit, i, first int) int8 {
 	u := &units[i]
 	if u.line == 0 {
@@ -496,7 +634,10 @@ func appealOf(units []flowUnit, i, first int) int8 {
 	if f := &units[first]; f.para == u.para {
 		start = f.line
 	}
-	if u.line-start >= u.orphans && u.lines-u.line >= u.widows {
+	// Widows give way where taking them along would leave this column fewer lines than
+	// orphans.
+	widows := min(u.widows, max(u.lines-start-u.orphans, 1))
+	if u.line-start >= u.orphans && u.lines-u.line >= widows {
 		return appealPerfect
 	}
 	return appealLines
@@ -505,12 +646,14 @@ func appealOf(units []flowUnit, i, first int) int8 {
 // fillColumns cuts the flow of units, which starts at top, into columns of height h: each
 // column takes the units that fit, and breaks before the first that doesn't, or earlier
 // where a break appeals more, as Chrome's does. It returns where each column starts in
-// the flow and the least room one more unit would have asked of a column.
-func fillColumns(units []flowUnit, top, h float32) ([]float32, float32) {
+// the flow, the least room one more unit would have asked of a column, and the least
+// appeal of the breaks it took.
+func fillColumns(units []flowUnit, top, h float32) ([]float32, float32, int8) {
 	starts := []float32{top}
 	shortage := float32(math.Inf(1))
+	least := appealPerfect
 	if h <= 0 {
-		return starts, shortage
+		return starts, shortage, least
 	}
 	s, first, best := top, 0, -1
 	var bestAppeal int8
@@ -537,19 +680,21 @@ func fillColumns(units []flowUnit, top, h float32) ([]float32, float32) {
 			i++
 		default:
 			shortage = fmin(shortage, u.bottom-s-h)
-			if best >= 0 && bestAppeal > appealOf(units, i, first) {
-				i = best
+			appeal := appealOf(units, i, first)
+			if best >= 0 && bestAppeal > appeal {
+				i, appeal = best, bestAppeal
 			}
+			least = min(least, appeal)
 			column(i, units[i].top)
 		}
 	}
-	return starts, shortage
+	return starts, shortage, least
 }
 
 // balancedHeight is the least column height that puts the flow of units, flowH high
 // from top, in count columns, found as Chrome finds it: from the flow's height shared
 // among the columns, and no less than the tallest unit, grown by the least shortage a
-// fill reports until the columns are few enough.
+// fill reports until the columns are few enough and no break they take breaks a rule.
 func balancedHeight(units []flowUnit, top, flowH float32, count int) float32 {
 	h := flowH / float32(count)
 	for _, u := range units {
@@ -558,8 +703,8 @@ func balancedHeight(units []flowUnit, top, flowH float32, count int) float32 {
 		}
 	}
 	for range len(units) + 1 {
-		starts, shortage := fillColumns(units, top, h)
-		if len(starts) <= count || math.IsInf(float64(shortage), 1) {
+		starts, shortage, appeal := fillColumns(units, top, h)
+		if len(starts) <= count && appeal == appealPerfect || math.IsInf(float64(shortage), 1) {
 			break
 		}
 		h += shortage
@@ -619,7 +764,7 @@ func keepFlow(n, m *node, flow, moved point) {
 			bottom := at.y + h + shift.y
 			if k < last {
 				// A box that goes on in the next column fills this one to its end.
-				bottom = cs.top + cs.height
+				bottom = cs.places[k].bottom
 			}
 			f.pieces = append(f.pieces,
 				geom.Rect{X: at.x + shift.x, Y: top, W: n.unrounded.size.w, H: fmax(bottom-top, 0)})
@@ -675,7 +820,11 @@ func (n *node) writeColumns() {
 		if b.Columns == nil {
 			b.Columns = &box.Columns{}
 		}
-		*b.Columns = box.Columns{Count: len(cs.starts), Width: cs.width, Gap: cs.gap, Height: cs.height}
+		c := b.Columns
+		c.Width, c.Gap, c.Rows = cs.width, cs.gap, c.Rows[:0]
+		for _, r := range cs.rows {
+			c.Rows = append(c.Rows, box.ColumnRow{Count: r.count, Top: r.top, Height: r.height})
+		}
 	} else {
 		b.Columns = nil
 	}

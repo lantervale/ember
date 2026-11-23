@@ -281,15 +281,18 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	if f.xs != nil {
 		return f.xs
 	}
-	text := b.Lines[k].Text
+	text, st := b.Lines[k].Text, b.Style
+	if s := b.Lines[k].Style; s != nil {
+		st = s
+	}
 	f.xs = make([]float32, 1, len(f.offs))
-	sp := spacingOf(b.Style)
+	sp := spacingOf(st)
 	var room float32
 	last := rune(-1)
 	for i, r := range text {
 		if i > 0 {
 			room += sp.after(last)
-			f.xs = append(f.xs, d.fonts.Advance(b.Style.Font, text[:i])+room)
+			f.xs = append(f.xs, d.fonts.Advance(st.Font, text[:i])+room)
 		}
 		last = r
 	}

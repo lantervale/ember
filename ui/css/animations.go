@@ -71,12 +71,52 @@ type track struct {
 }
 
 // key is a keyframe's style for a track: the element's style with the
-// keyframe's declarations over it, and the easing of the interval it
-// begins.
+// keyframe's declarations over it, the easing of the interval it begins,
+// and how its value combines with what is under it.
 type key struct {
 	at     float32
 	easing ease.Func
 	s      *style.Computed
+	op     end
+}
+
+// end is how a keyframe's value combines with what is under it: as
+// animation-composition says (style.Composite), or as an implicit
+// keyframe, which is that value itself.
+type end uint8
+
+const implicit = end(style.ComposeAccumulate) + 1
+
+// composite is how the two keyframes of an interval combine.
+type composite [2]end
+
+// replaces reports whether c is the keyframes' values alone.
+func (c composite) replaces() bool {
+	return c[0] == end(style.ComposeReplace) && c[1] == end(style.ComposeReplace)
+}
+
+// composed writes into dst the longhand's value at t between a's and
+// b's, each combined with dst's own as c says.
+func (p *prop) composed(dst, a, b *style.Computed, t float32, c composite) {
+	if c.replaces() {
+		p.blend(dst, a, b, t)
+		return
+	}
+	under := *dst
+	ends := [2]*style.Computed{a, b}
+	var sums [2]style.Computed
+	for i, op := range c {
+		switch {
+		case op == implicit:
+			ends[i] = &under
+		case op != end(style.ComposeReplace) && p.anim.add != nil:
+			sums[i] = *ends[i]
+			if p.anim.add(&sums[i], &under, ends[i], op == end(style.ComposeAccumulate)) {
+				ends[i] = &sums[i]
+			}
+		}
+	}
+	p.blend(dst, ends[0], ends[1], t)
 }
 
 // paintValue is a painted longhand's value now, at e between the styles
@@ -85,6 +125,7 @@ type paintValue struct {
 	index    int
 	from, to *style.Computed
 	e        float32
+	comp     composite
 }
 
 // on writes p's value into dst: the colours of the ends given as
@@ -95,13 +136,7 @@ func (p paintValue) on(dst *style.Computed, current *color.Color) {
 	if f := l.anim.current; current != nil && f != 0 {
 		from, to = following(from, f, *current), following(to, f, *current)
 	}
-	if !l.anim.lerp(dst, from, to, p.e) {
-		src := from
-		if p.e >= 0.5 {
-			src = to
-		}
-		l.inherit(dst, src)
-	}
+	l.composed(dst, from, to, p.e, p.comp)
 }
 
 // following is s with c for its colour f, when that is currentColor.
@@ -121,19 +156,16 @@ type override struct {
 	index   int
 	src, to *style.Computed
 	t       float32
+	comp    composite
 }
 
 func (o override) apply(c *style.Computed) {
 	p := &longhands[o.index].prop
-	switch {
-	case o.to == nil:
-	case p.anim.lerp != nil && p.anim.lerp(c, o.src, o.to, o.t):
-		return
-	case o.t >= 0.5:
-		p.inherit(c, o.to)
+	if o.to == nil {
+		p.inherit(c, o.src)
 		return
 	}
-	p.inherit(c, o.src)
+	p.composed(c, o.src, o.to, o.t, o.comp)
 }
 
 // Events drains the animation events since the last call, in the order
@@ -195,6 +227,10 @@ func (t *Transitions) animate() bool {
 			continue
 		}
 		hidden := hiddenNode(n)
+		if t.animated(n, displayIndex) {
+			// What its own animations make of its display hides nothing.
+			hidden = hiddenNode(n.Parent())
+		}
 		if a.restyled || t.rekey || hidden != a.hidden {
 			t.matchAnimations(n, a, hidden)
 		}
@@ -291,13 +327,16 @@ func (t *Transitions) resolve(n *dom.Node, an *animation) {
 	an.tracks = an.tracks[:0]
 	for _, f := range frames {
 		var decls []Declaration
-		fe := defaultEasing
+		fe, op := defaultEasing, end(an.Composite)
 		for _, d := range f.Decls {
-			if d.Name == propAnimationTiming {
+			switch d.Name {
+			case propAnimationTiming:
 				fe = easing(join(d.Value))
-				continue
+			case propAnimationComposition:
+				op = end(compositeOf(d.Value[0]))
+			default:
+				decls = append(decls, d)
 			}
-			decls = append(decls, d)
 		}
 		if len(decls) == 0 {
 			continue
@@ -305,17 +344,17 @@ func (t *Transitions) resolve(n *dom.Node, an *animation) {
 		s := t.probe(n, decls)
 		for _, d := range decls {
 			for _, name := range longhandsOf(d.Name) {
-				an.add(name, key{at: f.At, easing: fe, s: s})
+				an.add(name, key{at: f.At, easing: fe, s: s, op: op})
 			}
 		}
 	}
 	for i := range an.tracks {
 		tr := &an.tracks[i]
 		if tr.keys[0].at > 0 {
-			tr.keys = slices.Insert(tr.keys, 0, key{easing: defaultEasing, s: base})
+			tr.keys = slices.Insert(tr.keys, 0, key{easing: defaultEasing, s: base, op: implicit})
 		}
 		if tr.keys[len(tr.keys)-1].at < 1 {
-			tr.keys = append(tr.keys, key{at: 1, easing: defaultEasing, s: base})
+			tr.keys = append(tr.keys, key{at: 1, easing: defaultEasing, s: base, op: implicit})
 		}
 	}
 }
@@ -350,7 +389,12 @@ func (an *animation) add(name string, k key) {
 // probe is n's style with decls over its cascade, under its !important
 // declarations, as an animation's are; its own style with none.
 func (t *Transitions) probe(n *dom.Node, decls []Declaration) *style.Computed {
-	t.km.off, t.kpm.off, t.km.ranks, t.kpm.ranks, t.km.env, t.kpm.env = t.off, t.off, t.ranks, t.ranks, &t.env, &t.env
+	return t.probeIn(n, decls, t.off)
+}
+
+// probeIn is probe with the rules off sets off left out.
+func (t *Transitions) probeIn(n *dom.Node, decls []Declaration, off [][]bool) *style.Computed {
+	t.km.off, t.kpm.off, t.km.ranks, t.kpm.ranks, t.km.env, t.kpm.env = off, off, t.ranks, t.ranks, &t.env, &t.env
 	r := restyler{sheets: t.all, m: &t.km, pm: &t.kpm, computed: &t.probed, overlay: t.overlay,
 		viewport: t.viewport, browser: t.browser, env: &t.env, keyframe: decls}
 	if p := n.Pseudo(); p != dom.NoPseudo {
@@ -383,11 +427,14 @@ func (t *Transitions) update(n *dom.Node, a *nodeAnims) bool {
 		for i := range an.tracks {
 			tr := &an.tracks[i]
 			from, to, e := tr.at(p)
+			comp := composite{from.op, to.op}
 			if longhands[tr.index].prop.anim.kind == painted {
-				a.paints = setPaint(a.paints, paintValue{index: tr.index, from: from.s, to: to.s, e: e})
+				a.paints = stack(a.paints, paintValue{index: tr.index, from: from.s, to: to.s, e: e, comp: comp},
+					func(q paintValue) bool { return q.index == tr.index })
 				continue
 			}
-			over = setOverride(over, override{index: tr.index, src: from.s, to: to.s, t: e})
+			over = stack(over, override{index: tr.index, src: from.s, to: to.s, t: e, comp: comp},
+				func(q override) bool { return q.index == tr.index })
 		}
 	}
 	if slices.Equal(over, a.over) {
@@ -398,21 +445,19 @@ func (t *Transitions) update(n *dom.Node, a *nodeAnims) bool {
 	return true
 }
 
-func setPaint(list []paintValue, p paintValue) []paintValue {
-	if i := slices.IndexFunc(list, func(q paintValue) bool { return q.index == p.index }); i >= 0 {
-		list[i] = p
-		return list
+// stack puts v, a value of an animation later in the list than those of
+// list, after those of the same longhand (same), which it drops when it
+// replaces them.
+func stack[T interface{ composite() composite }](list []T, v T, same func(T) bool) []T {
+	if v.composite().replaces() {
+		list = slices.DeleteFunc(list, same)
 	}
-	return append(list, p)
+	return append(list, v)
 }
 
-func setOverride(list []override, o override) []override {
-	if i := slices.IndexFunc(list, func(q override) bool { return q.index == o.index }); i >= 0 {
-		list[i] = o
-		return list
-	}
-	return append(list, o)
-}
+func (p paintValue) composite() composite { return p.comp }
+
+func (o override) composite() composite { return o.comp }
 
 // at is the keyframes of the interval p falls in and how far along it,
 // eased.
