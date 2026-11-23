@@ -46,6 +46,43 @@ func TestSelectedTextDrawsOverChromesHighlightInItsOwnColour(t *testing.T) {
 	assert.Empty(t, selected(p, chosen{}).of("rect"), "no part, no highlight")
 }
 
+func TestTheSystemsHighlightIsBlendedWithWhiteAsChromeOnMacOSBlendsIt(t *testing.T) {
+	for in, want := range map[string]string{
+		"#b3d7fe":   "#80bcfd99",
+		"#dcdcdc":   "#c4c4c499",
+		"#ffffff":   "#fefefe99",
+		"#0078d7":   "#0056cdcc",
+		"#3390ff80": "#3390ff80",
+	} {
+		assert.Equal(t, color.Hex(want), blendWithWhite(color.Hex(in)), in)
+	}
+}
+
+func TestASelectionWithNoRuleTakesTheSystemsHighlight(t *testing.T) {
+	p := el(0, 0, 100, 20, func(s *style.Computed) { s.Color = red })
+	run := text(0, 0, "hello", p.Style)
+	p.Append(run)
+	paint := func(f Frame) *recorder {
+		r := newRecorder()
+		f.Selection = chosen{parts: map[*box.Box][]Selected{run: {{Rect: geom.Rect{W: 44, H: 20}}}}}
+		Paint(r, tree(p), Each(&f))
+		return r
+	}
+	sys := Highlight{Background: color.Hex("#0078d7"), Inactive: color.Hex("#f0f0f0"), Text: color.White}
+	r := paint(Frame{Highlight: sys})
+	require.Len(t, r.of("rect"), 1)
+	assert.Equal(t, color.Hex("#0056cdcc"), r.of("rect")[0].Color)
+	assert.Equal(t, color.White, r.of("text")[0].Color, "the system's text colour over it")
+
+	r = paint(Frame{Highlight: sys, Inactive: true})
+	assert.Equal(t, color.Hex("#e5e5e599"), r.of("rect")[0].Color, "its inactive one in an inactive window")
+	assert.Equal(t, color.White, r.of("text")[0].Color)
+
+	r = paint(Frame{Highlight: Highlight{Background: color.Hex("#ffd0a0")}, Inactive: true})
+	assert.Equal(t, color.Hex("#c4c4c499"), r.of("rect")[0].Color, "Chrome's grey where the system says none")
+	assert.Equal(t, red, r.of("text")[0].Color, "and the text keeps its colour where it says none")
+}
+
 func TestASelectionRuleSetsTheHighlightAndTheTextsColour(t *testing.T) {
 	p := el(0, 0, 100, 20, func(s *style.Computed) {
 		s.Color = red

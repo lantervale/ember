@@ -24,6 +24,23 @@ func TestAnIframeWithOnlyARatioFillsItsLineAsInChrome(t *testing.T) {
 	chrome.Match(t, d, geom.V2(640, 400))
 }
 
+func TestAnIframeWithOnlyARatioAsAFlexItemTakesItsContainersWidthAsInChrome(t *testing.T) {
+	d := ui.NewDocument()
+	d.Body().Append(
+		ui.Div(ui.Style("display: flex; flex-direction: column; width: 400px"),
+			ui.Iframe(nil, ui.Style("aspect-ratio: 2 / 1")),
+			ui.Iframe(nil, ui.Style("aspect-ratio: 4 / 1; border: 0; margin: 0 20px"))),
+		ui.Div(ui.Style("display: flex; width: 400px"),
+			ui.Iframe(nil, ui.Style("aspect-ratio: 2 / 1"))),
+		ui.Div(ui.Style("display: flex; width: 400px; height: 100px"),
+			ui.Iframe(nil, ui.Style("aspect-ratio: 2 / 1; border: 0"))),
+		ui.Div(ui.Style("display: flex; flex-direction: column; align-items: center; width: 400px"),
+			ui.Iframe(nil, ui.Style("aspect-ratio: 2 / 1"))),
+		ui.Div(ui.Style("display: grid; width: 400px"),
+			ui.Iframe(nil, ui.Style("aspect-ratio: 2 / 1"))))
+	chrome.Match(t, d, geom.V2(640, 1200))
+}
+
 func TestAPercentHeightOfAnInlineReplacedBoxIsItsContainersShareAsInChrome(t *testing.T) {
 	d := ui.NewDocument()
 	d.Body().Append(

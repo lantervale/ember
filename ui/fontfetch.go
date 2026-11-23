@@ -148,9 +148,11 @@ func faceDescriptors(f css.FontFace) fonts.Descriptors {
 			*o.at = fonts.Override{Set: true, Of: o.of}
 		}
 	}
-	if kern, ok := f.Feature("kern"); ok && kern == 0 {
-		look.NoKern = true
+	feats := make([]string, len(f.Features))
+	for i, ft := range f.Features {
+		feats[i] = fmt.Sprintf("%s=%d", ft.Tag, ft.Value)
 	}
+	look.Features = strings.Join(feats, ",")
 	return fonts.Descriptors{Family: f.Family, Weight: f.Weight, WeightMax: f.WeightMax, Italic: f.Italic,
 		Stretch: f.Stretch, StretchMax: f.StretchMax, AutoWeight: f.AutoWeight, AutoStretch: f.AutoStretch,
 		Ranges: fontRanges(f.Ranges), Look: look, Display: displays[f.Display]}
@@ -440,15 +442,15 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 	return tf
 }
 
-// drawLook is how c is drawn in ch: scaled by its size-adjust, unkerned
-// when its @font-face says so, made bold or slanted where the family has
-// no such face, and at the chain's instance of a variable font.
+// drawLook is how c is drawn in ch: scaled by its size-adjust, shaped
+// with the features its @font-face sets, made bold or slanted where the
+// family has no such face, and at the chain's instance of a variable font.
 func drawLook(c *fonts.Face, ch *fonts.Chain) draw.Look {
 	if !c.Web() {
 		return draw.Look{}
 	}
 	bold, italic := c.Synthetic(ch.Font())
-	look := draw.Look{Scale: c.Look.SizeAdjust, Bold: bold, Oblique: italic, NoKern: c.Look.NoKern}
+	look := draw.Look{Scale: c.Look.SizeAdjust, Bold: bold, Oblique: italic, Features: c.Look.Features}
 	if at := ch.Instance(c); at != nil {
 		look.Variation = &draw.Variation{Font: c.Variable(), Coords: at}
 	}

@@ -115,3 +115,17 @@ func TestContentURLReplacesAnElementByItsPicture(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "pic.png", src)
 }
+
+func TestAMarkersLineHeightPushesTheItemsFirstLineDown(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`body { margin: 0; font-size: 15px; line-height: 20px; }
+ol { margin: 0; } .tall li::marker { line-height: 60px; } .short li::marker { line-height: 4px; }`))
+	plain, tall, short := ui.Li(ui.Text("x")), ui.Li(ui.Text("x")), ui.Li(ui.Text("x"))
+	d.Body().Append(ui.Ol(plain), ui.Ol(ui.Class("tall"), tall), ui.Ol(ui.Class("short"), short))
+	d.Layout(geom.V2(400, 300))
+	p, _ := d.BoxOf(plain)
+	tl, _ := d.BoxOf(tall)
+	s, _ := d.BoxOf(short)
+	assert.InDelta(t, 20, p.H, 0.01)
+	assert.InDelta(t, 20+20, tl.H, 1, "its top half of 40 more points of leading above the line, its bottom overflowing")
+	assert.InDelta(t, 20, s.H, 0.01, "a shorter marker leaves the line as it is")
+}

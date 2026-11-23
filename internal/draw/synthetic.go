@@ -53,8 +53,12 @@ func (f *Font) synthetic(face int, idx sfnt.GlyphIndex, x fixed.Int26_6, l Look)
 		}
 		return [2]float32{px, py}
 	}
-	var r float32
-	if l.Bold {
+	var r, half float32
+	switch {
+	case f.stroke > 0:
+		half = f.stroke / 2 * oversample
+		r = half*miterLimit + 1
+	case l.Bold:
 		r = fakeBold(size) / 4 * oversample
 	}
 	lo := [2]float32{math.MaxFloat32, math.MaxFloat32}
@@ -72,6 +76,10 @@ func (f *Font) synthetic(face int, idx sfnt.GlyphIndex, x fixed.Int26_6, l Look)
 		return image.Rectangle{}, nil, false
 	}
 	t := tracer{segs: segs, pt: pt, dr: dr, mask: image.NewAlpha(image.Rect(0, 0, dr.Dx(), dr.Dy()))}
+	if half > 0 {
+		t.stroke(half)
+		return dr, t.mask, true
+	}
 	t.one = image.NewAlpha(t.mask.Rect)
 	t.trace(0, 0)
 	if r > 0 {

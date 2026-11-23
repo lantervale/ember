@@ -71,10 +71,13 @@ func TestWebkitsOwnPropertiesStayAsWritten(t *testing.T) {
 			t.Errorf("-webkit-%s\n got %s\nwant %s, as without the option", name, got, strict)
 		}
 	}
-	if got := read("-webkit-font-smoothing: none", Browser()); got != "-webkit-font-smoothing: none | " {
-		t.Errorf("ui's own: %s", got)
+	for _, decl := range []string{"-webkit-font-smoothing: none", "-webkit-line-clamp: 2",
+		"-webkit-box-orient: vertical", "display: -webkit-box", "display: -webkit-inline-box"} {
+		if got := read(decl, Browser()); got != decl+" | " {
+			t.Errorf("ui's own: %s", got)
+		}
 	}
-	if got := read("-webkit-line-clamp: 2", Browser()); !strings.Contains(got, `"-webkit-line-clamp" is not supported`) {
+	if got := read("-webkit-box-pack: center", Browser()); !strings.Contains(got, `"-webkit-box-pack" is not supported`) {
 		t.Errorf("Chrome's own keeps its warning: %s", got)
 	}
 }
@@ -118,6 +121,7 @@ func TestWebkitValues(t *testing.T) {
 	for decl, want := range map[string]string{
 		"width: -webkit-calc(1px + 2px)":   "width: calc(1px + 2px) | ",
 		"width: -webkit-min-content":       "width: min-content | ",
+		"width: -webkit-fill-available":    "width: stretch | ",
 		"height: -webkit-max-content":      "height: max-content | ",
 		"max-width: -webkit-fit-content":   "max-width: fit-content | ",
 		"display: -webkit-flex":            "display: flex | ",
@@ -147,7 +151,7 @@ func TestWebkitValues(t *testing.T) {
 		}
 	}
 	// Chrome's own values keep their warning.
-	for _, decl := range []string{"display: -webkit-box", "width: -webkit-fill-available",
+	for _, decl := range []string{"cursor: -webkit-zoom-in",
 		"background-image: -webkit-linear-gradient(left top, #fff, #000)",
 		"background-image: -webkit-linear-gradient(center top, #fff, #000)"} {
 		got, strict := read(decl, Browser()), read(decl)

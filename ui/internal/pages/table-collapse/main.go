@@ -2,8 +2,8 @@
 // empty cells undrawn over the layers behind them, the cell holding white
 // space with them and the one holding a no-break space drawn; and
 // visibility: collapse taking a row, a column and a row group out with
-// their room, their cells unpainted; the table round the collapsed column
-// is bare, as Chrome paints its background as wide as before.
+// their room, their cells unpainted; the table round the collapsed column,
+// a flex item, keeps its width from before, as Chrome's.
 package main
 
 import (

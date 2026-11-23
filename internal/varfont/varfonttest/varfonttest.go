@@ -39,6 +39,8 @@ type Options struct {
 	NoHVAR bool
 	// NoAvar leaves avar out: wght maps linearly.
 	NoAvar bool
+	// Source is the TrueType font made variable, Go Regular when nil.
+	Source []byte
 }
 
 // Weighty is Go Regular made variable: wght from 100 to 900, 400 its
@@ -49,8 +51,12 @@ func Weighty() []byte { return Build(Options{}) }
 
 // Build is Weighty as opts has it.
 func Build(opts Options) []byte {
-	tables := directory(goregular.TTF)
-	f, err := varfont.Parse(goregular.TTF)
+	src := opts.Source
+	if src == nil {
+		src = goregular.TTF
+	}
+	tables := directory(src)
+	f, err := varfont.Parse(src)
 	if err != nil {
 		panic(err)
 	}

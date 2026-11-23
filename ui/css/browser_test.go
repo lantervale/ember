@@ -18,7 +18,7 @@ func TestSupportsAppliesWhereUISupportsWhatItAsks(t *testing.T) {
 		"(position: sticky)":                               true,
 		"(-webkit-appearance: none)":                       true,
 		"(-moz-appearance: none)":                          false,
-		"(display: -webkit-box)":                           false,
+		"(display: -webkit-box)":                           true,
 		"(backdrop-filter: blur(4px))":                     true,
 		"(mix-blend-mode: plus-lighter)":                   true,
 		"(foo: bar)":                                       false,

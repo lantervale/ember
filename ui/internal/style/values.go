@@ -23,6 +23,8 @@ const (
 	Fr
 	// None is max-width/max-height's none.
 	None
+	// Stretch fills the containing block, less the box's margins.
+	Stretch
 )
 
 // Length is a computed length-percentage or sizing keyword.

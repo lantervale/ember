@@ -14,7 +14,6 @@ const (
 	kwInlineEnd   = "inline-end"
 	kwBlock       = "block"
 	kwInline      = "inline"
-	kwBoth        = "both"
 )
 
 // Sides are the physical sides of a box, a bit each.
