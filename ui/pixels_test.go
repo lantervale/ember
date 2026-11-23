@@ -115,6 +115,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/initial-letter", 520, 260, 0.008},
 		{"./internal/pages/first-line-more", 560, 420, 0.0042},
+		{"./internal/pages/floats-in-lines", 560, 420, 0.0062},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/text-stroke", 480, 420, 0.0095},
 		{"./internal/pages/marker-properties", 420, 360, 0.0065},
@@ -132,6 +133,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/ascii-breaks", 520, 440, 0.01},
 		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
+		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {

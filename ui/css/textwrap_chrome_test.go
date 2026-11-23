@@ -31,6 +31,9 @@ func TestTextWrapPropertiesMatchChrome(t *testing.T) {
 .normal { text-box: normal; }
 .spacing { text-spacing-trim: space-all; text-autospace: normal; interpolate-size: allow-keywords; }
 .first { text-spacing-trim: space-first; text-box: text trim-start; }
+.bs { white-space: break-spaces; }
+.bsn { white-space-collapse: break-spaces; text-wrap-mode: nowrap; }
+.bsw { white-space: nowrap break-spaces; }
 `))
 	d.Body().Append(
 		ui.Div(ui.Class("balance"), ui.Text("balance"), ui.Span(ui.Text("inherited"))),
@@ -50,6 +53,9 @@ func TestTextWrapPropertiesMatchChrome(t *testing.T) {
 		ui.Div(ui.Class("box normal"), ui.Text("normal")),
 		ui.Div(ui.Class("spacing"), ui.Text("spacing"), ui.Span(ui.Text("inherited"))),
 		ui.Div(ui.Class("first"), ui.Text("first")),
+		ui.Div(ui.Class("bs"), ui.Text("bs"), ui.Span(ui.Class("wrap"), ui.Text("inherited"))),
+		ui.Div(ui.Class("bsn"), ui.Text("bsn")),
+		ui.Div(ui.Class("bsw"), ui.Text("bsw"), ui.Span(ui.Style("text-wrap-mode: wrap"), ui.Text("wrap"))),
 	)
 	matchChrome(t, d)
 }
@@ -67,6 +73,8 @@ func TestTextWrapValuesAreReadAsChrome(t *testing.T) {
 		{"white-space", "preserve-breaks"}, {"white-space", "collapse balance"}, {"white-space", "wrap"},
 		{"white-space", "pre pre"}, {"white-space-collapse", "preserve-spaces"}, {"white-space-collapse", "discard"},
 		{"white-space-collapse", "preserve-breaks"},
+		{"white-space", "break-spaces"}, {"white-space", "break-spaces nowrap"}, {"white-space", "wrap break-spaces"},
+		{"white-space-collapse", "break-spaces"}, {"white-space", "break-spaces pre"},
 		{"hyphens", "auto"}, {"hyphens", "manual"}, {"hyphens", "all"}, {"hyphenate-character", "auto"},
 		{"hyphenate-character", `"-"`}, {"hyphenate-character", "none"}, {"hyphenate-character", `"a" "b"`},
 		{"text-box-trim", "trim-both"}, {"text-box-trim", "both"}, {"text-box-edge", "cap"},
