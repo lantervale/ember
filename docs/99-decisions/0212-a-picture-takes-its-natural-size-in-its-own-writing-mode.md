@@ -13,7 +13,7 @@ Pictures (img, svg, canvas, iframe) had their natural size turned into their par
 
 - A replaced box's natural size and proportions are turned into its own writing mode, where it is laid out whatever its parent's or its containing block's frame.
 - An absolutely positioned picture with neither size set is sized as an inline one (its min and max sizes carried through its ratio); an `aspect-ratio` that isn't `auto` gives a picture its natural inline size and the block size its ratio makes.
-- A range's sizes are no rules of ui's sheet but its natural content, as Chrome's shadow tree gives it: 129 along its track, 16 across a range of its own look, 129 across one of `appearance: slider-vertical` in horizontal lines; a block shrinks it to them, a grid or a flexbox may stretch it. Export writes those a range of ui's own look leaves auto, as Chrome's bare ranges lack them.
+- A range's sizes are no rules of ui's sheet but its natural content, as Chrome's shadow tree gives it: 129 along its track, 16 across a range of its own look, 129 across one of `appearance: slider-vertical` in horizontal lines; a block shrinks it to them, a grid or a flexbox may stretch it, and one laid out as a row round its `::before` and `::after` keeps its track's length whatever they hold. Export writes those a range of ui's own look leaves auto, as Chrome's bare ranges lack them.
 
 ## Alternatives
 

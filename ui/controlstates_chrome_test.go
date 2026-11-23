@@ -63,6 +63,7 @@ func TestRangesOfAnAutoSizeAreChromes(t *testing.T) {
 		"appearance: none; width: auto",
 		"width: auto; padding: 0 6px",
 		"writing-mode: vertical-lr; inline-size: auto",
+		"tall: ",
 		"tall: width: 120px",
 		"tall: width: 120px; height: 10px",
 		"tall: width: 120px; appearance: slider-vertical",

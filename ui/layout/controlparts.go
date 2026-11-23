@@ -95,6 +95,29 @@ func rangeNatural(st *style.Computed) size {
 	return size{trackLength, nativeThumb}
 }
 
+// sliderRow gives a range laid out as a row round its slider container, its width not
+// given, its track's length along it, as Chrome's keeps whatever its ::before and its
+// ::after hold.
+func (n *node) sliderRow(in input) input {
+	if !n.slider || some(in.known.w) {
+		return in
+	}
+	st := n.st
+	pb := edges(st.Padding, in.parent.w).add(n.borders()).sum()
+	w := float32(trackLength) + pb.w
+	if in.sizing == inherentSize {
+		adj := boxSizingAdjustment(st, pb)
+		if styled := resolveSize(st.Size, in.parent).mAdd(adj); some(styled.w) {
+			return in
+		}
+		minSize := resolveSize(st.MinSize, in.parent).mAdd(adj)
+		maxSize := resolveMax(st.MaxSize, in.parent).mAdd(adj)
+		w = mClamp(w, minSize.w, maxSize.w)
+	}
+	in.known.w = w
+	return in
+}
+
 // buildParts gives n, a control of part k, its ::before, the part and
 // its ::after: a range laid out as a flex row, a progress or a meter as
 // a block of them. The control's children are never shown, as in Chrome.
