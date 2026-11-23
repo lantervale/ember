@@ -458,6 +458,87 @@ var transforms = interp[[]style.TransformOp]{
 	add:   addTransforms,
 }
 
+// translations interpolate translate's lengths, none as 0px 0px, and add
+// up either way.
+//
+//nolint:gochecknoglobals // an interpolation, fixed
+var translations = interp[style.Translation]{
+	lerp: func(a, b style.Translation, t float32) (style.Translation, bool) {
+		if !a.Set && !b.Set {
+			return a, true
+		}
+		a, b = translation(a), translation(b)
+		x, okX := lerpLength(a.X, b.X, t, false)
+		y, okY := lerpLength(a.Y, b.Y, t, false)
+		return style.Translation{X: x, Y: y, Set: true}, okX && okY
+	},
+	equal: same[style.Translation],
+	add: func(a, b style.Translation, _ bool) (style.Translation, bool) {
+		switch {
+		case !a.Set:
+			return b, true
+		case !b.Set:
+			return a, true
+		}
+		x, okX := addLength(a.X, b.X)
+		y, okY := addLength(a.Y, b.Y)
+		return style.Translation{X: x, Y: y, Set: true}, okX && okY
+	},
+}
+
+func translation(t style.Translation) style.Translation {
+	if t.Set {
+		return t
+	}
+	return style.Translation{X: style.Px(0), Y: style.Px(0), Set: true}
+}
+
+// rotations interpolate rotate's angle, none as 0deg, and add it up
+// either way.
+//
+//nolint:gochecknoglobals // an interpolation, fixed
+var rotations = interp[style.Rotation]{
+	lerp: func(a, b style.Rotation, t float32) (style.Rotation, bool) {
+		if !a.Set && !b.Set {
+			return a, true
+		}
+		return style.Rotation{Deg: lerpf(a.Deg, b.Deg, t), Set: true}, true
+	},
+	equal: same[style.Rotation],
+	add: func(a, b style.Rotation, _ bool) (style.Rotation, bool) {
+		return style.Rotation{Deg: a.Deg + b.Deg, Set: a.Set || b.Set}, true
+	},
+}
+
+// scalings interpolate scale's factors, none as 1 1; added or accumulated
+// they multiply, as Chrome has them.
+//
+//nolint:gochecknoglobals // an interpolation, fixed
+var scalings = interp[style.Scaling]{
+	lerp: func(a, b style.Scaling, t float32) (style.Scaling, bool) {
+		if !a.Set && !b.Set {
+			return a, true
+		}
+		a, b = scaling(a), scaling(b)
+		return style.Scaling{X: lerpf(a.X, b.X, t), Y: lerpf(a.Y, b.Y, t), Set: true}, true
+	},
+	equal: same[style.Scaling],
+	add: func(a, b style.Scaling, _ bool) (style.Scaling, bool) {
+		if !a.Set && !b.Set {
+			return a, true
+		}
+		a, b = scaling(a), scaling(b)
+		return style.Scaling{X: a.X * b.X, Y: a.Y * b.Y, Set: true}, true
+	},
+}
+
+func scaling(s style.Scaling) style.Scaling {
+	if s.Set {
+		return s
+	}
+	return style.Scaling{X: 1, Y: 1, Set: true}
+}
+
 // addTransforms puts b's functions after a's; accumulated, two lists of
 // the same functions sum function by function (scales by how far each is
 // from one), as Chrome does, and others are put after too.

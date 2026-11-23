@@ -435,7 +435,7 @@ func (t *tree) performOOF(n *node, candidates []oofCandidate, area size, offset 
 		}
 		loc := point{lb.layout.location.x - offset.x, lb.layout.location.y - offset.y}
 		overflow = overflow.union(overflowContribution(loc, lb.layout.size,
-			lb.layout.overflow.rect, lb.layout.border, lb.overflow, container, rect{}))
+			lb.layout.overflow.rect, lb.layout.border, lb.overflow, c.node.st, container, rect{}))
 	}
 	return hoisted, unclaimed, overflow
 }
