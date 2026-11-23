@@ -99,7 +99,9 @@ func TestLineClampHidesTheLinesOfAnInlinePastItsLast(t *testing.T) {
 }
 
 func TestLineClampDiscardsTheFloatsAfterItsLastLine(t *testing.T) {
-	float := func(st *style.Computed) { st.Display, st.Float, st.Size.Width = style.Block, style.FloatLeft, style.Px(10) }
+	float := func(st *style.Computed) {
+		st.Display, st.Float, st.Size.Width = style.Block, style.FloatLeft, style.Px(10)
+	}
 	before, after := el(dom.Div, float, text("H")), el(dom.Div, float, text("H"))
 	d := el(dom.Div, clamped(1, false), before, el(dom.P, block, text("HH HH HH")), after)
 	tr := lay(el(dom.Div, block, d), 200)

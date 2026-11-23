@@ -1899,7 +1899,7 @@ var props = func() map[string]prop {
 				dst.LineClamp, dst.NoEllipsis = src.LineClamp, src.NoEllipsis
 				dst.ClampAuto, dst.ClampLegacy = src.ClampAuto, src.ClampLegacy
 			},
-			anim:    anim{kind: discrete},
+			anim: anim{kind: discrete},
 		},
 		"-webkit-line-clamp": field(func(c *style.Computed) *int { return &c.WebkitLineClamp }, clampOf,
 			flips[int]()),

@@ -383,9 +383,10 @@ func wrapsSpanner(k *node) bool {
 		edges(st.Margin, 1) != (rect{}) || edges(st.Padding, 1) != (rect{}) || k.borders() != (rect{}) {
 		return false
 	}
-	return slices.ContainsFunc(k.kids, func(c *node) bool {
+	positions := slices.ContainsFunc(k.kids, func(c *node) bool {
 		return outOfFlow(c.st.Position) && c.st.Display != style.DisplayNone
-	}) == false && slices.ContainsFunc(k.kids, func(c *node) bool { return spans(c) || wrapsSpanner(c) })
+	})
+	return !positions && slices.ContainsFunc(k.kids, func(c *node) bool { return spans(c) || wrapsSpanner(c) })
 }
 
 // wrap lays w, a block wrapping a spanner, out round what it holds, laid out in the flow

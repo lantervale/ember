@@ -130,7 +130,7 @@ func linesHeld(limit float32, laid func(lines int) (float32, int)) int {
 	held := 1
 	for lo, hi := 2, total-1; lo <= hi; {
 		mid := (lo + hi) / 2
-		if h, _ := laid(mid); h <= limit+columnEpsilon {
+		if at, _ := laid(mid); at <= limit+columnEpsilon {
 			held, lo = mid, mid+1
 		} else {
 			hi = mid - 1
