@@ -32,6 +32,8 @@ var (
 	// inactiveSelection is pageSelection while the window is inactive:
 	// macOS's unemphasized #dcdcdc, made translucent as Chrome makes it.
 	inactiveSelection = color.Hex("#c4c4c499")
+	// darkTick is the tick of a checkbox whose accent is light.
+	darkTick = color.Hex("#3b3b3b")
 	// meterColors are a meter's fill by region, Chrome's green, amber and
 	// red.
 	meterColors = map[control.Region]color.Color{
@@ -112,14 +114,23 @@ func (p *painter) marks(e entry, alpha float32) {
 		p.img(e, alpha)
 		return
 	}
+	own := st.Appearance.Native()
 	switch n.Tag() {
 	case dom.Input:
 		switch inputType(n) {
 		case "checkbox":
-			p.checkbox(n, c, ink)
+			if own {
+				p.checkbox(n, c, p.accented(e, st, alpha, ink))
+			}
 		case "radio":
-			p.radio(n, c, ink)
+			if own {
+				p.radio(n, c, p.accented(e, st, alpha, ink))
+			}
 		case "range":
+			if !own {
+				p.rangeParts(c, st, float32(p.rangeAt(n).Fraction()), alpha)
+				return
+			}
 			p.rangeMarks(n, c, st, alpha)
 		default:
 			p.caret(e, caretInk(st, alpha))
@@ -127,15 +138,9 @@ func (p *painter) marks(e entry, alpha float32) {
 	case dom.Textarea:
 		p.caret(e, caretInk(st, alpha))
 	case dom.Progress:
-		f, known := progressOf(p.machine(n), n)
-		p.bar(c, f, trackInk(st, alpha), accentInk(st, alpha))
-		if !known && p.timed && p.record(livePart{kind: liveSlide, e: e, rect: c, ink: ink}, c) {
-			p.slide(c, ink)
-			p.endGap()
-		}
+		p.progress(e, c, st, alpha)
 	case dom.Meter:
-		m := meterOf(p.machine(n), n)
-		p.bar(c, float32(m.Fraction()), trackInk(st, alpha), fade(meterColors[m.Region()], alpha))
+		p.meter(n, c, st, alpha)
 	case dom.Img, dom.Svg:
 		p.img(e, alpha)
 		if p.sel != nil && p.sel.Holds(e.b.Node) {
@@ -158,6 +163,93 @@ func (p *painter) marks(e entry, alpha float32) {
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
 		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source: // only marked controls come here
 	}
+}
+
+// accented draws a checked checkbox or radio of e whose accent-color is
+// set as Chrome does: the checkbox filled with it, the radio's ring in
+// it, and returns the ink of its mark, a radio's dot in the accent, a
+// checkbox's tick white or dark as the accent contrasts more with each;
+// ink where the accent is auto or the control unchecked.
+func (p *painter) accented(e entry, st *style.Computed, alpha float32, ink color.Color) color.Color {
+	n := e.b.Node
+	checked := n.State().Has(dom.Checked)
+	switch m := p.machine(n).(type) {
+	case *control.Checkbox:
+		checked = m.Checked || m.Indeterminate
+	case *control.Radio:
+		checked = m.Checked
+	}
+	if st.AccentAuto || !checked {
+		return ink
+	}
+	accent := fade(st.AccentColor, alpha)
+	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	if inputType(n) == "radio" {
+		p.s.Border(r, min(r.W, r.H)/2, st.Border.Top, accent)
+		return accent
+	}
+	radius, _ := st.Radius.TopLeft.Width.Resolve(r.W)
+	p.s.RoundRect(r, radius, accent)
+	return fade(tickOn(st.AccentColor), alpha)
+}
+
+// tickOn is the tick Chrome draws on a checkbox of accent a: white, or
+// its dark grey where that contrasts more.
+func tickOn(a color.Color) color.Color {
+	l := 0.2126*a.R + 0.7152*a.G + 0.0722*a.B
+	if (l+0.05)*(l+0.05) > 1.05*(darkTickLuminance+0.05) {
+		return darkTick
+	}
+	return color.White
+}
+
+// darkTickLuminance is darkTick's relative luminance.
+const darkTickLuminance = 0.0437
+
+// progress draws a progress in its content box c: its parts where its
+// appearance is none, else its track filled to its value in its accent,
+// or an indeterminate one's segment sliding across it.
+func (p *painter) progress(e entry, c geom.Rect, st *style.Computed, alpha float32) {
+	n := e.b.Node
+	f, known := progressOf(p.machine(n), n)
+	if !st.Appearance.Native() {
+		parts := partsOf(st)
+		if !known {
+			p.barParts(c, parts.Inner, parts.Bar, nil, 0, st.Dir == style.RTL, false, alpha)
+			return
+		}
+		p.barParts(c, parts.Inner, parts.Bar, parts.Value, f, st.Dir == style.RTL, false, alpha)
+		return
+	}
+	p.bar(c, f, trackInk(st, alpha), accentInk(st, alpha))
+	ink := fade(st.Color, alpha)
+	if !known && p.timed && p.record(livePart{kind: liveSlide, e: e, rect: c, ink: ink}, c) {
+		p.slide(c, ink)
+		p.endGap()
+	}
+}
+
+// meter draws a meter in its content box c: its parts where its
+// appearance is none, else its track filled to its value in its region's
+// colour, its styled parts' colours where a sheet gives them.
+func (p *painter) meter(n *dom.Node, c geom.Rect, st *style.Computed, alpha float32) {
+	m := meterOf(p.machine(n), n)
+	parts := partsOf(st)
+	value := parts.Regions[m.Region()]
+	if !st.Appearance.Native() {
+		p.barParts(c, parts.Inner, parts.Bar, value, float32(m.Fraction()), st.Dir == style.RTL, true, alpha)
+		return
+	}
+	p.bar(c, float32(m.Fraction()), partInk(parts.Bar, trackInk(st, alpha), alpha),
+		partInk(value, fade(meterColors[m.Region()], alpha), alpha))
+}
+
+// partsOf is st's control parts, none styled where it has none.
+func partsOf(st *style.Computed) *style.ControlParts {
+	if st.Parts == nil {
+		return &style.ControlParts{}
+	}
+	return st.Parts
 }
 
 // radioGap is the space Chrome leaves between a checked radio's ring and
@@ -215,11 +307,7 @@ func (p *painter) switchThumb(c geom.Rect, on bool, ink color.Color) {
 // on the value, overhanging the ends as Chrome's does, in its color, in
 // its accent-color while hovered.
 func (p *painter) rangeMarks(n *dom.Node, c geom.Rect, st *style.Computed, alpha float32) {
-	r, ok := p.machine(n).(*control.Range)
-	if !ok {
-		r = rangeOf(n)
-	}
-	f := float32(r.Fraction())
+	f := float32(p.rangeAt(n).Fraction())
 	h := min(rangeTrack, c.H)
 	cy := c.Y + c.H/2
 	track := geom.Rect{X: c.X, Y: cy - h/2, W: c.W, H: h}
@@ -235,6 +323,14 @@ func (p *painter) rangeMarks(n *dom.Node, c geom.Rect, st *style.Computed, alpha
 		thumb = accent
 	}
 	p.s.Circle(geom.V2(c.X+f*c.W, cy), min(rangeThumb, c.H)/2, thumb)
+}
+
+// rangeAt is n's range: its machine's, else as its attributes set it.
+func (p *painter) rangeAt(n *dom.Node) *control.Range {
+	if r, ok := p.machine(n).(*control.Range); ok {
+		return r
+	}
+	return rangeOf(n)
 }
 
 // rangeTrack and rangeThumb are a range's track height and thumb size.
@@ -257,7 +353,7 @@ func (p *painter) bar(c geom.Rect, f float32, track, fill color.Color) {
 // background-color is its track, painted with its marks, not behind its
 // box.
 func tracked(b *box.Box) bool {
-	if b.Node == nil {
+	if b.Node == nil || b.Style != nil && !b.Style.Appearance.Native() {
 		return false
 	}
 	switch b.Node.Tag() {
@@ -459,16 +555,32 @@ func (p *painter) selection(e entry, alpha float32) {
 	l := t.Layout
 	p.s.PushClip(padding(e.b, e.at))
 	for line := l.Line(from); line <= l.Line(to); line++ {
-		start, end := l.Span(line)
-		a, z := max(from, start), min(to, end)
 		lb := lineBox(e, l, line)
-		x0, x1 := lb.X+l.X(a), lb.X+l.X(z)
-		x0, x1 = min(x0, x1), max(x0, x1)
-		if x1 > x0 {
-			p.s.Rect(geom.Rect{X: x0, Y: lb.Y, W: x1 - x0, H: lb.H}, fade(c, alpha))
+		for _, r := range fieldRanges(l, line, from, to) {
+			p.s.Rect(geom.Rect{X: lb.X + r[0], Y: lb.Y, W: r[1] - r[0], H: lb.H}, fade(c, alpha))
 		}
 	}
 	p.s.PopClip()
+}
+
+// ranged is a text layout that knows the stretches of a line a selection
+// is shown in, several where its text runs in both directions.
+type ranged interface {
+	Ranges(line, from, to int) [][2]float32
+}
+
+// fieldRanges are the stretches of line the selection from up to to
+// covers, from its left, each wider than nothing.
+func fieldRanges(l textedit.Layout, line, from, to int) [][2]float32 {
+	if r, ok := l.(ranged); ok {
+		return r.Ranges(line, from, to)
+	}
+	start, end := l.Span(line)
+	x0, x1 := l.X(max(from, start)), l.X(min(to, end))
+	if x1 <= x0 {
+		return nil
+	}
+	return [][2]float32{{x0, x1}}
 }
 
 // lineBreak draws the selection's mark on the line a br holds alone.
@@ -509,14 +621,11 @@ func (p *painter) fieldParts(e entry) []Selected {
 		} else if line < len(e.b.Lines) {
 			row = e.b.Lines[line].Rect
 		}
-		start, end := l.Span(line)
-		x0, x1 := row.X+l.X(max(from, start)), row.X+l.X(min(to, end))
-		if x1 <= x0 {
-			continue
-		}
 		for k, f := range e.b.Lines {
 			if f.Rect.Y < row.Y+row.H && row.Y < f.Rect.Y+f.Rect.H {
-				out = append(out, Selected{Line: k, Rect: geom.Rect{X: x0, Y: f.Rect.Y, W: x1 - x0, H: f.Rect.H}})
+				for _, r := range fieldRanges(l, line, from, to) {
+					out = append(out, Selected{Line: k, Rect: geom.Rect{X: row.X + r[0], Y: f.Rect.Y, W: r[1] - r[0], H: f.Rect.H}})
+				}
 				break
 			}
 		}
@@ -536,6 +645,10 @@ func caretInk(st *style.Computed, alpha float32) color.Color {
 func (p *painter) caret(e entry, ink color.Color) {
 	t := p.editing(e.b)
 	if t == nil || t.Editor.ReadOnly {
+		return
+	}
+	if from, to := t.Editor.Selection(); from != to {
+		// Chrome shows no caret beside selected characters
 		return
 	}
 	if p.record(livePart{kind: liveCaret, e: e, ink: ink}, intersect(caretRect(e, t).Inset(-1), padding(e.b, e.at))) {

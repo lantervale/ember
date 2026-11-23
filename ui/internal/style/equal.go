@@ -72,9 +72,15 @@ func (b *Box) equal(o *Box) bool {
 		b.Snap == o.Snap &&
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
+		b.NoEllipsis == o.NoEllipsis &&
 		b.WebkitBox == o.WebkitBox &&
 		b.BoxVertical == o.BoxVertical &&
-		b.WebkitLineClamp == o.WebkitLineClamp
+		b.WebkitLineClamp == o.WebkitLineClamp &&
+		b.BoxPack == o.BoxPack &&
+		b.BoxAlign == o.BoxAlign &&
+		b.BoxReverse == o.BoxReverse &&
+		b.BoxFlex == o.BoxFlex &&
+		b.BoxOrdinal == o.BoxOrdinal
 }
 
 func (g *Grid) equal(o *Grid) bool {
@@ -187,6 +193,8 @@ func (c *Content) equal(o *Content) bool {
 //nolint:cyclop,gocyclo // one comparison a field
 func (l *Look) equal(o *Look) bool {
 	return l.Background == o.Background &&
+		l.Appearance == o.Appearance &&
+		l.Parts.Equal(o.Parts) &&
 		l.Scrollbar.Equal(o.Scrollbar) &&
 		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
 		l.ScrollbarColored == o.ScrollbarColored &&

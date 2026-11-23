@@ -25,6 +25,15 @@ func rows(style string, n int) *ui.Node {
 	return ui.P(args...)
 }
 
+// tableRows are n rows of one cell each, named by prefix and their number.
+func tableRows(prefix string, n int) []ui.Arg {
+	out := make([]ui.Arg, n)
+	for i := range n {
+		out[i] = ui.Tr(ui.Td(ui.Text(fmt.Sprint(prefix, i+1))))
+	}
+	return out
+}
+
 func prose(n int) string { return strings.TrimSpace(strings.Repeat(sentence+" ", n)) }
 
 func TestColumnsMatchChrome(t *testing.T) {
@@ -79,6 +88,20 @@ p { margin: 0 0 10px; background: #cdf; } .tall { height: 130px; background: #fc
 			m("column-count: 3", rows("break-after: column", 1), rows("", 4)),
 			m("", rows("", 4), rows("break-after: avoid", 1), rows("", 5)),
 		),
+		"breaks Chrome honours": styled(base+` p { margin: 0; } .f { display: flex; flex-direction: column; }`,
+			m("", rows("break-before: column", 2), rows("", 3)),
+			m("", rows("", 3), ui.Div(rows("break-before: column", 2), rows("", 1))),
+			m("", rows("", 3), ui.Div(rows("", 2), rows("break-after: column", 1)), rows("", 2)),
+			m("", rows("", 4), ui.Div(rows("break-before: avoid", 2)), rows("", 3)),
+			m("", rows("", 4), ui.Div(rows("", 1), rows("break-after: avoid", 1)), rows("", 3)),
+			m("", rows("", 2), rows("break-inside: avoid-column", 4), rows("", 2)),
+			m("", rows("", 2), rows("break-before: avoid-column", 3), rows("", 4)),
+			m("", rows("", 2), rows("break-before: page", 2), rows("", 2)),
+			m("", rows("", 2), rows("break-inside: avoid", 9)),
+			m("", ui.Div(ui.Class("f"), rows("", 2), rows("break-before: column", 2), rows("", 1))),
+			m("column-count: 3", rows("", 1), ui.Div(ui.Style("break-inside: avoid"), rows("", 2),
+				rows("break-before: column", 2))),
+		),
 		"a height, column-fill and columns that overflow": styled(base+` p { margin: 0; }`,
 			m("height: 100px", rows("", 6)),
 			m("height: 50px", rows("", 7)),
@@ -120,6 +143,32 @@ p { margin: 0 0 10px; background: #cdf; } .tall { height: 130px; background: #fc
 			m("", ui.Div(ui.Class("box"), ui.Style("float: left")), rows("", 6)),
 			m("", rows("", 3), ui.Div(ui.Class("box"), ui.Style("float: right")), rows("", 3)),
 			m("", ui.Div(ui.Class("box"), ui.Style("float: left; margin-right: 6px")), words("", prose(3))),
+		),
+		"a table cut between rows": styled(base+` p { margin: 0; } table { border-spacing: 0; background: #cdf; }
+td { padding: 0; }`,
+			m("", ui.Table(tableRows("r", 6)...)),
+			m("", rows("", 3), ui.Table(tableRows("r", 4)...), rows("", 2)),
+			m("", ui.Table(ui.Thead(ui.Tr(ui.Td(ui.Text("head")))), ui.Tbody(tableRows("r", 5)...))),
+			m("", ui.Table(ui.Style("border: 2px solid; padding: 3px"), ui.Tbody(tableRows("r", 4)...),
+				ui.Tbody(tableRows("s", 3)...))),
+			m("", ui.Table(ui.Style("break-inside: avoid"), ui.Tbody(tableRows("r", 4)...)), rows("", 2)),
+		),
+		"a flex container cut between its items and lines": styled(base+` p { margin: 0; }
+.f { display: flex; background: #cdf; } .w { width: 45px; height: 30px; background: #888; }`,
+			m("", ui.Div(ui.Class("f"), ui.Style("flex-direction: column"), rows("", 2), rows("", 2), rows("", 2))),
+			m("", ui.Div(ui.Class("f"), ui.Style("flex-wrap: wrap; width: 100px"), ui.Div(ui.Class("w")),
+				ui.Div(ui.Class("w")), ui.Div(ui.Class("w")), ui.Div(ui.Class("w")), ui.Div(ui.Class("w")),
+				ui.Div(ui.Class("w")))),
+			m("", ui.Div(ui.Class("f"), rows("", 4), rows("", 2))),
+			m("", rows("", 3), ui.Div(ui.Class("f"), ui.Style("padding: 4px; border: 2px solid; gap: 6px"),
+				rows("", 3), ui.Div(ui.Class("w"))), rows("", 1)),
+			m("", ui.Div(ui.Class("f"), ui.Style("break-inside: avoid"), rows("", 4)), rows("", 2)),
+		),
+		"a positioned box cut": styled(base+` p { margin: 0; } .m { position: relative; }
+.abs { position: absolute; top: 10px; left: 0; width: 60px; background: #f00; }`,
+			m("", rows("position: relative; top: 4px", 6)),
+			m("", ui.Div(ui.Style("position: relative"), rows("", 2), ui.Div(ui.Class("abs"), rows("", 4)))),
+			m("height: 60px; column-fill: auto", ui.Div(ui.Class("abs"), rows("", 6))),
 		),
 		"a nested multi-column container": styled(base+` p { margin: 0; }`,
 			m("", rows("", 2), m("width: auto; margin: 0", rows("", 4)), rows("", 2)),

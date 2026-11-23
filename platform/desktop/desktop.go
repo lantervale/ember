@@ -307,6 +307,15 @@ func (n *native) SetSize(w, h int) {
 
 func (n *native) Clipboard() string        { return glfw.GetClipboardString() }
 func (n *native) SetClipboard(text string) { glfw.SetClipboardString(text) }
+func (n *native) ClipboardHTML() string    { return clipboardHTML() }
+
+// SetClipboardHTML puts html beside text on the clipboard where the
+// system's takes it, the text alone elsewhere.
+func (n *native) SetClipboardHTML(html, text string) {
+	if !setClipboardHTML(html, text) {
+		glfw.SetClipboardString(text)
+	}
+}
 
 func (n *native) sync() {
 	ww, wh := n.h.GetSize()
