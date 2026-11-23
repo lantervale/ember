@@ -472,7 +472,8 @@ func fontWeightNumber(c Component) error {
 func timeTerm(nonNeg bool) term {
 	return func(c Component) error {
 		d, err := duration(c)
-		if err == nil && nonNeg && d < 0 {
+		// A math function's negative duration is clamped to 0, not refused.
+		if err == nil && nonNeg && d < 0 && c.Kind != Function {
 			return fmt.Errorf("%q can't be negative", c.String())
 		}
 		return err

@@ -1090,7 +1090,7 @@ func (x *ctx) animations() {
 		a := style.Animation{Name: n[0].Text, Easing: at(1, i).String(), Iterations: float32(math.Inf(1))}
 		dur, _ := duration(at(0, i))
 		delay, _ := duration(at(2, i))
-		a.Duration, a.Delay = float32(dur), float32(delay)
+		a.Duration, a.Delay = float32(max(dur, 0)), float32(delay)
 		if c := at(3, i); c.Kind == Number {
 			a.Iterations = float32(c.Num)
 		}
@@ -1128,7 +1128,7 @@ func transitionList(trans [4][]Component) []style.Transition {
 	for i, p := range props {
 		t := style.Transition{Property: strings.ToLower(p[0].Text)}
 		dur, _ := duration(lists[1][i%len(lists[1])][0])
-		t.Duration = float32(dur)
+		t.Duration = float32(max(dur, 0))
 		t.Easing = lists[2][i%len(lists[2])][0].String()
 		delay, _ := duration(lists[3][i%len(lists[3])][0])
 		t.Delay = float32(delay)
@@ -1330,11 +1330,18 @@ func (x *ctx) color(c Component) color.Color {
 	if isWord(c, kwCurrentColor) {
 		return x.c.Color
 	}
-	return linear(c)
+	return linear(c, x.c.Color)
 }
 
-func linear(c Component) color.Color {
-	s, _ := parseColor(c)
+// linear is the colour c, currentcolor in it standing for cur.
+func linear(c Component, cur color.Color) color.Color {
+	var s Color
+	if c.Kind == Function {
+		in := cur.SRGB()
+		s, _ = colorIn(c, &Color{float64(in[0]), float64(in[1]), float64(in[2]), float64(cur.A)})
+	} else {
+		s, _ = parseColor(c)
+	}
 	l := color.FromSRGB([3]float32{float32(s.R), float32(s.G), float32(s.B)})
 	l.A = float32(s.A)
 	return l
@@ -1670,7 +1677,7 @@ var props = func() map[string]prop {
 				if isWord(v[0], "currentcolor") {
 					return x.parent.Color
 				}
-				return linear(v[0])
+				return linear(v[0], x.parent.Color)
 			}, colors,
 		).painted(),
 		propColorScheme: field(func(c *style.Computed) *style.ColorScheme { return &c.ColorScheme },
@@ -2016,7 +2023,7 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 			c, auto := get(x.c)
 			*auto = isWord(v[0], "auto", kwCurrentColor)
 			if !*auto {
-				*c = linear(v[0])
+				*c = linear(v[0], x.c.Color)
 			}
 		},
 		inherit: func(dst, src *style.Computed) {
