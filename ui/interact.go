@@ -103,6 +103,8 @@ type interaction struct {
 	pinned   map[*Node]dom.State
 	scrolls  map[*Node]*paint.Scrolling
 	dragging *Node
+	// resizing is a box dragged by its resizer (resizer.go).
+	resizing *resizeDrag
 	// trackHeld is a click held on a scrollbar's track (scrollmotion.go).
 	trackHeld *trackHold
 	// barOn is the scroll container whose styled bars the pointer is on,
@@ -800,7 +802,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		inputfeed.Of(in).CapturePointer()
 		d.cover(c)
 	}
-	if !d.edgeCursor(c, at) {
+	if !d.edgeCursor(c, at) && !d.resizerCursor(c, at, hit) {
 		d.cssCursor(c, hit)
 		d.selectionCursor(c, hit, at)
 	}
@@ -1834,6 +1836,10 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		return false
 	}
 	at := d.mouse(c)
+	if d.resizing != nil {
+		d.dragResize(in, at)
+		return true
+	}
 	if n := d.dragging; n != nil {
 		b := d.scroller(n)
 		s := d.scrolling(n)
@@ -1855,7 +1861,7 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		return true
 	}
 	held := scrollContainers(hit)
-	if in.Pressed(input.MouseLeft) && d.pressBars(held, at) {
+	if in.Pressed(input.MouseLeft) && (d.pressResizer(hit, at) || d.pressBars(held, at)) {
 		return true
 	}
 	w, precise := in.Wheel(), in.WheelPrecise()
