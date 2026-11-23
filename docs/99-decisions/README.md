@@ -181,6 +181,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0176 | [Vertical writing modes are laid out turned into their own frame](0176-vertical-writing-modes-are-laid-out-turned-into-their-own-frame.md) | rendering |
 | 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
 | 0179 | [A collapsed column narrows a stretched table, but a flex row's](0179-a-collapsed-column-narrows-a-stretched-table-but-a-flex-rows.md) | api |
+| 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
 
 ## Writing one
 
