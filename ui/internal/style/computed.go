@@ -691,6 +691,15 @@ type Text struct {
 	HasSelectionShadows    bool
 	SelectionDecoration    TextDecoration
 	HasSelectionDecoration bool
+	// SelectionStroke is the ::selection's -webkit-text-stroke, set when
+	// HasSelectionStroke is, the colour or the width undeclared there the
+	// selected text's own. Its -webkit-text-fill-color is read and, as in
+	// Chrome, fills nothing: the selected glyphs take its color.
+	SelectionStroke    TextStroke
+	HasSelectionStroke bool
+	// TextStroke is -webkit-text-stroke: each glyph's outline drawn over
+	// its fill.
+	TextStroke TextStroke
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations
@@ -1143,7 +1152,7 @@ type Filter struct {
 }
 
 // CurrentColorFields is a set of colours given as currentColor.
-type CurrentColorFields uint8
+type CurrentColorFields uint16
 
 const (
 	BorderTopCurrent CurrentColorFields = 1 << iota
@@ -1153,6 +1162,7 @@ const (
 	OutlineCurrent
 	DecorationCurrent
 	ColumnRuleCurrent
+	StrokeCurrent
 )
 
 // FollowColor sets every colour marked currentColor to c, a decoration's
@@ -1162,7 +1172,7 @@ func (s *Computed) FollowColor(c color.Color) {
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
 		BorderBottomCurrent: &s.BorderColor.Bottom, BorderLeftCurrent: &s.BorderColor.Left,
 		OutlineCurrent: &s.OutlineColor, DecorationCurrent: &s.TextDecoration.Color,
-		ColumnRuleCurrent: &s.ColumnRuleColor,
+		ColumnRuleCurrent: &s.ColumnRuleColor, StrokeCurrent: &s.TextStroke.Color,
 	} {
 		if s.CurrentColor&f != 0 {
 			*p = c
@@ -1191,6 +1201,9 @@ const (
 	AlignBottom
 	// AlignLength raises the box by the style's VerticalShift.
 	AlignLength
+	// AlignBaselineMiddle is -webkit-baseline-middle: the box's middle on its parent's
+	// baseline.
+	AlignBaselineMiddle
 )
 
 // ListStyle is a list-style-type: a list item's bullet or marker string,

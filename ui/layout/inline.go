@@ -1490,10 +1490,27 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			i = after
 			y += lh
 			bottom = y
+			if side := c.brClear(after - 1); side != style.ClearNone {
+				if below := c.flow.clearedThreshold(side); some(below) && below > y {
+					y = below
+				}
+			}
 			break
 		}
 	}
 	return b.close()
+}
+
+// brClear is the clear of the br whose break is piece i, none for any other piece: the
+// line after it starts below the floats it names, as Chrome's.
+func (c *inlineContent) brClear(i int) style.Clear {
+	if i < 0 || i >= len(c.pieces) || c.pieces[i].kind != newline {
+		return style.ClearNone
+	}
+	if b := c.runs[c.pieces[i].run].parent; b != nil && b.Node != nil && b.Node.Tag() == dom.Br {
+		return b.Style.Clear
+	}
+	return style.ClearNone
 }
 
 // lines breaks the pieces greedily into lines no wider than width where they may wrap.
@@ -1628,6 +1645,12 @@ func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
 	defer c.useFirst(was)
 	h, base := t.lineHeight(c, c.rootStyle())
 	root := extent{base, h - base}
+	if m := c.listMarker(); m != nil && l.from == 0 {
+		// an outside ::marker of its own style pushes the item's first line down to
+		// hold its top, its bottom left to overflow, as Chrome places it
+		_, mb := t.lineHeight(c, m)
+		root.above = max(root.above, mb)
+	}
 	c.stamp++
 	c.pending = c.pending[:0]
 	lo, hi := t.openBoxes(c, l, &root)
@@ -1726,6 +1749,17 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 	return lo, hi
 }
 
+// listMarker is the ::marker style a rule gives the list item whose lines c holds,
+// nil for content of another owner or a marker in the item's own style.
+func (c *inlineContent) listMarker() *style.Computed {
+	n := c.owner.box.Node
+	if n == nil || !c.owner.st.ListItem || n.Tag() == dom.Summary || c.owner.st.ListStyle == style.ListNone &&
+		!dom.Data(n).HasMarkerText {
+		return nil
+	}
+	return dom.Data(n).Marker
+}
+
 // styleAt is the style of span k, the owner's for -1.
 func (c *inlineContent) styleAt(k int) *style.Computed {
 	if k < 0 {
@@ -1749,6 +1783,8 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 		return -st.VerticalShift.At(h), true
 	case style.AlignMiddle:
 		return (e.above-e.below)/2 - t.metricsOf(c, parent).XHeight/2, true
+	case style.AlignBaselineMiddle:
+		return (e.above - e.below) / 2, true
 	case style.AlignTextTop, style.AlignTextBottom, style.AlignTop, style.AlignBottom:
 		return 0, false
 	}
@@ -1789,7 +1825,8 @@ func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
 			top = max(top, p.extent.above+p.extent.below)
 		case style.AlignBottom:
 			bottom = max(bottom, p.extent.above+p.extent.below)
-		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength:
+		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
+			style.AlignBaselineMiddle:
 		}
 	}
 	grown := *e
@@ -1811,7 +1848,7 @@ func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
 		case style.AlignBottom:
 			c.settle(p, e, grown.below-p.extent.below)
 		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
-			style.AlignTextTop, style.AlignTextBottom:
+			style.AlignTextTop, style.AlignTextBottom, style.AlignBaselineMiddle:
 		}
 	}
 }

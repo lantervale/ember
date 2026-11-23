@@ -61,6 +61,15 @@ type Face struct {
 	// exactSizes are its fonts without stem darkening (ExactSize), apart
 	// as well.
 	exactSizes map[float32]*Font
+	// strokes are its fonts drawing each glyph's outline stroked.
+	strokes map[strokeKey]*Font
+}
+
+// strokeKey is a stroked font: its size, its stroke's width and its
+// smoothing.
+type strokeKey struct {
+	px, width float32
+	how       smoothing
 }
 
 // The engine's faces.
@@ -238,7 +247,7 @@ func (f *Face) Size(px float32) *Font {
 	if fnt, ok := f.sizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, darkened)
+	fnt, err := newFont(f, px, darkened, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -255,7 +264,7 @@ func (f *Face) ExactSize(px float32) *Font {
 	if fnt, ok := f.exactSizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, exact)
+	fnt, err := newFont(f, px, exact, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -274,7 +283,7 @@ func (f *Face) PixelSize(px float32) *Font {
 	if fnt, ok := f.pixelSizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, unsmoothed)
+	fnt, err := newFont(f, px, unsmoothed, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -282,6 +291,26 @@ func (f *Face) PixelSize(px float32) *Font {
 		f.pixelSizes = map[float32]*Font{}
 	}
 	f.pixelSizes[px] = fnt
+	return fnt
+}
+
+// stroked returns the font at px logical pixels, exact or unsmoothed, whose
+// glyphs are their outlines stroked width pixels wide, half outside and
+// half inside, with mitred joins: -webkit-text-stroke. Its advances are
+// the plain font's.
+func (f *Face) stroked(px, width float32, how smoothing) *Font {
+	key := strokeKey{float32(math.Round(float64(px))), width, how}
+	if fnt, ok := f.strokes[key]; ok {
+		return fnt
+	}
+	fnt, err := newFont(f, key.px, how, width)
+	if err != nil {
+		panic(err)
+	}
+	if f.strokes == nil {
+		f.strokes = map[strokeKey]*Font{}
+	}
+	f.strokes[key] = fnt
 	return fnt
 }
 
@@ -352,6 +381,9 @@ type Font struct {
 	size       float32
 	// smoothing is how glyphs are rasterized.
 	smoothing smoothing
+	// stroke is how wide the glyphs' outlines are stroked, in pixels of
+	// size, 0 for the glyphs filled.
+	stroke float32
 }
 
 // smoothing is what a font makes of a glyph's coverage: darkened, its
@@ -367,9 +399,9 @@ const (
 
 const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûüœ·•×÷°±…—–’“”«»€£¥©®™←↑→↓★♥"
 
-func newFont(f *Face, px float32, how smoothing) (*Font, error) {
+func newFont(f *Face, px float32, how smoothing, stroke float32) (*Font, error) {
 	out := &Font{glyphs: map[glyphKey]glyph{}, indexed: map[indexKey]glyph{}, emoji: f.emoji, size: px,
-		smoothing: how, blank: f.blank, hidden: f.hidden}
+		smoothing: how, blank: f.blank, hidden: f.hidden, stroke: stroke}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
@@ -517,7 +549,7 @@ func (f *Font) rasterIndex(face int, idx sfnt.GlyphIndex, r rune, phase int) gly
 	var mask image.Image
 	var mp image.Point
 	var ok bool
-	if l := f.looks[face]; l.Bold || l.Oblique || l.varied() != nil || r < 0 {
+	if l := f.looks[face]; l.Bold || l.Oblique || l.varied() != nil || r < 0 || f.stroke > 0 {
 		dr, mask, ok = f.synthetic(face, idx, x, l)
 	} else {
 		dr, mask, mp, _, ok = f.faces[face].Glyph(fixed.Point26_6{X: x}, r)

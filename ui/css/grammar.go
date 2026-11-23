@@ -362,7 +362,8 @@ var checks = map[string]check{
 	"position":              single(words("static", "relative", "absolute", "fixed", "sticky")),
 	"float":                 single(words("none", "left", "right", "inline-start", "inline-end")),
 	"vertical-align": single(either(lengthPercent,
-		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom"))),
+		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
+			"-webkit-baseline-middle"))),
 	"clear":   single(words("none", "left", "right", "both", "inline-start", "inline-end")),
 	"top":     single(either(lengthPercent, words("auto"))),
 	"right":   single(either(lengthPercent, words("auto"))),
@@ -385,7 +386,8 @@ var checks = map[string]check{
 		return nil
 	},
 	"font-size": single(either(sizeLP,
-		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
+		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller",
+			"larger"))),
 	"font-style":     single(words("normal", "italic", "oblique")),
 	"font-weight":    single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
 	"line-height":    single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
@@ -409,18 +411,20 @@ var checks = map[string]check{
 	"direction":       single(words("ltr", "rtl")),
 	"unicode-bidi": single(words("normal", "embed", "isolate", "bidi-override", "isolate-override",
 		"plaintext")),
-	"text-indent":              single(lengthPercent),
-	"text-transform":           single(words("none", "uppercase", "lowercase", "capitalize")),
-	"-webkit-font-smoothing":   single(words("auto", "none", "antialiased", "subpixel-antialiased")),
-	"-webkit-text-fill-color":  single(colorTerm),
-	"white-space":              single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
-	"overflow-wrap":            single(words("normal", "break-word", "anywhere")),
-	"word-break":               single(words("normal", "break-all", "keep-all", "break-word")),
-	"line-break":               single(words("auto", "loose", "normal", "strict", "anywhere")),
-	"tab-size":                 single(either(number, dimTerm(nonNegative))),
-	"text-decoration-skip-ink": single(words("auto", "none", "all")),
-	"color":                    single(colorTerm),
-	"color-scheme":             checkColorScheme,
+	"text-indent":               single(lengthPercent),
+	"text-transform":            single(words("none", "uppercase", "lowercase", "capitalize")),
+	"-webkit-font-smoothing":    single(words("auto", "none", "antialiased", "subpixel-antialiased")),
+	"-webkit-text-fill-color":   single(colorTerm),
+	"-webkit-text-stroke-width": single(borderWidth),
+	"-webkit-text-stroke-color": single(colorTerm),
+	"white-space":               single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
+	"overflow-wrap":             single(words("normal", "break-word", "anywhere")),
+	"word-break":                single(words("normal", "break-all", "keep-all", "break-word")),
+	"line-break":                single(words("auto", "loose", "normal", "strict", "anywhere")),
+	"tab-size":                  single(either(number, dimTerm(nonNegative))),
+	"text-decoration-skip-ink":  single(words("auto", "none", "all")),
+	"color":                     single(colorTerm),
+	"color-scheme":              checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
 	"text-overflow":     single(words("clip", "ellipsis")),
@@ -544,7 +548,7 @@ func iterationCount(c Component) error {
 //nolint:gochecknoglobals // the keywords of two animation longhands
 var (
 	animationDirections = []string{"normal", "reverse", "alternate", "alternate-reverse"}
-	animationFills      = []string{kwNone, "forwards", "backwards", "both"}
+	animationFills      = []string{kwNone, "forwards", "backwards", kwBoth}
 )
 
 func timingFunction(c Component) error {

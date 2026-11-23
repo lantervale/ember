@@ -6,14 +6,18 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/paint"
 )
 
-// Preferences has the Document's sheets answer prefers-color-scheme and
-// prefers-reduced-motion as the system does, through the preferences the
-// program added to the World (decision 0121): a change restyles where a
-// rule asks, as the next frame begins. Without it, or while the system
-// has not said, the Document answers light and no preference, the same on
-// any machine. ColorScheme and ReducedMotion win over it.
+// Preferences has the Document's sheets answer prefers-color-scheme,
+// prefers-reduced-motion, prefers-contrast and forced-colors as the
+// system does, through the preferences the program added to the World
+// (decisions 0121, 0155): a change restyles where a rule asks, as the
+// next frame begins. Without it, or while the system has not said, the
+// Document answers light, no preference and none, the same on any
+// machine. ColorScheme, ReducedMotion, PrefersContrast and ForcedColors
+// win over it. A selection no ::selection rule colours is drawn in the
+// system's selection colours where it says them.
 func Preferences(prefs *platform.Preferences) DocumentOption {
 	return func(d *Document) { d.prefs = prefs }
 }
@@ -93,6 +97,34 @@ const (
 	ContrastCustom
 )
 
+// platform is c as the system's preferences word it.
+func (c Contrast) platform() platform.Contrast {
+	switch c {
+	case ContrastMore:
+		return platform.ContrastMore
+	case ContrastLess:
+		return platform.ContrastLess
+	case ContrastCustom:
+		return platform.ContrastCustom
+	case ContrastNoPreference:
+	}
+	return platform.ContrastNoPreference
+}
+
+// contrastOf is the system's known contrast c as a Document answers it.
+func contrastOf(c platform.Contrast) Contrast {
+	switch c {
+	case platform.ContrastMore:
+		return ContrastMore
+	case platform.ContrastLess:
+		return ContrastLess
+	case platform.ContrastCustom:
+		return ContrastCustom
+	case platform.ContrastUnknown, platform.ContrastNoPreference:
+	}
+	return ContrastNoPreference
+}
+
 func (c Contrast) String() string {
 	switch c {
 	case ContrastMore:
@@ -108,36 +140,76 @@ func (c Contrast) String() string {
 
 // PrefersContrast has the Document's sheets answer prefers-contrast with
 // c, where a page that asks draws its borders and text stronger or
-// softer. Nothing on any system says it yet: without it, a Document
-// answers no-preference, or as its host in an iframe.
-func PrefersContrast(c Contrast) DocumentOption { return func(d *Document) { d.contrast = c } }
+// softer, whatever the Preferences say.
+func PrefersContrast(c Contrast) DocumentOption {
+	return func(d *Document) { d.contrast = c.platform() }
+}
 
-// Contrast is what the Document answers prefers-contrast with: its own,
-// else its host's in an iframe.
+// Contrast is what the Document answers prefers-contrast with: as the
+// program said, else as the Preferences say, else as its host in an
+// iframe, else no-preference.
 func (d *Document) Contrast() Contrast {
-	if d.contrast == ContrastNoPreference && d.framed != nil {
+	switch {
+	case d.contrast != platform.ContrastUnknown:
+		return contrastOf(d.contrast)
+	case d.prefs != nil && d.prefs.Contrast() != platform.ContrastUnknown:
+		return contrastOf(d.prefs.Contrast())
+	case d.framed != nil:
 		return d.framed.host.Contrast()
 	}
-	return d.contrast
+	return ContrastNoPreference
 }
 
 // SetContrast changes the answer from the next layout, which styles the
-// tree again where a rule asks.
-func (d *Document) SetContrast(c Contrast) { d.contrast = c }
+// tree again where a rule asks, and from then on wins over the
+// Preferences.
+func (d *Document) SetContrast(c Contrast) { d.contrast = c.platform() }
 
 // ForcedColors has the Document's sheets answer forced-colors: active,
-// as on a system whose high-contrast theme forces its own colours. It
-// answers the query only: ui forces no colour itself.
-func ForcedColors() DocumentOption { return func(d *Document) { d.forced = true } }
-
-// ForcedColors reports whether the Document answers forced-colors:
-// active: as the program said, or its host in an iframe.
-func (d *Document) ForcedColors() bool {
-	return d.forced || d.framed != nil && d.framed.host.ForcedColors()
+// as on a system whose high-contrast theme forces its own colours,
+// whatever the Preferences say. It answers the query only: ui forces no
+// colour itself.
+func ForcedColors() DocumentOption {
+	return func(d *Document) { d.forced = platform.ForcedColorsActive }
 }
 
-// SetForcedColors changes the answer from the next layout.
-func (d *Document) SetForcedColors(on bool) { d.forced = on }
+// ForcedColors reports whether the Document answers forced-colors:
+// active: as the program said, else as the Preferences say, else as its
+// host in an iframe, else not.
+func (d *Document) ForcedColors() bool {
+	switch {
+	case d.forced != platform.ForcedColorsUnknown:
+		return d.forced == platform.ForcedColorsActive
+	case d.prefs != nil && d.prefs.ForcedColors() != platform.ForcedColorsUnknown:
+		return d.prefs.ForcedColors() == platform.ForcedColorsActive
+	case d.framed != nil:
+		return d.framed.host.ForcedColors()
+	}
+	return false
+}
+
+// SetForcedColors changes the answer from the next layout, and from then
+// on wins over the Preferences.
+func (d *Document) SetForcedColors(on bool) {
+	d.forced = platform.ForcedColorsNone
+	if on {
+		d.forced = platform.ForcedColorsActive
+	}
+}
+
+// highlight is the system's selection colours a selection with no
+// ::selection rule is drawn in: the Preferences', else its host's in an
+// iframe, none known else.
+func (d *Document) systemHighlight() paint.Highlight {
+	switch {
+	case d.prefs != nil && d.prefs.Highlight() != (platform.Highlight{}):
+		h := d.prefs.Highlight()
+		return paint.Highlight{Background: h.Background, Inactive: h.Inactive, Text: h.Text}
+	case d.framed != nil:
+		return d.framed.host.systemHighlight()
+	}
+	return paint.Highlight{}
+}
 
 // TouchOnly has the Document answer as on a device with a touchscreen and
 // no mouse: pointer and any-pointer coarse, hover and any-hover none.
