@@ -123,7 +123,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/syllables", 420, 400, 0.0058},
 		{"./internal/pages/scripts", 420, 400, 0.0045},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
-		{"./internal/pages/break-spaces", 420, 520, 0.01},
+		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
