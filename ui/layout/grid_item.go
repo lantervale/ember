@@ -34,6 +34,14 @@ type gridItem struct {
 	loose   [2]bool
 	owner   *node
 	local   lineSpan
+	// localAxis is the axis of owner's own tracks local is on, and frame the writing mode the
+	// item is sized in when it isn't that of its parent's content: a subgrid's item hoisted
+	// to a grid of another.
+	localAxis axis
+	frame     *style.WritingMode
+	hoisted   bool
+	// fixed is the extent of local where owner's tracks there are of fixed sizes.
+	fixed float32
 }
 
 func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *gridItem {
@@ -69,7 +77,7 @@ func (it *gridItem) hasAutoBlockMargin() bool {
 
 func (it *gridItem) baselineAligned() bool {
 	cyclic := hasPercent(it.st.Size.Height) && (it.crossesIntrinsicRow || it.crossesFlexibleRow)
-	return it.alignSelf == style.AlignBaseline && !it.hasAutoBlockMargin() && !cyclic
+	return it.alignSelf == style.AlignBaseline && !it.hasAutoBlockMargin() && !cyclic && !it.subgrid[vertical]
 }
 
 func (it *gridItem) placement(a axis) lineSpan {
@@ -143,6 +151,9 @@ func (it *gridItem) spannedLimit(a axis, tracks []gridTrack,
 func (it *gridItem) paddingBorderSize(basis float32) size {
 	if it.node == nil {
 		return size{}
+	}
+	if it.frame != nil {
+		return edges(it.st.Padding, basis).add(borders(it.st)).sum()
 	}
 	return edges(it.st.Padding, basis).add(it.node.borders()).sum()
 }
@@ -220,8 +231,11 @@ func (it *gridItem) gridAreaSize(a axis, tracks, other []gridTrack,
 	}
 	s.set(a, sum)
 	if it.loose[a.other()] {
-		if it.owner != nil && it.owner.grid != nil {
-			s.set(a.other(), it.owner.grid.axis(a.other()).extent(it.local))
+		switch {
+		case some(it.fixed):
+			s.set(a.other(), it.fixed)
+		case it.owner != nil && it.owner.grid != nil:
+			s.set(a.other(), it.owner.grid.axis(it.localAxis).extent(it.local))
 		}
 		return s
 	}
@@ -310,6 +324,9 @@ func (t *tree) gridContribution(it *gridItem, a axis, area, avail size, fallback
 	}
 	am := it.availMinusMargins(area, avail)
 	space := spaces{spaceOr(am.w, fallback), spaceOr(am.h, fallback)}
+	if it.frame != nil {
+		defer t.reframe(it.node, *it.frame)()
+	}
 	return t.measureChildSize(it.node, known, area, it.keywordAdjustedSpace(area, space), inherentSize, a, [2]bool{})
 }
 

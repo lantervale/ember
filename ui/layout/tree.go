@@ -278,6 +278,10 @@ type node struct {
 	grid   *gridInfo
 	// subgrid is what its grid hands it in each axis it is a subgrid in.
 	subgrid [2]*subgridAxis
+	// shim is the room above an item of a subgrid of rows aligned on its baseline, where the
+	// grid round it aligned it with its own, sharing is set.
+	shim    float32
+	sharing bool
 	// row is a table row's cells' widths and heights, kept with the row;
 	// captionRoom a table's captions' room above and below its grid.
 	row         *tableRow
