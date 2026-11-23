@@ -32,6 +32,9 @@ func foundry(t *testing.T) ui.FontFetcher {
 	kerned, err := os.ReadFile(filepath.Join("..", "internal", "draw", "testdata", "go-kerned.ttf"))
 	require.NoError(t, err)
 	files["kerned.ttf"] = kerned
+	featured, err := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", "go-features.ttf"))
+	require.NoError(t, err)
+	files["features.ttf"] = featured
 	return func(url, _ string) ([]byte, error) {
 		if b, ok := files[url]; ok {
 			return b, nil

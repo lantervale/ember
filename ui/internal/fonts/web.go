@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/uniseg"
 
 	"github.com/lantervale/ember/internal/draw"
+	"github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 	"golang.org/x/image/font"
@@ -82,12 +83,13 @@ type Descriptors struct {
 }
 
 // Look is how an @font-face has its face measured and drawn: scaled by
-// SizeAdjust (0 for 1), with metrics in place of its own, kerned or
-// not.
+// SizeAdjust (0 for 1), with metrics in place of its own, shaped with
+// the OpenType features its font-feature-settings turns on or off,
+// HarfBuzz's way (shape.ParseFeatures), before the text's own.
 type Look struct {
 	SizeAdjust               float32
 	Ascent, Descent, LineGap Override
-	NoKern                   bool
+	Features                 string
 }
 
 // Override is a metric an @font-face gives in place of its file's, as a
@@ -267,8 +269,8 @@ func (c *Face) Descriptors() string {
 			out += fmt.Sprintf(" %s: %g%%;", o.name, o.o.Of*100)
 		}
 	}
-	if c.Look.NoKern {
-		out += ` font-feature-settings: "kern" 0;`
+	if c.Look.Features != "" {
+		out += " font-feature-settings: " + featureSettings(c.Look.Features) + ";"
 	}
 	if len(c.Ranges) == 0 {
 		return out
@@ -536,21 +538,20 @@ func (ch *Chain) first() *Face {
 	return ch.base
 }
 
-// chainAdvance is text's width at size through ch: each character in
-// the first face that draws it, kerned with the one before when both
-// are of one face.
-func (s *Set) chainAdvance(ch *Chain, size float32, text string) float32 {
+// chainAdvance is text's width in f through ch: each character in the
+// first face that draws it, shaped with those beside it of one face.
+func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 	var w float32
-	var run fixed.Int26_6
 	var of *Face
-	prev := sfnt.GlyphIndex(0)
+	script := shape.Script(text)
+	run := s.run[:0]
 	flush := func() {
-		if of != nil {
-			w += float32(run) / 64 * size * of.Look.adjust() / of.upem
+		if of != nil && len(run) > 0 {
+			w += float32(s.shaped(of, script, f.Features, run)) * f.Size * of.Look.adjust() / of.upem
 		}
-		run, prev = 0, 0
+		run = run[:0]
 	}
-	for _, r := range text {
+	for i, r := range text {
 		c, g, waiting := ch.glyph(s, r)
 		if c == nil {
 			if waiting || ch.base == nil {
@@ -564,18 +565,10 @@ func (s *Set) chainAdvance(ch *Chain, size float32, text string) float32 {
 			flush()
 			of = c
 		}
-		ppem := fixed.I(int(c.upem))
-		if prev != 0 && g != 0 && !c.Look.NoKern {
-			if k, err := c.font.Kern(&s.buf, prev, g, ppem, font.HintingNone); err == nil {
-				run += k
-			}
-		}
-		if a, err := c.font.GlyphAdvance(&s.buf, g, ppem, font.HintingNone); err == nil {
-			run += a
-		}
-		prev = g
+		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i)}) //nolint:gosec // a glyph index and a text offset
 	}
 	flush()
+	s.run = run
 	return w
 }
 

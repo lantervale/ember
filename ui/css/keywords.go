@@ -78,6 +78,8 @@ const (
 	propEastAsian            = "font-variant-east-asian"
 	propAlternates           = "font-variant-alternates"
 	propPosition             = "font-variant-position"
+	propFeatures             = "font-feature-settings"
+	propKerning              = "font-kerning"
 	propColorScheme          = "color-scheme"
 	propAnimationTiming      = "animation-timing-function"
 	propAnimationComposition = "animation-composition"
