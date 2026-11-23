@@ -149,6 +149,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0144 | [A background clipped to text shows through a picture of its glyphs](0144-a-background-clipped-to-text-shows-through-a-picture-of-its-glyphs.md) | rendering |
 | 0149 | [Rounded sides are bands of the ring cut to their side, as Chrome paints them](0149-rounded-sides-are-bands-of-the-ring-cut-to-their-side-as-chrome-paints-them.md) | rendering |
 | 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
+| 0153 | [Text is rasterized at its own size, and dashes are laid out in device pixels](0153-text-is-rasterized-at-its-own-size-and-dashes-are-laid-in-device-pixels.md) | rendering |
 
 ## Writing one
 

@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// topOnly is a w×h box at (10, 10) with only a top border of width bw in
+// topOnly is a w×24 box at (10, 10) with only a top border of width bw in
 // style s.
-func topOnly(w, h, bw float32, s style.BorderStyle) *box.Box {
-	b := el(10, 10, w, h, func(st *style.Computed) {
+func topOnly(w, bw float32, s style.BorderStyle) *box.Box {
+	b := el(10, 10, w, 24, func(st *style.Computed) {
 		st.Border = style.Sides[float32]{Top: bw}
 		st.BorderStyle = style.Sides[style.BorderStyle]{Top: s}
 		st.BorderColor = style.All(black)
@@ -30,7 +30,7 @@ func TestADashedSideHasDashesFlushAtBothEndsAsChromes(t *testing.T) {
 		{40, 1, 1, 3, 8}, {40, 2, 1, 6, 4}, {40, 3, 1, 6, 5}, {40, 4, 1, 8, 4},
 		{40, 1, 2, 3, 8}, {73, 1, 2, 3, 15}, {40, 2, 2, 4, 7}, {120, 2, 2, 4, 20},
 	} {
-		dashes := paintOne(topOnly(c.w, 24, c.bw, style.BorderDashed), Scale(c.scale)).of("round")
+		dashes := paintOne(topOnly(c.w, c.bw, style.BorderDashed), Scale(c.scale)).of("round")
 		require.Len(t, dashes, c.n, "%v px wide, %v long at %vx", c.bw, c.w, c.scale)
 		assert.Equal(t, float32(10), dashes[0].Rect.X)
 		last := dashes[c.n-1].Rect
@@ -44,17 +44,17 @@ func TestADashedSideHasDashesFlushAtBothEndsAsChromes(t *testing.T) {
 }
 
 func TestDashesFallBetweenPixelsAsChromesGapsDo(t *testing.T) {
-	dashes := paintOne(topOnly(40, 24, 1, style.BorderDashed)).of("round")
+	dashes := paintOne(topOnly(40, 1, style.BorderDashed)).of("round")
 	require.Len(t, dashes, 8)
 	assert.InDelta(t, 10+16.0/7+3, dashes[1].Rect.X, 1e-3, "8 dashes of 3 leave 7 gaps of 16/7")
 }
 
 func TestAShortDashedSideHasTwoShortenedDashesOrNone(t *testing.T) {
-	two := paintOne(topOnly(7, 24, 1, style.BorderDashed)).of("round")
+	two := paintOne(topOnly(7, 1, style.BorderDashed)).of("round")
 	require.Len(t, two, 2, "under two dashes and a gap: two, scaled to fit")
 	assert.InDelta(t, 3*7.0/8, two[0].Rect.W, 1e-3)
 	assert.InDelta(t, 17, two[1].Rect.X+two[1].Rect.W, 1e-3)
-	solid := paintOne(topOnly(6, 24, 1, style.BorderDashed))
+	solid := paintOne(topOnly(6, 1, style.BorderDashed))
 	assert.Empty(t, solid.of("round"), "no room for two dashes: solid")
 	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 6, H: 1}, solid.of("rect")[0].Rect)
 }
@@ -64,7 +64,7 @@ func TestADottedSideHasRoundDotsAtBothEnds(t *testing.T) {
 		w, bw, scale float32
 		n            int
 	}{{40, 4, 1, 6}, {40, 2, 2, 11}, {73, 4, 1, 10}} {
-		dots := paintOne(topOnly(c.w, 24, c.bw, style.BorderDotted), Scale(c.scale)).of("circle")
+		dots := paintOne(topOnly(c.w, c.bw, style.BorderDotted), Scale(c.scale)).of("circle")
 		require.Len(t, dots, c.n, "%v px wide, %v long at %vx", c.bw, c.w, c.scale)
 		assert.InDelta(t, 10+c.bw/2, dots[0].At.X, 1e-3)
 		assert.InDelta(t, 10+c.w-c.bw/2, dots[c.n-1].At.X, 0.1, "a hundredth of a pixel short a dot, as Chrome")
@@ -74,7 +74,7 @@ func TestADottedSideHasRoundDotsAtBothEnds(t *testing.T) {
 }
 
 func TestDotsUpToThreePixelsAreSquaresAtTheEndsAndCentredBetween(t *testing.T) {
-	r := paintOne(topOnly(40, 24, 1, style.BorderDotted), Scale(2))
+	r := paintOne(topOnly(40, 1, style.BorderDotted), Scale(2))
 	assert.Empty(t, r.of("circle"))
 	squares := r.of("round")
 	require.Len(t, squares, 21, "two device pixels wide, 80 long: one at each end, 19 between, as Chrome")

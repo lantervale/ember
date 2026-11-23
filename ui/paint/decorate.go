@@ -1591,7 +1591,8 @@ func (p *painter) dashes(r geom.Rect, across, dotted bool, c color.Color) {
 // dashPattern is the dashes Chrome strokes along a side length long and
 // w wide, both in whole device pixels: each one's start and length, or
 // for round dots their centres; false for a solid side.
-func dashPattern(length, w float32, dotted bool) (pieces [][2]float32, round, ok bool) {
+func dashPattern(length, w float32, dotted bool) ([][2]float32, bool, bool) {
+	var pieces [][2]float32
 	if dotted && w > 3 {
 		if length < 2*w {
 			return [][2]float32{{w / 2, 0}}, true, true

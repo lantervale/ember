@@ -561,6 +561,14 @@ func (c *inlineContent) rootStyle() *style.Computed {
 	return c.owner.st
 }
 
+// unspace takes word-spacing off gap p when its first space starts the content's text.
+func (c *inlineContent) unspace(p *piece, st *style.Computed) {
+	if p.kind == gap && p.text[0] == ' ' && st.WordGap() != 0 && c.first() {
+		p.width -= st.WordGap()
+		p.unspaced = true
+	}
+}
+
 // first reports whether the next piece starts the text of content whose block collapses
 // its spaces: Chrome adds no word-spacing to a space an element inside keeps there, where
 // a block keeping its own spaces widens it as any other.
@@ -603,10 +611,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		if kind == word || kind == gap {
 			p.width = fonts.Advance(r.st.Font, strings.ReplaceAll(s, zeroWidthSpace, "")) + r.st.Spacing(s)
 		}
-		if kind == gap && s[0] == ' ' && r.st.WordGap() != 0 && c.first() {
-			p.width -= r.st.WordGap()
-			p.unspaced = true
-		}
+		c.unspace(&p, r.st)
 		c.pieces = append(c.pieces, p)
 	}
 	for at, ch := range collapsedBlanks(r.text, ws) {
