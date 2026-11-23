@@ -415,9 +415,9 @@ type ctx struct {
 	// the parent's. root is set for the root, whose root units are its own.
 	sized, lined, root bool
 	// fontRead is set once a registered custom property read a unit of
-	// the element's font.
-	fontRead bool
-	vars     map[string][]Component
+	// the element's font, lineRead once one read lh.
+	fontRead, lineRead bool
+	vars               map[string][]Component
 	// frames are the custom functions being called, the innermost last.
 	frames []*frame
 	// inContent is set while content's value is substituted, whose attr()
@@ -426,6 +426,11 @@ type ctx struct {
 	// inherited are the custom properties the element starts from.
 	inherited map[string]string
 	resolving map[string]bool
+	// stack are the custom properties being resolved, the innermost last,
+	// after font-size or line-height while their var()s are; cyclic are
+	// those found in a cycle, which compute as invalid.
+	stack     []string
+	cyclic    map[string]bool
 	raw       map[string]*Declaration
 	trans     [5][]Component
 	anims     [8][]Component
@@ -601,7 +606,7 @@ func (x *ctx) appearance(casc cascaded) style.Appearance {
 	c := initial
 	y := *x
 	y.c = &c
-	y.customs(casc.custom)
+	y.customs(casc)
 	i := orderIndex["appearance"]
 	y.apply(&longhands[i], casc.longhands[i])
 	return c.Appearance
@@ -673,7 +678,7 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 // cascaded applies every longhand's winner, then what depends on several.
 func (x *ctx) cascaded(casc cascaded, root bool) {
 	x.flow = casc.flow
-	x.customs(casc.custom)
+	x.customs(casc)
 	x.fontFirst(casc, root)
 	if !x.transitioning(casc) {
 		x.longhands(casc, root, x.over)
@@ -687,7 +692,7 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 	if x.afterParent != nil {
 		y, yc := start, c
 		y.c, y.parent, y.em = &yc, x.afterParent, x.afterParent.Font.Size
-		y.customs(casc.custom)
+		y.customs(casc)
 		y.longhands(casc, root, y.over)
 		y.finish(root)
 		next = y.c
@@ -697,7 +702,7 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 		all := append(slices.Clip(x.over), over...)
 		if slices.ContainsFunc(over, func(o override) bool { return o.custom != "" }) {
 			x.over = all
-			x.customs(casc.custom)
+			x.customs(casc)
 		}
 		x.longhands(casc, root, all)
 		x.finish(root)
@@ -705,8 +710,9 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 }
 
 // fontFirst works the element's font out before its custom properties
-// again when a registered one read a unit of it, so that unit is the
-// element's own, as in Chrome.
+// again when a registered one read a unit of it, and then its line
+// height when one read lh, so that unit is the element's own, as in
+// Chrome.
 func (x *ctx) fontFirst(casc cascaded, root bool) {
 	if !x.fontRead || x.sized {
 		return
@@ -720,11 +726,19 @@ func (x *ctx) fontFirst(casc cascaded, root bool) {
 	if root {
 		x.rem = c.Font.Size
 	}
-	saved := x.c.Font
+	saved, savedLine := x.c.Font, x.c.LineHeight
 	x.c.Font = c.Font
-	x.customs(casc.custom)
-	x.c.Font = saved
-	x.em, x.sized, x.fontRead = x.parent.Font.Size, false, false
+	x.customs(casc)
+	if x.lineRead {
+		y = *x
+		y.c = &c
+		i := orderIndex[propLineHeight]
+		y.apply(&longhands[i], casc.longhands[i])
+		x.c.LineHeight, x.lined = c.LineHeight, true
+		x.customs(casc)
+	}
+	x.c.Font, x.c.LineHeight = saved, savedLine
+	x.em, x.sized, x.lined, x.fontRead, x.lineRead = x.parent.Font.Size, false, false, false, false
 	if root {
 		x.rem = initial.Font.Size
 	}
@@ -807,7 +821,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
 	ps.ColorInherited = true
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, flow: casc.flow}
-	px.customs(casc.custom)
+	px.customs(casc)
 	for i := range longhands {
 		l := &longhands[i]
 		if d := casc.longhands[i]; d != nil {
@@ -870,9 +884,11 @@ var (
 // its animations and transitions set. A cycle or a missing reference
 // without fallback leaves an unregistered property unset; a registered
 // one computes as its syntax says.
-func (x *ctx) customs(decls []*Declaration) {
+func (x *ctx) customs(casc cascaded) {
+	decls := casc.custom
 	x.inherited = x.env.props.inherited(x.parent.Vars, x.root)
 	x.c.Vars = x.inherited
+	x.cyclic = nil
 	if len(decls) > 0 {
 		x.raw = map[string]*Declaration{}
 		for _, d := range decls {
@@ -880,6 +896,8 @@ func (x *ctx) customs(decls []*Declaration) {
 		}
 		x.vars = map[string][]Component{}
 		x.resolving = map[string]bool{}
+		x.stack = x.stack[:0]
+		x.unitCycles(casc)
 		vars := make(map[string]string, len(x.inherited)+len(decls))
 		for k, v := range x.inherited {
 			vars[k] = v
@@ -929,12 +947,22 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 		return nil, false
 	}
 	if x.resolving[name] {
+		x.cycle(name)
 		return nil, false
 	}
 	x.resolving[name] = true
+	x.stack = append(x.stack, name)
 	v, ok := x.substitute(d.Value)
+	r := x.env.props.get(name)
+	if ok && r != nil && len(x.stack) > 1 {
+		x.unitCycle(v)
+	}
+	x.stack = x.stack[:len(x.stack)-1]
 	x.resolving[name] = false
-	if r := x.env.props.get(name); r != nil {
+	if x.cyclic[name] {
+		v, ok = nil, false
+	}
+	if r != nil {
 		var text string
 		text, ok = x.registered(r, v, ok)
 		v = nil
@@ -948,9 +976,10 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 	return v, ok
 }
 
-// customKeyword handles inherit, initial and unset on a custom property.
+// customKeyword handles inherit, initial and unset on a custom property,
+// and an invalid value, which is the guaranteed-invalid value.
 func (x *ctx) customKeyword(name string, v []Component, ok bool) ([]Component, bool) {
-	if ok && globalKeyword(v) == kwInitial {
+	if !ok || globalKeyword(v) == kwInitial {
 		return nil, false
 	}
 	if text, has := x.parent.Vars[name]; has {
@@ -1073,7 +1102,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	v, ok := x.valueOf(name, d)
 	if ok {
 		v = items(v)
-		ok = len(v) > 0
+		ok = len(v) > 0 && !x.cyclic[name]
 	}
 	kw := ""
 	if ok {

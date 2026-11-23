@@ -107,7 +107,7 @@ func (r *restyler) tries(x *ctx, c *style.Computed, casc cascaded, root bool) {
 		t := initial
 		y.c = &t
 		y.transit, y.over = nil, nil
-		y.customs(casc.custom)
+		y.customs(casc)
 		for _, flip := range f.Flips {
 			long = y.flipped(long, flip)
 		}
