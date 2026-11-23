@@ -99,8 +99,12 @@ var compared = map[string]func(s *style.Computed) string{
 		}
 		return map[bool]string{true: "visible", false: "hidden"}[s.Visible]
 	},
-	"empty-cells": func(s *style.Computed) string { return map[bool]string{true: "hide", false: "show"}[s.EmptyCellsHide] },
-	"column-span": func(s *style.Computed) string { return map[bool]string{true: "all", false: "none"}[s.ColumnSpanAll] },
+	"empty-cells": func(s *style.Computed) string {
+		return map[bool]string{true: "hide", false: "show"}[s.EmptyCellsHide]
+	},
+	"column-span": func(s *style.Computed) string {
+		return map[bool]string{true: "all", false: "none"}[s.ColumnSpanAll]
+	},
 	"pointer-events": func(s *style.Computed) string {
 		return map[bool]string{true: "none", false: "auto"}[s.PointerNone]
 	},
