@@ -1653,9 +1653,13 @@ var props = func() map[string]prop {
 				case v[0].Kind == Number:
 					return style.LineHeight{Factor: float32(v[0].Num)}
 				case v[0].Kind == Function:
-					if d, _ := parseDim(v[0]); d.typ == typeNumber {
-						return style.LineHeight{Factor: x.number(v[0], float64(x.em))}
+					d, _ := parseDim(v[0])
+					d = signPercents(d)
+					v := style.Finite(d.Absolute(x.units(&d)).Resolve(float64(x.em)), math.MaxFloat32)
+					if d.typ == typeNumber {
+						return style.LineHeight{Factor: v}
 					}
+					return style.LineHeight{Px: max(v, 0)}
 				}
 				l := x.length(v[0])
 				return style.LineHeight{Px: l.At(x.em)}

@@ -343,6 +343,10 @@ type mediaParser struct {
 	browser   bool
 	container bool
 	inStyle   bool
+	// standardStyle is set once a style() query names a standard
+	// property: Chrome holds no condition that has one, whatever its other
+	// queries answer.
+	standardStyle bool
 	warn      func(pos Pos, format string, args ...any)
 }
 

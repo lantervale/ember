@@ -175,6 +175,25 @@ func TestMathFunctionsInTimesComputeAsInChrome(t *testing.T) {
 	}, 2)
 }
 
+// TestPercentagesInSignInALineHeightComputeAsInChrome compares a
+// line-height whose sign() reads a percentage: Chrome reads it as a
+// percentage of 100 pixels there, not of the font size as elsewhere in
+// the line-height.
+func TestPercentagesInSignInALineHeightComputeAsInChrome(t *testing.T) {
+	values := []string{"calc(20px + 10px * sign(1% - 0.5px))", "calc(20px + 10px * sign(1% - 1.5px))",
+		"calc(20px + 10px * sign(10% - 9px))", "calc(20px * sign(50% - 49px) + 150%)",
+		"calc(2 * sign(5% - 6px) + 3)", "calc(20px + 10px * sign(abs(-1%) - 0.5px))",
+		"calc(10px * sign(1% - 1px) + 10px)", "max(150%, 10px * sign(2% - 1px))"}
+	sheet := "body { font-size: 10px; } div { height: 4px; }\n"
+	d := ui.NewDocument()
+	for i, v := range values {
+		sheet += ".l" + strconv.Itoa(i) + " { line-height: " + v + " }\n"
+		d.Body().Append(ui.Div(ui.Class("l" + strconv.Itoa(i))))
+	}
+	d.AddSheet(sheet)
+	matchChromeProps(t, d, map[string]func(*style.Computed) string{"line-height": compared["line-height"]}, 2)
+}
+
 func animationsCSS(as []style.Animation, f func(style.Animation) string) string {
 	if len(as) == 0 {
 		return "0s"
