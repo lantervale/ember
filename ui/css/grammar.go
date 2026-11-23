@@ -387,7 +387,7 @@ var checks = map[string]check{
 		"-webkit-box", "-webkit-inline-box")),
 	"box-sizing": single(words("content-box", "border-box")),
 	"width":      single(either(anchorSizeLP, words("auto"), boxSizes)),
-	"height":     single(either(anchorSizeLP, words("auto"), boxSizes)),
+	"height":     single(either(anchorSizeLP, words("auto"), boxSizes, calcSizeTerm)),
 	"min-width":  single(either(anchorSizeLP, words("auto"), boxSizes)),
 	"min-height": single(either(anchorSizeLP, words("auto"), boxSizes)),
 	"max-width":  single(either(anchorSizeLP, words("none"), boxSizes)),

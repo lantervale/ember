@@ -1565,6 +1565,9 @@ func (x *ctx) length(c Component) style.Length {
 		}
 		return style.Length{}
 	}
+	if isCalcSize(c) {
+		return x.calcSize(c)
+	}
 	if c.Kind == Function && strings.EqualFold(c.Text, kwFitContent) {
 		l := x.length(items(c.Args)[0])
 		l.Kind = style.FitContent
@@ -1963,7 +1966,7 @@ var props = func() map[string]prop {
 			"fixed": style.FixedPosition, "sticky": style.Sticky,
 		}),
 		"width":      lengthField(func(c *style.Computed) *style.Length { return &c.Size.Width }, sizeLength),
-		"height":     lengthField(func(c *style.Computed) *style.Length { return &c.Size.Height }, sizeLength),
+		"height":     sizeProp(func(c *style.Computed) *style.Length { return &c.Size.Height }),
 		"min-width":  lengthField(func(c *style.Computed) *style.Length { return &c.MinSize.Width }, sizeLength),
 		"min-height": lengthField(func(c *style.Computed) *style.Length { return &c.MinSize.Height }, sizeLength),
 		"max-width":  lengthField(func(c *style.Computed) *style.Length { return &c.MaxSize.Width }, sizeLength),

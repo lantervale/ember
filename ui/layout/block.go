@@ -166,7 +166,8 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 			n.captionRoom[0] = fmax(0, (legend.final.size.h-rBorder.t)/2)
 		}
 	}
-	outerH := mMax(or(known.h, mClamp(res.height, minSize.h, maxSize.h)), pbSize.h)
+	outerH := mMax(or(known.h, mClamp(sizedHeight(st, res.height, adj.h, in.parent.h), minSize.h, maxSize.h)),
+		pbSize.h)
 	final := size{outerW, outerH}
 	constrainedByMin := some(minSize.h) && minSize.h > 0 && minSize.h >= outerH
 	ownBottomCollapse := ownCollapse[1] && !constrainedByMin
@@ -284,6 +285,18 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 
 // renderedLegend is the legend a fieldset sets on its top border: its first box, when
 // that is a legend in the flow.
+// sizedHeight is the height of a block whose content takes h, its padding and
+// border included: a calc-size() height worked on that size, in the box its
+// box-sizing names (adj being the padding and border outside it), and h itself
+// for any other.
+func sizedHeight(st *style.Computed, h, adj, parent float32) float32 {
+	l := st.Size.Height
+	if !l.Sized {
+		return h
+	}
+	return l.Scale*(h-adj) + l.Px + l.Percent*or(parent, 0)/100 + adj
+}
+
 func renderedLegend(n *node, items []*blockItem) *blockItem {
 	if e := n.box.Node; e == nil || e.Tag() != dom.Fieldset || len(items) == 0 {
 		return nil

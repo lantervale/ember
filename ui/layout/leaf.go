@@ -119,7 +119,11 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		})
 	}
 	measured, first, last, lines := t.measureContent(n, known, avail, basis, clamp.lines)
-	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
+	content := measured.add(inset.sum())
+	if in.sizing != contentSize {
+		content.h = sizedHeight(st, content.h, adj.h, in.parent.h)
+	}
+	clamped := in.known.or(nodeSize).or(content).mClamp(minSize, maxSize)
 	s := clamped
 	if r := aspectRatio(st); in.sizing == inherentSize && some(r) {
 		s.h = fmax(clamped.h, ratioHeight(clamped.w, r))

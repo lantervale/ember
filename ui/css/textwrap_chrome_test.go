@@ -78,6 +78,10 @@ func TestTextWrapValuesAreReadAsChrome(t *testing.T) {
 		{"text-box", "none"}, {"text-box", "auto"}, {"text-box", "trim-both auto"}, {"text-box", "normal text"},
 		{"text-spacing-trim", "trim-start"}, {"text-spacing-trim", "trim-both"}, {"text-autospace", "normal"},
 		{"text-autospace", "auto"}, {"interpolate-size", "allow-keywords"}, {"interpolate-size", "auto"},
+		{"height", "calc-size(auto, size)"}, {"height", "calc-size(auto, size * 2 + 10%)"}, {"height", "calc-size(any, 10px)"},
+		{"height", "calc-size(any, size)"}, {"height", "calc-size(50%, size - 1em)"}, {"height", "calc-size(auto)"},
+		{"height", "calc-size(auto, 10)"}, {"height", "calc-size(calc-size(fit-content, size), size)"},
+		{"height", "calc-size(none, size)"}, {"height", "calc-size(stretch, size)"},
 	}
 	list, err := json.Marshal(decls)
 	if err != nil {

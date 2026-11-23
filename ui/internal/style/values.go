@@ -39,6 +39,11 @@ type Length struct {
 	// say, which no Px and Percent say: Px is then its value against
 	// nothing.
 	Calc unique.Handle[Calc]
+	// Sized is calc-size() of the sizing keyword Kind names: Scale times
+	// the size that keyword gives, plus Px and Percent. Where it isn't
+	// read, the length is that keyword.
+	Sized bool
+	Scale float32
 }
 
 func Px(v float32) Length      { return Length{Kind: Fixed, Px: v} }
