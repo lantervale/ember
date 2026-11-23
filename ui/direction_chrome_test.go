@@ -297,12 +297,14 @@ func TestChromeScrollsRightToLeft(t *testing.T) {
 // TestChromeLaysOutControlsRightToLeft has text fields, a textarea,
 // selects and buttons of direction rtl hold their text from the right,
 // a select its arrow on its left, compared box by box with Chrome's in a
-// font both draw alike.
+// font both draw alike. The selects' line-height is the font's normal one,
+// set: Chrome on Linux makes a select's normal line a point shorter.
 func TestChromeLaysOutControlsRightToLeft(t *testing.T) {
 	font := hebrewFont(t)
 	doc := ui.NewDocument(ui.FetchFonts(func(_, _ string) ([]byte, error) { return font, nil }),
 		ui.CSS(`@font-face { font-family: Hebrew; src: url(hebrew.ttf); }
-body { font-family: Hebrew; } input, select, textarea, button { width: 160px; display: block; margin-bottom: 4px; }`))
+body { font-family: Hebrew; } input, select, textarea, button { width: 160px; display: block; margin-bottom: 4px; }
+select { line-height: 18px; }`))
 	rtl := ui.Attr("dir", "rtl")
 	doc.Body().Append(
 		ui.Input(rtl, ui.Attr("value", "שלום abc")),
