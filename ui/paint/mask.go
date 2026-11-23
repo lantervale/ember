@@ -66,7 +66,7 @@ func (p *painter) maskBox(b *box.Box, r geom.Rect, edges box.Edges, radius radii
 		return union(r, ink), radii{}
 	case style.FillBox:
 		which = style.UnderContent
-	case style.InitialBox, style.StrokeBox, style.ViewBox:
+	case style.InitialBox, style.StrokeBox, style.ViewBox, style.UnderText:
 		which = style.UnderBorder
 	case style.UnderBorder, style.UnderPadding, style.UnderContent:
 	}

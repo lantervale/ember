@@ -204,8 +204,10 @@ type painter struct {
 	clip  *clip
 	held  int
 	floor *clip
-	// pictures is how many pictures paint has begun and not ended.
+	// pictures is how many pictures paint has begun and not ended, paged
+	// whether one of them is the whole page's.
 	pictures int
+	paged    bool
 	// spread is how far the filters of the elements painted round what
 	// is painted now draw it past where it is: so much more of it shows.
 	spread float32
@@ -228,6 +230,9 @@ type painter struct {
 	apart bool
 	// chain is use's room for a clip chain.
 	chain []*clip
+	// glyphsOnly draws text as the shape of its glyphs and decorations,
+	// opaque white: the picture background-clip: text shows through.
+	glyphsOnly bool
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey
@@ -297,6 +302,7 @@ func paintOn(s Surface, t *box.Tree, opts []Option, whole bool) int {
 	if grouped = grouped && t.Grouped; grouped {
 		on.BeginPicture()
 		p.pictures++
+		p.paged = true
 	}
 	p.canvasBackground(t.Root)
 	p.page(t.Root)
@@ -343,19 +349,20 @@ func (p *painter) start(root *box.Box) {
 // or body's when the root has none, as CSS's canvas does; that box then
 // leaves it out of its own decoration. Without either, a root drawn in
 // the dark scheme has the canvas Chrome's dark Canvas colour, where a
-// light one leaves the window's own showing. In a viewport that scrolls, its
-// picture is placed in the root element's padding box, as Chrome places
-// it, so it scrolls with the page; otherwise in the viewport.
+// light one leaves the window's own showing. Its picture is placed in the
+// root element's box its origin names, as Chrome places it, so in a
+// viewport that scrolls it scrolls with the page, unless it is fixed.
 func (p *painter) canvasBackground(root *box.Box) {
-	area := p.viewport
+	at := root.Pos
 	if root.Kind == box.Viewport {
 		if len(root.Children) == 0 {
 			return
 		}
-		at := root.Pos.Sub(root.Scroll)
+		at = root.Pos.Sub(root.Scroll)
 		root = root.Children[0]
-		area = padding(root, at.Add(root.Pos))
+		at = at.Add(root.Pos)
 	}
+	border := geom.Rect{X: at.X, Y: at.Y, W: root.Size.X, H: root.Size.Y}
 	src := root
 	if !hasBackground(shown(root)) {
 		src = nil
@@ -381,6 +388,10 @@ func (p *painter) canvasBackground(root *box.Box) {
 	}
 	for i := st.BackgroundLayers() - 1; i >= 0; i-- {
 		l := st.BackgroundLayer(i)
+		area, _ := backgroundBox(root, border, root.Border, radii{}, or(l.Origin, style.UnderPadding))
+		if l.Attachment == style.AttachFixed {
+			area = p.viewport
+		}
 		mixing.layer(l.Blend, func() { p.backgroundImage(p.viewport, area, radii{}, &l, st, 1) })
 	}
 }
