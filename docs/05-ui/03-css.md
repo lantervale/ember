@@ -280,7 +280,7 @@ A list numbers its items with the same counters: `ol`, `ul` and `menu` reset `li
 
 ### `::marker`
 
-`::marker` styles a list item's marker, and `::before::marker` and `::after::marker` those of a generated box that is a list item: `color`, the font properties, `letter-spacing`, `word-spacing`, `text-transform`, and `content`, a string, a counter or an `attr()` that replaces the bullet or the number. The other properties Chrome's `::marker` takes that ui has (`cursor`, `line-height`, `overflow-wrap`, `quotes`, `text-shadow`, `white-space`, the transition properties) are read without a warning and change nothing yet. Any other property is refused with a warning, as Chrome ignores it.
+`::marker` styles a list item's marker, and `::before::marker` and `::after::marker` those of a generated box that is a list item: `color`, the font properties, `letter-spacing`, `word-spacing`, `text-transform`, `text-shadow`, `quotes` (for an `open-quote` or a `close-quote` in its content), and `content`, a string, a counter or an `attr()` that replaces the bullet or the number. Its `line-height` pushes the item's first line down to hold the marker's top, its bottom left to overflow, as Chrome places an outside marker. `white-space` and `overflow-wrap` are read and, as in Chrome, change nothing: a marker keeps its spaces and stays on one line. `cursor` and the transition properties are read without a warning and change nothing yet. Any other property is refused with a warning, as Chrome ignores it.
 
 ### `::first-line` and `::first-letter`
 

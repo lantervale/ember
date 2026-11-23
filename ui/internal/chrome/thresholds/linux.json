@@ -45,6 +45,7 @@
   "iframe-faded": 0.002,
   "lists": 0.0065,
   "m0": 0.0003,
+  "marker-properties": 0.013,
   "markers": 0.0064,
   "mocka": 0.0023,
   "multicol": 0.0124,

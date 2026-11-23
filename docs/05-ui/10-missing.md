@@ -48,7 +48,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 |---|---|
 | `::before`, `::after` on `progress`, `meter` and range inputs | no box, where Chrome lays one out among the control's own parts |
 | a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
-| `::marker` with `line-height`, `text-shadow`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
+| `::marker` with `cursor`, transitions | read, and they change nothing |
 | `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
 | the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
 | a `list-style-image` gradient, `list-style-position: inside` | refused |
