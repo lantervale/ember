@@ -47,6 +47,7 @@ type Plugin struct{}
 func (Plugin) Build(w *world.World) {
 	r := &runner{world: w, sound: audiodevice.New()}
 	w.AddView(r.sound)
+	w.AddView(&r.preferences)
 	w.AddView(&r.windows).SetRunner(func(*world.World) error {
 		defer func() {
 			if p := recover(); p != nil {
@@ -65,6 +66,10 @@ func (Plugin) Build(w *world.World) {
 type runner struct {
 	world   *world.World
 	windows world.Group[platform.Windowed]
+	// preferences are the World's, kept as the browser says them through
+	// prefs, nil in a capture, which asks the browser nothing.
+	preferences world.Group[platform.Preferred]
+	prefs       *pagePrefs
 	// sound plays the World's mixer through Web Audio, which a browser
 	// starts only after the player's first click or key.
 	sound *audiodevice.Output
@@ -122,6 +127,7 @@ func (r *runner) run() error {
 			dt = 1.0 / 60
 		}
 		view.fit()
+		r.prefs.sync(&r.preferences)
 		r.world.Tick(dt)
 		if frame == 1 && !capturing {
 			// Start waits for the page's first click or key before Web
@@ -263,11 +269,13 @@ func animationFrames() (<-chan struct{}, func()) {
 	}
 }
 
-// attach listens to the canvas's input, resumes the sound on its first
-// click, key or touch, and titles the page; the func it gives removes and
-// releases every handler it added.
+// attach listens to the canvas's input and the browser's preferences,
+// resumes the sound on its first click, key or touch, and titles the
+// page; the func it gives removes and releases every handler it added.
 func (r *runner) attach(canvas js.Value, win *platform.Window) func() {
 	in := win.Input()
+	var unwatch func()
+	r.prefs, unwatch = watchPreferences()
 	ls := &listeners{}
 	listen(ls, canvas, in)
 	// The canvas keeps mousedown and mouseup from the page, which oto
@@ -279,7 +287,10 @@ func (r *runner) attach(canvas js.Value, win *platform.Window) func() {
 	if t := win.Title(); t != "" {
 		js.Global().Get("document").Set("title", t)
 	}
-	return ls.release
+	return func() {
+		ls.release()
+		unwatch()
+	}
 }
 
 // captureTo reads t back and hands it to the page as emberCapture, a

@@ -94,6 +94,7 @@ import (
 	"github.com/lantervale/ember/internal/audiodevice"
 	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/internal/errlog"
+	"github.com/lantervale/ember/internal/sysprefs"
 	"github.com/lantervale/ember/internal/wm"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/platform/capture"
@@ -377,13 +378,9 @@ type driver struct {
 	// input device.
 	scripted bool
 	windows  world.Group[platform.Windowed]
-	// preferences are the World's, kept as the system's: appearance,
-	// motion and languages as last read, asked the time it was last polled.
+	// preferences are the World's, kept as the system's as last read.
 	preferences world.Group[platform.Preferred]
-	appearance  platform.Appearance
-	motion      platform.Motion
-	languages   []string
-	asked       time.Time
+	system      sysprefs.System
 	natives     map[*platform.Window]*native
 	sound       *audiodevice.Output
 	// primary is the primary window's native, nil while the World has no

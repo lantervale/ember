@@ -1,8 +1,11 @@
 package platform //nolint:testpackage // shares window_test's package
 
 import (
+	"fmt"
 	"slices"
 	"testing"
+
+	"github.com/lantervale/ember/color"
 )
 
 func TestPreferencesAreUnknownUntilTheSystemSays(t *testing.T) {
@@ -93,6 +96,53 @@ func TestReducedMotionIsToldOncePerChange(t *testing.T) {
 	for m, word := range map[Motion]string{MotionUnknown: "unknown", MotionFull: "full", MotionReduced: "reduced"} {
 		if m.String() != word {
 			t.Fatalf("a motion prints as its word: %q, want %q", m.String(), word)
+		}
+	}
+}
+
+func TestContrastForcedColoursAndTheHighlightAreToldOncePerChange(t *testing.T) {
+	p := NewPreferences()
+	if p.Contrast() != ContrastUnknown || p.ForcedColors() != ForcedColorsUnknown || p.Highlight() != (Highlight{}) {
+		t.Fatalf("with no backend: %v %v %v", p.Contrast(), p.ForcedColors(), p.Highlight())
+	}
+	_, c := p.TakeContrast()
+	_, f := p.TakeForcedColors()
+	_, h := p.TakeHighlight()
+	if c || f || h {
+		t.Fatal("nothing changed yet")
+	}
+	p.SyncContrast(ContrastMore)
+	p.SyncForcedColors(ForcedColorsActive)
+	blue := Highlight{Background: color.Hex("#0078d7"), Text: color.White}
+	p.SyncHighlight(blue)
+	if c, changed := p.TakeContrast(); !changed || c != ContrastMore || p.Contrast() != ContrastMore {
+		t.Fatalf("the first contrast known is a change: %v %v", c, changed)
+	}
+	if f, changed := p.TakeForcedColors(); !changed || f != ForcedColorsActive || p.ForcedColors() != ForcedColorsActive {
+		t.Fatalf("the first forced colours known are a change: %v %v", f, changed)
+	}
+	if h, changed := p.TakeHighlight(); !changed || h != blue || p.Highlight() != blue {
+		t.Fatalf("the first highlight known is a change: %v %v", h, changed)
+	}
+	p.SyncContrast(ContrastMore)
+	p.SyncForcedColors(ForcedColorsActive)
+	p.SyncHighlight(blue)
+	_, c = p.TakeContrast()
+	_, f = p.TakeForcedColors()
+	_, h = p.TakeHighlight()
+	if c || f || h {
+		t.Fatalf("the same answers again are no change: %v %v %v", c, f, h)
+	}
+	p.SyncHighlight(Highlight{Background: color.Hex("#b3d7ff")})
+	if _, changed := p.TakeHighlight(); !changed {
+		t.Fatal("another colour is a change")
+	}
+	for v, word := range map[fmt.Stringer]string{
+		ContrastUnknown: "unknown", ContrastNoPreference: "no-preference", ContrastMore: "more", ContrastLess: "less",
+		ContrastCustom: "custom", ForcedColorsUnknown: "unknown", ForcedColorsNone: "none", ForcedColorsActive: "active",
+	} {
+		if v.String() != word {
+			t.Fatalf("an answer prints as its word: %q, want %q", v.String(), word)
 		}
 	}
 }

@@ -11,7 +11,7 @@ prefs := platform.NewPreferences()
 w := ember.New().AddEntities(win, prefs)
 ```
 
-`prefs.Appearance()` is `platform.AppearanceLight` or `platform.AppearanceDark`, `prefs.Motion()` is `platform.MotionReduced` where the user asked the system to reduce motion and `platform.MotionFull` where not, and `prefs.Languages()` the user's languages as BCP 47 tags such as `fr-FR`, the one they prefer first. The platform keeps them up to date while the program runs, and the World emits `platform.AppearanceChanged`, `platform.MotionChanged` and `platform.LanguagesChanged` as the next frame begins, once per change. The first time a value is known is a change too, so a program that only reads the events starts right:
+`prefs.Appearance()` is `platform.AppearanceLight` or `platform.AppearanceDark`, `prefs.Motion()` is `platform.MotionReduced` where the user asked the system to reduce motion and `platform.MotionFull` where not, `prefs.Contrast()` is `platform.ContrastMore`, `ContrastLess`, `ContrastCustom` or `ContrastNoPreference`, `prefs.ForcedColors()` is `platform.ForcedColorsActive` where a contrast theme forces its colours on programs and `platform.ForcedColorsNone` where not, `prefs.Highlight()` the colours the system selects text in (`Background`, `Inactive` for an unfocused window, `Text`; a colour of no alpha is one it does not say), and `prefs.Languages()` the user's languages as BCP 47 tags such as `fr-FR`, the one they prefer first. The platform keeps them up to date while the program runs, and the World emits `platform.AppearanceChanged`, `platform.MotionChanged`, `platform.ContrastChanged`, `platform.ForcedColorsChanged`, `platform.HighlightChanged` and `platform.LanguagesChanged` as the next frame begins, once per change. The first time a value is known is a change too, so a program that only reads the events starts right:
 
 ```go
 type Theme struct {
@@ -26,9 +26,16 @@ func (t *Theme) Update(f world.Frame) {
 }
 ```
 
-Before the program runs, and in a test, a server, a hidden run or a capture, nothing is known: the appearance is `platform.AppearanceUnknown`, the motion `platform.MotionUnknown` and the languages are empty, so the program needs a look and a language of its own to fall back on. A test says what the system would with `prefs.SyncAppearance(platform.AppearanceDark)`, `prefs.SyncMotion(platform.MotionReduced)` and `prefs.SyncLanguages("fr-FR", "en")`, then runs a frame. macOS and Windows say all three (macOS from Accessibility's Reduce motion, Windows from its animation effects); Linux says its languages, from `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` and `LANG`, and neither its appearance nor its motion; a page in a browser says none yet ([decisions 0108](../99-decisions/0108-a-program-follows-the-systems-appearance-and-languages.md), [0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)).
+Before the program runs, and in a test, a server, a hidden run or a capture, nothing is known: each answer is unknown (`platform.AppearanceUnknown`, `MotionUnknown`, `ContrastUnknown`, `ForcedColorsUnknown`, an empty `Highlight`) and the languages are empty, so the program needs a look and a language of its own to fall back on. A test says what the system would with `prefs.SyncAppearance(platform.AppearanceDark)`, `prefs.SyncMotion(platform.MotionReduced)`, `prefs.SyncContrast`, `prefs.SyncForcedColors`, `prefs.SyncHighlight` and `prefs.SyncLanguages("fr-FR", "en")`, then runs a frame. Everything is only read, never changed ([decisions 0108](../99-decisions/0108-a-program-follows-the-systems-appearance-and-languages.md), [0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md), [0155](../99-decisions/0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md)):
 
-A ui Document given them with `ui.Preferences(prefs)` answers `prefers-color-scheme` and `prefers-reduced-motion` as the system does ([media queries](../05-ui/03-css.md#the-users-preferences)).
+| System | What it says |
+|---|---|
+| macOS | all but forced colours, which it has none of: the app's appearance, Accessibility's Reduce motion and Increase contrast, the colours AppKit selects text in, the preferred languages, told by AppKit when they change |
+| Windows | all: the apps' light or dark theme, the animation effects, a contrast theme (its contrast more, less or custom by how far its text stands from its background), `Highlight` and `HighlightText`, the display languages, asked every two seconds |
+| Linux | the settings portal's colour scheme, contrast and reduced motion through `gdbus`, GNOME's settings through `gsettings` for what it leaves, KDE's `kdeglobals` (its selection colours too) and GTK's `settings.ini`, asked every two seconds off the frame; the languages from `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` and `LANG`; no forced colours |
+| the web | the browser's `prefers-color-scheme`, `prefers-reduced-motion`, `prefers-contrast` and `forced-colors`, followed as they change, its `Highlight` colour and `navigator.languages` |
+
+A ui Document given them with `ui.Preferences(prefs)` answers `prefers-color-scheme`, `prefers-reduced-motion`, `prefers-contrast` and `forced-colors` as the system does, and draws a selection no `::selection` rule colours in the system's selection colours ([media queries](../05-ui/03-css.md#the-users-preferences)).
 
 ## Where they draw
 

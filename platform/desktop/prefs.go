@@ -17,17 +17,21 @@ func (d *driver) syncPreferences() {
 	if d.scripted {
 		return
 	}
-	if systemChanged(&d.asked) {
-		d.appearance, d.motion, d.languages = systemAppearance(), systemMotion(), systemLanguages()
+	if systemChanged() {
+		d.system = systemPreferences()
 	}
 	d.tellPreferences()
 }
 
 func (d *driver) tellPreferences() {
+	s := d.system
 	for e := range d.preferences.All() {
 		p := e.GetPreferences()
-		p.SyncAppearance(d.appearance)
-		p.SyncMotion(d.motion)
-		p.SyncLanguages(d.languages...)
+		p.SyncAppearance(s.Appearance)
+		p.SyncMotion(s.Motion)
+		p.SyncContrast(s.Contrast)
+		p.SyncForcedColors(s.ForcedColors)
+		p.SyncHighlight(s.Highlight)
+		p.SyncLanguages(s.Languages...)
 	}
 }

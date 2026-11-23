@@ -92,6 +92,16 @@ type Frame struct {
 	// Inactive is the window not being the active one: a selection no
 	// ::selection colours is drawn in the inactive colours, as Chrome's.
 	Inactive bool
+	// Highlight is the system's selection colours, which a selection no
+	// ::selection colours is drawn in.
+	Highlight Highlight
+}
+
+// Highlight is the colours a system selects text in, as
+// platform.Highlight has them: a colour of no alpha is one it does not
+// say, Chrome's on macOS in its place.
+type Highlight struct {
+	Background, Inactive, Text color.Color
 }
 
 // Selection is the text a Document has selected, as paint draws it.
@@ -127,7 +137,8 @@ func TransformOf(b *box.Box) (geom.Transform2D, bool) {
 // Time, Live and Keep would.
 func Each(f *Frame) Option {
 	return func(p *painter) {
-		p.time, p.timed, p.keep, p.sel, p.inactive = f.Time, true, f.Keep, f.Selection, f.Inactive
+		p.time, p.timed, p.keep, p.sel, p.inactive, p.system = f.Time, true, f.Keep, f.Selection, f.Inactive,
+			f.Highlight
 		if f.Live != nil {
 			f.Live.reset()
 			p.live, p.apart = f.Live, f.Apart
@@ -173,8 +184,9 @@ type painter struct {
 	vector  func(string) Vector
 	control func(*dom.Node) any
 	sel     Selection
-	// inactive is Frame's Inactive.
+	// inactive and system are Frame's Inactive and Highlight.
 	inactive bool
+	system   Highlight
 	time     float32
 	timed    bool
 	scale    float32
