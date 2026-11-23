@@ -235,10 +235,14 @@ type oofArea struct {
 
 // output is Taffy's LayoutOutput.
 type output struct {
-	size                    size
-	overflow                overflowRect
-	firstBaseline           float32
-	lastBaseline            float32
+	size          size
+	overflow      overflowRect
+	firstBaseline float32
+	lastBaseline  float32
+	// synthetic is the height of the item whose block-end edge firstBaseline is made up
+	// from, as a flex or grid container whose first item has no line makes it; 0 where
+	// it is a line's.
+	synthetic               float32
 	topMargin, bottomMargin marginSet
 	collapsesThrough        bool
 	oof                     []oofCandidate

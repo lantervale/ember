@@ -418,10 +418,12 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 	}
 	if e.Tag() == dom.Canvas {
 		buildCanvas(n, e)
+		n.turnPicture()
 		return n
 	}
 	if e.Tag() == dom.Iframe {
 		buildFrame(n)
+		n.turnPicture()
 		return n
 	}
 	if inListBox(e) {

@@ -35,6 +35,7 @@ func pictured(e *dom.Node) bool {
 func (t *tree) buildImage(n *node, e *dom.Node) {
 	n.replaced = true
 	n.natural, n.shape, n.sized = pictureOf(e, n.st, t.images, t.fonts)
+	n.turnPicture()
 }
 
 // pictureOf is what the picture of the img e gives its box: its natural size at the
@@ -132,6 +133,7 @@ func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts
 			continue
 		}
 		natural, shape, sized := pictureOf(e, n.st, images, fonts)
+		natural, shape = turnPicture(natural, shape, outerFrame(n.parent, n.box.Style))
 		switch {
 		case natural == n.natural && shape == n.shape && sized == n.sized:
 		case n.intrinsic || n.fills() || sized && fillsRoom(shape):

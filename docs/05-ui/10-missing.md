@@ -92,6 +92,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `position: sticky` in vertical writing modes | not checked against Chrome |
 | a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |
 | the rules between columns of a multi-column box of vertical lines | drawn as if its columns stood side by side |
+| an inline table on a vertical line, and the last baselines of grid items in vertical writing modes | aligned off Chrome's line by up to the table's width, the cause not yet found (WPT's `inline-table-inline-block-baseline-vert-rl`, `grid-abspos-staticpos-align-self-vertWM-last-baseline-*`) |
 
 ## Backgrounds and borders
 
