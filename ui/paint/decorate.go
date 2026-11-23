@@ -246,8 +246,8 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 			p.groupBackground(b, e.at, fade(st.Background, alpha))
 		case st.TablePart == style.TableColumn || st.TablePart == style.TableColumnGroup:
 			p.columnBackground(b, e.at, fade(st.Background, alpha))
-		case st.MaskImage.Source != "":
-			p.maskedFill(r, radius, st, alpha)
+		case silhouetted(b, st):
+			p.maskedFill(b, r, edges, radius, st, alpha)
 		default:
 			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundLayer(n-1).Clip, style.UnderBorder))
 			p.fill(clip, rounding, fade(st.Background, alpha))
@@ -315,7 +315,7 @@ func backgroundBox(
 			Bottom: edges.Bottom + b.Padding.Bottom, Left: edges.Left + b.Padding.Left,
 		}
 		return inside(r, in), radius.inside(in)
-	case style.InitialBox, style.UnderBorder:
+	case style.InitialBox, style.UnderBorder, style.FillBox, style.StrokeBox, style.ViewBox, style.NoClip:
 	}
 	return r, radius
 }
@@ -485,15 +485,6 @@ const maxTiles = 4096
 func (p *painter) backgroundImage(view, area geom.Rect, radius radii, l *style.BackgroundLayer, st *style.Computed,
 	alpha float32) {
 	p.tiled(view, area, radius, l, st, alpha, fade(color.White, alpha), false)
-}
-
-// maskedFill paints st's background colour through its mask-image over
-// r, the border box: the picture's alpha, sized, placed and tiled as a
-// background image is, in the colour (decision 0093). Nothing is painted
-// until the picture is there.
-func (p *painter) maskedFill(r geom.Rect, radius radii, st *style.Computed, alpha float32) {
-	mask := style.BackgroundLayer{Image: st.MaskImage, Size: st.MaskSize, Repeat: st.MaskRepeat, Position: st.MaskPosition}
-	p.tiled(r, r, radius, &mask, st, alpha, fade(st.Background, alpha), true)
 }
 
 // tiled draws l's picture tinted by tint, as its shape alone when shape

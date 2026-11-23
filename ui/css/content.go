@@ -8,30 +8,45 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
-// listStyles are list-style-type's words, which counter() and counters()
-// take too.
+// listStyles are the list-style-type words ui draws itself, as
+// shapes; every other name is a counter style's.
 //
 //nolint:gochecknoglobals // lookup table
 var listStyles = map[string]style.ListStyle{
-	"disc": style.ListDisc, kwNone: style.ListNone, "circle": style.ListCircle, "square": style.ListSquare,
-	"decimal": style.ListDecimal, "decimal-leading-zero": style.ListDecimalLeadingZero,
-	"lower-alpha": style.ListLowerAlpha, "lower-latin": style.ListLowerAlpha,
-	"upper-alpha": style.ListUpperAlpha, "upper-latin": style.ListUpperAlpha,
-	"lower-roman": style.ListLowerRoman, "upper-roman": style.ListUpperRoman,
+	kwDisc: style.ListDisc, kwNone: style.ListNone, kwCircle: style.ListCircle, kwSquare: style.ListSquare,
 	"disclosure-closed": style.ListDisclosureClosed, "disclosure-open": style.ListDisclosureOpen,
 }
 
+// checkListStyle checks list-style-type: none, a counter style's name or
+// a string.
 func checkListStyle(v []Component) error {
-	if len(v) != 1 {
-		return fmt.Errorf("expected one value, found %d", len(v))
+	if len(v) == 1 && (v[0].Kind == String || isWord(v[0], kwNone) || checkStyleName(v) == nil) {
+		return nil
 	}
-	if v[0].Kind == Ident {
-		if _, ok := listStyles[strings.ToLower(v[0].Text)]; ok {
-			return nil
-		}
+	return fmt.Errorf("expected none, a counter style's name (decimal, lower-roman…) or a string, found %q", join(v))
+}
+
+// checkListImage checks list-style-image: none or a url().
+func checkListImage(v []Component) error {
+	if len(v) == 1 && (isWord(v[0], kwNone) || urlTerm(v[0]) == nil) {
+		return nil
 	}
-	return fmt.Errorf("expected none, disc, circle, square, decimal, decimal-leading-zero, lower-alpha, "+
-		"upper-alpha, lower-roman, upper-roman, disclosure-open or disclosure-closed, found %q", v[0].String())
+	return fmt.Errorf("expected none or url(), found %q; ui draws no gradient for a marker", join(v))
+}
+
+// listStyle computes list-style-type.
+func listStyle(x *ctx, v []Component) {
+	c := v[0]
+	x.c.ListName = ""
+	if c.Kind == String {
+		x.c.ListStyle, x.c.ListName = style.ListString, c.Text
+		return
+	}
+	if ls, ok := listStyles[strings.ToLower(c.Text)]; ok {
+		x.c.ListStyle = ls
+		return
+	}
+	x.c.ListStyle, x.c.ListName = style.ListCounter, styleName(c.Text)
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -104,7 +119,7 @@ func checkCounterFunction(c Component, fixed int) error {
 		return fmt.Errorf("counters() takes a string second, found %q", join(parts[1]))
 	}
 	if len(parts) > fixed {
-		if err := checkListStyle(parts[fixed]); err != nil {
+		if err := checkStyleName(parts[fixed]); err != nil {
 			return fmt.Errorf("%s(): the counter style: %w", name, err)
 		}
 	}
@@ -112,7 +127,8 @@ func checkCounterFunction(c Component, fixed int) error {
 }
 
 // checkCounters checks counter-reset, counter-increment and counter-set:
-// none, or names each with a whole number or none.
+// none, or names each with a whole number or none. reversed() is
+// refused, as Chrome refuses it.
 func checkCounters(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
@@ -124,7 +140,7 @@ func checkCounters(v []Component) error {
 			named = true
 		case c.Kind == Number && c.Num == float64(int(c.Num)) && i > 0 && v[i-1].Kind == Ident:
 		case c.Kind == Function && strings.EqualFold(c.Text, "reversed"):
-			return fmt.Errorf("reversed() is not supported; an ol counts down with its reversed attribute")
+			return fmt.Errorf("reversed() is not supported, as in Chrome; an ol counts down with its reversed attribute")
 		default:
 			return fmt.Errorf("expected none, or a counter's name and a whole number, found %q", c.String())
 		}
@@ -192,13 +208,13 @@ func (x *ctx) content(v []Component) style.Content {
 
 func counterItem(c Component) style.ContentItem {
 	parts := splitOn(items(c.Args), func(c Component) bool { return c.Kind == Comma })
-	it := style.ContentItem{Kind: style.ContentCounter, Name: parts[0][0].Text, Style: style.ListDecimal}
+	it := style.ContentItem{Kind: style.ContentCounter, Name: parts[0][0].Text}
 	at := 1
 	if strings.EqualFold(c.Text, "counters") {
 		it.Kind, it.Text, at = style.ContentCounters, parts[1][0].Text, 2
 	}
 	if len(parts) > at {
-		it.Style = listStyles[strings.ToLower(parts[at][0].Text)]
+		it.Style = styleName(parts[at][0].Text)
 	}
 	return it
 }
@@ -247,13 +263,19 @@ func contentProps() map[string]prop {
 	}
 }
 
-// generates reports whether an element of tag takes ::before and ::after
+// generates reports whether the element n takes ::before and ::after
 // boxes: not the ones Chrome gives none (img, br, text fields, select,
-// canvas), nor those ui draws whole.
-func generates(tag dom.Tag) bool {
-	switch tag {
-	case dom.Img, dom.Svg, dom.Br, dom.Input, dom.Textarea, dom.Select, dom.Canvas, dom.Iframe, dom.Progress,
-		dom.Meter, dom.Col, dom.Colgroup, dom.Source, dom.TextTag:
+// canvas), nor those ui draws whole but a checkbox and a radio, which
+// Chrome lays them out in as any block. A range, a progress bar and a
+// meter, whose own parts Chrome lays them out among, take none yet.
+func generates(n *dom.Node) bool {
+	switch n.Tag() {
+	case dom.Input:
+		typ, _ := n.Attr("type")
+		t := strings.ToLower(strings.TrimSpace(typ))
+		return t == "checkbox" || t == "radio"
+	case dom.Img, dom.Svg, dom.Br, dom.Textarea, dom.Select, dom.Canvas, dom.Iframe, dom.Progress, dom.Meter, dom.Col,
+		dom.Colgroup, dom.Source, dom.TextTag:
 		return false
 	case dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,

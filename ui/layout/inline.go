@@ -280,7 +280,7 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			t.lineBreak(c, parent, it.element, st)
 			continue
 		}
-		if isAtomicDisplay(st.Display) {
+		if isAtomicDisplay(st.Display) || st.Display == style.Inline && pictured(it.element) {
 			n := t.build(it.element, c.owner)
 			n.atomic = true
 			c.runs = append(c.runs,
@@ -646,9 +646,7 @@ func markerOf(st *style.Computed) string {
 		return "▸"
 	case style.ListDisclosureOpen:
 		return "▾"
-	case style.ListDisc, style.ListNone, style.ListCircle, style.ListSquare, style.ListDecimal,
-		style.ListDecimalLeadingZero, style.ListLowerAlpha, style.ListUpperAlpha, style.ListLowerRoman,
-		style.ListUpperRoman:
+	case style.ListDisc, style.ListNone, style.ListCircle, style.ListSquare, style.ListCounter, style.ListString:
 	}
 	return ""
 }

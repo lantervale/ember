@@ -9,13 +9,14 @@ import (
 
 // generate keeps n's ::before and ::after nodes and its ::marker style as
 // its style and the sheets ask: a node while the pseudo-element's content
-// makes a box, the same one from restyle to restyle.
+// makes a box, the same one from restyle to restyle, with its own
+// ::marker's style where it is a list item.
 func (r *restyler) generate(n *dom.Node, data *dom.Pipeline, rem float32) {
 	if !r.before && !r.after && !r.marker && data.Before == nil && data.After == nil && data.Marker == nil &&
 		!data.HasMarkerText {
 		return
 	}
-	shows := data.Style.Display != style.DisplayNone && generates(n.Tag())
+	shows := data.Style.Display != style.DisplayNone && generates(n)
 	var before, after *style.Computed
 	if r.before && shows && r.may(n, "before") {
 		before = r.generated(n, data.Style, rem, "before")
@@ -25,7 +26,13 @@ func (r *restyler) generate(n *dom.Node, data *dom.Pipeline, rem float32) {
 	}
 	r.keep(n, data, &data.Before, dom.Before, before)
 	r.keep(n, data, &data.After, dom.After, after)
-	r.markerOf(n, data, rem)
+	r.markerOf(n, data, data, rem, kwMarker)
+	if g := data.Before; g != nil {
+		r.markerOf(n, dom.Data(g), data, rem, beforeMarker)
+	}
+	if g := data.After; g != nil {
+		r.markerOf(n, dom.Data(g), data, rem, afterMarker)
+	}
 }
 
 // generated is the style of n's ::before or ::after, nil when its
@@ -101,7 +108,8 @@ func (r *restyler) keep(n *dom.Node, data *dom.Pipeline, slot **dom.Node, p dom.
 	} else {
 		st = old
 	}
-	if len(st.CounterReset)+len(st.CounterIncrement)+len(st.CounterSet) > 0 || st.Content.Dynamic() {
+	if len(st.CounterReset)+len(st.CounterIncrement)+len(st.CounterSet) > 0 || st.Content.Dynamic() ||
+		st.ListItem && (st.ListStyle == style.ListCounter || st.ListStyle == style.ListString) {
 		r.counts = true
 		r.recount = r.recount || changed
 		return
@@ -111,29 +119,39 @@ func (r *restyler) keep(n *dom.Node, data *dom.Pipeline, slot **dom.Node, p dom.
 	}
 }
 
-// markerOf keeps the style and the text of n's ::marker.
-func (r *restyler) markerOf(n *dom.Node, data *dom.Pipeline, rem float32) {
+// markerOf keeps the style and the text of the ::marker of a list item,
+// whose pipeline is data: n's own, or its ::before's or its ::after's,
+// whose ::marker name is then before::marker or after::marker. origin is
+// n's pipeline, flagged for layout with the item's when they change.
+func (r *restyler) markerOf(n *dom.Node, data, origin *dom.Pipeline, rem float32, name string) {
 	var st *style.Computed
-	if r.marker && data.Style.ListItem && r.may(n, "marker") {
+	if (r.marker || name != kwMarker) && data.Style.ListItem && r.may(n, name) {
 		x := &ctx{c: data.Style, em: data.Style.Font.Size, rem: rem, env: r.env, sized: true, lined: true}
-		st, _ = x.pseudo(r.pm, n, r.sheets, "marker")
+		st, _ = x.pseudo(r.pm, n, r.sheets, name)
 	}
 	if !data.Marker.Equal(st) {
 		data.Marker = st
 		data.Dirty |= dom.DirtyLayout
+		origin.Dirty |= dom.DirtyLayout
 		r.recount = true
 	}
 	text, has := "", false
-	if st != nil && st.Content.Kind != style.ContentNormal {
+	switch {
+	case st != nil && st.Content.Kind != style.ContentNormal:
 		if st.Content.Dynamic() {
 			r.counts = true
 			return
 		}
 		text, has = contentText(st.Content, nil), true
+	case data.Style.ListItem && (data.Style.ListStyle == style.ListCounter || data.Style.ListStyle == style.ListString):
+		// the marker string, which counting works out
+		r.counts = true
+		return
 	}
 	if data.MarkerText != text || data.HasMarkerText != has {
 		data.MarkerText, data.HasMarkerText = text, has
 		data.Dirty |= dom.DirtyLayout
+		origin.Dirty |= dom.DirtyLayout
 	}
 }
 

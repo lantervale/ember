@@ -61,6 +61,7 @@ Pages of the CSS subset itself (borders, gradients, clips, text, images…), eac
 | glyphs | 0.22% | 0.29% |
 | gradients | 0.06% | 0.09% |
 | insets | 0.09% | 0.12% |
+| lists | 0.27% | 0.32% |
 | m0 | 0.01% | 0.02% |
 | markers | 0.43% | 0.56% |
 | mocka | 0.15% | 0.20% |

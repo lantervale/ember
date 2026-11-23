@@ -198,13 +198,16 @@ fn roundedClip(pos: vec2f) -> f32 {
 }
 
 // cut is how much of the pixel at pos the batch's mask leaves: none
-// outside it.
+// outside it, or all when it is inverted.
 fn cut(pos: vec2f) -> f32 {
 	let p = vec3f(pos / u.scale, 1.0);
 	let uv = vec2f(dot(u.cutU.xyz, p), dot(u.cutV.xyz, p));
-	let a = textureSampleLevel(mask, maskSampler, uv, 0.0).a;
+	var a = textureSampleLevel(mask, maskSampler, uv, 0.0).a;
 	if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) {
-		return 0.0;
+		a = 0.0;
+	}
+	if (u.cutV.w > 0.5) {
+		return 1.0 - a;
 	}
 	return a;
 }
@@ -381,7 +384,7 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 	} else {
 		rgb = srgbEncode(c.rgb);
 	}
-	if (u.blend > 4.5) {
+	if (u.blend > 4.5 && u.blend < 5.5) {
 		return vec4f(rgb, c.a);
 	}
 	if (u.blend > 2.5) {

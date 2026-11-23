@@ -99,7 +99,7 @@ func TestTheTextElementsStartAsChromes(t *testing.T) {
 		t.Errorf("small is %v and big %v beside 16", s, b)
 	}
 	for n, want := range map[*dom.Node]style.ListStyle{
-		li: style.ListDisc, nested: style.ListCircle, numbered: style.ListDecimal,
+		li: style.ListDisc, nested: style.ListCircle, numbered: style.ListCounter,
 	} {
 		if st := styleOf(n); !st.ListItem || st.ListStyle != want {
 			t.Errorf("#%s: list item %v, marker %v, want %v", n.ID(), st.ListItem, st.ListStyle, want)

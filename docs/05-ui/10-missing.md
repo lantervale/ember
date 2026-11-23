@@ -43,12 +43,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `::before`, `::after` on `progress`, `meter`, and checkbox, radio and range inputs | no box, where Chrome makes one |
+| `::before`, `::after` on `progress`, `meter` and range inputs | no box, where Chrome lays one out among the control's own parts |
+| a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
 | `::marker` with `line-height`, `text-shadow`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
-| `::before::marker`, `::after::marker` | refused, where Chrome reads them |
-| `content: url()` on an element itself | read, and the element is not replaced |
-| `counter-reset: reversed(name)` | refused |
-| `ol type` | not read: `list-style-type` says the numbering |
+| `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
+| the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
+| a `list-style-image` gradient, `list-style-position: inside` | refused |
+| a `list-style-image` fetched off the frame (`ui.FetchImages`) | the marker is laid out once the picture is found by another layout, not when it lands |
 
 ## Layout
 
@@ -127,8 +128,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a filtered element's live parts (a caret, a canvas element) when its Document draws them apart, and a filtered inline element holding absolute boxes | drawn unfiltered over it, placed by the nearest positioned block ([decision 0118](../99-decisions/0118-a-filtered-element-is-a-picture-drawn-through-wgsl-effects.md)) |
 | a `transform` holding fixed descendants | placed in the viewport, where Chrome places them in the transformed element, as it does under a `filter` |
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
-| a `mask-image` over anything but the background colour: a background image, a border, the content | drawn whole; only the colour takes the picture's shape (decision [0093](../99-decisions/0093-a-mask-image-is-the-shape-of-the-background-colour.md)) |
-| the `mask` shorthand, a gradient mask, several layers, `mask-origin`, `mask-clip`, `mask-mode`, `mask-composite` | refused; `-webkit-mask-position` keeps its warning, write `mask-position` beside it |
+| a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
+| `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |
+| `-webkit-mask-position` and `-webkit-mask` with three-value positions, `-webkit-mask-position-x` and `-y`, `-webkit-mask-composite`'s other words (`destination-in`, `copy`, `plus-lighter`…), `-webkit-mask-box-image` | refused with a warning; `-webkit-mask: … no-clip`, which Chrome refuses, is read |
+| `mask-composite` serialised after `-webkit-mask-composite` | as the plain word (`exclude`), where Chrome keeps the legacy one (`xor`) |
+| a masked element under a rotation or a skew | hit in its border box, where Chrome reaches about half a pixel further |
+| a masked element on a surface other than `twod.Canvas` | drawn unmasked, but for the one-colour icon |
 | a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |
 | `:dir()` on an element of `dir="auto"` whose text changes below it (a field typed in excepted) | answered from the text as it stood when the element was last restyled |
 | a `pattern` Go's `regexp` cannot read (a lookahead, a backreference) | constrains nothing, where Chrome reads it as JavaScript does |
@@ -142,7 +147,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 | math functions in a colour's channels and in times (`calc(1s + 100ms)`) | refused |
 | a percentage inside `sign()` in a `line-height` | of the font size, where Chrome measures it against something else |
-| `list-style-image`, `word-break`, `font-variant`, `@counter-style`, `revert` | refused |
+| `word-break`, `font-variant`, `revert` | refused |
 
 ## Windows
 

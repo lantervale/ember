@@ -514,9 +514,18 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		}
 		e.clip = p.newClip(clip{rect: s.bounds, xf: p.s.Transform(), parent: e.clip, shape: &s})
 	}
+	if p.probing && b.Kind == box.Element && st.Masked() {
+		// Chrome hits a masked element's content in its border box alone,
+		// wherever its mask is clear or reaches.
+		e.clip = p.newClip(clip{rect: geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}, xf: p.s.Transform(),
+			parent: e.clip})
+	}
 	group := p.beginGroup(e, st, &alpha)
+	var mask *masking
 	var filters *filtering
 	if b.Kind == box.Element {
+		mask = p.beginMask(e, st, around, group, &alpha)
+		p.showBackdrop(group, e, st)
 		filters = p.beginFilters(e, st)
 	}
 	p.use(e.clip)
@@ -547,6 +556,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		BarsOf(c.b, c.at).paint(p.s, alpha)
 	}
 	p.endFilters(filters, e.clip)
+	p.endMask(mask, e, st)
 	p.endGroup(group, e.clip)
 	p.use(around)
 	p.s.SetTransform(saved)
@@ -688,10 +698,10 @@ func inkReach(st *style.Computed) float32 {
 
 // startsContext reports whether a box paints as a stacking context: a
 // positioned one with a z-index, or one less than opaque, transformed,
-// clipped by a clip-path, filtered, mixed or isolated.
+// clipped by a clip-path, filtered, masked, mixed or isolated.
 func startsContext(st *style.Computed) bool {
 	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 ||
-		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 ||
+		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 || st.Masked() ||
 		st.BlendMode != style.BlendNormal || st.Isolate
 }
 

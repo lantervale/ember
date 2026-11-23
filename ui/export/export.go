@@ -92,7 +92,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		b.WriteString(classicScrollbars + stillViewport)
 	}
 	b.WriteString(bareBars)
-	agent := css.Default
+	agent := css.Default + listTypes
 	if d.BrowserSheets() {
 		agent += css.BrowserDefault
 	} else {
@@ -602,6 +602,11 @@ c.width = Math.round(w * devicePixelRatio); c.height = Math.round(h * devicePixe
 const img = new Image(); img.onload = () => c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); ` +
 	`img.src = c.dataset.emberSnapshot;
 }));</script>` + "\n"
+
+// listTypes has the type attribute of a list or a list item number it in
+// Chrome as HTML maps it, over the user-agent sheet's list-style-type,
+// which the page holds as the author's.
+const listTypes = "ol[type], ul[type], li[type] { list-style-type: revert-layer; }\n"
 
 // truncateStart has Chrome's ellipsis cut the start of a truncate-start
 // element, as layout does: right to left outside, its content isolated
