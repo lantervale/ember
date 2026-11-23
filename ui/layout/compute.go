@@ -341,7 +341,7 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 	}
 	// Among floats a layout is the context's as much as the node's: where the floats
 	// before it stand, and the floats it places for what follows.
-	floats := ctx != nil && (n.holdsFloats || ctx.hasFloats())
+	floats := ctx != nil && (n.holdsFloats || ctx.hasFloats() || n.inline.pendingFloats())
 	if !floats {
 		if out, ok := n.cache.get(key); ok {
 			return out

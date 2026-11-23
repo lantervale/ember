@@ -84,7 +84,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-clamp: auto` whose last line fits but the padding below it in its block doesn't | the blocks after the clamp laid out whole, where Chrome's keep the clamp it first tried, one line lower |
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
-| a float after text in a block's lines (`text <span style="float: left">`) | stands at the top of the lines, as one before them, where Chrome places it on the line its place in the text falls on, or below it |
 | a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
 | an absolutely positioned box of a vertical box whose containing block is outside it, in another frame (a box of `vertical-rl` in a page of horizontal lines) | placed as its containing block's frame had it, sideways, where Chrome places it in that block's writing mode |
 | a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |

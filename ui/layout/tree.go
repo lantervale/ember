@@ -325,6 +325,9 @@ type node struct {
 	// holdsFloats is set when a float is among its kids or under one of them: laid out
 	// in its parent's formatting context, it places floats there each time.
 	holdsFloats bool
+	// inLines is the float's place among the lines of the content it is in, nil for a
+	// float before any.
+	inLines *lineFloat
 	// columns is how a multi-column container's last layout cut its flow, and frag the
 	// node's place in the flow of the multi-column container it is in, nil outside one.
 	columns *columnSet
@@ -647,8 +650,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			continue
 		}
 		if !inFlexOrGrid && st.Float != style.FloatNone && st.Display != style.DisplayNone {
-			// A float among inline content stands before it, the text going on round it.
-			n.kids = append(n.kids, t.build(it.element, n))
+			run = t.floatAmong(n, run, it)
 			continue
 		}
 		if (!inFlexOrGrid || n.st.WebkitBox) && !elementBlockLevel(it.element) {
@@ -665,6 +667,19 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.holdsFloats = true
 		}
 	}
+}
+
+// floatAmong takes the float it among n's inline content, of which run stands before it:
+// before the content, the text going on round it, when run is collapsible space alone,
+// else in run, placed among its lines.
+func (t *tree) floatAmong(n *node, run []item, it item) []item {
+	if !onlyCollapsibleSpace(run) {
+		return append(run, it)
+	}
+	k := t.build(it.element, n)
+	k.inLines = nil
+	n.kids = append(n.kids, k)
+	return run
 }
 
 // spaced is items less, in a -webkit-box laid out as flex, the white space between its
