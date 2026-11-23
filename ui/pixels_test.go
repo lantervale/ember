@@ -130,6 +130,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/han-spacing", 560, 300, 0.0055},
 		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
+		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
