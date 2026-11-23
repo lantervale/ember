@@ -53,6 +53,9 @@ type Face struct {
 	upem float32
 	// shaper is the face's layout tables, read when it is first shaped.
 	shaper *shape.Font
+	// vertical is the face's vertical metrics, read when it first sets a
+	// character upright in a vertical line.
+	vertical *vertical
 	// web is the file of an @font-face's face that is fetched.
 	web *File
 	// file is the installed font the face is read from when it is first
@@ -76,6 +79,8 @@ type Set struct {
 	shapedCount int
 	run         []shape.Glyph
 	ids         []byte
+	// uprights are the clusters set upright in vertical lines so far.
+	uprights map[uprightKey]uprightSet
 	// scale is device pixels per point, 0 for 1.
 	scale float32
 	installing

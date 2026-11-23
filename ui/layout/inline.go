@@ -1108,6 +1108,11 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 			spaces{def(a.width), maxContentSpace}, inherentSize)
 		a.height = out.size.h
 		a.baseline = out.size.h + a.margin.b
+		if c.owner.st.Stands() {
+			// a central baseline of the line, made up across the middle of its margin box
+			mh := a.height + a.margin.vertical()
+			a.baseline = mh - float32(math.Floor(float64(mh*c.unit)/2))/c.unit - a.margin.t
+		}
 		a.overflow = out.overflow
 		a.node.pendingOOF = out.oof
 		switch {
@@ -1843,8 +1848,33 @@ func (t *tree) metricsOf(c *inlineContent, st *style.Computed) box.Metrics {
 		c.metrics = map[*style.Computed]box.Metrics{}
 	}
 	m := t.fonts.Metrics(st.Font)
+	if st.Stands() {
+		m = central(m, c.unit)
+	}
 	c.metrics[st] = m
 	return m
+}
+
+// central is metrics m about the central baseline, which vertical lines whose text may
+// stand align their inline boxes on, as Chrome's: the room above and below it each half
+// of the ascent and descent, in whole device pixels, the odd one above, unit the layout
+// unit.
+func central(m box.Metrics, unit float32) box.Metrics {
+	px := unit / 64
+	h := m.Ascent + m.Descent
+	m.Descent = float32(math.Floor(float64(h*px)/2)) / px
+	m.Ascent = h - m.Descent
+	return m
+}
+
+// alphabetic is how far below the baseline the inline boxes of st align on its glyphs'
+// alphabetic baseline stands: below the central one of vertical lines whose text may
+// stand, else none.
+func (t *tree) alphabetic(c *inlineContent, st *style.Computed) float32 {
+	if !st.Stands() {
+		return 0
+	}
+	return t.fonts.Metrics(st.Font).Ascent - t.metricsOf(c, st).Ascent
 }
 
 // lineHeight is one run's line height and the baseline's place in it (half-leading above
@@ -2044,7 +2074,7 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 				c.pending = append(c.pending,
 					pendingAlign{span: -1, run: p.run, by: c.aligner(r.st, k), at: r.st.VerticalAlign, extent: e})
 			}
-		} else if m, ok := t.fallbackMetrics(p, r.st); ok {
+		} else if m, ok := t.fallbackMetrics(c, p, r.st); ok {
 			fh, fb := lineHeightOf(m, r.st)
 			*into = into.with(extent{fb, fh - fb}, 0)
 		}
@@ -2170,13 +2200,18 @@ func (c *inlineContent) settle(p *pendingAlign, e *extent, shift float32) {
 
 // fallbackMetrics is the metrics of the fallback faces a word draws with, when the fonts
 // have fallbacks and its text needs them: Chrome stretches a line-height: normal line to
-// fit them, and ignores them under any other line-height.
-func (t *tree) fallbackMetrics(p piece, st *style.Computed) (box.Metrics, bool) {
+// fit them, and ignores them under any other line-height. They are about the central
+// baseline where st's are (metricsOf).
+func (t *tree) fallbackMetrics(c *inlineContent, p piece, st *style.Computed) (box.Metrics, bool) {
 	ff, ok := t.fonts.(box.FallbackFonts)
 	if !ok || p.kind != word || !st.LineHeight.Normal || isASCII(p.text) {
 		return box.Metrics{}, false
 	}
-	return ff.FallbackMetrics(st.Font, p.text)
+	m, ok := ff.FallbackMetrics(st.Font, p.text)
+	if ok && st.Stands() {
+		m = central(m, c.unit)
+	}
+	return m, ok
 }
 
 func isASCII(s string) bool {
@@ -2380,6 +2415,11 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 				a := c.runs[p.run].atomic
 				l := &a.node.unrounded
 				l.location = point{x + a.margin.l, y + lb + c.runs[p.run].shift - a.baseline}
+				if n.st.Mode == style.VerticalLR {
+					// its line's over side is the page's right, as turnLines mirrors the text:
+					// its margin box mirrored across the line, its margins on their sides
+					l.location.y = 2*y + lh - l.location.y - a.height - a.margin.b + a.margin.t
+				}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
 				st := a.node.st
@@ -2645,7 +2685,8 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 			end = walk.at()
 		}
 		r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
-		frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart, cut[1] && i == len(pieces))
+		st := c.runs[run].st
+		frag := t.fragment(st, text, r, y+lb+c.runs[run].shift+t.alphabetic(c, st), cutStart, cut[1] && i == len(pieces))
 		frag.Start, frag.RTL, frag.Unspaced = from+c.runs[run].skip, rtl, unspaced
 		for _, p := range pieces[first:i] {
 			if p.shows {
