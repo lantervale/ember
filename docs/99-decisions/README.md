@@ -171,6 +171,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0166 | [A page replays round its covered live parts, and a framed list shows over the window](0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md) | rendering |
 | 0168 | [Nested rules and @scope rules are read as flat rules of the sheet](0168-nested-rules-and-scope-rules-are-read-as-flat-rules-of-the-sheet.md) | api |
 | 0169 | [The user's scrolls glide on Chrome's curves, and two-axis snaps land where both areas show](0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md) | api |
+| 0175 | [Relative snaps keep their unsnapped axes, and a held track pages on](0175-relative-snaps-keep-their-unsnapped-axes-and-a-held-track-pages-on.md) | api |
 
 ## Writing one
 

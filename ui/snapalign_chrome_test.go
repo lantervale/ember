@@ -153,7 +153,7 @@ body { margin: 0; }
 // scrollTos and compares where each lands.
 func TestScatteredSnapsLandWhereChromes(t *testing.T) {
 	const containers, steps = 90, 8
-	r := rand.New(rand.NewPCG(1, 7)) //nolint:gosec // a page laid out the same in both browsers
+	r := rand.New(rand.NewPCG(1, 7))
 	aligns := []string{"start", "end", "center", "start end", "end start", "center start"}
 	d := ui.NewDocument(ui.CSS(scatteredSnapSheet))
 	var outer []*ui.Node
