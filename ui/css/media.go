@@ -205,7 +205,7 @@ var mediaSpecs = map[string]*mediaSpec{
 	"device-height":       {kind: mediaLength, of: func(m Media) float64 { return float64(m.Height) }},
 	"aspect-ratio":        {kind: mediaRatio, of: viewportRatio},
 	"device-aspect-ratio": {kind: mediaRatio, of: viewportRatio},
-	"resolution":          {kind: mediaResolution, of: Media.dppx},
+	nameResolution:        {kind: mediaResolution, of: Media.dppx},
 	"color":               {kind: mediaInteger, of: fixedNumber(8)},
 	"monochrome":          {kind: mediaInteger, of: fixedNumber(0)},
 	"grid":                {kind: mediaInteger, of: fixedNumber(0)},
@@ -481,7 +481,7 @@ func (p *mediaParser) condition(toks []Component, orOK bool) (*mediaCond, bool) 
 
 func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 	switch {
-	case c.Kind == Function && p.container && !p.inStyle && !p.inScrollState && strings.EqualFold(c.Text, "style"):
+	case c.Kind == Function && p.container && !p.inStyle && !p.inScrollState && strings.EqualFold(c.Text, fnStyle):
 		return p.styleQuery(c), true
 	case c.Kind == Function && p.container && !p.inStyle && !p.inScrollState &&
 		strings.EqualFold(c.Text, kwScrollState):

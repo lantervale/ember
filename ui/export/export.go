@@ -5,6 +5,7 @@ package export
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -104,7 +105,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		b.WriteString(states(inline(d, s.String(), s.URL)))
 	}
 	b.WriteString("</style>\n")
-	b.WriteString(showModals)
+	b.WriteString(registered(d) + showModals)
 	b.WriteString(scrollTo)
 	b.WriteString(selectText)
 	b.WriteString(drawSnapshots)
@@ -718,3 +719,24 @@ const thumbs = ownBars + "::-webkit-scrollbar-thumb { background-color: rgba(255
 // ownBars keeps ui's look off the bars an element's sheets style
 // (data-ember-bars), which Chrome draws from those sheets alone, as paint does.
 const ownBars = ":not([data-ember-bars])"
+
+// registered is a script registering the custom properties d's
+// RegisterProperty registered, as CSS.registerProperty.
+func registered(d *ui.Document) string {
+	defs := d.RegisteredProperties()
+	if len(defs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<script>\n")
+	for _, def := range defs {
+		o := map[string]any{"name": def.Name, "syntax": def.Syntax, "inherits": def.Inherits}
+		if def.Initial != "" {
+			o["initialValue"] = def.Initial
+		}
+		js, _ := json.Marshal(o)
+		b.WriteString("CSS.registerProperty(" + string(js) + ");\n")
+	}
+	b.WriteString("</script>\n")
+	return b.String()
+}

@@ -3,6 +3,7 @@ package css
 import (
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/ease"
@@ -68,6 +69,8 @@ const (
 type track struct {
 	index int
 	keys  []key
+	// custom names the custom property it moves instead.
+	custom string
 }
 
 // key is a keyframe's style for a track: the element's style with the
@@ -157,6 +160,11 @@ type override struct {
 	src, to *style.Computed
 	t       float32
 	comp    composite
+	// custom names the custom property it sets instead, to text, or
+	// to the guaranteed-invalid value when unset.
+	custom string
+	text   string
+	unset  bool
 }
 
 func (o override) apply(c *style.Computed) {
@@ -373,12 +381,16 @@ func longhandsOf(name string) []string {
 // offset, as a later keyframe of it wins.
 func (an *animation) add(name string, k key) {
 	index, ok := orderIndex[name]
-	if !ok || longhands[index].prop.anim.kind == still {
+	custom := ""
+	if strings.HasPrefix(name, "--") {
+		index, ok, custom = -1, true, name
+	}
+	if !ok || index >= 0 && longhands[index].prop.anim.kind == still {
 		return
 	}
-	i := slices.IndexFunc(an.tracks, func(tr track) bool { return tr.index == index })
+	i := slices.IndexFunc(an.tracks, func(tr track) bool { return tr.index == index && tr.custom == custom })
 	if i < 0 {
-		an.tracks = append(an.tracks, track{index: index})
+		an.tracks = append(an.tracks, track{index: index, custom: custom})
 		i = len(an.tracks) - 1
 	}
 	tr := &an.tracks[i]
@@ -430,6 +442,11 @@ func (t *Transitions) update(n *dom.Node, a *nodeAnims) bool {
 		for i := range an.tracks {
 			tr := &an.tracks[i]
 			from, to, e := tr.at(p)
+			if tr.custom != "" {
+				over = stack(over, t.customOverride(tr.custom, from.s, to.s, e),
+					func(q override) bool { return q.custom == tr.custom })
+				continue
+			}
 			comp := composite{from.op, to.op}
 			if longhands[tr.index].prop.anim.kind == painted {
 				a.paints = stack(a.paints, paintValue{index: tr.index, from: from.s, to: to.s, e: e, comp: comp},
@@ -437,7 +454,7 @@ func (t *Transitions) update(n *dom.Node, a *nodeAnims) bool {
 				continue
 			}
 			over = stack(over, override{index: tr.index, src: from.s, to: to.s, t: e, comp: comp},
-				func(q override) bool { return q.index == tr.index })
+				func(q override) bool { return q.index == tr.index && q.custom == "" })
 		}
 	}
 	if slices.Equal(over, a.over) {
@@ -446,6 +463,23 @@ func (t *Transitions) update(n *dom.Node, a *nodeAnims) bool {
 	a.over = over
 	restyle(n)
 	return true
+}
+
+// customOverride is the value of the custom property name t of the way
+// from its value in a to its value in b: interpolated as its
+// registration's type, flipping halfway otherwise.
+func (t *Transitions) customOverride(name string, a, b *style.Computed, e float32) override {
+	va, okA := a.Vars[name]
+	vb, okB := b.Vars[name]
+	from, fromOK := va, okA
+	if e >= 0.5 {
+		from, fromOK = vb, okB
+	}
+	if okA && okB {
+		r := t.env.props.get(name)
+		from = r.interpolate(r.current(va, a), r.current(vb, b), e)
+	}
+	return override{index: -1, custom: name, text: from, unset: !fromOK}
 }
 
 // stack puts v, a value of an animation later in the list than those of

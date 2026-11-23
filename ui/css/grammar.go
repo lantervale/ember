@@ -55,9 +55,11 @@ func globalKeyword(v []Component) string {
 	return ""
 }
 
+// hasVar reports whether cs has a function the cascade replaces on each
+// element (substitutes), so its value is checked only then.
 func hasVar(cs []Component) bool {
 	for _, c := range cs {
-		if c.Kind == Function && (strings.EqualFold(c.Text, "var") || strings.EqualFold(c.Text, "env")) || hasVar(c.Args) {
+		if substitutes(c) || hasVar(c.Args) {
 			return true
 		}
 	}
@@ -152,6 +154,16 @@ var (
 			return nil
 		}
 		return fmt.Errorf("expected an integer, found %q", c.String())
+	})
+	// wholeNumber is an integer, or a math function of numbers, which
+	// computes rounded to the nearest one.
+	wholeNumber = term(func(c Component) error {
+		if c.Kind == Function {
+			if d, err := parseDim(c); err == nil && d.IsNumber() {
+				return nil
+			}
+		}
+		return integer(c)
 	})
 	positiveInteger = term(func(c Component) error {
 		if c.Kind == Number && c.Int && c.Num >= 1 {
@@ -423,7 +435,7 @@ var checks = map[string]check{
 	"grid-auto-columns":         repeated(trackSize, 64),
 	"grid-auto-rows":            repeated(trackSize, 64),
 	"grid-auto-flow":            checkAutoFlow,
-	"order":                     single(integer),
+	"order":                     single(wholeNumber),
 	"column-count":              single(either(positiveInteger, words("auto"))),
 	"column-width":              single(either(dimTerm(nonNegative), words("auto"))),
 	"column-fill":               single(words("balance", "auto")),
@@ -458,7 +470,7 @@ var checks = map[string]check{
 	"right":   single(either(lengthPercent, words("auto"))),
 	"bottom":  single(either(lengthPercent, words("auto"))),
 	"left":    single(either(lengthPercent, words("auto"))),
-	"z-index": single(either(integer, words("auto"))),
+	"z-index": single(either(wholeNumber, words("auto"))),
 
 	"font-family": checkFontFamily,
 	// the widths the font shorthand may name
@@ -641,6 +653,9 @@ func timeTerm(nonNeg bool) term {
 // transitionTarget is a property transition-property names: any ui
 // knows, as Chrome keeps any; one that doesn't interpolate runs none.
 func transitionTarget(c Component) error {
+	if c.Kind == Ident && strings.HasPrefix(c.Text, "--") {
+		return nil
+	}
 	name := strings.ToLower(c.Text)
 	name = physical(name, false)
 	if _, long := properties[name]; c.Kind == Ident && (long || shorthands[name] != nil) {

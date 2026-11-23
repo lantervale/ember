@@ -49,6 +49,13 @@ type measures struct {
 	// whether one was read since the tree was last styled whole.
 	titleBar     TitleBarArea
 	titleBarRead bool
+	// props are the registered custom properties and the custom
+	// functions, and media what if()'s media() queries are answered for.
+	props *registry
+	media Media
+	// mediaRead is set once an if() or a custom function answered a
+	// media query since the tree was last styled whole.
+	mediaRead bool
 }
 
 // TitleBarArea is the part of a window's title bar a Document drawn under
