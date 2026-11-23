@@ -87,3 +87,20 @@ func TestColouredScrollbarsTakeNoRoomAsChromes(t *testing.T) {
 	r := chrome.Match(t, d, geom.V2(640, 900))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
+
+// scrollbar-width: thin asks for the system's bars as scrollbar-color
+// does, which Chrome on macOS lays over the content, its
+// ::-webkit-scrollbar rules ignored.
+func TestThinScrollbarsTakeNoRoomAsChromes(t *testing.T) {
+	const sheet = `.s { width: 120px; height: 80px; overflow: scroll; margin: 4px; scrollbar-width: thin; }
+.s > div { width: 300px; height: 300px; }
+.styled::-webkit-scrollbar { width: 22px; height: 22px; }
+.auto { overflow: auto; }
+.auto > div { height: 20px; width: auto; }`
+	d := ui.NewDocument(ui.CSS(sheet))
+	for _, c := range [][]string{{}, {"styled"}, {"auto", "styled"}} {
+		d.Body().Append(ui.Div(ui.Class(append([]string{"s"}, c...)...), ui.Div()))
+	}
+	r := chrome.Match(t, d, geom.V2(640, 400))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

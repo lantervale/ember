@@ -86,6 +86,8 @@
   "rounded-styles": 0.002,
   "scrollbar-parts": 0.0005,
   "scrollbar-gutter": 0.003,
+  "scrollbar-buttons": 0.0008,
+  "scrollbar-hover": 0.0008,
   "control-parts": 0.002,
   "control-generated": 0.006,
   "scrolled": 0.0153,

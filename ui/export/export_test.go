@@ -339,6 +339,14 @@ func TestMediaRulesTravelForChromeToAnswer(t *testing.T) {
 	assert.Contains(t, got, "p { color: #100; }\n@media (max-width: 600px) { p { color: #200; } }\n")
 }
 
+func TestAScrollbarPartsStatesAreLeftToChromesPointer(t *testing.T) {
+	got := written(t, ui.NewDocument(ui.CSS(".s::-webkit-scrollbar-thumb:vertical:hover { color: red }\n"+
+		".s:hover::-webkit-scrollbar-thumb:active, .t:active { color: blue }")))
+	assert.Contains(t, got, ".s::-webkit-scrollbar-thumb:vertical:hover {")
+	assert.Contains(t, got, ".s:is(:hover, [data-ember-hover])::-webkit-scrollbar-thumb:active, "+
+		".t:is(:active, [data-ember-active])")
+}
+
 func TestABrowsersSheetTravelsAsItWasWritten(t *testing.T) {
 	site := `@layer base { p { -webkit-transform: rotate(3deg); -moz-transform: none; width: 100px } }
 @supports (display: grid) { p:hover { color: red } }`

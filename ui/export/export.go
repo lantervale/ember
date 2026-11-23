@@ -617,9 +617,22 @@ var pseudoClasses = regexp.MustCompile(`:(hover|active|focus-visible|focus-withi
 // states makes css's :hover, :active, :focus, :focus-visible,
 // :focus-within and :target also match the elements export marks as in
 // that state, so Chrome draws a pointer's or the focus's look, or a
-// fragment's, in a still page.
+// fragment's, in a still page. Those of a scrollbar's part are its own,
+// which Chrome's pointer alone puts it in, and stay as they are.
 func states(css string) string {
-	return pseudoClasses.ReplaceAllString(css, ":is(:$1, [data-ember-$1])")
+	var b strings.Builder
+	last := 0
+	for _, m := range pseudoClasses.FindAllStringSubmatchIndex(css, -1) {
+		b.WriteString(css[last:m[0]])
+		last = m[1]
+		compound := css[strings.LastIndexAny(css[:m[0]], " ,{}>+~\t\n")+1 : m[0]]
+		if strings.Contains(compound, "::-webkit-") {
+			b.WriteString(css[m[0]:m[1]])
+			continue
+		}
+		b.WriteString(":is(:" + css[m[2]:m[3]] + ", [data-ember-" + css[m[2]:m[3]] + "])")
+	}
+	return b.String() + css[last:]
 }
 
 // showModals opens with showModal the dialogs the Document has open modal,

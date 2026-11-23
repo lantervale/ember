@@ -15,21 +15,60 @@ const barGutter = 15
 // bars its sheets style, as Chrome does once a rule styles its
 // ::-webkit-scrollbar and neither scrollbar-color nor scrollbar-width
 // asks for the system's bars: their thicknesses are its gutters, and a
-// bar of display: none takes none.
+// bar of display: none takes none. It also gives a box the user may
+// resize its ::-webkit-resizer.
 func (r *restyler) scrollbars(c *style.Computed, n *dom.Node, rem float32) {
-	if c.ScrollbarWidth == 0 || c.ScrollbarColored || !r.may(n, webkitScrollbar) {
+	if c.Resizable {
+		c.Resizer = r.part(n, c, rem, webkitResizer, 0)
+	}
+	if c.ScrollbarWidth == 0 || c.ScrollbarColored || c.ScrollbarThin || !r.may(n, webkitScrollbar) {
 		return
 	}
-	const always = partEnabled | partNoButton
+	data := dom.Data(n)
+	if p := r.barParts(c, n, rem, data.BarHover, data.BarPressed); p != nil {
+		c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = p.parts, p.width, p.height
+		c.ScrollbarNone = p.parts == nil
+	}
+}
+
+// styledBars are the parts of bars a sheet styles and their thicknesses.
+type styledBars struct {
+	parts         *style.ScrollbarParts
+	width, height float32
+}
+
+// barParts styles the bars of a scroller of style c from the rules for
+// n, the element their parts are of, with hover the part under the
+// pointer and pressed the one held: nil when no rule styles n's
+// ::-webkit-scrollbar, parts nil when both bars take no room.
+func (r *restyler) barParts(c *style.Computed, n *dom.Node, rem float32, hover, pressed style.BarPart) *styledBars {
 	corner := partState(0)
-	if c.Overflow.Width == style.Scroll && c.Overflow.Height == style.Scroll {
+	if c.Overflow.Width == style.Scroll && c.Overflow.Height == style.Scroll ||
+		c.Resizable && (c.Overflow.Width == style.Scroll || c.Overflow.Height == style.Scroll) {
 		corner = partCornerPresent
 	}
-	v := r.part(n, c, rem, webkitScrollbar, partVertical|always|corner)
-	if v == nil {
-		return
+	held := func(horizontal bool, part style.BarPart) partState {
+		var s partState
+		if partHeld(hover, horizontal, part) {
+			s |= partHover
+		}
+		if partHeld(pressed, horizontal, part) {
+			s |= partActive
+		}
+		return s
 	}
-	h := r.part(n, c, rem, webkitScrollbar, partHorizontal|always|corner)
+	const always = partEnabled
+	orient := func(horizontal bool) partState {
+		if horizontal {
+			return partHorizontal | always | corner
+		}
+		return partVertical | always | corner
+	}
+	v := r.part(n, c, rem, webkitScrollbar, orient(false)|held(false, style.BarBackground))
+	if v == nil {
+		return nil
+	}
+	h := r.part(n, c, rem, webkitScrollbar, orient(true)|held(true, style.BarBackground))
 	thickness := func(st *style.Computed, l style.Length) float32 {
 		if st.Display == style.DisplayNone {
 			return 0
@@ -39,22 +78,53 @@ func (r *restyler) scrollbars(c *style.Computed, n *dom.Node, rem float32) {
 		}
 		return barGutter
 	}
-	c.ScrollbarWidth, c.ScrollbarHeight = thickness(v, v.Size.Width), thickness(h, h.Size.Height)
-	if c.ScrollbarWidth == 0 && c.ScrollbarHeight == 0 {
-		c.ScrollbarNone = true
-		return
+	out := &styledBars{width: thickness(v, v.Size.Width), height: thickness(h, h.Size.Height)}
+	if out.width == 0 && out.height == 0 {
+		return out
 	}
-	bar := func(st *style.Computed, s partState) style.BarParts {
-		s |= always | corner
-		return style.BarParts{Bar: st,
-			Track: r.part(n, c, rem, scrollbarTrack, s),
-			Start: r.part(n, c, rem, scrollbarTrackPiece, s|partStart),
-			End:   r.part(n, c, rem, scrollbarTrackPiece, s|partEnd),
-			Thumb: r.part(n, c, rem, scrollbarThumb, s),
+	bar := func(st *style.Computed, horizontal bool) style.BarParts {
+		s := orient(horizontal)
+		part := func(name string, p style.BarPart, more partState) *style.Computed {
+			return r.part(n, c, rem, name, s|more|held(horizontal, p))
 		}
+		b := style.BarParts{Bar: st,
+			Track: part(scrollbarTrack, barTrack, 0),
+			Start: part(scrollbarTrackPiece, style.BarBackTrack, partStart|partDecrement|partNoButton),
+			End:   part(scrollbarTrackPiece, style.BarForwardTrack, partEnd|partIncrement|partNoButton),
+			Thumb: part(scrollbarThumb, style.BarThumb, 0),
+		}
+		for i, at := range [4]partState{partStart | partDecrement, partStart | partIncrement,
+			partEnd | partDecrement, partEnd | partIncrement} {
+			b.Buttons[i] = part(scrollbarButton, style.BarBackStart+style.BarPart(i), at)
+		}
+		return b
 	}
-	c.Scrollbar = &style.ScrollbarParts{V: bar(v, partVertical), H: bar(h, partHorizontal),
-		Corner: r.part(n, c, rem, scrollbarCorner, always|corner)}
+	out.parts = &style.ScrollbarParts{V: bar(v, false), H: bar(h, true),
+		Corner: r.part(n, c, rem, scrollbarCorner, 0)}
+	return out
+}
+
+// barTrack stands for ::-webkit-scrollbar-track among the parts, which
+// the pointer is never on alone: it is on a piece or the thumb.
+const barTrack = style.BarHorizontal - 1
+
+// partHeld reports whether the part of a bar, horizontal or not, is in the
+// state of at, the part the pointer is on or presses, as Chrome reads
+// :hover and :active on a scrollbar's parts: the bar while any part of
+// it is, the track while a piece or the thumb is, another part while it
+// is itself.
+func partHeld(at style.BarPart, horizontal bool, part style.BarPart) bool {
+	if at == style.NoBarPart || (at&style.BarHorizontal != 0) != horizontal {
+		return false
+	}
+	switch on := at.Part(); part {
+	case style.BarBackground:
+		return true
+	case barTrack:
+		return on == style.BarBackTrack || on == style.BarThumb || on == style.BarForwardTrack
+	default:
+		return on == part
+	}
 }
 
 // part is the style of n's scrollbar part name in the states state,

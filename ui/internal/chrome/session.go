@@ -83,9 +83,10 @@ func Serve(t testing.TB, d *ui.Document, files map[string][]byte,
 }
 
 // Open opens url, served from this machine, in a viewport of size points
-// at scale device pixels a point, and waits for its load event. It skips
-// the test where Go can't hand Chrome its pipe (Windows).
-func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
+// at scale device pixels a point, Chrome run with flags besides its own,
+// and waits for its load event. It skips the test where Go can't hand
+// Chrome its pipe (Windows).
+func Open(t testing.TB, url string, size geom.Vec2, scale float32, flags ...string) *Session {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("chrome: no DevTools pipe on Windows")
@@ -106,12 +107,12 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	//nolint:gosec // the Chrome found on this machine, run on our own page
-	cmd := exec.CommandContext(ctx, browser(), "--headless=new", "--remote-debugging-pipe",
+	cmd := exec.CommandContext(ctx, browser(), append(flags, "--headless=new", "--remote-debugging-pipe",
 		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
 		"--user-data-dir="+filepath.Join(dir, "profile"),
 		// Headless Chrome loads lazy pictures at once unless told.
 		"--blink-settings=lazyLoadEnabled=true",
-		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)), "about:blank")
+		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)), "about:blank")...)
 	cmd.ExtraFiles = []*os.File{toChrome, fromChrome}
 	if err = cmd.Start(); err != nil {
 		cancel()
@@ -244,6 +245,37 @@ func (s *Session) Media(name, value string) {
 	s.t.Helper()
 	s.call("Emulation.setEmulatedMedia", map[string]any{
 		"features": []map[string]string{{"name": name, "value": value}}}, nil)
+}
+
+// Mouse sends Chrome's input a mouse event of kind (mousePressed,
+// mouseReleased, mouseMoved) at at, in the viewport's points: the left
+// button, a press or a release the clicks'th of a run, a move holding the
+// button where clicks is not 0.
+func (s *Session) Mouse(kind string, at geom.Vec2, clicks int) {
+	s.t.Helper()
+	ev := map[string]any{"type": kind, "x": at.X, "y": at.Y, "button": "left", "clickCount": clicks}
+	if kind == "mouseMoved" {
+		ev["clickCount"] = 0
+		if clicks == 0 {
+			ev["button"] = "none"
+		} else {
+			ev["buttons"] = 1
+		}
+	}
+	s.call("Input.dispatchMouseEvent", ev, nil)
+}
+
+// ShiftArrow presses and lets go the arrow key named key (ArrowDown…)
+// with Shift held, as extending a selection by the keyboard does.
+func (s *Session) ShiftArrow(key string) {
+	s.t.Helper()
+	const shift = 8
+	// the Windows key codes, which Blink's editing commands read
+	code := map[string]int{"ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40}[key]
+	for _, kind := range []string{"rawKeyDown", "keyUp"} {
+		s.call("Input.dispatchKeyEvent", map[string]any{"type": kind, "key": key, "code": key,
+			"windowsVirtualKeyCode": code, "modifiers": shift}, nil)
+	}
 }
 
 // Shot is the viewport as Chrome shows it now, in device pixels.

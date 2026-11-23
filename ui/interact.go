@@ -99,6 +99,9 @@ type interaction struct {
 	dragging *Node
 	// trackHeld is a click held on a scrollbar's track (scrollmotion.go).
 	trackHeld *trackHold
+	// barOn is the scroll container whose styled bars the pointer is on,
+	// and barHeld the one whose part the left button presses (barstates.go).
+	barOn, barHeld *Node
 	// scrollers are the scroll containers' snaps, glides and wheel
 	// gestures (snap.go).
 	scrollers map[*Node]*scrollerState
@@ -781,6 +784,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.crossed(was, d.hovered)
 	}
 	d.menuHover(d.hovered)
+	d.barStates(in, at, hit)
 	d.titleTips(in)
 	if n != nil && n != d.html && n != d.body {
 		inputfeed.Of(in).CapturePointer()
@@ -1829,7 +1833,8 @@ func (d *Document) pressBars(held []*box.Box, at geom.Vec2) bool {
 		s := d.scrolling(b.Node)
 		port := snapportOf(b)
 		page := geom.V2(pageStep(port.X), pageStep(port.Y))
-		off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true, Page: page}, d.lineStep(b))
+		off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true, Page: page, Line: lineScroll},
+			d.lineStep(b))
 		if s.Dragging() {
 			d.scrollerOf(b.Node).glide = nil
 			d.setScroll(b, off)
