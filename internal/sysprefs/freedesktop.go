@@ -2,6 +2,7 @@ package sysprefs
 
 import (
 	"bufio"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -116,6 +117,17 @@ func FromGTK(s *System, settings string) {
 			s.Motion = motionOf(truthy(v))
 		}
 	}
+}
+
+// findTool is the path of the first of dirs holding name as a program
+// exists says is one.
+func findTool(name string, dirs []string, exists func(string) bool) (string, bool) {
+	for _, dir := range dirs {
+		if path := filepath.Join(dir, name); exists(path) {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 func motionOf(animates bool) platform.Motion {

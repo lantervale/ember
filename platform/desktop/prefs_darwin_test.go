@@ -24,16 +24,16 @@ func TestMacOSSaysItsPreferencesAndWhenTheAppearanceChanges(t *testing.T) {
 			return
 		}
 		watchPreferences()
-		told = systemChanged()
+		told = systemChanged(false)
 		first, motion, languages = systemAppearance(), systemMotion(), systemLanguages()
 		contrast, highlight = systemContrast(), systemHighlight()
-		quiet = !systemChanged()
+		quiet = !systemChanged(false)
 		other := platform.AppearanceDark
 		if first == platform.AppearanceDark {
 			other = platform.AppearanceLight
 		}
 		overrideAppearance(other)
-		again = systemChanged()
+		again = systemChanged(false)
 		forced = systemAppearance()
 		overrideAppearance(platform.AppearanceUnknown)
 		back = systemAppearance()

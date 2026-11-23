@@ -20,7 +20,8 @@ const asking = time.Second
 // the session bus through gdbus, GNOME's settings through gsettings where
 // it said nothing, KDE's kdeglobals and GTK's settings.ini after them,
 // and the languages from the environment. ember speaks no D-Bus itself,
-// so each read runs those tools: call it off the frame.
+// so each read runs those tools, found in the standard places only, never
+// through PATH: call it off the frame, and seldom.
 func Read() System {
 	s := System{Languages: FromEnv(os.Getenv)}
 	answered := false
@@ -29,7 +30,7 @@ func Read() System {
 		"--method", "org.freedesktop.portal.Settings.ReadAll", "['org.freedesktop.appearance']"); ok {
 		answered = FromPortal(&s, out)
 	}
-	if _, err := exec.LookPath("gsettings"); err == nil {
+	if _, ok := findTool("gsettings", toolDirs, executable); ok {
 		FromGSettings(&s, func(schema, key string) (string, bool) { return run("gsettings", "get", schema, key) })
 	}
 	if dir, err := os.UserConfigDir(); err == nil {
@@ -48,6 +49,17 @@ func Read() System {
 	return s
 }
 
+// toolDirs are where a desktop's tools are looked for: the distributions'
+// own places and NixOS's.
+//
+//nolint:gochecknoglobals // a fixed list
+var toolDirs = []string{"/usr/bin", "/bin", "/usr/local/bin", "/run/current-system/sw/bin"}
+
+func executable(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+}
+
 func read(path string) (string, bool) {
 	b, err := os.ReadFile(path)
 	return string(b), err == nil
@@ -55,12 +67,13 @@ func read(path string) (string, bool) {
 
 // run is what a tool prints, false where it isn't there or fails.
 func run(name string, args ...string) (string, bool) {
-	if _, err := exec.LookPath(name); err != nil {
+	path, ok := findTool(name, toolDirs, executable)
+	if !ok {
 		return "", false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), asking)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, name, args...).Output()
+	out, err := exec.CommandContext(ctx, path, args...).Output()
 	if err != nil {
 		return "", false
 	}

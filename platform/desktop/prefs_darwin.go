@@ -134,7 +134,7 @@ func watchPreferences() { C.emberWatchPreferences() }
 
 // systemChanged reports, once, that the preferences are to read again: at
 // the start, then when AppKit said so.
-func systemChanged() bool { return C.emberTakePrefsChanged() != 0 }
+func systemChanged(bool) bool { return C.emberTakePrefsChanged() != 0 }
 
 func systemPreferences() sysprefs.System {
 	return sysprefs.System{

@@ -378,9 +378,11 @@ type driver struct {
 	// input device.
 	scripted bool
 	windows  world.Group[platform.Windowed]
-	// preferences are the World's, kept as the system's as last read.
+	// preferences are the World's, kept as the system's as last read;
+	// focused is whether one of the program's windows had the focus then.
 	preferences world.Group[platform.Preferred]
 	system      sysprefs.System
+	focused     bool
 	natives     map[*platform.Window]*native
 	sound       *audiodevice.Output
 	// primary is the primary window's native, nil while the World has no
