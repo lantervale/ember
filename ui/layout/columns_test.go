@@ -437,3 +437,38 @@ func TestATablesSpacingBelowItsLastRowGivesWayAtTheColumnsEnd(t *testing.T) {
 	assert.Equal(t, float32(30), got[0].H)
 	assert.Equal(t, float32(28), got[1].H, "two rows, the spacing between and below them, which the column has room for")
 }
+
+func TestAForcedBreakInABoxSideBySideBreaksItAlone(t *testing.T) {
+	after := para(2, func(st *style.Computed) { st.BreakBefore = style.BreakColumn })
+	a, b := el(dom.Div, block, para(2, nil), after), para(6, nil)
+	f := el(dom.Div, func(st *style.Computed) { st.Display = style.FlexDisplay }, a, b)
+	m := multicol(2, nil, f)
+	tr := lay(m, 600)
+	assert.Equal(t, float32(60), tr.Of[m].Size.Y, "the first run holds the item without a break whole")
+	assert.Equal(t, float32(210), tr.Of[after].Rect().X)
+	assert.Equal(t, float32(0), tr.Of[after].Rect().Y)
+	bs := parts(tr.Of[b])
+	require.Len(t, bs, 2, "stretched to the row in the column the break sends it on to")
+	assert.Equal(t, float32(60), bs[0].H)
+	assert.Equal(t, float32(20), bs[1].H)
+
+	after = para(2, func(st *style.Computed) { st.BreakBefore = style.BreakColumn })
+	cell := func(kids ...*dom.Node) *dom.Node { return el(dom.Td, nil, kids...) }
+	c := para(6, nil)
+	table := el(dom.Table, nil, el(dom.Tr, nil, cell(para(2, nil), after), cell(c)))
+	tr = lay(multicol(2, nil, table), 600)
+	assert.Equal(t, float32(210), tr.Of[after].Rect().X)
+	assert.False(t, tr.Of[c].Broken, "a cell ends with its content")
+}
+
+func TestAPositionedBoxBesideTheLinesIsCutByItsOwn(t *testing.T) {
+	abs := el(dom.Div, func(st *style.Computed) {
+		st.Display, st.Position = style.Block, style.Absolute
+		st.Inset.Top, st.Inset.Right, st.Size.Width = style.Px(5), style.Px(0), style.Px(50)
+	}, para(5, nil))
+	cb := el(dom.Div, func(st *style.Computed) { st.Display, st.Position = style.Block, style.Relative },
+		para(7, nil), abs)
+	tr := lay(multicol(2, nil, cb), 600)
+	assert.Equal(t, float32(40), tr.Of[cb].Rect().H, "balanced by the flow alone")
+	assert.Equal(t, []geom.Rect{{X: 140, Y: 5, W: 50, H: 35}, {X: 350, W: 50, H: 20}}, parts(tr.Of[abs]))
+}

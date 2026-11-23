@@ -20,7 +20,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `text-spacing-trim: trim-start` on an opening bracket that starts a block or follows a forced break | trimmed, as the specification has it, where Chrome leaves it full width at the start of a text node in Hiragino Sans and trims it inside an element or in Hiragino Sans GB |
 | a face with `chws` | its pairs of punctuation trimmed by Chrome's rules and `halt`, where Chrome hands the middle of a run to the face's own `chws` |
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
-| `text-box-trim` at the end of a column whose last line a block's bottom padding or border follows, and in the boxes side by side a column cuts (a flex or grid row's items, a table row's cells) | not compared with Chrome: the padding keeps the line whole, and the lines of boxes side by side are never trimmed at a column's start or end ([decision 0192](../99-decisions/0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md)) |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | `initial-letter` on an element (the first inline child of a block), `initial-letter-align`, and a drop cap in vertical text | not read: only a `::first-letter` is made a drop cap, its letter's ink measured in its first face |
 | `text-underline-position` and `from-font` on a variable font | the default instance's post and OS/2 values, not the instance's MVAR deltas ([decision 0189](../99-decisions/0189-an-underline-is-placed-by-its-decorating-box-as-chrome-places-it.md)) |
@@ -64,8 +63,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a positioned box beside the lines of its containing block, cut by a column, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
-| a forced break (`break-before: column`) inside one of boxes side by side cut by columns | breaks that box alone, the others filled on as they would be; not compared with Chrome |
+| a positioned box beside the lines of a flex or grid item or a table cell columns cut, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
