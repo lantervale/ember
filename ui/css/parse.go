@@ -1243,6 +1243,10 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 // browser's sheet, as the plain one the vendor reads it as, and reports
 // false when the vendor drops it.
 func (p *parser) vendorProperty(d *Declaration, at Pos) bool {
+	if as, ok := oldNames[d.Name]; ok && p.browser {
+		d.Name = as
+		return true
+	}
 	v, plain := vendorOf(d.Name)
 	if v == nil || !p.browser {
 		return true
