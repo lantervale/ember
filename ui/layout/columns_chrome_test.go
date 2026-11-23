@@ -362,3 +362,87 @@ background: #eee; margin-bottom: 10px; } p { margin: 0; background: #cdf; }`
 	r := chrome.Match(t, d, geom.V2(900, 600))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
+
+// TestColumnLanesMoreMatchChrome has columns cut boxes side by side past their lines: a
+// forced break in one, one stretched on past its content, text-box-trim beside them and
+// before a block's bottom edges, and positioned boxes beside the lines of their block.
+func TestColumnLanesMoreMatchChrome(t *testing.T) {
+	const base = `.m { column-count: 2; column-gap: 20px; width: 400px; background: #eee; margin-bottom: 10px; }
+p { margin: 0; background: #cdf; } .f { display: flex; background: #cdf; }
+.g { display: grid; grid-template-columns: 1fr 1fr; background: #cdf; }
+table { border-spacing: 0; background: #cdf; } td { padding: 0; vertical-align: top; }
+.br { break-before: column; }`
+	const trim = "text-box: trim-both cap alphabetic"
+	m := func(style string, kids ...ui.Arg) *ui.Node {
+		return ui.Div(append([]ui.Arg{ui.Class("m"), ui.Style(style)}, kids...)...)
+	}
+	forced := func(a, b int) *ui.Node {
+		return ui.Div(rows("", a), ui.P(ui.Class("br"), ui.Text("after")), rows("", b))
+	}
+	cases := map[string]*ui.Document{
+		"a forced break in a flex item": styled(base,
+			m("", ui.Div(ui.Class("f"), forced(2, 2), rows("", 6))),
+		),
+		"a forced break in a grid item": styled(base,
+			m("", ui.Div(ui.Class("g"), forced(2, 2), rows("", 6))),
+		),
+		"a forced break in a cell": styled(base,
+			m("", ui.Table(ui.Tr(ui.Td(forced(2, 2)), ui.Td(rows("", 6))))),
+		),
+		"a forced break in a flex item after content": styled(base,
+			m("", rows("", 2), ui.Div(ui.Class("f"), forced(1, 2), rows("", 3)), rows("", 2)),
+		),
+		"a forced break in framed boxes side by side": styled(base+`.f > div { padding: 4px; border: 2px solid; }`,
+			m("", ui.Div(ui.Class("f"), forced(2, 2), rows("", 6))),
+			m("", ui.Div(ui.Class("f"), rows("", 1), forced(1, 3), rows("", 5))),
+			m("", ui.Div(ui.Class("g"), ui.Style("padding: 4px; gap: 4px"), forced(1, 3), rows("", 5))),
+			m("", ui.Table(ui.Style("border-spacing: 4px; border: 2px solid"),
+				ui.Tr(ui.Td(ui.Style("padding: 4px; border: 2px solid"), forced(1, 3)),
+					ui.Td(ui.Style("padding: 4px; border: 2px solid"), rows("", 5))))),
+		),
+		"a forced break beside a framed item that ends first": styled(`body { font-size: 12px; line-height: 16px; }
+p { margin: 0; } .m { columns: 2; column-gap: 24px; padding: 6px; } .br { break-before: column; }
+.f { display: flex; gap: 8px; } .f > div { flex: 1; padding: 4px; border: 2px solid; }`,
+			ui.Div(ui.Class("m"), ui.Div(ui.Class("f"),
+				ui.Div(ui.P(ui.Text("a")), ui.P(ui.Text("b")), ui.P(ui.Class("br"), ui.Text("c")), ui.P(ui.Text("d"))),
+				ui.Div(ui.P(ui.Text("1")), ui.P(ui.Text("2")), ui.P(ui.Text("3")), ui.P(ui.Text("4")),
+					ui.P(ui.Text("5")), ui.P(ui.Text("6"))))),
+		),
+		"a finished flex item stretched": styled(base,
+			m("", ui.Div(ui.Class("f"), rows("", 8), rows("", 2))),
+			m("", ui.Div(ui.Class("g"), rows("", 8), rows("", 2))),
+			m("", ui.Table(ui.Tr(ui.Td(rows("", 8)), ui.Td(rows("", 2))))),
+		),
+		"trim before padding": styled(base,
+			m(trim, rows("padding-bottom: 6px", 3), rows("", 3)),
+			m(trim, rows("border-bottom: 4px solid", 3), rows("", 4)),
+			m(trim, ui.Div(ui.Style("padding-bottom: 5px"), rows("", 3)), rows("", 4)),
+			m(trim, rows("padding-bottom: 6px", 7)),
+		),
+		"trim in lanes": styled(base,
+			m("", ui.Div(ui.Class("f"), rows("", 6), rows("", 4))),
+			m(trim, ui.Div(ui.Class("f"), rows("", 6), rows("", 4))),
+			m(trim, rows("", 1), ui.Div(ui.Class("g"), rows("", 6), rows("", 5))),
+			m(trim, ui.Table(ui.Tr(ui.Td(rows("", 6)), ui.Td(rows("", 3))))),
+		),
+		"a positioned box beside lines": styled(base,
+			m("", ui.Div(ui.Style("position: relative; padding-right: 150px"), rows("", 7),
+				ui.Div(ui.Style("position: absolute; top: 0; right: 0; width: 140px; background: #fcc"),
+					rows("line-height: 23px", 5)))),
+			m("height: 54px; column-fill: auto", ui.Div(ui.Style("position: relative"), rows("", 2),
+				ui.Div(ui.Style("position: absolute; top: 9px; left: 60px; width: 100px; background: #fcc"),
+					rows("", 8)))),
+		),
+		"a positioned box lower down beside lines": styled(base,
+			m("", ui.Div(ui.Style("position: relative; padding-right: 150px"), rows("", 9),
+				ui.Div(ui.Style("position: absolute; top: 30px; right: 0; width: 140px; background: #fcc"),
+					rows("line-height: 13px", 6)))),
+		),
+	}
+	for name, page := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, page, geom.V2(900, 1400))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}

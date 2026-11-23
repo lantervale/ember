@@ -40,6 +40,7 @@
   "collapsed-styles": 0.0015,
   "column-cuts": 0.005,
   "column-cuts-more": 0.0075,
+  "column-lanes-more": 0.0065,
   "line-clamp-past": 0.006,
   "inline-opacity": 0.0045,
   "column-span": 0.0099,
