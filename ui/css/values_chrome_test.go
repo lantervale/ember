@@ -60,7 +60,7 @@ var colourFunctions = []string{
 var refusedColours = []string{
 	"rgb(10, 20 30)", "hsl(120, 50, 50)", "hsl(120 50% 50% 0.5)", "rgb(from red r g)",
 	"rgb(from red x g b)", "rgb(calc(1px) 0 0)", "color(foo 0 0 0)", "color-mix(in srgb, red)",
-"color-mix(in foo, red, blue)", "color-mix(in srgb longer hue, red, blue)",
+	"color-mix(in foo, red, blue)", "color-mix(in srgb longer hue, red, blue)",
 	"color-mix(in srgb, red -10%, blue)", "lab(from red l a)", "hwb(10, 20%, 30%)", "rgb(from red r, g, b)",
 }
 

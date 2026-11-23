@@ -437,18 +437,23 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 // blinkSettings has Chrome answer the media features as m does, whatever
 // the machine prefers and points with: headless Chrome reads the
 // system's appearance and devices. The pointer and hover types are
-// Chrome's flags, none 1, coarse 2 and fine 4, none 1 and hover 2.
+// Chrome's flags, none 1, coarse 2 and fine 4, none 1 and hover 2; its
+// contrasts are more 0, less 1, no-preference 2 and custom 3.
 func blinkSettings(m css.Media) string {
-	scheme, pointer, hover, pointers := 1, 4, 2, 4
+	scheme, pointer, hover, pointers, hovers := 1, 4, 2, 4, 2
 	if m.Dark {
 		scheme = 0
 	}
-	if m.Touch {
+	switch {
+	case m.TouchOnly:
+		pointer, hover, pointers, hovers = 2, 1, 2, 1
+	case m.Touch:
 		pointer, hover, pointers = 2, 1, 6
 	}
+	contrast := map[string]int{"more": 0, "less": 1, "": 2, "custom": 3}[m.Contrast]
 	return fmt.Sprintf("--blink-settings=preferredColorScheme=%d,prefersReducedMotion=%t,primaryPointerType=%d,"+
-		"availablePointerTypes=%d,primaryHoverType=%d,availableHoverTypes=2",
-		scheme, m.ReducedMotion, pointer, pointers, hover)
+		"availablePointerTypes=%d,primaryHoverType=%d,availableHoverTypes=%d,preferredContrast=%d,inForcedColors=%t",
+		scheme, m.ReducedMotion, pointer, pointers, hover, hovers, contrast, m.ForcedColors)
 }
 
 // done reports whether Chrome finished action before it exited: a whole
