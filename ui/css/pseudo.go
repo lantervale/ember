@@ -63,8 +63,9 @@ var (
 		"border-image-source", "border-image-slice", "border-image-width", "border-image-outset",
 		"border-image-repeat"}, firstLineProps...)
 	placeholderProps = []string{"color", "opacity"}
-	selectionProps   = []string{"color", "background-color", "background"}
-	backdropProps    = []string{"background-color", "background", "opacity"}
+	selectionProps   = []string{"color", "background-color", "background", "text-shadow", shortDecoration,
+		"text-decoration-line", "text-decoration-style", "text-decoration-color", "text-decoration-thickness"}
+	backdropProps = []string{"background-color", "background", "opacity"}
 )
 
 // pseudoElements are the pseudo-elements Chrome 157 reads
@@ -148,6 +149,20 @@ func takesDeclared(name, property string) bool {
 		return true
 	}
 	return slices.ContainsFunc(shorthands[property], func(l string) bool { return takesProperty(name, l) })
+}
+
+// windowInactive is cs without the :window-inactive that follows its
+// ::selection, and whether it had one: the one pseudo-class Chrome takes
+// after a pseudo-element that ui has.
+func windowInactive(cs []Component) ([]Component, bool) {
+	n := len(cs)
+	if n < 4 || cs[n-2].Kind != Colon || cs[n-3].Kind == Colon || !isWord(cs[n-1], "window-inactive") {
+		return cs, false
+	}
+	if name, k, err := pseudoElementAt(cs[:n-2]); err != nil || k == 0 || name != kwSelection {
+		return cs, false
+	}
+	return cs[:n-2], true
 }
 
 // pseudoElementAt reads the pseudo-element a complex selector ends with:

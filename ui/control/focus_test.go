@@ -111,3 +111,15 @@ func TestFocusLeavesATargetThatIsGone(t *testing.T) {
 	assert.False(t, ok)
 	assert.False(t, f.Active())
 }
+
+func TestMoveFromComesInFromOutsideAndShows(t *testing.T) {
+	f := &control.Focus[string]{}
+	f.SetTargets(grid())
+	assert.True(t, f.MoveFrom(geom.Rect{X: 120, Y: 60, W: 50, H: 20}, geom.V2(0, -1)), "up from below the grid")
+	assert.Equal(t, "wide", f.Key())
+	assert.True(t, f.Active())
+	assert.True(t, f.MoveFrom(geom.Rect{X: 200, Y: 0, W: 50, H: 20}, geom.V2(-1, 0)), "left from its right")
+	assert.Equal(t, "c", f.Key())
+	assert.False(t, f.MoveFrom(geom.Rect{X: 0, Y: -40, W: 170, H: 20}, geom.V2(0, -1)), "nothing above")
+	assert.Equal(t, "c", f.Key())
+}

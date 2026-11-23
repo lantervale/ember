@@ -14,6 +14,7 @@ x/image's sfnt reads no `fvar` or `gvar`, so a variable font drew its default in
 - `internal/varfont` reads `fvar`, `avar`, `gvar` (shared and private points, inferred points, intermediate regions, composites, phantom points) and `HVAR` beside sfnt: a glyph's outline and advance at any place on the axes. Layout measures a web face's advances there, and twod's glyphs take the instance as part of their `draw.Look`, rasterized from varfont's outline as made-up faces are.
 - A face's instance is Chrome's: the text's `font-weight` and `font-stretch`, clamped to the face's descriptors (the font's own axes when it gives none, or `auto`), on `wght` and `wdth`, then `font-variation-settings` on any axis, the last of a tag winning.
 - `font-display` is timed from when text first needs the file, on the Document's clock (the World's real time): 3 s block for `auto` and `block`, 100 ms for `fallback` and `optional`, none for `swap`; a file landing after 3 s (`fallback`) or 100 ms (`optional`) is a failed one. Text in its block period is laid out in the next family and drawn invisible. A Document never drawn has no clock and takes its fonts whenever they land.
+- `font-synthesis` without `small-caps` draws the small capitals the face lacks as the letters are, as Chrome does; its initial value is Chrome's, `weight style small-caps`.
 
 ## Alternatives
 

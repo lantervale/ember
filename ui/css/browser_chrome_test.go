@@ -390,8 +390,8 @@ return out;`, &chromes)
 	px := func(v float32) string { return fmt.Sprintf("%gpx", v) }
 	for i, n := range d.Body().Children() {
 		s := dom.Data(n).Style
-		got := [4]string{px(s.WordGap()), px(s.LetterSpacing), "none", "none"}
-		if s.LetterSpacing == 0 {
+		got := [4]string{px(s.WordGap()), px(s.LetterGap()), "none", "none"}
+		if s.LetterGap() == 0 {
 			got[1] = "normal"
 		}
 		if s.TextTransform != 0 {

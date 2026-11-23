@@ -47,3 +47,21 @@ span { display: inline-block; font: 24px Auto, monospace; }
 	assert.Empty(t, d.Warnings())
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
+
+func TestFontSynthesisWithoutSmallCapsDrawsTheLettersAsTheyAreAsInChrome(t *testing.T) {
+	d := ui.NewDocument(ui.FetchFonts(foundry(t)), ui.CSS(`
+@font-face { font-family: Plain; src: url(go-regular-latin.woff2); }
+span { display: inline-block; font: 20px Plain, monospace; font-variant-caps: small-caps; }
+.none { font-synthesis: none; }
+.weight { font-synthesis: weight style; }
+.caps { font-synthesis: small-caps; }
+.all { font-variant-caps: all-small-caps; font-synthesis: weight; }`))
+	for _, class := range []string{"", "none", "weight", "caps", "all"} {
+		d.Body().Append(ui.Div(ui.Span(ui.Class(class), ui.Text("Small Capitals, made up or not"))))
+	}
+	size := geom.V2(600, 300)
+	landed(t, d, size)
+	r := chrome.Match(t, d, size)
+	assert.Empty(t, d.Warnings())
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

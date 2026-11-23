@@ -34,6 +34,9 @@ type Media struct {
 	// cap, ic, lh and their root ones) stand for: the initial font's, at
 	// 16 pixels; zero for CSS's fallbacks.
 	Font FontUnits
+	// Inactive is the Document's window not being the active one, which
+	// no media feature asks: ::selection:window-inactive holds then.
+	Inactive bool
 }
 
 func (m Media) dppx() float64 {
