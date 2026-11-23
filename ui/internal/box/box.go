@@ -62,8 +62,14 @@ type Fragment struct {
 	Style *style.Computed
 	// Before and After are the text of the paragraph round Text, which it
 	// is shaped between, where a letter of Text may join theirs; empty
-	// elsewhere.
+	// elsewhere. Where Lead or Trail is set, they are the text round them.
 	Before, After string
+	// Lead and Trail are the text beside Text on its line that Chrome
+	// shapes as one with it, the runs on either side sharing its font and
+	// spacing across edges that take no room: Text draws the glyphs whose
+	// clusters start in it, a ligature or a kerned pair across an element's
+	// edge the first element's.
+	Lead, Trail string
 }
 
 // Shown is f's text as it is drawn from the left: right to left text reversed, by
@@ -275,13 +281,22 @@ type ContextFonts interface {
 	AdvanceIn(f style.Font, text, before, after string) float32
 }
 
+// WholeFonts is Fonts that shapes text as one with the text beside it:
+// AdvanceAmid is the advance of text's own glyphs, lead+text+trail
+// shaped as one text between before and after, a glyph text's where its
+// cluster starts in it.
+type WholeFonts interface {
+	AdvanceAmid(f style.Font, text, lead, trail, before, after string) float32
+}
+
 // InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the
 // stretches of x where the glyphs of text, drawn from 0 on its baseline
 // with letter points after each character and word after each word
 // separator, cross the band from top to bottom below the baseline, one a
-// glyph.
+// glyph; none for the glyphs of characters whose ink Chrome leaves whole
+// under text-decoration-skip-ink: all, or auto unless all (fonts.SkipsInk).
 type InkFonts interface {
-	Intercepts(f style.Font, text string, letter, word, top, bottom float32) [][2]float32
+	Intercepts(f style.Font, text string, letter, word, top, bottom float32, all bool) [][2]float32
 }
 
 // FallbackFonts is Fonts that draws some characters from other faces:
@@ -290,6 +305,27 @@ type InkFonts interface {
 // line to fit them, not the inline box holding them.
 type FallbackFonts interface {
 	FallbackMetrics(f style.Font, text string) (Metrics, bool)
+}
+
+// VerticalFonts is Fonts that knows its faces' vertical metrics (vhea, vmtx, VORG):
+// Upright is how one grapheme cluster standing in a vertical line is set in its glyphs
+// for vertical lines (vert), how far it takes down the line and how far below the top of
+// that room its baseline stands; ok false when its face has none.
+type VerticalFonts interface {
+	Upright(f style.Font, cluster string) (advance, baseline float32, ok bool)
+}
+
+// Upright is how cluster, standing in a vertical line in f, is set: by its face's
+// vertical metrics, or else, as Chrome's, in a room of its ascent and descent with its
+// baseline the ascent below its top.
+func Upright(fonts Fonts, f style.Font, cluster string) (float32, float32) {
+	if v, ok := fonts.(VerticalFonts); ok {
+		if a, b, has := v.Upright(f, cluster); has {
+			return a, b
+		}
+	}
+	m := fonts.Metrics(f)
+	return m.Ascent + m.Descent, m.Ascent
 }
 
 // Images gives layout the natural size of a replaced element's picture,

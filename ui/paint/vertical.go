@@ -1,9 +1,8 @@
 package paint
 
 import (
-	"unicode/utf8"
-
 	"github.com/lantervale/ember/geom"
+	textshape "github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -41,12 +40,19 @@ func (p *painter) verticalText(e entry, alpha float32) {
 				p.horizontalText(entry{b: &one, clip: e.clip, pseudo: e.pseudo}, alpha)
 				continue
 			}
-			// the centre of the character's room, on the line's central baseline
+			// the glyphs centred on the line's central baseline, their room's top where it
+			// starts on it; combined text is set across, without vertical alternates
+			vst := st
+			if !st.Combine {
+				vst = p.standing(st)
+				one.Lines[0].Style = vst
+			}
 			m := p.fonts.Metrics(st.Font)
 			mid := turn.Xform(geom.V2(seg.Rect.X+seg.Rect.W/2, line.Baseline-(m.Ascent-m.Descent)/2))
-			w := p.fonts.Advance(st.Font, seg.Text) + st.Spacing(seg.Text)
-			one.Lines[0].Rect = geom.Rect{X: mid.X - w/2, Y: mid.Y - seg.Rect.W/2, W: w, H: seg.Rect.W}
-			one.Lines[0].Baseline = mid.Y + (m.Ascent-m.Descent)/2
+			top := mid.Y - seg.Rect.W/2
+			w := p.fonts.Advance(vst.Font, seg.Text) + st.Spacing(seg.Text)
+			one.Lines[0].Rect = geom.Rect{X: mid.X - w/2, Y: top, W: w, H: seg.Rect.W}
+			one.Lines[0].Baseline = top + seg.baseline
 			p.s.SetTransform(saved)
 			if k := seg.Rect.W / w; st.Combine && k < 1 {
 				// combined text wider than its em is pressed into it
@@ -58,50 +64,55 @@ func (p *painter) verticalText(e entry, alpha float32) {
 	}
 }
 
+// standing is st with the features of glyphs standing in vertical lines (vert) first
+// among its own, made once a paint.
+func (p *painter) standing(st *style.Computed) *style.Computed {
+	if v, ok := p.standings[st]; ok {
+		return v
+	}
+	if p.standings == nil {
+		p.standings = map[*style.Computed]*style.Computed{}
+	}
+	v := *st
+	v.Font.Features = textshape.Splice(st.Font.Features, "vert")
+	p.standings[st] = &v
+	return &v
+}
+
 // orientedPart is a part of a vertical line's fragment, in the line's frame: its glyphs
-// turned with it, or one character standing upright.
+// turned with it, or one cluster standing upright, its baseline that far below the top of
+// its room.
 type orientedPart struct {
 	box.Fragment
-	upright bool
+	upright  bool
+	baseline float32
 }
 
 // orientedParts cuts f, a fragment of a vertical line of style st in the line's frame,
-// into its turned parts and its upright characters, each over the room it takes, as
-// layout measured them.
+// into its turned parts and its upright clusters, each over the room it takes, as layout
+// measured them.
 func (p *painter) orientedParts(f box.Fragment, st *style.Computed) []orientedPart {
 	if st.Combine && st.Mode.Vertical() {
 		f.Rect.W = st.Font.Size
-		return []orientedPart{{Fragment: f, upright: true}}
+		m := p.fonts.Metrics(st.Font)
+		return []orientedPart{{Fragment: f, upright: true, baseline: (st.Font.Size + m.Ascent - m.Descent) / 2}}
 	}
 	if !st.Stands() {
 		return []orientedPart{{Fragment: f}}
 	}
 	var out []orientedPart
 	x := f.Rect.X
-	add := func(s string, upright bool) {
-		if s == "" {
-			return
-		}
+	style.Oriented(f.Text, st.Orientation, func(s string, upright bool) {
 		w := p.fonts.Advance(st.Font, s)
+		var base float32
 		if upright {
-			m := p.fonts.Metrics(st.Font)
-			w = m.Ascent + m.Descent
+			w, base = box.Upright(p.fonts, st.Font, s)
 		}
 		w += st.Spacing(s)
 		part := f
 		part.Text, part.Rect.X, part.Rect.W = s, x, w
-		out = append(out, orientedPart{Fragment: part, upright: upright})
+		out = append(out, orientedPart{Fragment: part, upright: upright, baseline: base})
 		x += w
-	}
-	from := 0
-	for i, r := range f.Text {
-		if style.Upright(r, st.Orientation) {
-			add(f.Text[from:i], false)
-			n := i + utf8.RuneLen(r)
-			add(f.Text[i:n], true)
-			from = n
-		}
-	}
-	add(f.Text[from:], false)
+	})
 	return out
 }

@@ -196,8 +196,9 @@ func (p *Plan) stageLookups(t Tag) []*lookup {
 }
 
 // Mentions reports whether one of p's lookups may start at glyph g,
-// follow a glyph it starts at in a pair it adjusts, or join it into a
-// ligature: whether g, a space, ties the words on either side of it.
+// follow a glyph it starts at in a pair it adjusts, join it into a
+// ligature or read it round the glyph it starts at in a context: whether
+// g, a space, ties the words on either side of it.
 func (p *Plan) Mentions(g uint16) bool {
 	if p.first.has(g) || p.KernTable() {
 		return true
@@ -216,9 +217,13 @@ func (p *Plan) Mentions(g uint16) bool {
 }
 
 // seconds adds the glyphs after the first that subtable s of lk may
-// take, as the second of a pair or a ligature's component, to set.
+// take, as the second of a pair or a ligature's component, to set, and
+// those a context reads besides the glyph it starts at; of a context by
+// classes, the glyphs its classes name.
 func (lk *lookup) seconds(s data, set *glyphSet) {
 	switch {
+	case lk.kind == context || lk.kind == chain:
+		contextGlyphs(lk.kind == chain, s, set)
 	case lk.kind == ligature && s.u16(0) == 1:
 		for k := range int(s.u16(4)) {
 			ls := s.sub(6 + 2*k)
@@ -257,6 +262,67 @@ func (lk *lookup) seconds(s data, set *glyphSet) {
 				}
 			}
 		}
+	}
+}
+
+// contextGlyphs adds to set the glyphs context subtable s, chained or
+// not, reads besides the first of its input.
+func contextGlyphs(chained bool, s data, set *glyphSet) {
+	switch format := s.u16(0); {
+	case format == 2 && chained:
+		for _, at := range []int{4, 6, 8} {
+			s.sub(at).eachClassed(set.add)
+		}
+	case format == 2:
+		s.sub(4).eachClassed(set.add)
+	case format == 1:
+		for k := range int(s.u16(4)) {
+			rules := s.sub(6 + 2*k)
+			for n := range int(rules.u16(0)) {
+				ruleGlyphs(chained, rules.sub(2+2*n), set)
+			}
+		}
+	case format == 3 && chained:
+		back := int(s.u16(2))
+		in := 4 + 2*back
+		count := int(s.u16(in))
+		ahead := in + 2 + 2*count
+		for c := range back {
+			s.sub(4 + 2*c).eachCovered(set.add)
+		}
+		for c := 1; c < count; c++ {
+			s.sub(in + 2 + 2*c).eachCovered(set.add)
+		}
+		for c := range int(s.u16(ahead)) {
+			s.sub(ahead + 2 + 2*c).eachCovered(set.add)
+		}
+	case format == 3:
+		for c := 1; c < int(s.u16(2)); c++ {
+			s.sub(6 + 2*c).eachCovered(set.add)
+		}
+	}
+}
+
+// ruleGlyphs adds to set the glyphs a rule of a context by glyphs reads:
+// its input's after the first, and a chained one's backtrack and
+// lookahead.
+func ruleGlyphs(chained bool, rule data, set *glyphSet) {
+	if !chained {
+		for c := 1; c < int(rule.u16(0)); c++ {
+			set.add(rule.u16(4 + 2*(c-1)))
+		}
+		return
+	}
+	at := 0
+	for part := range 3 {
+		count, from := int(rule.u16(at)), 0
+		if part == 1 {
+			from = 1
+		}
+		for c := from; c < count; c++ {
+			set.add(rule.u16(at + 2 + 2*(c-from)))
+		}
+		at += 2 + 2*(count-from)
 	}
 }
 

@@ -187,7 +187,7 @@ func (t *Text) equal(o *Text) bool {
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
 		t.TabSize == o.TabSize &&
-		t.InkThrough == o.InkThrough &&
+		t.SkipInk == o.SkipInk &&
 		t.WrapStyle == o.WrapStyle &&
 		t.Hyphens == o.Hyphens &&
 		t.HyphenChar == o.HyphenChar &&
