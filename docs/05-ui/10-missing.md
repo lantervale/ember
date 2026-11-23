@@ -86,12 +86,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
 | a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
-| an absolutely positioned box of a vertical box whose containing block is outside it, in another frame (a box of `vertical-rl` in a page of horizontal lines) | placed as its containing block's frame had it, sideways, where Chrome places it in that block's writing mode |
+| a picture absolutely positioned in a box of another writing mode than its containing block's ([decision 0204](../99-decisions/0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md)) | its natural size turned into its parent's frame, where Chrome takes its containing block's |
 | a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |
 | `position: sticky` in vertical writing modes | not checked against Chrome |
 | a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |
 | the rules between columns of a multi-column box of vertical lines | drawn as if its columns stood side by side |
-| an inline table on a vertical line, and the last baselines of grid items in vertical writing modes | aligned off Chrome's line by up to the table's width, the cause not yet found (WPT's `inline-table-inline-block-baseline-vert-rl`, `grid-abspos-staticpos-align-self-vertWM-last-baseline-*`) |
+| `first baseline`, `last baseline`, `safe` and `unsafe` in `align-self`, `align-items`, `justify-self`, `justify-items` and `align-content` | the declaration dropped: an item aligns by `auto`, where Chrome reads them (an absolutely positioned box's static place in a grid, which Chrome puts at the start for `last baseline`, lands there all the same) |
 
 ## Backgrounds and borders
 
