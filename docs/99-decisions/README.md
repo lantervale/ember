@@ -190,6 +190,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0187 | [Han punctuation is trimmed by halt, and autospace is room after a character](0187-han-punctuation-is-trimmed-by-halt-and-autospace-is-room-after-a-character.md) | rendering |
 | 0188 | [A styled first line measures its whole block](0188-a-styled-first-line-measures-its-whole-block.md) | api |
 | 0189 | [An underline is placed by its decorating box, as Chrome places it](0189-an-underline-is-placed-by-its-decorating-box-as-chrome-places-it.md) | rendering |
+| 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
 
 ## Writing one
 

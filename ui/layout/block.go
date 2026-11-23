@@ -523,6 +523,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			lastInFlow = i
 		}
 	}
+	// floats are the floats since the last block in the flow: those an anonymous block's
+	// lines go round stand on its first line in Chrome.
+	floats := 0
 	for i, it := range items {
 		if outOfFlow(it.position) {
 			it.staticPosition = point{rInset.l, yForAbsolute}
@@ -584,6 +587,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 			overflow = overflow.union(overflowContribution(contributionLoc, lo.size,
 				lo.overflow.rect, it.border, it.overflow, container, negativeEdges(nonAuto)))
+			floats++
 			continue
 		}
 
@@ -789,6 +793,10 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, finalSize,
 			lo.overflow.rect, it.border, it.overflow, container, negativeEdges(resolved)))
+		if run == performLayout && floats > 0 {
+			t.raiseFloats(items[:i], floats, it.node, finalSize.w)
+		}
+		floats = 0
 		if in.clamp.lines > 0 {
 			left -= lo.lines
 			if lo.clamped {
@@ -896,4 +904,24 @@ func blockAlignOffset(st *style.Computed, free float32) float32 {
 		return free
 	}
 	return 0
+}
+
+// raiseFloats moves the last count floats of items, which stand before the anonymous
+// block anon of width w, up by what text-box-trim takes off its first line: Chrome lays
+// them out on that line, which the trim raises with what stands on it.
+func (t *tree) raiseFloats(items []*blockItem, count int, anon *node, w float32) {
+	c := anon.inline
+	if c == nil || anon.box.Kind != box.AnonymousBlock {
+		return
+	}
+	top, _ := t.trims(c, c.lines(w))
+	if top == 0 {
+		return
+	}
+	for i := len(items) - 1; i >= 0 && count > 0; i-- {
+		if it := items[i]; it.float != style.FloatNone && !outOfFlow(it.position) && it.final != nil {
+			it.final.location.y -= top
+			count--
+		}
+	}
 }

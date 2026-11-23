@@ -229,6 +229,93 @@ func TestTextBoxTrimsAsChrome(t *testing.T) {
 	}
 }
 
+func TestTextBoxTrimsBeyondBlocksAsChrome(t *testing.T) {
+	box := "background: #eee; margin: 4px 0; "
+	trim := "text-box: trim-both cap alphabetic; "
+	cols := "column-count: 2; width: 300px; "
+	long := sentence + " " + sentence
+	item := func(s string) *ui.Node { return ui.Div(ui.Style("background: #ccc"), ui.Text(s)) }
+	float := func(style, s string) *ui.Node {
+		return ui.Div(ui.Style("float: left; background: #ccc; "+style), ui.Text(s))
+	}
+	para := func(style, s string) *ui.Node { return ui.P(ui.Style("margin: 0; "+style), ui.Text(s)) }
+	cases := map[string]*ui.Document{
+		"flex": page(
+			ui.Div(ui.Style(box+trim+"display: flex; gap: 8px"), item("One"), item("Two lines of text in an item")),
+			ui.Div(ui.Style(box+trim+"display: flex; flex-direction: column"), item("First"), item("Last")),
+			ui.Div(ui.Style(box+trim+"display: flex; align-items: baseline"),
+				ui.Div(ui.Style("font-size: 30px"), ui.Text("Big")), item("small")),
+			ui.Div(ui.Style(box+trim+"display: flex"), ui.Text("Anonymous item")),
+		),
+		"grid": page(
+			ui.Div(ui.Style(box+trim+"display: grid; grid-template-columns: 1fr 1fr"),
+				item("A"), item("B"), item("C"), item("D")),
+		),
+		"block round flex and grid": page(
+			ui.Div(ui.Style(box+trim), ui.Div(ui.Style("display: flex"), item("Flex child"))),
+			ui.Div(ui.Style(box+trim), ui.Div(ui.Style("display: grid"), item("Grid child"))),
+		),
+		"text between blocks": page(
+			ui.Div(ui.Style(box+trim), para("", "First"), ui.Text("Between"), para("", "Last")),
+		),
+		"table": page(
+			ui.Table(ui.Tr(ui.Td(ui.Style("background: #ccc; "+trim), ui.Text("Cell")),
+				ui.Td(ui.Style("background: #ccc"), ui.Text("Other")))),
+			ui.Table(ui.Style(box+trim), ui.Tr(ui.Td(ui.Text("Table trimmed")))),
+			ui.Div(ui.Style(box+trim), ui.Table(ui.Tr(ui.Td(ui.Text("Table in a block"))))),
+		),
+		"columns": page(
+			ui.Div(ui.Style(box+trim+cols), ui.Text(sentence)),
+			ui.Div(ui.Style(box+"text-box: trim-start cap alphabetic; "+cols), ui.Text(sentence)),
+			ui.Div(ui.Style(box+"text-box: trim-end cap alphabetic; "+cols), ui.Text(sentence)),
+			ui.Div(ui.Style(box+trim+"column-count: 3; width: 400px"), ui.Text(long)),
+			ui.Div(ui.Style(box+"text-box: trim-both ex alphabetic; line-height: 2; "+cols), ui.Text(long)),
+		),
+		"columns of blocks": page(
+			ui.Div(ui.Style(box+trim+cols), para("", sentence), para("", "Last")),
+			ui.Div(ui.Style(box+"text-box: trim-start cap alphabetic; "+cols), para("", sentence), para("", "Last")),
+			ui.Div(ui.Style(box+trim+"column-count: 3; width: 400px"), para("", sentence), para("", sentence)),
+			ui.Div(ui.Style(box+trim+cols), para("margin-bottom: 10px", sentence), para("", sentence)),
+			ui.Div(ui.Style(box+trim+cols), para("", sentence), para("padding-top: 6px", sentence)),
+		),
+		"columns of a set height": page(
+			ui.Div(ui.Style(box+trim+cols+"height: 100px"), ui.Text(long)),
+		),
+		"first float": page(
+			ui.Div(ui.Style(box+trim), float("", "Float"), ui.Text("After the float")),
+			ui.Div(ui.Style(box+trim), ui.Div(ui.Style("float: right; background: #ccc"), ui.Text("Float")),
+				ui.Text("After the float")),
+			ui.Div(ui.Style(box+trim), float("width: 50px", "Float of lines"), ui.Text("After")),
+			ui.Div(ui.Style(box+trim), float("margin-top: 5px", "Float"), ui.Text("After")),
+			ui.Div(ui.Style(box+trim), float("", "One"), float("", "Two"), ui.Text("After")),
+		),
+		"floats among the lines": page(
+			ui.Div(ui.Style(box+trim+"width: 200px"), ui.Text("Before "), float("", "Float"), ui.Text(sentence)),
+			ui.Div(ui.Style(box+trim), ui.Div(ui.Span(ui.Style("float: left; background: #ccc"), ui.Text("Float")),
+				ui.Text("In a block"))),
+			ui.Div(ui.Style(box+trim), ui.Span(ui.Text("A "),
+				ui.Span(ui.Style("float: left; background: #ccc"), ui.Text("Float")), ui.Text("in a span"))),
+			ui.Div(ui.Style(box+trim), float("", "Float"), para("", "A paragraph")),
+		),
+		"first inline block": page(
+			ui.Div(ui.Style(box+trim),
+				ui.Span(ui.Style("display: inline-block; background: #ccc; width: 60px"), ui.Text("Inline block lines")),
+				ui.Text(" after")),
+			ui.Div(ui.Style(box+trim),
+				ui.Span(ui.Style("display: inline-block; background: #ccc; font-size: 30px"), ui.Text("Big")),
+				ui.Text(" after")),
+			ui.Div(ui.Style(box+trim), ui.Span(ui.Style("display: inline-flex; background: #ccc"), ui.Text("Flex"))),
+		),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+			matchText(t, d, geom.V2(800, 600))
+		})
+	}
+}
+
 // spanned is text with each word in a span of its own, so the boxes show
 // which line each word stands on.
 func spanned(style, text string) *ui.Node {
