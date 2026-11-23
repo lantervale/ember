@@ -671,6 +671,12 @@ func (c *inlineContent) first() bool {
 func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]bool, afterSpace bool,
 	levels []bidi.Level) bool {
 	ws := r.st.WhiteSpace
+	if r.st.Combine && r.st.Mode.Vertical() {
+		// text-combine-upright: the run is one piece, set across one em of the line
+		c.pieces = append(c.pieces, piece{kind: word, run: i, text: collapsedBlanks(r.text, ws),
+			width: r.st.Font.Size})
+		return false
+	}
 	defer c.tieSpaces(fonts, r.st, len(c.pieces))
 	var b strings.Builder
 	// n counts the characters read, and from is where the text in b starts; level is the

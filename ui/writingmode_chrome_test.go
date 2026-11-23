@@ -66,6 +66,13 @@ func TestVerticalTextOrientationMatchesChrome(t *testing.T) {
 			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("一丁丂", "abc", "Hi")...)))
 			return d
 		},
+		"text-combine-upright sets digits across one character's room": func(t *testing.T) *ui.Document {
+			d := cjkDocument(t, `.v { writing-mode: vertical-rl; height: 200px; } .c { text-combine-upright: all; }`)
+			d.Body().Append(ui.Div(ui.Class("v"), ui.P(ui.Span(ui.Text("一丁")),
+				ui.Span(ui.Class("c"), ui.Text("12")), ui.Span(ui.Text("丂七")),
+				ui.Span(ui.Class("c"), ui.Text("2024")), ui.Span(ui.Text("abc")))))
+			return d
+		},
 		"sideways turns the ideographs too": func(t *testing.T) *ui.Document {
 			d := cjkDocument(t, `.v { writing-mode: vertical-rl; text-orientation: sideways; height: 160px; }`)
 			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("一丁丂七", "abc", "丄丅")...)))

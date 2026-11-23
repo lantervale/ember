@@ -12,7 +12,8 @@ import (
 // horizontal line it is in its frame, turned a quarter clockwise onto the page, its
 // glyphs' tops to the right, or anticlockwise for sideways-lr, their tops to the left.
 // The characters standing upright (text-orientation) are drawn unturned, each centred
-// on the line in the room it takes along it.
+// on the line in the room it takes along it, and text-combine-upright's text across
+// the em it takes, pressed into it when wider.
 func (p *painter) verticalText(e entry, alpha float32) {
 	saved := p.s.Transform()
 	defer p.s.SetTransform(saved)
@@ -47,6 +48,11 @@ func (p *painter) verticalText(e entry, alpha float32) {
 			one.Lines[0].Rect = geom.Rect{X: mid.X - w/2, Y: mid.Y - seg.Rect.W/2, W: w, H: seg.Rect.W}
 			one.Lines[0].Baseline = mid.Y + (m.Ascent-m.Descent)/2
 			p.s.SetTransform(saved)
+			if k := seg.Rect.W / w; st.Combine && k < 1 {
+				// combined text wider than its em is pressed into it
+				p.s.SetTransform(saved.Mul(geom.Transform2D{X: geom.V2(k, 0), Y: geom.V2(0, 1),
+					Origin: geom.V2(mid.X*(1-k), 0)}))
+			}
 			p.horizontalText(entry{b: &one, clip: e.clip, pseudo: e.pseudo}, alpha)
 		}
 	}
@@ -63,6 +69,10 @@ type orientedPart struct {
 // into its turned parts and its upright characters, each over the room it takes, as
 // layout measured them.
 func (p *painter) orientedParts(f box.Fragment, st *style.Computed) []orientedPart {
+	if st.Combine && st.Mode.Vertical() {
+		f.Rect.W = st.Font.Size
+		return []orientedPart{{Fragment: f, upright: true}}
+	}
 	if !st.Stands() {
 		return []orientedPart{{Fragment: f}}
 	}

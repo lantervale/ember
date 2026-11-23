@@ -2,7 +2,8 @@
 // with their glyphs turned a quarter clockwise, vertical-lr stacking from the left,
 // sideways-lr's lines running up, underlined and padded inline elements on vertical
 // lines, a flex row running down a box, a horizontal block in a vertical one, and
-// letters standing upright (text-orientation: upright).
+// letters standing upright (text-orientation: upright), and numbers set across one
+// character's room (text-combine-upright).
 package main
 
 import (
@@ -26,6 +27,7 @@ u { text-decoration-color: #3a6fd8; }
 .row div { inline-size: 30px; background-color: #3a6fd8; }
 .row .grow { flex: 1; }
 .upright { text-orientation: upright; }
+.tcy { text-combine-upright: all; color: #c8473d; }
 .across { writing-mode: horizontal-tb; width: 90px; background-color: #e8e2d6; margin-block: 4px; }
 `
 
@@ -41,6 +43,8 @@ func main() {
 		ui.Div(ui.Class("box", "rl"), ui.P(ui.Text("Before")),
 			ui.Div(ui.Class("across"), ui.Text("A horizontal block inside.")), ui.P(ui.Text("After"))),
 		ui.Div(ui.Class("box", "rl", "upright"), ui.P(ui.Text("Upright Hi"))),
+		ui.Div(ui.Class("box", "rl"), ui.P(ui.Text("Day "), ui.Span(ui.Class("tcy"), ui.Text("12")), ui.Text(" of "),
+			ui.Span(ui.Class("tcy"), ui.Text("2024")))),
 	)
-	pages.Run(d, 440, 240)
+	pages.Run(d, 480, 240)
 }
