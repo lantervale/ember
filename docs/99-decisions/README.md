@@ -181,6 +181,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0176 | [Vertical writing modes are laid out turned into their own frame](0176-vertical-writing-modes-are-laid-out-turned-into-their-own-frame.md) | rendering |
 | 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
 | 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
+| 0185 | [Boxes side by side are lanes, and a framed block round a spanner is laid out per part](0185-boxes-side-by-side-are-lanes-and-a-framed-wrapper-is-laid-out-per-part.md) | rendering |
 
 ## Writing one
 

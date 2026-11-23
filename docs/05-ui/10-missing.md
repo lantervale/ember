@@ -74,11 +74,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `column-span: all` under a block with a margin, a border or padding, deeper in the container than its children | laid out in its column, where Chrome spans it and cuts the blocks round it, their margins, borders and padding on their parts |
-| a table row cut by a column | kept whole, where Chrome cuts its cells, each where its own content allows |
-| boxes side by side cut by a column (a flex row's items, a grid row's, a positioned box beside the lines of its containing block) whose lines don't line up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows: the columns' starts are one place in the flow for all of them |
+| a positioned box beside the lines of its containing block, cut by a column, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
+| a forced break (`break-before: column`) inside one of boxes side by side cut by columns | breaks that box alone, the others filled on as they would be; not compared with Chrome |
 | a table with a collapsed column as a grid item, or as a flex item with a width of its own | laid out at the width its container gives it, where Chrome narrows the grid item's by the column and sizes the flex item's apart; a flex item of an automatic width keeps it, as Chrome |
-| a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
