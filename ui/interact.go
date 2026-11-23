@@ -1360,7 +1360,7 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 		return n, true
 	}
 	if n == nil {
-		if i == control.Back && hasBack(d.body) {
+		if i == control.Back && (hasBack(d.body) || d.framed != nil) {
 			d.events = append(d.events, bodyBack{})
 			return n, true
 		}
@@ -1382,7 +1382,11 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 		return n, true
 	}
 	if dir := focusDir(i); dir != (geom.Vec2{}) {
-		d.moveFocus(func() bool { return d.focus.Move(dir) })
+		if d.moveFocus(func() bool { return d.focus.Move(dir) }) {
+			d.enterFrame(dir)
+		} else if d.focus.Active() {
+			d.leaveFrame(dir)
+		}
 		return n, true
 	}
 	return n, false
@@ -1411,6 +1415,9 @@ func (d *Document) keysLeft(in *input.State, n *Node, taken *keySet) {
 	}
 	if n == nil && len(d.modals) > 0 {
 		n = d.modals[len(d.modals)-1]
+	}
+	if n == nil && d.framed != nil {
+		n = d.body
 	}
 	if n == nil {
 		return
@@ -1567,7 +1574,7 @@ func (d *Document) fieldKeys(c *twod.Canvas, in *input.State, n *Node, t *contro
 	if c != nil {
 		w = c.World()
 	}
-	if w == nil || !heardUp(n, EventKey) {
+	if w == nil || !d.heardKeys(n) {
 		return prevented, typed, true
 	}
 	f := inputfeed.Of(in)
@@ -1593,6 +1600,16 @@ func (d *Document) fieldKeys(c *twod.Canvas, in *input.State, n *Node, t *contro
 		}
 	}
 	return prevented, typed, true
+}
+
+// heardKeys reports whether a key on n reaches an OnKey: of n, of an
+// ancestor, or of the Document round d from its iframe up.
+func (d *Document) heardKeys(n *Node) bool {
+	if heardUp(n, EventKey) {
+		return true
+	}
+	f := d.framed
+	return f != nil && f.host.heardKeys(f.n)
 }
 
 // heardUp reports whether n or an ancestor has a handler for t.

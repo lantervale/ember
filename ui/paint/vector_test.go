@@ -175,7 +175,7 @@ func TestABorderImageOfShapesIsDrawnAtTheSizeItAsksFor(t *testing.T) {
 	})
 	b.Border = box.Edges{Top: 4, Right: 4, Bottom: 4, Left: 4}
 	shapesOf(i, b, Scale(2))
-	assert.Equal(t, [][2]int{{40, 20}}, i.drawn, "a pixel a point, so its slices count as they do in the file")
+	assert.Equal(t, [][2]int{{80, 40}}, i.drawn, "at the screen's density, its slices scaled to match")
 }
 
 func TestAPictureOfPixelsIsUntouchedByVectors(t *testing.T) {

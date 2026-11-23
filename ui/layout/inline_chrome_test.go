@@ -140,7 +140,9 @@ func matchText(t *testing.T, d *ui.Document, size geom.Vec2, tol float32) {
 		}
 		for j := range w {
 			gt := strings.TrimSuffix(g[j].Text, "…")
-			if fold := cases.Fold(); fold.String(gt) != fold.String(w[j].Text) && !strings.HasPrefix(w[j].Text, gt) {
+			// a tab splits ember's line into fragments joined back with a space
+			wt := strings.Join(strings.FieldsFunc(w[j].Text, func(r rune) bool { return r == '\t' }), " ")
+			if fold := cases.Fold(); fold.String(gt) != fold.String(wt) && !strings.HasPrefix(wt, gt) {
 				t.Errorf("%q line %d: ember %q, Chrome %q", nodes[i].Text(), j, g[j].Text, w[j].Text)
 				continue
 			}
@@ -233,6 +235,12 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 			ui.P(ui.Style("width: 220px; word-spacing: calc(25% + 2px)"), ui.Text("A sum, "),
 				ui.Span(ui.Style("font-size: 24px"), ui.Text("in a bigger span")), ui.Text(" and back.")),
 		),
+		"letter-spacing as a percentage": page(
+			ui.P(ui.Style("width: 220px; letter-spacing: 10%; font-size: 12px"), ui.Text("A tenth of an em, "),
+				ui.Span(ui.Style("font-size: 24px"), ui.Text("then of a bigger one")), ui.Text(" and back.")),
+			ui.P(ui.Style("width: 220px; letter-spacing: calc(5% + 1px)"),
+				ui.Text("A sum of both, wrapped where Chrome wraps it.")),
+		),
 		"word-spacing justified": page(
 			ui.P(ui.Style("width: 170px; text-align: justify; word-spacing: 4px"), ui.Text(sentence)),
 			ui.P(ui.Style("width: 170px; text-align: justify"), ui.Text("Justified with a "),
@@ -265,6 +273,48 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 			ui.P(ui.Span(ui.Text("▸ tile 0 ✓ ▾ done → next"))),
 			ui.P(ui.Style("line-height: 1.2"), ui.Text("plain, then "), ui.Span(ui.Text("✓ done")), ui.Text(" and on")),
 			ui.P(ui.Style("width: 120px"), ui.Text("wrapping text with a ✓ on the second line maybe")),
+		),
+		"word-break": page(
+			ui.P(ui.Style("width: 100px; word-break: break-all"),
+				ui.Text("Open assets/tilesets/dungeon_walls_north_east.tsj now, (really) 12345.678 well-known!")),
+			ui.P(ui.Style("width: 90px; word-break: break-word"),
+				ui.Text("Open assets/tilesets/dungeon_walls_north_east.tsj now")),
+			ui.Div(ui.Style("display: flex; width: 50px"),
+				ui.Div(ui.Style("word-break: break-all"), ui.Text("supercalifragilistic"))),
+			ui.Div(ui.Style("display: flex; width: 50px"),
+				ui.Div(ui.Style("word-break: break-word"), ui.Text("supercalifragilistic"))),
+			ui.P(ui.Style("width: 140px; word-break: keep-all"), ui.Text(sentence)),
+			ui.P(ui.Style("width: 70px; word-break: break-all; text-align: center"),
+				ui.Text("Lorem ipsum "), ui.Span(ui.Style("font-weight: bold"), ui.Text("dolorsitamet")), ui.Text(" end")),
+		),
+		"line-break": page(
+			ui.P(ui.Style("width: 80px; line-break: anywhere"), ui.Text("Hello, world! (a) b-c and/or 3.14")),
+			ui.Div(ui.Style("display: flex; width: 30px"),
+				ui.Div(ui.Style("line-break: anywhere"), ui.Text("min-content"))),
+			ui.P(ui.Style("width: 100px; line-break: strict"), ui.Text(sentence)),
+		),
+		"small caps": page(
+			ui.P(ui.Style("width: 160px; font-variant: small-caps"), ui.Text(sentence)),
+			ui.P(ui.Style("font-variant-caps: all-small-caps"), ui.Text("Hello World, ÉTÉ ß 42")),
+			ui.P(ui.Style("font: small-caps 20px Go; letter-spacing: 1px; word-spacing: 4px"), ui.Text("Mixed Case Text")),
+			ui.P(ui.Style("font-variant-caps: unicase"), ui.Text("The Quick Brown Fox")),
+			ui.P(ui.Style("font-variant-caps: small-caps; font-size: 18px"), ui.Text("Eighteen halves up")),
+			ui.P(ui.Style("font-variant-caps: small-caps; font-size: 15px"), ui.Text("Fifteen halves")),
+			ui.P(ui.Style("font-variant-caps: petite-caps; text-transform: capitalize"), ui.Text("petite caps here"),
+				ui.Span(ui.Style("font-variant: normal"), ui.Text(" normal again"))),
+			ui.P(ui.Style("font-variant-caps: titling-caps"), ui.Text("Titling is not synthesised")),
+		),
+		"tabs": page(
+			ui.Div(ui.Style("white-space: pre"), ui.Text("a\tb\tcc\tddd\t\te")),
+			ui.Div(ui.Style("white-space: pre; tab-size: 4"), ui.Text("a\tbbbbbbb\tc")),
+			ui.Div(ui.Style("white-space: pre; tab-size: 30px; letter-spacing: 3px"), ui.Text("ab\tc\td")),
+			ui.Div(ui.Style("white-space: pre-wrap; width: 120px"), ui.Text("one\ttwo\tthree\tfour\tfive six")),
+			ui.Div(ui.Style("white-space: pre"), ui.Text("x"), ui.Span(ui.Style("font-size: 24px"), ui.Text("span")),
+				ui.Text("\tend")),
+			ui.Div(ui.Style("white-space: pre; text-indent: 20px"), ui.Text("in\tdent")),
+			ui.Div(ui.Style("white-space: pre; text-align: right; width: 300px"), ui.Text("right\taligned")),
+			ui.Div(ui.Style("white-space: pre; tab-size: 0"), ui.Text("no\tstop")),
+			ui.Div(ui.Text("collapsed\ttab")),
 		),
 		"pre and spans": page(ui.Div(ui.Style("width: 200px; white-space: pre-wrap"), ui.Text("one  two\nthree "),
 			ui.Span(ui.Style("font-size: 22px"), ui.Text("four five")), ui.Text(" six"))),
@@ -327,6 +377,68 @@ func matchSpanFragments(t *testing.T, d *ui.Document, size geom.Vec2, tol float3
 					break
 				}
 			}
+		}
+	}
+}
+
+// TestKeepAllKeepsIdeographsTogetherAsChrome compares where lines of
+// Chinese, Japanese and Korean words break under word-break: keep-all,
+// only by their text: Chrome draws them in a face of the system's.
+func TestKeepAllKeepsIdeographsTogetherAsChrome(t *testing.T) {
+	d := page(
+		ui.P(ui.Style("width: 40px; word-break: keep-all"), ui.Text("日本語 テキスト 한국어 단어")),
+		ui.P(ui.Style("width: 40px; word-break: keep-all"), ui.Text("中文，文字。再见")),
+	)
+	raw, err := chrome.Eval(d, geom.V2(800, 600), textLines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want [][]chromeLine
+	if err = json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	got, nodes := ourLines(d, geom.V2(800, 600))
+	for i := range want {
+		if texts(got[i]) != texts(want[i]) {
+			t.Errorf("%q: ember lines %s, Chrome %s", nodes[i].Text(), texts(got[i]), texts(want[i]))
+		}
+	}
+}
+
+// TestACarriageReturnTakesNoRoomAsChrome sets each text through the DOM,
+// as an HTML page can't carry a lone carriage return past its parser, and
+// compares the box it makes with ui's.
+func TestACarriageReturnTakesNoRoomAsChrome(t *testing.T) {
+	texts := []string{"a\rb", "a\r\rbc\r", "\ra\tb\rc", "ab"}
+	d := ui.NewDocument()
+	var nodes []*ui.Node
+	for range texts {
+		n := ui.Span(ui.Style("white-space: pre"), ui.Text("ab"))
+		nodes = append(nodes, n)
+		d.Body().Append(n, ui.Br())
+	}
+	list, err := json.Marshal(texts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := chrome.Eval(d, geom.V2(800, 600), `const texts = `+string(list)+`;
+return Array.from(document.body.querySelectorAll("span")).map((e, i) => {
+	e.textContent = texts[i]; const r = e.getBoundingClientRect(); return [r.width, r.height]; });`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want [][2]float32
+	if err = json.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	for i, n := range nodes {
+		n.SetText(texts[i])
+	}
+	d.Layout(geom.V2(800, 600))
+	for i, n := range nodes {
+		r, _ := d.BoxOf(n)
+		if abs(r.W-want[i][0]) > 0.05 || abs(r.H-want[i][1]) > 0.05 {
+			t.Errorf("%q: ember %v×%v, Chrome %v", texts[i], r.W, r.H, want[i])
 		}
 	}
 }

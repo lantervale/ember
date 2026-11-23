@@ -27,7 +27,7 @@ p { font-size: 20px; }
 #normal { word-spacing: normal; }
 #zero { word-spacing: 0; }
 `)})
-	want := map[string]style.WordSpacing{
+	want := map[string]style.Spacing{
 		"px": {Px: 3}, "em": {Px: 10}, "rem": {Px: 20}, "neg": {Px: -4}, "pct": {Percent: 50},
 		"calc": {Px: 18, Percent: 25}, "normal": {}, "zero": {},
 	}
@@ -47,14 +47,29 @@ func TestWordSpacingIsInheritedAsItsLengthAndItsPercentage(t *testing.T) {
 span { font-size: 40px; }
 #reset { word-spacing: initial; }
 `)})
-	if s := styleOf(em); s.WordSpacing != (style.WordSpacing{Px: 20}) || s.WordGap() != 20 {
+	if s := styleOf(em); s.WordSpacing != (style.Spacing{Px: 20}) || s.WordGap() != 20 {
 		t.Errorf("the parent's ems, not the child's: %+v", s.WordSpacing)
 	}
-	if s := styleOf(pct); s.WordSpacing != (style.WordSpacing{Percent: 50}) || s.WordGap() != 20 {
+	if s := styleOf(pct); s.WordSpacing != (style.Spacing{Percent: 50}) || s.WordGap() != 20 {
 		t.Errorf("a percentage of the child's own font size: %+v, %v", s.WordSpacing, s.WordGap())
 	}
-	if s := styleOf(reset); s.WordSpacing != (style.WordSpacing{}) {
+	if s := styleOf(reset); s.WordSpacing != (style.Spacing{}) {
 		t.Errorf("initial is normal: %+v", s.WordSpacing)
+	}
+}
+
+func TestLetterSpacingTakesAPercentageOfEachInheritorsFontSize(t *testing.T) {
+	pct, sum := el(dom.Span, "pct"), el(dom.Span, "sum")
+	Compute(page(with(el(dom.Div, "out"), pct, sum)), []*Sheet{sheet(t, `
+#out { font-size: 10px; letter-spacing: 10%; }
+span { font-size: 40px; }
+#sum { letter-spacing: calc(5% + 1px); }
+`)})
+	if s := styleOf(pct); s.LetterSpacing != (style.Spacing{Percent: 10}) || s.LetterGap() != 4 {
+		t.Errorf("a percentage of the child's own font size: %+v, %v", s.LetterSpacing, s.LetterGap())
+	}
+	if s := styleOf(sum); s.LetterGap() != 3 {
+		t.Errorf("calc(5%% + 1px) of 40px: %v", s.LetterGap())
 	}
 }
 
@@ -84,7 +99,7 @@ func TestControlsTakeThePagesWordSpacingAsItsLetterSpacing(t *testing.T) {
 	in := el(dom.Input, "in")
 	sheets := []*Sheet{sheet(t, Default), sheet(t, `body { word-spacing: 6px; }`)}
 	Compute(page(in), sheets)
-	if got := styleOf(in).WordSpacing; got != (style.WordSpacing{Px: 6}) {
+	if got := styleOf(in).WordSpacing; got != (style.Spacing{Px: 6}) {
 		t.Errorf("input: %+v", got)
 	}
 }

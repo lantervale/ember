@@ -712,7 +712,7 @@ func TestAnIframePutBackKeepsItsDocumentOnlyWithinTheFrame(t *testing.T) {
 	}
 }
 
-func TestAnIframeMovedToAnotherDocumentShowsNothing(t *testing.T) {
+func TestAnIframeMovedToAnotherDocumentShowsItsDocumentThere(t *testing.T) {
 	for _, first := range []string{"the one it leaves", "the one it joins"} {
 		t.Run(first+" drawn first", func(t *testing.T) {
 			p := newFramePage(t)
@@ -727,13 +727,20 @@ func TestAnIframeMovedToAnotherDocumentShowsNothing(t *testing.T) {
 			p.host.Body().Remove(p.slot)
 			other.Body().Append(p.slot)
 			p.frames(3)
-			if other.Frame(p.slot) != nil || other.FrameShown(p.slot) {
-				t.Fatal("an iframe moved to another Document still shows the one it had")
+			if other.Frame(p.slot) != p.child || !other.FrameShown(p.slot) {
+				t.Fatal("an iframe moved to another Document doesn't show there the one it had, as Chrome loads it again")
 			}
-			other.SetFrame(p.slot, p.child)
-			p.frames(2)
-			if !other.FrameShown(p.slot) {
-				t.Fatal("an iframe moved to another Document does not show the one it is given")
+			if p.host.FrameShown(p.slot) {
+				t.Fatal("the Document an iframe left still shows what it showed")
+			}
+			if first != "the one it leaves" {
+				return // the page drawn later lies over the other
+			}
+			r, _ := other.BoxOf(p.slot)
+			button, _ := p.child.BoxOf(p.first)
+			p.click(geom.V2(r.X+button.X+5, r.Y+button.Y+5))
+			if p.clicks["first"] != 1 {
+				t.Fatal("a click on the iframe moved to another Document doesn't reach its Document")
 			}
 		})
 	}

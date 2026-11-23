@@ -176,7 +176,7 @@ func (c *inlineContent) levelEdges() {
 				if c.pieces[k].start == (step < 0) {
 					return 0, false
 				}
-			case breakHere, emergency, marker, anchor:
+			case breakHere, emergency, marker, anchor, tab:
 			}
 		}
 		return 0, false
@@ -185,7 +185,7 @@ func (c *inlineContent) levelEdges() {
 	for i := range c.pieces {
 		p := &c.pieces[i]
 		switch p.kind {
-		case word, gap, atomic, newline:
+		case word, gap, atomic, newline, tab:
 		case marker:
 			p.level = c.base
 		case edge:
@@ -259,7 +259,7 @@ func trailing(k pieceKind) bool {
 	switch k {
 	case gap, breakHere, emergency, anchor, edge:
 		return true
-	case word, atomic, newline, marker:
+	case word, atomic, newline, marker, tab:
 	}
 	return false
 }

@@ -147,7 +147,13 @@ func (f *Focus[K]) Move(dir geom.Vec2) bool {
 	if f.at < 0 || !f.active {
 		return false
 	}
-	from := f.targets[f.at].Rect
+	return f.MoveFrom(f.targets[f.at].Rect, dir)
+}
+
+// MoveFrom moves the focus, made active, to the target nearest from
+// towards dir, as Move from a target there: where it comes in from
+// outside, as into an iframe's Document.
+func (f *Focus[K]) MoveFrom(from geom.Rect, dir geom.Vec2) bool {
 	best, bestScore := -1, float32(0)
 	for i, t := range f.targets {
 		if i == f.at || !f.takes(i, false) || t.TabIndex < 0 {
@@ -164,7 +170,7 @@ func (f *Focus[K]) Move(dir geom.Vec2) bool {
 	if best < 0 {
 		return false
 	}
-	f.at = best
+	f.at, f.active = best, true
 	return true
 }
 

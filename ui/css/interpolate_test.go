@@ -316,10 +316,10 @@ div { position: relative; padding-top: 2em; animation: f 1s linear }`)
 	tr.Step(0.35)
 	tr.Compute(root, sheets)
 	s := styleOf(d)
-	if !nearf(s.Font.Size, 13.5) || !nearf(s.Radius.TopLeft.Width.Px, 3.5) || !nearf(s.LetterSpacing, 3.5) ||
+	if !nearf(s.Font.Size, 13.5) || !nearf(s.Radius.TopLeft.Width.Px, 3.5) || !nearf(s.LetterGap(), 3.5) ||
 		s.ZIndex != 1 || !nearf(s.LineHeight.Factor, 1.7) {
 		t.Errorf("at 0.35: size %v radius %+v spacing %v z %v line %+v", s.Font.Size, s.Radius.TopLeft,
-			s.LetterSpacing, s.ZIndex, s.LineHeight)
+			s.LetterGap(), s.ZIndex, s.LineHeight)
 	}
 	if !nearf(s.Padding.Top.Px, 27) {
 		t.Errorf("an em follows the animated font size: %+v", s.Padding.Top)
