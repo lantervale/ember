@@ -15,9 +15,14 @@ import (
 // Chrome's do: a checkbox and a radio are empty boxes, 0 by 0 unless
 // sized, a select has no room for its chevron, a field and a button take
 // the borders of Chrome's sheet, and a range is as tall as its track,
-// which is as tall as its thumb unless sized.
+// which is as tall as its thumb unless sized. The selects' line-height
+// and the field's and textarea's widths are set: Chrome on Linux makes a
+// select's normal line a point shorter, and sizes a field by its
+// system font's characters.
 func TestControlsOfAppearanceNoneTakeChromesBoxes(t *testing.T) {
 	const sheet = `.none { appearance: none; }
+select { line-height: 16px; }
+input:not([type]), textarea { width: 180px; }
 .sized { width: 12px; height: 10px; border: 1px solid #000; }
 input[type="range"] { width: 100px; }
 .four::-webkit-slider-runnable-track { height: 4px; margin: 3px 0; }
@@ -40,10 +45,11 @@ input[type="range"] { width: 100px; }
 }
 
 // appearance computes as Chrome computes it: none and auto, and the
-// compatibility keywords as written, on any element.
+// compatibility keywords as written, on any element. slider-vertical is
+// left out: Chrome 156 computes it none, 157 as written, as ui does.
 func TestAppearanceComputesAsChromes(t *testing.T) {
 	words := []string{"none", "auto", "textfield", "menulist-button", "checkbox", "radio", "button", "listbox",
-		"menulist", "meter", "progress-bar", "slider-vertical", "searchfield", "textarea", "base-select"}
+		"menulist", "meter", "progress-bar", "searchfield", "textarea", "base-select"}
 	d := ui.NewDocument()
 	var els []*ui.Node
 	for _, w := range words {

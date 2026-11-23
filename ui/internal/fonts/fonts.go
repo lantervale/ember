@@ -51,6 +51,9 @@ type Face struct {
 	TTF  []byte
 	font *sfnt.Font
 	upem float32
+	// ascii is 1 once the face is known to draw every printable ASCII
+	// character, -1 once known not to.
+	ascii int8
 	// shaper is the face's layout tables, read when it is first shaped.
 	shaper *shape.Font
 	// web is the file of an @font-face's face that is fetched.
@@ -300,6 +303,21 @@ func (s *Set) AdvanceIn(f style.Font, text, before, after string) float32 {
 // twod draws as an emoji picture, one em wide, as twod does.
 func (s *Set) SetEmoji(has func(cluster string) bool) { s.emoji = has }
 
+// drawsASCII reports whether c draws every printable ASCII character
+// itself, so that no ASCII text needs a fallback.
+func (s *Set) drawsASCII(c *Face) bool {
+	if c.ascii == 0 && c.font != nil {
+		c.ascii = 1
+		for r := rune(0x21); r < 0x7f; r++ {
+			if !c.covers(r) || !s.hasGlyph(c, r) {
+				c.ascii = -1
+				break
+			}
+		}
+	}
+	return c.ascii > 0
+}
+
 func isASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= 0x80 {
@@ -437,7 +455,7 @@ func (s *Set) FallbackMetrics(f style.Font, text string) (box.Metrics, bool) {
 		return s.chainFallbackMetrics(ch, f.Size, text)
 	}
 	c, fb := s.Face(f), s.Fallback()
-	if fb == nil || fb == c {
+	if fb == nil || fb == c || isASCII(text) && s.drawsASCII(c) {
 		return box.Metrics{}, false
 	}
 	for _, r := range text {

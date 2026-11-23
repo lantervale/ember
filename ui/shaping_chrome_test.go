@@ -78,13 +78,16 @@ func TestTextRightToLeftMixesArabicAndLatinAsInChrome(t *testing.T) {
 }
 
 // syllabic lays out spans of devanagari.ttf, a subset of Noto Sans
-// Devanagari, each with its declarations, against Chrome.
+// Devanagari, each with its declarations, against Chrome; what it lacks
+// falls back to Go Mono, not to the system's monospace (Consolas on
+// Windows).
 func syllabic(t *testing.T, sheet string, spans ...[2]string) {
 	t.Helper()
 	d := ui.NewDocument(ui.FetchFonts(foundry(t)), ui.CSS(`
 @font-face { font-family: Deva; src: url(devanagari.ttf); }
+@font-face { font-family: Mono; src: url(mono.ttf); }
 div { margin: 0 0 4px; }
-span { display: inline-block; font: 24px Deva, monospace; }
+span { display: inline-block; font: 24px Deva, Mono, monospace; }
 `+sheet))
 	for _, s := range spans {
 		d.Body().Append(ui.Div(ui.Span(ui.Style(s[0]), ui.Text(s[1]))))
