@@ -198,6 +198,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0193 | [Vertical lines are selected in the flow of their lines](0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md) | api |
 | 0194 | [A float after text is placed as its lines are broken](0194-a-float-after-text-is-placed-as-its-lines-are-broken.md) | rendering |
 | 0195 | [line-break strictness reclasses characters before UAX #14](0195-line-break-strictness-reclasses-characters-before-uax-14.md) | rendering |
+| 0197 | [Text right to left and sideways is shaped as one, and a reshaped end keeps its joins](0197-text-right-to-left-and-sideways-is-shaped-as-one-and-a-reshaped-end-keeps-its-joins.md) | api |
 
 ## Writing one
 
