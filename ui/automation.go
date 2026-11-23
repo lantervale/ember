@@ -168,12 +168,7 @@ func (d *Document) recorded(n *Node) recorded {
 	case *control.Checkbox:
 		return recorded{automation.RoleToggle, d.labelOf(n, d.shown), m.Checked, enabled, pressOrSet()}
 	case *control.Select:
-		label, _ := n.Attr("placeholder")
-		label = layout.TranslatedAt(n, label, d.tr())
-		if sh := dom.Data(n).Shadow; sh != nil {
-			label = d.shown(sh)
-		}
-		return recorded{automation.RoleCombo, label, m.Selected, enabled, []string{automation.ActPress, automation.ActSelect}}
+		return d.recordedSelect(n, m, enabled)
 	case *control.Range:
 		return recorded{automation.RoleSlider, d.labelOf(n, d.shown), m.Value, enabled, []string{automation.ActSet}}
 	case *control.Radio:
@@ -416,9 +411,51 @@ func (d *Document) act(n *Node, a *automation.Act, byPath func(string) *Node) {
 	}
 }
 
+// recordedSelect is how automation sees the select n: a dropdown by what
+// it shows, its choice its value; a listbox by its label, a multiple
+// one's value every option it selects.
+func (d *Document) recordedSelect(n *Node, m *control.Select, enabled bool) recorded {
+	label, _ := n.Attr("placeholder")
+	label = layout.TranslatedAt(n, label, d.tr())
+	if sh := dom.Data(n).Shadow; sh != nil && !m.ListBox {
+		label = d.shown(sh)
+	}
+	if m.ListBox {
+		label = d.labelOf(n, d.shown)
+	}
+	var value any = m.Selected
+	if m.Multiple {
+		picked := []any{}
+		for _, i := range d.SelectedOptions(n) {
+			picked = append(picked, i)
+		}
+		value = picked
+	}
+	return recorded{automation.RoleCombo, label, value, enabled, []string{automation.ActPress, automation.ActSelect}}
+}
+
 // actSelect chooses the option of a select that v names, as a click in
-// its list does.
+// its list does; a listbox's options v names, a list of them or one,
+// which it selects alone, firing its change once if it changed.
 func (d *Document) actSelect(n *Node, s *control.Select, v any) {
+	if s.ListBox {
+		names, ok := v.([]any)
+		if !ok {
+			names = []any{v}
+		}
+		var is []int
+		for _, name := range names {
+			if i, found := optionIndex(s, name); found && i >= 0 {
+				is = append(is, i)
+			}
+		}
+		was := d.SelectedOptions(n)
+		s.SetPicked(is...)
+		if !slices.Equal(was, d.SelectedOptions(n)) {
+			d.fire(n, control.Input|control.Changed)
+		}
+		return
+	}
 	i, found := optionIndex(s, v)
 	if !found {
 		return

@@ -63,8 +63,14 @@ func newMachine(n *Node) any {
 		opts, groups, selected := listOf(n)
 		s := control.NewSelect(opts...)
 		s.Groups = groups
-		if selected >= 0 || has(n, "placeholder") {
-			s.Selected, s.Highlight = selected, selected
+		switch {
+		case dom.ListBox(n):
+			s.SetListBox(true, has(n, "multiple"), dom.ListBoxRows(n))
+			s.SetPicked(selected...)
+		case len(selected) > 0:
+			s.Selected, s.Highlight = selected[len(selected)-1], selected[len(selected)-1]
+		case has(n, "placeholder"):
+			s.Selected, s.Highlight = -1, -1
 		}
 		s.Disabled = disabled
 		return s
@@ -118,18 +124,18 @@ func newMachine(n *Node) any {
 
 // listOf is what the select n offers: its options, its optgroups, each
 // label before its options, which a disabled one disables, and the
-// option chosen by its selected attribute, -1 for none.
-func listOf(n *Node) ([]control.Option, []control.Group, int) {
+// options its selected attributes choose.
+func listOf(n *Node) ([]control.Option, []control.Group, []int) {
 	var opts []control.Option
 	var groups []control.Group
-	selected := -1
+	var selected []int
 	add := func(o *Node, group int, off bool) {
 		v, valued := o.Attr("value")
 		opts = append(opts, control.Option{
 			Label: o.Text(), Value: v, Valued: valued, Disabled: off || has(o, "disabled"), Group: group,
 		})
 		if has(o, "selected") {
-			selected = len(opts) - 1
+			selected = append(selected, len(opts)-1)
 		}
 	}
 	for _, c := range n.Children() {
@@ -213,8 +219,12 @@ func (d *Document) sync(n *Node, m any) {
 		}
 	case *control.Select:
 		m.Disabled = disabled
+		m.SetListBox(dom.ListBox(n), has(n, "multiple"), dom.ListBoxRows(n))
 		n.SetState(dom.Open, m.Open)
 		d.showOptions(n, m)
+		if m.ListBox {
+			break
+		}
 		if m.Selected >= 0 && m.Selected < len(m.Options) {
 			n.SetShadow(m.Options[m.Selected].Label, false)
 		} else {
@@ -278,10 +288,16 @@ func (d *Document) Value(n *Node) string {
 func (d *Document) SetValue(n *Node, v string) {
 	switch m := d.machine(n).(type) {
 	case *control.Select:
+		var found []int
 		for i, o := range m.Options {
 			if o.Value == v || o.Value == "" && !o.Valued && o.Label == v {
 				m.Selected, m.Highlight = i, i
+				found = append(found, i)
 			}
+		}
+		if m.ListBox {
+			// as the DOM's value: the first option of that value alone, none for no such
+			m.SetPicked(found[:min(len(found), 1)]...)
 		}
 	case *control.Range:
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
@@ -387,7 +403,7 @@ func (d *Document) Selected(n *Node) int {
 // i, without events.
 func (d *Document) SetSelected(n *Node, i int) {
 	if s, ok := d.machine(n).(*control.Select); ok {
-		s.Selected, s.Highlight = i, i
+		s.SetPicked(i)
 		d.sync(n, s)
 		return
 	}
@@ -409,8 +425,52 @@ func (d *Document) SetSelected(n *Node, i int) {
 	}
 }
 
+// SelectedOptions are a select's options selected, in order, as the
+// DOM's selectedOptions: a listbox's every one (multiple or a size above
+// 1), else the chosen one; nil for none or for what is no select.
+func (d *Document) SelectedOptions(n *Node) []int {
+	s, ok := d.machine(n).(*control.Select)
+	if !ok {
+		return nil
+	}
+	var out []int
+	for i := range s.Options {
+		if s.Picked(i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// SetSelectedOptions selects a select's options is alone, without
+// events: all of them in a select with multiple, else the last.
+func (d *Document) SetSelectedOptions(n *Node, is ...int) {
+	if s, ok := d.machine(n).(*control.Select); ok {
+		s.SetPicked(is...)
+		d.sync(n, s)
+	}
+}
+
+// Values are what a form submits for the select n, as the DOM's
+// FormData holds them: the value of each option selected and enabled, in
+// order; none for a disabled select.
+func (d *Document) Values(n *Node) []string {
+	s, ok := d.machine(n).(*control.Select)
+	if !ok || disabledField(n) {
+		return nil
+	}
+	var out []string
+	for _, i := range d.SelectedOptions(n) {
+		if !s.Options[i].Disabled {
+			out = append(out, s.Options[i].FormValue())
+		}
+	}
+	return out
+}
+
 // showOptions gives a select's options their labels as the player reads
-// them, which its list shows and typing matches.
+// them, which its list shows and typing matches, and a listbox's
+// optgroups their label rows.
 func (d *Document) showOptions(n *Node, m *control.Select) {
 	for i, c := range dom.Options(n) {
 		if i >= len(m.Options) {
@@ -421,7 +481,7 @@ func (d *Document) showOptions(n *Node, m *control.Select) {
 			m.Options[i].Shown = say(c, d.shown)
 		}
 		g := c.Parent()
-		c.SetState(dom.Checked, i == m.Selected)
+		c.SetState(dom.Checked, m.Picked(i))
 		c.SetState(dom.Default, has(c, "selected"))
 		c.SetState(dom.Disabled, has(c, "disabled") || g.Tag() == dom.Optgroup && has(g, "disabled"))
 	}
@@ -436,6 +496,9 @@ func (d *Document) showOptions(n *Node, m *control.Select) {
 			m.Groups[i].Shown = layout.TranslatedAt(g, label, d.tr())
 		}
 		g.SetState(dom.Disabled, has(g, "disabled"))
+		if m.ListBox {
+			g.SetShadow(label, false)
+		}
 		i++
 	}
 }

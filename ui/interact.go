@@ -73,6 +73,12 @@ type interaction struct {
 	// hovered and pressed are the element chains under the pointer and
 	// held by its left button, innermost first.
 	hovered, pressed []*Node
+	// overParts are the parts of hovered[0] under the pointer, and
+	// pressedParts those of pressed[0] a press began on, as its part
+	// states; grab is how far along its track a press on a range's thumb
+	// was from the value, which a drag keeps.
+	overParts, pressedParts dom.State
+	grab                    float64
 	// pointerClick is the element a pointer click is on while it is
 	// handled, and lastClick, lastClickAt and clicks the run of clicks it
 	// counts in (Clicked.Clicks).
@@ -112,6 +118,9 @@ type interaction struct {
 	// or Clicked on a menu bar title doesn't fire for a press and release
 	// on it.
 	pressOpened *Node
+	// listPressed is the listbox a press on one of its options began on,
+	// until its release.
+	listPressed *Node
 	// drag is a press on a Draggable element, a drag once past dragStart;
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
@@ -780,6 +789,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.hovered = chain(n)
 		d.crossed(was, d.hovered)
 	}
+	d.controlParts(at)
 	d.menuHover(d.hovered)
 	d.titleTips(in)
 	if n != nil && n != d.html && n != d.body {
@@ -852,6 +862,9 @@ func (d *Document) leftHeld(at geom.Vec2) {
 	if held, r := d.dragged(); r != nil {
 		d.fire(held, r.Drag(d.along(held, at)))
 	}
+	if d.listPressed != nil {
+		d.dragListBox()
+	}
 }
 
 // hitAt is the box under at and the innermost element holding it, the
@@ -906,7 +919,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 	}
 	d.menuPressOutside(d.hovered)
 	d.lightDismiss(d.hovered)
-	d.pressed = d.hovered
+	d.pressed, d.pressedParts, d.grab = d.hovered, dom.PartsPressed(d.overParts), 0
 	if src := draggableIn(d.hovered); src != nil {
 		d.drag = &dragState{source: src, from: at}
 	}
@@ -936,7 +949,13 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		d.pressText(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	}
 	if r, ok := d.machine(takes).(*control.Range); ok {
+		if len(d.pressed) > 0 && d.pressed[0] == takes && d.pressedParts.Has(dom.ThumbActive) {
+			d.grab = d.along(takes, at) - r.Fraction()
+		}
 		d.fire(takes, r.Press(d.along(takes, at)))
+	}
+	if d.listBox(takes) != nil {
+		d.pressListBox(in, takes)
 	}
 	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	return false
@@ -947,6 +966,9 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 func (d *Document) leftRelease(open *control.Select, pick paint.Pick) {
 	if held, r := d.dragged(); r != nil {
 		d.fire(held, r.Release())
+	}
+	if d.listPressed != nil {
+		d.releaseListBox()
 	}
 	if o := d.pressOpened; o != nil {
 		d.pressOpened = nil
@@ -1266,18 +1288,31 @@ func (d *Document) dragged() (*Node, *control.Range) {
 	return nil, nil
 }
 
-// along is where at lies across n's content box, 0 to 1: a range's
-// value under the pointer, as paint centres its thumb on the value.
+// along is where at puts the value of the range n along its track, 0 to
+// 1, as paint lays the thumb out (paint.RangeAlong), less the grab a
+// press on the thumb took.
 func (d *Document) along(n *Node, at geom.Vec2) float64 {
-	r := n.Box()
-	if b := d.tree.Of[n]; b != nil {
-		r.X += b.Border.Left + b.Padding.Left
-		r.W -= b.Border.Horizontal() + b.Padding.Horizontal()
-	}
-	if r.W <= 0 {
+	b := d.tree.Of[n]
+	if b == nil {
 		return 0
 	}
-	return float64(min(max((at.X-r.X)/r.W, 0), 1))
+	r := n.Box()
+	f := paint.RangeAlong(b, geom.V2(r.X, r.Y), at, paint.Controls(d.machine))
+	return min(max(f-d.grab, 0), 1)
+}
+
+// controlParts notes what of the control under the pointer it is over,
+// its parts' hover (paint.ControlPartsAt).
+func (d *Document) controlParts(at geom.Vec2) {
+	d.overParts = 0
+	if len(d.hovered) == 0 || d.tree == nil {
+		return
+	}
+	n := d.hovered[0]
+	if b := d.tree.Of[n]; b != nil && b.Style != nil {
+		r := n.Box()
+		d.overParts = paint.ControlPartsAt(b, geom.V2(r.X, r.Y), at, paint.Controls(d.machine))
+	}
 }
 
 // selectOpen reports whether a select shows its list, the only time the
@@ -1357,7 +1392,7 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 		d.tab(f.RawDown(int(input.KeyShift)))
 		return
 	}
-	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
+	if d.typedIn(n, f, in) {
 		return
 	}
 	intents, from := pressedIntents(f, pressed)
@@ -1367,6 +1402,18 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 			taken.add(from[j])
 		}
 	}
+}
+
+// typedIn hands the focused n what was typed: a listbox finds an option
+// by it. It reports a grid with a shortcut held, which leaves the keys.
+func (d *Document) typedIn(n *Node, f inputfeed.Feed, in *input.State) bool {
+	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
+		return true
+	}
+	if s := d.listBox(n); s != nil && !d.commandHeld(f) {
+		d.listBoxType(n, s, in.Text())
+	}
+	return false
 }
 
 // stillHeld reports whether a key or pad button that was down when a modal
@@ -1429,6 +1476,15 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent,
 			return n, true
 		}
 		return n, false
+	}
+	if s := d.listBox(n); s != nil {
+		if k == input.KeyEnter || k == input.KeyPadEnter {
+			// not a listbox's: it goes on as a key of its own
+			return n, false
+		}
+		if d.listBoxKey(f, n, s, i) {
+			return n, true
+		}
 	}
 	if d.intent(n, m, i) {
 		return n, true
@@ -1708,6 +1764,15 @@ func (d *Document) states() {
 		held := d.pinned[n]
 		n.SetState(dom.Hover, contains(d.hovered, n) || held&dom.Hover != 0)
 		n.SetState(dom.Active, contains(d.pressed, n) || held&dom.Active != 0)
+		parts := held & (dom.PartHover | dom.PartActive)
+		if len(d.hovered) > 0 && d.hovered[0] == n {
+			parts |= d.overParts
+		}
+		if len(d.pressed) > 0 && d.pressed[0] == n {
+			parts |= d.pressedParts
+		}
+		n.SetState((dom.PartHover|dom.PartActive)&^parts, false)
+		n.SetState(parts, true)
 		n.SetState(dom.Focus, n == focused && takes || held&dom.Focus != 0)
 		n.SetState(dom.FocusVisible, n == focused && takes && d.focus.Active() || held&dom.FocusVisible != 0)
 		n.SetState(dom.FocusWithin, contains(d.within, n) || held&dom.FocusWithin != 0)

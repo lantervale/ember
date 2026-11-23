@@ -38,6 +38,9 @@ func controlOf(e *dom.Node) controlKind {
 	case dom.Input:
 		return inputControl
 	case dom.Select:
+		if dom.ListBox(e) {
+			return noControl
+		}
 		return selectControl
 	case dom.Textarea:
 		return textareaControl
@@ -102,7 +105,7 @@ func centresContent(n *node) bool {
 	}
 	e := n.box.Node
 	if e.Tag() != dom.Input {
-		return e.Tag() == dom.Button || e.Tag() == dom.Select
+		return e.Tag() == dom.Button || e.Tag() == dom.Select && !dom.ListBox(e)
 	}
 	t, _ := e.Attr("type")
 	t = strings.ToLower(strings.TrimSpace(t))
