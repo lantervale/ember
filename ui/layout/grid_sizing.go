@@ -182,7 +182,7 @@ func (t *tree) resolveItemBaselines(a axis, items []*gridItem, inner size) {
 			it.baseline = or(childFirstBaseline(out.firstBaseline, h, it.st.Overflow.Height), h)
 		}
 		marginBox := func(it *gridItem) float32 {
-			return or(it.baseline, 0) + resolveOrZero(it.st.Margin.Top, inner.w)
+			return or(it.baseline, 0) + resolveOrZero(it.st.Margin.Top, inner.w) + it.extra[vertical].start
 		}
 		maxBaseline := float32(0)
 		first := true
@@ -198,7 +198,15 @@ func (t *tree) resolveItemBaselines(a axis, items []*gridItem, inner size) {
 			if it.baselineAligned() {
 				it.baselineShim = maxBaseline - marginBox(it)
 				it.knownCache = nil
+				if it.hoisted {
+					it.node.shim, it.node.sharing = it.baselineShim, true
+				}
 			}
+		}
+	}
+	for _, it := range items {
+		if k := it.node; !it.hoisted && k != nil && k.sharing && it.baselineAligned() && k.parent.handed()[vertical] != nil {
+			it.baselineShim, it.knownCache = k.shim, nil
 		}
 	}
 }

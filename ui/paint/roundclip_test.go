@@ -53,12 +53,13 @@ func TestAPointerInARoundedClipsCutCornerMissesTheChild(t *testing.T) {
 	assert.Same(t, panel, HitTest(tr, geom.V2(107, 87)), "and in the opposite one")
 }
 
-func TestARotatedRoundedClipIsHitAsItIsDrawnSquare(t *testing.T) {
+func TestARotatedRoundedClipIsHitAsItIsDrawnRounded(t *testing.T) {
 	var s probe
 	s.xf = geom.Transform2DFrom(geom.Vec2{}, 0.3, 0, geom.V2(1, 1))
 	s.PushClipRounded(geom.Rect{W: 100, H: 80}, [4]float32{20, 20, 20, 20})
-	assert.True(t, s.holds(s.xf.Xform(geom.V2(2, 2)), geom.Rect{W: 100, H: 80}),
-		"turned, the corner is kept, as the draw list keeps it square")
+	assert.False(t, s.holds(s.xf.Xform(geom.V2(2, 2)), geom.Rect{W: 100, H: 80}),
+		"turned, the corner is cut, as the draw list cuts it in its own space")
+	assert.True(t, s.holds(s.xf.Xform(geom.V2(50, 2)), geom.Rect{W: 100, H: 80}), "and its edge kept")
 	var flat probe
 	flat.xf = geom.Identity2D()
 	flat.PushClipRounded(geom.Rect{W: 100, H: 80}, [4]float32{20, 20, 20, 20})

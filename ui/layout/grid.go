@@ -1,6 +1,10 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"slices"
+
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 func gridAlignContent(a style.Align) alignment {
 	if a == style.AlignNormal {
@@ -84,8 +88,8 @@ func (t *tree) grid(n *node, in input) output {
 	gaps := [2]float32{usedGap(n, horizontal, basis), usedGap(n, vertical, basis)}
 	columns := p.tracks(n, horizontal, gaps[horizontal], in.parent.w)
 	rows := p.tracks(n, vertical, gaps[vertical], in.parent.w)
-	colItems := t.sizingItems(items, horizontal, gaps[horizontal], basis)
-	rowItems := t.sizingItems(items, vertical, gaps[vertical], basis)
+	colItems := t.sizingItems(n, items, horizontal, gaps, basis)
+	rowItems := t.sizingItems(n, items, vertical, gaps, basis)
 	resolveItemTrackIndexes(items, finalCols, finalRows)
 	resolveItemTrackIndexes(colItems, finalCols, finalRows)
 	resolveItemTrackIndexes(rowItems, finalCols, finalRows)
@@ -112,6 +116,11 @@ func (t *tree) grid(n *node, in input) output {
 	t.layOutOwners(items, rowItems, columns, rows, inner, byBase)
 	for _, it := range rowItems {
 		it.areaCache = nil
+	}
+	if slices.ContainsFunc(rowItems, func(it *gridItem) bool {
+		return (it.hoisted || it.subgrid[horizontal]) && it.baselineAligned()
+	}) {
+		t.resolveItemBaselines(horizontal, rowItems, inner)
 	}
 	t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
 		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
@@ -403,7 +412,10 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	vAlign := self
 	if vAlign == style.AlignNormal {
-		if some(inherent.h) || isSizingKeyword(st.Size.Height) || some(ratio) {
+		// an item of an aspect ratio stretches in one axis, its other following: across, unless
+		// it fills its row or has a width
+		if some(inherent.h) || isSizingKeyword(st.Size.Height) ||
+			some(ratio) && (hAlign == style.AlignStretch || some(inherent.w) || n.replaced) {
 			vAlign = style.AlignStart
 		} else {
 			vAlign = style.AlignStretch
@@ -502,7 +514,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		margin:    resolvedMargin,
 	}
 	contribution := overflowContribution(point{x - paddingBoxInset.l, y - paddingBoxInset.t},
-		final, out.overflow.rect, border, st.Overflow, container, resolvedMargin)
+		final, out.overflow.rect, border, st.Overflow, st, container, resolvedMargin)
 	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height)
 }
 

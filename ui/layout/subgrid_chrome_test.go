@@ -177,3 +177,61 @@ func TestSubgridsLayOutAsInChrome(t *testing.T) {
 		})
 	}
 }
+
+// Items aligned on their baseline in a subgrid sharing its grid's rows align with the grid's
+// own in the same row, their subgrid's edges counted.
+func TestSubgridBaselinesAsInChrome(t *testing.T) {
+	const page = `.g { display: grid; grid-template-columns: auto auto auto; column-gap: 10px; margin-bottom: 10px;
+	align-items: baseline; justify-content: start }
+.s { display: grid; grid-column: span 2; background: #eee }
+.big { font-size: 30px } .small { font-size: 12px }`
+	text := func(class, s string) *ui.Node { return ui.Div(ui.Class(class), ui.Text(s)) }
+	sub := func(style string, kids ...ui.Arg) *ui.Node {
+		return ui.Div(append([]ui.Arg{ui.Class("s"), ui.Style(style)}, kids...)...)
+	}
+	grid := func(style string, kids ...ui.Arg) *ui.Node {
+		return ui.Div(append([]ui.Arg{ui.Class("g"), ui.Style(style)}, kids...)...)
+	}
+	cases := map[string]*ui.Document{
+		"rows and columns": styled(page, grid("",
+			text("big", "Big"), sub("grid-template: subgrid / subgrid; padding-top: 7px",
+				text("small", "small"), text("", "mid")))),
+		"rows alone": styled(page, grid("grid-template-rows: auto auto",
+			sub("grid-template-rows: subgrid; grid-row: span 2; grid-template-columns: auto auto; border-top: 5px solid",
+				text("small", "one"), text("", "two"), text("big", "three")), text("big", "Big"))),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+			assert.Empty(t, d.Warnings())
+		})
+	}
+}
+
+// In a subgrid of columns alone, an item's width that follows from its height takes that
+// height from the subgrid's own rows when it sizes the grid's columns.
+func TestSubgridItemsSizedByTheirRowsAsInChrome(t *testing.T) {
+	const page = `.g { display: grid; grid-template-columns: auto auto 40px; column-gap: 10px; margin-bottom: 10px;
+	justify-content: start }
+.s { display: grid; grid-template-columns: subgrid; grid-column: span 2; grid-template-rows: 60px 30px;
+	background: #eee }
+.x { background: #888 }`
+	x := func(style string) *ui.Node { return ui.Div(ui.Class("x"), ui.Style(style)) }
+	cases := map[string]*ui.Document{
+		"aspect ratio, a grid alone": styled(page, ui.Div(ui.Class("g"), ui.Style("grid-template-rows: 60px 30px"),
+			x("aspect-ratio: 1; justify-self: start"), x("grid-row: 2; aspect-ratio: 2; justify-self: start"))),
+		"aspect ratio": styled(page, ui.Div(ui.Class("g"),
+			ui.Div(ui.Class("s"), x("aspect-ratio: 1; justify-self: start"),
+				x("grid-row: 2; aspect-ratio: 2; justify-self: start")),
+			x("height: 10px"))),
+		"percentage height": styled(page, ui.Div(ui.Class("g"),
+			ui.Div(ui.Class("s"), x("height: 50%; aspect-ratio: 2; justify-self: start"), x("")), x("height: 10px"))),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}

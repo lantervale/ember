@@ -47,6 +47,19 @@ func TestAnInvertedCutIsFlaggedInItsUniforms(t *testing.T) {
 	assert.Equal(t, float32(1), batchUniforms(&b, target2D{}, geom.V2(10, 10), 1, 0, 0).CutV[3])
 }
 
+func TestATurnedRoundedClipTakesPointsToItsOwnSpace(t *testing.T) {
+	turn := geom.Transform2DFrom(geom.V2(3, 4), 0.5, 0, geom.V2(2, 2))
+	b := draw.Batch{Round: draw.Rounded{Rect: geom.Rect{W: 10, H: 10}, ToLocal: turn.Inverse(), Scale: 2}}
+	u := batchUniforms(&b, target2D{}, geom.V2(10, 10), 1, 0, 0)
+	p := turn.Xform(geom.V2(7, 1))
+	got := geom.V2(u.RoundU[0]*p.X+u.RoundU[1]*p.Y+u.RoundU[2], u.RoundV[0]*p.X+u.RoundV[1]*p.Y+u.RoundV[2])
+	assert.InDelta(t, 7, got.X, 1e-4)
+	assert.InDelta(t, 1, got.Y, 1e-4)
+	assert.Equal(t, float32(2), u.RoundU[3])
+	b.Round = draw.Rounded{Rect: geom.Rect{W: 10, H: 10}, Radii: [4]float32{2, 2, 2, 2}}
+	assert.Zero(t, batchUniforms(&b, target2D{}, geom.V2(10, 10), 1, 0, 0).RoundU, "one in the screen's space has none")
+}
+
 func TestTheUniformsLieAsUIWGSLsDrawStruct(t *testing.T) {
 	var u drawUniforms
 	for name, at := range map[string][2]uintptr{
@@ -56,7 +69,13 @@ func TestTheUniformsLieAsUIWGSLsDrawStruct(t *testing.T) {
 		"hdr":      {unsafe.Offsetof(u.HDR), 16},
 		"exposure": {unsafe.Offsetof(u.Exposure), 20},
 		"masked":   {unsafe.Offsetof(u.Masked), 24},
-		"blend":    {unsafe.Offsetof(u.Blend), 28}, "targets": {unsafe.Offsetof(u.Targets), 32},
+		"blend":    {unsafe.Offsetof(u.Blend), 28},
+		"targets":  {unsafe.Offsetof(u.Targets), 32},
+		"round":    {unsafe.Offsetof(u.Round), 48},
+		"cutU":     {unsafe.Offsetof(u.CutU), 80},
+		"backU":    {unsafe.Offsetof(u.BackU), 112},
+		"roundU":   {unsafe.Offsetof(u.RoundU), 144},
+		"roundV":   {unsafe.Offsetof(u.RoundV), 160},
 	} {
 		assert.Equal(t, at[1], at[0], name)
 	}

@@ -204,7 +204,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 				l := it.final
 				loc := point{l.location.x - rBorder.l - gutter.l, l.location.y - rBorder.t}
 				res.overflow = res.overflow.union(overflowContribution(loc, l.size,
-					l.overflow.rect, l.border, it.overflow, container, negativeEdges(l.margin)))
+					l.overflow.rect, l.border, it.overflow, it.node.st, container, negativeEdges(l.margin)))
 			}
 		}
 	}
@@ -602,7 +602,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			}
 			contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 			overflow = overflow.union(overflowContribution(contributionLoc, lo.size,
-				lo.overflow.rect, it.border, it.overflow, container, negativeEdges(nonAuto)))
+				lo.overflow.rect, it.border, it.overflow, it.node.st, container, negativeEdges(nonAuto)))
 			floats++
 			continue
 		}
@@ -836,7 +836,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, finalSize,
-			lo.overflow.rect, it.border, it.overflow, container, negativeEdges(resolved)))
+			lo.overflow.rect, it.border, it.overflow, it.node.st, container, negativeEdges(resolved)))
 		if run == performLayout && floats > 0 {
 			t.raiseFloats(items[:i], floats, it.node, finalSize.w)
 		}
@@ -1001,7 +1001,7 @@ func (t *tree) placeLineFloats(ctx *blockContext, floats []lineFloatItem, corner
 		f.it.final.location = loc
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, f.out.size,
-			f.out.overflow.rect, f.it.border, f.it.overflow, container, negativeEdges(f.margin)))
+			f.out.overflow.rect, f.it.border, f.it.overflow, f.it.node.st, container, negativeEdges(f.margin)))
 	}
 	return overflow
 }

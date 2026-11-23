@@ -93,6 +93,11 @@ struct Draw {
 	// for none (decision 0130).
 	backU: vec4f,
 	backV: vec4f,
+	// roundU and roundV take a point to the rounded clip's own space when
+	// roundU.w, how many points one of its units spans, is above 0: a clip
+	// turned or skewed with what it cuts (decision 0216).
+	roundU: vec4f,
+	roundV: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> u: Draw;
@@ -187,14 +192,20 @@ fn cover(d: f32) -> f32 { return clamp(0.5 - d * u.scale, 0.0, 1.0); }
 // pixels and scale is x's points-to-pixels; passes scale both axes alike.
 fn roundedClip(pos: vec2f) -> f32 {
 	let h = u.round.zw * 0.5;
-	let q = pos / u.scale - (u.round.xy + h);
+	var p = pos / u.scale;
+	var k = 1.0;
+	if (u.roundU.w > 0.0) {
+		p = vec2f(dot(u.roundU.xyz, vec3f(p, 1.0)), dot(u.roundV.xyz, vec3f(p, 1.0)));
+		k = u.roundU.w;
+	}
+	let q = p - (u.round.xy + h);
 	var r = u.radii.x;
 	if (q.x >= 0.0) {
 		if (q.y >= 0.0) { r = u.radii.z; } else { r = u.radii.y; }
 	} else if (q.y >= 0.0) {
 		r = u.radii.w;
 	}
-	return cover(roundRect(q, h, r));
+	return cover(roundRect(q, h, r) * k);
 }
 
 // cut is how much of the pixel at pos the batch's mask leaves: none
