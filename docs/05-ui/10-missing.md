@@ -204,8 +204,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `text`, `clip-path`, `mask`, `filter`, `pattern`, `image`, `marker`, `symbol`, a nested `svg`, animation | not drawn, and named in a warning; `clip-path` is the commonest in real logos |
-| a `transform` on the root, `!important` in a style, a UTF-16 file | ignored, ignored, rejected |
+| `filter`, `foreignObject`, `textPath`, `mix-blend-mode`, `vector-effect`, animation | not drawn, and named in a warning |
+| a `clip-path` or a `mask` of a basic shape or another file, `clip-path` on the shapes inside a `clipPath` | the first two named in a warning and not applied, the last ignored |
+| the letters of `text` | Go's faces, the monospace one for a family naming one, whatever font the file asks for (Chrome's sans-serif differs by a few levels on average); no `letter-spacing`, `word-spacing`, `textLength`, `text-decoration`, `dominant-baseline`, vertical text, ligatures or shaping of complex scripts |
+| an `image` of a file | not fetched, and named in a warning: only `data:` addresses are drawn |
+| an SVG `image` sized by its own `width` and `height` with no `viewBox`, under a `preserveAspectRatio` other than the default | fitted from its own size as if it had a view box of it |
+| a UTF-16 file | rejected |
 | hairline strokes, dashes along curves | differ a little from Chrome's |
 | `currentColor` in an `img` or a `url()`, `image-rendering: pixelated` | black, as in Chrome, where only an `svg` element takes the page's colour; ignored |
 | an SVG as a twod texture | by hand: `svg.LoadPicture`, `Rasterise`, `twod.NewTexture` |
