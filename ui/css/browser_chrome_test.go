@@ -153,7 +153,7 @@ func TestChromeReadsWebkitValuesSelectorsAndAtRulesAsTheTable(t *testing.T) {
 	on := map[string]string{"calc": "width: -webkit-calc(1px + 2px)", "min-content": "width: -webkit-min-content",
 		"max-content": "width: -webkit-max-content", "fit-content": "width: -webkit-fit-content",
 		"flex": "display: -webkit-flex", "inline-flex": "display: -webkit-inline-flex", "grab": "cursor: -webkit-grab",
-		"grabbing": "cursor: -webkit-grabbing"}
+		"grabbing": "cursor: -webkit-grabbing", "fill-available": "width: -webkit-fill-available"}
 	var decls []string
 	for _, name := range slices.Sorted(maps.Keys(css.WebkitValues())) {
 		if on[name] == "" {
@@ -162,7 +162,7 @@ func TestChromeReadsWebkitValuesSelectorsAndAtRulesAsTheTable(t *testing.T) {
 		decls = append(decls, on[name])
 	}
 	// Chrome's own values, which keep their warning but text-align's, and one it refuses.
-	decls = append(decls, "display: -webkit-box", "width: -webkit-fill-available", "text-align: -webkit-center",
+	decls = append(decls, "display: -webkit-box", "text-align: -webkit-center",
 		"background-image: -webkit-linear-gradient(top, red, blue)", "position: -webkit-sticky")
 	selectors := []string{"input::-webkit-input-placeholder", "a:-webkit-any-link", "::-webkit-scrollbar",
 		"::-webkit-search-decoration", "::-webkit-anything-at-all", "input:-webkit-autofill", "p:-webkit-drag",
