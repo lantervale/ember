@@ -42,6 +42,7 @@
   "debug-grid": 0.0052,
   "decorations": 0.017,
   "direction": 0.0068,
+  "direction-more": 0.006,
   "disabled": 0.0078,
   "field-case": 0.0082,
   "first-letter-line": 0.0145,

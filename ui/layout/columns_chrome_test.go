@@ -198,6 +198,21 @@ background: #cfc; } .m { padding: 5px; border: 2px solid; }`,
 			m("column-count: 3", ui.H3(ui.Text("Title")), ui.P(ui.Text(prose(2))), ui.H3(ui.Text("Another")),
 				ui.P(ui.Text(prose(2)))),
 		),
+		"columns right to left": styled(base+` p { margin: 0; } .m { position: relative; }
+.s { column-span: all; background: #cfc; } .abs { position: absolute; width: 10px; height: 10px; background: #f00; }`,
+			m("direction: rtl", rows("", 3), rows("", 4)),
+			m("direction: rtl; column-count: 3", ui.Text(prose(3))),
+			m("direction: rtl; column-count: 3; padding: 4px 9px 4px 2px; border-left: 5px solid", words("", prose(3))),
+			m("direction: rtl; columns: 3 100px; column-gap: 7px", rows("", 3), ui.Div(ui.Class("s"), ui.Text("across")),
+				rows("", 5)),
+			m("direction: rtl; height: 60px; column-fill: auto", rows("", 7)),
+			m("direction: rtl", ui.Div(ui.Class("box"), ui.Style("float: right")), rows("", 6)),
+			m("direction: rtl", rows("", 3), ui.P(ui.Style("white-space: pre"), ui.Text("one\n"),
+				ui.Span(ui.Text("two"), ui.Span(ui.Class("abs"))), ui.Text("\nthree"))),
+			m("direction: rtl; display: inline-block; width: auto", rows("", 2), rows("", 2)),
+			m("direction: rtl; column-count: auto", rows("", 3), ui.P(ui.Style("white-space: pre"), ui.Text("one\n"),
+				ui.Span(ui.Text("two"), ui.Span(ui.Class("abs"))), ui.Text("\nthree"))),
+		),
 	}
 	for name, d := range cases {
 		t.Run(name, func(t *testing.T) {

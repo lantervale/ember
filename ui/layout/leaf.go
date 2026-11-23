@@ -135,8 +135,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		end += padding.r
 		bottom += padding.b
 	}
-	overflow := finalizeOverflow(rect{r: end, b: bottom},
-		s.sub(border.sum()).sub(size{gutter.x, gutter.y}), [2]bool{}, scroll)
+	port := s.sub(border.sum()).sub(size{gutter.x, gutter.y})
+	reach := reachLeft(n, rect{r: end, b: bottom}, port.w, measured.w, padding, scroll)
+	overflow := finalizeOverflow(reach, port, fromEnd(st), scroll)
 
 	out := output{
 		size:             s,
@@ -197,6 +198,21 @@ func (t *tree) leafChildren(n *node, out *output, pb, border rect, gutter point)
 	}
 	inset := border.add(rect{r: gutter.x, b: gutter.y})
 	out.area = &oofArea{size: out.size.sub(inset.sum()), offset: point{inset.l, inset.t}}
+}
+
+// reachLeft is reach for n's text under direction rtl, measured wide and laid out from
+// the right of a padding box port wide: lines too long overflow its left, past its left
+// padding where it scrolls. A control's is reach.
+func reachLeft(n *node, reach rect, port, measured float32, padding rect, scroll bool) rect {
+	if n.st.Dir != style.RTL || n.control != noControl {
+		return reach
+	}
+	reach.r = port - padding.r
+	reach.l = reach.r - measured
+	if scroll {
+		reach.l -= padding.l
+	}
+	return reach
 }
 
 // room is the width a replaced box that fills takes: the room it is given, or with no

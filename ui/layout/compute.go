@@ -409,8 +409,8 @@ func (n *node) fitGutter(out output) bool {
 			changed = true
 		}
 	}
-	fit(st.Overflow.Height == style.OverflowAuto, &n.gutter.w, r.b > port.h+slack)
-	fit(st.Overflow.Width == style.OverflowAuto, &n.gutter.h, r.r > port.w+slack)
+	fit(st.Overflow.Height == style.OverflowAuto, &n.gutter.w, r.b-r.t > port.h+slack)
+	fit(st.Overflow.Width == style.OverflowAuto, &n.gutter.h, r.r-r.l > port.w+slack)
 	return changed
 }
 

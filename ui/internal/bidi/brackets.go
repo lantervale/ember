@@ -106,3 +106,13 @@ func (s *sequence) brackets() {
 		}
 	}
 }
+
+// Mirror is r's Bidi_Mirroring_Glyph, the character drawn for it at an odd level (L4),
+// and false when it has none.
+func Mirror(r rune) (rune, bool) {
+	i, ok := slices.BinarySearchFunc(mirrors[:], r, func(m [2]rune, r rune) int { return int(m[0] - r) })
+	if !ok {
+		return r, false
+	}
+	return mirrors[i][1], true
+}
