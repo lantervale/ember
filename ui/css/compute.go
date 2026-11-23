@@ -1849,17 +1849,24 @@ var props = func() map[string]prop {
 			}, numbers(0, math.MaxFloat32)),
 		"font-synthesis": field(func(c *style.Computed) *style.FontSynthesis { return &c.Font.Synthesis },
 			func(_ *ctx, v []Component) style.FontSynthesis {
-				no := style.NoSyntheticBold | style.NoSyntheticItalic
+				no := style.NoSyntheticBold | style.NoSyntheticItalic | style.NoSyntheticSmallCaps
 				for _, c := range v {
 					switch {
 					case isWord(c, "weight"):
 						no &^= style.NoSyntheticBold
 					case isWord(c, "style"):
 						no &^= style.NoSyntheticItalic
+					case isWord(c, "small-caps"):
+						no &^= style.NoSyntheticSmallCaps
 					}
 				}
 				return no
 			}, flips[style.FontSynthesis]()),
+		propFontVariations: field(func(c *style.Computed) *[]style.FontVariation { return &c.Font.Variations },
+			func(_ *ctx, v []Component) []style.FontVariation {
+				out, _ := fontVariations(v)
+				return out
+			}, flips[[]style.FontVariation]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {

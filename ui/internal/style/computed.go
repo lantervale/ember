@@ -386,6 +386,16 @@ type Font struct {
 	// Caps is font-variant-caps, which measuring and drawing synthesise
 	// (SmallCaps).
 	Caps FontCaps
+	// Variations are font-variation-settings' axes, in order, a later
+	// one of a tag winning; none for normal.
+	Variations []FontVariation
+}
+
+// FontVariation is a place on one axis of a variable font: a tag, such
+// as "wght", and a value in the axis's units.
+type FontVariation struct {
+	Tag   string
+	Value float32
 }
 
 // FontSynthesis is the faces font-synthesis forbids making up from
@@ -398,6 +408,9 @@ const (
 	NoSyntheticBold FontSynthesis = 1 << iota
 	// NoSyntheticItalic leaves an italic the family lacks upright.
 	NoSyntheticItalic
+	// NoSyntheticSmallCaps leaves the small capitals font-variant-caps
+	// asks for drawn as the letters are.
+	NoSyntheticSmallCaps
 )
 
 // LineHeight is normal, a factor of the font size, or points.

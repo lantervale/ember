@@ -9,6 +9,8 @@ import (
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/lantervale/ember/internal/varfont"
+	"github.com/lantervale/ember/internal/varfont/varfonttest"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -93,4 +95,53 @@ func TestAFaceLeftOutOfTheSheetsDrawsNothing(t *testing.T) {
 	again := s.AddFace(Descriptors{Family: "Heavy", Weight: 400, WeightMax: 400}, heavy.File())
 	assert.Same(t, heavy, again, "the face known, its file landed")
 	assert.Same(t, heavy, s.Face(font))
+}
+
+func TestAVariableFaceIsDrawnAtTheInstanceItsFontAsksWithinItsDescriptors(t *testing.T) {
+	s := Builtin()
+	ttf := varfonttest.Weighty()
+	auto := loaded(t, s, Descriptors{Family: "Auto", Weight: 400, WeightMax: 400, AutoWeight: true,
+		Stretch: 100, StretchMax: 100, AutoStretch: true}, ttf)
+	ranged := loaded(t, s, Descriptors{Family: "Ranged", Weight: 300, WeightMax: 700, Stretch: 75, StretchMax: 125},
+		ttf)
+	fixed := loaded(t, s, Descriptors{Family: "Fixed", Weight: 400, WeightMax: 400, Stretch: 100, StretchMax: 100},
+		ttf)
+	vf := auto.Variable()
+	require.NotNil(t, vf)
+	for _, k := range []struct {
+		face *Face
+		font style.Font
+		want varfont.Coords
+	}{
+		{auto, style.Font{Weight: 400}, nil},
+		{auto, style.Font{Weight: 900, Stretch: 150}, vf.Normalize([]float32{900, 150})},
+		{auto, style.Font{Weight: 1000, Stretch: 30}, vf.Normalize([]float32{900, 50})},
+		{ranged, style.Font{Weight: 900, Stretch: 150}, vf.Normalize([]float32{700, 125})},
+		{ranged, style.Font{Weight: 100, Stretch: 50}, vf.Normalize([]float32{300, 75})},
+		{fixed, style.Font{Weight: 900, Stretch: 150}, nil},
+		{fixed, style.Font{Weight: 900, Variations: []style.FontVariation{{Tag: "wght", Value: 650},
+			{Tag: "wdth", Value: 60}, {Tag: "XXXX", Value: 1}}}, vf.Normalize([]float32{650, 60})},
+		{auto, style.Font{Weight: 200, Variations: []style.FontVariation{{Tag: "wght", Value: 800},
+			{Tag: "wght", Value: 500}}}, vf.Normalize([]float32{500})},
+	} {
+		assert.Equal(t, k.want, k.face.Instance(k.font), "%s %+v", k.face.Family, k.font)
+	}
+	bold, _ := auto.Synthetic(style.Font{Weight: 700})
+	assert.False(t, bold, "an auto weight covers the font's own")
+	bold, _ = fixed.Synthetic(style.Font{Weight: 700})
+	assert.True(t, bold, "a weight of 400 is made bold")
+	assert.Empty(t, auto.Descriptors(), "auto, as written")
+	assert.Equal(t, "font-weight: 400;", fixed.Descriptors())
+
+	at := style.Font{Family: []string{"Auto"}, Size: 20, Weight: 900}
+	plain := style.Font{Family: []string{"Auto"}, Size: 20, Weight: 400}
+	assert.InDelta(t, s.Advance(plain, "AVOH")+4*2*varfonttest.Bolder*20.0/2048, s.Advance(at, "AVOH"), 1e-3)
+}
+
+func TestAStaticFaceHasNoInstance(t *testing.T) {
+	s := Builtin()
+	c := loaded(t, s, Descriptors{Family: "Plain", Weight: 400, WeightMax: 400, AutoWeight: true}, goregular.TTF)
+	assert.Nil(t, c.Variable())
+	assert.Nil(t, c.Instance(style.Font{Weight: 900}))
+	assert.Equal(t, "font-weight: 400;", c.Descriptors(), "a static face's auto weight is normal")
 }

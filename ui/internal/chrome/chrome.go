@@ -400,6 +400,12 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 	if err = os.WriteFile(file, page, 0o600); err != nil { //nolint:gosec // a file in our own temporary folder
 		return nil, err
 	}
+	return runAt(dir, "file://"+file, size, action, m)
+}
+
+// runAt runs Chrome once on the page at address with a window of size,
+// its profile in dir.
+func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	// --run-all-compositor-stages-before-draw: headless shoots when the
@@ -420,7 +426,7 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 		blinkSettings(m),
 		"--virtual-time-budget=10000",
 		action,
-		"file://"+file,
+		address,
 	)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -674,6 +680,47 @@ func EvalScaled(d *ui.Document, size geom.Vec2, scale float32, expr string) ([]b
 	return Eval(d, size, expr)
 }
 
+// EvalScript is the script a page given to EvalPage holds: expr, the
+// body of an async function, evaluated once the page and its fonts have
+// loaded, the value it resolves to written into the page as JSON.
+func EvalScript(expr string) string {
+	return `<script>
+addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` + expr + ` })()).then(v => {
+	const out = document.createElement("script");
+	out.type = "application/json";
+	out.id = "ember-eval";
+	out.textContent = JSON.stringify(v);
+	document.head.appendChild(out);
+}));
+</script>`
+}
+
+// EvalPage loads the page at url, served from this machine, in Chrome in
+// a viewport of size points, and returns the value of its EvalScript as
+// JSON: what it fetches comes as the server sends it, timed as Chrome
+// times it.
+func EvalPage(url string, size geom.Vec2) ([]byte, error) {
+	unlock, err := lockChrome()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	dir, err := os.MkdirTemp("", "ember-chrome-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	out, err := runAt(dir, url, size, dumpDOM, css.Media{})
+	if err != nil {
+		return nil, err
+	}
+	res := evalJSON.FindSubmatch(out)
+	if res == nil {
+		return nil, fmt.Errorf("chrome: no result in the page:\n%s", out)
+	}
+	return res[1], nil
+}
+
 // Eval lays d out in Chrome in a viewport of size points, evaluates the
 // JavaScript expr, the body of an async function, once the fonts are
 // ready, and returns the value it resolves to as JSON. Chrome answers
@@ -685,17 +732,8 @@ func Eval(d *ui.Document, size geom.Vec2, expr string) ([]byte, error) {
 // EvalIn is Eval with Chrome answering the media features as m does: its
 // colour scheme, reduced motion and pointer.
 func EvalIn(m css.Media, d *ui.Document, size geom.Vec2, expr string) ([]byte, error) {
-	head := `<script>
-addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` + expr + ` })()).then(v => {
-	const out = document.createElement("script");
-	out.type = "application/json";
-	out.id = "ember-eval";
-	out.textContent = JSON.stringify(v);
-	document.head.appendChild(out);
-}));
-</script>`
 	var page bytes.Buffer
-	if err := export.Write(&page, d, export.Head(head)); err != nil {
+	if err := export.Write(&page, d, export.Head(EvalScript(expr))); err != nil {
 		return nil, err
 	}
 	out, err := run(page.Bytes(), size, dumpDOM, m)
