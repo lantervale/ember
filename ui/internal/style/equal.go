@@ -200,11 +200,15 @@ func (l *Look) equal(o *Look) bool {
 		sameSliceFunc(l.MaskImages, o.MaskImages, (*Image).equal) &&
 		sameSlice(l.MaskSizes, o.MaskSizes) &&
 		sameSlice(l.MaskRepeats, o.MaskRepeats) &&
-		sameSlice(l.MaskPositions, o.MaskPositions) &&
+		sameSlice(l.MaskPositionsX, o.MaskPositionsX) &&
+		sameSlice(l.MaskPositionsY, o.MaskPositionsY) &&
 		sameSlice(l.MaskOrigins, o.MaskOrigins) &&
 		sameSlice(l.MaskClips, o.MaskClips) &&
 		sameSlice(l.MaskModes, o.MaskModes) &&
 		sameSlice(l.MaskComposites, o.MaskComposites) &&
+		l.MaskBoxImage.Image.equal(&o.MaskBoxImage.Image) &&
+		l.MaskBoxImage.Width == o.MaskBoxImage.Width && l.MaskBoxImage.Outset == o.MaskBoxImage.Outset &&
+		l.MaskBoxImage.Repeat == o.MaskBoxImage.Repeat &&
 		l.ClipPath.Equal(&o.ClipPath) &&
 		l.ImageRendering == o.ImageRendering &&
 		l.ObjectFit == o.ObjectFit &&

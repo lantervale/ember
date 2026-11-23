@@ -492,7 +492,13 @@ var checks = map[string]check{
 	"mask-image":            commaList(single(either(words("none"), imageTerm))),
 	"mask-repeat":           commaList(checkTiling),
 	"mask-size":             commaList(checkBackgroundSize),
-	"mask-position":         commaList(checkMaskPosition),
+	propMaskBoxSource:       single(either(words("none"), urlTerm)),
+	propMaskBoxSlice:        checkImageSlice,
+	propMaskBoxWidth:        repeated(either(dimTerm(allowPercent|allowNumber|nonNegative), words("auto")), 4),
+	propMaskBoxOutset:       repeated(dimTerm(allowNumber|nonNegative), 4),
+	propMaskBoxRepeat:       repeated(words("stretch", "repeat", "round", "space"), 2),
+	propMaskPositionX:       commaList(checkMaskAxis(isXEdge)),
+	propMaskPositionY:       commaList(checkMaskAxis(isYEdge)),
 	"mask-origin":           commaList(single(maskBox)),
 	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
 	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
@@ -1133,7 +1139,7 @@ func parsePosition(v []Component) (position, error) {
 		case isEdge(v[0]):
 			err = p.set('x', v[0], nil)
 		default:
-			err = lengthPercent(v[0])
+			p.x, err = v[0], lengthPercent(v[0])
 		}
 	case 2:
 		err = p.pair(v[0], v[1])

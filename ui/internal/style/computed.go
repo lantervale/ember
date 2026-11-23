@@ -55,6 +55,13 @@ func Initial() Computed {
 				Top: ImageWidth{WidthTimes, 1}, Right: ImageWidth{WidthTimes, 1},
 				Bottom: ImageWidth{WidthTimes, 1}, Left: ImageWidth{WidthTimes, 1},
 			},
+			MaskBoxImage: MaskBoxImage{
+				Image: Image{Fill: true},
+				Width: Sides[ImageWidth]{
+					Top: ImageWidth{Kind: WidthAuto}, Right: ImageWidth{Kind: WidthAuto},
+					Bottom: ImageWidth{Kind: WidthAuto}, Left: ImageWidth{Kind: WidthAuto},
+				},
+			},
 		},
 	}
 }
@@ -1019,13 +1026,20 @@ type Look struct {
 	// lists their longhands', read as the background's are (MaskLayer):
 	// the pictures whose alpha, or luminance, the element and all it holds
 	// show through (decision 0133).
-	MaskImages             []Image
-	MaskSizes              []BackgroundSize
-	MaskRepeats            []BackgroundRepeat
-	MaskPositions          []BackgroundPosition
+	MaskImages  []Image
+	MaskSizes   []BackgroundSize
+	MaskRepeats []BackgroundRepeat
+	// MaskPositionsX and MaskPositionsY are mask-position's longhands:
+	// each layer's offset along one axis, the other zero.
+	MaskPositionsX         []BackgroundPosition
+	MaskPositionsY         []BackgroundPosition
 	MaskOrigins, MaskClips []BackgroundBox
 	MaskModes              []MaskMode
 	MaskComposites         []MaskComposite
+	// MaskBoxImage is -webkit-mask-box-image: a picture cut in nine as a
+	// border image is, over the border box grown by its outset, whose
+	// alpha the element shows through with its mask's layers.
+	MaskBoxImage MaskBoxImage
 	// ClipPath is clip-path: the shape the element and all it holds are
 	// painted and hit in (decision 0119).
 	ClipPath ClipPath
@@ -1480,7 +1494,7 @@ func (l *Look) MaskLayer(i int) MaskLayer {
 			Image:    layerItem(l.MaskImages, i, Image{}),
 			Size:     layerItem(l.MaskSizes, i, BackgroundSize{}),
 			Repeat:   layerItem(l.MaskRepeats, i, BackgroundRepeat{}),
-			Position: layerItem(l.MaskPositions, i, TopLeft),
+			Position: l.maskPosition(i),
 			Origin:   layerItem(l.MaskOrigins, i, InitialBox),
 			Clip:     layerItem(l.MaskClips, i, InitialBox),
 		},
@@ -1489,9 +1503,19 @@ func (l *Look) MaskLayer(i int) MaskLayer {
 	}
 }
 
+// maskPosition is layer i's position: its X of one longhand's list, its
+// Y of the other's.
+func (l *Look) maskPosition(i int) BackgroundPosition {
+	x, y := layerItem(l.MaskPositionsX, i, TopLeft), layerItem(l.MaskPositionsY, i, TopLeft)
+	return BackgroundPosition{X: x.X, FromRight: x.FromRight, Y: y.Y, FromBottom: y.FromBottom}
+}
+
 // Masked reports whether the element is masked: a layer of its mask has
 // a picture, there or not.
 func (l *Look) Masked() bool {
+	if l.MaskBoxImage.Image.Source != "" {
+		return true
+	}
 	for i := range l.MaskImages {
 		if img := &l.MaskImages[i]; img.Source != "" || img.Gradient != nil {
 			return true
@@ -1543,6 +1567,15 @@ const (
 type ImageWidth struct {
 	Kind ImageWidthKind
 	V    float32
+}
+
+// MaskBoxImage is a picture cut in nine (Image's Slice and Fill), its
+// sides Width thick, laid over the border box grown by Outset (lengths or
+// times the border's widths) and along its edges by Repeat.
+type MaskBoxImage struct {
+	Image         Image
+	Width, Outset Sides[ImageWidth]
+	Repeat        [2]ImageRepeat
 }
 
 // ImageWidthKind is what an ImageWidth's V measures.

@@ -2174,8 +2174,16 @@ var props = func() map[string]prop {
 			(*ctx).backgroundSize, repeatable(backgroundSizes, style.BackgroundSize{})),
 		"mask-repeat": layered(func(c *style.Computed) *[]style.BackgroundRepeat { return &c.MaskRepeats },
 			tiling, flips[[]style.BackgroundRepeat]()),
-		"mask-position": layered(func(c *style.Computed) *[]style.BackgroundPosition { return &c.MaskPositions },
-			(*ctx).position, repeatable(positions, style.TopLeft)),
+		propMaskPositionX: layered(func(c *style.Computed) *[]style.BackgroundPosition { return &c.MaskPositionsX },
+			func(x *ctx, v []Component) style.BackgroundPosition {
+				at, end := x.maskAxis(v)
+				return style.BackgroundPosition{X: at, FromRight: end}
+			}, repeatable(positions, style.TopLeft)),
+		propMaskPositionY: layered(func(c *style.Computed) *[]style.BackgroundPosition { return &c.MaskPositionsY },
+			func(x *ctx, v []Component) style.BackgroundPosition {
+				at, end := x.maskAxis(v)
+				return style.BackgroundPosition{Y: at, FromBottom: end}
+			}, repeatable(positions, style.TopLeft)),
 		"mask-origin": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.MaskOrigins },
 			wordOf(maskBoxes), flips[[]style.BackgroundBox]()),
 		"mask-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.MaskClips },
@@ -2218,64 +2226,29 @@ var props = func() map[string]prop {
 				"none": style.FitNone, "scale-down": style.FitScaleDown}),
 		"border-image-source": field(func(c *style.Computed) *string { return &c.BorderImage.Source },
 			imageSource, flips[string]()),
-		"border-image-slice": filled(field(
-			func(c *style.Computed) *style.Sides[float32] { return &c.BorderImage.Slice },
-			func(_ *ctx, v []Component) style.Sides[float32] {
-				if len(v) == 1 && v[0].Kind == Percentage && v[0].Num == 100 {
-					return style.Sides[float32]{}
-				}
-				var n []float32
-				for _, c := range v {
-					if !isWord(c, "fill") {
-						n = append(n, float32(c.Num))
-					}
-				}
-				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(n)-1]
-				return style.Sides[float32]{Top: n[pick[0]], Right: n[pick[1]], Bottom: n[pick[2]], Left: n[pick[3]]}
-			}, imageSlices,
+		"border-image-slice": filled(func(c *style.Computed) *style.Image { return &c.BorderImage }, field(
+			func(c *style.Computed) *style.Sides[float32] { return &c.BorderImage.Slice }, imageSlicesOf, imageSlices,
 		)),
 		"border-image-width": field(
 			func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.BorderImageWidth },
-			func(x *ctx, v []Component) style.Sides[style.ImageWidth] {
-				var w []style.ImageWidth
-				for _, c := range v {
-					switch {
-					case isWord(c, "auto"):
-						w = append(w, style.ImageWidth{Kind: style.WidthAuto})
-					case c.Kind == Number:
-						w = append(w, style.ImageWidth{Kind: style.WidthTimes, V: float32(c.Num)})
-					case c.Kind == Percentage:
-						w = append(w, style.ImageWidth{Kind: style.WidthPercent, V: float32(c.Num)})
-					default:
-						w = append(w, style.ImageWidth{Kind: style.WidthLength, V: x.px(c)})
-					}
-				}
-				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(w)-1]
-				return style.Sides[style.ImageWidth]{Top: w[pick[0]], Right: w[pick[1]], Bottom: w[pick[2]], Left: w[pick[3]]}
-			}, imageWidths,
+			(*ctx).imageWidthsOf, imageWidths,
 		),
 		"border-image-repeat": field(
 			func(c *style.Computed) *[2]style.ImageRepeat { return &c.BorderImageRepeat },
-			func(_ *ctx, v []Component) [2]style.ImageRepeat {
-				of := func(c Component) style.ImageRepeat {
-					switch {
-					case isWord(c, kwRepeat):
-						return style.RepeatTile
-					case isWord(c, "round"):
-						return style.RepeatRound
-					case isWord(c, "space"):
-						return style.RepeatSpace
-					}
-					return style.RepeatStretch
-				}
-				across := of(v[0])
-				down := across
-				if len(v) > 1 {
-					down = of(v[1])
-				}
-				return [2]style.ImageRepeat{across, down}
-			}, flips[[2]style.ImageRepeat](),
+			imageRepeatsOf, flips[[2]style.ImageRepeat](),
 		),
+		propMaskBoxSource: field(func(c *style.Computed) *string { return &c.MaskBoxImage.Image.Source },
+			imageSource, flips[string]()),
+		propMaskBoxSlice: filled(func(c *style.Computed) *style.Image { return &c.MaskBoxImage.Image }, field(
+			func(c *style.Computed) *style.Sides[float32] { return &c.MaskBoxImage.Image.Slice }, imageSlicesOf,
+			imageSlices,
+		)),
+		propMaskBoxWidth: field(func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.MaskBoxImage.Width },
+			(*ctx).imageWidthsOf, imageWidths),
+		propMaskBoxOutset: field(func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.MaskBoxImage.Outset },
+			(*ctx).imageWidthsOf, imageWidths),
+		propMaskBoxRepeat: field(func(c *style.Computed) *[2]style.ImageRepeat { return &c.MaskBoxImage.Repeat },
+			imageRepeatsOf, flips[[2]style.ImageRepeat]()),
 		"box-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.Shadows },
 			(*ctx).shadows, shadows).painted(),
 		"outline-width": field(func(c *style.Computed) *float32 { return &c.OutlineWidth }, borderWidthOf, widths),
@@ -2459,17 +2432,73 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 
 // filled is border-image-slice's p that also reads its fill word, which
 // flips with the slices.
-func filled(p prop) prop {
+func filled(get func(*style.Computed) *style.Image, p prop) prop {
 	set, inherit := p.set, p.inherit
 	p.set = func(x *ctx, v []Component) {
 		set(x, v)
-		x.c.BorderImage.Fill = slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "fill") })
+		get(x.c).Fill = slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "fill") })
 	}
 	p.inherit = func(dst, src *style.Computed) {
 		inherit(dst, src)
-		dst.BorderImage.Fill = src.BorderImage.Fill
+		get(dst).Fill = get(src).Fill
 	}
 	return p
+}
+
+// imageSlicesOf is a border image's slice, side by side; 100% alone is
+// the whole picture, none cut.
+func imageSlicesOf(_ *ctx, v []Component) style.Sides[float32] {
+	if len(v) == 1 && v[0].Kind == Percentage && v[0].Num == 100 {
+		return style.Sides[float32]{}
+	}
+	var n []float32
+	for _, c := range v {
+		if !isWord(c, "fill") {
+			n = append(n, float32(c.Num))
+		}
+	}
+	pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(n)-1]
+	return style.Sides[float32]{Top: n[pick[0]], Right: n[pick[1]], Bottom: n[pick[2]], Left: n[pick[3]]}
+}
+
+// imageWidthsOf is a border image's width or outset, side by side.
+func (x *ctx) imageWidthsOf(v []Component) style.Sides[style.ImageWidth] {
+	var w []style.ImageWidth
+	for _, c := range v {
+		switch {
+		case isWord(c, "auto"):
+			w = append(w, style.ImageWidth{Kind: style.WidthAuto})
+		case c.Kind == Number:
+			w = append(w, style.ImageWidth{Kind: style.WidthTimes, V: float32(c.Num)})
+		case c.Kind == Percentage:
+			w = append(w, style.ImageWidth{Kind: style.WidthPercent, V: float32(c.Num)})
+		default:
+			w = append(w, style.ImageWidth{Kind: style.WidthLength, V: x.px(c)})
+		}
+	}
+	pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(w)-1]
+	return style.Sides[style.ImageWidth]{Top: w[pick[0]], Right: w[pick[1]], Bottom: w[pick[2]], Left: w[pick[3]]}
+}
+
+// imageRepeatsOf is a border image's repeat across and down.
+func imageRepeatsOf(_ *ctx, v []Component) [2]style.ImageRepeat {
+	of := func(c Component) style.ImageRepeat {
+		switch {
+		case isWord(c, kwRepeat):
+			return style.RepeatTile
+		case isWord(c, "round"):
+			return style.RepeatRound
+		case isWord(c, "space"):
+			return style.RepeatSpace
+		}
+		return style.RepeatStretch
+	}
+	across := of(v[0])
+	down := across
+	if len(v) > 1 {
+		down = of(v[1])
+	}
+	return [2]style.ImageRepeat{across, down}
 }
 
 // textFill is -webkit-text-fill-color: a colour, or currentColor, which

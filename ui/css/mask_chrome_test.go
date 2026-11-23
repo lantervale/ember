@@ -103,9 +103,16 @@ div { width: 20px; height: 20px; background-color: #36c; }
 .q { -webkit-mask: url(img/panel.png) no-clip; -webkit-mask-composite: plus-darker; }
 .r { -webkit-mask: url(img/panel.png) xor; }
 .s { -webkit-mask: url(img/panel.png) add; }
+.t { -webkit-mask-image: url(img/panel.png), url(img/panel.png); -webkit-mask-position-x: right 3px, center; }
+.u { mask-image: url(img/panel.png); -webkit-mask-position: right 4px bottom; -webkit-mask-position-y: 20%; }
+.v { mask-image: url(img/panel.png); -webkit-mask-position-x: 10px; -webkit-mask-position: center; }
+.w { -webkit-mask: url(img/panel.png) left 2px top 3px; -webkit-mask-position-x: right; }
+.x { mask-image: url(img/panel.png), url(img/panel.png), url(img/panel.png); -webkit-mask-position-x: 1px, left 2px;
+  -webkit-mask-position-y: 3px, bottom 4px, top; }
+.y { mask-image: url(img/panel.png); -webkit-mask-position-y: bottom -2px; mask-position: 5px; }
 `)}}
 	d := ui.NewDocument(ui.Stylesheet(fsys, "m.css"), ui.BrowserSheets())
-	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", ""}
+	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", ""}
 	for _, class := range classes {
 		d.Body().Append(ui.Div(ui.Class(class)))
 	}
