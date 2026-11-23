@@ -330,9 +330,12 @@ func authorStyles(sheets []*Sheet, m Media) *counterStyles {
 	return newCounterStyles(rules, predefined())
 }
 
-// get is the counter style name stands for: decimal when no rule
-// defines it, or the rule doesn't define one.
+// get is the counter style name stands for: the one symbols() made, or
+// decimal when no rule defines it, or the rule doesn't define one.
 func (cs *counterStyles) get(name string) *style.CounterStyle {
+	if s := symbolsStyle(name); s != nil {
+		return s
+	}
 	if s := cs.lookup(name, nil); s != nil {
 		return s
 	}

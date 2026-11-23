@@ -90,3 +90,27 @@ func TestComplexPredefinedStylesWriteByTheirAlgorithm(t *testing.T) {
 		assert.Equal(t, c.want, predefined().represent(c.name, c.n), "%s %d", c.name, c.n)
 	}
 }
+
+func TestSymbolsMakesAnAnonymousCounterStyle(t *testing.T) {
+	ref := func(text string) (string, error) {
+		v := items(componentsOf(text))
+		if err := checkCounterStyleRef(v); err != nil {
+			return "", err
+		}
+		return counterStyleRef(v[0]), nil
+	}
+	name, err := ref(`SYMBOLS(Cyclic '*' "+")`)
+	require.NoError(t, err)
+	assert.Equal(t, `symbols(cyclic "*" "+")`, name, "written as getComputedStyle writes it")
+	assert.Equal(t, "+", predefined().represent(name, 4))
+	assert.Equal(t, "+ ", predefined().marker(name, 4), "no prefix, a space after")
+	name, err = ref(`symbols("*")`)
+	require.NoError(t, err)
+	assert.Equal(t, "**", predefined().represent(name, 2), "symbolic when no system is given")
+	assert.Equal(t, "-1", predefined().represent(name, -1), "decimal where it can't write")
+	for _, bad := range []string{`symbols(alphabetic "x")`, `symbols()`, `symbols(cyclic x)`, `symbols(url(a.png))`,
+		`symbols(extends "a")`} {
+		_, err = ref(bad)
+		assert.Error(t, err, bad)
+	}
+}

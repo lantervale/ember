@@ -68,6 +68,49 @@ func TestCounterStylesWriteEachValueAsChromes(t *testing.T) {
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
+// TestSymbolsWriteEachValueAsChromes writes -3 to 14 in counter styles
+// symbols() makes, in counter() and in list items' markers, and compares
+// list-style-type with getComputedStyle's: symbols() of one alphabetic
+// string, of none, of a name or of a picture is dropped.
+func TestSymbolsWriteEachValueAsChromes(t *testing.T) {
+	funcs := []string{`symbols("*" "+")`, `symbols(cyclic "a" "bb")`, `SYMBOLS(Fixed 'x' 'y' 'z')`,
+		`symbols(alphabetic "x" "y")`, `symbols(numeric "0" "1" "2")`, `symbols(symbolic "o")`,
+		`symbols(alphabetic "x")`, `symbols()`, `symbols(cyclic x)`, `symbols(cyclic url(pic.png))`}
+	sheet := "body { margin: 8px; font-size: 20px; } p, ol { margin: 0 0 6px; } p span { display: inline-block; }\n" +
+		"ol { padding-left: 60px; list-style-type: lower-roman; }\n"
+	var nodes []*ui.Node
+	for i, f := range funcs {
+		p := ui.P()
+		for v := -3; v <= 14; v++ {
+			p.Append(ui.Span(ui.Class(fmt.Sprintf("c%d", i)), ui.Style(fmt.Sprintf("counter-reset: n %d", v)),
+				ui.Text("|")))
+		}
+		ol := ui.Ol(ui.Class(fmt.Sprintf("l%d", i)), ui.Attr("start", "-1"))
+		for range 5 {
+			ol.Append(ui.Li(ui.Text("item")))
+		}
+		nodes = append(nodes, p, ol)
+		sheet += fmt.Sprintf(".c%d::before { content: counter(n, %s); }\n.l%d { list-style-type: %s; }\n", i, f, i, f)
+	}
+	d := ui.NewDocument(ui.CSS(sheet))
+	d.Body().Append(nodes...)
+	r := chrome.Match(t, d, geom.V2(700, 1400))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+	want, err := chrome.Styles(d, geom.V2(700, 1400), []string{"list-style-type"})
+	require.NoError(t, err)
+	i := 0
+	d.HTML().Walk(func(n *ui.Node) bool {
+		if n.IsText() {
+			return true
+		}
+		if n.Tag() == dom.Ol {
+			assert.Equal(t, want[i]["list-style-type"], listStyleType(dom.Data(n).Style), "%s %d", n.Tag(), i)
+		}
+		i++
+		return true
+	})
+}
+
 // TestReversedCountersAreDroppedAsChromes has the numbers stand in each
 // item's ::before, as wide as Chrome writes them: Chrome 157 reads no
 // reversed() (CSS.supports says false), so the declaration is dropped and
