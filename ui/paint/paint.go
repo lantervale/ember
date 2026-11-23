@@ -89,19 +89,24 @@ type Frame struct {
 	Keep  *box.Box
 	// Selection is the text selected outside the fields, nil for none.
 	Selection Selection
+	// Inactive is the window not being the active one: a selection no
+	// ::selection colours is drawn in the inactive colours, as Chrome's.
+	Inactive bool
 }
 
 // Selection is the text a Document has selected, as paint draws it.
 type Selection interface {
 	// Parts are the rectangles of a text run the selection covers, in the
-	// run's space as its fragments' are.
+	// run's space as its fragments' are, or of a br the mark of the line
+	// it holds alone, in its box's space.
 	Parts(run *box.Box) []Selected
 	// Holds reports an element wholly inside the selection: a picture
 	// there is tinted.
 	Holds(n *dom.Node) bool
 }
 
-// Selected is the part of a text run's fragment Line a selection covers.
+// Selected is the part of a text run's fragment Line a selection covers:
+// Line is -1 for the mark of an empty line, which no fragment holds.
 type Selected struct {
 	Line int
 	Rect geom.Rect
@@ -122,7 +127,7 @@ func TransformOf(b *box.Box) (geom.Transform2D, bool) {
 // Time, Live and Keep would.
 func Each(f *Frame) Option {
 	return func(p *painter) {
-		p.time, p.timed, p.keep, p.sel = f.Time, true, f.Keep, f.Selection
+		p.time, p.timed, p.keep, p.sel, p.inactive = f.Time, true, f.Keep, f.Selection, f.Inactive
 		if f.Live != nil {
 			f.Live.reset()
 			p.live, p.apart = f.Live, f.Apart
@@ -168,9 +173,11 @@ type painter struct {
 	vector  func(string) Vector
 	control func(*dom.Node) any
 	sel     Selection
-	time    float32
-	timed   bool
-	scale   float32
+	// inactive is Frame's Inactive.
+	inactive bool
+	time     float32
+	timed    bool
+	scale    float32
 	// popups are the open selects met, drawn over everything at the end.
 	popups []popup
 	// top is the top layer: the modal dialogs met, painted over the page
@@ -464,7 +471,12 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		case box.Marker:
 			p.use(c.clip)
 			p.marker(c, alpha)
-		case box.Element, box.AnonymousBlock, box.Viewport:
+		case box.Element:
+			if p.sel != nil && c.b.Node != nil && c.b.Node.Tag() == dom.Br {
+				p.use(c.clip)
+				p.lineBreak(c, alpha)
+			}
+		case box.AnonymousBlock, box.Viewport:
 		}
 	}
 	if marked(e.b) {

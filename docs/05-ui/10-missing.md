@@ -6,16 +6,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a selected empty line | not drawn, where Chrome draws a space-wide mark at its start |
-| a double click on a word cut by an element (`wo<b>rd</b>`) | takes the part in the text node pressed |
-| the selection of an unfocused window | drawn as a focused one's, where Chrome greys it; `::selection:window-inactive` is refused |
-| `::selection` with `text-decoration`, `text-shadow`, `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning; Chrome reads them |
-| `::selection`'s `color` in a text field | the field's text keeps its colour; only `background-color` applies |
-| the default selection colour on Windows and Linux | macOS's blue everywhere |
+| `::selection` with `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning, as ui draws neither on any text; Chrome reads them |
+| the default selection colour on Windows and Linux, focused or not | macOS's blue everywhere, and its grey in an inactive window: the machines here run Chrome on macOS only, which can't say what the others draw |
+| a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
-| a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
 | `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
@@ -206,7 +202,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 Things built and tested, with a part no test against Chrome covers yet.
 
 - `background-size: cover` and `contain` under a Document `Zoom`.
-- Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press, a double click and Shift with a key reach are tested in ember alone; the copied text, the rectangles and the picture are compared with Chrome's.
+- Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press and Shift with a key reach are tested in ember alone, a double click's word against the one Chrome's `Selection.modify` reaches; the copied text, the rectangles and the picture are compared with Chrome's.
+- A selection in an inactive window: headless Chrome's page is neither focused nor not, its `::selection:window-inactive` holding in one run and not in the next, so the grey and the rules are tested in ember alone, with Chrome asked only which selectors it reads.
+- The Linux and Windows thresholds of the `selection-marks` and `field-selection` pages: measured on macOS only.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
 - `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone.
 - `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so they are tested in ember alone; Chrome is asked only that nothing matches them before.

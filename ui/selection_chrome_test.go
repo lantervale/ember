@@ -4,6 +4,7 @@ package ui_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -183,5 +184,48 @@ func TestTheSelectionsRectanglesAreChromesRangeRects(t *testing.T) {
 				assert.InDelta(t, w[2], g.W, 0.51, "%s: rect %d as wide as Chrome's", name, i)
 			}
 		}
+	}
+}
+
+// TestADoubleClickTakesChromesWord compares the word a double click takes
+// with the one Chrome's Selection.modify reaches from the same place, a
+// word back then a word on: headless Chrome takes no clicks.
+func TestADoubleClickTakesChromesWord(t *testing.T) {
+	p := ui.P(ui.Text("a wo"), ui.B(ui.Text("rd")), ui.Text(" sp"), ui.I(ui.Text("l"), ui.Span(ui.Text("it"))),
+		ui.Text("s and"), ui.Br(), ui.Text("x "), ui.Em(ui.Text("tail")), ui.Text("ed."))
+	l := selectableDoc(t, "", p)
+	kids := p.Children()
+	for _, c := range []struct {
+		path []int
+		at   int
+	}{{[]int{0}, 3}, {[]int{1, 0}, 1}, {[]int{2}, 2}, {[]int{3, 1, 0}, 1}, {[]int{4}, 3}, {[]int{7, 0}, 2}} {
+		n := kids[c.path[0]]
+		for _, i := range c.path[1:] {
+			n = n.Children()[i]
+		}
+		path, err := json.Marshal(c.path)
+		require.NoError(t, err)
+		out, err := chrome.Eval(l.doc, geom.V2(640, 360), fmt.Sprintf(`
+			let n = document.querySelector("p");
+			for (const i of %s) n = n.childNodes[i];
+			const s = getSelection();
+			s.collapse(n, %d);
+			s.modify("move", "backward", "word");
+			s.modify("extend", "forward", "word");
+			return s.toString();`, path, c.at))
+		require.NoError(t, err)
+		var want string
+		require.NoError(t, json.Unmarshal(out, &want))
+
+		l.doc.Select(ui.Position{Node: n, Offset: c.at}, ui.Position{Node: n, Offset: c.at + 1})
+		r := l.doc.SelectionRects()[0]
+		l.doc.ClearSelection()
+		at := geom.V2(r.X+0.5, r.Y+r.H/2)
+		l.frames(30)
+		for range 2 {
+			l.down(at)
+			l.up()
+		}
+		assert.Equal(t, want, l.doc.Selection().Text, "pressed in %q at %d", n.Text(), c.at)
 	}
 }

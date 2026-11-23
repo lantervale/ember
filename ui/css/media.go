@@ -25,6 +25,9 @@ type Media struct {
 	// any-pointer and any-hover always find, any-pointer a coarse one
 	// beside it under Touch.
 	Touch bool
+	// Inactive is the Document's window not being the active one, which
+	// no media feature asks: ::selection:window-inactive holds then.
+	Inactive bool
 }
 
 func (m Media) dppx() float64 {

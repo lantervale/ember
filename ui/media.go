@@ -83,13 +83,14 @@ func (d *Document) SetReducedMotion(on bool) {
 
 // medium is what the Document answers the media features that aren't
 // its viewport's with. The pointer is its window's, the outermost
-// Document's.
+// Document's, and so is whether that window is inactive.
 func (d *Document) medium() css.Media {
 	top := d
 	for top.framed != nil {
 		top = top.framed.host
 	}
-	return css.Media{Dark: d.ColorScheme() == platform.AppearanceDark, ReducedMotion: d.ReducedMotion(), Touch: top.touch}
+	return css.Media{Dark: d.ColorScheme() == platform.AppearanceDark, ReducedMotion: d.ReducedMotion(), Touch: top.touch,
+		Inactive: top.inactive}
 }
 
 // notePointer records whether the pointer last used is a finger on the

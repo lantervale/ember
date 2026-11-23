@@ -353,13 +353,26 @@ func (m *matcher) try(s *Sheet, es []entry, e *dom.Node, off []bool) {
 	for _, en := range es {
 		r := &s.Rules[en.rule]
 		sel := r.Selectors[en.sel]
-		if off != nil && off[en.rule] || !sel.Matches(e) || len(r.containers) > 0 && !m.contained(r, e) {
+		if off != nil && off[en.rule] || !m.active(sel) || !sel.Matches(e) || len(r.containers) > 0 && !m.contained(r, e) {
 			continue
 		}
 		if sp, ok := m.best[en.rule]; !ok || sp.Less(sel.Specificity) {
 			m.best[en.rule] = sel.Specificity
 		}
 	}
+}
+
+// active reports whether sel holds as the window stands: one with
+// :window-inactive only while it is inactive, which the cascade then reads.
+func (m *matcher) active(sel Selector) bool {
+	if !sel.inactive {
+		return true
+	}
+	if m.env == nil {
+		return false
+	}
+	m.env.inactiveRead = true
+	return m.env.inactive
 }
 
 func (m *matcher) contained(r *Rule, e *dom.Node) bool {
