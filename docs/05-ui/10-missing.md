@@ -16,7 +16,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| `::first-line`, `::first-letter` | refused with a warning, the rule dropped |
+| a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
+| `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
+| `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
+| a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
+| a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
 | `text-decoration-skip-ink`, a decoration's shadow | a line is drawn through descenders, and `text-shadow` leaves it out |
 | text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time, 27 of the 47 pixel pages with text measured further from Chrome at that scale and none nearer, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
 | `-webkit-font-smoothing` on the options of an open `select` and on a picture's alt text | not read: drawn with the default smoothing |
@@ -104,14 +108,16 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `prefers-contrast`, `forced-colors`, `any-hover: none` on a touch-only device | fixed: no preference, none, and a mouse that hovers is always there |
 | `ex`, `ch` and the font's other units in a media query's length | refused: Chrome measures them in the initial font, ui would take CSS's fallbacks |
 | `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
-| `backdrop-filter`, a `url()` filter | refused |
+| a `url()` filter, in `filter` or `backdrop-filter`; `mix-blend-mode: plus-lighter`, `plus-darker` | refused |
+| a backdrop filter inside an isolated group that is no backdrop root (`isolation: isolate`, a `z-index` holding a mixed element) | reads the group only, where Chrome reads on to the backdrop root ([decision 0130](../99-decisions/0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md)) |
+| a mixed element or a backdrop filter reaching the page | mixes with the Document's canvas, not with what the game drew under the Document |
+| `opacity` below 1 on an ancestor of an element drawn as a picture, itself not one | each of its pictures and boxes faded apart, where Chrome fades the ancestor as one |
 | a `clip-path` inside another's (one on an element held by one) | the inner shape cuts, the outer one only by its bounds ([decision 0119](../99-decisions/0119-a-clip-path-is-a-mask-the-gpu-cuts-by-and-an-outline-the-pointer-is-tested-against.md)) |
 | `clip-path` on an inline element over several lines | placed in the box round all its lines; not compared with Chrome |
 | `path()` transitioning to another `path()` with the same commands | flips half way; Chrome moves each point |
 | a pointer in the corner a rounded border cuts off | hits the box, where Chrome lets it through to what is under it |
 | a filtered element's live parts (a caret, a canvas element) when its Document draws them apart, and a filtered inline element holding absolute boxes | drawn unfiltered over it, placed by the nearest positioned block ([decision 0118](../99-decisions/0118-a-filtered-element-is-a-picture-drawn-through-wgsl-effects.md)) |
 | a `transform` holding fixed descendants | placed in the viewport, where Chrome places them in the transformed element, as it does under a `filter` |
-| `opacity` with a filter on one element | its children's colours faded inside the picture, where Chrome fades the filtered picture once |
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |
@@ -132,7 +138,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 | math functions in a colour's channels and in times (`calc(1s + 100ms)`) | refused |
 | a percentage inside `sign()` in a `line-height` | of the font size, where Chrome measures it against something else |
-| `list-style-image`, `direction`, `word-break`, `mix-blend-mode`, `font-variant`, `@counter-style`, `revert` | refused |
+| `list-style-image`, `direction`, `word-break`, `font-variant`, `@counter-style`, `revert` | refused |
 
 ## Windows
 

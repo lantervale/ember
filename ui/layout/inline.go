@@ -58,6 +58,16 @@ type inlineContent struct {
 	// unindented is set where the first line is not its block container's: an anonymous
 	// block after other content.
 	unindented bool
+	// line is the style of the block's first line where a ::first-line styles it, nil
+	// elsewhere; firstPieces are the pieces as measured in the first line's styles, and
+	// firstOn is set while they, and each run's and span's first-line style, stand in
+	// for their own (useFirst). firstInWord is inWord for the first line's text.
+	line        *style.Computed
+	firstPieces []piece
+	firstOn     bool
+	firstInWord bool
+	// back is the box painting the first line's background, nil without one.
+	back *box.Box
 }
 
 // inlineOOF is an absolutely positioned (or fixed) element inside inline content: its
@@ -98,6 +108,12 @@ type textRun struct {
 	// shift is how far below the baseline of the line last given to lineBox the run's
 	// own stands, vertical-align's.
 	shift float32
+	// skip is how many characters of the node's text stand before the run's: its first
+	// letter, which a ::first-letter box holds.
+	skip int32
+	// lineSt and lineText are the run's style and text on its block's first line.
+	lineSt   *style.Computed
+	lineText string
 }
 
 // atomicInline is an inline-level box laid out on its own and placed in a line as one piece.
@@ -132,6 +148,8 @@ type inlineSpan struct {
 	// noStart and noEnd are set on a part of an element blocks cut that is not its
 	// first or not its last: it has no edge there.
 	noStart, noEnd bool
+	// lineSt is the span's style on its block's first line.
+	lineSt *style.Computed
 }
 
 type pieceKind uint8
@@ -199,7 +217,7 @@ func isAtomicDisplay(d style.Display) bool {
 // inlineOf gathers the inline content of items for owner, nil when it is only collapsible
 // whitespace.
 func (t *tree) inlineOf(owner *node, items []item) *inlineContent {
-	c := &inlineContent{owner: owner, unit: unitsPerPoint(t.fonts)}
+	c := &inlineContent{owner: owner, unit: unitsPerPoint(t.fonts), line: firstLineOf(owner)}
 	t.gather(c, owner.box, items)
 	if n := owner.box.Node; n != nil && n.Tag() == dom.Summary && owner.st.ListItem && markerOf(owner.st) != "" {
 		c.marker = &box.Box{Kind: box.Marker, Node: n, Style: owner.st}
@@ -225,14 +243,7 @@ func (t *tree) inlineOf(owner *node, items []item) *inlineContent {
 func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 	for _, it := range items {
 		if it.text != nil {
-			st := c.owner.st
-			if p := it.text.Parent(); p != nil && p != c.owner.box.Node {
-				st = styleOf(p)
-			}
-			b := &box.Box{Kind: box.TextRun, Node: it.text, Style: st}
-			c.runs = append(c.runs,
-				&textRun{box: b, parent: parent, st: st, span: -1,
-					text: shownText(Translated(it.text, t.translate), st, it.text.Parent(), &c.inWord)})
+			t.gatherText(c, parent, it.text)
 			continue
 		}
 		st := styleOf(it.element)
@@ -266,7 +277,7 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			n := t.build(it.element, c.owner)
 			n.atomic = true
 			c.runs = append(c.runs,
-				&textRun{box: n.box, parent: parent, st: st, span: -1, atomic: &atomicInline{node: n}})
+				&textRun{box: n.box, parent: parent, st: st, lineSt: st, span: -1, atomic: &atomicInline{node: n}})
 			continue
 		}
 		b := &box.Box{Kind: box.Element, Node: it.element, Style: st}
@@ -281,11 +292,91 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 		t.gather(c, b, inside)
 		s := &inlineSpan{box: b, parent: parent, st: st, first: first, end: len(c.runs),
 			noStart: it.cut != nil && !it.first, noEnd: it.cut != nil && !it.last}
+		s.lineSt = c.lineStyle(it.element, st)
 		for i := first; i < len(c.runs); i++ {
 			s.runs = append(s.runs, i)
 		}
 		c.hold(s, inner)
 	}
+}
+
+// firstLineOf is the style of the first line of owner's block, nil where no
+// ::first-line styles it.
+func firstLineOf(owner *node) *style.Computed {
+	e := owner.box.Node
+	if e == nil && owner.parent != nil {
+		e = owner.parent.box.Node
+	}
+	if e == nil || e.IsText() {
+		return nil
+	}
+	return dom.Data(e).FirstLine
+}
+
+// lineBack is the node of the box behind the first line of owner's block, nil for none.
+func lineBack(owner *node) *dom.Node {
+	e := owner.box.Node
+	if e == nil && owner.parent != nil {
+		e = owner.parent.box.Node
+	}
+	if e == nil || e.IsText() {
+		return nil
+	}
+	return dom.Data(e).LineBack
+}
+
+// lineStyle is the style on the first line of what e holds, of style st: the block's
+// first line's for its own text, e's there inside it.
+func (c *inlineContent) lineStyle(e *dom.Node, st *style.Computed) *style.Computed {
+	if c.line == nil || e == nil {
+		return st
+	}
+	if b := c.owner.box.Node; e == b || b == nil && c.owner.parent != nil && e == c.owner.parent.box.Node {
+		return c.line
+	}
+	if s := dom.Data(e).FirstLine; s != nil {
+		return s
+	}
+	return st
+}
+
+// letterOf is the ::first-letter node that takes text's first letter, and where the
+// letter ends in its text, nil when none does.
+func letterOf(text *dom.Node) (*dom.Node, int) {
+	g := dom.Data(text).Letter
+	if g == nil || dom.Data(g).Style == nil || dom.Data(g).Letter != text {
+		return nil, 0
+	}
+	end := dom.Data(text).LetterEnd
+	if end > len(text.Text()) {
+		return nil, 0
+	}
+	return g, end
+}
+
+// gatherText adds the run of text node n, after the ::first-letter box taking its
+// first letter.
+func (t *tree) gatherText(c *inlineContent, parent *box.Box, n *dom.Node) {
+	st := c.owner.st
+	if p := n.Parent(); p != nil && p != c.owner.box.Node {
+		st = styleOf(p)
+	}
+	text, skip := Translated(n, t.translate), int32(0)
+	if g, end := letterOf(n); g != nil && text == n.Text() {
+		t.gather(c, parent, []item{{element: g}})
+		skip = int32(utf8.RuneCountInString(text[:end])) //nolint:gosec // a text node's length
+		if text = text[end:]; text == "" {
+			return
+		}
+	}
+	b := &box.Box{Kind: box.TextRun, Node: n, Style: st}
+	r := &textRun{box: b, parent: parent, st: st, span: -1, skip: skip, lineSt: st,
+		text: shownText(text, st, n.Parent(), &c.inWord)}
+	if c.line != nil {
+		r.lineSt = c.lineStyle(n.Parent(), st)
+		r.lineText = shownText(text, r.lineSt, n.Parent(), &c.firstInWord)
+	}
+	c.runs = append(c.runs, r)
 }
 
 // hold adds span s, the spans gathered since inner and the runs in it that no span holds
@@ -322,8 +413,10 @@ func (t *tree) lineBreak(c *inlineContent, parent *box.Box, e *dom.Node, st *sty
 	t.place(e, b)
 	first := len(c.runs)
 	c.runs = append(c.runs,
-		&textRun{box: &box.Box{Kind: box.TextRun, Style: kept}, parent: b, st: kept, span: -1, text: "\n"})
-	c.hold(&inlineSpan{box: b, parent: parent, st: st, first: first, end: first + 1, runs: []int{first}}, len(c.spans))
+		&textRun{box: &box.Box{Kind: box.TextRun, Style: kept}, parent: b, st: kept, lineSt: kept, span: -1, text: "\n",
+			lineText: "\n"})
+	c.hold(&inlineSpan{box: b, parent: parent, st: st, lineSt: st, first: first, end: first + 1, runs: []int{first}},
+		len(c.spans))
 }
 
 // cut splits the runs into pieces: whitespace collapsed as each run's white-space says,
@@ -350,6 +443,68 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 	}
 	c.openSpans(len(c.runs))
 	c.anchorsAt(len(c.runs))
+	if c.line != nil && !c.firstOn {
+		c.cutFirst(fonts)
+	}
+}
+
+// cutFirst cuts the runs again as the first line has them, into firstPieces: the same
+// pieces in its styles. Where its text cuts otherwise, the first line takes the runs'
+// own styles.
+func (c *inlineContent) cutFirst(fonts box.Fonts) {
+	own := c.pieces
+	c.pieces = nil
+	c.swapStyles()
+	c.firstOn = true
+	c.cut(fonts)
+	c.firstOn = false
+	c.swapStyles()
+	c.pieces, c.firstPieces = own, c.pieces
+	same := len(own) == len(c.firstPieces)
+	for i := 0; same && i < len(own); i++ {
+		same = own[i].kind == c.firstPieces[i].kind && own[i].run == c.firstPieces[i].run
+	}
+	if !same {
+		c.firstPieces = nil
+	}
+}
+
+// useFirst has the content stand as its first line (on) or as the others, and reports
+// how it stood: the pieces measured in the first line's styles and each run's and
+// span's style there in place of their own.
+func (c *inlineContent) useFirst(on bool) bool {
+	was := c.firstOn
+	if on == was || c.firstPieces == nil {
+		return was
+	}
+	c.firstOn = on
+	c.pieces, c.firstPieces = c.firstPieces, c.pieces
+	c.swapStyles()
+	return was
+}
+
+func (c *inlineContent) swapStyles() {
+	for _, r := range c.runs {
+		r.st, r.lineSt = r.lineSt, r.st
+		if r.atomic == nil {
+			r.text, r.lineText = r.lineText, r.text
+		}
+	}
+	for _, sp := range c.spans {
+		sp.st, sp.lineSt = sp.lineSt, sp.st
+	}
+}
+
+// hasFirst reports whether the content's first line is its block's styled by a
+// ::first-line.
+func (c *inlineContent) hasFirst() bool { return c.firstPieces != nil && !c.unindented }
+
+// rootStyle is the style of the line's own box: the owner's, or its first line's.
+func (c *inlineContent) rootStyle() *style.Computed {
+	if c.firstOn {
+		return c.line
+	}
+	return c.owner.st
 }
 
 // cutRun cuts run i's text into pieces, afterSpace saying whether a collapsible space
@@ -595,9 +750,9 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		if p := &c.pieces[i]; p.kind == edge {
 			sp := c.spans[p.span]
 			if p.start {
-				c.resize(p, sp.margin.l+sp.border.l+sp.padding.l)
+				c.resize(i, sp.margin.l+sp.border.l+sp.padding.l)
 			} else {
-				c.resize(p, sp.margin.r+sp.border.r+sp.padding.r)
+				c.resize(i, sp.margin.r+sp.border.r+sp.padding.r)
 			}
 		}
 	}
@@ -628,7 +783,7 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		case some(out.firstBaseline):
 			a.baseline = out.firstBaseline
 		}
-		c.resize(p, a.width+a.margin.horizontal())
+		c.resize(i, a.width+a.margin.horizontal())
 	}
 }
 
@@ -643,7 +798,7 @@ func (c *inlineContent) compress() {
 		}
 		a := c.runs[p.run].atomic
 		if st := a.node.st; a.node.replaced && (st.Size.Width.IsPercent || st.MaxSize.Width.IsPercent) {
-			c.resize(p, a.margin.horizontal())
+			c.resize(i, a.margin.horizontal())
 		}
 	}
 }
@@ -725,6 +880,8 @@ func (c *inlineContent) anyWraps() bool {
 type line struct {
 	from, to int
 	width    float32
+	// first is set on the block's first line where a ::first-line styles it.
+	first    bool
 	forced   bool
 	x, avail float32
 	push     float32
@@ -927,7 +1084,7 @@ func (b *breaker) finish(next int) {
 
 // open starts the breaker's next line at piece i, in room avail wide starting at x.
 func (b *breaker) open(i int, x, avail, push float32) {
-	b.cur = line{from: i, to: i, x: x, avail: avail, push: push}
+	b.cur = line{from: i, to: i, x: x, avail: avail, push: push, first: len(b.out) == 0 && b.c.hasFirst()}
 	b.at = newPen(b.c.unit, 0)
 	b.kept = b.at
 	b.pending, b.spaced = -1, -1
@@ -1077,10 +1234,13 @@ func (b *breaker) breakAll(width float32) []line {
 	c := b.c
 	indent := c.indent(width)
 	b.open(0, indent, width-indent, 0)
+	was := c.useFirst(b.cur.first)
+	defer c.useFirst(was)
 	for i := 0; i < len(c.pieces); {
 		var ended bool
 		if i, ended = b.one(i, b.cur.avail); ended {
 			b.open(i, 0, width, 0)
+			c.useFirst(false)
 		}
 	}
 	return b.close()
@@ -1105,7 +1265,9 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			room -= indent
 			b.out = b.out[:kept]
 			b.open(i, x-c.flowLeft+indent, room, y-bottom)
+			was := c.useFirst(b.cur.first)
 			after, ended := b.one(i, room)
+			c.useFirst(was)
 			l := b.cur
 			l.width = b.kept.end()
 			if ended {
@@ -1154,9 +1316,13 @@ func (c *inlineContent) lines(width float32) []line {
 	return out
 }
 
-// resize gives piece p width w, forgetting the lines broken at the old one.
-func (c *inlineContent) resize(p *piece, w float32) {
-	if p.width != w {
+// resize gives piece i width w, as the first line measures it too, forgetting the lines
+// broken at the old one.
+func (c *inlineContent) resize(i int, w float32) {
+	if c.firstPieces != nil {
+		c.firstPieces[i].width = w
+	}
+	if p := &c.pieces[i]; p.width != w {
 		p.width = w
 		c.broken, c.unbroken = nil, nil
 	}
@@ -1247,7 +1413,9 @@ type pendingAlign struct {
 // shift of each run and span of the line in them: from its parent's baseline as the
 // boxes are sized, inner ones first, then from the line's.
 func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
-	h, base := t.lineHeight(c, c.owner.st)
+	was := c.useFirst(l.first)
+	defer c.useFirst(was)
+	h, base := t.lineHeight(c, c.rootStyle())
 	root := extent{base, h - base}
 	c.stamp++
 	c.pending = c.pending[:0]
@@ -1350,7 +1518,7 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 // styleAt is the style of span k, the owner's for -1.
 func (c *inlineContent) styleAt(k int) *style.Computed {
 	if k < 0 {
-		return c.owner.st
+		return c.rootStyle()
 	}
 	return c.spans[k].st
 }
@@ -1524,6 +1692,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	}
 	for li, l := range ls {
 		lh, lb := t.lineBox(c, l)
+		was := c.useFirst(l.first)
 		y += l.push
 		off, perGap := c.align(n.st.TextAlign, l, li == len(ls)-1, l.avail-l.width)
 		start := inset.l + l.x + off
@@ -1551,6 +1720,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 				l.overflow = a.overflow
 			}
 		}
+		c.useFirst(was)
 		y += lh
 	}
 	for _, o := range c.oofs {
@@ -1654,6 +1824,9 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 			}
 		}
 	}
+	if c.back != nil {
+		add(n.box, c.back)
+	}
 	if c.marker != nil {
 		add(n.box, c.marker)
 	}
@@ -1696,10 +1869,12 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 	spanRects := make(map[*box.Box]geom.Rect)
 	spanSeen := make([]bool, len(c.spans))
 	spanLines := make(map[*box.Box][]geom.Rect)
+	c.back = nil
 	ls := c.lines(content)
 	y := t.textTop(n, ls, inset.t, f.size.h-inset.vertical()-f.scrollbar.h)
 	for li, l := range ls {
 		lh, lb := t.lineBox(c, l)
+		was := c.useFirst(l.first)
 		y += l.push
 		flowY := y
 		if n.frag != nil {
@@ -1710,42 +1885,74 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		off, perGap := c.align(n.st.TextAlign, l, li == len(ls)-1, l.avail-l.width)
 		x := inset.l + l.x + off
 		pieces := c.shown(l)
+		if c.firstOn {
+			t.backOf(c, n, geom.Rect{X: x, Y: y, W: l.width, H: lh}, lb)
+		}
 		t.spanRects(c, l, pieces, x, perGap, y, lb, spanRects, spanSeen, spanLines)
 		cut, cutStart := false, false
 		if ellipsis && l.width > l.avail {
 			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
-		walk := newPen(c.unit, x)
-		for i := 0; i < len(pieces); {
-			run := pieces[i].run
-			if k := pieces[i].kind; k == atomic || k == edge || k == marker || k == anchor || k == gap && perGap > 0 {
-				at := walk.step(pieces[i], perGap)
-				if k == marker {
-					c.placeMarker(geom.Rect{X: at, Y: y, W: pieces[i].width, H: lh}, lb)
-				}
-				i++
-				continue
-			}
-			var text string
-			var start float32
-			var from int32
-			text, start, from, i = runText(&walk, pieces, i, perGap)
-			end := walk.end()
-			if i < len(pieces) && isText(pieces[i].kind) && pieces[i].run == run {
-				end = walk.at()
-			}
-			r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
-			frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart,
-				cut && i == len(pieces))
-			frag.Start = from
-			cutStart = false
-			c.runs[run].box.Lines = append(c.runs[run].box.Lines, frag)
-			runRects[run] = unionRect(runRects[run], frag.Rect, seen[run])
-			seen[run] = true
-		}
+		t.writeRuns(c, pieces, geom.Rect{X: x, Y: y, H: lh}, lb, perGap, [2]bool{cutStart, cut}, runRects, seen)
+		c.useFirst(was)
 		y = flowY + lh
 	}
 	return runRects, spanRects, spanLines
+}
+
+// writeRuns writes the fragments of a line's pieces into their runs' boxes, the line
+// at at (its width aside) with its baseline lb, an ellipsis before or after it as cut
+// says, and grows each run's rectangle in rects.
+func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, perGap float32, cut [2]bool,
+	rects []geom.Rect, seen []bool) {
+	y, lh := at.Y, at.H
+	cutStart := cut[0]
+	walk := newPen(c.unit, at.X)
+	for i := 0; i < len(pieces); {
+		run := pieces[i].run
+		if k := pieces[i].kind; k == atomic || k == edge || k == marker || k == anchor || k == gap && perGap > 0 {
+			x := walk.step(pieces[i], perGap)
+			if k == marker {
+				c.placeMarker(geom.Rect{X: x, Y: y, W: pieces[i].width, H: lh}, lb)
+			}
+			i++
+			continue
+		}
+		var text string
+		var start float32
+		var from int32
+		text, start, from, i = runText(&walk, pieces, i, perGap)
+		end := walk.end()
+		if i < len(pieces) && isText(pieces[i].kind) && pieces[i].run == run {
+			end = walk.at()
+		}
+		r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
+		frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart, cut[1] && i == len(pieces))
+		frag.Start = from + c.runs[run].skip
+		if c.firstOn {
+			frag.Style = c.runs[run].st
+		}
+		cutStart = false
+		c.runs[run].box.Lines = append(c.runs[run].box.Lines, frag)
+		rects[run] = unionRect(rects[run], frag.Rect, seen[run])
+		seen[run] = true
+	}
+}
+
+// backOf gives the first line, at r with its baseline lb, the box that paints its
+// background: over its content, as high as its font's content area.
+func (t *tree) backOf(c *inlineContent, n *node, r geom.Rect, lb float32) {
+	g := lineBack(n)
+	if g == nil || dom.Data(g).Style == nil {
+		return
+	}
+	st := dom.Data(g).Style
+	m := t.metricsOf(c, c.line)
+	r.Y += lb - m.Ascent
+	r.H = m.Ascent + m.Descent
+	c.back = &box.Box{Kind: box.Element, Node: g, Style: st, Pos: geom.Vec2{X: r.X, Y: r.Y},
+		Size: geom.Vec2{X: r.W, Y: r.H}, Fragments: []geom.Rect{{W: r.W, H: r.H}}}
+	t.place(g, c.back)
 }
 
 // runText steps walk over the text one run has on a line from piece i: its words and the

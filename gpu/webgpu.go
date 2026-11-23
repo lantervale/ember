@@ -83,6 +83,9 @@ type drawUniforms struct {
 	// CutU and CutV are the rows of the batch's Cut: what takes a point to
 	// its mask's UV, CutU's w set when there is one (decision 0119).
 	CutU, CutV [4]float32
+	// BackU and BackV are the rows of what takes a point to the UV of the
+	// batch's backdrop, its second image, BackU's w its Mix, 0 for none.
+	BackU, BackV [4]float32
 }
 
 type gpuTexture struct {
@@ -641,6 +644,11 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 			cutV[3] = 1
 		}
 	}
+	var backU, backV [4]float32
+	if b.Mix != 0 {
+		m := b.ToBackdrop
+		backU, backV = [4]float32{m.X.X, m.Y.X, m.Origin.X, float32(b.Mix)}, [4]float32{m.X.Y, m.Y.Y, m.Origin.Y, 0}
+	}
 	return drawUniforms{
 		Screen:   [2]float32{max(size.X, 1), max(size.Y, 1)},
 		Scale:    sx,
@@ -654,6 +662,8 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 		Radii:    b.Round.Radii,
 		CutU:     cutU,
 		CutV:     cutV,
+		BackU:    backU,
+		BackV:    backV,
 	}
 }
 

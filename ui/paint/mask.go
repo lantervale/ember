@@ -17,10 +17,11 @@ const luminanceShader = `fn effect(vUV: vec2f) -> vec4f {
 }`
 
 // masking is a masked element's picture being drawn, with the clips it
-// is drawn above and the opacity it is shown at.
+// is drawn above, the clip it is shown in and the alpha it is shown at.
 type masking struct {
 	on      Pictures
 	floor   *clip
+	show    *clip
 	opacity float32
 }
 
@@ -73,35 +74,43 @@ func (p *painter) maskBox(b *box.Box, r geom.Rect, edges box.Edges, radius radii
 }
 
 // beginMask opens the picture a masked element and its content are drawn
-// in, its clip-path's clip and those inside around them; none for an
+// in, at 1, its alpha left for the picture: its clip-path's clip and
+// those inside around them, or inside the clip of g, the picture of its
+// group it is drawn in whole, which shows it in its clip-path. None for an
 // element masked as a silhouette, on a surface that draws no pictures or
 // in a scan, as masks change nothing hit.
-func (p *painter) beginMask(e entry, st *style.Computed, around *clip) *masking {
+func (p *painter) beginMask(e entry, st *style.Computed, around *clip, g *grouping, alpha *float32) *masking {
 	on, ok := p.s.(Pictures)
 	if !ok || p.probing || !st.Masked() || silhouetted(e.b, st) {
 		return nil
 	}
-	m := &masking{on: on, floor: p.floor}
+	m := &masking{on: on, floor: p.floor, show: around, opacity: *alpha}
+	if g != nil && g.whole {
+		m.show = e.clip
+	}
+	*alpha = 1
 	p.use(nil)
 	on.BeginPicture()
-	p.floor = around
+	p.pictures++
+	p.floor = m.show
 	return m
 }
 
 // endMask shows what m's picture holds through the element's mask, in
-// the clip around: the mask is a picture of its layers, drawn as
+// its clip, at its alpha: the mask is a picture of its layers, drawn as
 // backgrounds are, whose alpha cuts the element's.
-func (p *painter) endMask(m *masking, e entry, st *style.Computed, around *clip) {
+func (p *painter) endMask(m *masking, e entry, st *style.Computed) {
 	if m == nil {
 		return
 	}
 	p.use(nil)
 	p.floor = m.floor
+	p.pictures--
 	content := m.on.EndPicture(0)
 	m.on.BeginPicture()
 	p.maskFrom(m.on, e, st, 0)
 	mask := m.on.EndPicture(0)
-	p.use(around)
+	p.use(m.show)
 	m.on.PushClipPicture(mask)
 	if m.opacity < 1 {
 		m.on.DrawPicture(content, p.filterEffects(m.on, nil, style.Filter{Kind: style.OpacityFilter, Amount: m.opacity},

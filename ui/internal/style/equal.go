@@ -160,6 +160,7 @@ func (l *Look) equal(o *Look) bool {
 		sameSlice(l.BackgroundAttachments, o.BackgroundAttachments) &&
 		sameSlice(l.BackgroundOrigins, o.BackgroundOrigins) &&
 		sameSlice(l.BackgroundClips, o.BackgroundClips) &&
+		sameSlice(l.BackgroundBlends, o.BackgroundBlends) &&
 		sameSliceFunc(l.MaskImages, o.MaskImages, (*Image).equal) &&
 		sameSlice(l.MaskSizes, o.MaskSizes) &&
 		sameSlice(l.MaskRepeats, o.MaskRepeats) &&
@@ -196,6 +197,9 @@ func (l *Look) equal(o *Look) bool {
 		sameSlice(l.Transform, o.Transform) &&
 		l.TransformOrigin == o.TransformOrigin &&
 		sameSlice(l.Filters, o.Filters) &&
+		sameSlice(l.BackdropFilters, o.BackdropFilters) &&
+		l.BlendMode == o.BlendMode &&
+		l.Isolate == o.Isolate &&
 		sameSlice(l.Transitions, o.Transitions) &&
 		sameSlice(l.Animations, o.Animations)
 }

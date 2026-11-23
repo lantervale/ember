@@ -62,6 +62,15 @@ func (r *picturing) DrawPicture(_ *twod.Picture, effects ...*render.Effect) {
 	r.effects = append(r.effects, effects...)
 }
 
+func (r *picturing) DrawPictureOver(_, _ *twod.Picture, m twod.Mix, effects ...*render.Effect) {
+	names := []string{fmt.Sprint(m)}
+	for _, e := range effects {
+		names = append(names, shaderName(e.Shader()))
+	}
+	r.add(op{Kind: "mix", Text: strings.Join(names, " ")})
+	r.effects = append(r.effects, effects...)
+}
+
 func (r *picturing) Effect(shader string) *render.Effect { return render.NewEffect(shader) }
 
 func shaderName(s string) string {
@@ -74,6 +83,8 @@ func shaderName(s string) string {
 		return "shadow"
 	case luminanceShader:
 		return "luminance"
+	case mirroredBlurShader:
+		return "mirrored"
 	}
 	return "?"
 }
@@ -93,6 +104,10 @@ func (r *picturing) steps() string {
 			out = append(out, "sum "+o.Text)
 		case "cut":
 			out = append(out, o.Text)
+		case "mix":
+			out = append(out, "mix("+o.Text+")")
+		case "push-round":
+			out = append(out, fmt.Sprintf("round %g", o.Rect.X))
 		case "push":
 			out = append(out, fmt.Sprintf("push %g", o.Rect.X))
 		case "push-mask":

@@ -2,8 +2,9 @@
 // spills past it, masked by a picture, gradients, several layers joined
 // by each compositing word, luminance, the boxes mask-origin and
 // mask-clip name, under a transform, a clip-path, opacity and a filter,
-// a mask inside another, Chrome's -webkit-mask with xor, and an icon of
-// a colour and a mask.
+// a mask inside another, Chrome's -webkit-mask with xor, an icon of a
+// colour and a mask, and masked elements mixed, translucent, and filtering
+// their backdrop over stripes.
 package main
 
 import (
@@ -52,6 +53,12 @@ body { margin: 0; padding: 10px; display: grid; grid-template-columns: repeat(5,
 .icons { display: flex; gap: 8px; align-items: center; }
 .icon { width: 24px; height: 24px; background-color: #c33; mask: url(ring.png) center / contain no-repeat; }
 .icon + .icon { background-color: #36c; mask-size: 16px; mask-repeat: repeat; }
+.stage { grid-column: span 3; height: 86px;
+  background: linear-gradient(90deg, #e33 0 33%, #fc3 33% 66%, #36d 66%); display: flex; gap: 6px; padding: 6px; }
+.stage > div { flex: 1; background-color: #3b5; border: 3px solid #234; }
+.stage .mixed { mix-blend-mode: multiply; opacity: 0.7; mask-image: linear-gradient(#000, transparent); }
+.stage .frosted { background-color: rgba(255, 255, 255, 0.2); backdrop-filter: blur(4px);
+  mask-image: radial-gradient(#000 45%, transparent 70%); }
 `
 
 // ring is a picture 32 by 32: a coloured ring, solid round its middle,
@@ -87,5 +94,6 @@ func main() {
 			ui.Div(ui.Text(fmt.Sprint(i+1)))))
 	}
 	d.Body().Append(ui.Div(ui.Class("icons"), ui.Span(ui.Class("icon")), ui.Span(ui.Class("icon"))))
+	d.Body().Append(ui.Div(ui.Class("stage"), ui.Div(ui.Class("mixed"), ui.Text("22")), ui.Div(ui.Class("frosted"))))
 	pages.Run(d, 680, 560)
 }
