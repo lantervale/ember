@@ -392,6 +392,8 @@ func expandTransition(v []Component, out map[string][]Component) error {
 				default:
 					return fmt.Errorf("a transition has at most two times")
 				}
+			case isWord(c, kwNormal, kwAllowDiscrete) && one[propTransitionBehavior].Kind == EOF:
+				one[propTransitionBehavior] = c
 			case c.Kind == Ident && one["transition-property"].Kind == EOF:
 				if !isWord(c, kwAll, kwNone) {
 					if err := transitionTarget(c); err != nil {

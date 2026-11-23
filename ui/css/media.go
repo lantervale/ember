@@ -681,9 +681,15 @@ func mediaLengthOf(v []Component) (mediaValue, bool) {
 // mediaOff is, for each of sheets with @media rules, the rules whose
 // queries don't all hold for m; nil when no sheet has any.
 func mediaOff(sheets []*Sheet, m Media) [][]bool {
+	return rulesOff(sheets, m, false)
+}
+
+// rulesOff is mediaOff with the rules of @starting-style on when
+// starting is set, else off.
+func rulesOff(sheets []*Sheet, m Media, starting bool) [][]bool {
 	var off [][]bool
 	for si, s := range sheets {
-		if len(s.media) == 0 {
+		if len(s.media) == 0 && (starting || !slices.ContainsFunc(s.Rules, func(r Rule) bool { return r.starting })) {
 			continue
 		}
 		if off == nil {
@@ -695,6 +701,7 @@ func mediaOff(sheets []*Sheet, m Media) [][]bool {
 		}
 		off[si] = make([]bool, len(s.Rules))
 		for ri := range s.Rules {
+			off[si][ri] = s.Rules[ri].starting && !starting
 			for _, i := range s.Rules[ri].media {
 				if !holds[i] {
 					off[si][ri] = true
@@ -703,6 +710,13 @@ func mediaOff(sheets []*Sheet, m Media) [][]bool {
 		}
 	}
 	return off
+}
+
+// startingRules reports whether some rule of sheets is in @starting-style.
+func startingRules(sheets []*Sheet) bool {
+	return slices.ContainsFunc(sheets, func(s *Sheet) bool {
+		return slices.ContainsFunc(s.Rules, func(r Rule) bool { return r.starting })
+	})
 }
 
 func sameOff(a, b [][]bool) bool {

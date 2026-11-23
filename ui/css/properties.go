@@ -144,10 +144,12 @@ var properties = map[string]property{
 
 	"transition-property": {initial: "all"}, "transition-duration": {initial: "0s"},
 	"transition-timing-function": {initial: "ease"}, "transition-delay": {initial: "0s"},
-	"animation-name": {initial: "none"}, "animation-duration": {initial: "0s"},
+	"transition-behavior": {initial: "normal"},
+	"animation-name":      {initial: "none"}, "animation-duration": {initial: "0s"},
 	"animation-timing-function": {initial: "ease"}, "animation-delay": {initial: "0s"},
 	"animation-iteration-count": {initial: "1"}, "animation-direction": {initial: "normal"},
 	"animation-fill-mode": {initial: "none"}, "animation-play-state": {initial: "running"},
+	"animation-composition": {initial: "replace"},
 
 	"text-decoration-line":      {initial: "none"},
 	"text-decoration-style":     {initial: "solid"},
@@ -213,7 +215,8 @@ var shorthands = map[string][]string{
 		"mask-mode"},
 	"list-style": {"list-style-type", "list-style-image"},
 	"font":       {"font-style", "font-weight", "font-size", "line-height", "font-family"},
-	"transition": {"transition-property", "transition-duration", "transition-timing-function", "transition-delay"},
+	"transition": {"transition-property", "transition-duration", "transition-timing-function", "transition-delay",
+		"transition-behavior"},
 	"animation": {"animation-duration", "animation-timing-function", "animation-delay", "animation-iteration-count",
 		"animation-direction", "animation-fill-mode", "animation-play-state", "animation-name"},
 

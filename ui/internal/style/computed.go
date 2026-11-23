@@ -362,7 +362,7 @@ type Font struct {
 	// Family is font-family's list, generic names last.
 	Family []string
 	Size   float32
-	Weight int
+	Weight float32
 	Italic bool
 }
 
@@ -664,6 +664,9 @@ type Transition struct {
 	Property        string
 	Duration, Delay float32
 	Easing          string
+	// Discrete is transition-behavior: allow-discrete: the property
+	// transitions between values that don't interpolate, flipping.
+	Discrete bool
 }
 
 // Animation is one entry of the animation list: the @keyframes it runs,
@@ -676,7 +679,18 @@ type Animation struct {
 	Direction       AnimationDirection
 	Fill            AnimationFill
 	Paused          bool
+	Composite       Composite
 }
+
+// Composite is animation-composition: how an animation's values combine
+// with what is under them.
+type Composite uint8
+
+const (
+	ComposeReplace Composite = iota
+	ComposeAdd
+	ComposeAccumulate
+)
 
 type AnimationDirection uint8
 
