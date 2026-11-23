@@ -48,9 +48,22 @@ func TestLineClampComputesAsChromeLaysItOut(t *testing.T) {
 
 func TestLineClampsAreCheckedAsIntegers(t *testing.T) {
 	for _, decl := range []string{"line-clamp: 0", "line-clamp: 1.5", "-webkit-line-clamp: -1", "line-clamp: auto",
-		"-webkit-box-orient: diagonal"} {
+		"-webkit-box-orient: diagonal", "line-clamp: no-ellipsis", "line-clamp: 2 2", "line-clamp: none no-ellipsis",
+		"max-lines: 2", "block-ellipsis: auto", "continue: discard"} {
 		if got := read(decl); got == decl+" | " {
 			t.Errorf("%s read", decl)
 		}
+	}
+}
+
+func TestNoEllipsisLeavesTheClampsEllipsisOut(t *testing.T) {
+	for _, decls := range []string{"line-clamp: 2 no-ellipsis", "line-clamp: no-ellipsis 2"} {
+		s := clampOfDecls(t, decls)
+		if lines, _ := s.Clamp(); lines != 2 || !s.NoEllipsis {
+			t.Errorf("%s: clamp %d, no ellipsis %v", decls, lines, s.NoEllipsis)
+		}
+	}
+	if s := clampOfDecls(t, "line-clamp: 2 no-ellipsis; line-clamp: 3"); s.NoEllipsis {
+		t.Error("a later line-clamp without it has its ellipsis")
 	}
 }

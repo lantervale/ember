@@ -64,8 +64,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
-| a flex container or a table cut between rows by a column | kept whole |
-| a positioned box cut by a column | kept whole |
+| a table row, a grid container, a table with a caption cut by a column | kept whole, where Chrome cuts them |
+| boxes side by side cut by a column (a flex row's items, a positioned box beside the lines of its containing block) whose lines don't line up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
+| a table with `border-spacing` cut by a column | the spacing after its last row kept in its last part, where Chrome leaves it out and balances the columns without it |
 | a table with a collapsed column as a grid item, or as a flex item with a width of its own | laid out at the width its container gives it, where Chrome narrows the grid item's by the column and sizes the flex item's apart; a flex item of an automatic width keeps it, as Chrome |
 | a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
@@ -73,13 +74,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
 | the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone | measured without the subgrid's rows: a percentage height or an aspect ratio there counts as on no row |
-| `opacity` on an inline element holding blocks | its lines fade, the blocks inside it do not |
 | an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's; one with alt text stands by its bottom too, where Chrome's stands on that text's line, which ui cannot tell from a picture still loading, whose landing lays nothing out |
 | a `summary`'s marker in a font without ▸ | measured with ui's fallback face for the triangle, where Chrome on macOS takes 1.06em whatever the font: about 3 points narrower at 16px |
 | the presentational attributes but those [read](03-css.md): `link`, `vlink` and `alink` on `body` | read, and they do nothing |
 | a `br` ending the last line a `-webkit-line-clamp` or `line-clamp` shows | no wider than before, where Chrome's is as wide as the ellipsis drawn in its place |
-| `line-clamp`'s longhands (`max-lines`, `block-ellipsis`, `continue`) and its values but a number and `none` | refused; past its last line the inline elements' backgrounds and borders, the floats and the positioned boxes are still drawn, and what it doesn't draw still takes the pointer |
-| `stretch` in `min-width`, `max-width`, `min-height`, `max-height`, on a flex or a grid item, a table cell or a column | read, and taken as `auto` (`none` for a maximum) |
+| `line-clamp: auto`, `-webkit-legacy` | refused, where Chrome clamps at the last line its height holds |
+| `line-clamp` with `no-ellipsis` ending inside a block of its own | as high as the clamped line ends, where Chrome's is that block's bottom margin higher |
+| past a `line-clamp`'s last line | the inline elements' backgrounds and borders, the floats and the positioned boxes are still drawn, and what it doesn't draw still takes the pointer |
 
 ## Backgrounds and borders
 
@@ -114,7 +115,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `forced-colors: active` | answers the query, where Chrome also forces the system's colours on the page |
 | `ex`, `ch` and the font's other units in a media query's length | measured in ui's initial font (Go, 16px), where Chrome measures in its default font (Times on macOS): a bound between the two is answered otherwise |
 | a corner or a centre in `-webkit-linear-gradient()`, `-webkit-gradient()`, the prefixed repeating gradients | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
-| `-webkit-box-pack`, `-webkit-box-align`, `-webkit-box-flex`, `-webkit-box-direction`, `-webkit-box-ordinal-group` | keep their warning: a `-webkit-box` that clamps no lines is laid out as `flex` along its orient, its inline children each an item, where Chrome's old flexbox keeps them on one line |
 | a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
 | a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
 | `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |

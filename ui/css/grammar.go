@@ -200,6 +200,22 @@ func repeated(t term, most int) check {
 	}
 }
 
+// checkLineClamp takes none, or a number of lines with no-ellipsis before or after it.
+func checkLineClamp(v []Component) error {
+	switch {
+	case len(v) == 1 && isWord(v[0], "none"):
+		return nil
+	case len(v) == 2 && isWord(v[0], "no-ellipsis"):
+		return positiveInteger(v[1])
+	case len(v) == 2:
+		if err := positiveInteger(v[0]); err != nil {
+			return err
+		}
+		return words("no-ellipsis")(v[1])
+	}
+	return single(positiveInteger)(v)
+}
+
 // checkScrollbarColor takes auto, or the thumb's colour then the track's.
 func checkScrollbarColor(v []Component) error {
 	if len(v) == 1 && isWord(v[0], "auto") {
@@ -373,7 +389,7 @@ var checks = map[string]check{
 	"column-gap":     single(either(sizeLP, words("normal"))),
 	"flex-grow":      single(number),
 	"flex-shrink":    single(number),
-	"flex-basis":     single(either(sizeLP, words("auto", "content"), intrinsic)),
+	"flex-basis":     single(either(sizeLP, words("auto", "content"), boxSizes)),
 	"flex-wrap":      single(words("nowrap", "wrap", "wrap-reverse")),
 	"flex-direction": single(words("row", "row-reverse", "column", "column-reverse")),
 	"align-items":    single(words(alignWords...)),
@@ -385,37 +401,42 @@ var checks = map[string]check{
 	"justify-items": single(words(append([]string{"legacy", "left", "right"}, alignWords...)...)),
 	"justify-self":  single(words(append([]string{"auto", "left", "right"}, alignWords...)...)),
 
-	"grid-template-columns": checkTracks,
-	"grid-template-rows":    checkTracks,
-	"grid-template-areas":   checkTemplateAreas,
-	"grid-column-start":     checkGridLine,
-	"grid-column-end":       checkGridLine,
-	"grid-row-start":        checkGridLine,
-	"grid-row-end":          checkGridLine,
-	"grid-auto-columns":     repeated(trackSize, 64),
-	"grid-auto-rows":        repeated(trackSize, 64),
-	"grid-auto-flow":        checkAutoFlow,
-	"order":                 single(integer),
-	"column-count":          single(either(positiveInteger, words("auto"))),
-	"column-width":          single(either(dimTerm(nonNegative), words("auto"))),
-	"column-fill":           single(words("balance", "auto")),
-	"column-span":           single(words("none", kwAll)),
-	"column-rule-width":     single(borderWidth),
-	"column-rule-style":     single(borderStyle),
-	"column-rule-color":     single(colorTerm),
-	"break-inside":          single(words("auto", "avoid", "avoid-column", "avoid-page")),
-	"break-before":          single(words(breakWords...)),
-	"break-after":           single(words(breakWords...)),
-	"orphans":               single(positiveInteger),
-	"line-clamp":            single(either(positiveInteger, words("none"))),
-	"-webkit-line-clamp":    single(either(positiveInteger, words("none"))),
-	"-webkit-box-orient":    single(words("horizontal", "vertical", "inline-axis", "block-axis")),
-	"widows":                single(positiveInteger),
-	"aspect-ratio":          checkAspectRatio,
-	"overflow-x":            single(words("visible", "hidden", "clip", "auto", "scroll")),
-	"overflow-y":            single(words("visible", "hidden", "clip", "auto", "scroll")),
-	"position":              single(words("static", "relative", "absolute", "fixed", "sticky")),
-	"float":                 single(words("none", "left", "right", "inline-start", "inline-end")),
+	"grid-template-columns":     checkTracks,
+	"grid-template-rows":        checkTracks,
+	"grid-template-areas":       checkTemplateAreas,
+	"grid-column-start":         checkGridLine,
+	"grid-column-end":           checkGridLine,
+	"grid-row-start":            checkGridLine,
+	"grid-row-end":              checkGridLine,
+	"grid-auto-columns":         repeated(trackSize, 64),
+	"grid-auto-rows":            repeated(trackSize, 64),
+	"grid-auto-flow":            checkAutoFlow,
+	"order":                     single(integer),
+	"column-count":              single(either(positiveInteger, words("auto"))),
+	"column-width":              single(either(dimTerm(nonNegative), words("auto"))),
+	"column-fill":               single(words("balance", "auto")),
+	"column-span":               single(words("none", kwAll)),
+	"column-rule-width":         single(borderWidth),
+	"column-rule-style":         single(borderStyle),
+	"column-rule-color":         single(colorTerm),
+	"break-inside":              single(words("auto", "avoid", "avoid-column", "avoid-page")),
+	"break-before":              single(words(breakWords...)),
+	"break-after":               single(words(breakWords...)),
+	"orphans":                   single(positiveInteger),
+	"line-clamp":                checkLineClamp,
+	"-webkit-line-clamp":        single(either(positiveInteger, words("none"))),
+	"-webkit-box-orient":        single(words("horizontal", "vertical", "inline-axis", "block-axis")),
+	"-webkit-box-pack":          single(words("start", "end", "center", kwJustify)),
+	"-webkit-box-align":         single(words("start", "end", "center", "baseline", "stretch")),
+	"-webkit-box-direction":     single(words("normal", "reverse")),
+	"-webkit-box-flex":          single(number),
+	"-webkit-box-ordinal-group": single(positiveInteger),
+	"widows":                    single(positiveInteger),
+	"aspect-ratio":              checkAspectRatio,
+	"overflow-x":                single(words("visible", "hidden", "clip", "auto", "scroll")),
+	"overflow-y":                single(words("visible", "hidden", "clip", "auto", "scroll")),
+	"position":                  single(words("static", "relative", "absolute", "fixed", "sticky")),
+	"float":                     single(words("none", "left", "right", "inline-start", "inline-end")),
 	"vertical-align": single(either(lengthPercent,
 		words("baseline", "sub", "super", "text-top", "text-bottom", "middle", "top", "bottom",
 			"-webkit-baseline-middle"))),

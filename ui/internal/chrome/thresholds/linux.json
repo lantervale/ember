@@ -33,6 +33,8 @@
   "broken-image": 0.016,
   "collapsed-joins": 0.0005,
   "collapsed-styles": 0.0015,
+  "column-cuts": 0.0045,
+  "inline-opacity": 0.004,
   "column-span": 0.0088,
   "dashes": 0.0025,
   "debug-grid": 0.0048,

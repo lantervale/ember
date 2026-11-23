@@ -77,3 +77,16 @@ func TestASplitSpansOutlineCirclesEachFragment(t *testing.T) {
 	require.Len(t, outlines, 2)
 	assert.Equal(t, geom.Rect{X: 49, Y: 9, W: 62, H: 22}, outlines[0].Rect)
 }
+
+func TestABlockAFadedSpanHoldsFadesWithIt(t *testing.T) {
+	b := el(10, 10, 100, 20, bg(red))
+	b.Dim = 0.75
+	var fills []float32
+	for _, o := range paintOne(b).of("rect") {
+		if o.Color.R == red.R && o.Color.G == red.G && o.Color.B == red.B {
+			fills = append(fills, o.Color.A)
+		}
+	}
+	require.Len(t, fills, 1)
+	assert.InDelta(t, 0.25*red.A, fills[0], 1e-6)
+}
