@@ -47,8 +47,12 @@ func TestAPartsHoverAndActiveFollowThePartThePointerIsOn(t *testing.T) {
 	if b := p.V.Buttons; b[0] != nil || b[1] != nil || b[2] != nil || b[3] == nil || b[3].Display != style.Block {
 		t.Errorf("buttons %v, want the one going forward at the end alone", b)
 	}
-	dom.Data(n).BarHover = style.BarThumb | style.BarHorizontal
-	dom.Data(n).BarPressed = style.BarThumb | style.BarHorizontal
+	data := dom.Data(n)
+	for _, p := range []style.BarPart{data.BarHover, style.BarThumb | style.BarHorizontal} {
+		data.BarsStale.Mark(p)
+	}
+	data.BarHover = style.BarThumb | style.BarHorizontal
+	data.BarPressed = style.BarThumb | style.BarHorizontal
 	dom.Invalidate(n, ":scrollbar")
 	Compute(root, sheets)
 	p = styleOf(n).Scrollbar
@@ -79,10 +83,53 @@ func TestAResizerIsStyledOnABoxTheUserMayResize(t *testing.T) {
 		t.Fatalf("warnings:\n%s", warnings(warns))
 	}
 	Compute(page(clips, visible), []*Sheet{s})
-	if c := styleOf(clips); !c.Resizable || c.Resizer == nil || c.Resizer.Background != color.Hex("#f00") {
-		t.Errorf("resizable %v, resizer %v", c.Resizable, c.Resizer)
+	if c := styleOf(clips); !c.Resizable() || c.Resizer == nil || c.Resizer.Background != color.Hex("#f00") {
+		t.Errorf("resizable %v, resizer %v", c.Resize, c.Resizer)
 	}
-	if c := styleOf(visible); c.Resizable || c.Resizer != nil {
-		t.Errorf("a box that doesn't clip: resizable %v, resizer %v", c.Resizable, c.Resizer)
+	if c := styleOf(visible); c.Resizable() || c.Resizer != nil {
+		t.Errorf("a box that doesn't clip: resizable %v, resizer %v", c.Resize, c.Resizer)
+	}
+}
+
+// A box's :hover restyles its bars' parts only as Chrome's: none while
+// the pointer is off them, the part reached with its bar and track, all
+// of them once the box's own style, or its bar's, changes.
+func TestABoxsHoverRestylesItsPartsAsThePointerReachesThem(t *testing.T) {
+	n := el(dom.Div, "", "a")
+	s, warns := Parse("t.css", `div { overflow: scroll; }
+		.a::-webkit-scrollbar { width: 12px; height: 12px; }
+		.a::-webkit-scrollbar-thumb { background-color: #111; }
+		.a:hover::-webkit-scrollbar-thumb { background-color: #222; }
+		.a::-webkit-scrollbar-track-piece { background-color: #333; }
+		.a:hover::-webkit-scrollbar-track-piece { background-color: #444; }
+		.b:hover { color: red; }`)
+	if len(warns) > 0 {
+		t.Fatalf("warnings:\n%s", warnings(warns))
+	}
+	sheets := []*Sheet{s}
+	root := page(n)
+	Compute(root, sheets)
+	n.SetState(dom.Hover, true)
+	Compute(root, sheets)
+	p := styleOf(n).Scrollbar
+	if p.V.Thumb.Background != color.Hex("#111") || p.V.End.Background != color.Hex("#333") {
+		t.Errorf("box hovered, pointer off the bars: thumb %v, piece %v", p.V.Thumb.Background, p.V.End.Background)
+	}
+	data := dom.Data(n)
+	data.BarsStale.Mark(style.BarForwardTrack)
+	data.BarHover = style.BarForwardTrack
+	dom.Invalidate(n, ":scrollbar")
+	Compute(root, sheets)
+	p = styleOf(n).Scrollbar
+	if p.V.Thumb.Background != color.Hex("#111") || p.V.End.Background != color.Hex("#444") ||
+		p.H.End.Background != color.Hex("#333") {
+		t.Errorf("pointer on the piece: thumb %v, piece %v, the other bar's %v", p.V.Thumb.Background,
+			p.V.End.Background, p.H.End.Background)
+	}
+	n.AddClass("b")
+	Compute(root, sheets)
+	if p = styleOf(n).Scrollbar; p.V.Thumb.Background != color.Hex("#222") || p.H.End.Background != color.Hex("#444") {
+		t.Errorf("the box's own style changed: thumb %v, the other bar's piece %v", p.V.Thumb.Background,
+			p.H.End.Background)
 	}
 }
