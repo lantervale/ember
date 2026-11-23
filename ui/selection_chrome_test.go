@@ -197,7 +197,8 @@ func TestARightToLeftSelectionsRectanglesAreChromes(t *testing.T) {
 		ui.CSS(selectionSheet+`@font-face { font-family: Hebrew; src: url(hebrew.ttf); } body { font-family: Hebrew; }`))
 	d.Body().Append(ui.P(ui.Attr("dir", "rtl"), ui.Text("אבג דהו זחט יכל מנס עפצ קרש תאב גדה וזח טיכ")),
 		ui.P(ui.Attr("dir", "rtl"), ui.Text("שלום abc def עולם")),
-		ui.P(ui.Text("abc "), ui.Span(ui.Attr("dir", "rtl"), ui.Text("שלום עולם")), ui.Text(" def")))
+		ui.P(ui.Text("abc "), ui.Span(ui.Attr("dir", "rtl"), ui.Text("שלום עולם")), ui.Text(" def")),
+		ui.P(ui.Attr("dir", "rtl"), ui.Text("abc שלום")))
 	size := geom.V2(400, 800)
 	landed(t, d, size)
 	var texts []*ui.Node
@@ -207,13 +208,16 @@ func TestARightToLeftSelectionsRectanglesAreChromes(t *testing.T) {
 		}
 		return true
 	})
-	hebrew, mixed, third := texts[0], texts[1], texts[2]
+	hebrew, mixed, third, fourth := texts[0], texts[1], texts[2], texts[3]
 	for name, ends := range map[string][2]ui.Position{
-		"inside a word": {{Node: hebrew, Offset: 1}, {Node: hebrew, Offset: 3}},
-		"across lines":  {{Node: hebrew, Offset: 5}, {Node: hebrew, Offset: 30}},
-		"hebrew":        {{Node: mixed, Offset: 1}, {Node: mixed, Offset: 3}},
-		"latin":         {{Node: mixed, Offset: 6}, {Node: mixed, Offset: 11}},
-		"an rtl span":   {{Node: third, Offset: 1}, {Node: third, Offset: 7}},
+		"inside a word":  {{Node: hebrew, Offset: 1}, {Node: hebrew, Offset: 3}},
+		"across lines":   {{Node: hebrew, Offset: 5}, {Node: hebrew, Offset: 30}},
+		"hebrew":         {{Node: mixed, Offset: 1}, {Node: mixed, Offset: 3}},
+		"latin":          {{Node: mixed, Offset: 6}, {Node: mixed, Offset: 11}},
+		"an rtl span":    {{Node: third, Offset: 1}, {Node: third, Offset: 7}},
+		"into latin":     {{Node: mixed, Offset: 3}, {Node: mixed, Offset: 6}},
+		"into hebrew":    {{Node: fourth, Offset: 2}, {Node: fourth, Offset: 6}},
+		"through hebrew": {{Node: third, Offset: 2}, {Node: third, Offset: 10}},
 	} {
 		d.Select(ends[0], ends[1])
 		out, err := chrome.Eval(d, size, `
@@ -244,6 +248,7 @@ func TestARightToLeftSelectionsRectanglesAreChromes(t *testing.T) {
 		}
 		for i := range w {
 			assert.InDelta(t, w[i].X, g[i].X, 0.51, "%s: rect %d starts where Chrome's does: %v %v", name, i, g, w)
+			assert.InDelta(t, w[i].W, g[i].W, 0.51, "%s: rect %d as wide as Chrome's: %v %v", name, i, g, w)
 			assert.InDelta(t, w[i].Y+w[i].H/2, g[i].Y+g[i].H/2, 1.01, "%s: rect %d on Chrome's line", name, i)
 		}
 	}
@@ -305,5 +310,61 @@ func TestADoubleClickTakesChromesWord(t *testing.T) {
 			l.up()
 		}
 		assert.Equal(t, want, l.doc.Selection().Text, "pressed in %q at %d", n.Text(), c.at)
+	}
+}
+
+// TestASelectedTabsRoomIsChromes selects a tab of text that keeps it,
+// alone and with its neighbours: its room is selected, between the
+// characters around it, and copied as a tab.
+func TestASelectedTabsRoomIsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`body { margin: 8px; user-select: text; font-size: 16px; }
+pre { margin: 0 0 6px; font: inherit; } .wrap { white-space: pre-wrap; } .line { white-space: pre-line; }`))
+	d.Body().Append(ui.Pre(ui.Text("a\tb")), ui.Div(ui.Class("wrap"), ui.Text("one\t\ttwo")),
+		ui.Div(ui.Class("line"), ui.Text("x\ty")))
+	size := geom.V2(400, 300)
+	d.Layout(size)
+	var texts []*ui.Node
+	d.Body().Walk(func(n *ui.Node) bool {
+		if n.IsText() {
+			texts = append(texts, n)
+		}
+		return true
+	})
+	for name, ends := range map[string][3]int{
+		"a tab whole":     {0, 0, 3},
+		"the tab alone":   {0, 1, 2},
+		"from the tab":    {0, 1, 3},
+		"up to the tab":   {0, 0, 2},
+		"two tabs":        {1, 2, 6},
+		"the second tab":  {1, 4, 5},
+		"a collapsed tab": {2, 0, 3},
+	} {
+		n := texts[ends[0]]
+		d.Select(ui.Position{Node: n, Offset: ends[1]}, ui.Position{Node: n, Offset: ends[2]})
+		out, err := chrome.Eval(d, size, `
+			return [getSelection().toString(),
+				[...getSelection().getRangeAt(0).getClientRects()].map(r => [r.x, r.y, r.width, r.height])]`)
+		require.NoError(t, err)
+		var res []json.RawMessage
+		require.NoError(t, json.Unmarshal(out, &res))
+		var text string
+		var all [][4]float32
+		require.NoError(t, json.Unmarshal(res[0], &text))
+		require.NoError(t, json.Unmarshal(res[1], &all))
+		assert.Equal(t, text, d.Selection().Text, "%s: copied as Chrome copies it", name)
+		var want []geom.Rect
+		for _, r := range all {
+			if r[2] > 0 {
+				want = append(want, geom.Rect{X: r[0], Y: r[1], W: r[2], H: r[3]})
+			}
+		}
+		g, w := mergedRects(d.SelectionRects()), mergedRects(want)
+		if !assert.Len(t, g, len(w), "%s: ember %v, Chrome %v", name, g, w) {
+			continue
+		}
+		for i := range w {
+			assert.InDelta(t, w[i].X, g[i].X, 0.51, "%s: rect %d starts where Chrome's does", name, i)
+			assert.InDelta(t, w[i].W, g[i].W, 0.51, "%s: rect %d as wide as Chrome's", name, i)
+		}
 	}
 }

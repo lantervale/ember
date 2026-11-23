@@ -416,3 +416,18 @@ func TestSelectAllWorksWithAButtonFocused(t *testing.T) {
 	l.held(input.KeyLeftSuper, input.KeyA)
 	assert.Equal(t, "The quick brown fox\n\nPress", l.doc.Selection().Text, "as Chrome: the focus is in no field")
 }
+
+func TestASelectedTabIsCopiedAndDrawnInItsRoom(t *testing.T) {
+	pre := ui.Pre(ui.Text("one\t\ttwo"))
+	l := selectableDoc(t, "pre { margin: 0; font: inherit; }", pre)
+	n := textOf(pre)
+	l.doc.Select(ui.Position{Node: n, Offset: 4}, ui.Position{Node: n, Offset: 5})
+	assert.Equal(t, "\t", l.doc.Selection().Text)
+	second := l.doc.SelectionRects()
+	require.Len(t, second, 1, "the second tab's room")
+	l.doc.Select(ui.Position{Node: n, Offset: 3}, ui.Position{Node: n, Offset: 5})
+	both := l.doc.SelectionRects()
+	require.Len(t, both, 1)
+	assert.Greater(t, both[0].W, second[0].W, "the first tab's room before it")
+	assert.InDelta(t, both[0].X+both[0].W, second[0].X+second[0].W, 0.01, "both end at the second's stop")
+}
