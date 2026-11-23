@@ -447,11 +447,19 @@ func (c *List) Reset(time float32) {
 
 // Rounded is a rounded rect a batch is cut to, in the List's space: its
 // rect and the radii of its top-left, top-right, bottom-right and
-// bottom-left corners. The zero Rounded cuts nothing.
+// bottom-left corners. Pushed under a rotation or a skew, it is in its
+// own space instead: ToLocal takes the List's space there, and Scale is
+// about how many of the List's points one of its own spans. The zero
+// Rounded cuts nothing.
 type Rounded struct {
-	Rect  geom.Rect
-	Radii [4]float32
+	Rect    geom.Rect
+	Radii   [4]float32
+	ToLocal geom.Transform2D
+	Scale   float32
 }
+
+// Local reports whether r is in its own space, under ToLocal.
+func (r Rounded) Local() bool { return r.Scale > 0 }
 
 // IsZero reports whether r cuts nothing.
 func (r Rounded) IsZero() bool { return r == Rounded{} }
@@ -479,7 +487,12 @@ type clipState struct {
 
 // PushClip bounds drawing to r, within the current clip, until PopClip.
 // A rounded clip or a mask around it still cuts what is drawn.
+//
+// Under a rotation or a skew, r cuts as itself turned, as a rounded clip
+// with no radii does: within a square one turned alike, as their overlap;
+// within any other rounded clip, that one goes on cutting.
 func (c *List) PushClip(r geom.Rect) {
+	local := r
 	if c.transformed {
 		r = Bounds(c.transform, r)
 	}
@@ -487,7 +500,31 @@ func (c *List) PushClip(r geom.Rect) {
 	if n := len(c.clips); n > 0 {
 		s.rect, s.round, s.cut = Intersect(r, c.clips[n-1].rect), c.clips[n-1].round, c.clips[n-1].cut
 	}
+	if c.turned() {
+		own := c.localRound(local, [4]float32{})
+		switch {
+		case s.round.IsZero():
+			s.round = own
+		case s.round.Radii == [4]float32{} && s.round.ToLocal == own.ToLocal && s.round.Scale == own.Scale:
+			s.round.Rect = Intersect(s.round.Rect, local)
+		}
+	}
 	c.clips = append(c.clips, s)
+}
+
+// turned reports whether the transform rotates or skews.
+func (c *List) turned() bool {
+	return c.transformed && (c.transform.X.Y != 0 || c.transform.Y.X != 0)
+}
+
+// localRound is r rounded by radii in the space the transform draws from.
+func (c *List) localRound(r geom.Rect, radii [4]float32) Rounded {
+	t := c.transform
+	det := abs(t.X.X*t.Y.Y - t.X.Y*t.Y.X)
+	if det == 0 {
+		return Rounded{}
+	}
+	return Rounded{Rect: r, Radii: radii, ToLocal: t.Inverse(), Scale: float32(math.Sqrt(float64(det)))}
 }
 
 // PushClipMask bounds drawing to r, within the current clip, and cuts it
@@ -532,11 +569,12 @@ const unclipped = 1 << 20
 // PushClipRounded bounds drawing to r with its corners rounded by radii
 // (top-left, top-right, bottom-right, bottom-left), within the current
 // clip, until PopClip. It replaces a rounded clip around it, which then
-// clips as its rect (decision 0058). Under a rotation or a skew it clips
-// to r's bounds, square.
+// clips as its rect (decision 0058). Under a rotation or a skew it rounds
+// r in its own space, turned with what is drawn (decision 0216).
 func (c *List) PushClipRounded(r geom.Rect, radii [4]float32) {
-	if c.transformed && (c.transform.X.Y != 0 || c.transform.Y.X != 0) {
+	if c.turned() {
 		c.PushClip(r)
+		c.clips[len(c.clips)-1].round = c.localRound(r, radii)
 		return
 	}
 	round := Rounded{Rect: r, Radii: radii}
@@ -1269,11 +1307,13 @@ func (c *List) Shift(d geom.Vec2) {
 			c.Batches[i].Clip.X += d.X
 			c.Batches[i].Clip.Y += d.Y
 		}
-		if !c.Batches[i].Round.IsZero() {
-			c.Batches[i].Round.Rect.X += d.X
-			c.Batches[i].Round.Rect.Y += d.Y
-		}
 		back := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: d.Scale(-1)}
+		if round := &c.Batches[i].Round; round.Local() {
+			round.ToLocal = round.ToLocal.Mul(back)
+		} else if !round.IsZero() {
+			round.Rect.X += d.X
+			round.Rect.Y += d.Y
+		}
 		if cut := &c.Batches[i].Cut; !cut.IsZero() {
 			cut.ToMask = cut.ToMask.Mul(back)
 		}

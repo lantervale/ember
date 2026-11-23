@@ -213,6 +213,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0211 | [A face's chws spaces its pairs, and vertical text trims by vhal](0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md) | rendering |
 | 0213 | [A page's textarea resizes, and sideways lines are spaced as horizontal ones](0213-a-pages-textarea-resizes-and-sideways-lines-are-spaced-as-horizontal-ones.md) | api |
 | 0214 | [translate, rotate and scale are their own values before transform](0214-translate-rotate-and-scale-are-their-own-values-before-transform.md) | rendering |
+| 0216 | [A clip under a rotation or a skew cuts in its own space](0216-a-clip-under-a-rotation-or-a-skew-cuts-in-its-own-space.md) | rendering |
 
 ## Writing one
 

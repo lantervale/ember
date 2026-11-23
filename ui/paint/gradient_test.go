@@ -102,3 +102,47 @@ func TestAGradientFillsItsRoundedPaddingBoxAndNothingOutside(t *testing.T) {
 		}
 	}
 }
+
+func TestATurnedGradientReachesPastItsBoxForItsClipToCut(t *testing.T) {
+	turn := geom.Transform2DFrom(geom.V2(50, 50), 0.5, 0, geom.V2(1, 1))
+	area := geom.Rect{X: 10, Y: 20, W: 100, H: 60}
+	past := geom.Rect{X: 9, Y: 19, W: 102, H: 62}
+	g := &style.Gradient{Angle: 90, Stops: stops(red, blue)}
+
+	r := newRecorder()
+	r.xf = turn
+	(&painter{s: r, base: geom.Identity2D()}).gradient(area, radii{}, g, 1)
+	require.Len(t, r.ops, 3)
+	assert.Equal(t, "push", r.ops[0].Kind, "its box clips it, turned with it")
+	assert.Equal(t, area, r.ops[0].Rect)
+	assert.Equal(t, past, r.ops[1].Rect, "the bands reach a point past the box")
+	assert.Equal(t, area, r.ops[1].Clip)
+
+	r = newRecorder()
+	r.xf = turn
+	(&painter{s: r, base: geom.Identity2D()}).gradient(area, radii{8, 8, 8, 8}, g, 1)
+	assert.Equal(t, "push-round", r.ops[0].Kind, "rounded, its curve clips it alone")
+	assert.Equal(t, past, r.ops[1].Rect)
+
+	r = newRecorder()
+	(&painter{s: r, base: geom.Identity2D()}).gradient(area, radii{}, g, 1)
+	require.Len(t, r.ops, 1, "upright, it needs no clip")
+	assert.Equal(t, area, r.ops[0].Rect, "and spans its box alone")
+}
+
+func TestTurnedGradientTilesMeetEdgeToEdgeInTheirViewsClip(t *testing.T) {
+	r := newRecorder()
+	r.xf = geom.Transform2DFrom(geom.Vec2{}, 0.5, 0, geom.V2(1, 1))
+	area := geom.Rect{W: 40, H: 20}
+	l := style.BackgroundLayer{
+		Image: style.Image{Gradient: &style.Gradient{Angle: 90, Stops: stops(red, blue)}},
+		Size:  sized(style.Px(20), style.Px(20)),
+	}
+	st := style.Initial()
+	(&painter{s: r, base: geom.Identity2D()}).backgroundImage(area, area, radii{}, &l, &st, 1)
+	tiles := r.of("gradient")
+	require.Len(t, tiles, 2)
+	assert.Equal(t, geom.Rect{W: 20, H: 20}, tiles[0].Rect, "each tile spans itself alone")
+	assert.Equal(t, geom.Rect{X: 20, W: 20, H: 20}, tiles[1].Rect)
+	assert.Equal(t, area, tiles[0].Clip, "cut by the view's clip")
+}

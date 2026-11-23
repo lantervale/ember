@@ -64,6 +64,7 @@
   "iframe-faded": 0.002,
   "img-crisp-animated": 0.008,
   "individual-transforms": 0.0016,
+  "transformed-gradients": 0.006,
   "initial-letter": 0.031,
   "joined": 0.025,
   "syllables": 0.011,

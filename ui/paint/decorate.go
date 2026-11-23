@@ -631,7 +631,7 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, l *style.BackgroundL
 	}
 	backgroundTiles(view, first, rep, gap, func(tile geom.Rect) {
 		if g != nil {
-			p.gradient(tile, radii{}, g, alpha)
+			p.gradientIn(tile, radii{}, g, alpha, 0)
 			return
 		}
 		p.s.Image(tile, tex, texels(tex), tint)

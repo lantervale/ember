@@ -120,12 +120,9 @@ func (s *probe) PushClip(r geom.Rect) {
 	s.clips = append(s.clips, probeClip{rect: r, back: s.xf.Inverse()})
 }
 
-// PushClipRounded is a rounded clip, which is square under a rotation or
-// a skew, as the draw list draws it (decision 0058).
+// PushClipRounded is a rounded clip, turned with what it cuts, as the
+// draw list draws it (decision 0216).
 func (s *probe) PushClipRounded(r geom.Rect, radii [4]float32) {
-	if s.xf.X.Y != 0 || s.xf.Y.X != 0 {
-		radii = [4]float32{}
-	}
 	s.clips = append(s.clips, probeClip{rect: r, radii: radii, back: s.xf.Inverse()})
 }
 

@@ -92,13 +92,15 @@ func (u *Canvas) NinePatch(r geom.Rect, tex *Texture, left, top, right, bottom f
 }
 
 // PushClip bounds drawing to r, within the current clip, until PopClip.
+// Under a rotation or a skew it cuts turned with what it bounds, unless a
+// rounded clip around it cuts already (decision 0216).
 func (u *Canvas) PushClip(r geom.Rect) { u.list.PushClip(r) }
 
 // PushClipRounded bounds drawing to r with its corners rounded by radii
 // (top-left, top-right, bottom-right, bottom-left), within the current
-// clip, until PopClip. Only the innermost rounded clip rounds; one around
-// it then clips as its rect, and under a rotation or a skew it clips to
-// r's bounds, square (decision 0058).
+// clip, until PopClip, turned or skewed with what it cuts. Only the
+// innermost rounded clip rounds; one around it then clips as its rect
+// (decisions 0058, 0216).
 func (u *Canvas) PushClipRounded(r geom.Rect, radii [4]float32) { u.list.PushClipRounded(r, radii) }
 
 // PushClipMask bounds drawing to r, within the current clip, and shows it

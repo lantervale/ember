@@ -86,6 +86,10 @@ type drawUniforms struct {
 	// BackU and BackV are the rows of what takes a point to the UV of the
 	// batch's backdrop, its second image, BackU's w its Mix, 0 for none.
 	BackU, BackV [4]float32
+	// RoundU and RoundV are the rows of what takes a point to the space of
+	// a rounded clip turned or skewed, RoundU's w how many points one of
+	// its units spans, 0 for a clip in the screen's own space.
+	RoundU, RoundV [4]float32
 }
 
 type gpuTexture struct {
@@ -644,6 +648,11 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 			cutV[3] = 1
 		}
 	}
+	var roundU, roundV [4]float32
+	if r := b.Round; r.Local() {
+		m := r.ToLocal
+		roundU, roundV = [4]float32{m.X.X, m.Y.X, m.Origin.X, r.Scale}, [4]float32{m.X.Y, m.Y.Y, m.Origin.Y, 0}
+	}
 	var backU, backV [4]float32
 	if b.Mix != 0 {
 		m := b.ToBackdrop
@@ -664,6 +673,8 @@ func batchUniforms(b *draw.Batch, t target2D, size geom.Vec2, sx, time float32, 
 		CutV:     cutV,
 		BackU:    backU,
 		BackV:    backV,
+		RoundU:   roundU,
+		RoundV:   roundV,
 	}
 }
 
