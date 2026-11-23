@@ -6,6 +6,7 @@ import (
 	"image"
 	_ "image/png" // ui.Images and url() backgrounds decode PNG
 	"io/fs"
+	"math"
 	"sync"
 	"time"
 
@@ -231,14 +232,18 @@ type playing struct {
 	pic   *animated.Picture
 	tex   *twod.Texture
 	frame int
-	// start is the clock when it began, -1 until a frame is drawn; done
-	// is set once it has played its times.
-	start float32
-	done  bool
+	// start is the clock when the play under way began, -1 until the
+	// picture is first drawn, and played the plays done before it; done is
+	// set once it has played its times. shown is whether the last paint
+	// drew it.
+	start  float32
+	played int
+	shown  bool
+	done   bool
 }
 
 // play is the texture of url's animation, which the Document's clock
-// moves from the next frame drawn on.
+// moves once it is drawn.
 func (d *Document) play(url string, pic *animated.Picture) *twod.Texture {
 	p := &playing{pic: pic, tex: twod.NewTexture(pic.Frames[0], twod.Encoded()), start: -1}
 	if d.playing == nil {
@@ -248,20 +253,51 @@ func (d *Document) play(url string, pic *animated.Picture) *twod.Texture {
 	return p.tex
 }
 
+// paintImage is image for paint, which notes the animations it draws:
+// one begins when first drawn.
+func (d *Document) paintImage(url string) *twod.Texture {
+	if p, ok := d.playing[url]; ok {
+		if d.drawnPictures == nil {
+			d.drawnPictures = map[string]bool{}
+		}
+		d.drawnPictures[url] = true
+		if p.start < 0 {
+			p.start = max(d.clock, 0)
+		}
+	}
+	return d.image(url)
+}
+
 // animate shows each animation's frame at the clock, and repaints where
-// one changed.
+// one changed. An animation moves only while the last paint drew it,
+// as Chrome's only moves in view: drawn again within the play it left,
+// it shows the frame of the moment; past it, the next play begins.
 func (d *Document) animate() {
-	for _, p := range d.playing {
-		if p.done {
+	for url, p := range d.playing {
+		back := d.drawnPictures[url] && !p.shown
+		p.shown = d.drawnPictures[url]
+		if p.done || !p.shown || p.start < 0 {
 			continue
 		}
-		if p.start < 0 {
-			p.start = d.clock
+		whole := p.pic.Whole().Seconds()
+		t := float64(d.clock - p.start)
+		if t >= whole {
+			if back {
+				p.played++
+				p.start, t = d.clock, 0
+			} else {
+				n := math.Floor(t / whole)
+				p.played += int(n)
+				p.start += float32(n * whole)
+				t -= n * whole
+			}
 		}
-		i, more := p.pic.At(time.Duration(float64(d.clock-p.start) * float64(time.Second)))
-		p.done = !more
+		i := p.pic.Within(time.Duration(t * float64(time.Second)))
+		if plays := p.pic.Plays; plays > 0 && p.played >= plays {
+			p.done, i = true, p.pic.Len()-1
+		}
 		if i != p.frame {
-			p.frame, p.tex.Image = i, p.pic.Frames[i]
+			p.frame, p.tex.Image = i, p.pic.Frame(i)
 			p.tex.Touch()
 			d.replay.repaint = true
 		}

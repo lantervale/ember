@@ -5,6 +5,8 @@ package web_test
 import (
 	"encoding/json"
 	"fmt"
+	"image"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -124,5 +126,46 @@ func assertPixels(t *testing.T, want, got []uint8, name string) {
 				break
 			}
 		}
+	}
+}
+
+// sampled is chromeFrames with each frame's pixels only at the places
+// samples names, x then y.
+func sampled(samples []image.Point) string {
+	var xy []int
+	for _, p := range samples {
+		xy = append(xy, p.X, p.Y)
+	}
+	b, _ := json.Marshal(xy)
+	return strings.Replace(chromeFrames, "pixels: [...g.getImageData(0, 0, c.width, c.height).data]",
+		"pixels: (() => { const d = g.getImageData(0, 0, c.width, c.height).data, at = "+string(b)+
+			", out = []; for (let i = 0; i < at.length; i += 2) out.push(...d.slice(4 * (at[i+1] * c.width + at[i]), 4 * (at[i+1] * c.width + at[i]) + 4)); return out; })()", 1)
+}
+
+func TestAnAnimationPastTheMostPixelsPlaysEveryFrameAsChromes(t *testing.T) {
+	data := heavyGIF(t)
+	var samples []image.Point
+	for i := 0; i < 1024; i += 37 {
+		samples = append(samples, image.Pt(i, i), image.Pt(i, 0), image.Pt(1023-i, i))
+	}
+	d := ui.NewDocument(ui.Images(fstest.MapFS{"heavy.gif": {Data: data}}))
+	d.Body().Append(ui.Img(ui.Attr("src", "heavy.gif"), ui.Attr("title", "heavy")))
+	out, err := chrome.Eval(d, geom.V2(400, 300), sampled(samples))
+	require.NoError(t, err)
+	var want map[string]chromeAnimation
+	require.NoError(t, json.Unmarshal(out, &want))
+	frames := want["heavy"].Frames
+	pic, err := animated.Decode(data)
+	require.NoError(t, err)
+	require.Less(t, len(pic.Frames), pic.Len(), "some frames past the most pixels")
+	require.Len(t, frames, pic.Len(), "every frame plays")
+	for i, f := range frames {
+		img := pic.Frame(i)
+		var got []uint8
+		for _, p := range samples {
+			c := img.NRGBAAt(p.X, p.Y)
+			got = append(got, c.R, c.G, c.B, c.A)
+		}
+		assertPixels(t, f.Pixels, got, fmt.Sprintf("frame %d", i))
 	}
 }

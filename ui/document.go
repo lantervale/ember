@@ -70,8 +70,10 @@ type Document struct {
 	fetch    ImageFetcher
 	fetching fetches
 	choices  choices
-	// playing are the animated pictures, by url.
-	playing map[string]*playing
+	// playing are the animated pictures, by url, and drawnPictures those the
+	// last paint drew.
+	playing       map[string]*playing
+	drawnPictures map[string]bool
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -686,6 +688,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 	apart := !d.replay.inPlace
 	d.painted++
 	d.unsettled = false
+	clear(d.drawnPictures)
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
 		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })

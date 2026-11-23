@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"image"
 	"image/color"
+	"image/draw"
 	"testing"
 	"time"
 
@@ -32,27 +33,16 @@ func TestAFrameOfTenMillisecondsOrLessShowsForAHundred(t *testing.T) {
 	assert.Equal(t, time.Second, p.Duration(3))
 }
 
-func TestAnAnimationPlaysItsTimesThenStaysOnItsLastFrame(t *testing.T) {
+func TestAPlayShowsEachFrameForItsDuration(t *testing.T) {
 	ms := time.Millisecond
-	forever := picture(0, 200*ms, 0, 300*ms)
+	p := picture(0, 200*ms, 0, 300*ms)
+	assert.Equal(t, 600*ms, p.Whole())
 	for _, c := range []struct {
 		at   time.Duration
 		want int
-	}{{0, 0}, {199 * ms, 0}, {200 * ms, 1}, {299 * ms, 1}, {300 * ms, 2}, {599 * ms, 2}, {600 * ms, 0}, {6250 * ms, 1}} {
-		i, more := forever.At(c.at)
-		assert.Equal(t, c.want, i, "at %v", c.at)
-		assert.True(t, more)
+	}{{0, 0}, {199 * ms, 0}, {200 * ms, 1}, {299 * ms, 1}, {300 * ms, 2}, {599 * ms, 2}} {
+		assert.Equal(t, c.want, p.Within(c.at), "at %v", c.at)
 	}
-	twice := picture(2, 200*ms, 300*ms)
-	i, more := twice.At(600 * ms)
-	assert.Equal(t, 0, i, "the second play")
-	assert.True(t, more)
-	i, more = twice.At(999 * ms)
-	assert.Equal(t, 1, i)
-	assert.True(t, more)
-	i, more = twice.At(1000 * ms)
-	assert.Equal(t, 1, i, "the last frame stays")
-	assert.False(t, more)
 }
 
 func frame(b []byte) (image.Image, error) { return webp.Decode(bytes.NewReader(b)) }
@@ -78,14 +68,39 @@ func TestAWebPFrameOutsideItsCanvasOrItsFileIsAnError(t *testing.T) {
 	require.Error(t, err, "a canvas over the most pixels")
 }
 
-func TestAnAnimationOverTheMostPixelsKeepsTheFramesBeforeIt(t *testing.T) {
-	c := animated.NewCanvas(4096, 4096, 0)
-	shown := 0
-	for c.Show(time.Second) {
-		shown++
+// grey is a step drawing a w×w square of grey v at the canvas's
+// top-left over what is there, cleared once shown when cleared.
+func grey(w int, v uint8, cleared bool) animated.Step {
+	return func(img *image.NRGBA) (func(), error) {
+		at := image.Rect(0, 0, w, w)
+		draw.Draw(img, at, image.NewUniform(color.NRGBA{v, v, v, 255}), image.Point{}, draw.Src)
+		if cleared {
+			return func() { animated.Clear(img, at) }, nil
+		}
+		return nil, nil
 	}
-	assert.Equal(t, animated.MaxPixels/(4096*4096), shown)
-	assert.Len(t, c.Picture().Frames, shown)
+}
+
+func TestTheFramesPastTheMostPixelsAreDrawnAsTheyShow(t *testing.T) {
+	const side = 4096
+	held := animated.MaxPixels / (side * side)
+	c := animated.NewCanvas(side, side, 0)
+	for i := range held + 3 {
+		require.NoError(t, c.Add(time.Second, grey(side-i, uint8(i+1), i == held+1)))
+	}
+	p := c.Picture()
+	assert.Len(t, p.Frames, held, "held within the most pixels")
+	assert.Equal(t, held+3, p.Len())
+	value := func(f *image.NRGBA, x int) uint8 { return f.NRGBAAt(x, 0).R }
+	last := p.Frame(held + 2)
+	assert.Equal(t, uint8(held+3), value(last, 0))
+	assert.Equal(t, uint8(0), value(last, side-held-2), "the frame before cleared")
+	assert.Equal(t, uint8(held+1), value(last, side-held-1), "over what the frames before left")
+	assert.Equal(t, uint8(1), value(last, side-1))
+	assert.Same(t, p.Frames[0], p.Frame(0))
+	again := p.Frame(held + 1)
+	assert.Equal(t, uint8(held+2), value(again, 0), "drawn again from the frames held")
+	assert.Equal(t, uint8(held+1), value(again, side-held-1))
 }
 
 func FuzzDecodeWebP(f *testing.F) {
@@ -100,7 +115,7 @@ func FuzzDecodeWebP(f *testing.F) {
 		if err != nil || pic == nil {
 			return
 		}
-		require.Len(t, pic.Delays, len(pic.Frames))
+		require.LessOrEqual(t, len(pic.Frames), pic.Len())
 		size := pic.Frames[0].Rect
 		for _, f := range pic.Frames {
 			require.Equal(t, size, f.Rect)

@@ -49,20 +49,23 @@ func decodeGIF(data []byte) (*animated.Picture, error) {
 		if i < len(g.Disposal) {
 			disposal = g.Disposal[i]
 		}
-		var saved []byte
-		if disposal == gif.DisposalPrevious {
-			saved = canvas.Save()
+		step := func(img *image.NRGBA) (func(), error) {
+			var saved []byte
+			if disposal == gif.DisposalPrevious {
+				saved = bytes.Clone(img.Pix)
+			}
+			at := frame.Bounds().Intersect(img.Rect)
+			draw.Draw(img, at, frame, at.Min, draw.Over)
+			switch disposal {
+			case gif.DisposalBackground:
+				return func() { animated.Clear(img, at) }, nil
+			case gif.DisposalPrevious:
+				return func() { copy(img.Pix, saved) }, nil
+			}
+			return nil, nil
 		}
-		at := frame.Bounds().Intersect(canvas.Rect)
-		draw.Draw(canvas.NRGBA, at, frame, at.Min, draw.Over)
-		if !canvas.Show(time.Duration(g.Delay[i]) * 10 * time.Millisecond) {
-			break
-		}
-		switch disposal {
-		case gif.DisposalBackground:
-			canvas.Clear(at)
-		case gif.DisposalPrevious:
-			canvas.Restore(saved)
+		if err = canvas.Add(time.Duration(g.Delay[i])*10*time.Millisecond, step); err != nil {
+			return nil, err
 		}
 	}
 	if past && len(g.Image) == 1 {
