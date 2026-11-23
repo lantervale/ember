@@ -40,6 +40,7 @@ const (
 	kwDecimal       = "decimal"
 	kwFixed         = "fixed"
 	kwMarker        = "marker"
+	kwSelection     = "selection"
 	kwBorderBox     = "border-box"
 	kwContentBox    = "content-box"
 	kwPaddingBox    = "padding-box"
@@ -104,6 +105,7 @@ const (
 	propTextDecorationThickness = "text-decoration-thickness"
 
 	shortBackground  = "background"
+	shortDecoration  = "text-decoration"
 	shortMask        = "mask"
 	shortGrid        = "grid"
 	shortBorderImage = "border-image"

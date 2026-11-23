@@ -95,6 +95,7 @@ var properties = map[string]property{
 	"text-indent":              {inherited: true, initial: "0"},
 	"text-transform":           {inherited: true, initial: "none"},
 	"-webkit-font-smoothing":   {inherited: true, initial: "auto"},
+	"-webkit-text-fill-color":  {inherited: true, initial: "currentcolor"},
 	"white-space":              {inherited: true, initial: "normal"},
 	"overflow-wrap":            {inherited: true, initial: "normal"},
 	"word-break":               {inherited: true, initial: "normal"},

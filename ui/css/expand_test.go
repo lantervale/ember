@@ -116,7 +116,7 @@ func TestValidate(t *testing.T) {
 		"opacity":                    {"0.5", "50%"},
 		"z-index":                    {"-1", "auto"},
 		"transition-timing-function": {"cubic-bezier(0.1, 0.7, 1, 0.1)", "steps(4, jump-end)"},
-		"font":                       {"small-caps bold 12px/1.5 Go", "italic small-caps 12px Go"},
+		"font":                       {"small-caps bold 12px/1.5 Go", "italic small-caps condensed 12px Go"},
 		"font-variant": {"normal", "none", "small-caps", "tabular-nums slashed-zero all-petite-caps",
 			"no-common-ligatures contextual super"},
 		"letter-spacing": {"10%", "calc(5% + 1px)"},

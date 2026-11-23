@@ -532,6 +532,15 @@ type Spacing struct{ Px, Percent float32 }
 // no-break space, the two Chrome widens.
 func WordSeparator(r rune) bool { return r == ' ' || r == '\u00a0' }
 
+// Fill is the colour glyphs are filled with: -webkit-text-fill-color's,
+// else color.
+func (t *Text) Fill() color.Color {
+	if t.TextFilled {
+		return t.TextFill
+	}
+	return t.Color
+}
+
 // WordGap is the room word-spacing adds after each word separator in t's
 // font.
 func (t *Text) WordGap() float32 { return t.WordSpacing.Px + t.WordSpacing.Percent*t.Font.Size/100 }
@@ -633,6 +642,15 @@ type Text struct {
 	HasSelection     bool
 	SelectionText    color.Color
 	HasSelectionText bool
+	// SelectionShadows is the ::selection's text-shadow, set when
+	// HasSelectionShadows is: the selected text's shadows in place of its
+	// own. SelectionDecoration is its text-decoration, set when
+	// HasSelectionDecoration is, drawn on the selected text over the
+	// text's own.
+	SelectionShadows       []Shadow
+	HasSelectionShadows    bool
+	SelectionDecoration    TextDecoration
+	HasSelectionDecoration bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations
@@ -645,6 +663,10 @@ type Text struct {
 	// or currentColor, kept as such when inherited).
 	AccentColor, CaretColor color.Color
 	AccentAuto, CaretAuto   bool
+	// TextFill is -webkit-text-fill-color, the colour glyphs are filled
+	// with when TextFilled; else they take color, as for currentColor.
+	TextFill   color.Color
+	TextFilled bool
 	// ColorScheme is color-scheme, and Dark the scheme the element is
 	// drawn in: its system colours and light-dark() resolved, and the
 	// canvas behind a dark root.
@@ -792,8 +814,10 @@ type Shadow struct {
 // border-image's slice for nine-patches, or a background's
 // linear-gradient().
 type Image struct {
-	Source   string
-	Slice    Sides[float32]
+	Source string
+	Slice  Sides[float32]
+	// Fill is border-image-slice's fill: the middle drawn too.
+	Fill     bool
 	Gradient *Gradient
 }
 
@@ -1088,7 +1112,8 @@ const (
 	ColumnRuleCurrent
 )
 
-// FollowColor sets every colour marked currentColor to c.
+// FollowColor sets every colour marked currentColor to c, a decoration's
+// to -webkit-text-fill-color's when one is set.
 func (s *Computed) FollowColor(c color.Color) {
 	for f, p := range map[CurrentColorFields]*color.Color{
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
@@ -1099,6 +1124,10 @@ func (s *Computed) FollowColor(c color.Color) {
 		if s.CurrentColor&f != 0 {
 			*p = c
 		}
+	}
+	if s.CurrentColor&DecorationCurrent != 0 && s.TextFilled {
+		// Chrome draws a decoration of currentColor in the glyphs' fill.
+		s.TextDecoration.Color = s.TextFill
 	}
 }
 
@@ -1172,6 +1201,9 @@ const (
 	// NoClip is mask-clip: no-clip, a mask shown wherever the element
 	// draws.
 	NoClip
+	// UnderText is background-clip: text, a layer shown through the
+	// glyphs of the element and of those it holds.
+	UnderText
 )
 
 // MaskMode is mask-mode: what of a mask layer's picture the element

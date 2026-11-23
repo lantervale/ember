@@ -43,8 +43,8 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-style": func(s *style.Computed) string {
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
-	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
 	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
 	"text-decoration-skip-ink": func(s *style.Computed) string {
 		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
 	},

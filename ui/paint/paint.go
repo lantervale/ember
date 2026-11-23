@@ -89,19 +89,24 @@ type Frame struct {
 	Keep  *box.Box
 	// Selection is the text selected outside the fields, nil for none.
 	Selection Selection
+	// Inactive is the window not being the active one: a selection no
+	// ::selection colours is drawn in the inactive colours, as Chrome's.
+	Inactive bool
 }
 
 // Selection is the text a Document has selected, as paint draws it.
 type Selection interface {
 	// Parts are the rectangles of a text run the selection covers, in the
-	// run's space as its fragments' are.
+	// run's space as its fragments' are, or of a br the mark of the line
+	// it holds alone, in its box's space.
 	Parts(run *box.Box) []Selected
 	// Holds reports an element wholly inside the selection: a picture
 	// there is tinted.
 	Holds(n *dom.Node) bool
 }
 
-// Selected is the part of a text run's fragment Line a selection covers.
+// Selected is the part of a text run's fragment Line a selection covers:
+// Line is -1 for the mark of an empty line, which no fragment holds.
 type Selected struct {
 	Line int
 	Rect geom.Rect
@@ -122,7 +127,7 @@ func TransformOf(b *box.Box) (geom.Transform2D, bool) {
 // Time, Live and Keep would.
 func Each(f *Frame) Option {
 	return func(p *painter) {
-		p.time, p.timed, p.keep, p.sel = f.Time, true, f.Keep, f.Selection
+		p.time, p.timed, p.keep, p.sel, p.inactive = f.Time, true, f.Keep, f.Selection, f.Inactive
 		if f.Live != nil {
 			f.Live.reset()
 			p.live, p.apart = f.Live, f.Apart
@@ -168,9 +173,11 @@ type painter struct {
 	vector  func(string) Vector
 	control func(*dom.Node) any
 	sel     Selection
-	time    float32
-	timed   bool
-	scale   float32
+	// inactive is Frame's Inactive.
+	inactive bool
+	time     float32
+	timed    bool
+	scale    float32
 	// popups are the open selects met, drawn over everything at the end.
 	popups []popup
 	// top is the top layer: the modal dialogs met, painted over the page
@@ -197,8 +204,10 @@ type painter struct {
 	clip  *clip
 	held  int
 	floor *clip
-	// pictures is how many pictures paint has begun and not ended.
+	// pictures is how many pictures paint has begun and not ended, paged
+	// whether one of them is the whole page's.
 	pictures int
+	paged    bool
 	// spread is how far the filters of the elements painted round what
 	// is painted now draw it past where it is: so much more of it shows.
 	spread float32
@@ -221,6 +230,9 @@ type painter struct {
 	apart bool
 	// chain is use's room for a clip chain.
 	chain []*clip
+	// glyphsOnly draws text as the shape of its glyphs and decorations,
+	// opaque white: the picture background-clip: text shows through.
+	glyphsOnly bool
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey
@@ -290,6 +302,7 @@ func paintOn(s Surface, t *box.Tree, opts []Option, whole bool) int {
 	if grouped = grouped && t.Grouped; grouped {
 		on.BeginPicture()
 		p.pictures++
+		p.paged = true
 	}
 	p.canvasBackground(t.Root)
 	p.page(t.Root)
@@ -336,19 +349,20 @@ func (p *painter) start(root *box.Box) {
 // or body's when the root has none, as CSS's canvas does; that box then
 // leaves it out of its own decoration. Without either, a root drawn in
 // the dark scheme has the canvas Chrome's dark Canvas colour, where a
-// light one leaves the window's own showing. In a viewport that scrolls, its
-// picture is placed in the root element's padding box, as Chrome places
-// it, so it scrolls with the page; otherwise in the viewport.
+// light one leaves the window's own showing. Its picture is placed in the
+// root element's box its origin names, as Chrome places it, so in a
+// viewport that scrolls it scrolls with the page, unless it is fixed.
 func (p *painter) canvasBackground(root *box.Box) {
-	area := p.viewport
+	at := root.Pos
 	if root.Kind == box.Viewport {
 		if len(root.Children) == 0 {
 			return
 		}
-		at := root.Pos.Sub(root.Scroll)
+		at = root.Pos.Sub(root.Scroll)
 		root = root.Children[0]
-		area = padding(root, at.Add(root.Pos))
+		at = at.Add(root.Pos)
 	}
+	border := geom.Rect{X: at.X, Y: at.Y, W: root.Size.X, H: root.Size.Y}
 	src := root
 	if !hasBackground(shown(root)) {
 		src = nil
@@ -374,6 +388,10 @@ func (p *painter) canvasBackground(root *box.Box) {
 	}
 	for i := st.BackgroundLayers() - 1; i >= 0; i-- {
 		l := st.BackgroundLayer(i)
+		area, _ := backgroundBox(root, border, root.Border, radii{}, or(l.Origin, style.UnderPadding))
+		if l.Attachment == style.AttachFixed {
+			area = p.viewport
+		}
 		mixing.layer(l.Blend, func() { p.backgroundImage(p.viewport, area, radii{}, &l, st, 1) })
 	}
 }
@@ -464,7 +482,12 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		case box.Marker:
 			p.use(c.clip)
 			p.marker(c, alpha)
-		case box.Element, box.AnonymousBlock, box.Viewport:
+		case box.Element:
+			if p.sel != nil && c.b.Node != nil && c.b.Node.Tag() == dom.Br {
+				p.use(c.clip)
+				p.lineBreak(c, alpha)
+			}
+		case box.AnonymousBlock, box.Viewport:
 		}
 	}
 	if marked(e.b) {

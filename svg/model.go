@@ -221,6 +221,10 @@ type Shape struct {
 	DashOffset float64
 	// StrokeFirst paints the stroke under the fill (paint-order).
 	StrokeFirst bool
+	// NonScalingStroke strokes the path where it shows, its width and
+	// dashes in CSS pixels whatever Transform and the view do
+	// (vector-effect: non-scaling-stroke).
+	NonScalingStroke bool
 }
 
 // Pattern is a tile repeated over a shape: its Items drawn in the
@@ -233,16 +237,48 @@ type Pattern struct {
 	Transform Matrix
 }
 
-// Group is items drawn together, cut by its Clip, shown through its Mask,
-// then through one opacity.
+// Group is items drawn together, apart from what is under them: run
+// through its Filters, cut by its Clip, shown through its Mask, then
+// through one opacity, and blended with what is under them.
 type Group struct {
 	Opacity float64
 	Items   []Item
+	// Filters, when set, make the picture of the items anew, one after
+	// another.
+	Filters []*Filter
 	// Clip, when set, keeps only what it covers.
 	Clip *Clip
 	// Mask, when set, shows the items as much as it is bright, or opaque.
 	Mask *Mask
+	// Blend is how the group mixes with what is under it.
+	Blend BlendMode
 }
+
+// BlendMode is how a picture's colours mix with those it is drawn over:
+// mix-blend-mode, and feBlend's mode.
+type BlendMode uint8
+
+// The blend modes of CSS compositing.
+const (
+	BlendNormal BlendMode = iota
+	BlendMultiply
+	BlendScreen
+	BlendOverlay
+	BlendDarken
+	BlendLighten
+	BlendColorDodge
+	BlendColorBurn
+	BlendHardLight
+	BlendSoftLight
+	BlendDifference
+	BlendExclusion
+	BlendHue
+	BlendSaturation
+	BlendColor
+	BlendLuminosity
+	// BlendPlusLighter adds the colours, each up to white.
+	BlendPlusLighter
+)
 
 // Clip is a clipping path: what any of its shapes' fills covers, each
 // under its own FillRule, and of that what Clip covers in turn when set.

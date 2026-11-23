@@ -46,7 +46,7 @@ func (p *painter) decorationsIn(e entry, st *style.Computed, lines style.Decorat
 	for i := range st.Decorations {
 		d := &st.Decorations[i]
 		c := fade(d.Color, alpha)
-		if d.Color.A > 0 && ink != nil {
+		if (d.Color.A > 0 || p.glyphsOnly) && ink != nil {
 			c = *ink
 		}
 		if d.Line&lines == 0 || c.A <= 0 {

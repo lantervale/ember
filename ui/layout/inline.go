@@ -73,6 +73,9 @@ type inlineContent struct {
 	firstInWord bool
 	// back is the box painting the first line's background, nil without one.
 	back *box.Box
+	// height is the owner's content height its atomic inlines' percentages are of, none
+	// where it depends on the content.
+	height float32
 }
 
 // inlineOOF is an absolutely positioned (or fixed) element inside inline content: its
@@ -230,7 +233,7 @@ func isAtomicDisplay(d style.Display) bool {
 // inlineOf gathers the inline content of items for owner, nil when it is only collapsible
 // whitespace.
 func (t *tree) inlineOf(owner *node, items []item) *inlineContent {
-	c := &inlineContent{owner: owner, unit: unitsPerPoint(t.fonts), line: firstLineOf(owner)}
+	c := &inlineContent{owner: owner, unit: unitsPerPoint(t.fonts), line: firstLineOf(owner), height: none}
 	t.gather(c, owner.box, items)
 	if n := owner.box.Node; n != nil && n.Tag() == dom.Summary && owner.st.ListItem && markerOf(owner.st) != "" {
 		c.marker = &box.Box{Kind: box.Marker, Node: n, Style: owner.st}
@@ -901,6 +904,9 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		}
 		a := c.runs[p.run].atomic
 		st := a.node.st
+		if !some(parent.h) {
+			parent.h = c.height
+		}
 		a.margin = edges(st.Margin, parent.w)
 		inner := avail.mSub(a.margin.horizontal()).mMax(0)
 		if k, sp := resolveSizingKeyword(st.Size.Width, inner.value(), parent.w); k == keywordMeasure {
@@ -1564,6 +1570,10 @@ func (t *tree) metricsOf(c *inlineContent, st *style.Computed) box.Metrics {
 func (t *tree) lineHeight(c *inlineContent, st *style.Computed) (float32, float32) {
 	return lineHeightOf(t.metricsOf(c, st), st)
 }
+
+// LineHeight is the line height a face with metrics m takes in a run of style st, and the
+// baseline's place in it.
+func LineHeight(m box.Metrics, st *style.Computed) (float32, float32) { return lineHeightOf(m, st) }
 
 // lineHeightOf is the line height a face with metrics m takes in a run of style st, and
 // the baseline's place in it.

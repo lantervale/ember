@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="ramp"><stop stop-color="#f60"/><stop offset=".5" stop-color="#3c9"/><stop offset="1" stop-color="#36f"/></linearGradient>
+  </defs>
+  <rect width="120" height="120" fill="url(#ramp)"/>
+  <rect x="0" y="0" width="120" height="30" fill="#fff" fill-opacity=".5"/>
+  <g fill="#c39">
+    <circle cx="12" cy="14" r="9" style="mix-blend-mode: multiply"/>
+    <circle cx="36" cy="14" r="9" style="mix-blend-mode: screen"/>
+    <circle cx="60" cy="14" r="9" style="mix-blend-mode: overlay"/>
+    <circle cx="84" cy="14" r="9" style="mix-blend-mode: darken"/>
+    <circle cx="108" cy="14" r="9" style="mix-blend-mode: lighten"/>
+    <circle cx="12" cy="40" r="9" style="mix-blend-mode: color-dodge"/>
+    <circle cx="36" cy="40" r="9" style="mix-blend-mode: color-burn"/>
+    <circle cx="60" cy="40" r="9" style="mix-blend-mode: hard-light"/>
+    <circle cx="84" cy="40" r="9" style="mix-blend-mode: soft-light"/>
+    <circle cx="108" cy="40" r="9" style="mix-blend-mode: difference"/>
+    <circle cx="12" cy="66" r="9" style="mix-blend-mode: exclusion"/>
+    <circle cx="36" cy="66" r="9" style="mix-blend-mode: hue"/>
+    <circle cx="60" cy="66" r="9" style="mix-blend-mode: saturation"/>
+    <circle cx="84" cy="66" r="9" style="mix-blend-mode: color"/>
+    <circle cx="108" cy="66" r="9" style="mix-blend-mode: luminosity"/>
+  </g>
+  <g style="mix-blend-mode: multiply" opacity=".7"><rect x="4" y="82" width="30" height="30" fill="#fc0"/><rect x="18" y="90" width="20" height="20" fill="#0cf"/></g>
+  <g style="isolation: isolate"><rect x="44" y="82" width="30" height="30" fill="#fff"/><circle cx="59" cy="97" r="11" fill="#c33" style="mix-blend-mode: difference"/></g>
+  <g opacity=".9"><rect x="84" y="82" width="30" height="30" fill="#036"/><circle cx="99" cy="97" r="11" fill="#fc0" style="mix-blend-mode: screen"/></g>
+</svg>

@@ -221,3 +221,18 @@ func TestADragAndATitleBarDoubleClickReachTheOpenWindow(t *testing.T) {
 		t.Fatalf("calls %q, want %q: a closed window drags nothing", f.calls, want)
 	}
 }
+
+func TestAWindowIsFocusedUntilItsSystemSaysOtherwise(t *testing.T) {
+	w := NewWindow()
+	if !w.Focused() {
+		t.Fatal("a new window is focused")
+	}
+	w.SetFocused(false)
+	if w.Focused() {
+		t.Fatal("SetFocused stands for the system")
+	}
+	w.Sync(w.Size(), w.Size(), true)
+	if !w.Focused() {
+		t.Fatal("the backend says it again")
+	}
+}

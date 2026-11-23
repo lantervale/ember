@@ -142,9 +142,13 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0137 | [A box placed past a scroller is moved back as it scrolls](0137-a-box-placed-past-a-scroller-is-moved-back-as-it-scrolls.md) | api |
 | 0138 | [Animated pictures play as one texture per address](0138-animated-pictures-play-as-one-texture-per-address.md) | assets |
 | 0139 | [Colours in any space are worked out in sRGB as the cascade reads them](0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md) | api |
+| 0140 | [A Document's window focus is a state the cascade answers](0140-a-documents-window-focus-is-a-state-the-cascade-answers.md) | api |
+| 0141 | [Keys and the arrows cross a frame; the frame fades and moves with its iframe](0141-keys-and-the-arrows-cross-a-frame-the-frame-fades-and-moves-with-its-iframe.md) | api |
 | 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
+| 0144 | [A background clipped to text shows through a picture of its glyphs](0144-a-background-clipped-to-text-shows-through-a-picture-of-its-glyphs.md) | rendering |
 | 0145 | [Text is shaped by a pure-Go OpenType layout reader](0145-text-is-shaped-by-a-pure-go-opentype-layout-reader.md) | rendering |
+| 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
 
 ## Writing one
 

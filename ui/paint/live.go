@@ -84,7 +84,8 @@ func Live(set *LiveSet, apart bool) Option {
 
 // record keeps part, reporting whether it is to be drawn now: not when
 // the paint keeps live parts apart. A part under another transform than
-// the root's counts as covered: it can't be checked.
+// the root's counts as covered: it can't be checked; so does one inside a
+// group picture, which an opacity or a filter of the group must reach.
 func (p *painter) record(part livePart, area geom.Rect) bool {
 	if p.live == nil {
 		return true
@@ -93,7 +94,7 @@ func (p *painter) record(part livePart, area geom.Rect) bool {
 	part.e.clip = p.live.keep(part.e.clip)
 	p.live.parts = append(p.live.parts, part)
 	p.live.viewport = p.viewport
-	if part.xf != p.base {
+	if part.xf != p.base || p.pictures > 0 && !p.paged || p.pictures > 1 {
 		p.live.covered = true
 	} else if part.kind != liveList {
 		p.live.rects = append(p.live.rects, area)
