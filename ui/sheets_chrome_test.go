@@ -81,6 +81,42 @@ func TestSheetsChangedWhileADocumentShowsLayOutAsChromes(t *testing.T) {
 	}
 }
 
+// TestNestedRulesInsertedAndDeletedLayOutAsChromes inserts and deletes
+// style rules holding nested rules and @scope rules, as a page's
+// scripts do, and lays the page out against Chrome at each step.
+func TestNestedRulesInsertedAndDeletedLayOutAsChromes(t *testing.T) {
+	for name, opts := range map[string][]ui.DocumentOption{"a game's sheet": nil,
+		"a browser's sheet": {ui.BrowserSheets()}} {
+		t.Run(name, func(t *testing.T) {
+			d := ui.NewDocument(append(opts, ui.CSS(`
+				.card { width: 200px; height: 20px; border: 1px solid #335;
+					.in { height: 6px; width: 50px; } &.wide { width: 300px; } }`))...)
+			d.Body().Append(
+				ui.Div(ui.Class("card"), ui.Div(ui.Class("in")), ui.Div(ui.Class("in", "deep"), ui.Div(ui.Class("in")))),
+				ui.Div(ui.Class("card", "wide"), ui.Div(ui.Class("in"))),
+			)
+			step := func(name string) {
+				t.Run(name, func(t *testing.T) {
+					r := chrome.Match(t, d, geom.V2(800, 600))
+					t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+				})
+			}
+			step("as made")
+			s := d.AddSheet(`.card { > .in { width: 70px; } }`)
+			step("a sheet of a nested rule added")
+			require.NoError(t, s.InsertRule(0, `@scope (.card) to (.deep) { .in { height: 9px; } :scope { height: 50px; } }`))
+			require.NoError(t, s.InsertRule(2,
+				`.card { @media (min-width: 700px) { padding: 3px; .in { width: 90px; } } height: 30px; }`))
+			step("an @scope and a rule nesting an @media inserted")
+			require.NoError(t, s.DeleteRule(1))
+			step("the nested rule deleted")
+			require.NoError(t, s.DeleteRule(0))
+			step("the @scope deleted")
+			assert.Empty(t, d.Warnings())
+		})
+	}
+}
+
 // TestImportedSheetsExportAsChromeLaysThemOut writes a Document whose
 // sheet imports others as one page, each imported sheet in its import's
 // layer and media, and lays it out against Chrome.

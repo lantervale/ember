@@ -225,6 +225,10 @@ func (r *restyler) letterOf(n *dom.Node, data *dom.Pipeline, rem float32) {
 		}
 		return
 	}
+	letter := strings.TrimLeft(text.Text()[:end], " \t\n\r\f")
+	if st.InitialLetter.Size > 0 {
+		r.dropCap(st, data.Style, letter)
+	}
 	g := data.FirstLetter
 	if g == nil {
 		g = dom.NewGenerated(n, dom.FirstLetter)
@@ -236,7 +240,6 @@ func (r *restyler) letterOf(n *dom.Node, data *dom.Pipeline, rem float32) {
 		gd.Style, gd.Shown = st, st
 		relayout(n)
 	}
-	letter := strings.TrimLeft(text.Text()[:end], " \t\n\r\f")
 	if kids := g.Children(); len(kids) != 1 || kids[0].Text() != letter {
 		g.SetGenerated([]*dom.Node{dom.NewText(letter)})
 		relayout(n)

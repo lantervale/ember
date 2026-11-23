@@ -79,6 +79,9 @@ func (p *painter) place(pp popup) menu {
 		}
 	}
 	vp := p.viewport
+	if p.lists {
+		vp = p.listsIn
+	}
 	h := float32(n)*l.row + 2*l.border
 	if h > vp.H {
 		l.rows = max(int((vp.H-2*l.border)/l.row), 1)
@@ -113,14 +116,52 @@ func (l menu) inner() geom.Rect { return l.rect.Inset(l.border) }
 
 // popups draws the open selects' lists, on top of everything.
 func (p *painter) drawPopups() {
-	saved := p.s.Transform()
+	saved, apart := p.s.Transform(), p.apart
+	if p.listsApart && p.live != nil {
+		p.apart, p.live.listsApart = true, true
+	}
 	for _, pp := range p.popups {
 		p.s.SetTransform(pp.xf)
-		if p.record(livePart{kind: liveList, list: pp}, geom.Rect{}) {
+		if p.record(livePart{kind: liveList, list: pp}, geom.Rect{}) && !p.listsApart {
 			p.drawList(pp, p.place(pp))
+			p.endGap()
 		}
 	}
+	p.apart = apart
 	p.s.SetTransform(saved)
+}
+
+// DrawLists draws the open selects' lists a paint with Lists apart left
+// out of set, kept inside within as Lists says, over what is drawn: the
+// page round the Document in an iframe. It appends where each lies, in
+// the space of the surface's drawing, to rects and returns them.
+func DrawLists(s Surface, set *LiveSet, within geom.Rect, time float32, rects []geom.Rect,
+	opts ...Option,
+) []geom.Rect {
+	if !set.listsApart {
+		return rects
+	}
+	p := pooled[painter](&painters)
+	defer painters.Put(p)
+	*p = painter{s: s, base: s.Transform(), scratch: p.scratch[:0], chain: p.chain[:0]}
+	for _, o := range opts {
+		o(p)
+	}
+	p.time, p.timed = time, true
+	p.lists, p.listsIn = true, within
+	saved := s.Transform()
+	p.use(nil)
+	for _, part := range set.parts {
+		if part.kind != liveList {
+			continue
+		}
+		s.SetTransform(part.xf)
+		l := p.place(part.list)
+		p.drawList(part.list, l)
+		rects = append(rects, boundsIn(part.xf, l.rect))
+	}
+	s.SetTransform(saved)
+	return rects
 }
 
 func (p *painter) drawList(pp popup, l menu) {

@@ -534,9 +534,16 @@ func TestAQuietIframeReplays(t *testing.T) {
 	if ui.Painted(p.child) != child {
 		t.Fatalf("a frame nothing changed in painted %d times", ui.Painted(p.child)-child)
 	}
-	if ui.Painted(p.host) == host {
-		t.Fatal("a page with an element over its frame is not painted each frame")
+	if ui.Painted(p.host) != host {
+		t.Fatalf("a page with an element over its frame painted %d times", ui.Painted(p.host)-host)
 	}
+	p.first.SetText("changed under the cover")
+	p.frames(2)
+	if ui.Painted(p.host) != host || ui.Painted(p.child) == child {
+		t.Fatalf("a change in the covered frame painted the page %d times and the frame %d", ui.Painted(p.host)-host,
+			ui.Painted(p.child)-child)
+	}
+	child = ui.Painted(p.child)
 	p.host.Body().Remove(p.cover)
 	p.frames(4)
 	host = ui.Painted(p.host)
@@ -545,7 +552,7 @@ func TestAQuietIframeReplays(t *testing.T) {
 		t.Fatalf("with nothing over the frame, the page painted %d times and the frame %d", ui.Painted(p.host)-host,
 			ui.Painted(p.child)-child)
 	}
-	p.first.SetText("changed")
+	p.first.SetText("changed again")
 	p.frames(2)
 	if ui.Painted(p.host) != host || ui.Painted(p.child) == child {
 		t.Fatalf("a change in the frame painted the page %d times and the frame %d", ui.Painted(p.host)-host,

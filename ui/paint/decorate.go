@@ -412,7 +412,7 @@ func (p *painter) decorate(e entry, alpha float32) {
 				p.insetShadow(inside(r, pc.edges), radius.inside(pc.edges), sh, alpha)
 			}
 		}
-		if tex, k := p.borderImage(st); tex != nil {
+		if tex, k := p.borderImage(st.BorderImage, st); tex != nil {
 			s := st.BorderImage.Slice
 			p.picture(r, tex, style.Sides[float32]{Top: s.Top * k, Right: s.Right * k, Bottom: s.Bottom * k, Left: s.Left * k},
 				imageWidths(r, st.BorderImageWidth, st.Border, s), st.BorderImageRepeat, st.BorderImage.Fill, alpha)
@@ -483,13 +483,14 @@ func (p *painter) find(img style.Image, st *style.Computed) *twod.Texture {
 	return pixelated(tex)
 }
 
-// borderImage is st's border-image picture and how many of its pixels
-// make one of the picture's own: a picture of shapes is drawn at the
-// screen's density, as Chrome rasterises it, its slices scaled to match.
-func (p *painter) borderImage(st *style.Computed) (*twod.Texture, float32) {
-	v := p.shapes(st.BorderImage.Source)
+// borderImage is img's picture, a border image of st, and how many of
+// its pixels make one of the picture's own: a picture of shapes is drawn
+// at the screen's density, as Chrome rasterises it, its slices scaled to
+// match.
+func (p *painter) borderImage(img style.Image, st *style.Computed) (*twod.Texture, float32) {
+	v := p.shapes(img.Source)
 	if v == nil {
-		return p.find(st.BorderImage, st), 1
+		return p.find(img, st), 1
 	}
 	natural := v.Intrinsic().Natural(geom.V2(defaultWidth, defaultHeight))
 	tex := p.drawn(v, natural)

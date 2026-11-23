@@ -1,5 +1,7 @@
 package shape
 
+import "slices"
+
 // context applies the first rule of contextual subtable s matching the
 // glyphs from i, and reports where the glyphs after its input start.
 func (b *buffer) context(lk *lookup, s data, i int) (int, bool) {
@@ -107,9 +109,8 @@ func (b *buffer) chain(lk *lookup, s data, i int) (int, bool) {
 	return i, false
 }
 
-// input is where the count glyphs from i lie, lk passing over those it
-// ignores, when each after the first matches and has the lookup's mask;
-// nil when they don't.
+// input is where the count glyphs from i lie, as seek finds them, when
+// each after the first matches; nil when they don't.
 func (b *buffer) input(lk *lookup, i, count int, match func(c int, g uint16) bool) []int {
 	if count <= 0 {
 		return nil
@@ -118,7 +119,7 @@ func (b *buffer) input(lk *lookup, i, count int, match func(c int, g uint16) boo
 	pos[0] = i
 	j := i
 	for c := 1; c < count; c++ {
-		if j = b.next(lk, j); j < 0 || b.glyphs[j].mask&b.mask == 0 || !match(c, b.glyphs[j].ID) {
+		if j = b.seek(lk, j, 1, false, func(g *Glyph) bool { return match(c, g.ID) }); j < 0 {
 			return nil
 		}
 		pos = append(pos, j)
@@ -132,13 +133,13 @@ func (b *buffer) contextAround(lk *lookup, pos []int, backMatch func(int, uint16
 	aheadMatch func(int, uint16) bool, after int) bool {
 	j := pos[0]
 	for n := range back {
-		if j = b.prev(lk, j); j < 0 || !backMatch(n, b.glyphs[j].ID) {
+		if j = b.seek(lk, j, -1, true, func(g *Glyph) bool { return backMatch(n, g.ID) }); j < 0 {
 			return false
 		}
 	}
 	j = pos[len(pos)-1]
 	for n := range after {
-		if j = b.next(lk, j); j < 0 || !aheadMatch(n, b.glyphs[j].ID) {
+		if j = b.seek(lk, j, 1, true, func(g *Glyph) bool { return aheadMatch(n, g.ID) }); j < 0 {
 			return false
 		}
 	}
@@ -164,16 +165,33 @@ func (b *buffer) nested(lk *lookup, pos []int, recs data, count int) int {
 			continue
 		}
 		inner := l.lookup(index)
-		if inner == nil || b.f.ignores(inner, b.glyphs[pos[seq]].ID) {
+		if inner == nil {
 			continue
 		}
 		n := len(b.glyphs)
 		b.apply(inner, 1, pos[seq])
-		if d := len(b.glyphs) - n; d != 0 {
-			for k := seq + 1; k < len(pos); k++ {
-				pos[k] += d
+		delta := len(b.glyphs) - n
+		if delta == 0 {
+			continue
+		}
+		end += delta
+		if end < pos[seq] {
+			delta += pos[seq] - end
+			end = pos[seq]
+		}
+		next := seq + 1
+		if delta > 0 {
+			pos = slices.Insert(pos, next, make([]int, delta)...)
+			for j := next; j < next+delta; j++ {
+				pos[j] = pos[j-1] + 1
 			}
-			end += d
+			next += delta
+		} else {
+			delta = max(delta, next-len(pos))
+			pos = slices.Delete(pos, next, next-delta)
+		}
+		for j := next; j < len(pos); j++ {
+			pos[j] += delta
 		}
 	}
 	return end

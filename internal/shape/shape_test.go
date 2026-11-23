@@ -38,7 +38,7 @@ func run(t *testing.T, f *sfnt.Font, text string) []shape.Glyph {
 		g, err := f.GlyphIndex(&buf, r)
 		require.NoError(t, err)
 		cluster := int32(i)
-		if len(out) > 0 && unicode.Is(unicode.Mn, r) {
+		if len(out) > 0 && (unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) || r == 0x200D) {
 			cluster = out[len(out)-1].Cluster
 		}
 		out = append(out, shape.Glyph{ID: uint16(g), Cluster: cluster, Char: r})
