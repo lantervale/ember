@@ -570,6 +570,9 @@ func (r *restyler) overKeyframe(casc cascaded) {
 	for i := range r.keyframe {
 		d := &r.keyframe[i]
 		for _, name := range longhandsOf(d.Name) {
+			if casc.rtl && d.inline {
+				name = mirrored(name)
+			}
 			if w := casc.longhands[orderIndex[name]]; w == nil || !w.Important {
 				casc.longhands[orderIndex[name]] = d
 			}

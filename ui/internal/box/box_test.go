@@ -18,6 +18,13 @@ func TestRectAddsTheParentsAndTheirScroll(t *testing.T) {
 	assert.Same(t, root, panel.Parent)
 }
 
+func TestShownMirrorsRightToLeftText(t *testing.T) {
+	f := box.Fragment{Text: "a ≤ (b) « c » é", RTL: true}
+	assert.Equal(t, "é « c » (b) ≥ a", f.Shown())
+	f.RTL = false
+	assert.Equal(t, f.Text, f.Shown())
+}
+
 func TestContentRectInsetsBorderAndPadding(t *testing.T) {
 	b := &box.Box{Size: geom.V2(100, 50), Border: box.Edges{1, 2, 3, 4}, Padding: box.Edges{10, 10, 10, 10}}
 	assert.Equal(t, geom.Rect{X: 14, Y: 11, W: 74, H: 26}, b.ContentRect())

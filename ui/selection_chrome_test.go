@@ -5,6 +5,7 @@ package ui_test
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -186,6 +187,83 @@ func TestTheSelectionsRectanglesAreChromesRangeRects(t *testing.T) {
 		}
 	}
 }
+
+// TestARightToLeftSelectionsRectanglesAreChromes selects inside text
+// shown right to left, Hebrew in a font both draw alike, and compares
+// the rectangles with Chrome's range rects, line by line from the left.
+func TestARightToLeftSelectionsRectanglesAreChromes(t *testing.T) {
+	font := hebrewFont(t)
+	d := ui.NewDocument(ui.FetchFonts(func(_, _ string) ([]byte, error) { return font, nil }),
+		ui.CSS(selectionSheet+`@font-face { font-family: Hebrew; src: url(hebrew.ttf); } body { font-family: Hebrew; }`))
+	d.Body().Append(ui.P(ui.Attr("dir", "rtl"), ui.Text("אבג דהו זחט יכל מנס עפצ קרש תאב גדה וזח טיכ")),
+		ui.P(ui.Attr("dir", "rtl"), ui.Text("שלום abc def עולם")),
+		ui.P(ui.Text("abc "), ui.Span(ui.Attr("dir", "rtl"), ui.Text("שלום עולם")), ui.Text(" def")))
+	size := geom.V2(400, 800)
+	landed(t, d, size)
+	var texts []*ui.Node
+	d.Body().Walk(func(n *ui.Node) bool {
+		if n.IsText() && strings.ContainsFunc(n.Text(), func(r rune) bool { return r >= 0x0590 }) {
+			texts = append(texts, n)
+		}
+		return true
+	})
+	hebrew, mixed, third := texts[0], texts[1], texts[2]
+	for name, ends := range map[string][2]ui.Position{
+		"inside a word": {{Node: hebrew, Offset: 1}, {Node: hebrew, Offset: 3}},
+		"across lines":  {{Node: hebrew, Offset: 5}, {Node: hebrew, Offset: 30}},
+		"hebrew":        {{Node: mixed, Offset: 1}, {Node: mixed, Offset: 3}},
+		"latin":         {{Node: mixed, Offset: 6}, {Node: mixed, Offset: 11}},
+		"an rtl span":   {{Node: third, Offset: 1}, {Node: third, Offset: 7}},
+	} {
+		d.Select(ends[0], ends[1])
+		out, err := chrome.Eval(d, size, `
+			return [...getSelection().getRangeAt(0).getClientRects()].map(r => [r.x, r.y, r.width, r.height])`)
+		require.NoError(t, err)
+		var all [][4]float32
+		require.NoError(t, json.Unmarshal(out, &all))
+		var want []geom.Rect
+		for _, r := range all {
+			if r[2] > 0 {
+				want = append(want, geom.Rect{X: r[0], Y: r[1], W: r[2], H: r[3]})
+			}
+		}
+		got := d.SelectionRects()
+		byLine := func(rs []geom.Rect) []geom.Rect {
+			out := slices.Clone(rs)
+			slices.SortFunc(out, func(a, b geom.Rect) int {
+				if d := a.Y + a.H/2 - b.Y - b.H/2; d < -1 || d > 1 {
+					return int(d)
+				}
+				return int(a.X - b.X)
+			})
+			return mergedRects(out)
+		}
+		g, w := byLine(got), byLine(want)
+		if !assert.Len(t, g, len(w), "%s: ember %v, Chrome %v", name, g, w) {
+			continue
+		}
+		for i := range w {
+			assert.InDelta(t, w[i].X, g[i].X, 0.51, "%s: rect %d starts where Chrome's does: %v %v", name, i, g, w)
+			assert.InDelta(t, w[i].Y+w[i].H/2, g[i].Y+g[i].H/2, 1.01, "%s: rect %d on Chrome's line", name, i)
+		}
+	}
+}
+
+// mergedRects joins rectangles of a line that touch, as Chrome gives a
+// rectangle per text box where ember gives one per fragment.
+func mergedRects(rs []geom.Rect) []geom.Rect {
+	var out []geom.Rect
+	for _, r := range rs {
+		if n := len(out); n > 0 && abs32(out[n-1].Y-r.Y) < 1 && abs32(out[n-1].X+out[n-1].W-r.X) < 0.6 {
+			out[n-1].W = r.X + r.W - out[n-1].X
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func abs32(v float32) float32 { return max(v, -v) }
 
 // TestADoubleClickTakesChromesWord compares the word a double click takes
 // with the one Chrome's Selection.modify reaches from the same place, a

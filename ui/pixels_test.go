@@ -97,6 +97,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/rounded-dashes", 560, 160, 0.0012},
 		{"./internal/pages/outline-styles", 520, 160, 0.001},
 		{"./internal/pages/direction", 400, 400, 0.003},
+		{"./internal/pages/direction-more", 400, 420, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},

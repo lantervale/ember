@@ -40,9 +40,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Indic, Khmer, Myanmar and the USE scripts' reordering, a mark placed by its combining class in a face whose GPOS does not place it, a precomposed character a face lacks drawn from its decomposition | left out ([decision 0157](../99-decisions/0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) shapes Arabic, Hebrew and the joining scripts); a character the face lacks breaks the run, so letters on either side of it are not joined |
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without its ligatures and kerning, where Chrome's HarfBuzz reads them; most of the Mac's faces have GSUB and GPOS too |
 | a variable font's GPOS values at an instance (their device and variation deltas) and its GSUB feature variations (`rvrn` by axis) | the default instance's kerning and substitutions, the glyphs' advances the instance's |
-| ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole; a space's pair kerning with the words beside it is Chrome's || selecting, the caret and `text-overflow` in text shown right to left | a selection and the caret measure a right-to-left run from its left, and the ellipsis cuts a line's right end |
-| mirroring the characters of right-to-left text but brackets (`<`, `>`, `«`…) | drawn as they are, where Chrome mirrors every Bidi_Mirrored character |
-| the text and the arrow of a text field, a `select` or a button of direction `rtl` | laid out as left-to-right controls |
+| ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole; a space's pair kerning with the words beside it is Chrome's |
+| a selected space where a line's text changes direction (`שלום abc` from the `ם` into `abc`) | its room is highlighted with the run it is shown in, where Chrome's range leaves it out |
+| the caret and the selection of a `textarea` in text shown right to left; a field's selection over text of both directions | measured from the left; one rectangle from the first selected character's edge to the last's, where Chrome draws one per run |
 
 ## Generated content
 
@@ -63,12 +63,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
-| columns right to left | left to right only, their content laid out right to left in each |
 | a table with a collapsed column as a grid item, or as a flex item with a width of its own | laid out at the width its container gives it, where Chrome narrows the grid item's by the column and sizes the flex item's apart; a flex item of an automatic width keeps it, as Chrome |
-| a scroller of direction `rtl` | scrolls from its left, where Chrome starts it at its right end; its bar is on its left, as Chrome's |
-| collapsed borders of a table of direction `rtl` | each cell's left border still wins its left edge, where Chrome resolves its start edge first |
-| logical properties in `@keyframes` and `transition-property` under `direction: rtl` | the left side's |
-| a float of direction `rtl` beside a block that avoids floats, a block's own `text-align` of `-webkit-left` under rtl | not compared with Chrome |
+| a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
