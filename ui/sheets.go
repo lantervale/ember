@@ -256,5 +256,6 @@ func (d *Document) take() {
 		}
 	}
 	d.trans.SetSheets(d.sheets)
+	d.takeFontFaces()
 	dom.Data(d.html).Dirty |= dom.DirtyStyle
 }

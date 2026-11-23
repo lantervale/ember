@@ -30,8 +30,13 @@ type Face struct {
 	// or Weight for one weight.
 	WeightMax int
 	Italic    bool
+	// Stretch is the width the face is of, as a percentage of the normal
+	// one, to StretchMax for a variable font's; 0 for 100.
+	Stretch, StretchMax float32
 	// Ranges are the characters the face draws, all without any.
 	Ranges []Range
+	// Look is how its @font-face has the face measured and drawn.
+	Look Look
 	// TTF is the face's file, nil while it is on its way (web).
 	TTF  []byte
 	font *sfnt.Font
@@ -208,16 +213,21 @@ func (s *Set) has(family string) bool {
 // rounded to whole device pixels as Chrome rounds them.
 func (s *Set) Metrics(f style.Font) box.Metrics { return s.metricsOf(s.Face(f), f.Size) }
 
-// metricsOf are c's metrics at size.
+// metricsOf are c's metrics at size: its own, or those its @font-face
+// gives in their place, scaled by its size-adjust.
 func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 	m, err := c.font.Metrics(&s.buf, fixed.I(int(c.upem)), font.HintingNone)
 	if err != nil {
 		return box.Metrics{}
 	}
+	size *= c.Look.adjust()
 	scale := size / c.upem
 	ascent := float32(m.Ascent) / 64 * scale
 	descent := float32(m.Descent) / 64 * scale
 	gap := float32(m.Height)/64*scale - ascent - descent
+	ascent = c.Look.Ascent.or(ascent, size)
+	descent = c.Look.Descent.or(descent, size)
+	gap = c.Look.LineGap.or(gap, size)
 	px := s.scale
 	if px <= 0 {
 		px = 1

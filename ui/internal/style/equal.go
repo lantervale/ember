@@ -92,7 +92,7 @@ func (f Font) Equal(o Font) bool {
 	return sameSlice(f.Family, o.Family) &&
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
-		f.Italic == o.Italic
+		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis
 }
 
 //nolint:cyclop,gocyclo // one comparison a field

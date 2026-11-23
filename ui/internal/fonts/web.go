@@ -51,7 +51,8 @@ func (f *File) Settled() bool { return f.state == fileLoaded || f.state == fileF
 // rules whose files are fetched, and the chains text is measured and
 // drawn through once it has any.
 type webFonts struct {
-	web []*Face
+	// web are the faces text is drawn with, of those known.
+	web, known []*Face
 	// wanted are the files text needed since Wanted was last asked.
 	wanted []*File
 	// loading counts the files wanted and not yet settled.
@@ -62,24 +63,93 @@ type webFonts struct {
 }
 
 // AddWeb adds a face of family whose file comes later: for the weights
-// from weight to weightMax, drawing the characters of ranges, all
-// without any. It is measured and drawn with once Loaded gives its
-// file; until then, and for the characters it lacks, text falls to the
-// next family of its list.
+// from weight to weightMax, of the normal width, drawing the characters
+// of ranges, all without any. It is AddFace with those descriptors.
 func (s *Set) AddWeb(family string, weight, weightMax int, italic bool, ranges []Range, file *File) *Face {
-	for _, c := range s.web {
-		if c.web == file && c.Family == family && c.Weight == weight && c.WeightMax == weightMax &&
-			c.Italic == italic && slices.Equal(c.Ranges, ranges) {
+	return s.AddFace(Descriptors{Family: family, Weight: weight, WeightMax: weightMax, Italic: italic,
+		Stretch: 100, StretchMax: 100, Ranges: ranges}, file)
+}
+
+// Descriptors are what an @font-face says of its face.
+type Descriptors struct {
+	Family            string
+	Weight, WeightMax int
+	Italic            bool
+	// Stretch is the width the face is of, a percentage, to StretchMax.
+	Stretch, StretchMax float32
+	Ranges              []Range
+	Look                Look
+}
+
+// Look is how an @font-face has its face measured and drawn: scaled by
+// SizeAdjust (0 for 1), with metrics in place of its own, kerned or
+// not.
+type Look struct {
+	SizeAdjust               float32
+	Ascent, Descent, LineGap Override
+	NoKern                   bool
+}
+
+// Override is a metric an @font-face gives in place of its file's, as a
+// fraction of the font size, when Set.
+type Override struct {
+	Set bool
+	Of  float32
+}
+
+func (o Override) or(own, size float32) float32 {
+	if o.Set {
+		return o.Of * size
+	}
+	return own
+}
+
+func (l Look) adjust() float32 {
+	if l.SizeAdjust == 0 {
+		return 1
+	}
+	return l.SizeAdjust
+}
+
+// AddFace adds the face an @font-face describes, whose file comes later:
+// it is measured and drawn with once Loaded gives its file; until then,
+// and for the characters it lacks, text falls to the next family of its
+// list. A face the set knew is the same face, and is among those text
+// is drawn with again.
+func (s *Set) AddFace(d Descriptors, file *File) *Face {
+	for _, c := range s.known {
+		if c.web == file && c.Family == d.Family && c.Weight == d.Weight && c.WeightMax == d.WeightMax &&
+			c.Italic == d.Italic && c.Stretch == d.Stretch && c.StretchMax == d.StretchMax && c.Look == d.Look &&
+			slices.Equal(c.Ranges, d.Ranges) {
+			if !slices.Contains(s.web, c) {
+				s.web = append(s.web, c)
+				s.stale()
+			}
 			return c
 		}
 	}
-	c := &Face{Family: family, Weight: weight, WeightMax: weightMax, Italic: italic, Ranges: ranges, web: file}
+	c := &Face{Family: d.Family, Weight: d.Weight, WeightMax: d.WeightMax, Italic: d.Italic, Stretch: d.Stretch,
+		StretchMax: d.StretchMax, Ranges: d.Ranges, Look: d.Look, web: file}
 	if file.state == fileLoaded {
 		c.TTF, c.font, c.upem = file.ttf, file.font, float32(file.font.UnitsPerEm())
 	}
+	s.known = append(s.known, c)
 	s.web = append(s.web, c)
 	s.stale()
 	return c
+}
+
+// SetWeb has text drawn with faces alone of those the set knows, in
+// their order: the @font-face rules of the sheets a Document has now.
+// A face left out is kept, as is its file, for a sheet that gives it
+// again. It reports whether the faces changed.
+func (s *Set) SetWeb(faces []*Face) bool {
+	if slices.Equal(s.web, faces) {
+		return false
+	}
+	s.web = slices.Clone(faces)
+	s.stale()
+	return true
 }
 
 // stale drops the chains: the faces they were made of have changed.
@@ -146,7 +216,7 @@ func Parse(ttf []byte) (*sfnt.Font, error) {
 func (s *Set) Loaded(file *File, ttf []byte, f *sfnt.Font) {
 	s.settle(file, fileLoaded)
 	file.ttf, file.font = ttf, f
-	for _, c := range s.web {
+	for _, c := range s.known {
 		if c.web == file {
 			c.TTF, c.font, c.upem = ttf, f, float32(f.UnitsPerEm())
 		}
@@ -175,13 +245,30 @@ func (c *Face) File() *File { return c.web }
 // covers reports whether c draws r when it has it.
 func (c *Face) covers(r rune) bool { return draw.Covers(c.Ranges, r) }
 
-// Descriptors are the face's weight and characters as an @font-face
-// writes them: "font-weight: 400;", and a unicode-range when it has
-// one.
+// Descriptors are the face's descriptors as an @font-face writes them:
+// "font-weight: 400;", and its width, unicode-range, size-adjust,
+// metrics and kerning when it has them.
 func (c *Face) Descriptors() string {
 	out := fmt.Sprintf("font-weight: %d;", c.Weight)
 	if c.WeightMax > c.Weight {
 		out = fmt.Sprintf("font-weight: %d %d;", c.Weight, c.WeightMax)
+	}
+	if lo, hi := c.stretches(); lo != 100 || hi != 100 {
+		out += fmt.Sprintf(" font-stretch: %g%% %g%%;", lo, hi)
+	}
+	if c.Look.SizeAdjust != 0 {
+		out += fmt.Sprintf(" size-adjust: %g%%;", c.Look.SizeAdjust*100)
+	}
+	for _, o := range []struct {
+		name string
+		o    Override
+	}{{"ascent-override", c.Look.Ascent}, {"descent-override", c.Look.Descent}, {"line-gap-override", c.Look.LineGap}} {
+		if o.o.Set {
+			out += fmt.Sprintf(" %s: %g%%;", o.name, o.o.Of*100)
+		}
+	}
+	if c.Look.NoKern {
+		out += ` font-feature-settings: "kern" 0;`
 	}
 	if len(c.Ranges) == 0 {
 		return out
@@ -193,9 +280,40 @@ func (c *Face) Descriptors() string {
 	return out + " unicode-range: " + strings.Join(ranges, ", ") + ";"
 }
 
-// distance is how far the face's weights are from weight, and further
-// than any weight when its style is not the one asked.
-func (c *Face) distance(weight int, italic bool) int {
+// stretches are the widths the face covers, 100 for one that says none.
+func (c *Face) stretches() (float32, float32) {
+	lo, hi := c.Stretch, c.StretchMax
+	if lo == 0 {
+		lo = 100
+	}
+	return lo, max(lo, hi)
+}
+
+// stretchThreshold puts a width on the side of normal not asked for
+// past every one on the side asked, as Chrome's font matching does.
+const stretchThreshold = 1000
+
+// distance is how far the face is from the width, style and weight asked,
+// in that order: the width first, as CSS's font matching narrows the
+// faces by it before their style and weight, the narrower first for a
+// width at most normal and the wider for one above; then the style, then
+// the weight.
+func (c *Face) distance(stretch float32, weight int, italic bool) float64 {
+	if stretch == 0 {
+		stretch = 100
+	}
+	var ds float32
+	switch lo, hi := c.stretches(); {
+	case stretch >= lo && stretch <= hi:
+	case stretch > 100 && lo > stretch:
+		ds = lo - stretch
+	case stretch > 100:
+		ds = stretch - hi + stretchThreshold
+	case hi < stretch:
+		ds = stretch - hi
+	default:
+		ds = lo - stretch + stretchThreshold
+	}
 	d := 0
 	switch hi := max(c.Weight, c.WeightMax); {
 	case weight < c.Weight:
@@ -206,7 +324,22 @@ func (c *Face) distance(weight int, italic bool) int {
 	if c.Italic != italic {
 		d += 10000
 	}
-	return d
+	return float64(ds)*1e6 + float64(d)
+}
+
+// boldThreshold is the weight from which a bold is made up from a face
+// lighter than it, as Chrome's.
+const boldThreshold = 600
+
+// Synthetic reports whether text in f is drawn with c made bold, or
+// slanted, as the family has no such face: a bold one where f is at
+// least 600 and c lighter than that, an italic one where f is italic
+// and c is not, unless font-synthesis forbids it.
+func (c *Face) Synthetic(f style.Font) (bold, italic bool) {
+	bold = f.Weight >= boldThreshold && max(c.Weight, c.WeightMax) < boldThreshold &&
+		f.Synthesis&style.NoSyntheticBold == 0
+	italic = f.Italic && !c.Italic && f.Synthesis&style.NoSyntheticItalic == 0
+	return bold, italic
 }
 
 // Chain is the faces a font draws with, in the order a character is
@@ -214,7 +347,9 @@ func (c *Face) distance(weight int, italic bool) int {
 // @font-face gives, the closest in weight and style, then the face the
 // set would draw with had it no such family, then the Fallback.
 type Chain struct {
-	family  []string
+	family []string
+	// font is the font the chain is of.
+	font    style.Font
 	entries []*Face
 	// base is the face that is no @font-face's, drawing what nothing
 	// else does.
@@ -226,10 +361,12 @@ type Chain struct {
 // chainKey is a list of families by what it says, not by the slice that
 // holds it: a style computed again names them in a new one.
 type chainKey struct {
-	families uint64
-	n        int
-	weight   int
-	italic   bool
+	families  uint64
+	n         int
+	weight    int
+	italic    bool
+	stretch   float32
+	synthesis style.FontSynthesis
 }
 
 //nolint:gochecknoglobals // the seed every chain key is hashed with
@@ -242,7 +379,8 @@ func keyOf(f style.Font) chainKey {
 		h.WriteString(name)
 		h.WriteByte(0)
 	}
-	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic}
+	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic,
+		stretch: f.Stretch, synthesis: f.Synthesis}
 }
 
 // Chain is the faces f draws with.
@@ -260,7 +398,7 @@ func (s *Set) Chain(f style.Font) *Chain {
 }
 
 func (s *Set) chain(f style.Font) *Chain {
-	ch := &Chain{family: slices.Clone(f.Family)}
+	ch := &Chain{family: slices.Clone(f.Family), font: f}
 	var plain []string
 	for _, name := range f.Family {
 		if !s.hasWeb(name) {
@@ -277,7 +415,7 @@ func (s *Set) chain(f style.Font) *Chain {
 	based := false
 	for _, name := range f.Family {
 		if s.hasWeb(name) {
-			ch.entries = append(ch.entries, s.webFaces(name, int(f.Weight), f.Italic)...)
+			ch.entries = append(ch.entries, s.webFaces(name, f)...)
 			continue
 		}
 		if !based && ch.base != nil && s.draws(name, ch.base) {
@@ -311,24 +449,28 @@ func (s *Set) hasWeb(family string) bool {
 	return false
 }
 
-// webFaces are family's faces closest to weight and style, one for each
-// set of characters, the last declared first, as it wins a character
-// two of them draw.
-func (s *Set) webFaces(family string, weight int, italic bool) []*Face {
-	best := -1
+// webFaces are family's faces closest to f's width, style and weight,
+// one for each set of characters, the last declared first, as it wins a
+// character two of them draw.
+func (s *Set) webFaces(family string, f style.Font) []*Face {
+	weight := int(f.Weight)
+	best := -1.0
 	for _, c := range s.web {
-		if d := c.distance(weight, italic); strings.EqualFold(c.Family, family) && (best < 0 || d < best) {
+		if d := c.distance(f.Stretch, weight, f.Italic); strings.EqualFold(c.Family, family) && (best < 0 || d < best) {
 			best = d
 		}
 	}
 	var out []*Face
 	for i := len(s.web) - 1; i >= 0; i-- {
-		if c := s.web[i]; strings.EqualFold(c.Family, family) && c.distance(weight, italic) == best {
+		if c := s.web[i]; strings.EqualFold(c.Family, family) && c.distance(f.Stretch, weight, f.Italic) == best {
 			out = append(out, c)
 		}
 	}
 	return out
 }
+
+// Font is the font the chain draws.
+func (ch *Chain) Font() style.Font { return ch.font }
 
 // Faces are the chain's faces that have their file, in order: what
 // draws its text now.
@@ -404,7 +546,7 @@ func (s *Set) chainAdvance(ch *Chain, size float32, text string) float32 {
 	prev := sfnt.GlyphIndex(0)
 	flush := func() {
 		if of != nil {
-			w += float32(run) / 64 * size / of.upem
+			w += float32(run) / 64 * size * of.Look.adjust() / of.upem
 		}
 		run, prev = 0, 0
 	}
@@ -423,7 +565,7 @@ func (s *Set) chainAdvance(ch *Chain, size float32, text string) float32 {
 			of = c
 		}
 		ppem := fixed.I(int(c.upem))
-		if prev != 0 && g != 0 {
+		if prev != 0 && g != 0 && !c.Look.NoKern {
 			if k, err := c.font.Kern(&s.buf, prev, g, ppem, font.HintingNone); err == nil {
 				run += k
 			}

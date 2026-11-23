@@ -167,12 +167,45 @@ func TestDescriptorsUIDoesNotUseAreSilentForABrowsersSheet(t *testing.T) {
 	if _, warns := faceOf(t, src, Browser()); warns != "" {
 		t.Errorf("a browser's sheet warns: %s", warns)
 	}
-	_, warns := faceOf(t, `@font-face { font-family: M; src: url(m.woff2); size-adjust: 90% }`)
-	if want := `ui/tool.css:1:49: @font-face: "size-adjust" is not supported`; warns != want {
+	_, warns := faceOf(t, `@font-face { font-family: M; src: url(m.woff2); font-variation-settings: "wght" 400 }`)
+	if want := `ui/tool.css:1:49: @font-face: "font-variation-settings" is not supported`; warns != want {
 		t.Errorf("a game's sheet: %s\nwant %s", warns, want)
 	}
 	_, warns = faceOf(t, `@font-face { font-family: M; src: url(m.woff2); font-colour: red }`, Browser())
 	if want := `ui/tool.css:1:49: @font-face: "font-colour" is not supported`; warns != want {
 		t.Errorf("a descriptor CSS has not: %s\nwant %s", warns, want)
+	}
+}
+
+func TestAFacesWidthMetricsAndFeaturesAreRead(t *testing.T) {
+	f, warns := faceOf(t, `@font-face { font-family: M; src: url(m.woff2); font-stretch: 125% condensed;
+	size-adjust: 90%; ascent-override: 80%; descent-override: 0%; line-gap-override: normal;
+	font-feature-settings: "kern" off, "liga", "salt" 3 }`)
+	if warns != "" {
+		t.Fatalf("warns: %s", warns)
+	}
+	if f.Stretch != 75 || f.StretchMax != 125 {
+		t.Errorf("stretch %v to %v, want 75%% to 125%%", f.Stretch, f.StretchMax)
+	}
+	if f.SizeAdjust != 0.9 || f.Ascent != 0.8 || f.Descent != 0 || f.LineGap != -1 {
+		t.Errorf("size-adjust %v, ascent %v, descent %v, line gap %v", f.SizeAdjust, f.Ascent, f.Descent, f.LineGap)
+	}
+	want := []FontFeature{{"kern", 0}, {"liga", 1}, {"salt", 3}}
+	if !reflect.DeepEqual(f.Features, want) {
+		t.Errorf("features %v, want %v", f.Features, want)
+	}
+	if kern, ok := f.Feature("kern"); !ok || kern != 0 {
+		t.Errorf("kern %d, %v", kern, ok)
+	}
+	plain, _ := faceOf(t, `@font-face { font-family: M; src: url(m.woff2) }`)
+	if plain.Stretch != 100 || plain.StretchMax != 100 || plain.SizeAdjust != 1 || plain.Ascent != -1 ||
+		plain.Features != nil {
+		t.Errorf("a face that says none: %+v", plain)
+	}
+	for _, bad := range []string{`font-stretch: 10px`, `size-adjust: 1.2`, `ascent-override: -5%`,
+		`font-feature-settings: liga`, `font-feature-settings: "ligature"`, `font-feature-settings: "kern" -1`} {
+		if _, warns := faceOf(t, `@font-face { font-family: M; src: url(m.woff2); `+bad+` }`); warns == "" {
+			t.Errorf("%s: no warning", bad)
+		}
 	}
 }

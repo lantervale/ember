@@ -40,6 +40,7 @@
   "field-case": 0.0082,
   "first-letter-line": 0.0145,
   "font-smoothing": 0.0064,
+  "font-synthesis": 0.02,
   "generated": 0.0057,
   "glyphs": 0.0044,
   "iframe": 0.0044,

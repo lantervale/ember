@@ -1,7 +1,9 @@
 package css
 
 import (
+	"fmt"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -22,6 +24,18 @@ type FontFace struct {
 	// Display is font-display's word, auto without one.
 	Display string
 	Ranges  []UnicodeRange
+	// Stretch is the width the face is of, as a percentage of the
+	// normal one, or the widths from Stretch to StretchMax a variable
+	// font covers.
+	Stretch, StretchMax float32
+	// SizeAdjust scales the face's glyphs and metrics, 1 without
+	// size-adjust.
+	SizeAdjust float32
+	// Ascent, Descent and LineGap are the face's metrics as fractions of
+	// the font size that override its own, negative for its own.
+	Ascent, Descent, LineGap float32
+	// Features are font-feature-settings' features, in order.
+	Features []FontFeature
 	// From is the address of the sheet the rule is in, "" for a sheet
 	// that says none.
 	From string
@@ -35,6 +49,13 @@ type FontSource struct {
 	Local  string
 	Format string
 	Tech   []string
+}
+
+// FontFeature is an OpenType feature an @font-face turns on, off (0)
+// or to one of its alternates.
+type FontFeature struct {
+	Tag   string
+	Value int
 }
 
 // UnicodeRange is the characters from Lo to Hi.
@@ -105,9 +126,8 @@ func (s FontSource) Reads() bool {
 //
 //nolint:gochecknoglobals // a lookup table
 var ignoredFaceDescriptors = map[string]bool{
-	"font-stretch": true, "font-width": true, "font-variant": true, "font-feature-settings": true,
+	"font-width": true, "font-variant": true,
 	"font-variation-settings": true, "font-named-instance": true, "font-language-override": true,
-	"size-adjust": true, "ascent-override": true, "descent-override": true, "line-gap-override": true,
 	"subscript-position-override": true, "subscript-size-override": true,
 	"superscript-position-override": true, "superscript-size-override": true,
 }
@@ -117,7 +137,8 @@ func (p *parser) fontFace(pos Pos) (FontFace, bool) {
 	if !ok {
 		return FontFace{}, false
 	}
-	f := FontFace{Weight: 400, WeightMax: 400, Display: kwAuto}
+	f := FontFace{Weight: 400, WeightMax: 400, Display: kwAuto, Stretch: 100, StretchMax: 100, SizeAdjust: 1,
+		Ascent: -1, Descent: -1, LineGap: -1}
 	if p.origin != nil && p.origin.from != nil {
 		f.From = p.origin.from.String()
 	}
@@ -216,6 +237,36 @@ func (p *parser) fontFaceDescriptor(f *FontFace, name Component, raw, v []Compon
 			f.Ranges = ranges
 		} else {
 			p.warnf(v[0].Pos, "unicode-range: expected U+26, U+0-7F or U+4??, with commas between")
+		}
+	case "font-stretch":
+		if lo, hi, ok := fontFaceStretch(v); ok {
+			f.Stretch, f.StretchMax = lo, hi
+		} else {
+			p.warnf(v[0].Pos, "font-stretch: expected auto, normal, condensed… or a percentage, once or twice")
+		}
+	case "size-adjust":
+		if len(v) == 1 && v[0].Kind == Percentage && v[0].Num >= 0 {
+			f.SizeAdjust = float32(v[0].Num / 100)
+		} else {
+			p.warnf(v[0].Pos, "size-adjust: expected a percentage")
+		}
+	case "ascent-override", "descent-override", "line-gap-override":
+		at := map[string]*float32{"ascent-override": &f.Ascent, "descent-override": &f.Descent,
+			"line-gap-override": &f.LineGap}[descriptor]
+		switch {
+		case len(v) == 1 && isWord(v[0], "normal"):
+			*at = -1
+		case len(v) == 1 && v[0].Kind == Percentage && v[0].Num >= 0:
+			*at = float32(v[0].Num / 100)
+		default:
+			p.warnf(v[0].Pos, "%s: expected normal or a percentage", descriptor)
+		}
+	case "font-feature-settings":
+		if features, ok := fontFeatures(raw); ok {
+			f.Features = features
+		} else {
+			p.warnf(v[0].Pos, `font-feature-settings: expected normal, or "tag" with on, off or a number, `+
+				"with commas between")
 		}
 	default:
 		if !p.browser || !ignoredFaceDescriptors[descriptor] {
@@ -366,4 +417,111 @@ func familyName(v []Component) string {
 		names = append(names, c.Text)
 	}
 	return strings.Join(names, " ")
+}
+
+// stretches are font-stretch's words and the widths they stand for,
+// as percentages of the normal width.
+//
+//nolint:gochecknoglobals // a lookup table
+var stretches = map[string]float32{
+	"ultra-condensed": 50, "extra-condensed": 62.5, "condensed": 75, "semi-condensed": 87.5, "normal": 100,
+	"semi-expanded": 112.5, "expanded": 125, "extra-expanded": 150, "ultra-expanded": 200,
+}
+
+// fontStretch is a width font-stretch gives, as a percentage: a word or
+// a percentage, not negative.
+func fontStretch(c Component) (float32, bool) {
+	if c.Kind == Ident {
+		w, ok := stretches[strings.ToLower(c.Text)]
+		return w, ok
+	}
+	if c.Kind == Percentage && c.Num >= 0 {
+		return float32(c.Num), true
+	}
+	return 0, false
+}
+
+// fontSynthesisWords are the faces font-synthesis may let be made up.
+//
+//nolint:gochecknoglobals // a lookup table
+var fontSynthesisWords = []string{"weight", "style", "small-caps", "position"}
+
+func checkFontSynthesis(v []Component) error {
+	if len(v) == 1 && isWord(v[0], "none") {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, c := range v {
+		w := strings.ToLower(c.Text)
+		if c.Kind != Ident || !slices.Contains(fontSynthesisWords, w) || seen[w] {
+			return fmt.Errorf("font-synthesis: expected none, or weight, style, small-caps and position, each once")
+		}
+		seen[w] = true
+	}
+	return nil
+}
+
+// fontFaceStretch is an @font-face's font-stretch: one width, or the
+// two ends of a variable font's, the narrower first; auto is normal.
+func fontFaceStretch(v []Component) (float32, float32, bool) {
+	if len(v) == 1 && isWord(v[0], kwAuto) {
+		return 100, 100, true
+	}
+	if len(v) < 1 || len(v) > 2 {
+		return 0, 0, false
+	}
+	var w [2]float32
+	for i, c := range v {
+		s, ok := fontStretch(c)
+		if !ok {
+			return 0, 0, false
+		}
+		w[i] = s
+	}
+	if len(v) == 1 {
+		return w[0], w[0], true
+	}
+	return min(w[0], w[1]), max(w[0], w[1]), true
+}
+
+// fontFeatures reads font-feature-settings: normal, none at all, or a
+// list of four-letter tags, each on (1) unless off, 0 or another number
+// follows.
+func fontFeatures(v []Component) ([]FontFeature, bool) {
+	if all := items(v); len(all) == 1 && isWord(all[0], "normal") {
+		return nil, true
+	}
+	var out []FontFeature
+	for _, part := range splitOn(v, func(c Component) bool { return c.Kind == Comma }) {
+		part = items(part)
+		if len(part) == 0 || len(part) > 2 || part[0].Kind != String || len(part[0].Text) != 4 {
+			return nil, false
+		}
+		f := FontFeature{Tag: part[0].Text, Value: 1}
+		if len(part) == 2 {
+			switch c := part[1]; {
+			case isWord(c, "on"):
+			case isWord(c, "off"):
+				f.Value = 0
+			case c.Kind == Number && c.Num >= 0 && c.Num == float64(int(c.Num)):
+				f.Value = int(c.Num)
+			default:
+				return nil, false
+			}
+		}
+		out = append(out, f)
+	}
+	return out, len(out) > 0
+}
+
+// Feature is the value the face gives feature tag, and whether it
+// gives one.
+func (f FontFace) Feature(tag string) (int, bool) {
+	value, found := 0, false
+	for _, ft := range f.Features {
+		if ft.Tag == tag {
+			value, found = ft.Value, true
+		}
+	}
+	return value, found
 }
