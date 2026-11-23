@@ -42,7 +42,7 @@ func TestSolidSidesOfOtherColoursAreMitered(t *testing.T) {
 	assert.Len(t, r.of("rect"), 4)
 }
 
-func TestARoundedBorderOfOtherColoursIsARingPerColourCutAtItsMitres(t *testing.T) {
+func TestARoundedBorderOfOtherColoursIsARunOfSidesPerColourCutAtItsMitres(t *testing.T) {
 	box := el(10, 10, 60, 40, func(s *style.Computed) {
 		s.BorderStyle = style.All(style.BorderSolid)
 		s.BorderColor = style.Sides[color.Color]{Top: red, Right: blue, Bottom: blue, Left: red}
@@ -51,15 +51,12 @@ func TestARoundedBorderOfOtherColoursIsARingPerColourCutAtItsMitres(t *testing.T
 	})
 	r := newRecorder()
 	Paint(r, tree(box), Scale(1))
-	rings := r.of("border")
-	require.Len(t, rings, 2, "the top and left's colour round the box, the right and bottom's over it")
-	assert.Equal(t, red, rings[0].Color)
-	assert.Equal(t, blue, rings[1].Color)
-	assert.Equal(t, float32(12), rings[1].Radius)
-	masks := r.of("push-mask")
-	require.Len(t, masks, 1, "the second ring cut to its sides")
-	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 60, H: 40}, masks[0].Rect)
-	assert.Empty(t, r.of("triangles"), "no square sides")
+	fills := r.of("rect")
+	require.Len(t, fills, 2, "the top and left's colour, then the right and bottom's")
+	assert.Equal(t, red, fills[0].Color, "the run holding the top first, as Chrome orders the sides")
+	assert.Equal(t, blue, fills[1].Color)
+	assert.Len(t, r.of("push-mask"), 2, "each cut to its sides of the ring")
+	assert.Empty(t, r.of("border"), "no whole ring")
 
 	r = newRecorder()
 	bare := el(10, 10, 60, 40, func(s *style.Computed) {
@@ -70,7 +67,7 @@ func TestARoundedBorderOfOtherColoursIsARingPerColourCutAtItsMitres(t *testing.T
 		rounded(12)(s)
 	})
 	Paint(r, tree(bare), Scale(1))
-	require.Len(t, r.of("border"), 1, "only the side that shows")
+	require.Len(t, r.of("rect"), 1, "only the side that shows")
 	assert.Len(t, r.of("push-mask"), 1, "cut to the top, the rest clear")
 }
 

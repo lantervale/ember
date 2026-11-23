@@ -80,7 +80,7 @@ func TestSidesRunCornerToCornerSoCornersJoin(t *testing.T) {
 	assert.InDelta(t, 34, left[len(left)-1].Y+left[len(left)-1].H, 1e-3)
 }
 
-func TestARoundedDashedBorderStaysSolidForNow(t *testing.T) {
+func TestARoundedDashedBorderIsItsDashesCutToTheRing(t *testing.T) {
 	b := el(10, 10, 40, 24, func(st *style.Computed) {
 		st.Border = style.All[float32](2)
 		st.BorderStyle = style.All(style.BorderDashed)
@@ -88,5 +88,8 @@ func TestARoundedDashedBorderStaysSolidForNow(t *testing.T) {
 		c := style.Size[style.Length]{Width: style.Px(6), Height: style.Px(6)}
 		st.Radius = style.Corners[style.Size[style.Length]]{TopLeft: c, TopRight: c, BottomRight: c, BottomLeft: c}
 	})
-	assert.Len(t, paintOne(b).of("border"), 1, "a known gap: dashes along arcs")
+	r := paintOne(b)
+	assert.Empty(t, r.of("border"), "no solid ring")
+	require.Len(t, r.of("push-mask"), 1, "one colour and style all round: one mask")
+	assert.Len(t, r.of("rect"), 1)
 }

@@ -1326,10 +1326,10 @@ func grow(r geom.Rect, d float32) geom.Rect {
 	return g
 }
 
-// border paints the border: one stroke when every side is alike and the
-// box is rounded, else each side square, solid or dashed or dotted, solid
-// sides of more than one colour mitered into each other; a rounded dashed
-// border is drawn solid for now.
+// border paints the border: one stroke when the box is rounded and its
+// sides solid or double alike, any other rounded border side by side as
+// Chrome draws it, else each side square, solid or dashed or dotted, solid
+// sides of more than one colour mitered into each other.
 func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Computed, alpha float32) {
 	side := func(width float32, s style.BorderStyle, c color.Color) (float32, color.Color) {
 		if s == style.BorderNone || width <= 0 {
@@ -1341,6 +1341,11 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 	rw, rc := side(w.Right, st.BorderStyle.Right, st.BorderColor.Right)
 	bw, bc := side(w.Bottom, st.BorderStyle.Bottom, st.BorderColor.Bottom)
 	lw, lc := side(w.Left, st.BorderStyle.Left, st.BorderColor.Left)
+	styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
+	if !radius.zero() && !oneRing([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, styles) {
+		p.roundedBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, styles, radius)
+		return
+	}
 	if p.doubleBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, radius, st.BorderStyle) {
 		return
 	}
@@ -1352,7 +1357,6 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 			p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
 			return
 		}
-		styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
 		half, rest := [4]float32{tw, rw, bw, lw}, [4]float32{}
 		for i, s := range styles {
 			if s == style.BorderGroove || s == style.BorderRidge {
@@ -1365,9 +1369,10 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		p.bevel(in, rest, [4]color.Color{tc, rc, bc, lc}, inner)
 		return
 	}
-	if tw == rw && rw == bw && bw == lw && !radius.zero() &&
-		(tc == rc && rc == bc && bc == lc || solidAround(st.BorderStyle)) {
-		p.roundedSides(r, tw, [4]color.Color{tc, rc, bc, lc}, radius)
+	if !radius.zero() {
+		if tw > 0 && tc.A > 0 {
+			p.ring(r, radius, tw, tc)
+		}
 		return
 	}
 	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
@@ -1396,12 +1401,6 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 			p.s.Rect(s.rect, s.c)
 		}
 	}
-}
-
-// solidAround reports a border solid on every side.
-func solidAround(s style.Sides[style.BorderStyle]) bool {
-	return s.Top == style.BorderSolid && s.Right == style.BorderSolid && s.Bottom == style.BorderSolid &&
-		s.Left == style.BorderSolid
 }
 
 // mitered reports solid sides that must not lie over each other's
