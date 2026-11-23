@@ -2,12 +2,14 @@ package ui_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 )
 
@@ -32,4 +34,29 @@ p { font: 20px Han; white-space: nowrap; text-autospace: normal; }
 	}
 	assert.InDelta(t, width(plain)-7.5, width(spaced), 0.01, "half the bracket off, an eighth of an em on")
 	assert.Empty(t, l.doc.Warnings())
+}
+
+func TestAFieldsCaretFollowsTrimmedPunctuationAndAutospace(t *testing.T) {
+	face, err := os.ReadFile("../internal/shape/testdata/go-han.ttf")
+	require.NoError(t, err)
+	caret := func(class, value string, at int) float32 {
+		d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"page.css": {Data: []byte(`
+@font-face { font-family: Han; src: url(han.ttf); }
+body { margin: 0; } input, textarea { font: 20px Han; padding: 0; border: none; width: 300px; }
+.auto { text-autospace: normal; } .all { text-spacing-trim: space-all; }`)}, "han.ttf": {Data: face}}, "page.css"))
+		in := ui.Input(ui.Class(class), ui.Attr("value", value))
+		if strings.Contains(value, "\n") {
+			in = ui.Textarea(ui.Class(class), ui.Text(value))
+		}
+		d.Body().Append(in)
+		d.Layout(geom.V2(400, 100))
+		d.Focus(in)
+		d.SetSelectionRange(in, at, at)
+		d.Layout(geom.V2(400, 100))
+		return ui.FieldCaretRect(d, in).X
+	}
+	assert.InDelta(t, caret("all", "」「漢", 3)-10, caret("", "」「漢", 3), 0.01, "the opening bracket half wide")
+	assert.InDelta(t, caret("", "漢A漢", 2)+5, caret("auto", "漢A漢", 2), 0.01,
+		"an eighth of an em after the ideograph and after the letter")
+	assert.InDelta(t, caret("all", "字\n」「漢", 5)-10, caret("", "字\n」「漢", 5), 0.01, "along a textarea's line")
 }

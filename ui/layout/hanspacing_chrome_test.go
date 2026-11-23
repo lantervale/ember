@@ -161,6 +161,94 @@ p { margin: 0 0 10px; width: 300px; }
 	matchHan(t, d)
 }
 
+// TestHanSpacingByAFacesChwsAsChrome compares text-spacing-trim in
+// go-han-chws.ttf, the stand-in face with a chws of its own that spaces
+// some pairs otherwise than Chrome's rules: Chrome hands it every pair,
+// across elements, and keeps its rules for a line's start and end.
+func TestHanSpacingByAFacesChwsAsChrome(t *testing.T) {
+	face, err := os.ReadFile("../../internal/shape/testdata/go-han-chws.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sheet = `@font-face { font-family: Han; src: url(han.ttf); }
+body { font-family: Han; font-size: 20px; margin: 8px; }
+p { margin: 0 0 10px; width: 300px; }
+.w { width: 100px; }`
+	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"page.css": {Data: []byte(sheet)}, "han.ttf": {Data: face}},
+		"page.css"))
+	d.Body().Append(
+		hanP("", ui.Text("漢」「漢。「漢、」漢」」漢「「漢・「漢」・漢")),
+		hanP("text-spacing-trim: space-all", ui.Text("漢」「漢。「漢、」漢」」漢")),
+		hanP("", ui.Text("」「漢「「漢」」")),
+		hanP("", ui.Text("漢」"), hanSpan("", "「"), ui.Text("漢。"), hanSpan("", "「"), ui.Text("漢「"),
+			hanSpan("", "「"), ui.Text("漢")),
+		hanP("", ui.Text("漢"), hanSpan("", "」"), ui.Text("「漢"), hanSpan("text-spacing-trim: space-all", "」"),
+			ui.Text("「漢")),
+		hanP("", ui.Class("w"), ui.Text("漢字漢字」「漢字字字字」「字字字字（字」字")),
+		hanP("text-spacing-trim: trim-start", ui.Class("w"), ui.Text("「字」漢字」「漢字字字」「字")),
+		hanP("width: 95px", ui.Text("字字字字」字")),
+		hanP("width: 100px", ui.Text("字字字字」「字")), hanP("width: 95px", ui.Text("字字字字」「字")),
+		hanP("width: 100px", ui.Text("字字字字。」字")), hanP("width: 85px", ui.Text("字字字字」」字")),
+	)
+	fonts.Of(d).Await()
+	matchHan(t, d)
+}
+
+// TestTrimStartAtABlocksStartAsChrome compares text-spacing-trim:
+// trim-start where a block begins and after a forced break, in each
+// Hiragino face, at the start of a text node and of an element: Chrome
+// sets the opening bracket half wide in each, and full under normal and
+// space-first.
+func TestTrimStartAtABlocksStartAsChrome(t *testing.T) {
+	const start = "text-spacing-trim: trim-start"
+	matchHan(t, hanPage(t, `p { width: 100px; }
+.mincho { font-family: "Hiragino Mincho ProN"; }`,
+		hanP(start, ui.Text("「字」字字字字（字）")),
+		hanP(start, hanSpan("", "「字」"), ui.Text("字字字字（字）")),
+		hanP(start, ui.Class("gb"), ui.Text("「字」字字字字（字）")),
+		hanP(start, ui.Class("gb"), ui.Text("“字”字字字字“字”")),
+		hanP(start, ui.Class("mincho"), ui.Text("『字』字字字字【字】")),
+		hanP(start, ui.Text(" 〔字〕字字")),
+		hanP(start, ui.Text("字字"), ui.Br(), ui.Text("「字」字字字字（字）")),
+		hanP(start, ui.Text("字字"), ui.Br(), hanSpan("", "「字」"), ui.Text("字字字字")),
+		hanP(start, ui.Class("gb"), ui.Text("字字"), ui.Br(), ui.Text("「字」字字")),
+		hanP("", ui.Text("「字」字字"), ui.Br(), ui.Text("「字」")),
+		hanP("text-spacing-trim: space-first", ui.Text("「字」字字"), ui.Br(), ui.Text("「字」")),
+	))
+}
+
+// TestHanSpacingInVerticalLinesAsChrome compares both properties in
+// vertical lines with Chrome's, each character in a span of its own:
+// the punctuation standing upright trimmed by the face's vhal by the
+// rules of horizontal lines, the room text-autospace adds after an
+// ideograph or a letter turned with the line, and none between upright
+// letters.
+func TestHanSpacingInVerticalLinesAsChrome(t *testing.T) {
+	chars := func(s string) []ui.Arg {
+		var out []ui.Arg
+		for _, r := range s {
+			out = append(out, hanSpan("", string(r)))
+		}
+		return out
+	}
+	d := hanPage(t, `p { writing-mode: vertical-rl; width: auto; height: 300px; display: inline-block; }
+p { margin: 0 10px 0 0; }
+.auto { text-autospace: normal; }`,
+		hanP("", chars("漢」「漢。「漢、」漢」」漢「「漢")...),
+		hanP("", chars("漢・「漢」・漢：「漢“漢”「漢")...),
+		hanP("text-spacing-trim: space-all", chars("漢」「漢。「漢")...),
+		hanP("", append([]ui.Arg{ui.Class("gb")}, chars("漢」「漢。「漢、」漢，「漢“漢”「漢")...)...),
+		hanP("", ui.Class("auto"), hanSpan("", "漢A漢"), ui.Text(" "), hanSpan("", "漢1漢"), ui.Text(" "),
+			hanSpan("", "かAB字"), ui.Text("字Kana字")),
+		hanP("text-orientation: upright", append([]ui.Arg{ui.Class("auto")}, chars("漢A漢 」「漢")...)...),
+		hanP("height: 100px", ui.Text("漢字漢字」"), hanSpan("", "「"), ui.Text("漢字字字字」「字")),
+		hanP("height: 100px; text-spacing-trim: trim-start", hanSpan("", "「"), ui.Text("字」漢字字")),
+	)
+	r := chrome.Match(t, d, geom.V2(800, 1000))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+	matchSpanFragments(t, d, geom.V2(800, 1000))
+}
+
 func matchHan(t *testing.T, d *ui.Document) {
 	t.Helper()
 	size := geom.V2(800, 1000)

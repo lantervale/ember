@@ -19,8 +19,11 @@ type Glyph struct {
 	// Char is the character the glyph is of, 0 where it is not known:
 	// the letters of a script that joins them take their forms by it.
 	Char rune
-	// Advance is how far the glyph moves the pen, kerning included.
-	Advance int32
+	// Advance is how far the glyph moves the pen, kerning included, and
+	// YAdvance what the font's positioning adds to its advance down a
+	// vertical line (vhal, vkrn), up positive.
+	Advance  int32
+	YAdvance int32
 	// XOffset and YOffset move the glyph from the pen, y up.
 	XOffset, YOffset int32
 
