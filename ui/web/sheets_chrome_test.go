@@ -3,10 +3,12 @@
 package web_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,7 +56,9 @@ div { height: 10px; }
 // where the media of an import holds and at one where it doesn't.
 func TestImportsCascadeAsChromes(t *testing.T) {
 	mux := http.NewServeMux()
+	site := map[string]bool{"/css/plain.css": true, "/css/untyped.css": true}
 	for path, text := range importedSite {
+		site[path] = true
 		mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/css")
 			_, _ = w.Write([]byte(text))
@@ -68,7 +72,18 @@ func TestImportsCascadeAsChromes(t *testing.T) {
 		w.Header()["Content-Type"] = nil
 		_, _ = w.Write([]byte(`#untyped { width: 105px; }`))
 	})
-	srv := httptest.NewServer(mux)
+	var (
+		mu     sync.Mutex
+		served []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if site[r.URL.Path] {
+			mu.Lock()
+			served = append(served, r.URL.Path)
+			mu.Unlock()
+		}
+		mux.ServeHTTP(w, r)
+	}))
 	t.Cleanup(srv.Close)
 
 	ids := []string{"layers", "media", "deep", "supports", "never", "cycle", "plain", "untyped", "anon", "twice",
@@ -78,16 +93,33 @@ func TestImportsCascadeAsChromes(t *testing.T) {
 		body.WriteString(`<div id="` + id + `"></div>`)
 	}
 	sheet := `@import url(css/site.css); body { margin: 0; }`
+	mux.HandleFunc("/index.html", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><head><style>` + sheet + `</style>` + chrome.EvalScript(`return {
+	boxes: [...document.body.children].map(e => { const r = e.getBoundingClientRect(); return [r.width, r.y]; }),
+	fetched: performance.getEntriesByType("resource").map(e => [new URL(e.name).pathname, e.responseStatus]),
+};`) + `</head><body>` + body.String() + `</body></html>`))
+	})
 	for _, size := range []geom.Vec2{geom.V2(800, 600), geom.V2(600, 600)} {
 		// A loaded runner's Chrome can let a fetch from the local server
-		// fail, and lays the page out without the sheet: #order's 30px,
-		// which site.css always sets, says it came.
-		var want []geom.Rect
-		for try := 0; try < 3 && (len(want) == 0 || want[2+slices.Index(ids, "order")].W != 30); try++ {
-			var err error
-			want, err = chrome.PageBoxes(`<base href="`+srv.URL+`/index.html"><style>`+sheet+`</style>`, body.String(),
-				size)
+		// fail, and lays the page out without that sheet: Chrome's page
+		// counts only once every sheet the server sent came to it whole.
+		var want chromePage
+		for try := 0; ; try++ {
+			mu.Lock()
+			served = nil
+			mu.Unlock()
+			out, err := chrome.EvalPage(srv.URL+"/index.html", size)
 			require.NoError(t, err)
+			want = chromePage{}
+			require.NoError(t, json.Unmarshal(out, &want))
+			mu.Lock()
+			missing := want.missing(site, served)
+			mu.Unlock()
+			if len(missing) == 0 {
+				break
+			}
+			require.Less(t, try, 4, "%v: Chrome never had every sheet, the last time not %v", size, missing)
 		}
 
 		d := ui.NewDocument(ui.BrowserSheets(), ui.FetchSheets(web.Sheets(srv.URL+"/")),
@@ -102,10 +134,42 @@ func TestImportsCascadeAsChromes(t *testing.T) {
 			return d.SheetsLoading() == 0
 		}, 5*time.Second, time.Millisecond)
 		d.Layout(size)
-		require.Len(t, want, len(els)+2)
+		require.Len(t, want.Boxes, len(els))
 		for i, n := range els {
-			assert.InDelta(t, want[i+2].W, n.Box().W, chrome.Tolerance, "%v #%s", size, ids[i])
-			assert.InDelta(t, want[i+2].Y, n.Box().Y, chrome.Tolerance, "%v #%s", size, ids[i])
+			assert.InDelta(t, want.Boxes[i][0], n.Box().W, chrome.Tolerance, "%v #%s", size, ids[i])
+			assert.InDelta(t, want.Boxes[i][1], n.Box().Y, chrome.Tolerance, "%v #%s", size, ids[i])
 		}
 	}
+}
+
+// chromePage is what Chrome laid out: each element's width and top, and
+// the path and HTTP status of every resource it fetched, 0 where the
+// fetch failed.
+type chromePage struct {
+	Boxes   [][2]float32 `json:"boxes"`
+	Fetched [][2]any     `json:"fetched"`
+}
+
+// missing returns the sheets of the site, which every path of served
+// is, that Chrome has no answer for, and those it fetched and lost.
+func (p chromePage) missing(site map[string]bool, served []string) []string {
+	answered := map[string]bool{}
+	var lost []string
+	for _, f := range p.Fetched {
+		path, _ := f[0].(string)
+		if status, _ := f[1].(float64); status != 0 {
+			answered[path] = true
+		} else if site[path] {
+			lost = append(lost, path)
+		}
+	}
+	if !slices.Contains(served, "/css/site.css") {
+		lost = append(lost, "/css/site.css")
+	}
+	for _, path := range served {
+		if !answered[path] && !slices.Contains(lost, path) {
+			lost = append(lost, path)
+		}
+	}
+	return lost
 }
