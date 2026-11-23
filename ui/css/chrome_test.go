@@ -45,6 +45,12 @@ var compared = map[string]func(s *style.Computed) string{
 	},
 	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
 	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
+	"font-palette": func(s *style.Computed) string {
+		if s.Font.Palette == "" {
+			return "normal"
+		}
+		return s.Font.Palette
+	},
 	"font-variation-settings": func(s *style.Computed) string {
 		if len(s.Font.Variations) == 0 {
 			return "normal"
@@ -266,6 +272,13 @@ func matchChromeProps(t *testing.T, d *ui.Document, props map[string]func(*style
 	d.Layout(geom.V2(800, 600))
 	matchChromeShown(t, d, props, skip, "", nil, func(n *dom.Node) *style.Computed { return dom.Data(n).Style })
 }
+
+// holdAtStart begins a script that moves a page in Chrome: it pauses at
+// their start the transitions and animations the page began as it
+// loaded, which ui begins at time 0, so the time Chrome took to reach
+// the script, a frame or more on a loaded machine, moves none of them.
+const holdAtStart = `document.getAnimations().forEach(a => { a.pause(); a.currentTime = 0; });
+`
 
 // matchChromeShown compares what read gives with Chrome's computed styles
 // after script ran in the page; then, if set, does on ui's side what
@@ -781,7 +794,9 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
   white-space: pre-wrap; overflow-wrap: break-word; text-overflow: ellipsis; visibility: hidden; cursor: grab;
   text-transform: capitalize; font-stretch: semi-condensed; font-variation-settings: "wght" 650, 'wdth' 75.5;
+  font-palette: --brand;
 }
+.t span { font-palette: DARK; }
 .l {
   background-color: rgb(1 2 3 / 0.25); border: 2px dashed steelblue; border-left: 4px dotted;
   border-right-color: transparent; border-radius: 3px 10% 0 1em; outline: 1px solid Lime; outline-offset: -2px;
@@ -959,7 +974,7 @@ div.x.on { transform: scale(2, 1.5) skewX(20deg) translate(30px, -6px); }
 		"box-shadow":        everything["box-shadow"],
 		"transform":         func(s *style.Computed) string { return matrixCSS(s.Transform) },
 	}
-	script := `els.forEach(e => getComputedStyle(e).color);
+	script := holdAtStart + `els.forEach(e => getComputedStyle(e).color);
 	document.querySelectorAll("div").forEach(e => e.classList.add("on"));
 	els.forEach(e => getComputedStyle(e).color);
 	document.getAnimations().forEach(a => { a.pause(); a.currentTime = 350; });`
@@ -1070,7 +1085,7 @@ div { width: 100px; height: 10px; position: relative; left: 0; right: 0; border:
 	}
 	tr := css.NewTransitions()
 	tr.Compute(d.HTML(), d.Sheets())
-	script := `els.forEach(e => getComputedStyle(e).marginLeft);
+	script := holdAtStart + `els.forEach(e => getComputedStyle(e).marginLeft);
 	document.querySelectorAll(".t").forEach(e => e.classList.add("on"));
 	els.forEach(e => getComputedStyle(e).marginLeft);
 	document.getAnimations().forEach(a => { a.pause(); a.currentTime = 350; });`

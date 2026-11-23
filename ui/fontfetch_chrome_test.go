@@ -15,6 +15,7 @@ import (
 	"golang.org/x/image/font/gofont/gomono"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/colourfont/colourtest"
 	"github.com/lantervale/ember/internal/varfont/varfonttest"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
@@ -25,7 +26,10 @@ import (
 func foundry(t *testing.T) ui.FontFetcher {
 	t.Helper()
 	files := map[string][]byte{"heavy.ttf": gobold.TTF, "mono.ttf": gomono.TTF, "weighty.ttf": varfonttest.Weighty(),
-		"weighty-phantom.ttf": varfonttest.Build(varfonttest.Options{NoHVAR: true})}
+		"weighty-phantom.ttf": varfonttest.Build(varfonttest.Options{NoHVAR: true}),
+		"layered.ttf":         colourtest.COLRv0(), "painted.ttf": colourtest.COLRv1(), "struck.ttf": colourtest.Sbix(true),
+		"bitmapped.ttf": colourtest.CBDT(true), "drawn.ttf": colourtest.SVG(true),
+		"bold-mono.ttc": colourtest.Collection(gobold.TTF, gomono.TTF)}
 	for _, name := range []string{"go-regular-latin.woff2", "go-regular-latin.woff", "go-icons.woff2"} {
 		b, err := os.ReadFile(filepath.Join("internal", "woff", "testdata", name))
 		require.NoError(t, err)

@@ -26,7 +26,7 @@ func matchMovedAt(t *testing.T, src string, build func(body *dom.Node), props ma
 	tr := css.NewTransitions()
 	tr.SetMedia(css.Media{Width: 800, Height: 600, Resolution: scale})
 	tr.Compute(d.HTML(), d.Sheets())
-	script := fmt.Sprintf(`els.forEach(e => getComputedStyle(e).fontSize);
+	script := holdAtStart + fmt.Sprintf(`els.forEach(e => getComputedStyle(e).fontSize);
 document.querySelectorAll("[class^=t]").forEach(e => e.classList.add("on"));
 els.forEach(e => getComputedStyle(e).fontSize);
 document.getAnimations().forEach(a => { a.pause(); a.currentTime = %v; });`, at*1000)

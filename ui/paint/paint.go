@@ -20,6 +20,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/fx"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -183,6 +184,13 @@ type Vector interface {
 	Texture(w, h int, scale float32) *twod.Texture
 }
 
+// Filters finds the filter element an element's filter: url(#id) names,
+// read for an element of size points, nil for none: one in an svg element
+// of the Document.
+func Filters(graph func(id string, size geom.Vec2) *fx.Graph) Option {
+	return func(p *painter) { p.graph = graph }
+}
+
 // Vectors finds by name the pictures Images has no texture for because
 // they are drawn from shapes, nil for any other: each is drawn at the
 // size it is shown at, in device pixels.
@@ -197,6 +205,7 @@ type painter struct {
 	fonts   box.Fonts
 	image   func(string) *twod.Texture
 	vector  func(string) Vector
+	graph   func(id string, size geom.Vec2) *fx.Graph
 	control func(*dom.Node) any
 	sel     Selection
 	// around is the text round the fragment drawn, which its words are
@@ -667,12 +676,16 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	see := p.sight(inner)
 	for _, c := range run {
 		at := origin.Add(c.Pos)
-		if c.Discarded || see.misses(c, at) {
+		if see.misses(c, at) {
 			continue
 		}
 		p.reached++
 		st := shown(c)
 		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
+		if c.Discarded {
+			p.collectPositioned(ce, outer)
+			continue
+		}
 		switch {
 		case p.modal(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
@@ -703,6 +716,23 @@ func (p *painter) collect(e entry, own, outer *layers) {
 			p.collect(ce, own, outer)
 		}
 	}
+}
+
+// collectPositioned collects into outer the positioned boxes under e, a box past a
+// line-clamp's last line: e and the rest it holds are never drawn, as Chrome's.
+func (p *painter) collectPositioned(e entry, outer *layers) {
+	var own, held layers
+	p.collect(e, &own, &held)
+	keep := func(to *[]entry, from []entry) {
+		for _, c := range from {
+			if shown(c.b).Position != style.Static {
+				*to = append(*to, c)
+			}
+		}
+	}
+	keep(&outer.negative, held.negative)
+	keep(&outer.positioned, held.positioned)
+	keep(&outer.positive, held.positive)
 }
 
 // placedClip is the clip of c, a child of the box inner is the clip in: inner, less,

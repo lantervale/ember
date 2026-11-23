@@ -72,6 +72,15 @@ func (c *cursor) offset(pos Pos) int {
 // written.
 func (s *Sheet) Text() string { return s.text }
 
+// nestedFrom is r in a sheet that holds its sheet's nests base places
+// further on.
+func (r Rule) nestedFrom(base int) Rule {
+	if r.nest > 0 {
+		r.nest += base
+	}
+	return r
+}
+
 // keyframesWithin is ks in a sheet that holds their media query lists
 // base places further on, each inside the lists outer too.
 func keyframesWithin(ks []Keyframes, outer []int, base int) []Keyframes {
@@ -122,8 +131,8 @@ func Join(name, media string, sheets []*Sheet) (*Sheet, []Warning) {
 				layers[i] = len(out.layers)
 			}
 		}
-		base := len(out.media)
-		out.media = append(out.media, s.media...)
+		base, nests := len(out.media), len(out.nests)
+		out.media, out.nests = append(out.media, s.media...), append(out.nests, s.nests...)
 		for _, imp := range s.imports {
 			media := slices.Clone(within)
 			for _, m := range imp.media {
@@ -153,10 +162,10 @@ func Join(name, media string, sheets []*Sheet) (*Sheet, []Warning) {
 			if r.layer > 0 {
 				r.layer = layers[r.layer-1]
 			}
-			out.Rules = append(out.Rules, r)
+			out.Rules = append(out.Rules, r.nestedFrom(nests))
 		}
 		out.Keyframes = append(out.Keyframes, keyframesWithin(s.Keyframes, within, base)...)
-		out.faces = append(out.faces, s.faces...)
+		out.faces, out.palettes = append(out.faces, s.faces...), append(out.palettes, s.palettes...)
 		out.CounterStyles = append(out.CounterStyles, counterStylesWithin(s.CounterStyles, within, base)...)
 	}
 	return out, warns

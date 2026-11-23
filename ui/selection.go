@@ -69,8 +69,10 @@ type selecting struct {
 	rightArmed, rightDragged bool
 	rightAt                  Position
 	rightFrom                geom.Vec2
-	// scrolledAt is the clock when a drag last scrolled a container.
-	scrolledAt float32
+	// scrolledAt is the clock when a drag last scrolled a container, and
+	// dragScrolled the containers it scrolled, snapped once it ends.
+	scrolledAt   float32
+	dragScrolled []*Node
 	// runs are the text nodes with fragments in tree order and maps what
 	// was asked of them, as layout serial laid them out.
 	runs    []*Node

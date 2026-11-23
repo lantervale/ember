@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
@@ -45,7 +46,7 @@ type Document struct {
 	html, body *Node
 	tree       *box.Tree
 	fonts      *fonts.Set
-	faces      map[*fonts.Face]*twod.Face
+	faces      map[faceKey]*twod.Face
 	// authored are the stylesheets in cascade order, sheets what the
 	// cascade reads of those not disabled, and resheet is set once one
 	// changed: the next frame takes them again (take).
@@ -70,8 +71,12 @@ type Document struct {
 	fetch    ImageFetcher
 	fetching fetches
 	choices  choices
-	// playing are the animated pictures, by url.
-	playing map[string]*playing
+	// playing are the animated pictures, by url, and drawnPictures those the
+	// last paint drew.
+	playing       map[string]*playing
+	drawnPictures map[string]bool
+	// prioritized are the imgs that say their fetchpriority.
+	prioritized []*Node
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -153,6 +158,8 @@ type Document struct {
 	lists frameLists
 	// wheel is how many times the wheel's turn d scrolls by (wheel.go).
 	wheel float32
+	// instant is whether the user's scrolls move at once (scrollmotion.go).
+	instant bool
 }
 
 // DocumentOption configures a Document.
@@ -171,6 +178,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 	d.html.Append(d.body)
 	dom.Data(d.html).Root = true
 	d.trans.MeasureFonts(d.fontUnits)
+	d.trans.MeasureInk(d.fonts.Ink)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)
@@ -367,6 +375,10 @@ func (d *Document) Body() *Node { return d.body }
 // show their state before styling, so their pseudo-classes restyle them
 // the same frame.
 func (d *Document) Layout(size geom.Vec2) {
+	d.fetching.mu.Lock()
+	d.fetching.holding = true
+	d.fetching.mu.Unlock()
+	defer d.fetchQueued()
 	d.landImages()
 	d.landFonts()
 	d.landSheets()
@@ -395,6 +407,13 @@ func (d *Document) Layout(size geom.Vec2) {
 			return
 		}
 		d.replay.repaint = true
+		if d.nearing(size) {
+			d.choosePictures(media, false)
+			d.style()
+			d.lay(size)
+			d.requery(size)
+			return
+		}
 		if d.trans.RequeryScroll(d.scrollState) {
 			d.style()
 			d.lay(size)
@@ -412,6 +431,7 @@ func (d *Document) Layout(size geom.Vec2) {
 		d.requery(size)
 	}
 	if d.choosePictures(media, true) {
+		d.choosePictures(media, false)
 		d.style()
 		d.lay(size)
 	}
@@ -539,6 +559,7 @@ func (d *Document) style() {
 	} else {
 		d.controls, d.forms = d.controls[:0], d.forms[:0]
 		d.choices.imgs, d.choices.stale = d.choices.imgs[:0], true
+		d.prioritized = d.prioritized[:0]
 		d.html.Walk(func(n *Node) bool {
 			if dom.Data(n).Dirty&dom.DirtyTree != 0 {
 				d.restructure = true
@@ -575,11 +596,17 @@ func (d *Document) noteImg(n *Node) {
 	if n.Tag() != dom.Img {
 		return
 	}
+	if _, ok := n.Attr("fetchpriority"); ok {
+		d.prioritized = append(d.prioritized, n)
+	}
 	if !choosesPicture(n) {
 		dom.Unchoose(n)
 		return
 	}
 	d.choices.imgs = append(d.choices.imgs, n)
+	if dom.Data(n).Dirty&dom.DirtyTree != 0 {
+		delete(d.choices.dppx, n)
+	}
 	if s := dom.ChosenSource(n); s != nil && dom.Data(s).Dirty&dom.DirtyStyle != 0 {
 		dom.Data(n).Dirty |= dom.DirtyStyle | dom.DirtyLayout
 	}
@@ -707,8 +734,7 @@ func (d *Document) draw(c *twod.Canvas) {
 	count(c, why)
 	m := c.Mark()
 	apart := !d.replay.inPlace
-	d.painted++
-	d.unsettled = false
+	d.paintBegins()
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
 		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight,
 		Lists: d.listsFrame(), ListsApart: d.framed != nil}
@@ -718,6 +744,14 @@ func (d *Document) draw(c *twod.Canvas) {
 	d.replay.inPlace = live.Covered()
 	d.replay.replayedLast = false
 	d.replay.repaint, d.replay.size, d.replay.scale = d.unsettled, size, d.fonts.Scale()
+}
+
+// paintBegins counts a paint, which settles the Document and notes the
+// animations it draws afresh.
+func (d *Document) paintBegins() {
+	d.painted++
+	d.unsettled = false
+	clear(d.drawnPictures)
 }
 
 // keep records what d painted since m to replay: round the live parts
@@ -789,7 +823,8 @@ func (d *Document) face(f style.Font) *twod.Face {
 		return d.chainFace(ch)
 	}
 	ff := d.fonts.Face(f)
-	if tf, ok := d.faces[ff]; ok {
+	key := faceKey{ff, f.Palette}
+	if tf, ok := d.faces[key]; ok {
 		return tf
 	}
 	var opts []twod.FaceOption
@@ -799,15 +834,23 @@ func (d *Document) face(f style.Font) *twod.Face {
 	if d.emoji != nil {
 		opts = append(opts, twod.Emoji(d.emoji))
 	}
-	tf, err := twod.NewFace(ff.TTF, opts...)
-	if err != nil {
-		tf = twod.Regular()
+	tf := twod.Regular()
+	if df, err := draw.ParseFace(ff.Family, ff.TTF); err == nil {
+		if wrapped, ok := draw.Wrap(df.Styled(d.colourLook(ff.Family, f.Palette))).(*twod.Face); ok {
+			tf = wrapped.With(opts...)
+		}
 	}
 	if d.faces == nil {
-		d.faces = map[*fonts.Face]*twod.Face{}
+		d.faces = map[faceKey]*twod.Face{}
 	}
-	d.faces[ff] = tf
+	d.faces[key] = tf
 	return tf
+}
+
+// faceKey is a face of the Document's fonts drawn in a font-palette.
+type faceKey struct {
+	face    *fonts.Face
+	palette string
 }
 
 // warn keeps a style attribute's warning once, however often its element

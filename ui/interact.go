@@ -833,6 +833,7 @@ func (d *Document) heldSelection(in *input.State, at geom.Vec2) {
 		return
 	}
 	d.sel.held = false
+	d.dragScrollEnded()
 }
 
 // leftHeld moves what the held left button drags: the selection of the
@@ -1354,7 +1355,7 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	intents, from := pressedIntents(f, pressed)
 	for j, i := range intents {
 		var took bool
-		if n, took = d.keyIntent(f, n, m, i); took {
+		if n, took = d.keyIntent(f, n, m, i, from[j]); took {
 			taken.add(from[j])
 		}
 	}
@@ -1403,7 +1404,7 @@ func pressedIntents(f inputfeed.Feed, pressed func(input.Key) bool) ([]control.I
 // keyIntent answers i for n, whose machine is m: a menu, a modal's Back,
 // the control, a scroll, Back, else a focus move. It returns the element the
 // next intent goes to and whether i was taken.
-func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent) (*Node, bool) {
+func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent, k input.Key) (*Node, bool) {
 	if n != nil && d.menuIntent(n, i) {
 		return d.focused(), true
 	}
@@ -1415,8 +1416,8 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 			d.events = append(d.events, bodyBack{})
 			return n, true
 		}
-		if d.scrollKey(d.pointed(), i) {
-			f.CaptureKeys(int(pageKey(i)))
+		if d.scrollKey(d.pointed(), i, k, true, f.RawDown(int(input.KeyShift))) {
+			f.CaptureKeys(int(scrollingKey(i, k)))
 			return n, true
 		}
 		return n, false
@@ -1424,8 +1425,8 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 	if d.intent(n, m, i) {
 		return n, true
 	}
-	if d.scrollKey(n, i) {
-		f.CaptureKeys(int(pageKey(i)))
+	if d.scrollKey(n, i, k, false, false) {
+		f.CaptureKeys(int(scrollingKey(i, k)))
 		return n, true
 	}
 	if i == control.Back {
@@ -1779,17 +1780,21 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 				continue
 			}
 			s := d.scrolling(b.Node)
-			off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true}, d.lineStep(b))
+			port := snapportOf(b)
+			page := geom.V2(pageStep(port.X), pageStep(port.Y))
+			off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true, Page: page}, d.lineStep(b))
 			if s.Dragging() {
+				d.scrollerOf(b.Node).glide = nil
 				d.setScroll(b, off)
 				d.dragging = b.Node
-			} else {
-				d.scrollBoxTo(b, off, snapAhead, false, true)
+			} else if off != bars.Scroll {
+				from := d.userAim(b)
+				d.userScroll(b, bars.Clamp(d.snap(b, from, bars.Clamp(from.Add(off.Sub(bars.Scroll))), snapPage)), byKeys)
 			}
 			return true
 		}
 	}
-	w := in.Wheel()
+	w, precise := in.Wheel(), in.WheelPrecise()
 	if inputfeed.Of(in).RawDown(int(input.KeyShift)) && w.X == 0 {
 		w = geom.V2(w.Y, 0)
 	}
@@ -1807,68 +1812,103 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 			}
 			continue
 		}
-		off, _ := d.scrolling(b.Node).Input(bars, paint.Pointer{At: at, Hover: true, Wheel: w}, d.lineStep(b))
-		d.wheelTurned(b, bars.Scroll, off)
-		d.setScroll(b, off)
+		step := d.lineStep(b) * 3
+		if precise {
+			step = pointsPerPreciseLine
+		}
+		d.wheelTurned(b, w.Scale(step), precise)
 		break
 	}
 	return false
 }
 
 // scrollKey scrolls the innermost container holding n, n included, that
-// can still move that way: by PageUp and PageDown a view at a time, to
-// its start or end by Home and End. n is the focused element, whose own
+// can still move that way, as Chrome's keys: PageUp and PageDown by
+// seven eighths of its snapport (pageStep), Home and End to its start or
+// end and, with nothing focused in a Document whose viewport scrolls, a
+// page's, the arrows by 40 points and Space by a page, back with Shift.
+// The scroll glides from where a glide under way is going, unless the
+// user's scrolls are instant. n is the focused element, whose own
 // control left the key, or with nothing focused what is under the
 // pointer, as a browser pages what the pointer is over. It reports
 // whether it scrolled.
-func (d *Document) scrollKey(n *Node, i control.Intent) bool {
+func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift bool) bool {
 	if d.tree == nil || n == nil {
 		return false
 	}
-	switch i {
-	case control.PageUp, control.PageDown, control.Home, control.End:
-	case control.None, control.Activate, control.Back, control.Up, control.Down, control.Left, control.Right:
+	way, kind, ok := keyScroll(i, k, free && d.scrollingViewport, shift)
+	if !ok {
 		return false
 	}
-	b := d.tree.Of[n]
-	for _, s := range scrollContainers(b) {
+	for _, s := range scrollContainers(d.tree.Of[n]) {
 		bars := paint.BarsOf(s, origin(s))
-		off, kind := bars.Scroll, snapAhead
-		switch i {
-		case control.PageUp:
-			off.Y -= bars.View.H
-		case control.PageDown:
-			off.Y += bars.View.H
-		case control.Home:
-			off.Y, kind = bars.Start.Y, snapEnd
-		case control.End:
-			off.Y, kind = math.MaxFloat32, snapEnd
-		case control.None, control.Activate, control.Back, control.Up, control.Down, control.Left, control.Right:
-			// scrollKey lets only the four above through
+		from := d.userAim(s)
+		off := from
+		switch kind {
+		case snapEnd:
+			if way.Y < 0 {
+				off.Y = bars.Start.Y
+			} else {
+				off.Y = math.MaxFloat32
+			}
+		case snapPage:
+			port := snapportOf(s)
+			off = off.Add(geom.V2(way.X*pageStep(port.X), way.Y*pageStep(port.Y)))
+		case snapAhead, snapNext:
+			off = off.Add(way.Scale(lineScroll))
 		}
 		off = bars.Clamp(off)
-		if off == bars.Scroll {
-			if overscrollContained(s, geom.V2(0, off.Y-bars.Scroll.Y+pageWay(i))) {
+		if off == from {
+			if overscrollContained(s, way) {
 				return true
 			}
 			continue
 		}
-		d.scrollBoxTo(s, off, kind, false, true)
+		d.userScroll(s, bars.Clamp(d.snap(s, from, off, kind)), byKeys)
 		return true
 	}
 	return false
 }
 
-// pageWay is the way i scrolls along y.
-func pageWay(i control.Intent) float32 {
-	if i == control.PageUp || i == control.Home {
-		return -1
+// keyScroll is the way the key k of intent i scrolls and how, as Chrome
+// snaps it: by a line, a page or to an end. The arrows and Space scroll
+// only where free.
+func keyScroll(i control.Intent, k input.Key, free, shift bool) (geom.Vec2, snapKind, bool) {
+	switch i {
+	case control.PageUp:
+		return geom.V2(0, -1), snapPage, true
+	case control.PageDown:
+		return geom.V2(0, 1), snapPage, true
+	case control.Home:
+		return geom.V2(0, -1), snapEnd, true
+	case control.End:
+		return geom.V2(0, 1), snapEnd, true
+	case control.Activate:
+		if free && k == input.KeySpace {
+			if shift {
+				return geom.V2(0, -1), snapPage, true
+			}
+			return geom.V2(0, 1), snapPage, true
+		}
+	case control.Up, control.Down, control.Left, control.Right:
+		if free && k != input.KeyUnknown {
+			return focusDir(i), snapNext, true
+		}
+	case control.None, control.Back:
 	}
-	return 1
+	return geom.Vec2{}, 0, false
 }
 
-// pageKey is the key that pages a scroll container for i, taken from the
-// game only when it scrolled something.
+// scrollingKey is the key k that scrolled for i, taken from the game only
+// when it scrolled something: a pad's page intent takes its page key.
+func scrollingKey(i control.Intent, k input.Key) input.Key {
+	if k != input.KeyUnknown {
+		return k
+	}
+	return pageKey(i)
+}
+
+// pageKey is the key that pages a scroll container for i.
 func pageKey(i control.Intent) input.Key {
 	switch i {
 	case control.PageUp:

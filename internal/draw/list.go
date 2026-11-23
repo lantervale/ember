@@ -1200,6 +1200,24 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 		if phase == phases {
 			whole, phase = whole+1, 0
 		}
+		if cg := f.colourItem(it, col); cg.tex != nil {
+			if pictures && s.Stroke == 0 {
+				over := oversample * k
+				c.Image(
+					geom.Rect{
+						X: float32(whole)/px + cg.at.X/over,
+						Y: y + it.offset.Y/k + cg.at.Y/over,
+						W: cg.size.X / over,
+						H: cg.size.Y / over,
+					},
+					cg.tex,
+					geom.Rect{W: 1, H: 1},
+					color.RGBA(1, 1, 1, col.A),
+				)
+			}
+			x += it.advance/k + s.Tracking*float32(it.clusters)
+			return
+		}
 		if gp := f.drawn(it, phase); gp.size.X > 0 {
 			c.quad(
 				geom.Rect{

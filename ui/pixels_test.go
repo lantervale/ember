@@ -49,6 +49,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/border-image-width", 460, 170, 0.0007},
 		{"./internal/pages/flex-negative-margin", 640, 220, 0.0004},
 		{"./internal/pages/img-crisp", 160, 104, 0.0002},
+		{"./internal/pages/img-crisp-animated", 176, 120, 0.004},
 		{"./internal/pages/bevels", 480, 120, 0.0001},
 		{"./internal/pages/mitres", 560, 90, 0.0002},
 		{"./internal/pages/disabled", 480, 110, 0.0024},
@@ -77,7 +78,9 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/blend-modes", 600, 330, 0.0015},
 		{"./internal/pages/plus-lighter", 420, 180, 0.0006},
 		{"./internal/pages/mask-composite", 460, 260, 0.0004},
+		{"./internal/pages/webkit-masks", 380, 180, 0.001},
 		{"./internal/pages/backdrop-filter", 560, 360, 0.001},
+		{"./internal/pages/url-filters", 500, 410, 0.0045},
 		{"./internal/pages/background-blend", 600, 260, 0.0012},
 		{"./internal/pages/svg-pictures", 860, 640, 0.0008},
 		{"./internal/pages/multicol", 640, 440, 0.0046},
@@ -104,6 +107,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/list-inside", 520, 360, 0.0072},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
+		{"./internal/pages/initial-letter", 520, 260, 0.008},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/text-stroke", 480, 420, 0.0095},
 		{"./internal/pages/marker-properties", 420, 360, 0.0065},
@@ -111,12 +115,30 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-text", 640, 300, 0.0031},
 		{"./internal/pages/text-sizes", 420, 240, 0.008},
 		{"./internal/pages/font-variations", 520, 320, 0.0065},
+		{"./internal/pages/colour-fonts", 520, 340, 0.0025},
 		{"./internal/pages/joined", 440, 400, 0.0055},
 		{"./internal/pages/syllables", 420, 400, 0.0058},
 		{"./internal/pages/scripts", 420, 400, 0.0045},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
+		})
+	}
+}
+
+// TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of
+// what Chrome ships behind a flag, turned on.
+func TestFlaggedPagesLookLikeChrome(t *testing.T) {
+	for _, c := range []struct {
+		pkg     string
+		w, h    int
+		mean    float64
+		feature string
+	}{
+		{"./internal/pages/line-clamp-past", 420, 360, 0.003, "CSSLineClamp"},
+	} {
+		t.Run(c.pkg, func(t *testing.T) {
+			chrome.WithinWith(t, c.pkg, c.w, c.h, c.mean, c.feature)
 		})
 	}
 }

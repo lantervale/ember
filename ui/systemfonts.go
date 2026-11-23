@@ -47,7 +47,8 @@ func (d *Document) landFonts() {
 // an em and an em where it has no such glyph, and its normal line.
 func (d *Document) fontUnits(f style.Font) css.FontUnits {
 	m := d.fonts.Metrics(f)
-	u := css.FontUnits{Ex: m.XHeight, Ch: f.Size / 2, Cap: m.CapHeight, Ic: f.Size, Line: m.Ascent + m.Descent + m.LineGap}
+	u := css.FontUnits{Ex: m.XHeight, Ch: f.Size / 2, Cap: m.CapHeight, Ic: f.Size, Line: m.Ascent + m.Descent + m.LineGap,
+		Ascent: m.Ascent, Descent: m.Descent}
 	if u.Ex <= 0 {
 		u.Ex = f.Size / 2
 	}

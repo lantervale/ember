@@ -6,6 +6,9 @@ import (
 	"image"
 	_ "image/png" // ui.Images and url() backgrounds decode PNG
 	"io/fs"
+	"math"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/animated"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // imageBytes is the file url names: one of css.DefaultImages, else a path
@@ -75,12 +79,22 @@ type fetches struct {
 	// layout.
 	drawn []drawnVector
 	slots chan struct{}
+	// queue are the urls asked for that wait for one of the
+	// fetchesAtOnce fetches, running, the most urgent first once a frame
+	// sorted them; fetch is the fetcher they go to.
+	queue   []string
+	running int
+	fetch   ImageFetcher
+	// holding is set during a layout, which asks for its pictures all
+	// before fetchQueued sorts them.
+	holding bool
 	// onWay are the urls asked for that have not landed, read and
 	// written on the frame.
 	onWay map[string]bool
 }
 
-// fetchImage asks the fetcher for url off the frame.
+// fetchImage asks the fetcher for url off the frame: during a layout,
+// once it sorted it among the others asked for (fetchQueued).
 func (d *Document) fetchImage(url string) {
 	f := &d.fetching
 	if f.slots == nil {
@@ -90,16 +104,66 @@ func (d *Document) fetchImage(url string) {
 		f.onWay = map[string]bool{}
 	}
 	f.onWay[url] = true
-	fetch := d.fetch
 	f.Add(1)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fetch, f.queue = d.fetch, append(f.queue, url)
+	for !f.holding && f.running < fetchesAtOnce && len(f.queue) > 0 {
+		f.startNext()
+	}
+}
+
+// fetchQueued sorts the pictures waiting to be fetched by the priority
+// their imgs' fetchpriority gives them, high first and low last, as
+// Chrome does, then has them fetched while fewer than fetchesAtOnce are.
+func (d *Document) fetchQueued() {
+	f := &d.fetching
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.holding = false
+	if len(f.queue) == 0 {
+		return
+	}
+	priority := map[string]int{}
+	for _, n := range d.prioritized {
+		url, ok := dom.Picture(n)
+		if !ok {
+			continue
+		}
+		v, _ := n.Attr("fetchpriority")
+		switch strings.ToLower(v) {
+		case "high":
+			priority[url] = max(priority[url], 1)
+		case "low":
+			if _, set := priority[url]; !set {
+				priority[url] = -1
+			}
+		}
+	}
+	slices.SortStableFunc(f.queue, func(a, b string) int { return priority[b] - priority[a] })
+	for f.running < fetchesAtOnce && len(f.queue) > 0 {
+		f.startNext()
+	}
+}
+
+// startNext fetches the first picture of the queue off the frame, then
+// the next once it is back; f.mu is held.
+func (f *fetches) startNext() {
+	url, fetch := f.queue[0], f.fetch
+	f.queue = f.queue[1:]
+	f.running++
 	go func() {
 		defer f.Done()
 		f.slots <- struct{}{}
-		defer func() { <-f.slots }()
 		got := fetched(url, fetch)
+		<-f.slots
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.landed = append(f.landed, got)
+		f.running--
+		if len(f.queue) > 0 {
+			f.startNext()
+		}
 	}()
 }
 
@@ -143,8 +207,10 @@ func (d *Document) landImages() {
 			continue
 		case got.vec != nil:
 			d.keepVector(got.url, got.vec, got.warning, true)
-		case got.anim != nil:
+		case got.anim != nil && got.anim.Moves():
 			d.images[got.url] = d.play(got.url, got.anim)
+		case got.anim != nil:
+			d.images[got.url] = twod.NewTexture(got.anim.Frames[0], twod.Encoded())
 		default:
 			d.images[got.url] = twod.NewTexture(got.img, twod.Encoded())
 		}
@@ -204,8 +270,11 @@ func (d *Document) decoded(url string, b []byte) *twod.Texture {
 		return nil
 	}
 	anim, err := animated.Decode(b)
-	if anim != nil {
+	switch {
+	case anim != nil && anim.Moves():
 		return d.play(url, anim)
+	case anim != nil:
+		return twod.NewTexture(anim.Frames[0], twod.Encoded())
 	}
 	if err != nil {
 		d.warn(fmt.Errorf("ui: image %s: %w", url, err))
@@ -226,14 +295,18 @@ type playing struct {
 	pic   *animated.Picture
 	tex   *twod.Texture
 	frame int
-	// start is the clock when it began, -1 until a frame is drawn; done
-	// is set once it has played its times.
-	start float32
-	done  bool
+	// start is the clock when the play under way began, -1 until the
+	// picture is first drawn, and played the plays done before it; done is
+	// set once it has played its times. shown is whether the last paint
+	// drew it.
+	start  float32
+	played int
+	shown  bool
+	done   bool
 }
 
 // play is the texture of url's animation, which the Document's clock
-// moves from the next frame drawn on.
+// moves once it is drawn.
 func (d *Document) play(url string, pic *animated.Picture) *twod.Texture {
 	p := &playing{pic: pic, tex: twod.NewTexture(pic.Frames[0], twod.Encoded()), start: -1}
 	if d.playing == nil {
@@ -243,20 +316,51 @@ func (d *Document) play(url string, pic *animated.Picture) *twod.Texture {
 	return p.tex
 }
 
+// paintImage is image for paint, which notes the animations it draws:
+// one begins when first drawn.
+func (d *Document) paintImage(url string) *twod.Texture {
+	if p, ok := d.playing[url]; ok {
+		if d.drawnPictures == nil {
+			d.drawnPictures = map[string]bool{}
+		}
+		d.drawnPictures[url] = true
+		if p.start < 0 {
+			p.start = max(d.clock, 0)
+		}
+	}
+	return d.image(url)
+}
+
 // animate shows each animation's frame at the clock, and repaints where
-// one changed.
+// one changed. An animation moves only while the last paint drew it,
+// as Chrome's only moves in view: drawn again within the play it left,
+// it shows the frame of the moment; past it, the next play begins.
 func (d *Document) animate() {
-	for _, p := range d.playing {
-		if p.done {
+	for url, p := range d.playing {
+		back := d.drawnPictures[url] && !p.shown
+		p.shown = d.drawnPictures[url]
+		if p.done || !p.shown || p.start < 0 {
 			continue
 		}
-		if p.start < 0 {
-			p.start = d.clock
+		whole := p.pic.Whole().Seconds()
+		t := float64(d.clock - p.start)
+		if t >= whole {
+			if back {
+				p.played++
+				p.start, t = d.clock, 0
+			} else {
+				n := math.Floor(t / whole)
+				p.played += int(n)
+				p.start += float32(n * whole)
+				t -= n * whole
+			}
 		}
-		i, more := p.pic.At(time.Duration(float64(d.clock-p.start) * float64(time.Second)))
-		p.done = !more
+		i := p.pic.Within(time.Duration(t * float64(time.Second)))
+		if plays := p.pic.Plays; plays > 0 && p.played >= plays {
+			p.done, i = true, p.pic.Len()-1
+		}
 		if i != p.frame {
-			p.frame, p.tex.Image = i, p.pic.Frames[i]
+			p.frame, p.tex.Image = i, p.pic.Frame(i)
 			p.tex.Touch()
 			d.replay.repaint = true
 		}
