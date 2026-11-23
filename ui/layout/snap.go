@@ -31,9 +31,11 @@ type pen struct {
 	raw   float32
 	extra float32
 	run   int
+	// origin is where the line starts, which tab stops are measured from.
+	origin float32
 }
 
-func newPen(unit, x float32) pen { return pen{unit: unit, start: x, run: -1} }
+func newPen(unit, x float32) pen { return pen{unit: unit, start: x, run: -1, origin: x} }
 
 func isText(k pieceKind) bool {
 	return k == word || k == gap || k == emergency || k == breakHere
@@ -55,7 +57,9 @@ func (p *pen) step(q piece, perGap float32) float32 {
 	if !isText(q.kind) {
 		p.close()
 		at := p.start
-		if q.kind != newline {
+		if q.kind == tab {
+			p.start += tabAdvance(at-p.origin, q.stop, q.least)
+		} else if q.kind != newline {
 			p.start += q.width
 		}
 		return at
@@ -70,6 +74,20 @@ func (p *pen) step(q piece, perGap float32) float32 {
 		p.extra += perGap
 	}
 	return at
+}
+
+// tabAdvance is how far a tab at x from its line's start goes: to the next stop, a
+// multiple of stop, or to the one after where that is nearer than least, as Chrome's
+// Font::TabWidth. No stop is a carriage return, of no width.
+func tabAdvance(x, stop, least float32) float32 {
+	if stop <= 0 {
+		return 0
+	}
+	d := stop - float32(math.Mod(float64(x), float64(stop)))
+	if d < least {
+		d += stop
+	}
+	return d
 }
 
 // end is where the line ends once its last item is closed.

@@ -158,7 +158,7 @@ func (p *painter) drawList(pp popup, l menu) {
 			ink = fade(ink, dimmed)
 		}
 		p.s.Text(geom.V2(row.X+optionPad, row.Y+2), o.Text(),
-			twod.Typeface(face), twod.FontSize(st.Font.Size), twod.Color(ink), twod.Tracking(st.LetterSpacing))
+			twod.Typeface(face), twod.FontSize(st.Font.Size), twod.Color(ink), twod.Tracking(st.LetterGap()))
 	}
 	p.s.PopClip()
 }

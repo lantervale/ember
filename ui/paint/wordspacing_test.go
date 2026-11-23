@@ -17,8 +17,8 @@ func spaced(s string, letter float32, edit func(*style.Computed)) []op {
 	p := el(0, 0, 400, 20, func(st *style.Computed) {
 		st.Color = white
 		st.Font.Size = 10
-		st.LetterSpacing = letter
-		st.WordSpacing = style.WordSpacing{Px: 5}
+		st.LetterSpacing = style.Spacing{Px: letter}
+		st.WordSpacing = style.Spacing{Px: 5}
 		if edit != nil {
 			edit(st)
 		}
@@ -45,7 +45,7 @@ func TestWordSpacedTextIsDrawnWordByWordEachAfterItsWidenedSpace(t *testing.T) {
 }
 
 func TestTextWithoutWordSpacingIsDrawnWhole(t *testing.T) {
-	texts, xs := places(spaced("ab cd e", 0, func(st *style.Computed) { st.WordSpacing = style.WordSpacing{} }))
+	texts, xs := places(spaced("ab cd e", 0, func(st *style.Computed) { st.WordSpacing = style.Spacing{} }))
 	assert.Equal(t, []string{"ab cd e"}, texts)
 	assert.Equal(t, []float32{0}, xs)
 }
@@ -62,7 +62,7 @@ func TestWordSpacingAddsToLetterSpacingAsDrawn(t *testing.T) {
 }
 
 func TestAPercentageWordSpacingIsDrawnAtTheTextsFontSize(t *testing.T) {
-	_, xs := places(spaced("a b", 0, func(st *style.Computed) { st.WordSpacing = style.WordSpacing{Percent: 50} }))
+	_, xs := places(spaced("a b", 0, func(st *style.Computed) { st.WordSpacing = style.Spacing{Percent: 50} }))
 	assert.Equal(t, []float32{0, 25}, xs)
 }
 
@@ -78,7 +78,7 @@ func TestSelectedWordSpacedTextIsDrawnSpacedInBothColours(t *testing.T) {
 	p := el(0, 0, 400, 20, func(st *style.Computed) {
 		st.Color = white
 		st.Font.Size = 10
-		st.WordSpacing = style.WordSpacing{Px: 5}
+		st.WordSpacing = style.Spacing{Px: 5}
 		st.HasSelectionText, st.SelectionText = true, red
 	})
 	run := text(0, 0, "ab cd", p.Style)
@@ -97,9 +97,9 @@ func TestSelectedWordSpacedTextIsDrawnSpacedInBothColours(t *testing.T) {
 }
 
 func TestWordSpacedTextIsMeasuredByItsFaceWithoutFonts(t *testing.T) {
-	p := el(0, 0, 400, 20, func(st *style.Computed) { st.Color = white; st.WordSpacing = style.WordSpacing{Px: 5} })
+	p := el(0, 0, 400, 20, func(st *style.Computed) { st.Color = white; st.WordSpacing = style.Spacing{Px: 5} })
 	p.Append(text(0, 0, "a b", p.Style))
-	plain := el(0, 0, 400, 20, func(st *style.Computed) { st.Color = white; st.LetterSpacing = 5 })
+	plain := el(0, 0, 400, 20, func(st *style.Computed) { st.Color = white; st.LetterSpacing = style.Spacing{Px: 5} })
 	plain.Append(text(0, 0, "a b", plain.Style))
 	r := newRecorder()
 	Paint(r, tree(el(0, 0, 400, 40, nil, p, plain)))

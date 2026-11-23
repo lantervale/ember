@@ -65,6 +65,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/debug-grid", 640, 180, 0.004},
 		{"./internal/pages/decorations", 420, 560, 0.007},
 		{"./internal/pages/word-spacing", 420, 440, 0.0065},
+		{"./internal/pages/text-properties", 420, 490, 0.0086},
 		{"./internal/pages/vertical-align", 420, 620, 0.0092},
 		{"./internal/pages/font-smoothing", 420, 520, 0.0018},
 		{"./internal/pages/background-size", 660, 330, 0.0011},
@@ -93,7 +94,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
-		{"./internal/pages/background-text", 640, 300, 0.0027},
+		{"./internal/pages/background-text", 640, 300, 0.0031},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			if strings.HasSuffix(c.pkg, "/mitres") && os.Getenv("CI") != "" && runtime.GOOS != "windows" {

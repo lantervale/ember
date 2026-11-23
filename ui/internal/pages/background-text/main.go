@@ -4,7 +4,8 @@
 // to the border box, glyphs filled apart from their underline; a picture
 // fixed under a transform, placed in its element; the canvas's picture
 // placed in html's box; and a border-image of shapes drawn at the
-// screen's density, its middle drawn only when filled; markers shadowed.
+// screen's density, its middle drawn only when filled; markers shadowed;
+// small caps and an underline skipping ink clipped to, shadows under a fill.
 package main
 
 import (
@@ -31,7 +32,10 @@ body { margin: 0; padding: 12px 10px; display: flex; flex-wrap: wrap; gap: 10px 
   padding: 4px 8px; border: 3px dashed #345; }
 .held span { color: transparent; font-size: 28px; }
 .layers { background: linear-gradient(135deg, #c33, #f0b545) text, #cde; color: transparent; padding: 2px 10px; }
-.fill { -webkit-text-fill-color: #36c; color: #c33; text-decoration: underline; font-size: 32px; }
+.fill { -webkit-text-fill-color: #36c; color: #c33; text-decoration: underline; font-size: 32px;
+  text-shadow: 2px 2px rgba(240, 181, 69, 0.8); }
+.caps { font-variant: small-caps; background: linear-gradient(90deg, #2a8, #36c) text; color: transparent;
+  text-decoration: underline; font-size: 30px; }
 .turned { transform: translate(6px, 2px); }
 .fixed { width: 120px; height: 56px; border: 2px solid #345;
   background: url(mark.png) fixed 10px 12px no-repeat #dfe; }
@@ -77,6 +81,7 @@ func main() {
 		ui.Div(ui.Class("held"), ui.Text("Held "), ui.Span(ui.Text("and its child"))),
 		div("layers", "Layers"),
 		div("fill", "Filled apart"),
+		div("caps", "Glyphs in Caps"),
 		ui.Div(ui.Class("turned"), ui.Div(ui.Class("fixed"))),
 		ui.Div(ui.Class("frame")), ui.Div(ui.Class("frame", "filled")),
 		ui.Ol(ui.Li(ui.Text("a shadowed marker")), ui.Li(ui.Text("and another"))),

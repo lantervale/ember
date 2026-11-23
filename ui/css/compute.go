@@ -1437,6 +1437,17 @@ func (x *ctx) unit(u relUnit) float32 {
 	}
 }
 
+// spacing is a letter-spacing or a word-spacing: a calc() resolved, a
+// percentage kept to resolve against the font size of each element that
+// inherits it.
+func (x *ctx) spacing(v []Component) style.Spacing {
+	l := x.length(v[0])
+	if l.Calc != (unique.Handle[style.Calc]{}) {
+		return style.Spacing{Px: l.At(x.em)}
+	}
+	return style.Spacing{Px: l.Px, Percent: l.Percent}
+}
+
 func (x *ctx) px(c Component) float32 {
 	return x.length(c).Px
 }
@@ -1865,16 +1876,21 @@ var props = func() map[string]prop {
 				return style.LineHeight{Px: l.At(x.em)}
 			}, lineHeights,
 		),
-		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
-			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, numbers(-math.MaxFloat32, math.MaxFloat32)),
-		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
-			func(x *ctx, v []Component) style.WordSpacing {
-				l := x.length(v[0])
-				if l.Calc != (unique.Handle[style.Calc]{}) {
-					return style.WordSpacing{Px: l.At(x.em)}
-				}
-				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
-			}, wordSpacings),
+		propCaps: keyword(func(c *style.Computed) *style.FontCaps { return &c.Font.Caps }, capsWords),
+		propLigatures: field(func(c *style.Computed) *string { return &c.FontVariant.Ligatures },
+			variantField(propLigatures), flips[string]()),
+		propNumeric: field(func(c *style.Computed) *string { return &c.FontVariant.Numeric },
+			variantField(propNumeric), flips[string]()),
+		propEastAsian: field(func(c *style.Computed) *string { return &c.FontVariant.EastAsian },
+			variantField(propEastAsian), flips[string]()),
+		propAlternates: field(func(c *style.Computed) *string { return &c.FontVariant.Alternates },
+			variantField(propAlternates), flips[string]()),
+		propPosition: field(func(c *style.Computed) *string { return &c.FontVariant.Position },
+			variantField(propPosition), flips[string]()),
+		"letter-spacing": field(func(c *style.Computed) *style.Spacing { return &c.LetterSpacing },
+			(*ctx).spacing, textSpacings),
+		"word-spacing": field(func(c *style.Computed) *style.Spacing { return &c.WordSpacing },
+			(*ctx).spacing, textSpacings),
 		"color": field(
 			func(c *style.Computed) *color.Color { return &c.Color },
 			func(x *ctx, v []Component) color.Color {
@@ -1933,6 +1949,21 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
+		"text-decoration-skip-ink": keyword(func(c *style.Computed) *bool { return &c.InkThrough },
+			map[string]bool{"auto": false, "all": false, "none": true}),
+		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
+			func(x *ctx, v []Component) style.TabSize {
+				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
+					return style.TabSize{Spaces: x.number(v[0], 0)}
+				}
+				return style.TabSize{Px: x.px(v[0]), Length: true}
+			}, tabSizes),
+		"word-break": keyword(func(c *style.Computed) *style.WordBreak { return &c.WordBreak },
+			map[string]style.WordBreak{"normal": style.WordBreakNormal, "break-all": style.BreakAll,
+				"keep-all": style.KeepAll, "break-word": style.WordBreakBreakWord}),
+		"line-break": keyword(func(c *style.Computed) *style.LineBreak { return &c.LineBreak },
+			map[string]style.LineBreak{"auto": style.LineBreakAuto, "loose": style.LineBreakLoose,
+				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {

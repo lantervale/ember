@@ -224,6 +224,15 @@ type Fonts interface {
 	Advance(f style.Font, text string) float32
 }
 
+// InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the
+// stretches of x where the glyphs of text, drawn from 0 on its baseline
+// with letter points after each character and word after each word
+// separator, cross the band from top to bottom below the baseline, one a
+// glyph.
+type InkFonts interface {
+	Intercepts(f style.Font, text string, letter, word, top, bottom float32) [][2]float32
+}
+
 // FallbackFonts is Fonts that draws some characters from other faces:
 // FallbackMetrics are the largest metrics of the faces besides f's that
 // draw text, false when f's own face draws it all. Chrome stretches a
