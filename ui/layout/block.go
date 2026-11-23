@@ -680,6 +680,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		// childFloats is how far down the floats under a block of this context reach,
 		// from its border top.
 		childFloats := negInf
+		// childTop is where the block's border top stood in the context as it was laid
+		// out, and laidTop where it ended up there, its own blocks' margins collapsed.
+		var childTop, laidTop float32
 		var lo output
 		if it.inSameBFC {
 			// Where the block's border box stands in the context, its auto margins
@@ -702,6 +705,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				overflow)
 			inLines = nil
 			childFloats = child.floatHeight
+			childTop, laidTop = ctx.y+childY, child.y
 			top := child.topAdjoiningFloats()
 			ctx.adjoining = [2]bool{ctx.adjoining[0] || top[0], ctx.adjoining[1] || top[1]}
 		} else {
@@ -773,6 +777,13 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			loc = point{avoid.x + extra + insetOffset.x, avoid.y + insetOffset.y}
 		}
 		if it.inSameBFC {
+			// Floats stand where the block was laid out: what follows goes from there, the
+			// margins its first block collapsed out through this one's top, or its own
+			// blocks', placed again where it settled.
+			if moved := laidTop - (loc.y - insetOffset.y) - ctx.y; moved != 0 &&
+				(laidTop != childTop || collapsingWithFirst && ownCollapse[0]) {
+				ctx.y += moved
+			}
 			ctx.floatHeight = fmax(ctx.floatHeight, loc.y-insetOffset.y+childFloats)
 		}
 		hasAutoX := !some(margin.l) || !some(margin.r)

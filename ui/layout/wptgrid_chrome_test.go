@@ -82,19 +82,18 @@ grid-auto-columns: 5px; grid-row-gap: 3px; width: min-content; height: 94px } di
 }
 
 // WPT css/css-grid/grid-model/grid-empty-floating-positioned-and-inline-001.html: empty
-// grids floated, positioned and inline, laid out as the empty blocks of its reference. The
-// floats' paragraph is a flow root where the page clears them with a br, whose clear is
-// missing.
+// grids floated, positioned and inline, laid out as the empty blocks of its reference.
 func TestWPTGridEmptyFloatingPositionedAndInlineMatchesChrome(t *testing.T) {
 	page := func(grid, inline string) *ui.Document {
 		return wptDoc(`span { width: 100px; height: 100px }
 .grid { display: `+grid+`; background-color: green }
 .inline-grid { display: `+inline+`; background-color: green }`,
-			ui.Div(ui.Style("display: flow-root"), ui.P(ui.Text("In this paragraph "),
+			ui.P(ui.Text("In this paragraph "),
 				ui.Span(ui.Class("grid"), ui.Style("float: left")),
 				ui.Text(" there should be "), ui.Span(ui.Class("grid"), ui.Style("float: right")),
 				ui.Text(" two empty grids.  One will float to the left and one will float to the right.  "+
-					"They should both be empty."))),
+					"They should both be empty.")),
+			ui.Br(ui.Attr("clear", "all")),
 			ui.P(ui.Text("This grid should be positioned to the right. "),
 				ui.Span(ui.Class("grid"), ui.Style("position: absolute; right: 8px"))),
 			ui.P(ui.Style("margin-top: 115px"), ui.Span(ui.Style("float: left; background-color: orange")),
@@ -121,12 +120,12 @@ func TestWPTFieldsetBaselineAlignmentMatchesChrome(t *testing.T) {
 
 // WPT css/css-flexbox/abspos/flex-abspos-staticpos-fallback-justify-content-001.html: the
 // static position of a positioned child of a flex row under justify-content's
-// distributions, falling back to their alignment where it overflows. A block clears the
-// floats where the page's br does (its clear is missing).
+// distributions, falling back to their alignment where it overflows, rows of floats
+// cleared by brs.
 func TestWPTFlexAbsposStaticPositionFallbackMatchesChrome(t *testing.T) {
 	const sheet = `.container { display: flex; flex-flow: row; padding: 1px 2px; border: 1px solid black;
 background: yellow; margin-bottom: 5px; margin-right: 5px; float: left }
-.clear { clear: both }
+br { clear: both }
 .big > .container { height: 10px; width: 16px }
 .small > .container { height: 2px; width: 4px }
 .container > * { position: absolute; background: teal; height: 6px; width: 8px }`
@@ -135,7 +134,11 @@ background: yellow; margin-bottom: 5px; margin-right: 5px; float: left }
 		for _, j := range []string{"space-between", "space-around", "space-evenly", "stretch"} {
 			args = append(args, ui.Div(ui.Class("container"), ui.Style("justify-content: "+j), ui.Div()))
 		}
-		return ui.Div(append(args, ui.Div(ui.Class("clear")))...)
+		args = append(args, ui.Br())
+		if class == "big" {
+			args = append(args, ui.Br())
+		}
+		return ui.Div(args...)
 	}
 	matchPages(t, geom.V2(800, 600), map[string]*ui.Document{"test": wptDoc(sheet, row("big"), row("small"))})
 }

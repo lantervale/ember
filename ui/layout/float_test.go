@@ -199,3 +199,44 @@ func TestAKeptLayoutWithFloatsMatchesAFreshOne(t *testing.T) {
 		})
 	}
 }
+
+func clearing(c style.Clear) func(*style.Computed) {
+	return func(st *style.Computed) { st.Clear = c }
+}
+
+func TestABreakThatClearsStartsTheNextLineBelowTheFloats(t *testing.T) {
+	p := el(dom.P, block, el(dom.Div, float(style.FloatLeft, 10, 30)), text("H"),
+		el(dom.Br, clearing(style.ClearBoth)), text("H"))
+	tr := lay(el(dom.Div, width(60), p), 200)
+	assert.Equal(t, []fragmentAt{{"H", 10, 0}, {"H", 0, 30}}, fragments(tr.Of[p]))
+	assert.Equal(t, float32(40), tr.Of[p].Size.Y)
+}
+
+func TestABreakClearingAtTheEndOfItsBlockMakesItHoldTheFloats(t *testing.T) {
+	p := el(dom.P, block, el(dom.Div, float(style.FloatLeft, 10, 30)), text("H"), el(dom.Br, clearing(style.ClearLeft)))
+	after := el(dom.P, block, text("H"))
+	tr := lay(el(dom.Div, width(60), p, after), 200)
+	assert.Equal(t, float32(30), tr.Of[p].Size.Y)
+	assert.Equal(t, []fragmentAt{{"H", 0, 0}}, fragments(tr.Of[after]), "below the float, at the left edge")
+}
+
+func TestABreakEndsItsLineWithTheElementsItCloses(t *testing.T) {
+	span := el(dom.Span, nil, text("H"), el(dom.Br, clearing(style.ClearBoth)))
+	p := el(dom.P, block, el(dom.Div, float(style.FloatLeft, 10, 30)), span, text("H"))
+	tr := lay(el(dom.Div, width(60), p), 200)
+	assert.Equal(t, geom.Rect{X: 10, W: 10, H: 10}, tr.Of[span].Rect(), "the span ends on the break's line")
+	assert.Equal(t, []fragmentAt{{"H", 10, 0}, {"H", 10, 10}}, fragments(tr.Of[p]),
+		"a break before the end of an element clears nothing, as Chrome's")
+}
+
+func TestBlocksAfterOneWhoseMarginsLeaveTheirParentClearItsFloatsWhereTheyStand(t *testing.T) {
+	f := el(dom.Div, float(style.FloatLeft, 10, 30))
+	p := el(dom.P, func(st *style.Computed) {
+		st.Display, st.Margin.Top, st.Margin.Bottom = style.Block, style.Px(10), style.Px(10)
+	}, f, text("H"))
+	outer := el(dom.Div, block, p)
+	cleared := el(dom.Div, func(st *style.Computed) { st.Display, st.Clear = style.Block, style.ClearBoth }, text("H"))
+	tr := lay(el(dom.Div, width(60), outer, cleared), 200)
+	bottom := tr.Of[outer].Pos.Y + tr.Of[p].Pos.Y + tr.Of[f].Pos.Y + tr.Of[f].Size.Y
+	assert.Equal(t, bottom, tr.Of[cleared].Pos.Y)
+}
