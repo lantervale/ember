@@ -28,3 +28,26 @@ func TestTheTextBesideAPieceIsShapedWithItWithinItsRunAndReadRoundItBeyond(t *te
 	assert.Empty(t, trail, "an edge with room cuts the run")
 	assert.Equal(t, "ab", after)
 }
+
+func TestTheTextBeforeAPieceShownRightToLeftIsOnItsRight(t *testing.T) {
+	// בד גה ו read in that order, shown from the left.
+	shown := []piece{
+		{kind: word, text: "ו", whole: 1},
+		{kind: gap, text: " ", whole: 1},
+		{kind: word, text: "גה", whole: 1},
+		{kind: edge, whole: 1},
+		{kind: word, text: "בד", whole: 1},
+	}
+	lead, _ := besideShown(shown, 2, -1, 1, true)
+	assert.Equal(t, "בד", lead)
+	trail, _ := besideShown(shown, 2, 1, 1, true)
+	assert.Equal(t, " ו", trail, "in the order it is read")
+	lead, _ = besideShown(shown, 2, -1, 1, false)
+	assert.Equal(t, "ו ", lead, "left to right, the text on its left")
+}
+
+func TestALinesTailFollowsThePieceHoldingItsLastWord(t *testing.T) {
+	tail := lineTail{whole: 1, run: 2, at: 4}
+	assert.True(t, tail.in([]piece{{kind: word, run: 1, at: 4}, {kind: word, run: 2, at: 4}}))
+	assert.False(t, tail.in([]piece{{kind: gap, run: 2, at: 4}, {kind: word, run: 2, at: 0}}))
+}

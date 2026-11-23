@@ -18,31 +18,30 @@ import (
 func (p *painter) verticalText(e entry, alpha float32) {
 	saved := p.s.Transform()
 	defer p.s.SetTransform(saved)
-	up := shown(e.b).Mode.Upward()
+	mode, parts := shown(e.b).Mode, p.selected(e.b)
 	for i := range e.b.Lines {
 		f := e.b.Lines[i]
 		r := f.Rect
-		line, turn := f, geom.Transform2D{X: geom.V2(0, 1), Y: geom.V2(-1, 0),
-			Origin: geom.V2(e.at.X+r.X+r.W, e.at.Y+r.Y)}
+		turn := LineTurn(mode, geom.Rect{X: e.at.X + r.X, Y: e.at.Y + r.Y, W: r.W, H: r.H})
+		line := f
 		line.Rect = geom.Rect{W: r.H, H: r.W}
-		line.Baseline = r.X + r.W - f.Baseline
-		if up {
-			turn = geom.Transform2D{X: geom.V2(0, -1), Y: geom.V2(1, 0), Origin: geom.V2(e.at.X+r.X, e.at.Y+r.Y+r.H)}
-			line.Baseline = f.Baseline - r.X
-		}
+		line.Baseline = LineBaseline(mode, f)
 		st := shown(e.b)
 		if f.Style != nil {
 			st = f.Style
 		}
+		sel, selected := lineSelection(parts, i, LineTurn(mode, r))
 		whole := *e.b
 		whole.Lines = []box.Fragment{line}
 		along := entry{b: &whole, clip: e.clip, pseudo: e.pseudo}
 		p.s.SetTransform(saved.Mul(turn))
 		p.lineDecorations(along, st, style.Underline|style.Overline, alpha)
-		p.lineDecorated = true
+		p.lineDecorated, p.lineSelecting = true, true
+		p.lineHighlight(st, sel, selected, alpha)
 		for _, seg := range p.orientedParts(line, st) {
 			one := *e.b
 			one.Lines = []box.Fragment{seg.Fragment}
+			p.selectPart(seg, sel, selected)
 			if !seg.upright {
 				p.s.SetTransform(saved.Mul(turn))
 				p.horizontalText(entry{b: &one, clip: e.clip, pseudo: e.pseudo}, alpha)
@@ -61,6 +60,9 @@ func (p *painter) verticalText(e entry, alpha float32) {
 			w := p.fonts.Advance(vst.Font, seg.Text) + st.Spacing(seg.Text)
 			one.Lines[0].Rect = geom.Rect{X: mid.X - w/2, Y: top, W: w, H: seg.Rect.W}
 			one.Lines[0].Baseline = top + seg.baseline
+			if len(p.lineParts) > 0 {
+				p.lineParts[0].Rect = one.Lines[0].Rect
+			}
 			p.s.SetTransform(saved)
 			if k := seg.Rect.W / w; st.Combine && k < 1 {
 				// combined text wider than its em is pressed into it
@@ -69,10 +71,76 @@ func (p *painter) verticalText(e entry, alpha float32) {
 			}
 			p.horizontalText(entry{b: &one, clip: e.clip, pseudo: e.pseudo}, alpha)
 		}
-		p.lineDecorated = false
+		p.lineDecorated, p.lineSelecting = false, false
 		p.s.SetTransform(saved.Mul(turn))
 		p.lineDecorations(along, st, style.LineThrough, alpha)
 	}
+}
+
+// selected is the parts of the run b the selection covers.
+func (p *painter) selected(b *box.Box) []Selected {
+	if p.sel == nil {
+		return nil
+	}
+	return p.sel.Parts(b)
+}
+
+// selectPart sets lineParts for seg, a part of a vertical line whose selected part is
+// sel where selected: a turned part takes sel, a standing one sel whole where sel
+// covers its middle.
+func (p *painter) selectPart(seg orientedPart, sel Selected, selected bool) {
+	p.lineParts = p.lineParts[:0]
+	if mid := seg.Rect.X + seg.Rect.W/2; selected && (!seg.upright || sel.Rect.X <= mid && mid < sel.Rect.X+sel.Rect.W) {
+		p.lineParts = append(p.lineParts, Selected{Rect: sel.Rect})
+	}
+}
+
+// lineHighlight draws the selection's background under sel, the selected part of a
+// vertical line in its frame, where selected.
+func (p *painter) lineHighlight(st *style.Computed, sel Selected, selected bool, alpha float32) {
+	if !selected || !st.Visible {
+		return
+	}
+	if back, _ := p.selectionColors(st, fade(st.Fill(), alpha), alpha); back.A > 0 {
+		p.s.Rect(p.snap(sel.Rect), back)
+	}
+}
+
+// LineTurn is the transform from the frame of a fragment of a vertical line of mode m,
+// r on the page, to the page: the horizontal line it is in its frame, x along it from
+// its start and y across from the side its glyphs' tops face, turned a quarter
+// clockwise, or anticlockwise for sideways-lr.
+func LineTurn(m style.WritingMode, r geom.Rect) geom.Transform2D {
+	if m.Upward() {
+		return geom.Transform2D{X: geom.V2(0, -1), Y: geom.V2(1, 0), Origin: geom.V2(r.X, r.Y+r.H)}
+	}
+	return geom.Transform2D{X: geom.V2(0, 1), Y: geom.V2(-1, 0), Origin: geom.V2(r.X+r.W, r.Y)}
+}
+
+// LineBaseline is where fragment f of a vertical line of mode m has its baseline in
+// its line's frame (LineTurn).
+func LineBaseline(m style.WritingMode, f box.Fragment) float32 {
+	if m.Upward() {
+		return f.Baseline - f.Rect.X
+	}
+	return f.Rect.X + f.Rect.W - f.Baseline
+}
+
+// TurnRect is r, a rectangle in the frame of xf's line, on the page.
+func TurnRect(xf geom.Transform2D, r geom.Rect) geom.Rect {
+	a, b := xf.Xform(geom.V2(r.X, r.Y)), xf.Xform(geom.V2(r.X+r.W, r.Y+r.H))
+	return geom.Rect{X: min(a.X, b.X), Y: min(a.Y, b.Y), W: abs(b.X - a.X), H: abs(b.Y - a.Y)}
+}
+
+// lineSelection is the part of line i of a vertical run that parts select, in the
+// line's frame, turn its transform to the run's space.
+func lineSelection(parts []Selected, i int, turn geom.Transform2D) (Selected, bool) {
+	for _, s := range parts {
+		if s.Line == i {
+			return Selected{Line: i, Rect: TurnRect(turn.Inverse(), s.Rect)}, true
+		}
+	}
+	return Selected{}, false
 }
 
 // lineDecorations draws the lines of st's text decorations along a vertical line,
