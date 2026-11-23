@@ -162,7 +162,7 @@ p { width: 1px; }
 func TestWhatAContainerQueryCannotAnswerIsAWarning(t *testing.T) {
 	for prelude, want := range map[string]string{
 		"(unknown-thing > 1px)":        "@container: the unknown-thing feature is not supported in a range",
-		"scroll-state(scrolled: top)":  "@container: scrolled:top is no scroll-state feature ui answers",
+		"scroll-state(scrolled: up)":   "@container: scrolled:up is no scroll-state feature ui answers",
 		"style(color: red)":            "@container: style() reads custom properties alone",
 		"(width > 10%)":                "@container: width can't take 10%",
 		"(prefers-color-scheme: dark)": "@container: the prefers-color-scheme feature is not supported",

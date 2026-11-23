@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="h"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#f00"/></linearGradient>
+    <filter id="d1" x="0" y="0" width="1" height="1"><feTurbulence baseFrequency=".08" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="10" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <filter id="d2" x="-.2" y="-.2" width="1.4" height="1.4"><feFlood flood-color="#c08000"/><feDisplacementMap in="SourceGraphic" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter>
+    <filter id="d3" x="-.2" y="-.2" width="1.4" height="1.4" color-interpolation-filters="sRGB"><feFlood flood-color="#c08000"/><feDisplacementMap in="SourceGraphic" scale="12" xChannelSelector="R" yChannelSelector="G"/></filter>
+  </defs>
+  <g filter="url(#d1)"><rect x="4" y="4" width="52" height="52" fill="#fff"/><path d="M8 30 H52 M30 8 V52" stroke="#36c" stroke-width="4"/></g>
+  <rect x="70" y="10" width="36" height="36" fill="#2a7" filter="url(#d2)"/>
+  <rect x="10" y="70" width="36" height="36" fill="#2a7" filter="url(#d3)"/>
+  <rect x="70" y="70" width="36" height="36" fill="#93c" stroke="#fc0" stroke-width="4" filter="url(#d1)"/>
+</svg>

@@ -376,3 +376,24 @@ func TestASpannerHoldsAPositionedBoxWhereItsLineHasIt(t *testing.T) {
 	assert.Equal(t, float32(20), tr.Of[abs].Rect().X, "after the text before it")
 	assert.Equal(t, float32(20), tr.Of[abs].Rect().Y)
 }
+
+func TestAFlexRowsItemsAreCutWhereTheColumnEnds(t *testing.T) {
+	a, b := para(4, nil), para(2, nil)
+	f := el(dom.Div, func(st *style.Computed) { st.Display = style.FlexDisplay }, a, b)
+	m := multicol(2, nil, f)
+	tr := lay(m, 600)
+	assert.Equal(t, float32(20), tr.Of[m].Size.Y)
+	assert.Equal(t, []geom.Rect{{W: 190, H: 20}, {X: 210, W: 190, H: 20}}, parts(tr.Of[f]))
+	assert.Equal(t, []fragmentAt{{"H", 0, 0}, {"H", 0, 10}, {"H", 210, 0}, {"H", 210, 10}}, fragments(tr.Of[a]))
+	assert.Len(t, parts(tr.Of[b]), 2, "stretched as tall as the line, cut with it")
+}
+
+func TestAForcedBreakCutsABoxThatAvoidsBreaks(t *testing.T) {
+	a := para(2, nil)
+	b := para(2, func(st *style.Computed) { st.BreakBefore = style.BreakColumn })
+	avoid := el(dom.Div, func(st *style.Computed) { st.Display, st.BreakInsideAvoid = style.Block, true }, a, b)
+	m := multicol(2, nil, avoid)
+	tr := lay(m, 600)
+	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 20}, tr.Of[b].Rect())
+	assert.Len(t, parts(tr.Of[avoid]), 2)
+}

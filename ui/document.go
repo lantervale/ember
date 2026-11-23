@@ -392,7 +392,7 @@ func (d *Document) Layout(size geom.Vec2) {
 			return
 		}
 		d.replay.repaint = true
-		if d.trans.RequeryScroll(scrollState) {
+		if d.trans.RequeryScroll(d.scrollState) {
 			d.style()
 			d.lay(size)
 			d.requery(size)
@@ -446,6 +446,7 @@ func (d *Document) lay(size geom.Vec2) {
 	}
 	d.findFollowers()
 	d.placed += len(d.tree.Of)
+	d.resnap()
 }
 
 // maxRequeries bounds the layouts one Layout runs again for its @container
@@ -457,7 +458,7 @@ const maxRequeries = 8
 // that changes an answer (decision 0120).
 func (d *Document) requery(size geom.Vec2) {
 	for range maxRequeries {
-		if !d.trans.Requery(contentBox) && !d.trans.RequeryScroll(scrollState) {
+		if !d.trans.Requery(contentBox) && !d.trans.RequeryScroll(d.scrollState) {
 			return
 		}
 		d.style()
@@ -483,14 +484,16 @@ func contentBox(n *Node) (float32, float32, bool) {
 }
 
 // scrollState is n's scroll state as a scroll-state() query reads it: the
-// sides a sticky box stands moved from, and those a scroll container can
-// scroll toward.
-func scrollState(n *Node) css.ScrollState {
+// sides a sticky box stands moved from; those a scroll container can
+// scroll toward and those it last scrolled toward; the axes a snap area
+// is snapped on.
+func (d *Document) scrollState(n *Node) css.ScrollState {
 	var s css.ScrollState
 	b, placed := dom.Data(n).Placed.(*box.Box)
 	if !placed || b == nil || b.Style == nil {
 		return s
 	}
+	s.Snapped, s.Scrolled = d.snappedOf(n), d.scrolledOf(n)
 	const near = 0.5
 	if b.Style.Position == style.Sticky {
 		s.Stuck |= side(b.Sticky.Y > near, css.SideTop) | side(b.Sticky.Y < -near, css.SideBottom) |
@@ -704,6 +707,9 @@ func (d *Document) tick(c *twod.Canvas) bool {
 		}
 		d.clock = now
 		d.animate()
+		if d.stepScrolls() {
+			animating = true
+		}
 		d.drawnIn(w.Time().Frame)
 	}
 	return animating

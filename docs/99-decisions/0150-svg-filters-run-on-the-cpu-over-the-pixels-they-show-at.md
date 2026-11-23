@@ -1,6 +1,6 @@
 # 0150. SVG filters run on the CPU over the pixels they show at
 
-- Status: Accepted
+- Status: Superseded by [0161](0161-svg-filters-run-in-the-elements-own-space-with-every-primitive-chrome-draws.md) for a filter under a rotation or a skew, which runs in the element's own space; the rest stands
 - Date: 2026-11-23
 - Area: assets
 - Owner: engine

@@ -158,9 +158,14 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0153 | [Text is rasterized at its own size, and dashes are laid out in device pixels](0153-text-is-rasterized-at-its-own-size-and-dashes-are-laid-in-device-pixels.md) | rendering |
 | 0154 | [Complex counter styles, inside markers and scroll state follow Chrome's algorithms](0154-complex-counter-styles-inside-markers-and-scroll-state-follow-chromes-algorithms.md) | rendering |
 | 0155 | [The system says its contrast, forced colours and selection colours, read-only](0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md) | api |
+| 0156 | [Columns cut what they hold through one flow of units](0156-columns-cut-what-they-hold-through-one-flow-of-units.md) | rendering |
 | 0157 | [Arabic is joined, and marks attached, by HarfBuzz's stages and masks](0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) | rendering |
 | 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
 | 0159 | [A pattern is read as JavaScript, and a form is submitted by its button](0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md) | api |
+| 0160 | [A control of appearance: none is drawn from its CSS and its parts](0160-a-control-of-appearance-none-is-drawn-from-its-css-and-its-parts.md) | api |
+| 0161 | [SVG filters run in the element's own space, with every primitive Chrome draws](0161-svg-filters-run-in-the-elements-own-space-with-every-primitive-chrome-draws.md) | assets |
+| 0162 | [A copy puts the selection's markup beside its text](0162-a-copy-puts-the-selections-markup-beside-its-text.md) | api |
+| 0163 | [Scrolls snap and glide as Chrome's strategies, on the Document's clock](0163-scrolls-snap-and-glide-as-chromes-strategies-on-the-documents-clock.md) | api |
 | 0164 | [Indic, Khmer, Myanmar and USE scripts are shaped by HarfBuzz's syllabic shapers](0164-indic-khmer-myanmar-and-use-scripts-are-shaped-by-harfbuzzs-syllabic-shapers.md) | rendering |
 
 ## Writing one

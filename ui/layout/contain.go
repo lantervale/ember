@@ -36,8 +36,8 @@ func (n *node) contain(in input) input {
 		ratio := aspectRatio(st)
 		adj := boxSizingAdjustment(st, pb.sum())
 		styled = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
-		minSize = resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
+		minSize = stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+		maxSize = stretched(resolveMax(st.MaxSize, in.parent).mAdd(adj), st.MaxSize, st, in.parent)
 	}
 	empty := in.known.or(styled).or(inset).mClamp(minSize, maxSize).mMax(inset)
 	if axes.w && !some(in.known.w) {

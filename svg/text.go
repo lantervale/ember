@@ -518,6 +518,9 @@ type textPath struct {
 // transform of the path element, and where its text starts along it.
 func (b *builder) textPath(props map[string]string, st *style) *textPath {
 	var path Path
+	// author is the length the path element says it has, 0 for none: a
+	// startOffset in numbers is of it.
+	author := 0.0
 	if d, ok := props["path"]; ok {
 		path = parsePath(d, MaxSegments-b.segments+1)
 	} else {
@@ -532,6 +535,9 @@ func (b *builder) textPath(props map[string]string, st *style) *textPath {
 		}
 		refProps := b.props(ref)
 		path = b.path(ref, refProps, st.fontSize)
+		if v, valid := number(refProps["pathLength"]); valid && v > 0 {
+			author = v
+		}
 		if t, valid := parseTransform(refProps["transform"]); valid && t.finite() {
 			moved := Path{Verbs: path.Verbs, Points: make([]Point, len(path.Points))}
 			for i, p := range path.Points {
@@ -559,7 +565,11 @@ func (b *builder) textPath(props map[string]string, st *style) *textPath {
 	}
 	tp.end = tp.pts[len(tp.pts)-1]
 	if v, ok := props["startOffset"]; ok {
-		tp.start, _ = length(v, lengthContext{whole: tp.dist[len(tp.dist)-1], em: st.fontSize})
+		total := tp.dist[len(tp.dist)-1]
+		tp.start, _ = length(v, lengthContext{whole: total, em: st.fontSize})
+		if author > 0 && !strings.HasSuffix(strings.TrimSpace(v), "%") {
+			tp.start *= total / author
+		}
 	}
 	return tp
 }

@@ -26,12 +26,22 @@ const (
 	SideLeft
 )
 
+// SnapAxes are the axes a snap area is snapped to.
+type SnapAxes uint8
+
+const (
+	SnappedX SnapAxes = 1 << iota
+	SnappedY
+)
+
 // ScrollState is what a scroll-state() query asks of a container, as the
 // last layout or scroll left it: the sides it is stuck to as a sticky
-// box, and those toward which it can scroll as a scroll container. ui
-// snaps no scroll, so it is never snapped.
+// box; those toward which it can scroll, and those its last relative
+// scroll went toward on each axis, as a scroll container; the axes its
+// snap container is snapped to it on, as a snap area.
 type ScrollState struct {
-	Stuck, Scrollable Sides
+	Stuck, Scrollable, Scrolled Sides
+	Snapped                     SnapAxes
 }
 
 // scrollStateFeatures are the words each scroll-state() feature takes.
@@ -42,6 +52,8 @@ var scrollStateFeatures = map[string][]string{
 	"scrollable": {kwNone, kwTop, kwRight, kwBottom, kwLeft, kwBlockStart, kwBlockEnd, kwInlineStart, kwInlineEnd,
 		"x", "y", kwBlock, kwInline},
 	"snapped": {kwNone, "x", "y", kwBlock, kwInline, kwBoth},
+	"scrolled": {kwNone, kwTop, kwRight, kwBottom, kwLeft, kwBlockStart, kwBlockEnd, kwInlineStart, kwInlineEnd,
+		"x", "y", kwBlock, kwInline},
 }
 
 // scrollStateQuery reads scroll-state(): one feature, or conditions on
@@ -103,6 +115,10 @@ func (c *mediaCond) scrollEval(s *subject) tri {
 		on = s.scroll.Stuck
 	case "scrollable":
 		on = s.scroll.Scrollable
+	case "scrolled":
+		on = s.scroll.Scrolled
+	case "snapped":
+		return c.snappedEval(s.scroll.Snapped)
 	}
 	switch c.word {
 	case "":
@@ -111,6 +127,21 @@ func (c *mediaCond) scrollEval(s *subject) tri {
 		return triOf(on == 0)
 	}
 	return triOf(on&sidesOf(c.word, s.rtl) != 0)
+}
+
+// snappedEval answers scroll-state(snapped) for an area snapped on axes.
+func (c *mediaCond) snappedEval(axes SnapAxes) tri {
+	switch c.word {
+	case "":
+		return triOf(axes != 0)
+	case kwNone:
+		return triOf(axes == 0)
+	case "x", kwInline:
+		return triOf(axes&SnappedX != 0)
+	case "y", kwBlock:
+		return triOf(axes&SnappedY != 0)
+	}
+	return triOf(axes == SnappedX|SnappedY)
 }
 
 // sidesOf are the physical sides a scroll-state() word names on a

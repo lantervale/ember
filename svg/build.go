@@ -19,6 +19,10 @@ const (
 	elemRect     = "rect"
 	elemPolygon  = "polygon"
 	nonScaling   = "non-scaling-stroke"
+	boxBorder    = "border-box"
+	boxFill      = "fill-box"
+	closestSide  = "closest-side"
+	farthestSide = "farthest-side"
 )
 
 const (
@@ -575,11 +579,14 @@ type effects struct {
 	isolated      bool
 	filter, shape string
 	clip, mask    *node
+	// cssMask is a mask of a CSS image, where mask names no element.
+	cssMask *maskLayer
 }
 
 // layered reports effects that need the group in a layer of its own.
 func (fx *effects) layered() bool {
-	return fx.isolated || fx.filter != "" || fx.shape != "" || fx.clip != nil || fx.mask != nil
+	return fx.isolated || fx.filter != "" || fx.shape != "" || fx.clip != nil || fx.mask != nil ||
+		fx.cssMask != nil
 }
 
 // effectsOf reads an element's effects; draw is false when they hide it.
@@ -603,7 +610,17 @@ func (b *builder) effectsOf(props map[string]string) (effects, bool) {
 		fx.clip, cyclicClip = b.reference(fx.shape, "clip-path", "clipPath")
 		fx.shape = ""
 	}
-	fx.mask, cyclicMask = b.reference(props["mask"], "mask", "mask")
+	layer, odd := maskLayerOf(props)
+	switch img := strings.TrimSpace(layer.image); {
+	case img == "" || img == none:
+	case strings.HasPrefix(img, "url("):
+		fx.mask, cyclicMask = b.reference(img, "mask", "mask")
+	default:
+		fx.cssMask = &layer
+	}
+	if odd && (fx.mask != nil || fx.cssMask != nil) {
+		b.unsupported("mask")
+	}
 	return fx, fx.opacity != 0 && !cyclicClip && !cyclicMask
 }
 
@@ -635,6 +652,12 @@ func (b *builder) applyEffects(group *Group, fx effects, st *style, m Matrix) (b
 	if fx.mask != nil {
 		if group.Mask, err = b.mask(fx.mask, m, bbox); err != nil {
 			return false, err
+		}
+	}
+	if fx.cssMask != nil {
+		group.Mask = b.cssMask(*fx.cssMask, st, m, group.Items, bbox)
+		if group.Mask == nil && isImage(fx.cssMask.image) {
+			b.unsupported("mask")
 		}
 	}
 	return true, nil

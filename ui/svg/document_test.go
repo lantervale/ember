@@ -21,15 +21,14 @@ const bare = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="
 
 // samples are a sheet and pictures of each kind: sized.svg asks for
 // 200×100, shaped.svg has a view box of 48×24 alone, plain.svg asks for
-// 60×40 with no view box, bare.svg for nothing, and filter.svg and
+// 60×40 with no view box, bare.svg for nothing, and effect.svg and
 // object.svg use what is not drawn.
 func samples(t *testing.T, css string) fstest.MapFS {
 	t.Helper()
 	files := fstest.MapFS{
 		"page.css": {Data: []byte(css)}, "bare.svg": {Data: []byte(bare)},
-		"filter.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` +
-			`<filter id="f"><feTurbulence/></filter>` +
-			`<rect width="24" height="24" filter="url(#f)"/></svg>`)},
+		"effect.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` +
+			`<rect width="24" height="24" vector-effect="non-rotation"/></svg>`)},
 		"object.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><foreignObject/></svg>`)},
 	}
 	for name, file := range map[string]string{
@@ -87,7 +86,7 @@ func TestAViewBoxAloneTakesTheRoomOfAFlexRowAndOfAnAbsoluteBox(t *testing.T) {
 
 func TestWhatAnSVGUsesThatIsNotDrawnIsAWarningNamingTheFile(t *testing.T) {
 	d := ui.NewDocument(ui.Stylesheet(samples(t, `body { background: url(object.svg); }`), "page.css"))
-	for _, src := range []string{"filter.svg", "filter.svg", "sized.svg"} {
+	for _, src := range []string{"effect.svg", "effect.svg", "sized.svg"} {
 		d.Body().Append(ui.Img(ui.Attr("src", src)))
 	}
 	win := platform.NewWindow(platform.Size(400, 300))
@@ -98,7 +97,7 @@ func TestWhatAnSVGUsesThatIsNotDrawnIsAWarningNamingTheFile(t *testing.T) {
 		texts = append(texts, w.Error())
 	}
 	assert.ElementsMatch(t, []string{
-		"ui: image filter.svg: image/svg+xml is not drawn: feTurbulence",
+		"ui: image effect.svg: image/svg+xml is not drawn: vector-effect",
 		"ui: image object.svg: image/svg+xml is not drawn: foreignObject",
 	}, texts)
 }

@@ -532,10 +532,15 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		rem = initial.Font.Size
 	}
 	casc := r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
-	r.overKeyframe(casc)
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
+	if r.m.native && !x.appearance(casc).Native() {
+		r.m.bare = true
+		casc = r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
+		r.m.bare = false
+	}
+	r.overKeyframe(casc)
 	if r.over != nil {
 		x.over = r.over(n)
 	}
@@ -566,11 +571,24 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		}
 	}
 	r.scrollbars(&c, n, rem)
+	r.controlParts(&c, n, rem)
 	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
 		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
 		r.counts = true
 	}
 	return &c
+}
+
+// appearance is the appearance casc gives x's element, read before the
+// rest: the rules of a control's own look hold only while it isn't none.
+func (x *ctx) appearance(casc cascaded) style.Appearance {
+	c := initial
+	y := *x
+	y.c = &c
+	y.customs(casc.custom)
+	i := orderIndex["appearance"]
+	y.apply(&longhands[i], casc.longhands[i])
+	return c.Appearance
 }
 
 // transitOf has x tell r's transit of n's style.
@@ -1168,7 +1186,8 @@ func (x *ctx) display(root bool) {
 	x.webkitBox()
 	switch x.parent.Display {
 	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
-		if !root {
+		// A -webkit-box's inline-level children stay inline, its lines wrapped in one item.
+		if !root && !x.parent.WebkitBox {
 			c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 			c.Float = style.FloatNone
 		}
@@ -1187,7 +1206,9 @@ func (x *ctx) display(root bool) {
 }
 
 // webkitBox lays display: -webkit-box out as Chrome does: a vertical one
-// clamping its lines as flow-root, any other as flex along its orient.
+// clamping its lines as flow-root, any other as flex along its orient and
+// direction on one line, packed and aligned by -webkit-box-pack and
+// -webkit-box-align alone.
 func (x *ctx) webkitBox() {
 	c := x.c
 	switch {
@@ -1199,10 +1220,16 @@ func (x *ctx) webkitBox() {
 			c.Display = style.Block
 		}
 		c.FlowRoot = true
-	case c.BoxVertical:
-		c.Direction = style.Column
 	default:
 		c.Direction = style.Row
+		if c.BoxVertical {
+			c.Direction = style.Column
+		}
+		if c.BoxReverse {
+			c.Direction++
+		}
+		c.Wrap = style.NoWrap
+		c.JustifyContent, c.AlignItems = c.BoxPack, c.BoxAlign
 	}
 }
 
@@ -1555,6 +1582,15 @@ func linear(c Component, cur color.Color) color.Color {
 }
 
 //nolint:gochecknoglobals // lookup table
+var appearances = func() map[string]style.Appearance {
+	m := map[string]style.Appearance{}
+	for a, name := range style.AppearanceNames {
+		m[name] = style.Appearance(a)
+	}
+	return m
+}()
+
+//nolint:gochecknoglobals // lookup table
 var verticalAligns = map[string]style.VerticalAlign{
 	kwBaseline: style.AlignBaselineText, kwSub: style.AlignSub, kwSuper: style.AlignSuper,
 	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
@@ -1874,11 +1910,35 @@ var props = func() map[string]prop {
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "avoid", "avoid-column") }, flips[bool]()),
 		"break-before": keyword(func(c *style.Computed) *style.Break { return &c.BreakBefore }, breaks),
 		"break-after":  keyword(func(c *style.Computed) *style.Break { return &c.BreakAfter }, breaks),
-		"line-clamp":   field(func(c *style.Computed) *int { return &c.LineClamp }, clampOf, flips[int]()),
+		"line-clamp": {
+			set: func(x *ctx, v []Component) {
+				x.c.LineClamp, x.c.NoEllipsis = 0, false
+				for _, c := range v {
+					if c.Kind == Number {
+						x.c.LineClamp = int(c.Num)
+					}
+					x.c.NoEllipsis = x.c.NoEllipsis || isWord(c, "no-ellipsis")
+				}
+			},
+			inherit: func(dst, src *style.Computed) { dst.LineClamp, dst.NoEllipsis = src.LineClamp, src.NoEllipsis },
+			anim:    anim{kind: discrete},
+		},
 		"-webkit-line-clamp": field(func(c *style.Computed) *int { return &c.WebkitLineClamp }, clampOf,
 			flips[int]()),
 		"-webkit-box-orient": field(func(c *style.Computed) *bool { return &c.BoxVertical },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "vertical", "block-axis") }, flips[bool]()),
+		"-webkit-box-pack": keyword(func(c *style.Computed) *style.Align { return &c.BoxPack },
+			map[string]style.Align{"start": style.AlignFlexStart, "end": style.AlignFlexEnd,
+				"center": style.AlignCenter, kwJustify: style.AlignSpaceBetween}),
+		"-webkit-box-align": keyword(func(c *style.Computed) *style.Align { return &c.BoxAlign },
+			map[string]style.Align{"start": style.AlignFlexStart, "end": style.AlignFlexEnd,
+				"center": style.AlignCenter, "baseline": style.AlignBaseline, "stretch": style.AlignStretch}),
+		"-webkit-box-direction": field(func(c *style.Computed) *bool { return &c.BoxReverse },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "reverse") }, flips[bool]()),
+		"-webkit-box-flex": field(func(c *style.Computed) *float32 { return &c.BoxFlex },
+			func(x *ctx, v []Component) float32 { return x.num(v[0]) }, numbers(0, math.MaxFloat32)),
+		"-webkit-box-ordinal-group": field(func(c *style.Computed) *int { return &c.BoxOrdinal },
+			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 		"orphans": field(func(c *style.Computed) *int { return &c.Orphans },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(1)),
 		"widows": field(func(c *style.Computed) *int { return &c.Widows },
@@ -2300,7 +2360,7 @@ var props = func() map[string]prop {
 			wordOf(blendModes), flips[[]style.BlendMode]()),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
-		"appearance": {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
+		"appearance": keyword(func(c *style.Computed) *style.Appearance { return &c.Appearance }, appearances),
 		"resize":     {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
@@ -2343,6 +2403,7 @@ var props = func() map[string]prop {
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}}
 	m["border-image-outset"] = noop
 	maps.Copy(m, contentProps())
+	maps.Copy(m, snapProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
