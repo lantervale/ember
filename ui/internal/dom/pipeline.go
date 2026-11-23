@@ -115,6 +115,9 @@ type Pipeline struct {
 	density  float32
 	choosing bool
 	source   *Node
+	// Near is set on an img that loads lazily once it came near the
+	// viewport: it shows its picture from then on.
+	Near bool
 	// Canvas is a canvas element's machine, made with it since it holds
 	// the game's drawing, for the Document to take as the element's.
 	Canvas any

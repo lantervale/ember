@@ -65,10 +65,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
-| a table row, a grid container, a table with a caption cut by a column | kept whole, where Chrome cuts them |
-| boxes side by side cut by a column (a flex row's items, a positioned box beside the lines of its containing block) whose lines don't line up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
-| a table with `border-spacing` cut by a column | the spacing after its last row kept in its last part, where Chrome leaves it out and balances the columns without it |
+| `column-span: all` under a block with a margin, a border or padding, deeper in the container than its children | laid out in its column, where Chrome spans it and cuts the blocks round it, their margins, borders and padding on their parts |
+| a table row cut by a column | kept whole, where Chrome cuts its cells, each where its own content allows |
+| boxes side by side cut by a column (a flex row's items, a grid row's, a positioned box beside the lines of its containing block) whose lines don't line up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows: the columns' starts are one place in the flow for all of them |
 | a table with a collapsed column as a grid item, or as a flex item with a width of its own | laid out at the width its container gives it, where Chrome narrows the grid item's by the column and sizes the flex item's apart; a flex item of an automatic width keeps it, as Chrome |
 | a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
@@ -80,9 +79,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `summary`'s marker in a font without ▸ | measured with ui's fallback face for the triangle, where Chrome on macOS takes 1.06em whatever the font: about 3 points narrower at 16px |
 | the presentational attributes but those [read](03-css.md): `link`, `vlink` and `alink` on `body` | read, and they do nothing |
 | a `br` ending the last line a `-webkit-line-clamp` or `line-clamp` shows | no wider than before, where Chrome's is as wide as the ellipsis drawn in its place |
-| `line-clamp: auto`, `-webkit-legacy` | refused, where Chrome clamps at the last line its height holds |
-| `line-clamp` with `no-ellipsis` ending inside a block of its own | as high as the clamped line ends, where Chrome's is that block's bottom margin higher |
-| past a `line-clamp`'s last line | the inline elements' backgrounds and borders, the floats and the positioned boxes are still drawn, and what it doesn't draw still takes the pointer |
+| `line-clamp: auto` whose height holds no line | shows the first, where Chrome shows none and is no taller than its padding |
+| `line-clamp: auto` whose last line fits but the padding below it in its block doesn't | the blocks after the clamp laid out whole, where Chrome's keep the clamp it first tried, one line lower |
+| `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
+| past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
 
 ## Backgrounds and borders
 
@@ -149,7 +149,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a form's submission | Chrome's validation bubble is not shown, and nothing is sent: `action`, `method`, `formaction`, `target` are the program's to read |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `container-type: anchored` | refused with a warning |
-| a scroll by the user gliding, `scroll-snap-type` on both axes snapping to one area on both (Chrome's mutual snap), snapping a selection's drag | the wheel, the keys and a held thumb move at once, the keys to their snap position too (the wheel and the thumb glide to theirs), each axis picks its own nearest area, and a drag past an edge never snaps, where Chrome glides the user's scrolls as the system says, prefers an area aligned on both axes and snaps once a drag ends |
+| a trackpad's or a smooth wheel's scroll on Windows, Linux and the web | counted as a mouse's notches, three lines each and gliding, as GLFW and the browser's `deltaY` tell them: only macOS says a turn is precise ([decision 0169](../99-decisions/0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md)) |
+| a `ScrollBy` moving both axes of a container that snaps on both, by Chrome's displacement strategy | lands as Chrome's search reads, which in some layouts is another area than Chrome 157 lands on |
+| a click held on a scrollbar's track | pages once, where Chrome pages again while it is held |
+| the arrows and Space with nothing focused on a Document without `ScrollingViewport()` | left to the game, where Chrome scrolls ([decision 0169](../99-decisions/0169-the-users-scrolls-glide-on-chromes-curves-and-two-axis-snaps-land-where-both-areas-show.md)) |
 | `overscroll-behavior` on a touch's scroll, `overscroll-behavior: none`'s bounce | ui scrolls by no touch and bounces nothing: `contain` and `none` stop the chain alike |
 | `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
@@ -183,12 +186,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| an animated picture off-screen, or in no element shown | plays on, where Chrome pauses it; it begins when it lands, where Chrome begins it when first painted ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
-| an animation of more than 2^25 pixels in all its frames | plays the frames before that, where Chrome decodes them as they show |
-| a GIF frame reaching past the picture's size | no picture, and a warning (`gif: frame bounds larger than image bounds`), where Chrome cuts the frame |
+| an animated picture out of view under a transform, or in a box paint can't bound (`Box.Loose`), or with `EMBER_UI_CULL=off` | plays on, as paint draws it, where Chrome stands it still when none of it shows; one scrolled out of the viewport or of a scroll container stands still as in Chrome ([decision 0167](../99-decisions/0167-pictures-load-play-and-choose-again-when-a-desktop-chrome-does.md)) |
+| an animation out of view for more than one play of a picture played a number of times | counts the plays it missed as one, as Chrome is assumed to; only one played for ever is compared |
 | AVIF | no picture, and a warning; `web.Images` does not ask for it: no reader in pure Go ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
 | a `source` of AVIF (`type="image/avif"`) | passed over, where Chrome takes it: the next source, or the `img`'s own pictures |
-| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where a desktop Chrome waits for it to near the viewport; headless Chrome, the reference, asks for them all before the load event, so no margin can be checked ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
+| `loading="lazy"` on a slow network | asked for within Chrome's margins on a fast one, 1250 points along the page and 625 across, where Chrome widens them on 3G and slower |
+| `loading="lazy"` in an `iframe` | near its own Document's viewport, where Chrome measures it against the page's; an `iframe`'s own `loading` is not read |
+| the order Chrome asks for pictures in | by `fetchpriority` alone, six at a time; Chrome also lets a few low ones through while the page is laid out, raises those in view and starts what its parser found first, so that only a high picture going before the rest is compared |
 | the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
 | an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |
 | an `svg` element whose markup changes every frame | each state is one more picture the Document keeps |

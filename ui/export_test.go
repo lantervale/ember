@@ -154,6 +154,15 @@ func Bidi(n *Node) (string, string) {
 	return dir, [...]string{"normal", "embed", "isolate", "bidi-override", "isolate-override", "plaintext"}[st.Bidi]
 }
 
+// ShownFrame is the frame d shows of the animation url names, -1 when it
+// plays none there.
+func ShownFrame(d *Document, url string) int {
+	if p, ok := d.playing[url]; ok {
+		return p.frame
+	}
+	return -1
+}
+
 // fieldLine is line l of field n's text run, laid out, in the document's
 // space as paint places it.
 func fieldLine(d *Document, n *Node, l textedit.Layout, line int) geom.Rect {

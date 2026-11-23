@@ -64,14 +64,14 @@ func (p *tallPage) wheel(at geom.Vec2, lines float32) {
 	p.in.SetMouse(at)
 	p.w.RunFrames(1)
 	p.in.AddWheel(geom.V2(0, lines))
-	p.w.RunFrames(2)
+	p.w.RunFrames(settle)
 }
 
 func (p *tallPage) key(k input.Key) {
 	p.in.SetKey(k, true)
 	p.w.RunFrames(1)
 	p.in.SetKey(k, false)
-	p.w.RunFrames(1)
+	p.w.RunFrames(settle)
 }
 
 const pageHeight = 40 + 20 + 100 + 2000 + 30
@@ -135,7 +135,7 @@ func TestAScrollerInThePageTakesTheWheelFirstThenThePage(t *testing.T) {
 func TestPageKeysScrollTheViewport(t *testing.T) {
 	p := newScrollingPage(t, "")
 	p.key(input.KeyPageDown)
-	assert.InDelta(t, 300, p.scrolled(), 1e-3, "a page is the viewport")
+	assert.InDelta(t, 262, p.scrolled(), 1e-3, "a page is seven eighths of the viewport, as Chrome's")
 	p.key(input.KeyEnd)
 	assert.InDelta(t, pageHeight-300, p.scrolled(), 1e-3)
 	p.key(input.KeyHome)

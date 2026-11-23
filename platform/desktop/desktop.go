@@ -1008,7 +1008,14 @@ func (d *driver) listen(h *glfw.Window, win *platform.Window) {
 		in.SetMouseButton(input.MouseButton(b), action == glfw.Press)
 	})
 	h.SetCursorPosCallback(func(_ *glfw.Window, x, y float64) { in.SetMouse(geom.V2(float32(x), float32(y))) })
-	h.SetScrollCallback(func(_ *glfw.Window, x, y float64) { in.AddWheel(geom.V2(float32(x), float32(y))) })
+	wheelPrecise(h)
+	h.SetScrollCallback(func(_ *glfw.Window, x, y float64) {
+		if wheelPrecise(h) {
+			in.AddPreciseWheel(geom.V2(float32(x), float32(y)))
+		} else {
+			in.AddWheel(geom.V2(float32(x), float32(y)))
+		}
+	})
 	listenTouches(h, in)
 	listenText(h, in)
 	h.SetDropCallback(func(_ *glfw.Window, paths []string) {
@@ -1023,6 +1030,7 @@ func (d *driver) listen(h *glfw.Window, win *platform.Window) {
 func (d *driver) destroy(n *native) {
 	d.pending = slices.DeleteFunc(d.pending, func(p *native) bool { return p == n })
 	forgetTouches(n.h)
+	forgetWheel(n.h)
 	forgetText(n.h)
 	n.window.Attach(nil)
 	for _, c := range n.cursors {

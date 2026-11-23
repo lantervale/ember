@@ -141,6 +141,9 @@ type Box struct {
 	// getBoundingClientRect.
 	Fragments []geom.Rect
 	Broken    bool
+	// Hidden is how many of an inline element's last Fragments lie on lines
+	// past the last a line-clamp shows: laid out, never drawn nor hit.
+	Hidden int
 	// Columns is a multi-column container's columns, nil for any other box.
 	Columns *Columns
 	// Baseline is the first baseline's y, for alignment.
