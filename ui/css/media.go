@@ -347,7 +347,7 @@ type mediaParser struct {
 	// property: Chrome holds no condition that has one, whatever its other
 	// queries answer.
 	standardStyle bool
-	warn      func(pos Pos, format string, args ...any)
+	warn          func(pos Pos, format string, args ...any)
 }
 
 // rule is the at-rule the queries stand in, as warnings name it, and
