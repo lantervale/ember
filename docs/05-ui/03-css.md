@@ -296,7 +296,7 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | Refused | Use |
 |---|---|
 | `text-decoration: wavy`, `blink` | solid, double, dotted or dashed |
-| `word-wrap`, `grid-gap`, `grid-row-gap`, `grid-column-gap` | `overflow-wrap`, `gap`, `row-gap`, `column-gap` |
+| `word-wrap`, `grid-gap`, `grid-row-gap`, `grid-column-gap` | `overflow-wrap`, `gap`, `row-gap`, `column-gap`; under `ui.BrowserSheets()` they are read as those, as Chrome does |
 | `zoom` | `transform: scale()` |
 | `clip` | `overflow: clip` |
 | `clip-path: url()` | a basic shape: `polygon()` or `path()` for an SVG `clipPath`'s outline |

@@ -254,7 +254,7 @@ var shorthands = map[string][]string{
 		"border-bottom-left-radius"},
 	"border-image": {"border-image-source", "border-image-slice", "border-image-width", "border-image-outset",
 		"border-image-repeat"},
-	"gap":           {"row-gap", "column-gap"},
+	shortGap:        {"row-gap", "column-gap"},
 	"flex":          {"flex-grow", "flex-shrink", "flex-basis"},
 	"flex-flow":     {"flex-direction", "flex-wrap"},
 	"place-items":   {"align-items", "justify-items"},
@@ -316,6 +316,20 @@ var outside = map[string]string{
 	"box-flex":        "old flexbox is not supported; use flex",
 	"zoom":            "zoom is not supported; use transform: scale()",
 	"clip":            "clip is not supported; use overflow: clip",
+}
+
+// shortGap is gap, the shorthand of row-gap and column-gap.
+const shortGap = "gap"
+
+// oldNames are the names of outside a browser's sheet reads as the plain property they
+// were renamed to, as Chrome does.
+//
+//nolint:gochecknoglobals // lookup table
+var oldNames = map[string]string{
+	"word-wrap":       "overflow-wrap",
+	"grid-gap":        shortGap,
+	"grid-row-gap":    "row-gap",
+	"grid-column-gap": "column-gap",
 }
 
 // checkProperty returns why name can't be used, or "" when it can.
