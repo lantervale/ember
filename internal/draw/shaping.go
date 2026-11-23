@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/image/font/sfnt"
-	"golang.org/x/text/unicode/bidi"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/shape"
@@ -78,7 +77,7 @@ func (f *Font) plan(face int, script shape.Tag, features string) *shape.Plan {
 // each face's own: each run of clusters one face draws shaped together,
 // a picture or a character no face has breaking the run. Text right to
 // left is shaped in its order and each line given from its end, its
-// brackets turned round.
+// characters that have mirror images drawn as them.
 func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 	if rtl {
 		line := f.line[:0]
@@ -142,24 +141,16 @@ func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 	f.pending = run
 }
 
-// mirrored is s with each bracket turned round, as text right to left
-// draws it.
+// mirrored is s with each character that has a mirror image drawn as
+// it, as text right to left draws it (UAX #9, L4).
 func mirrored(s string) string {
-	if !strings.ContainsFunc(s, isBracket) {
+	if !strings.ContainsFunc(s, func(r rune) bool { _, ok := shape.Mirror(r); return ok }) {
 		return s
 	}
 	return strings.Map(func(r rune) rune {
-		if isBracket(r) {
-			m, _ := utf8.DecodeRuneInString(bidi.ReverseString(string(r)))
-			return m
-		}
-		return r
+		m, _ := shape.Mirror(r)
+		return m
 	}, s)
-}
-
-func isBracket(r rune) bool {
-	p, _ := bidi.LookupRune(r)
-	return p.IsBracket()
 }
 
 // shapeRun calls fn with the glyphs run, characters face draws of n

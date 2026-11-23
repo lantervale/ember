@@ -1819,7 +1819,7 @@ func (p *painter) strokes(e entry, st *style.Computed, face *twod.Face, parts []
 	draw := func(at geom.Vec2, f box.Fragment, s style.TextStroke) {
 		if s.Width > 0 && s.Color.A > 0 {
 			o := p.textOptions(face, st.Font.Size, st.LetterGap(), s.Color, smoothingOf(st))
-			p.words(at, f.Shown(), st, append(slices.Clip(o), twod.TextStroke(s.Width)))
+			p.fragment(at, &f, st, append(slices.Clip(o), twod.TextStroke(s.Width)))
 		}
 	}
 	for i, f := range e.b.Lines {
