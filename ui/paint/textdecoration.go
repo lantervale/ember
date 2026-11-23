@@ -53,11 +53,7 @@ func (p *painter) decorationsIn(e entry, st *style.Computed, lines style.Decorat
 			continue
 		}
 		px := p.pixels()
-		given, _ := d.Thickness.Resolve(d.Font.Size)
-		if d.Thickness.Kind == style.Auto {
-			given = d.Font.Size / 10
-		}
-		thick := max(given*px, 1)
+		thick := max(p.thickness(d)*px, 1)
 		whole := float32(math.Floor(float64(thick)))
 		for _, f := range e.b.Lines {
 			if f.Rect.W <= 0 {
@@ -65,8 +61,8 @@ func (p *painter) decorationsIn(e entry, st *style.Computed, lines style.Decorat
 			}
 			r := geom.Rect{X: e.at.X + f.Rect.X + off.X, Y: e.at.Y + f.Baseline + off.Y, W: f.Rect.W, H: whole / px}
 			if d.Line&lines&style.Underline != 0 {
-				gap := max(float32(math.Ceil(float64(thick/2))), 1)
-				p.skipping(st, f, r, gap/px, thick/px, func() { p.decorationLine(d.Style, r, gap/px, (thick+1)/px, c) })
+				dy, double := p.underline(st, d, thick)
+				p.skipping(st, f, r, dy, thick/px, func() { p.decorationLine(d.Style, r, dy, double, c) })
 			}
 			if d.Line&lines&(style.Overline|style.LineThrough) == 0 {
 				continue
@@ -84,6 +80,76 @@ func (p *painter) decorationsIn(e entry, st *style.Computed, lines style.Decorat
 		}
 	}
 }
+
+// thickness is d's lines' thickness in points: a tenth of its font's
+// size for auto, the face's own underline's for from-font where it has
+// one, else the length given.
+func (p *painter) thickness(d *style.Decoration) float32 {
+	switch d.Thickness.Kind {
+	case style.Fixed:
+		t, _ := d.Thickness.Resolve(d.Font.Size)
+		return t
+	case style.None:
+		if m := p.metrics(d.Font); m.Underlined && m.UnderlineThickness > 0 {
+			return m.UnderlineThickness
+		}
+	case style.Auto, style.MinContent, style.MaxContent, style.FitContent, style.Fr, style.Stretch:
+	}
+	return d.Font.Size / 10
+}
+
+func (p *painter) metrics(f style.Font) box.Metrics {
+	if p.fonts == nil {
+		return box.Metrics{}
+	}
+	return p.fonts.Metrics(f)
+}
+
+// underline is how far below the baseline d's underline of text in st
+// begins, thick device pixels thick, as Chrome places it, in
+// whole device pixels: on horizontal lines and sideways ones, half its
+// thickness below the baseline, or text-underline-offset below it, or
+// that below the face's own underline (from-font), or a pixel past that
+// below the em box's bottom (under); on vertical lines, which Chrome sets
+// on their central baseline, a pixel and the offset past the em box's
+// left edge, or as far past its right one for right and the languages
+// that underline there. The second result is the step to a double line's second, away
+// from the text.
+func (p *painter) underline(st *style.Computed, d *style.Decoration, thick float32) (float32, float32) {
+	px := p.pixels()
+	m := p.metrics(d.Font)
+	given, offset := d.Offset.Resolve(d.Font.Size)
+	given = lu(given * px)
+	if st.Stands() {
+		t := p.metrics(st.Font)
+		ascent, height := t.Ascent*px, (t.Ascent+t.Descent)*px
+		em := lu(d.Font.Size * px)
+		mid := lu(height / 2)
+		at := floor(mid+float32(math.Floor(float64(em*64/2)))/64+given) + 1
+		if d.Position&style.UnderRight != 0 || d.Position&style.UnderLeft == 0 && d.RightInVertical {
+			return (2*mid - at - floor(thick) - ascent) / px, -(thick + 1) / px
+		}
+		return (at - ascent) / px, (thick + 1) / px
+	}
+	var at float32
+	switch {
+	case d.Position&style.UnderUnder != 0 && m.EmAscent > 0:
+		size := d.Font.Size * px
+		at = floor(lu(size)-lu(m.EmAscent*size)+given) + 1
+	case d.Position&style.UnderFromFont != 0 && m.Underlined:
+		at = float32(math.Round(float64(m.Underline*px + given)))
+	case offset:
+		at = float32(math.Round(float64(given)))
+	default:
+		at = max(float32(math.Ceil(float64(thick/2))), 1)
+	}
+	return at / px, (thick + 1) / px
+}
+
+// lu is v in Chrome's layout units, 64ths, to the nearest.
+func lu(v float32) float32 { return float32(math.Round(float64(v)*64)) / 64 }
+
+func floor(v float32) float32 { return float32(math.Floor(float64(v))) }
 
 // inkDilation is the most a gap round a glyph's ink reaches past it,
 // Chrome's kDecorationClipMaxDilation.
@@ -192,12 +258,15 @@ func (p *painter) decorationDashes(r geom.Rect, dash, gap float32, c color.Color
 	}
 }
 
-// decorationReach is how far a run's decorations may lie from its baseline.
+// decorationReach is how far a run's decorations may lie from its
+// baseline.
 func decorationReach(st *style.Computed) float32 {
 	var d float32
 	for i := range st.Decorations {
-		t, _ := st.Decorations[i].Thickness.Resolve(st.Decorations[i].Font.Size)
-		d = max(d, st.Decorations[i].Font.Size+2*t)
+		dec := &st.Decorations[i]
+		t, _ := dec.Thickness.Resolve(dec.Font.Size)
+		o, _ := dec.Offset.Resolve(dec.Font.Size)
+		d = max(d, dec.Font.Size+2*t+float32(math.Abs(float64(o))))
 	}
 	return d
 }

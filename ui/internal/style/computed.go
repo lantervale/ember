@@ -966,8 +966,12 @@ type Text struct {
 	LineBreak     LineBreak
 	TabSize       TabSize
 	SkipInk       SkipInk
-	WrapStyle     WrapStyle
-	Hyphens       Hyphens
+	// UnderlineOffset is text-underline-offset, Auto for auto, its
+	// percentage kept: it is of the font size of the box decorating.
+	UnderlineOffset   Length
+	UnderlinePosition UnderlinePosition
+	WrapStyle         WrapStyle
+	Hyphens           Hyphens
 	// HyphenChar is hyphenate-character's string when HyphenChosen,
 	// else it is auto.
 	HyphenChar   string

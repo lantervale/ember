@@ -2426,8 +2426,13 @@ var props = func() map[string]prop {
 			decorationStyles),
 		"text-decoration-color": currentField(style.DecorationCurrent,
 			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
-		"text-decoration-thickness": lengthField(
-			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }, anyLength),
+		"text-decoration-thickness": field(func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness },
+			decorationThicknessOf, anyLength),
+		"text-underline-offset": lengthField(func(c *style.Computed) *style.Length { return &c.UnderlineOffset },
+			anyLength),
+		"text-underline-position": field(
+			func(c *style.Computed) *style.UnderlinePosition { return &c.UnderlinePosition }, underlinePosition,
+			flips[style.UnderlinePosition]()),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),

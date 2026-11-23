@@ -1,6 +1,7 @@
 package fonts
 
 import (
+	"math"
 	"slices"
 	"unicode/utf8"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/shape"
+	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -21,7 +23,7 @@ import (
 // which Chrome skips an underline's ink by. The glyphs are those drawn,
 // shaped with f's features, its face's own small capitals among them.
 // The glyph of a character whose ink Chrome leaves whole (SkipsInk) has
-// none.
+// none. A variable font's glyphs are those of the instance f draws.
 func (s *Set) Intercepts(f style.Font, text string, letter, word, top, bottom float32, all bool) [][2]float32 {
 	f = s.Caps(f, text)
 	if runs := f.SmallCaps(text); runs != nil {
@@ -39,7 +41,8 @@ func (s *Set) Intercepts(f style.Font, text string, letter, word, top, bottom fl
 	if c == nil || c.font == nil {
 		return nil
 	}
-	in := intercepts{s: s, text: text, letter: letter, word: word, top: top, bottom: bottom, size: f.Size, all: all}
+	in := intercepts{s: s, text: text, letter: letter, word: word, top: top, bottom: bottom, size: f.Size, all: all,
+		of: c, at: c.Instance(f)}
 	script := shape.Script(text)
 	var run []shape.Glyph
 	flush := func() {
@@ -81,7 +84,11 @@ type intercepts struct {
 	text                               string
 	letter, word, top, bottom, size, x float32
 	all                                bool
-	out                                [][2]float32
+	// at is the instance of the glyphs of of, a variable font, nil for
+	// its default; the fallback face's are its default's.
+	of  *Face
+	at  varfont.Coords
+	out [][2]float32
 }
 
 // run adds the stretches of run, glyphs of c, shaped with features in
@@ -92,12 +99,19 @@ func (in *intercepts) run(c *Face, script shape.Tag, features string, run []shap
 	}
 	s := in.s
 	ppem := fixed.I(int(c.upem))
+	var at varfont.Coords
+	vf := c.Variable()
+	if c == in.of {
+		at = in.at
+	}
 	glyphs := slices.Clone(run)
-	if p := c.layout().Plan(script, c.joined(features)); p.Touches(run) {
+	if p := c.plan(script, features, at); p.Touches(run) {
 		glyphs = p.Shape(glyphs)
 	} else {
 		for i := range glyphs {
-			if a, err := c.font.GlyphAdvance(&s.buf, sfnt.GlyphIndex(glyphs[i].ID), ppem, font.HintingNone); err == nil {
+			if at != nil {
+				glyphs[i].Advance = int32(math.Round(float64(vf.Advance(glyphs[i].ID, at))))
+			} else if a, err := c.font.GlyphAdvance(&s.buf, sfnt.GlyphIndex(glyphs[i].ID), ppem, font.HintingNone); err == nil {
 				glyphs[i].Advance = int32(a >> 6)
 			}
 		}
@@ -109,7 +123,7 @@ func (in *intercepts) run(c *Face, script shape.Tag, features string, run []shap
 		r, _ := utf8.DecodeRuneInString(in.text[g.Cluster:])
 		if SkipsInk(r, in.all) {
 			dy := float32(g.YOffset) * scale
-			if segs, err := c.font.LoadGlyph(&s.buf, sfnt.GlyphIndex(g.ID), ppem, nil); err == nil {
+			if segs, err := c.outline(&s.buf, g.ID, at); err == nil {
 				if lo, hi, ok := crossing(segs, scale, in.top+dy, in.bottom+dy); ok {
 					dx := in.x + float32(g.XOffset)*scale
 					in.out = append(in.out, [2]float32{dx + lo, dx + hi})
@@ -125,6 +139,31 @@ func (in *intercepts) run(c *Face, script shape.Tag, features string, run []shap
 			in.x += spacing(in.text[g.Cluster:next], in.letter, in.word)
 		}
 	}
+}
+
+// outline is glyph g's outline at instance at of c's variable font, or of
+// its default for nil, y down in 26.6 font units as sfnt loads it.
+func (c *Face) outline(buf *sfnt.Buffer, g uint16, at varfont.Coords) (sfnt.Segments, error) {
+	ppem := fixed.I(int(c.upem))
+	if at == nil {
+		return c.font.LoadGlyph(buf, sfnt.GlyphIndex(g), ppem, nil)
+	}
+	points, ends, err := c.Variable().Outline(g, at)
+	if err != nil {
+		return nil, err
+	}
+	pt := func(x, y float32) fixed.Point26_6 {
+		return fixed.Point26_6{X: fixed.Int26_6(math.Round(float64(x) * 64)), Y: fixed.Int26_6(math.Round(float64(-y) * 64))}
+	}
+	var segs sfnt.Segments
+	varfont.Contours(points, ends, func(x, y float32) {
+		segs = append(segs, sfnt.Segment{Op: sfnt.SegmentOpMoveTo, Args: [3]fixed.Point26_6{pt(x, y)}})
+	}, func(x, y float32) {
+		segs = append(segs, sfnt.Segment{Op: sfnt.SegmentOpLineTo, Args: [3]fixed.Point26_6{pt(x, y)}})
+	}, func(cx, cy, x, y float32) {
+		segs = append(segs, sfnt.Segment{Op: sfnt.SegmentOpQuadTo, Args: [3]fixed.Point26_6{pt(cx, cy), pt(x, y)}})
+	})
+	return segs, nil
 }
 
 // fallbackGlyph is r's glyph in the Fallback face when c lacks it and it has it, else

@@ -184,6 +184,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
 | 0182 | [Skipped ink follows the glyphs drawn and Chrome's table of characters](0182-skipped-ink-follows-the-glyphs-drawn-and-chromes-table-of-characters.md) | rendering |
 | 0186 | [A variable font's layout is shaped at its instance](0186-a-variable-fonts-layout-is-shaped-at-its-instance.md) | rendering |
+| 0189 | [An underline is placed by its decorating box, as Chrome places it](0189-an-underline-is-placed-by-its-decorating-box-as-chrome-places-it.md) | rendering |
 
 ## Writing one
 

@@ -25,6 +25,14 @@ func TestTextDecorationParses(t *testing.T) {
 		"text-decoration-thickness: auto",
 		"text-decoration-thickness: 0.1em",
 		"text-decoration-thickness: 10%",
+		"text-underline-offset: auto",
+		"text-underline-offset: -0.1em",
+		"text-underline-offset: calc(2px + 10%)",
+		"text-underline-position: auto",
+		"text-underline-position: under",
+		"text-underline-position: from-font",
+		"text-underline-position: right under",
+		"text-underline-position: from-font left",
 	} {
 		_, warns := Parse("t.css", "p { "+src+" }")
 		assert.Empty(t, warns, src)
@@ -33,17 +41,23 @@ func TestTextDecorationParses(t *testing.T) {
 
 func TestTextDecorationRefusesWhatItCannotDraw(t *testing.T) {
 	for src, why := range map[string]string{
-		"text-decoration: underline wavy":         "wavy",
-		"text-decoration-style: wavy":             "wavy",
-		"text-decoration-line: blink":             "blink",
-		"text-decoration: underline underline":    "underline",
-		"text-decoration: none underline":         "none",
-		"text-decoration-line: underline none":    "none",
-		"text-decoration: underline solid dotted": "dotted",
-		"text-decoration: underline 1px 2px":      "2px",
-		"text-decoration-thickness: -1px":         "negative",
-		"text-decoration-thickness: 2":            "unit",
-		"text-decoration-line: ":                  "",
+		"text-decoration: underline wavy":          "wavy",
+		"text-decoration-style: wavy":              "wavy",
+		"text-decoration-line: blink":              "blink",
+		"text-decoration: underline underline":     "underline",
+		"text-decoration: none underline":          "none",
+		"text-decoration-line: underline none":     "none",
+		"text-decoration: underline solid dotted":  "dotted",
+		"text-decoration: underline 1px 2px":       "2px",
+		"text-decoration-thickness: -1px":          "negative",
+		"text-decoration-thickness: 2":             "unit",
+		"text-decoration-line: ":                   "",
+		"text-underline-offset: 2":                 `found "2"`,
+		"text-underline-offset: from-font":         "from-font",
+		"text-underline-position: under from-font": "second of from-font and under",
+		"text-underline-position: left right":      "second of left and right",
+		"text-underline-position: auto under":      "auto",
+		"text-underline-position: over":            "over",
 	} {
 		_, warns := Parse("t.css", "p { "+src+" }")
 		require.Len(t, warns, 1, src)
@@ -214,4 +228,26 @@ func TestADecorationThatChangesRestylesDescendantsWithoutLayout(t *testing.T) {
 	assert.Len(t, styleOf(sp).Decorations, 1, "the span is restyled though nothing it inherits changed")
 	assert.Zero(t, dom.Data(box).Dirty&dom.DirtyLayout, "a decoration moves nothing")
 	assert.Zero(t, dom.Data(sp).Dirty&dom.DirtyLayout)
+}
+
+func TestAnUnderlinesPlaceIsTheDecoratingBoxs(t *testing.T) {
+	sp := el(dom.Span, "s")
+	p := with(el(dom.P, "p"), sp)
+	p.SetAttr("lang", "ja-JP")
+	decorated(t, `
+#box { font-size: 20px; text-decoration: underline; text-underline-offset: 10%; text-underline-position: under; }
+#p { writing-mode: vertical-rl; text-decoration: overline; }
+#s { text-underline-offset: 3px; text-underline-position: from-font right; }
+`, p)
+	box, ps := styleOf(p.Parent()), styleOf(p)
+	assert.Equal(t, style.Length{Kind: style.Fixed, Percent: 10, IsPercent: true}, ps.UnderlineOffset,
+		"inherited as a percentage")
+	assert.Equal(t, style.UnderUnder, ps.UnderlinePosition)
+	outer := style.Decoration{TextDecoration: box.TextDecoration, Font: ps.Font, Offset: box.UnderlineOffset,
+		Position: style.UnderUnder}
+	own := style.Decoration{TextDecoration: ps.TextDecoration, Font: ps.Font, Offset: ps.UnderlineOffset,
+		Position: style.UnderUnder, RightInVertical: true}
+	assert.Equal(t, []style.Decoration{outer, own}, styleOf(sp).Decorations,
+		"each box's offset and position, whatever the span sets; Japanese vertical lines underlined on the right")
+	assert.Equal(t, style.UnderFromFont|style.UnderRight, styleOf(sp).UnderlinePosition)
 }
