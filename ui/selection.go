@@ -300,17 +300,11 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	f.xs = make([]float32, 1, len(f.offs))
 	sp := spacingOf(st)
 	frag := &b.Lines[k]
-	advance := func(i int) float32 { return d.fonts.Advance(st.Font, text[:i]) }
-	if frag.Lead != "" || frag.Trail != "" {
-		// A ligature across the fragment's start is the text before's, one
-		// across its end its own: its characters after it stand at its end.
-		advance = func(i int) float32 {
-			return d.fonts.AdvanceAmid(st.Font, text[:i], frag.Lead, text[i:]+frag.Trail, frag.Before, frag.After)
-		}
-	}
+	carets, _ := d.fonts.Carets(st.Font, text, frag.Lead, frag.Trail, frag.Before, frag.After)
 	var room float32
 	last := rune(-1)
 	han := b.Lines[k].Spacing
+	n := 0
 	for i, r := range text {
 		if i > 0 {
 			room += sp.after(last)
@@ -318,9 +312,10 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 				room += han[0].Space
 				han = han[1:]
 			}
-			f.xs = append(f.xs, advance(i)+room)
+			f.xs = append(f.xs, carets[n]+room)
 		}
 		last = r
+		n++
 	}
 	if len(text) > 0 {
 		f.xs = append(f.xs, max(b.Lines[k].Rect.W, f.xs[len(f.xs)-1]))

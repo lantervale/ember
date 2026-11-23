@@ -805,6 +805,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
 	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
+	ps.ColorInherited = true
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, flow: casc.flow}
 	px.customs(casc.custom)
 	for i := range longhands {
@@ -2248,11 +2249,16 @@ var props = func() map[string]prop {
 		"-webkit-font-smoothing": {
 			set: func(x *ctx, v []Component) {
 				kw := strings.ToLower(v[0].Text)
-				x.c.PixelText, x.c.ExactText = kw == kwNone, kw == "antialiased"
+				x.c.PixelText, x.c.ExactText, x.c.SubpixelText = kw == kwNone, kw == "antialiased", kw == "subpixel-antialiased"
 			},
-			inherit: func(dst, src *style.Computed) { dst.PixelText, dst.ExactText = src.PixelText, src.ExactText },
-			anim:    anim{kind: discrete},
+			inherit: func(dst, src *style.Computed) {
+				dst.PixelText, dst.ExactText, dst.SubpixelText = src.PixelText, src.ExactText, src.SubpixelText
+			},
+			anim: anim{kind: discrete},
 		},
+		"text-rendering": keyword(func(c *style.Computed) *style.TextRendering { return &c.TextRendering },
+			map[string]style.TextRendering{"auto": style.TextRenderingAuto, "optimizespeed": style.OptimizeSpeed,
+				"optimizelegibility": style.OptimizeLegibility, "geometricprecision": style.GeometricPrecision}),
 		"text-transform": keyword(func(c *style.Computed) *style.TextTransform { return &c.TextTransform },
 			map[string]style.TextTransform{"none": style.NoTransform, "uppercase": style.Uppercase,
 				"lowercase": style.Lowercase, "capitalize": style.Capitalize}),

@@ -27,6 +27,10 @@ const (
 	// its Style the root's Viewport. Node is the root element, which
 	// keeps its scroll offset.
 	Viewport
+	// ControlPart is the inner element of a progress or a meter, or the
+	// slider container of a range, among the control's ::before and
+	// ::after: the box its parts are drawn in. Node is nil.
+	ControlPart
 )
 
 // Edges is a resolved margin, border or padding, in points.
@@ -149,6 +153,10 @@ type Box struct {
 	// gradient it shows in its place.
 	Picture  string
 	Gradient *style.Gradient
+	// Area is what a Marker of a bullet or a picture takes the pointer
+	// over, in its box's space, as Chrome's: its inline box on the line,
+	// wider than the bullet; zero where that is its box.
+	Area geom.Rect
 	// Fragments is an inline element's border box on each line it spans,
 	// in the box's space: the first holds its left edge and the last its
 	// right, as Chrome's getClientRects. With Broken they are a block's
@@ -298,6 +306,15 @@ type ContextFonts interface {
 // cluster starts in it.
 type WholeFonts interface {
 	AdvanceAmid(f style.Font, text, lead, trail, before, after string) float32
+}
+
+// CaretFonts is Fonts that places carets: Carets is where one stands
+// before each character of text and after its last, shaped as
+// WholeFonts.AdvanceAmid shapes it, a ligature's advance shared evenly
+// among the characters it draws; starts reports where a glyph's cluster
+// starts, which a ligature's characters but its first don't.
+type CaretFonts interface {
+	Carets(f style.Font, text, lead, trail, before, after string) (xs []float32, starts []bool)
 }
 
 // InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the
