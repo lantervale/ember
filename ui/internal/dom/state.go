@@ -1,5 +1,7 @@
 package dom
 
+import "github.com/lantervale/ember/ui/internal/style"
+
 // State is the set of an element's dynamic pseudo-classes.
 type State uint32
 
@@ -41,6 +43,39 @@ const (
 	// PopoverOpen is an element with the popover attribute shown
 	// (:popover-open).
 	PopoverOpen
+	// ContainerHover, TrackHover and ThumbHover are a range's slider
+	// container, track and thumb under the pointer, or a progress's or a
+	// meter's inner element, bar and value; the Active ones those a press
+	// began on, until it ends. A part is in the states of the parts it
+	// holds, as in Chrome's shadow tree.
+	ContainerHover
+	TrackHover
+	ThumbHover
+	ContainerActive
+	TrackActive
+	ThumbActive
 )
+
+// PartHover and PartActive are the part states, outermost first.
+const (
+	PartHover  = ContainerHover | TrackHover | ThumbHover
+	PartActive = ContainerActive | TrackActive | ThumbActive
+)
+
+// Shade is the shade a control or its part in state s draws its accent
+// in: pressed while active holds, hovered while hover does.
+func (s State) Shade(hover, active State) style.Shade {
+	switch {
+	case s.Has(active):
+		return style.ShadePressed
+	case s.Has(hover):
+		return style.ShadeHovered
+	}
+	return style.ShadeRest
+}
+
+// PartsPressed are the Active states of the parts hovered in s, which a
+// press there makes.
+func PartsPressed(s State) State { return (s & PartHover) * (ContainerActive / ContainerHover) }
 
 func (s State) Has(f State) bool { return s&f == f }

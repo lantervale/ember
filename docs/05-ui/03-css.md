@@ -199,12 +199,17 @@ progress::-webkit-progress-value { border-radius: 7px; background-color: #6b8f5a
 
 | Part | |
 |---|---|
-| `::-webkit-slider-runnable-track` | across the range, between its `::before` and `::after`, centred down it, as tall as the thumb unless sized; the range is at least as tall as the track when its height is `auto` |
+| `::-webkit-slider-container` | the range's content box less its margins, holding the track; the range is at least as tall as the container round its track when its height is `auto` |
+| `::-webkit-slider-runnable-track` | across the container's content box, between the range's `::before` and `::after`, centred down it, as tall as the thumb unless sized; the range is at least as tall as the track when its height is `auto` |
 | `::-webkit-slider-thumb` | at the value along the track's content box less its own width, from its top and its `margin-top`; Chrome's blue disc, in the range's `accent-color`, unless its own `appearance` is `none` |
 | `::-webkit-progress-inner-element`, `::-webkit-meter-inner-element` | the control's content box, or a block as tall between the lines of its `::before` and `::after` |
 | `::-webkit-progress-bar`, `::-webkit-meter-bar` | the inner element's content box, a meter's half as tall and centred; grey for a progress, Chrome's grey gradient for a meter |
-| `::-webkit-progress-value` | the bar's content box cut to the value; green |
+| `::-webkit-progress-value` | the bar's content box cut to the value, never narrower than its own padding, borders and `min-width`, as at 0 while the progress is indeterminate; green |
 | `::-webkit-meter-optimum-value`, `-suboptimum-value`, `-even-less-good-value` | the bar's content box cut to the value, styled by the region the value is in; Chrome's green, yellow and red gradients |
+
+Each part takes `:hover` and `:active` (`::-webkit-slider-thumb:hover`), as the elements of Chrome's shadow tree take them ([decision 0199](../99-decisions/0199-a-controls-parts-are-hovered-and-pressed-as-chromes-shadow-elements.md)): a part is hovered while the pointer is over it or over a part it holds (the thumb hovers the track and the container), and active from a press on it until the button is let go. A press on the track moves the thumb under the pointer, hovered, not pressed; a press on the thumb drags it from where it was taken. A range whose `writing-mode` is vertical lays its parts down its box, its value from the top (from the bottom in `rtl`, and up a `sideways-lr` line), the track's `width` its thickness; `appearance: slider-vertical` turns a range of ui's own look upright, its value from the bottom.
+
+A range of ui's own look draws its thumb in its `accent-color` where one is set, else in its `color`. Its fill, its thumb and a checked checkbox's or radio's accent are drawn darker while hovered and lighter while pressed (the other way round for a light accent), Chrome's shades of the accent: the fill while the range is hovered, the thumb while the pointer is on it.
 
 A progress and a meter stand 0.2 em below the baseline of a line of text, as Chrome's sheet sets them, whatever their look. A switch of `appearance: none` is an empty box as a checkbox is, as Chrome, which draws no switch, shows it. A meter of its own look takes its styled bar's and values' `background-color`s. The parts are read in every sheet; `-webkit-appearance` is read under `ui.BrowserSheets()` only, so a game's sheet writes `appearance`.
 
@@ -467,7 +472,7 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 | `::checkmark`, `::picker()`, `::picker-icon` | matches nothing: a select is drawn whole |
 | `::permission-icon` | matches nothing: no permission element |
 | `::-webkit-scrollbar`, `::-webkit-scrollbar-track`, `::-webkit-scrollbar-track-piece`, `::-webkit-scrollbar-thumb`, `::-webkit-scrollbar-corner` | a scroll container's styled bars (above, beside `overflow`); `::-webkit-scrollbar-button` and `::-webkit-resizer` match nothing |
-| `::-webkit-slider-runnable-track`, `::-webkit-slider-thumb`, `::-webkit-progress-inner-element`, `::-webkit-progress-bar`, `::-webkit-progress-value`, `::-webkit-meter-inner-element`, `::-webkit-meter-bar`, `::-webkit-meter-optimum-value`, `::-webkit-meter-suboptimum-value`, `::-webkit-meter-even-less-good-value` | the parts of a range, a progress and a meter ([below](#controls-drawn-from-their-css)) |
+| `::-webkit-slider-container`, `::-webkit-slider-runnable-track`, `::-webkit-slider-thumb`, `::-webkit-progress-inner-element`, `::-webkit-progress-bar`, `::-webkit-progress-value`, `::-webkit-meter-inner-element`, `::-webkit-meter-bar`, `::-webkit-meter-optimum-value`, `::-webkit-meter-suboptimum-value`, `::-webkit-meter-even-less-good-value` | the parts of a range, a progress and a meter ([below](#controls-drawn-from-their-css)) |
 | any other vendor's (`::-webkit-inner-spin-button`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
 | any other name | refused: unknown, as Chrome drops the rule |
 
