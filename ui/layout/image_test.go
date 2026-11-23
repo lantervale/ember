@@ -119,3 +119,25 @@ func TestAnImageInAFlexRow(t *testing.T) {
 	row := el(dom.Div, func(st *style.Computed) { st.Display = style.FlexDisplay; st.AlignItems = style.AlignStart }, i)
 	assert.Equal(t, geom.V2(60, 30), layImages(el(dom.Div, block, row))[i])
 }
+
+func TestAPictureOfAFullWidthFillsItsAutoGridTrack(t *testing.T) {
+	full := func() *dom.Node {
+		return img("tile.png", func(st *style.Computed) {
+			st.Size.Width = style.Length{Kind: style.Fixed, Percent: 100, IsPercent: true}
+		})
+	}
+	grid := func(edit func(*style.Computed), kid *dom.Node) *dom.Node {
+		return el(dom.Div, func(st *style.Computed) {
+			st.Display = style.InlineGrid
+			st.Size.Width = style.Px(30)
+			if edit != nil {
+				edit(st)
+			}
+		}, kid)
+	}
+	stretched, started := full(), full()
+	sizes := layImages(el(dom.Div, block, grid(nil, stretched),
+		grid(func(st *style.Computed) { st.JustifyContent = style.AlignStart }, started)))
+	assert.Equal(t, geom.V2(30, 15), sizes[stretched], "its track stretched to the grid's width")
+	assert.Equal(t, geom.V2(30, 15), sizes[started], "its track as wide as the grid, the picture no wider")
+}
