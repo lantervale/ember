@@ -54,7 +54,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		}
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
 			n.intrinsic = true
-			nodeSize = replacedSize(n.naturalIn(room, pbSum).add(pbSum), ratio, minSize, maxSize)
+			nodeSize = replacedSize(n.preferredIn(room, pbSum, st), ratio, minSize, maxSize)
 		}
 	}
 
@@ -119,6 +119,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		})
 	}
 	measured, first, last, lines := t.measureContent(n, known, avail, basis, clamp.lines)
+	if !n.replaced {
+		measured = size{max(measured.w, n.natural.w), max(measured.h, n.natural.h)}
+	}
 	content := measured.add(inset.sum())
 	if in.sizing != contentSize {
 		content.h = sizedHeight(st, content.h, adj.h, in.parent.h)

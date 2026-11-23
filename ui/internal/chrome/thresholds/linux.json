@@ -68,7 +68,7 @@
   "initial-letter": 0.031,
   "joined": 0.025,
   "syllables": 0.011,
-  "scripts": 0.0065,
+  "scripts": 0.0075,
   "shaped-whole": 0.016,
   "line-break": 0.013,
   "shaped-whole-rtl": 0.015,
@@ -147,5 +147,6 @@
   "viewport-top": 0.0071,
   "webkit-masks": 0.002,
   "word-spacing": 0.0133,
-  "writing-modes": 0.013
+  "writing-modes": 0.013,
+  "positioned-pictures": 0.001
 }

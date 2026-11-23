@@ -52,7 +52,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a range of `appearance: slider-vertical` whose height is `auto` | 16 tall, where Chrome makes it 129 by 129 ([decision 0199](../99-decisions/0199-a-controls-parts-are-hovered-and-pressed-as-chromes-shadow-elements.md)) |
 | a part's `:focus`, `:focus-visible` and `:focus-within`, an author's `!important` `width` on a progress's value, a thumb hovered where it overhangs its range's box | the rule dropped with a warning, the value's width its fraction, and the thumb hovered only within the range's box, where Chrome reads the pseudo-classes and matches nothing, takes the width, and hovers the thumb wherever it is drawn |
 | a meter of its own look whose parts a sheet styles | ui's flat bar in the parts' `background-color`s, where Chrome draws its rounded native bar in them |
 | a page's textarea in its default face (`ui.BrowserSheets()`), `monospace` | its rows and columns measured in Go Mono, where Chrome's monospace face makes it a few points apart (182×38 against 183×34 on macOS) |
@@ -71,12 +70,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | a `br` clearing floats (`clear`, or the `clear` attribute) at the end of its block's lines, or before the closing edge of an inline element | the next line starts below the floats only when the `br` is the last thing of its line inside no element; where it ends the lines, the blocks after them don't move below the floats, as Chrome's do (WPT css/css-grid/grid-model/grid-empty-floating-positioned-and-inline-001.html, css/css-flexbox/abspos/flex-abspos-staticpos-fallback-justify-content-001.html) |
 | a picture of `height: 100%` in a grid item of `height: 100%` in an auto row | the item's row grows with the picture its own stretched height resolves, 3px past Chrome's row for a square picture (and its bottom margin's worth more with one), where Chrome keeps the row it sized (WPT css/css-grid/grid-items/replaced-element-015.html, which matches its reference all the same) |
-| a subgrid in both axes inside a subgrid in both axes | its rows are sized without the text of its items: the grid's auto row stays the height of a subgrid in one axis (WPT css/css-grid/subgrid/auto-track-sizing-002.html) |
-| a subgrid of the other direction inside a subgrid (`rtl` in `ltr`) | its item's column is placed from the wrong side's padding, border or margin (WPT css/css-grid/subgrid/writing-directions-002.html) |
-| a subgrid of another writing mode than its grid's | its tracks are not the grid's: the grid's rows don't grow for its items, and the subgrid takes its own size (WPT css/css-grid/subgrid/orthogonal-writing-mode-001.html and -006.html) |
-| `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
+| a subgrid of columns alone aligned on its baseline in its grid's row | stands where Chrome's does, but the row is a point taller than Chrome's, which keeps the row a point short of the subgrid's bottom |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
-| the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone | measured without the subgrid's rows: a percentage height or an aspect ratio there counts as on no row |
+| the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone whose rows are not of fixed sizes | measured against the subgrid's rows of its last layout, on no row the first time: a percentage height or an aspect ratio there counts for nothing; on rows of fixed sizes it is as Chrome's |
+| a nested subgrid of another direction or writing mode in a subgrid of columns or rows alone, its items on the outer subgrid's own tracks | their lines on those tracks are counted in the inner subgrid's frame |
+| an inline box of text in `monospace` at `12px/1` | its content area a point taller and higher than Chrome's (15 points from 6, where Chrome's is 14 from 7) |
 | an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's; one with alt text stands by its bottom too, where Chrome's stands on that text's line, which ui cannot tell from a picture still loading, whose landing lays nothing out |
 | a `summary`'s marker in a font without ▸ | measured with ui's fallback face for the triangle, where Chrome on macOS takes 1.06em whatever the font: about 3 points narrower at 16px |
 | the presentational attributes but those [read](03-css.md): `link`, `vlink` and `alink` on `body` | read, and they do nothing |
@@ -86,7 +84,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
 | a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
-| a picture absolutely positioned in a box of another writing mode than its containing block's ([decision 0204](../99-decisions/0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md)) | its natural size turned into its parent's frame, where Chrome takes its containing block's |
 | a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |
 | `position: sticky` in vertical writing modes | not checked against Chrome |
 | a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |
@@ -131,6 +128,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | the system's own system colours | Chrome's on macOS on every system, where Chrome on Windows and Linux takes `Highlight`, `SelectedItem` and their texts, and on Windows its light buttons, links and grays, from the system |
 | a select's line at `line-height: normal` on Linux | its font's normal line, as Chrome on macOS makes it, where Chrome on Linux makes a select's a point shorter than the font's other lines (Go Regular at 16px: 17 points, not 18); ui lays out alike everywhere |
 | an initial letter's box on Linux and Windows | as wide as its letter's ink, as Chrome on macOS makes it, where Chrome on Linux and Windows rounds the ink out to whole pixels, up to a pixel wider on each side; ui lays out alike everywhere |
+| a bitmap colour font's advances on Windows | its outlines' advances, as Chrome on macOS and Linux takes them, where Chrome on Windows gives a font with `sbix` or `CBDT` strikes whole-pixel advances (its "ABC abc" at 30px: 147 points, not 146.72); ui lays out alike everywhere |
 | a dark control's hover and press, a dark select's chevron, meter's dark fills, the scrollbars, an iframe whose scheme isn't its host's | a hovered or pressed button keeps its dark face, the chevron stays dark, a meter fills in its light colours, the bars keep ember's own look in either scheme, and an iframe's canvas is never made opaque, where Chrome draws its own dark ones and backs an iframe of the other scheme |
 | a touch-only device from the system | the program's answer alone (`ui.TouchOnly`): no system is read for it ([decision 0139](../99-decisions/0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md)) |
 | `forced-colors: active` | answers the query, where Chrome also forces the system's colours on the page |

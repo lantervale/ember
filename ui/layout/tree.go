@@ -278,6 +278,10 @@ type node struct {
 	grid   *gridInfo
 	// subgrid is what its grid hands it in each axis it is a subgrid in.
 	subgrid [2]*subgridAxis
+	// shim is the room above an item of a subgrid of rows aligned on its baseline, where the
+	// grid round it aligned it with its own, sharing is set.
+	shim    float32
+	sharing bool
 	// row is a table row's cells' widths and heights, kept with the row;
 	// captionRoom a table's captions' room above and below its grid.
 	row         *tableRow
@@ -302,7 +306,8 @@ type node struct {
 	// leaves the table or one of its cells for borders, nil where borders are apart.
 	shared    *borderGrid
 	collapsed *rect
-	// replaced is an img, natural its picture's size (zero without one).
+	// replaced is an img, natural its picture's size (zero without one); a range's
+	// natural is the least content it takes, its track's (rangeNatural).
 	replaced bool
 	natural  size
 	// shape is what a picture that doesn't ask for a size of pixels asks
@@ -403,6 +408,9 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		return n
 	}
 	n := t.element(e, parent)
+	if isRange(e) {
+		n.natural = rangeNatural(n.box.Style)
+	}
 	if k := controlPartOf(e); k != noPart {
 		t.buildParts(n, k)
 		return n

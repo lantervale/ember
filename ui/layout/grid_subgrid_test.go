@@ -111,3 +111,39 @@ func TestAKeptSubgridFollowsItsGrid(t *testing.T) {
 		})
 	}
 }
+
+func TestASubgridsAxesLieAlongItsGridsByTheirFrames(t *testing.T) {
+	htb, rtl := gridFrame{mode: style.HorizontalTB}, gridFrame{mode: style.HorizontalTB, rtl: true}
+	vrl, vlr := gridFrame{mode: style.VerticalRL}, gridFrame{mode: style.VerticalLR}
+	vlrRTL, slr := gridFrame{mode: style.VerticalLR, rtl: true}, gridFrame{mode: style.SidewaysLR}
+	type along struct {
+		a    axis
+		back bool
+	}
+	cases := []struct {
+		own, grid gridFrame
+		h, v      along
+	}{
+		{htb, htb, along{horizontal, false}, along{vertical, false}},
+		{rtl, htb, along{horizontal, true}, along{vertical, false}},
+		{rtl, rtl, along{horizontal, false}, along{vertical, false}},
+		{vrl, htb, along{vertical, true}, along{horizontal, false}},
+		{vlr, htb, along{vertical, false}, along{horizontal, false}},
+		{vlrRTL, htb, along{vertical, false}, along{horizontal, true}},
+		{htb, vrl, along{vertical, false}, along{horizontal, true}},
+		{slr, vlr, along{horizontal, true}, along{vertical, false}},
+	}
+	for _, c := range cases {
+		a, back := c.own.from(c.grid, horizontal)
+		assert.Equal(t, c.h, along{a, back}, "%v in %v, the grid's columns", c.own, c.grid)
+		a, back = c.own.from(c.grid, vertical)
+		assert.Equal(t, c.v, along{a, back}, "%v in %v, the grid's rows", c.own, c.grid)
+	}
+}
+
+func TestReversedSubgridLinesAndTracksCountFromTheOtherEnd(t *testing.T) {
+	assert.Equal(t, map[string][]int{"a": {1, 3}, "b": {0}},
+		reverseNames(map[string][]int{"a": {0, 2}, "b": {3}}, 3))
+	assert.Equal(t, []span{{0, 50}, {60, 90}, {100, 140}},
+		reverseSpans([]span{{0, 40}, {50, 80}, {90, 140}}))
+}

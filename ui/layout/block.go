@@ -635,7 +635,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
-		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across
+		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across ||
+			it.node.ranged()
 		if shrinks && widthStyle.Kind == style.Auto {
 			widthStyle = style.Length{Kind: style.FitContent}
 		}

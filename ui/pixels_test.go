@@ -145,6 +145,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
 		{"./internal/pages/shaped-whole-rtl", 460, 480, 0.0078},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
+		{"./internal/pages/positioned-pictures", 560, 260, 0.0005},
 		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
 		{"./internal/pages/vertical-selection", 420, 240, 0.011},

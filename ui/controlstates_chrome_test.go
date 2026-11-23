@@ -37,6 +37,72 @@ func TestVerticalRangesAreSizedAsChromes(t *testing.T) {
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
+// Ranges of their own look whose size across their track is auto are
+// sized as Chrome's own: as thick as its thumb, and one of appearance
+// slider-vertical in horizontal lines as tall as its track is long.
+// Chrome draws its own ranges here, which an exported page wouldn't.
+func TestRangesOfAnAutoSizeAreChromes(t *testing.T) {
+	styles := []string{
+		"appearance: slider-vertical",
+		"appearance: slider-vertical; width: 20px",
+		"appearance: slider-vertical; max-height: 60px",
+		"appearance: slider-vertical; min-height: 140px",
+		"appearance: slider-vertical; padding: 3px 5px",
+		"appearance: slider-vertical; height: 50%",
+		"appearance: slider-vertical; width: auto; border: 2px solid",
+		"appearance: slider-vertical; box-sizing: border-box; padding: 4px",
+		"box-sizing: border-box; padding: 0 5px",
+		"display: block",
+		"display: block; appearance: slider-vertical",
+		"appearance: slider-vertical; writing-mode: vertical-lr",
+		"appearance: slider-vertical; writing-mode: vertical-rl; height: auto",
+		"height: auto",
+		"writing-mode: vertical-rl; block-size: auto",
+		"max-height: 10px",
+		"appearance: none; height: auto",
+		"appearance: none; width: auto",
+		"width: auto; padding: 0 6px",
+		"writing-mode: vertical-lr; inline-size: auto",
+		"tall: ",
+		"tall: width: 120px",
+		"tall: width: 120px; height: 10px",
+		"tall: width: 120px; appearance: slider-vertical",
+	}
+	// a tall range has a ::before and an ::after taller than its thumb
+	const sheet = `body { margin: 0; } div { height: 200px; }
+.tall::before, .tall::after { content: ""; display: inline-block; width: 4px; height: 30px; }`
+	var page strings.Builder
+	page.WriteString(`<!DOCTYPE html><html><head><style>` + sheet + `</style></head><body>`)
+	d := ui.NewDocument(ui.CSS(sheet))
+	ranges := make([]*ui.Node, len(styles))
+	for i, s := range styles {
+		class := ""
+		if rest, ok := strings.CutPrefix(s, "tall: "); ok {
+			class, s = "tall", rest
+		}
+		fmt.Fprintf(&page, `<div><input type="range" class="%s" style="%s"></div>`, class, s)
+		ranges[i] = ui.Input(ui.Type("range"), ui.Class(class), ui.Style(s))
+		d.Body().Append(ui.Div(ranges[i]))
+	}
+	page.WriteString("</body></html>")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(page.String()))
+	}))
+	defer srv.Close()
+	size := geom.V2(400, 300)
+	s := chrome.Open(t, srv.URL, size, 1)
+	var want [][2]float32
+	s.Eval(`[...document.querySelectorAll("input")].map(e => { const r = e.getBoundingClientRect(); `+
+		`return [r.width, r.height]; })`, &want)
+	d.Layout(size)
+	for i, n := range ranges {
+		if got := [2]float32{n.Box().W, n.Box().H}; got != want[i] {
+			t.Errorf("%q: ui's %v, Chrome's %v", styles[i], got, want[i])
+		}
+	}
+}
+
 // TestAccentShadesAreChromes hovers and presses Chrome's own ranges and
 // checkboxes of several accents and reads the colours it fills them
 // with: the range's fill and thumb, the checkbox's box, each within a
