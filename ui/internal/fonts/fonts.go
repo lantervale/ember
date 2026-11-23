@@ -33,6 +33,9 @@ type Face struct {
 	// Stretch is the width the face is of, as a percentage of the normal
 	// one, to StretchMax for a variable font's; 0 for 100.
 	Stretch, StretchMax float32
+	// AutoWeight and AutoStretch are a face of an @font-face that gives
+	// no weight or width: normal, or a variable font's own.
+	AutoWeight, AutoStretch bool
 	// Ranges are the characters the face draws, all without any.
 	Ranges []Range
 	// Look is how its @font-face has the face measured and drawn.

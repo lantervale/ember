@@ -14,6 +14,7 @@ import (
 	"weak"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/render"
 	"github.com/rivo/uniseg"
 	"golang.org/x/image/font"
@@ -101,10 +102,27 @@ func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
 // Look is how a face is drawn other than as its file has it, as an
 // @font-face and the font asked for have it: its glyphs and advances
 // scaled by Scale (0 for 1), made bold or slanted where its family has
-// no such face, kerned or not.
+// no such face, kerned or not, and a variable font's at the instance
+// Variation places it.
 type Look struct {
 	Scale                 float32
 	Bold, Oblique, NoKern bool
+	Variation             *Variation
+}
+
+// Variation is an instance of a variable font: the face's file read by
+// varfont, and the place on its axes.
+type Variation struct {
+	Font   *varfont.Font
+	Coords varfont.Coords
+}
+
+// varied is the instance l draws, nil for the font's default.
+func (l Look) varied() *Variation {
+	if l.Variation == nil || l.Variation.Coords == nil {
+		return nil
+	}
+	return l.Variation
 }
 
 func (l Look) scale() float32 {
@@ -413,6 +431,9 @@ func (f *Font) picture(c string) (*render.Texture, bool) {
 func (f *Font) advance(face int, idx sfnt.GlyphIndex) float32 {
 	src := f.sources[face]
 	upem := src.UnitsPerEm()
+	if v := f.looks[face].varied(); v != nil {
+		return v.Font.Advance(uint16(idx), v.Coords) * f.size * f.looks[face].scale() / float32(upem)
+	}
 	a, err := src.GlyphAdvance(&f.buf, idx, fixed.I(int(upem)), font.HintingNone)
 	if err != nil {
 		return 0
@@ -558,7 +579,7 @@ func (f *Font) raster(r rune, phase int) glyph {
 	var mask image.Image
 	var mp image.Point
 	var ok bool
-	if l := f.looks[face]; l.Bold || l.Oblique {
+	if l := f.looks[face]; l.Bold || l.Oblique || l.varied() != nil {
 		dr, mask, ok = f.synthetic(face, idx, x, l)
 	} else {
 		dr, mask, mp, _, ok = f.faces[face].Glyph(fixed.Point26_6{X: x}, r)

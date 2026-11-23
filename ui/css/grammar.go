@@ -365,6 +365,12 @@ var checks = map[string]check{
 		"extra-condensed", "condensed", "semi-condensed", "semi-expanded", "expanded", "extra-expanded",
 		"ultra-expanded"))),
 	"font-synthesis": checkFontSynthesis,
+	"font-variation-settings": func(v []Component) error {
+		if _, ok := fontVariations(v); !ok {
+			return fmt.Errorf(`font-variation-settings: expected normal, or "tag" and a number, with commas between`)
+		}
+		return nil
+	},
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
 	"font-style":      single(words("normal", "italic", "oblique")),

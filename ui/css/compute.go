@@ -1833,6 +1833,11 @@ var props = func() map[string]prop {
 				}
 				return no
 			}, flips[style.FontSynthesis]()),
+		"font-variation-settings": field(func(c *style.Computed) *[]style.FontVariation { return &c.Font.Variations },
+			func(_ *ctx, v []Component) []style.FontVariation {
+				out, _ := fontVariations(v)
+				return out
+			}, flips[[]style.FontVariation]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {

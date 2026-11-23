@@ -91,6 +91,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
+		{"./internal/pages/font-variations", 520, 320, 0.0065},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			if strings.HasSuffix(c.pkg, "/mitres") && os.Getenv("CI") != "" && runtime.GOOS != "windows" {

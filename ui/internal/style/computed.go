@@ -382,6 +382,16 @@ type Font struct {
 	Stretch float32
 	// Synthesis is what font-synthesis forbids making up.
 	Synthesis FontSynthesis
+	// Variations are font-variation-settings' axes, in order, a later
+	// one of a tag winning; none for normal.
+	Variations []FontVariation
+}
+
+// FontVariation is a place on one axis of a variable font: a tag, such
+// as "wght", and a value in the axis's units.
+type FontVariation struct {
+	Tag   string
+	Value float32
 }
 
 // FontSynthesis is the faces font-synthesis forbids making up from

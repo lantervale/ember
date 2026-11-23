@@ -148,7 +148,8 @@ func faceDescriptors(f css.FontFace) fonts.Descriptors {
 		look.NoKern = true
 	}
 	return fonts.Descriptors{Family: f.Family, Weight: f.Weight, WeightMax: f.WeightMax, Italic: f.Italic,
-		Stretch: f.Stretch, StretchMax: f.StretchMax, Ranges: fontRanges(f.Ranges), Look: look}
+		Stretch: f.Stretch, StretchMax: f.StretchMax, AutoWeight: f.AutoWeight, AutoStretch: f.AutoStretch,
+		Ranges: fontRanges(f.Ranges), Look: look}
 }
 
 // readFontFace adds f from the first of its files fsys holds, and
@@ -397,7 +398,7 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 		if df == nil {
 			continue
 		}
-		if look := drawLook(c, ch.Font()); look != (draw.Look{}) {
+		if look := drawLook(c, ch); look != (draw.Look{}) {
 			df = df.Styled(look)
 		}
 		if i == 0 {
@@ -428,15 +429,19 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 	return tf
 }
 
-// drawLook is how c is drawn in f: scaled by its size-adjust, unkerned
-// when its @font-face says so, and made bold or slanted where the
-// family has no such face.
-func drawLook(c *fonts.Face, f style.Font) draw.Look {
+// drawLook is how c is drawn in ch: scaled by its size-adjust, unkerned
+// when its @font-face says so, made bold or slanted where the family has
+// no such face, and at the chain's instance of a variable font.
+func drawLook(c *fonts.Face, ch *fonts.Chain) draw.Look {
 	if !c.Web() {
 		return draw.Look{}
 	}
-	bold, italic := c.Synthetic(f)
-	return draw.Look{Scale: c.Look.SizeAdjust, Bold: bold, Oblique: italic, NoKern: c.Look.NoKern}
+	bold, italic := c.Synthetic(ch.Font())
+	look := draw.Look{Scale: c.Look.SizeAdjust, Bold: bold, Oblique: italic, NoKern: c.Look.NoKern}
+	if at := ch.Instance(c); at != nil {
+		look.Variation = &draw.Variation{Font: c.Variable(), Coords: at}
+	}
+	return look
 }
 
 // drawFace is c as twod draws it, parsed once: TrueType or CFF

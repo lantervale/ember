@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/lantervale/ember/internal/varfont"
+	"github.com/lantervale/ember/internal/varfont/varfonttest"
 )
 
 func coverage(f *Font, r rune) (int, image.Rectangle) {
@@ -85,3 +88,37 @@ func TestAnUnkernedFaceKernsNoPair(t *testing.T) {
 		t.Errorf("unkerned AV: %v", k)
 	}
 }
+
+func TestAVariableFontsInstanceDrawsItsOwnOutlinesAndAdvances(t *testing.T) {
+	ttf := varfonttest.Weighty()
+	face, err := ParseFace("weighty", ttf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vf, err := varfont.Parse(ttf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(user ...float32) *Font {
+		return face.Styled(Look{Variation: &Variation{Font: vf, Coords: vf.Normalize(user)}}).ExactSize(24)
+	}
+	plain, bold, wide, still := face.ExactSize(24), at(900, 100), at(400, 150), at(400, 100)
+	pc, pr := coverage(plain, 'l')
+	bc, _ := coverage(bold, 'l')
+	sc, sr := coverage(still, 'l')
+	if bc <= pc*13/10 {
+		t.Errorf("an l at 900 covers %d, at 400 %d", bc, pc)
+	}
+	if sc != pc || sr.Size() != pr.Size() {
+		t.Errorf("the default instance covers %d in %v, the file as it is %d in %v", sc, sr.Size(), pc, pr.Size())
+	}
+	const units = 24.0 / 2048
+	if got, want := bold.glyph('l').advance-plain.glyph('l').advance, float32(2*varfonttest.Bolder*units); !near(got, want) {
+		t.Errorf("an l at 900 is %v wider, want %v", got, want)
+	}
+	if w, p := wide.Measure("AVOH").X, plain.Measure("AVOH").X; w < p*1.35 {
+		t.Errorf("AVOH at a width of 150 is %v, at 100 %v", w, p)
+	}
+}
+
+func near(a, b float32) bool { return a-b < 1e-3 && b-a < 1e-3 }
