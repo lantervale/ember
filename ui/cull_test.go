@@ -197,6 +197,32 @@ func TestCullingChangesNothingAPageDrawsOrHits(t *testing.T) {
 	}
 }
 
+// A control's parts, a range's track and thumb, a progress's or a meter's
+// bars, are drawn as boxes of their own but hit as the control.
+func TestAControlsPartsAreHitAsTheControl(t *testing.T) {
+	bothWays(t)
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 0; }
+input, progress { appearance: none; display: block; width: 120px; }
+input::-webkit-slider-runnable-track { background: #99cc66; }
+input::-webkit-slider-thumb { appearance: none; width: 10px; height: 24px; background: #003366; }
+progress { height: 14px; }
+progress::-webkit-progress-bar { background: #dddddd; padding: 2px; }
+progress::-webkit-progress-value { background: #22aa77; }
+`))
+	slider := ui.Input(ui.Type("range"), ui.Value("100"))
+	bar := ui.Progress(ui.Value("0.6"))
+	d.Body().Append(slider, bar)
+	d.Layout(geom.V2(400, 300))
+	for _, n := range []*ui.Node{slider, bar} {
+		area, ok := d.BoxOf(n)
+		require.True(t, ok)
+		for x := area.X + 1; x < area.X+area.W; x += 7 {
+			assert.Same(t, n, d.ElementAt(geom.V2(x, area.Y+area.H/2)))
+		}
+	}
+}
+
 func TestAStyleChangeThatNeedsNoLayoutMovesWhatIsCulled(t *testing.T) {
 	bothWays(t)
 	p := newCullPage(t, 1)
