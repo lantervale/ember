@@ -980,6 +980,11 @@ const (
 )
 
 type Look struct {
+	// Appearance is appearance: whether a control keeps ui's own look.
+	Appearance Appearance
+	// Parts are a range's, a progress's or a meter's parts, nil where no
+	// sheet styles any.
+	Parts *ControlParts
 	// Scrollbar is the parts of a scroll container's bars its sheets style,
 	// nil where they keep ui's own look.
 	Scrollbar *ScrollbarParts

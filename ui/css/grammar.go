@@ -504,8 +504,9 @@ var checks = map[string]check{
 	"isolation":             single(words("auto", "isolate")),
 	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,
-	"appearance":            single(words("none", "auto", "textfield")),
-	"resize":                single(words("none", "both", "horizontal", "vertical")),
+	"appearance": single(words("none", "auto", "textfield", "menulist-button", "checkbox", "radio", "button", "listbox",
+		"menulist", "meter", "progress-bar", "slider-vertical", "searchfield", "textarea", "base-select")),
+	"resize": single(words("none", "both", "horizontal", "vertical")),
 
 	"transition-property":        commaList(single(either(words("none", "all"), transitionTarget))),
 	"transition-duration":        commaList(single(timeTerm(true))),

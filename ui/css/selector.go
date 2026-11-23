@@ -174,6 +174,9 @@ type Selector struct {
 	inactive bool
 	// part is the states a scrollbar part's pseudo-classes ask for.
 	part partState
+	// native is the user agent's :-ember-native: the rule draws a
+	// control's own look, and holds only while its appearance isn't none.
+	native bool
 }
 
 func (s Selector) String() string {
@@ -194,6 +197,9 @@ func (s Selector) String() string {
 		b.WriteString(":window-inactive")
 	}
 	b.WriteString(s.part.String())
+	if s.native {
+		b.WriteString(":" + nativeClass)
+	}
 	return b.String()
 }
 
@@ -791,6 +797,7 @@ func matched(cs []Component) []Component {
 
 func parseComplex(cs []Component) (Selector, *SelectorError) {
 	var s Selector
+	cs, s.native = nativeOf(cs)
 	cs, s.part = partStatesOf(cs)
 	cs, s.inactive = windowInactive(cs)
 	name, n, err := pseudoElementAt(cs)
@@ -866,6 +873,9 @@ func (s *Selector) specificity() Specificity {
 		sp[1]++
 	}
 	sp[1] += bits.OnesCount16(uint16(s.part))
+	if s.native {
+		sp[1]++
+	}
 	if s.PseudoElement == beforeMarker || s.PseudoElement == afterMarker {
 		sp[2]++
 	}

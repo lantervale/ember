@@ -183,6 +183,8 @@ func (c *Content) equal(o *Content) bool {
 //nolint:cyclop,gocyclo // one comparison a field
 func (l *Look) equal(o *Look) bool {
 	return l.Background == o.Background &&
+		l.Appearance == o.Appearance &&
+		l.Parts.Equal(o.Parts) &&
 		l.Scrollbar.Equal(o.Scrollbar) &&
 		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
 		l.ScrollbarColored == o.ScrollbarColored &&

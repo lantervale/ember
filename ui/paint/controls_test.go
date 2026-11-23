@@ -22,7 +22,9 @@ func ctl(tag dom.Tag, w, h float32, attrs ...string) *box.Box {
 	for i := 0; i+1 < len(attrs); i += 2 {
 		n.SetAttr(attrs[i], attrs[i+1])
 	}
-	b := el(10, 10, w, h, func(s *style.Computed) { s.Color, s.AccentAuto, s.CaretAuto = black, true, true })
+	b := el(10, 10, w, h, func(s *style.Computed) {
+		s.Color, s.AccentAuto, s.CaretAuto, s.Appearance = black, true, true, style.AppearanceAuto
+	})
 	b.Node = n
 	return b
 }

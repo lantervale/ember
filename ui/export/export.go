@@ -91,8 +91,8 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 	default:
 		b.WriteString(classicScrollbars + stillViewport)
 	}
-	b.WriteString(bareBars)
-	agent := css.Default + listTypes
+	b.WriteString(ownLook)
+	agent := strings.ReplaceAll(css.Default, ":"+nativeClass, ownLookOn) + listTypes
 	if d.BrowserSheets() {
 		agent += css.BrowserDefault
 	} else {
@@ -251,8 +251,11 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
 		write("data-ember-bars", "")
 	}
+	if bare(n) {
+		write("data-ember-bare", "")
+	}
 	live := map[string]bool{
-		"open": modal, "style": true, "checked": n.Tag() == dom.Input, "value": n.Tag() == dom.Input && typ != "checkbox",
+		"open": modal, "style": true, "checked": n.Tag() == dom.Input, "value": n.Tag() == dom.Input && typ != checkboxType,
 		"placeholder": n.Tag() == dom.Select, "selected": n.Tag() == dom.Option,
 	}
 	for _, a := range n.Attrs() {
@@ -285,6 +288,9 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 	if thumb := switchThumb(d, n); thumb != "" {
 		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+thumb), "; ")
 	}
+	if accent := accentLook(d, n); accent != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+accent), "; ")
+	}
 	if bar := barLook(d, n); bar != "" {
 		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
 	}
@@ -300,7 +306,7 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 // selected.
 func controlState(d *ui.Document, n *dom.Node, typ string) (string, string, bool) {
 	switch {
-	case n.Tag() == dom.Input && (typ == "checkbox" || typ == "radio"):
+	case n.Tag() == dom.Input && (typ == checkboxType || typ == "radio"):
 		return "checked", "", d.Checked(n)
 	case n.Tag() == dom.Input:
 		v := d.Value(n)
@@ -387,14 +393,63 @@ func switchThumb(d *ui.Document, n *dom.Node) string {
 		base64.StdEncoding.EncodeToString([]byte(svg)), side)
 }
 
+// nativeClass is the user agent's pseudo-class of a control's own look,
+// which holds while its appearance isn't none: on the page, while it has
+// no data-ember-bare.
+const (
+	nativeClass = "-ember-native"
+	ownLookOn   = ":not([data-ember-bare])"
+)
+
+// ownLook keeps Chrome from drawing its own controls, which the user
+// agent's rules of their look draw in ui's: a page's appearance is read
+// in ui's cascade, and a control of appearance: none is marked
+// data-ember-bare. Its style element can be taken out to read Chrome's
+// own appearance.
+const ownLook = "</style>\n<style id=\"ember-own-look\">\n" +
+	"button, input, select, textarea, progress { appearance: none !important; }\n" + bareBars + "</style>\n<style>\n"
+
+// bare reports whether n is a control of appearance: none, which draws
+// from its CSS alone.
+func bare(n *dom.Node) bool {
+	st := dom.Data(n).Style
+	t := n.Tag()
+	control := t == dom.Input || t == dom.Button || t == dom.Select || t == dom.Textarea || t == dom.Progress ||
+		t == dom.Meter
+	return control && st != nil && !st.Appearance.Native()
+}
+
+// accentLook draws a checked checkbox or radio of ui's own look whose
+// accent-color is set as paint does: the checkbox filled with it, the
+// radio's ring in it.
+func accentLook(d *ui.Document, n *dom.Node) string {
+	st := dom.Data(n).Style
+	typ, _ := n.Attr("type")
+	if st == nil || st.AccentAuto || !st.Appearance.Native() || n.Tag() != dom.Input || !d.Checked(n) {
+		return ""
+	}
+	a := st.AccentColor.Hex()
+	switch strings.ToLower(typ) {
+	case checkboxType:
+		return "background-color: " + a + " !important; border-color: " + a + " !important"
+	case "radio":
+		return "border-color: " + a + " !important"
+	}
+	return ""
+}
+
+// checkboxType is a checkbox's type attribute.
+const checkboxType = "checkbox"
+
 // bareBars takes Chrome's own look off ranges and progress bars, which
 // barLook draws as paint does. Its selectors weigh nothing (:where), so
 // an author's rules on the same elements win as they do in ember.
-const bareBars = `:where(input[type="range"]) { appearance: none; background: none; }
-:where(input[type="range"])::-webkit-slider-runnable-track { background: none; }
-:where(input[type="range"])::-webkit-slider-thumb { appearance: none; width: 0; height: 0; }
-:where(progress) { appearance: none; background: none; }
-:where(progress)::-webkit-progress-bar, :where(progress)::-webkit-progress-value { background: none; }
+const bareBars = `:where(input[type="range"]:not([data-ember-bare])) { appearance: none; background: none; }
+:where(input[type="range"]:not([data-ember-bare]))::-webkit-slider-runnable-track { background: none; }
+:where(input[type="range"]:not([data-ember-bare]))::-webkit-slider-thumb { appearance: none; width: 0; height: 0; }
+:where(progress:not([data-ember-bare])) { appearance: none; background: none; }
+:where(progress:not([data-ember-bare]))::-webkit-progress-bar,
+:where(progress:not([data-ember-bare]))::-webkit-progress-value { background: none; }
 `
 
 // barLook is the declarations that draw a range or a progress bar in
@@ -407,7 +462,7 @@ const bareBars = `:where(input[type="range"]) { appearance: none; background: no
 // so a document exported before any layout shows Chrome's bare bars.
 func barLook(d *ui.Document, n *dom.Node) string {
 	st := dom.Data(n).Style
-	if st == nil {
+	if st == nil || bare(n) {
 		return ""
 	}
 	typ, _ := n.Attr("type")

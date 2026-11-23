@@ -167,6 +167,33 @@ A background has as many layers as `background-image` has pictures, comma-separa
 
 A `url()` whose address is a `data:` one, base64 or percent-encoded, is read from the address itself, in a sheet as in an `img`'s `src`.
 
+### Controls drawn from their CSS
+
+A control keeps ui's own look while its `appearance` is `auto` (or one of the old keywords, `checkbox`, `menulist`…, which compute as written). With `appearance: none` it is drawn from its CSS alone, as Chrome draws it ([decision 0160](../99-decisions/0160-a-control-of-appearance-none-is-drawn-from-its-css-and-its-parts.md)): the user agent's rules of its look hold no more, so a checkbox or a radio is an empty box, 0 by 0 until sized, with no tick or dot; a select has no chevron; a text field takes a 2-point inset border and a button a 2-point outset one, as in Chrome's sheet. A checked checkbox or radio of ui's own look whose `accent-color` is set is filled (ringed) in it, the tick white or dark grey, whichever shows more.
+
+A range, a progress and a meter of `appearance: none` are drawn as boxes of their parts, styled as real pages style them:
+
+```css
+input[type="range"] { appearance: none; }
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: #6b5a45; }
+input[type="range"]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; margin-top: -6px;
+  border-radius: 50%; background: #ad9773; }
+progress { appearance: none; }
+progress::-webkit-progress-bar { border-radius: 7px; background-color: #3a332c; }
+progress::-webkit-progress-value { border-radius: 7px; background-color: #6b8f5a; }
+```
+
+| Part | |
+|---|---|
+| `::-webkit-slider-runnable-track` | across the range, centred down it, as tall as the thumb unless sized; the range is as tall as the track when its height is `auto` |
+| `::-webkit-slider-thumb` | at the value along the track's content box less its own width, from its top and its `margin-top`; Chrome's blue disc, in the range's `accent-color`, unless its own `appearance` is `none` |
+| `::-webkit-progress-inner-element`, `::-webkit-meter-inner-element` | the control's content box |
+| `::-webkit-progress-bar`, `::-webkit-meter-bar` | the inner element's content box, a meter's half as tall and centred; grey for a progress, Chrome's grey gradient for a meter |
+| `::-webkit-progress-value` | the bar's content box cut to the value; green |
+| `::-webkit-meter-optimum-value`, `-suboptimum-value`, `-even-less-good-value` | the bar's content box cut to the value, styled by the region the value is in; Chrome's green, yellow and red gradients |
+
+A meter of its own look takes its styled bar's and values' `background-color`s. The parts are read in every sheet; `-webkit-appearance` is read under `ui.BrowserSheets()` only, so a game's sheet writes `appearance`.
+
 ### Clamping lines
 
 A card's text cut after a few lines, its last ending in an ellipsis, is the web's `display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden`, and ui lays it out as Chrome does (decision [0147](../99-decisions/0147-lines-are-clamped-as-chrome-clamps-them.md)): the box is a `flow-root`, its height ends below its third line, counted through the blocks in its flow (not those that start a formatting context of their own), and that line makes room for an ellipsis when anything follows it. The lines after it are laid out and drawn, as Chrome draws them, so `overflow: hidden` is what hides them. `line-clamp: 3` does the same on any block container, starting a formatting context, and draws nothing after the clamp: the standard property, which Chrome reads behind its `CSSLineClamp` flag. Any other `-webkit-box` is laid out as `flex`, in a row, or in a column with `-webkit-box-orient: vertical`; `-webkit-box-pack`, `-webkit-box-align` and `-webkit-box-flex` are not read.
@@ -351,7 +378,8 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 | `::checkmark`, `::picker()`, `::picker-icon` | matches nothing: a select is drawn whole |
 | `::permission-icon` | matches nothing: no permission element |
 | `::-webkit-scrollbar`, `::-webkit-scrollbar-track`, `::-webkit-scrollbar-track-piece`, `::-webkit-scrollbar-thumb`, `::-webkit-scrollbar-corner` | a scroll container's styled bars (above, beside `overflow`); `::-webkit-scrollbar-button` and `::-webkit-resizer` match nothing |
-| any other vendor's (`::-webkit-slider-thumb`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
+| `::-webkit-slider-runnable-track`, `::-webkit-slider-thumb`, `::-webkit-progress-inner-element`, `::-webkit-progress-bar`, `::-webkit-progress-value`, `::-webkit-meter-inner-element`, `::-webkit-meter-bar`, `::-webkit-meter-optimum-value`, `::-webkit-meter-suboptimum-value`, `::-webkit-meter-even-less-good-value` | the parts of a range, a progress and a meter ([below](#controls-drawn-from-their-css)) |
+| any other vendor's (`::-webkit-inner-spin-button`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
 | any other name | refused: unknown, as Chrome drops the rule |
 
 A pseudo-element's rule that sets a property it does not take keeps its other declarations and warns of that one. Nothing may follow a pseudo-element in a selector: `::before:hover` and `li::marker::before` are refused as Chrome refuses them; `::before::marker` and `::after::marker` are read as Chrome reads them, and so is `::selection:window-inactive`, the one pseudo-class after a pseudo-element; `:window-inactive` elsewhere matches nothing, as in Chrome.
