@@ -363,7 +363,7 @@ func (n *node) context() context {
 		return contextNone
 	case n.role == roleTable && len(n.kids) > 0:
 		return contextTable
-	case len(n.kids) == 0 || n.inline != nil:
+	case n.inline != nil, len(n.kids) == 0 && !n.isGrid():
 		return contextLeaf
 	case n.slider:
 		return contextFlex
@@ -700,6 +700,11 @@ func (n *node) flexOrGrid() bool {
 	d := n.st.Display
 	return n.slider || d == style.FlexDisplay || d == style.InlineFlex || d == style.GridDisplay ||
 		d == style.InlineGrid
+}
+
+// isGrid reports a grid container, laid out by its tracks even when it holds nothing.
+func (n *node) isGrid() bool {
+	return !n.slider && (n.st.Display == style.GridDisplay || n.st.Display == style.InlineGrid)
 }
 
 // noteFloats sets holdsFloats where a float is among n's kids or under one of them.
