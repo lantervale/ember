@@ -34,6 +34,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/scrollbar-parts", 480, 230, 0.0003},
 		{"./internal/pages/scrollbar-gutter", 560, 210, 0.0015},
 		{"./internal/pages/control-parts", 440, 280, 0.001},
+		{"./internal/pages/control-generated", 420, 280, 0.003},
 		{"./internal/pages/viewport-top", 320, 260, 0.0055},
 		{"./internal/pages/viewport-end", 320, 260, 0.006},
 		{"./internal/pages/top-layer", 320, 240, 0.002},

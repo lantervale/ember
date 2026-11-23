@@ -1371,7 +1371,8 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		a.overflow = out.overflow
 		a.node.pendingOOF = out.oof
 		switch {
-		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl:
+		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl,
+			a.node.slider:
 		case some(out.lastBaseline):
 			a.baseline = out.lastBaseline
 		case some(out.firstBaseline):
@@ -2107,6 +2108,12 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			}
 			i = after
 			y += lh
+			if kept == 0 {
+				// The lines after a trimmed first line rise by its trim, the floats beside
+				// it staying where it was laid out, as Chrome's.
+				top, _ := t.trims(c, []line{l})
+				y -= top
+			}
 			bottom = y
 			if side := c.brClear(after - 1); side != style.ClearNone {
 				if below := c.flow.clearedThreshold(side); some(below) && below > y {

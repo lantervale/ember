@@ -176,6 +176,9 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		if some(res.firstBaseline) {
 			res.firstBaseline += offset
 		}
+		if some(res.lastBaseline) {
+			res.lastBaseline += offset
+		}
 		anyInFlow := false
 		for _, it := range items {
 			if it.final != nil {
@@ -214,7 +217,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	out := output{
 		size:             final,
 		firstBaseline:    res.firstBaseline,
-		lastBaseline:     none,
+		lastBaseline:     res.lastBaseline,
 		collapsesThrough: !preventsCollapse && outerH == 0 && allCollapse,
 		lines:            res.lines,
 		clamped:          res.clamped,
@@ -449,6 +452,7 @@ type blockResult struct {
 	firstTop      marginSet
 	lastBottom    marginSet
 	firstBaseline float32
+	lastBaseline  float32
 	lines         int
 	clamped       bool
 }
@@ -502,7 +506,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	yForAbsolute := rInset.t
 	var firstTop, active marginSet
 	collapsingWithFirst := true
-	firstBaseline := none
+	firstBaseline, lastBaseline := none, none
 	// activeHasClearance is set while the margins waiting to collapse are those of an
 	// empty element with clearance: they collapse with what follows, never out of the
 	// block's bottom.
@@ -523,6 +527,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			lastInFlow = i
 		}
 	}
+	// floats are the floats since the last block in the flow: those an anonymous block's
+	// lines go round stand on its first line in Chrome.
+	floats := 0
 	for i, it := range items {
 		if outOfFlow(it.position) {
 			it.staticPosition = point{rInset.l, yForAbsolute}
@@ -584,6 +591,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 			overflow = overflow.union(overflowContribution(contributionLoc, lo.size,
 				lo.overflow.rect, it.border, it.overflow, container, negativeEdges(nonAuto)))
+			floats++
 			continue
 		}
 
@@ -768,6 +776,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				firstBaseline = loc.y - insetOffset.y + b
 			}
 		}
+		if b := childLastBaseline(lo, finalSize.h, it.overflow.Height); some(b) {
+			lastBaseline = loc.y - insetOffset.y + b
+		}
 		if avoids {
 			if !some(margin.l) {
 				resolved.l += avoid.x - rInset.l
@@ -789,6 +800,10 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, finalSize,
 			lo.overflow.rect, it.border, it.overflow, container, negativeEdges(resolved)))
+		if run == performLayout && floats > 0 {
+			t.raiseFloats(items[:i], floats, it.node, finalSize.w)
+		}
+		floats = 0
 		if in.clamp.lines > 0 {
 			left -= lo.lines
 			if lo.clamped {
@@ -859,6 +874,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		firstTop:      firstTop,
 		lastBottom:    lastBottom,
 		firstBaseline: firstBaseline,
+		lastBaseline:  lastBaseline,
 		lines:         clamp.lines - max(left, 0),
 		clamped:       some(clampEnd),
 	}
@@ -896,4 +912,24 @@ func blockAlignOffset(st *style.Computed, free float32) float32 {
 		return free
 	}
 	return 0
+}
+
+// raiseFloats moves the last count floats of items, which stand before the anonymous
+// block anon of width w, up by what text-box-trim takes off its first line: Chrome lays
+// them out on that line, which the trim raises with what stands on it.
+func (t *tree) raiseFloats(items []*blockItem, count int, anon *node, w float32) {
+	c := anon.inline
+	if c == nil || anon.box.Kind != box.AnonymousBlock {
+		return
+	}
+	top, _ := t.trims(c, c.lines(w))
+	if top == 0 {
+		return
+	}
+	for i := len(items) - 1; i >= 0 && count > 0; i-- {
+		if it := items[i]; it.float != style.FloatNone && !outOfFlow(it.position) && it.final != nil {
+			it.final.location.y -= top
+			count--
+		}
+	}
 }

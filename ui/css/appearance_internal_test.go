@@ -100,8 +100,8 @@ func TestTheUserAgentsNativeClassWeighsAsAClassAndPrints(t *testing.T) {
 }
 
 // A range, a progress and a meter get their parts' styles, each
-// inheriting from the part it is in; a range of appearance none is as
-// tall as its track, as tall as its thumb unless sized.
+// inheriting from the part it is in; a range of appearance none is at
+// least as tall as its track, as tall as its thumb unless sized.
 func TestTheControlsPartsAreStyledAsChromes(t *testing.T) {
 	prog, meter := el(dom.Progress, "", ""), el(dom.Meter, "", "")
 	plain, short, tall := input("range", "none", ""), input("range", "none four", ""), input("range", "none thumb", "")
@@ -124,8 +124,8 @@ meter::-webkit-meter-suboptimum-value { background-color: #f00; }`)})
 		n *dom.Node
 		h style.Length
 	}{"plain": {plain, style.Px(16)}, "short": {short, style.Px(8)}, "tall": {tall, style.Px(20)}} {
-		if got := styleOf(c.n).Size.Height; got != c.h {
-			t.Errorf("%s: height %v, want %v", name, got, c.h)
+		if got := styleOf(c.n).MinSize.Height; got != c.h {
+			t.Errorf("%s: min-height %v, want %v", name, got, c.h)
 		}
 	}
 	if st := styleOf(own); st.Size.Height != style.Px(16) || st.Parts.Thumb.Appearance.Native() {

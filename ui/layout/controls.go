@@ -91,7 +91,8 @@ func (t *tree) inputText(n *node) float32 {
 }
 
 // centresContent reports a button, input, select or cell, which place their content in
-// the height of their content box.
+// the height of their content box; a checkbox's or a radio's generated content starts at
+// its top, as Chrome's.
 func centresContent(n *node) bool {
 	if n.cell {
 		return true
@@ -99,8 +100,13 @@ func centresContent(n *node) bool {
 	if n.box.Node == nil {
 		return false
 	}
-	tag := n.box.Node.Tag()
-	return tag == dom.Button || tag == dom.Input || tag == dom.Select
+	e := n.box.Node
+	if e.Tag() != dom.Input {
+		return e.Tag() == dom.Button || e.Tag() == dom.Select
+	}
+	t, _ := e.Attr("type")
+	t = strings.ToLower(strings.TrimSpace(t))
+	return t != "checkbox" && t != "radio"
 }
 
 // contentAlign is where n's content stands in its height: where its align-content says,

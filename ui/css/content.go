@@ -273,15 +273,15 @@ func contentProps() map[string]prop {
 // generates reports whether the element n takes ::before and ::after
 // boxes: not the ones Chrome gives none (img, br, text fields, select,
 // canvas), nor those ui draws whole but a checkbox and a radio, which
-// Chrome lays them out in as any block. A range, a progress bar and a
-// meter, whose own parts Chrome lays them out among, take none yet.
+// Chrome lays them out in as any block, and a range, a progress bar and
+// a meter, which it lays them out among their own parts.
 func generates(n *dom.Node) bool {
 	switch n.Tag() {
 	case dom.Input:
 		typ, _ := n.Attr("type")
 		t := strings.ToLower(strings.TrimSpace(typ))
-		return t == "checkbox" || t == "radio"
-	case dom.Img, dom.Svg, dom.Br, dom.Textarea, dom.Select, dom.Canvas, dom.Iframe, dom.Progress, dom.Meter, dom.Col,
+		return t == "checkbox" || t == "radio" || t == rangeType
+	case dom.Img, dom.Svg, dom.Br, dom.Textarea, dom.Select, dom.Canvas, dom.Iframe, dom.Col,
 		dom.Colgroup, dom.Source, dom.TextTag:
 		return false
 	case dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
@@ -291,7 +291,7 @@ func generates(n *dom.Node) bool {
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small,
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.Table, dom.Thead, dom.Tbody, dom.Tfoot, dom.Tr, dom.PictureElement:
+		dom.Table, dom.Thead, dom.Tbody, dom.Tfoot, dom.Tr, dom.PictureElement, dom.Progress, dom.Meter:
 	}
 	return true
 }

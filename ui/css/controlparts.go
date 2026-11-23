@@ -12,10 +12,14 @@ import (
 // appearance is none.
 const nativeThumb = 16
 
+// rangeType is a range input's type attribute.
+const rangeType = "range"
+
 // controlParts gives a range, a progress or a meter of style c the parts
 // its sheets style, each inheriting from the part it is in, as in
 // Chrome's shadow tree. A range of appearance none whose height is auto
-// is as tall as its track, which is as tall as its thumb unless sized.
+// is at least as tall as its track, which is as tall as its thumb unless
+// sized: its min-height, so its ::before and ::after can make it taller.
 func (r *restyler) controlParts(c *style.Computed, n *dom.Node, rem float32) {
 	var p style.ControlParts
 	part := func(name string, in *style.Computed) *style.Computed {
@@ -36,7 +40,7 @@ func (r *restyler) controlParts(c *style.Computed, n *dom.Node, rem float32) {
 		for i, name := range [...]string{meterOptimum, meterSuboptimum, meterEvenLessGood} {
 			p.Regions[i] = part(name, p.Bar)
 		}
-	case tag == dom.Input && strings.EqualFold(t, "range"):
+	case tag == dom.Input && strings.EqualFold(t, rangeType):
 		p.Track = r.part(n, c, rem, sliderTrack, 0)
 		p.Thumb = part(sliderThumb, p.Track)
 		if !c.Appearance.Native() && c.Size.Height.Kind == style.Auto {
@@ -44,7 +48,10 @@ func (r *restyler) controlParts(c *style.Computed, n *dom.Node, rem float32) {
 			if c.BoxSizing == style.BorderBox {
 				h += vertical(c)
 			}
-			c.Size.Height = style.Px(h)
+			if m, ok := c.MinSize.Height.Resolve(0); c.MinSize.Height.Kind == style.Auto ||
+				ok && c.MinSize.Height.Percent == 0 && m < h {
+				c.MinSize.Height = style.Px(h)
+			}
 		}
 	default:
 		return
