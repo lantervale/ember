@@ -129,6 +129,8 @@ func (t *Text) equal(o *Text) bool {
 		t.CaretColor == o.CaretColor &&
 		t.AccentAuto == o.AccentAuto &&
 		t.CaretAuto == o.CaretAuto &&
+		t.TextFill == o.TextFill &&
+		t.TextFilled == o.TextFilled &&
 		t.Content.equal(&o.Content) &&
 		sameSlice(t.CounterReset, o.CounterReset) &&
 		sameSlice(t.CounterIncrement, o.CounterIncrement) &&
@@ -222,7 +224,7 @@ func (l *Look) equal(o *Look) bool {
 }
 
 func (i *Image) equal(o *Image) bool {
-	return i.Source == o.Source && i.Slice == o.Slice && i.Gradient.equal(o.Gradient)
+	return i.Source == o.Source && i.Slice == o.Slice && i.Fill == o.Fill && i.Gradient.equal(o.Gradient)
 }
 
 func (g *Gradient) equal(o *Gradient) bool {

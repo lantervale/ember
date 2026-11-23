@@ -46,7 +46,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 |---|---|
 | `::before`, `::after` on `progress`, `meter` and range inputs | no box, where Chrome lays one out among the control's own parts |
 | a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
-| `::marker` with `line-height`, `text-shadow`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
+| `::marker` with `line-height`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
 | `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
 | the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
 | a `list-style-image` gradient, `list-style-position: inside` | refused |
@@ -86,11 +86,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a rounded border whose sides differ in width or in style, or that is `inset`, `outset`, `groove` or `ridge`; a rounded `dashed` or `dotted` one | drawn square; the dashed or dotted one drawn solid |
 | a rounded border of three or four colours | each meets the next on Chrome's line, with a trace of the first colour through the blend where two later ones meet |
 | `outline-style` but `solid` and `double` (`dashed`, `dotted`, `inset`, `outset`, `groove`, `ridge`, `auto`) | drawn solid |
-| `background-clip: text` | refused |
-| `background-attachment: fixed` on an element under a transform | placed in the viewport, where Chrome places it in the element |
+| `background-clip: text` on the root or `body` painting the canvas | the canvas is painted whole, not clipped to the text |
+| `-webkit-text-stroke` | refused |
 | a scaled picture's tile seams, the gaps of `background-repeat: space` | each tile keeps its own edge, where Chrome blends across: about a pixel row; a gap of a fraction of a pixel is a whole pixel or none, where Chrome blends it |
-| a `border-image` from an SVG on a dense screen | rasterised at one pixel a point, so blurred |
-| a canvas picture in a Document without `ui.ScrollingViewport()` | placed in the window, where Chrome places it in `html`'s box |
+| a `border-image-slice` of `100%` without `fill` | the picture drawn whole over the border box, where Chrome draws its corners alone |
 
 ## Sheets
 

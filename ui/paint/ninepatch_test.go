@@ -16,7 +16,7 @@ func TestANinePatchSamplesEachSliceWithinItself(t *testing.T) {
 	r := newRecorder()
 	(&painter{s: r}).ninePatch(geom.Rect{X: 10, Y: 10, W: 200, H: 60}, tex,
 		style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8},
-		style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8}, [2]style.ImageRepeat{}, color.White)
+		style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8}, [2]style.ImageRepeat{}, color.White, true)
 	slices := [4]float32{0, 8, 16, 24}
 	within := func(a, b float32) bool {
 		for i := range 3 {
@@ -42,7 +42,7 @@ func TestANinePatchSliceMapsItsMiddleLinearly(t *testing.T) {
 	r := newRecorder()
 	(&painter{s: r}).ninePatch(geom.Rect{W: 200, H: 60}, tex,
 		style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8},
-		style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8}, [2]style.ImageRepeat{}, color.White)
+		style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8}, [2]style.ImageRepeat{}, color.White, true)
 	for _, o := range r.of("image") {
 		if o.Rect.X > 8 && o.Rect.X+o.Rect.W < 192 && o.Rect.Y > 8 && o.Rect.Y+o.Rect.H < 52 {
 			assert.InDelta(t, 7.0/(184-184.0/8), o.UV.W*24/o.Rect.W, 1e-4,
@@ -85,7 +85,7 @@ func TestANinePatchTilesItsEdgesAndCentreByRepeat(t *testing.T) {
 	box := geom.Rect{W: 46, H: 30}
 	eight := style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8}
 	(&painter{s: r}).ninePatch(box, tex, eight, eight, [2]style.ImageRepeat{style.RepeatTile, style.RepeatRound},
-		color.White)
+		color.White, true)
 	top := 0
 	for _, o := range r.of("image") {
 		if o.Rect.Y >= 8 || o.Rect.X+o.Rect.W <= 8 || o.Rect.X >= 38 {
@@ -137,7 +137,7 @@ func TestABorderImageWithNoTopOrBottomStretchesItsMiddleBandOverTheBox(t *testin
 	r := newRecorder()
 	box := geom.Rect{W: 100, H: 4}
 	(&painter{s: r}).ninePatch(box, tex, style.Sides[float32]{Top: 6, Right: 16, Bottom: 6, Left: 16},
-		style.Sides[float32]{Right: 16, Left: 16}, [2]style.ImageRepeat{}, color.White)
+		style.Sides[float32]{Right: 16, Left: 16}, [2]style.ImageRepeat{}, color.White, true)
 	area := float32(0)
 	for _, o := range r.of("image") {
 		area += o.Rect.W * o.Rect.H
@@ -154,7 +154,7 @@ func TestATiledEdgeDrawnThickerTilesLongerCopies(t *testing.T) {
 	eight := style.Sides[float32]{Top: 8, Right: 8, Bottom: 8, Left: 8}
 	sixteen := style.Sides[float32]{Top: 16, Right: 16, Bottom: 16, Left: 16}
 	(&painter{s: r}).ninePatch(geom.Rect{W: 96, H: 48}, tex, eight, sixteen,
-		[2]style.ImageRepeat{style.RepeatTile, style.RepeatStretch}, color.White)
+		[2]style.ImageRepeat{style.RepeatTile, style.RepeatStretch}, color.White, true)
 	var starts []float32
 	for _, o := range r.of("image") {
 		if o.Rect.Y == 0 && o.Rect.X >= 16 && o.Rect.X < 80 && o.UV.W == 0 && o.UV.X < 12.0/24 {

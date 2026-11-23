@@ -444,7 +444,7 @@ var colored = map[string]bool{
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
 	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
-	"backdrop-filter": true,
+	"backdrop-filter": true, "-webkit-text-fill-color": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -2035,6 +2035,7 @@ var props = func() map[string]prop {
 		"background-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundClips },
 			wordOf(map[string]style.BackgroundBox{
 				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
+				"text": style.UnderText,
 			}), flips[[]style.BackgroundBox]()),
 		"mask-image": layered(func(c *style.Computed) *[]style.Image { return &c.MaskImages },
 			backgroundImage, flips[[]style.Image]()),
@@ -2072,6 +2073,9 @@ var props = func() map[string]prop {
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
 		"caret-color":  autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.CaretColor, &c.CaretAuto }),
+
+		"-webkit-text-fill-color": textFill(),
+
 		"object-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.ObjectPosition },
 			(*ctx).position, positions),
 		"object-fit": keyword(func(c *style.Computed) *style.ObjectFit { return &c.ObjectFit },
@@ -2079,7 +2083,7 @@ var props = func() map[string]prop {
 				"none": style.FitNone, "scale-down": style.FitScaleDown}),
 		"border-image-source": field(func(c *style.Computed) *string { return &c.BorderImage.Source },
 			imageSource, flips[string]()),
-		"border-image-slice": field(
+		"border-image-slice": filled(field(
 			func(c *style.Computed) *style.Sides[float32] { return &c.BorderImage.Slice },
 			func(_ *ctx, v []Component) style.Sides[float32] {
 				if len(v) == 1 && v[0].Kind == Percentage && v[0].Num == 100 {
@@ -2094,7 +2098,7 @@ var props = func() map[string]prop {
 				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(n)-1]
 				return style.Sides[float32]{Top: n[pick[0]], Right: n[pick[1]], Bottom: n[pick[2]], Left: n[pick[3]]}
 			}, imageSlices,
-		),
+		)),
 		"border-image-width": field(
 			func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.BorderImageWidth },
 			func(x *ctx, v []Component) style.Sides[style.ImageWidth] {
@@ -2293,6 +2297,43 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 				ca, aa := get(a)
 				cb, ab := get(b)
 				return *aa == *ab && (*aa || *ca == *cb)
+			},
+		},
+	}
+}
+
+// filled is border-image-slice's p that also reads its fill word, which
+// flips with the slices.
+func filled(p prop) prop {
+	set, inherit := p.set, p.inherit
+	p.set = func(x *ctx, v []Component) {
+		set(x, v)
+		x.c.BorderImage.Fill = slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "fill") })
+	}
+	p.inherit = func(dst, src *style.Computed) {
+		inherit(dst, src)
+		dst.BorderImage.Fill = src.BorderImage.Fill
+	}
+	return p
+}
+
+// textFill is -webkit-text-fill-color: a colour, or currentColor, which
+// leaves the glyphs to color, as the element's own, inherited or not.
+func textFill() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			if x.c.TextFilled = !isWord(v[0], kwCurrentColor); x.c.TextFilled {
+				x.c.TextFill = linear(v[0], x.c.Color)
+			}
+		},
+		inherit: func(dst, src *style.Computed) { dst.TextFill, dst.TextFilled = src.TextFill, src.TextFilled },
+		anim: anim{kind: interpolated,
+			lerp: func(dst, a, b *style.Computed, t float32) bool {
+				dst.TextFill, dst.TextFilled = lerpColor(a.Fill(), b.Fill(), t), true
+				return true
+			},
+			equal: func(a, b *style.Computed) bool {
+				return a.TextFilled == b.TextFilled && (!a.TextFilled || a.TextFill == b.TextFill)
 			},
 		},
 	}

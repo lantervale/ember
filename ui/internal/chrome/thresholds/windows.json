@@ -33,6 +33,7 @@
   "32d-file-dialog-own-window": 0.0047,
   "33-hint": 0.0055,
   "background-boxes": 0.0068,
+  "background-text": 0.0065,
   "column-span": 0.0099,
   "debug-grid": 0.0052,
   "decorations": 0.017,

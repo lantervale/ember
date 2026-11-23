@@ -73,10 +73,10 @@ func tiles(d0, d1, length float32, repeat style.ImageRepeat, out [][2]float32) (
 // corners scaled to their widths, its edges and centre stretched or tiled
 // along each axis as repeat says (across, then down), each copy sampled
 // within its slice and scaled as its edge is. Copies cut by the ends of
-// their part are clipped to it.
+// their part are clipped to it. The centre is drawn only when fill is.
 func (p *painter) ninePatch(
 	r geom.Rect, tex *twod.Texture, slice, widths style.Sides[float32], repeat [2]style.ImageRepeat,
-	tint color.Color,
+	tint color.Color, fill bool,
 ) {
 	size := tex.Size()
 	if size.X <= 0 || size.Y <= 0 {
@@ -105,6 +105,9 @@ func (p *painter) ninePatch(
 	var cols, rows [9]sliceSpan
 	for j := range 3 {
 		for i := range 3 {
+			if i == 1 && j == 1 && !fill {
+				continue
+			}
 			var cutX, cutY bool
 			rowTiles, cutY = lay(ys, vs, j, repeat[1], scaleDown[i], rowTiles[:0])
 			colTiles, cutX = lay(xs, us, i, repeat[0], scaleAcross[j], colTiles[:0])

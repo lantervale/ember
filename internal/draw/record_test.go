@@ -126,6 +126,23 @@ func TestAPassPictureIsNeverRecorded(t *testing.T) {
 	assert.False(t, c.Record(m, &r), "a render texture's batch is drawn alone")
 }
 
+func TestDrawingCutByAPassPictureIsNeverRecorded(t *testing.T) {
+	var c List
+	m := c.Mark()
+	c.PushClipMask(geom.Rect{W: 10, H: 10}, &render.Texture{})
+	c.Rect(geom.Rect{W: 10, H: 10}, color.White)
+	c.PopClip()
+	var r Recording
+	assert.False(t, c.Record(m, &r), "its picture is drawn again only in the frame that made it")
+
+	c = List{}
+	m = c.Mark()
+	c.PushClipMask(geom.Rect{W: 10, H: 10}, picture())
+	c.Rect(geom.Rect{W: 10, H: 10}, color.White)
+	c.PopClip()
+	assert.True(t, c.Record(m, &r), "a mask of pixels stays")
+}
+
 func TestARecordingStartingInsideAnOpenBatchReplaysItsOwnPart(t *testing.T) {
 	var c List
 	c.Rect(geom.Rect{W: 4, H: 4}, color.White)

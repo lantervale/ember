@@ -230,6 +230,9 @@ type painter struct {
 	apart bool
 	// chain is use's room for a clip chain.
 	chain []*clip
+	// glyphsOnly draws text as the shape of its glyphs and decorations,
+	// opaque white: the picture background-clip: text shows through.
+	glyphsOnly bool
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey
@@ -346,19 +349,20 @@ func (p *painter) start(root *box.Box) {
 // or body's when the root has none, as CSS's canvas does; that box then
 // leaves it out of its own decoration. Without either, a root drawn in
 // the dark scheme has the canvas Chrome's dark Canvas colour, where a
-// light one leaves the window's own showing. In a viewport that scrolls, its
-// picture is placed in the root element's padding box, as Chrome places
-// it, so it scrolls with the page; otherwise in the viewport.
+// light one leaves the window's own showing. Its picture is placed in the
+// root element's box its origin names, as Chrome places it, so in a
+// viewport that scrolls it scrolls with the page, unless it is fixed.
 func (p *painter) canvasBackground(root *box.Box) {
-	area := p.viewport
+	at := root.Pos
 	if root.Kind == box.Viewport {
 		if len(root.Children) == 0 {
 			return
 		}
-		at := root.Pos.Sub(root.Scroll)
+		at = root.Pos.Sub(root.Scroll)
 		root = root.Children[0]
-		area = padding(root, at.Add(root.Pos))
+		at = at.Add(root.Pos)
 	}
+	border := geom.Rect{X: at.X, Y: at.Y, W: root.Size.X, H: root.Size.Y}
 	src := root
 	if !hasBackground(shown(root)) {
 		src = nil
@@ -384,6 +388,10 @@ func (p *painter) canvasBackground(root *box.Box) {
 	}
 	for i := st.BackgroundLayers() - 1; i >= 0; i-- {
 		l := st.BackgroundLayer(i)
+		area, _ := backgroundBox(root, border, root.Border, radii{}, or(l.Origin, style.UnderPadding))
+		if l.Attachment == style.AttachFixed {
+			area = p.viewport
+		}
 		mixing.layer(l.Blend, func() { p.backgroundImage(p.viewport, area, radii{}, &l, st, 1) })
 	}
 }

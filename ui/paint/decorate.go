@@ -249,6 +249,10 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		p.s.PushClip(r)
 		defer p.s.PopClip()
 	}
+	var text *twod.Picture
+	if clipsText(st) {
+		text = p.textMask(e)
+	}
 	mixing := p.beginLayers(st)
 	defer mixing.end()
 	if st.Background.A > 0 && !tracked(b) {
@@ -263,13 +267,16 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 		case silhouetted(b, st):
 			p.maskedFill(b, r, edges, radius, st, alpha)
 		default:
-			clip, rounding := backgroundBox(b, r, edges, radius, or(st.BackgroundLayer(n-1).Clip, style.UnderBorder))
-			p.fill(clip, rounding, fade(st.Background, alpha))
+			which := or(st.BackgroundLayer(n-1).Clip, style.UnderBorder)
+			clip, rounding := backgroundBox(b, r, edges, radius, which)
+			p.throughText(text, which, func() { p.fill(clip, rounding, fade(st.Background, alpha)) })
 		}
 	}
 	for i := n - 1; i >= 0; i-- {
 		if l := st.BackgroundLayer(i); l.Image.Source != "" || l.Image.Gradient != nil {
-			mixing.layer(l.Blend, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
+			mixing.layer(l.Blend, func() {
+				p.throughText(text, l.Clip, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
+			})
 		}
 	}
 }
@@ -297,7 +304,9 @@ func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edge
 	}
 	switch l.Attachment {
 	case style.AttachFixed:
-		area = p.viewport
+		if !transformed(b) {
+			area = p.viewport
+		}
 	case style.AttachLocal:
 		pad := inside(r, edges)
 		view = intersect(view, pad)
@@ -306,6 +315,18 @@ func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edge
 	case style.AttachScroll:
 	}
 	p.backgroundImage(view, area, rounding, l, st, alpha)
+}
+
+// transformed reports whether b or a box round it is turned, moved or
+// scaled by its style, where Chrome places a fixed background in b's box
+// as a scrolling one.
+func transformed(b *box.Box) bool {
+	for ; b != nil; b = b.Parent {
+		if st := shown(b); b.Kind == box.Element && st != nil && len(st.Transform) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func or(b, initial style.BackgroundBox) style.BackgroundBox {
@@ -329,7 +350,8 @@ func backgroundBox(
 			Bottom: edges.Bottom + b.Padding.Bottom, Left: edges.Left + b.Padding.Left,
 		}
 		return inside(r, in), radius.inside(in)
-	case style.InitialBox, style.UnderBorder, style.FillBox, style.StrokeBox, style.ViewBox, style.NoClip:
+	case style.InitialBox, style.UnderBorder, style.FillBox, style.StrokeBox, style.ViewBox, style.NoClip,
+		style.UnderText:
 	}
 	return r, radius
 }
@@ -390,9 +412,10 @@ func (p *painter) decorate(e entry, alpha float32) {
 				p.insetShadow(inside(r, pc.edges), radius.inside(pc.edges), sh, alpha)
 			}
 		}
-		if tex := p.find(st.BorderImage, st); tex != nil {
-			p.picture(r, tex, st.BorderImage.Slice, imageWidths(r, st.BorderImageWidth, st.Border, st.BorderImage.Slice),
-				st.BorderImageRepeat, alpha)
+		if tex, k := p.borderImage(st); tex != nil {
+			s := st.BorderImage.Slice
+			p.picture(r, tex, style.Sides[float32]{Top: s.Top * k, Right: s.Right * k, Bottom: s.Bottom * k, Left: s.Left * k},
+				imageWidths(r, st.BorderImageWidth, st.Border, s), st.BorderImageRepeat, st.BorderImage.Fill, alpha)
 		} else if gap, ok := legendGap(b, e.at); ok {
 			for _, clip := range around(r, p.snap(gap)) {
 				p.s.PushClip(clip)
@@ -454,6 +477,22 @@ func (p *painter) find(img style.Image, st *style.Computed) *twod.Texture {
 		return tex
 	}
 	return pixelated(tex)
+}
+
+// borderImage is st's border-image picture and how many of its pixels
+// make one of the picture's own: a picture of shapes is drawn at the
+// screen's density, as Chrome rasterises it, its slices scaled to match.
+func (p *painter) borderImage(st *style.Computed) (*twod.Texture, float32) {
+	v := p.shapes(st.BorderImage.Source)
+	if v == nil {
+		return p.find(st.BorderImage, st), 1
+	}
+	natural := v.Intrinsic().Natural(geom.V2(defaultWidth, defaultHeight))
+	tex := p.drawn(v, natural)
+	if tex == nil || natural.X <= 0 {
+		return nil, 1
+	}
+	return tex, tex.Size().X / natural.X
 }
 
 // defaultWidth and defaultHeight are the size CSS gives a picture that
@@ -745,14 +784,15 @@ func place(l style.Length, fromEnd bool, origin, extent, img float32) float32 {
 // picture stretches tex over r, or when slice is set draws it cut by
 // slice, its sides widths thick, its edges and centre laid by repeat.
 func (p *painter) picture(
-	r geom.Rect, tex *twod.Texture, slice, widths style.Sides[float32], repeat [2]style.ImageRepeat, alpha float32,
+	r geom.Rect, tex *twod.Texture, slice, widths style.Sides[float32], repeat [2]style.ImageRepeat, fill bool,
+	alpha float32,
 ) {
 	tint := fade(color.White, alpha)
 	if slice == (style.Sides[float32]{}) {
 		p.s.Image(r, tex, whole, tint)
 		return
 	}
-	p.ninePatch(r, tex, slice, widths, repeat, tint)
+	p.ninePatch(r, tex, slice, widths, repeat, tint, fill)
 }
 
 // imageWidths is how thick a border image's sides are drawn over r, as
@@ -1678,7 +1718,16 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	if !st.Visible {
 		return
 	}
-	c := fade(st.Color, alpha)
+	if p.glyphsOnly {
+		white := color.White
+		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
+		for _, f := range b.Lines {
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+		}
+		return
+	}
+	c := fade(st.Fill(), alpha)
 	if placeholder(b) {
 		c = fade(c, placeholderAlpha)
 		if st.HasPlaceholder {
