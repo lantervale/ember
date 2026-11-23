@@ -83,3 +83,27 @@ p::first-line { font-size: 20px; color: #f00; }
 		t.Error("a first line's background has a box of its own")
 	}
 }
+
+func TestAFirstLetterKeepsTheSpacesWhiteSpaceKeeps(t *testing.T) {
+	pre := with(el(dom.P, "", "pre"), txt("  Hello"))
+	normal := with(el(dom.P, ""), txt("  Hello"))
+	Compute(page(pre, normal), []*Sheet{sheet(t, `p::first-letter { color: #f00; } .pre { white-space: pre; }`)})
+	for n, want := range map[*dom.Node]string{pre: "  H", normal: "H"} {
+		if got := dom.Data(n).FirstLetter.Text(); got != want {
+			t.Errorf("%s: %q, want %q", describe(n), got, want)
+		}
+	}
+}
+
+func TestAFirstLetterIsTakenFromTheTextAsShown(t *testing.T) {
+	p := with(el(dom.P, ""), txt("hello"))
+	tr := NewTransitions()
+	tr.ShowText(func(*dom.Node) string { return "«Ça va»" })
+	tr.Compute(page(p), []*Sheet{sheet(t, `p::first-letter { color: #f00; }`)})
+	if got := dom.Data(p).FirstLetter.Text(); got != "«Ç" {
+		t.Errorf("the letter of the translation: %q", got)
+	}
+	if end := dom.Data(p.Children()[0]).LetterEnd; end != len("«Ç") {
+		t.Errorf("ends where it ends in the translation: %d", end)
+	}
+}

@@ -181,6 +181,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 	dom.Data(d.html).Root = true
 	d.trans.MeasureFonts(d.fontUnits)
 	d.trans.MeasureInk(d.fonts.Ink)
+	d.trans.ShowText(d.shown)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)
@@ -386,6 +387,10 @@ func (d *Document) Layout(size geom.Vec2) {
 	d.landSheets()
 	if d.relayout && d.trans.FontsChanged() {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
+	}
+	if d.relayout {
+		// the first letters are taken again from the text as it now shows
+		dom.Data(d.html).Dirty |= dom.DirtyLayout
 	}
 	media := d.medium()
 	media.Width, media.Height, media.Resolution = size.X, size.Y, d.fonts.Scale()

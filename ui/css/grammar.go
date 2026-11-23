@@ -558,6 +558,8 @@ var checks = map[string]check{
 	"line-break":                single(words("auto", "loose", "normal", "strict", "anywhere")),
 	"tab-size":                  single(either(number, dimTerm(nonNegative))),
 	"text-decoration-skip-ink":  single(words("auto", "none", "all")),
+	"text-underline-offset":     single(either(words("auto"), dimTerm(allowPercent))),
+	"text-underline-position":   checkUnderlinePosition,
 	"color":                     single(colorTerm),
 	"color-scheme":              checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",

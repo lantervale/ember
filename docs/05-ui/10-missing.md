@@ -19,12 +19,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `text-spacing-trim` and `text-autospace: normal` | read and computed as Chrome's, laid out as `normal` and `no-autospace`: the full-width punctuation and the space between ideographs and letters are left as the face draws them |
 | `text-box-trim` on a flex or grid container, a table cell and columns, and a first line the block's first float or inline block holds | not compared with Chrome: trimmed as a block container's own lines, the propagation going into blocks of a block flow alone | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
 | `initial-letter` on an element (the first inline child of a block), `initial-letter-align`, and a drop cap in vertical text | not read: only a `::first-letter` is made a drop cap, its letter's ink measured in its first face |
-| `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
-| a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
-| a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
-| `text-underline-offset` and `text-underline-position` | not read: an underline lies half its thickness below the baseline, Chrome's `auto` |
+| `text-underline-position` and `from-font` on a variable font | the default instance's post and OS/2 values, not the instance's MVAR deltas ([decision 0189](../99-decisions/0189-an-underline-is-placed-by-its-decorating-box-as-chrome-places-it.md)) |
 | the characters whose ink `text-decoration-skip-ink: auto` leaves whole, outside the blocks measured (CJK, symbols, pictographs, Hangul, Linear B) | skipped as a Latin letter's, where Chrome's table may name more ([decision 0182](../99-decisions/0182-skipped-ink-follows-the-glyphs-drawn-and-chromes-table-of-characters.md)) |
 | text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time (each quad a texel longer right and below), 27 of the 44 pixel pages with text measured further from Chrome at that scale and 2 nearer, none changed at two pixels a point, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
@@ -38,12 +34,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a mark a face without GPOS places by its combining class | placed by its glyph's box from `xMin`, where HarfBuzz takes the left side bearing of `hmtx`: the same in a face whose two agree, as faces' do |
 | an emoji followed by VS15 or VS16 | VS16 draws the emoji set's picture and VS15 the face's glyph ([decision 0171](../99-decisions/0171-thai-hangul-and-hebrew-are-shaped-as-harfbuzz-and-a-run-between-the-text-round-it.md)); not compared, as Chrome takes its emoji from the system's colour font |
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without `morx`'s substitutions (ligatures, contextual forms, the joining of Geeza Pro and the Mac's other Arabic faces) and `kerx`'s kerning, where Chrome's HarfBuzz reads them. About 150 of the Mac's faces have no GSUB or GPOS, among them Helvetica, Helvetica Neue, Times, Courier, Menlo, Geneva, Palatino, Optima, Baskerville, Didot and Zapfino; two thirds of them have the old `kern` too, which ember reads, so their kerning is Chrome's but for the few that have `kerx` (Helvetica Neue's bolder faces, the Indic MN faces). Reading `morx`'s four state machines and `kerx`'s formats is a shaper of its own, and only the machine's faces (`ui.SystemFonts()`) have these tables |
-| ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole (joined forms do join across the edge, the text round a run shaping it); a pre-base matra after a letter of another element takes `init` as at a word's start; a space's pair kerning with the words beside it is Chrome's |
+| a pre-base matra after a letter of another element | takes `init` as at a word's start |
+| text shaped as one across elements ([decision 0183](../99-decisions/0183-text-is-shaped-as-one-across-elements-of-one-font-and-spacing.md)) right to left or set vertically | shaped apart, the text round each part its context, where Chrome shapes it as one |
+| a line that breaks at a space or an emergency break inside a ligature or a kerned pair | its parts keep the widths the text shaped as one gives them (the part on the next line none where the ligature took it), where Chrome shapes the lines' ends again |
+| two elements of one font and spacing whose `lang`, `text-rendering` or `-webkit-font-smoothing` differ | shaped as one, where Chrome's font descriptions differ and it shapes them apart |
+| a caret or a selection's end inside a ligature | where the characters before it measure without it (in text shaped as one with another element's, at the ligature's end), where Chrome divides the ligature's advance evenly among its characters |
 | selecting text of vertical lines: a drag, a double click, a caret placed by the pointer, the selection drawn | the characters found and the selection drawn as if the lines ran across, the selection not drawn on them |
-| a face's vertical metrics (`vhea`, `vmtx`, `VORG`) and its vertical alternates (`vert`, `vrt2`): the CJK brackets and punctuation turned or moved for vertical lines | a standing character takes its font's ascent and descent, drawn as in a horizontal line; the faces ui ships have none |
-| UTR #50's orientation of each character under `text-orientation: mixed` | the CJK scripts, fullwidth forms and CJK symbols stand, all else turns: the symbols and the pictographs UTR #50 stands (emoji, ©, §) are turned |
-| inline elements of several font sizes on a vertical line | aligned on their alphabetic baseline, where Chrome aligns vertical text on its central baseline |
-| the vertical alignment of an inline-block in a `vertical-lr` line taller than it | placed as in `vertical-rl`, from the line's right, where Chrome places it from its left |
+| a character standing in a vertical line that a fallback face draws (an emoji of the system's colour font, a symbol of Go Mono) | it takes the first face's ascent and descent, or its vertical advance, where Chrome takes the fallback face's |
 
 ## Generated content
 
@@ -71,10 +68,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `column-span: all` under a block with a margin, a border or padding, deeper in the container than its children | laid out in its column, where Chrome spans it and cuts the blocks round it, their margins, borders and padding on their parts |
-| a table row cut by a column | kept whole, where Chrome cuts its cells, each where its own content allows |
-| boxes side by side cut by a column (a flex row's items, a grid row's, a positioned box beside the lines of its containing block) whose lines don't line up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows: the columns' starts are one place in the flow for all of them |
-| a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
+| a positioned box beside the lines of its containing block, cut by a column, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
+| a forced break (`break-before: column`) inside one of boxes side by side cut by columns | breaks that box alone, the others filled on as they would be; not compared with Chrome |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |

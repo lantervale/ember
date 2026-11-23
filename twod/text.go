@@ -43,8 +43,10 @@ type Text struct {
 	// rightToLeft draws each line from its end (RightToLeft).
 	rightToLeft bool `node:"prop"`
 	// before and after are the text round it, which it is shaped between
-	// (Between).
+	// (Between), and lead and trail the text beside it it is shaped as one
+	// with (Amid).
 	before, after string
+	lead, trail   string
 	face          *Face
 	// expanded is text with its shortcodes replaced, for expandedFrom.
 	expanded, expandedFrom string
@@ -139,6 +141,8 @@ func (t *Text) style() draw.Style {
 		RightToLeft: t.rightToLeft,
 		Before:      t.before,
 		After:       t.after,
+		Lead:        t.lead,
+		Trail:       t.trail,
 	}
 }
 
@@ -183,6 +187,22 @@ func (t *Text) Between() (string, string) { return t.before, t.after }
 
 // SetBetween sets the text t is shaped between.
 func (t *Text) SetBetween(before, after string) { t.before, t.after = before, after }
+
+// Amid shapes a text as one with lead before it and trail after it, as a
+// browser shapes the text of elements of one font side by side, and
+// draws and measures only its own glyphs: those whose clusters start in
+// it. A ligature or a kerned pair across its start is lead's, drawn by
+// the text before; one across its end is its own. Between's text is then
+// what lies round lead and trail.
+func Amid(lead, trail string) TextOption {
+	return textOption(func(t *Text) { t.lead, t.trail = lead, trail })
+}
+
+// Amid is the text t is shaped as one with, before and after it.
+func (t *Text) Amid() (string, string) { return t.lead, t.trail }
+
+// SetAmid sets the text t is shaped as one with.
+func (t *Text) SetAmid(lead, trail string) { t.lead, t.trail = lead, trail }
 
 // Pixelated reports whether t's glyphs are drawn unsmoothed.
 func (t *Text) Pixelated() bool { return t.pixelated }

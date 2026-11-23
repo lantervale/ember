@@ -74,6 +74,8 @@ type inlineContent struct {
 	firstPieces []piece
 	firstOn     bool
 	firstInWord bool
+	// allFirst keeps the first line's styles on every line, as the content is measured.
+	allFirst bool
 	// back is the box painting the first line's background, nil without one.
 	back *box.Box
 	// height is the owner's content height its atomic inlines' percentages are of, none
@@ -169,8 +171,10 @@ type inlineSpan struct {
 	// noStart and noEnd are set on a part of an element blocks cut that is not its
 	// first or not its last: it has no edge there.
 	noStart, noEnd bool
-	// lineSt is the span's style on its block's first line.
-	lineSt *style.Computed
+	// lineSt is the span's style on its block's first line, and lineMargin, lineBorder and
+	// linePadding its edges there.
+	lineSt                              *style.Computed
+	lineMargin, lineBorder, linePadding rect
 }
 
 type pieceKind uint8
@@ -222,6 +226,9 @@ type piece struct {
 	// the line it is shown in.
 	hyphen float32
 	shows  bool
+	// whole numbers the text Chrome shapes as one (shapingRuns) that the piece is in,
+	// 0 where it cuts it.
+	whole int32
 }
 
 const (
@@ -419,15 +426,24 @@ func (c *inlineContent) lineStyle(e *dom.Node, st *style.Computed) *style.Comput
 	return st
 }
 
-// letterOf is the ::first-letter node that takes text's first letter, and where the
-// letter ends in its text, nil when none does.
-func letterOf(text *dom.Node) (*dom.Node, int) {
+// letterNode is the ::first-letter node that takes text's first letter, nil for none.
+func letterNode(text *dom.Node) *dom.Node {
 	g := dom.Data(text).Letter
 	if g == nil || dom.Data(g).Style == nil || dom.Data(g).Letter != text {
+		return nil
+	}
+	return g
+}
+
+// letterOf is the ::first-letter node that takes the first letter of text, which shows
+// shown, and where the letter ends in shown, nil when none does.
+func letterOf(text *dom.Node, shown string) (*dom.Node, int) {
+	g := letterNode(text)
+	if g == nil {
 		return nil, 0
 	}
 	end := dom.Data(text).LetterEnd
-	if end > len(text.Text()) {
+	if kids := g.Children(); end > len(shown) || len(kids) != 1 || !strings.HasSuffix(shown[:end], kids[0].Text()) {
 		return nil, 0
 	}
 	return g, end
@@ -441,12 +457,11 @@ func (t *tree) gatherText(c *inlineContent, parent *box.Box, n *dom.Node) {
 		st = styleOf(p)
 	}
 	text, skip := Translated(n, t.translate), int32(0)
-	if g, end := letterOf(n); g != nil && text == n.Text() {
+	if g, end := letterOf(n, text); g != nil {
 		t.gather(c, parent, []item{{element: g}})
 		skip = int32(utf8.RuneCountInString(text[:end])) //nolint:gosec // a text node's length
-		if text = text[end:]; text == "" {
-			return
-		}
+		// a node of its letter alone keeps a run of no text, which selection finds it by
+		text = text[end:]
 	}
 	b := &box.Box{Kind: box.TextRun, Node: n, Style: st}
 	r := &textRun{box: b, parent: parent, st: st, span: -1, skip: skip, lineSt: st,
@@ -551,21 +566,37 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 	}
 }
 
-// joinRuns measures again, shaped between the text round them, the
-// words that start or end a run beside another run's letters: an Arabic
-// word an element cuts joins across it, as Chrome shapes it with its
-// paragraph's text as context.
+// joinRuns measures again the words and spaces whose shaping reads the text of other
+// runs. Where Chrome shapes their runs as one (shapingRuns), each is shaped as one with
+// the text beside it, a ligature or a kerned pair across an element's edge the first
+// element's, and in a face that shapes a space with its words (spaceTies) every word
+// and space is. Elsewhere a word that starts or ends a run beside another run's letters
+// is shaped between them: an Arabic word an element cuts joins across it, as Chrome
+// shapes it with its paragraph's text as context.
 func (c *inlineContent) joinRuns(fonts box.Fonts) {
-	cf, ok := fonts.(box.ContextFonts)
-	if !ok {
-		return
-	}
+	c.shapingRuns()
+	wf, whole := fonts.(box.WholeFonts)
+	cf, joins := fonts.(box.ContextFonts)
+	var ties map[*style.Computed]bool
 	for k := range c.pieces {
 		p := &c.pieces[k]
-		if p.kind != word {
+		if p.kind != word && p.kind != gap {
 			continue
 		}
 		r := c.runs[p.run]
+		text := unshown(p.text)
+		if whole && c.amid(fonts, k, &ties) {
+			lead, before := beside(c.pieces, k, -1, p.whole)
+			trail, after := beside(c.pieces, k, 1, p.whole)
+			p.width = wf.AdvanceAmid(r.st.Font, text, lead, trail, before, after) + r.st.Spacing(text)
+			if p.unspaced {
+				p.width -= r.st.WordGap()
+			}
+			continue
+		}
+		if p.kind != word || !joins {
+			continue
+		}
 		end := p.at + int32(utf8.RuneCountInString(p.text)) //nolint:gosec // a text node's length
 		if p.at > 0 && int(end) < utf8.RuneCountInString(r.text) {
 			continue
@@ -574,9 +605,154 @@ func (c *inlineContent) joinRuns(fonts box.Fonts) {
 		if !shape.JoinsAcross(before, after) {
 			continue
 		}
-		text := unshown(p.text)
 		p.width += cf.AdvanceIn(r.st.Font, text, before, after) - fonts.Advance(r.st.Font, text)
 	}
+}
+
+// shapingRuns numbers the pieces Chrome shapes as one text in whole: the words and
+// spaces of runs of one font and spacing, shown left to right across lines, between the
+// edges of elements that take no room and keep the baseline (CSS Text's boundary
+// shaping), with the break opportunities and anchors among them. A piece that cuts such
+// a text, an atomic inline, a newline, a tab, takes 0, as text set vertically or right
+// to left does.
+func (c *inlineContent) shapingRuns() {
+	var n int32
+	var last *style.Computed
+	var level bidi.Level
+	open := false
+	for k := range c.pieces {
+		p := &c.pieces[k]
+		p.whole = 0
+		switch p.kind {
+		case word, gap:
+			st := c.runs[p.run].st
+			if st.Mode.Vertical() || p.level%2 == 1 {
+				open = false
+				continue
+			}
+			if !open || p.level != level || !sameShaping(last, st) {
+				n++
+			}
+			open, last, level = true, st, p.level
+			p.whole = n
+		case edge:
+			if c.cutsShaping(p) {
+				open = false
+			} else if open {
+				p.whole = n
+			}
+		case breakHere, emergency, anchor, softHyphen:
+			if open {
+				p.whole = n
+			}
+		case newline, atomic, marker, tab:
+			open = false
+		}
+	}
+}
+
+// sameShaping reports whether Chrome shapes text of styles a and b as one: of one font,
+// letter-spacing and word-spacing.
+func sameShaping(a, b *style.Computed) bool {
+	return a == b || a.Font.Equal(b.Font) && a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing
+}
+
+// cutsShaping reports whether edge p of a span cuts the text Chrome shapes as one: it
+// takes room, by a margin, a border or padding on its side, or the span stands off the
+// baseline.
+func (c *inlineContent) cutsShaping(p *piece) bool {
+	sp := c.spans[p.span]
+	st := sp.st
+	if st.VerticalAlign != style.AlignBaselineText {
+		return true
+	}
+	if p.start && sp.noStart || !p.start && sp.noEnd {
+		return false
+	}
+	if p.start == (st.Dir == style.RTL) {
+		return room(st.Margin.Right) || room(st.Padding.Right) || st.Border.Right != 0
+	}
+	return room(st.Margin.Left) || room(st.Padding.Left) || st.Border.Left != 0
+}
+
+// room reports whether a margin or padding of l takes room, or may.
+func room(l style.Length) bool {
+	return l.At(0) != 0 || l.At(1000) != 0
+}
+
+// amid reports whether piece k is shaped as one with the text beside it: another run's
+// in the text Chrome shapes as one with it, or its own where its face shapes a space with
+// the words beside it.
+func (c *inlineContent) amid(fonts box.Fonts, k int, ties *map[*style.Computed]bool) bool {
+	p := c.pieces[k]
+	if p.whole == 0 {
+		return false
+	}
+	st := c.runs[p.run].st
+	tied, ok := (*ties)[st]
+	if !ok {
+		t, can := fonts.(spaceTies)
+		tied = can && t.SpaceTies(st.Font)
+		if *ties == nil {
+			*ties = map[*style.Computed]bool{}
+		}
+		(*ties)[st] = tied
+	}
+	for _, dir := range [2]int{-1, 1} {
+		for j := k + dir; j >= 0 && j < len(c.pieces) && c.pieces[j].whole == p.whole; j += dir {
+			if q := c.pieces[j]; q.kind == word || q.kind == gap {
+				if tied || q.run != p.run {
+					return true
+				}
+				break
+			}
+		}
+	}
+	return false
+}
+
+// beside is the text of the pieces before piece k (dir -1) or after it (dir 1), as much
+// as shaping reads: that of the text numbered whole, which shapes as one with it, and
+// the rest round it, an atomic inline standing as an object replacement character, up
+// to a newline.
+func beside(ps []piece, k, dir int, whole int32) (string, string) {
+	var shaped, round []rune
+	in := true
+	for j := k + dir; j >= 0 && j < len(ps) && len(round) < contextRunes; j += dir {
+		q := ps[j]
+		if q.kind == newline {
+			break
+		}
+		var rs []rune
+		switch q.kind {
+		case word, gap:
+			rs = []rune(unshown(q.text))
+		case atomic:
+			rs = []rune{'\uFFFC'}
+		case breakHere, emergency, anchor, softHyphen, edge, marker, tab, newline:
+		}
+		if q.whole != whole {
+			in = false
+		}
+		if dir < 0 {
+			slices.Reverse(rs)
+		}
+		for _, r := range rs {
+			if in && len(shaped) < contextRunes {
+				shaped = append(shaped, r)
+				continue
+			}
+			in = false
+			if len(round) < contextRunes {
+				round = append(round, r)
+			}
+		}
+	}
+	if dir < 0 {
+		slices.Reverse(shaped)
+		slices.Reverse(round)
+	}
+	return string(shaped), string(round)
 }
 
 // contextRunes is how many characters of the text on either side of a
@@ -658,6 +834,9 @@ func (c *inlineContent) swapStyles() {
 	}
 	for _, sp := range c.spans {
 		sp.st, sp.lineSt = sp.lineSt, sp.st
+		sp.margin, sp.lineMargin = sp.lineMargin, sp.margin
+		sp.border, sp.lineBorder = sp.lineBorder, sp.border
+		sp.padding, sp.linePadding = sp.linePadding, sp.padding
 	}
 }
 
@@ -809,6 +988,9 @@ type spaceTies interface {
 // word takes its kerning with the space after it, a space its kerning with the word
 // after it.
 func (c *inlineContent) tieSpaces(fonts box.Fonts, st *style.Computed, first int) {
+	if _, whole := fonts.(box.WholeFonts); whole && !st.Mode.Vertical() {
+		return
+	}
 	if t, ok := fonts.(spaceTies); !ok || !t.SpaceTies(st.Font) || st.Stands() {
 		return
 	}
@@ -1112,28 +1294,23 @@ func (c *inlineContent) fills() bool {
 // margin box.
 func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 	for _, sp := range c.spans {
-		sp.margin = edges(sp.st.Margin, parent.w)
-		sp.padding = edges(sp.st.Padding, parent.w)
-		b := sp.st.Border
-		sp.border = rect{l: b.Left, r: b.Right, t: b.Top, b: b.Bottom}
-		left, right := sp.noStart, sp.noEnd
-		if sp.st.Dir == style.RTL {
-			left, right = right, left
-		}
-		if left {
-			sp.margin.l, sp.border.l, sp.padding.l = 0, 0, 0
-		}
-		if right {
-			sp.margin.r, sp.border.r, sp.padding.r = 0, 0, 0
+		sp.margin, sp.border, sp.padding = sp.edgesIn(sp.st, parent.w)
+		if c.firstPieces != nil {
+			sp.lineMargin, sp.lineBorder, sp.linePadding = sp.edgesIn(sp.lineSt, parent.w)
 		}
 	}
 	for i := range c.pieces {
 		if p := &c.pieces[i]; p.kind == edge {
-			start, end := startSides(c.spans[p.span])
+			sp := c.spans[p.span]
+			start, end := startSides(sp.st, sp.margin, sp.border, sp.padding)
+			lineStart, lineEnd := start, end
+			if c.firstPieces != nil {
+				lineStart, lineEnd = startSides(sp.lineSt, sp.lineMargin, sp.lineBorder, sp.linePadding)
+			}
 			if p.start {
-				c.resize(i, start)
+				c.resizeEdge(i, start, lineStart)
 			} else {
-				c.resize(i, end)
+				c.resizeEdge(i, end, lineEnd)
 			}
 		}
 	}
@@ -1163,6 +1340,11 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 			spaces{def(a.width), maxContentSpace}, inherentSize)
 		a.height = out.size.h
 		a.baseline = out.size.h + a.margin.b
+		if c.owner.st.Stands() {
+			// a central baseline of the line, made up across the middle of its margin box
+			mh := a.height + a.margin.vertical()
+			a.baseline = mh - float32(math.Floor(float64(mh*c.unit)/2))/c.unit - a.margin.t
+		}
 		a.overflow = out.overflow
 		a.node.pendingOOF = out.oof
 		switch {
@@ -1174,6 +1356,18 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		}
 		c.resize(i, a.width+a.margin.horizontal())
 	}
+}
+
+// measured are the content's lines where nothing wraps, every one in the first line's
+// styles while those stand (useFirst).
+func (c *inlineContent) measured() []line {
+	if !c.firstOn {
+		return c.lines(unbounded)
+	}
+	c.allFirst = true
+	defer func() { c.allFirst = false }()
+	b := breaker{c: c}
+	return b.breakAll(unbounded)
 }
 
 // compress takes the pictures whose width or max-width is a percentage down to their
@@ -1199,14 +1393,18 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 	var minW, maxW float32
 	// A percentage of the width being found is no width yet.
 	parent.w = none
+	// Chrome measures every line of a block whose first line is styled in the first
+	// line's styles.
+	was := c.useFirst(true)
+	defer c.useFirst(was)
 	t.sizeAtomics(c, maxContentSpace, parent)
-	for _, l := range c.lines(unbounded) {
+	for _, l := range c.measured() {
 		maxW = max(maxW, l.x+l.width)
 	}
 	t.sizeAtomics(c, minContentSpace, parent)
 	c.compress()
 	if !c.anyWraps() {
-		for _, l := range c.lines(unbounded) {
+		for _, l := range c.measured() {
 			minW = max(minW, l.x+l.width)
 		}
 		return minW, maxW
@@ -1805,7 +2003,9 @@ func (b *breaker) breakAll(width float32) []line {
 		var ended bool
 		if i, ended = b.one(i, b.cur.avail); ended {
 			b.open(i, 0, width, 0)
-			c.useFirst(false)
+			if !c.allFirst {
+				c.useFirst(false)
+			}
 		}
 	}
 	return b.close()
@@ -1899,6 +2099,37 @@ func (c *inlineContent) lines(width float32) []line {
 	return out
 }
 
+// edgesIn are the margin, border and padding of sp in style st, resolved against basis,
+// none at a side where an element blocks cut has no edge.
+func (sp *inlineSpan) edgesIn(st *style.Computed, basis float32) (rect, rect, rect) {
+	m, p := edges(st.Margin, basis), edges(st.Padding, basis)
+	b := rect{l: st.Border.Left, r: st.Border.Right, t: st.Border.Top, b: st.Border.Bottom}
+	left, right := sp.noStart, sp.noEnd
+	if st.Dir == style.RTL {
+		left, right = right, left
+	}
+	if left {
+		m.l, b.l, p.l = 0, 0, 0
+	}
+	if right {
+		m.r, b.r, p.r = 0, 0, 0
+	}
+	return m, b, p
+}
+
+// resizeEdge gives the edge piece i width w, and line as the other styles measure it:
+// the first line's where the pieces stand in their own, their own otherwise.
+func (c *inlineContent) resizeEdge(i int, w, line float32) {
+	if c.firstPieces != nil && c.firstPieces[i].width != line {
+		c.firstPieces[i].width = line
+		c.broken, c.unbroken = nil, nil
+	}
+	if p := &c.pieces[i]; p.width != w {
+		p.width = w
+		c.broken, c.unbroken = nil, nil
+	}
+}
+
 // resize gives piece i width w, as the first line measures it too, forgetting the lines
 // broken at the old one.
 func (c *inlineContent) resize(i int, w float32) {
@@ -1945,8 +2176,33 @@ func (t *tree) metricsOf(c *inlineContent, st *style.Computed) box.Metrics {
 		c.metrics = map[*style.Computed]box.Metrics{}
 	}
 	m := t.fonts.Metrics(st.Font)
+	if st.Stands() {
+		m = central(m, c.unit)
+	}
 	c.metrics[st] = m
 	return m
+}
+
+// central is metrics m about the central baseline, which vertical lines whose text may
+// stand align their inline boxes on, as Chrome's: the room above and below it each half
+// of the ascent and descent, in whole device pixels, the odd one above, unit the layout
+// unit.
+func central(m box.Metrics, unit float32) box.Metrics {
+	px := unit / 64
+	h := m.Ascent + m.Descent
+	m.Descent = float32(math.Floor(float64(h*px)/2)) / px
+	m.Ascent = h - m.Descent
+	return m
+}
+
+// alphabetic is how far below the baseline the inline boxes of st align on its glyphs'
+// alphabetic baseline stands: below the central one of vertical lines whose text may
+// stand, else none.
+func (t *tree) alphabetic(c *inlineContent, st *style.Computed) float32 {
+	if !st.Stands() {
+		return 0
+	}
+	return t.fonts.Metrics(st.Font).Ascent - t.metricsOf(c, st).Ascent
 }
 
 // lineHeight is one run's line height and the baseline's place in it (half-leading above
@@ -2146,7 +2402,7 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 				c.pending = append(c.pending,
 					pendingAlign{span: -1, run: p.run, by: c.aligner(r.st, k), at: r.st.VerticalAlign, extent: e})
 			}
-		} else if m, ok := t.fallbackMetrics(p, r.st); ok {
+		} else if m, ok := t.fallbackMetrics(c, p, r.st); ok {
 			fh, fb := lineHeightOf(m, r.st)
 			*into = into.with(extent{fb, fh - fb}, 0)
 		}
@@ -2272,13 +2528,18 @@ func (c *inlineContent) settle(p *pendingAlign, e *extent, shift float32) {
 
 // fallbackMetrics is the metrics of the fallback faces a word draws with, when the fonts
 // have fallbacks and its text needs them: Chrome stretches a line-height: normal line to
-// fit them, and ignores them under any other line-height.
-func (t *tree) fallbackMetrics(p piece, st *style.Computed) (box.Metrics, bool) {
+// fit them, and ignores them under any other line-height. They are about the central
+// baseline where st's are (metricsOf).
+func (t *tree) fallbackMetrics(c *inlineContent, p piece, st *style.Computed) (box.Metrics, bool) {
 	ff, ok := t.fonts.(box.FallbackFonts)
 	if !ok || p.kind != word || !st.LineHeight.Normal || isASCII(p.text) {
 		return box.Metrics{}, false
 	}
-	return ff.FallbackMetrics(st.Font, p.text)
+	m, ok := ff.FallbackMetrics(st.Font, p.text)
+	if ok && st.Stands() {
+		m = central(m, c.unit)
+	}
+	return m, ok
 }
 
 func isASCII(s string) bool {
@@ -2482,6 +2743,11 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 				a := c.runs[p.run].atomic
 				l := &a.node.unrounded
 				l.location = point{x + a.margin.l, y + lb + c.runs[p.run].shift - a.baseline}
+				if n.st.Mode == style.VerticalLR {
+					// its line's over side is the page's right, as turnLines mirrors the text:
+					// its margin box mirrored across the line, its margins on their sides
+					l.location.y = 2*y + lh - l.location.y - a.height - a.margin.b + a.margin.t
+				}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
 				st := a.node.st
@@ -2747,7 +3013,8 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 			end = walk.at()
 		}
 		r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
-		frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart, cut[1] && i == len(pieces))
+		st := c.runs[run].st
+		frag := t.fragment(st, text, r, y+lb+c.runs[run].shift+t.alphabetic(c, st), cutStart, cut[1] && i == len(pieces))
 		frag.Start, frag.RTL, frag.Unspaced = from+c.runs[run].skip, rtl, unspaced
 		for _, p := range pieces[first:i] {
 			if p.shows {
@@ -2758,6 +3025,13 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		if before, after := c.around(run, from, from+int32(utf8.RuneCountInString(text))); shape.JoinsAcross(before,
 			after) {
 			frag.Before, frag.After = before, after
+		}
+		if whole := wholeOf(pieces[first:i]); whole != 0 && !frag.Ellipsis {
+			lead, before := beside(pieces, first, -1, whole)
+			trail, after := beside(pieces, i-1, 1, whole)
+			if lead != "" || trail != "" {
+				frag.Lead, frag.Trail, frag.Before, frag.After = lead, trail, before, after
+			}
 		}
 		if c.firstOn {
 			frag.Style = c.runs[run].st
@@ -3126,4 +3400,14 @@ func (t *tree) atomsIntoSpans(n *node) {
 		}
 		r.parent.Append(r.box)
 	}
+}
+
+// wholeOf is the text Chrome shapes as one that a fragment's pieces are in, 0 for none.
+func wholeOf(pieces []piece) int32 {
+	for _, p := range pieces {
+		if p.kind == word || p.kind == gap {
+			return p.whole
+		}
+	}
+	return 0
 }

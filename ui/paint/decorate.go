@@ -1828,8 +1828,10 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		return
 	}
 	if p.glyphsOnly {
-		white := color.White
-		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		if !p.lineDecorated {
+			white := color.White
+			p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		}
 		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
 		for _, f := range b.Lines {
 			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
@@ -1852,11 +1854,11 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 			ink = fade(st.SelectionText, alpha)
 		}
 	}
-	p.decorations(e, st, style.Underline|style.Overline, alpha)
+	p.ownDecorations(e, st, style.Underline|style.Overline, alpha)
 	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
 	stroked := st.TextStroke.Width > 0 || len(parts) > 0 && st.HasSelectionStroke
 	if c.A <= 0 && ink == c && !stroked {
-		p.decorations(e, st, style.LineThrough, alpha)
+		p.ownDecorations(e, st, style.LineThrough, alpha)
 		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
@@ -1875,8 +1877,16 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	if stroked {
 		p.strokes(e, st, face, parts, alpha)
 	}
-	p.decorations(e, st, style.LineThrough, alpha)
+	p.ownDecorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// ownDecorations is decorations, but for a part of a vertical line, whose
+// line draws them.
+func (p *painter) ownDecorations(e entry, st *style.Computed, lines style.DecorationLine, alpha float32) {
+	if !p.lineDecorated {
+		p.decorations(e, st, lines, alpha)
+	}
 }
 
 // runShadows draws the text shadows of e's run, the selected parts' the
@@ -2020,7 +2030,7 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 		p.wordsIn(at, text, st, f, withFeatures(opts, f))
 		return
 	}
-	p.around = [2]string{}
+	p.around, p.amid = [2]string{}, [2]string{}
 	// Text placed by its top (alt text, a select's list) sets its small
 	// capitals on the baseline of the rest.
 	top := p.fonts != nil && !twod.NewText("", opts...).Baseline()
@@ -2042,8 +2052,8 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 // the fragment ends.
 func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
 	shown := f.Text + f.Hyphen
-	p.around = [2]string{f.Before, f.After}
-	defer func() { p.around = [2]string{} }()
+	p.around, p.amid = [2]string{f.Before, f.After}, [2]string{f.Lead, f.Trail}
+	defer func() { p.around, p.amid = [2]string{}, [2]string{} }()
 	if !f.RTL {
 		if f.Unspaced {
 			// The space starting its block's text takes no word-spacing.
@@ -2061,7 +2071,7 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 	if runs == nil {
 		runs = []style.CapsRun{{Text: shown, Font: font}}
 	} else {
-		p.around = [2]string{}
+		p.around, p.amid = [2]string{}, [2]string{}
 	}
 	type piece struct {
 		text   string
@@ -2135,33 +2145,49 @@ func (p *painter) wordsIn(at geom.Vec2, text string, st *style.Computed, f style
 			at.X += p.advance(st, f, rest[:i], o, ctx)
 		}
 		_, n := utf8.DecodeRuneInString(rest[i:])
-		at.X += p.advance(st, f, rest[i:i+n], opts, [2]string{}) + gap
+		o, ctx := p.between(opts, text, from+i, from+i+n)
+		at.X += p.advance(st, f, rest[i:i+n], o, ctx) + gap
 		from += i + n
 	}
 	return at.X
 }
 
-// between is opts shaping text[a:b] between the rest of text and the
-// text round the fragment drawn, where the fragment has any, and that
-// text before and after it.
-func (p *painter) between(opts []twod.TextOption, text string, a, b int) ([]twod.TextOption, [2]string) {
-	if p.around == [2]string{} {
-		return opts, [2]string{}
+// shaping is the text round a part of a fragment drawn: before and
+// after, which it is shaped between, and lead and trail, which it is
+// shaped as one with.
+type shaping struct{ before, after, lead, trail string }
+
+// between is opts shaping text[a:b] with the rest of text and the text
+// round the fragment drawn, where the fragment has any, and that text.
+// Where the fragment is shaped as one with the text beside it, so is
+// text[a:b] with the rest of text; elsewhere it is shaped between it.
+func (p *painter) between(opts []twod.TextOption, text string, a, b int) ([]twod.TextOption, shaping) {
+	switch {
+	case p.amid != [2]string{}:
+		sh := shaping{p.around[0], p.around[1], p.amid[0] + text[:a], text[b:] + p.amid[1]}
+		return append(slices.Clip(opts), twod.Between(sh.before, sh.after), twod.Amid(sh.lead, sh.trail)), sh
+	case p.around != [2]string{}:
+		sh := shaping{before: p.around[0] + text[:a], after: text[b:] + p.around[1]}
+		return append(slices.Clip(opts), twod.Between(sh.before, sh.after)), sh
 	}
-	ctx := [2]string{p.around[0] + text[:a], text[b:] + p.around[1]}
-	return append(slices.Clip(opts), twod.Between(ctx[0], ctx[1])), ctx
+	return opts, shaping{}
 }
 
-// advance is how far s in f, between the text ctx holds, takes the text
-// after it, its letters spaced: by layout's fonts, or without them by the
-// face opts draw it in.
-func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []twod.TextOption, ctx [2]string) float32 {
+// advance is how far s in f, shaped with the text ctx holds, takes the
+// text after it, its letters spaced: by layout's fonts, or without them
+// by the face opts draw it in.
+func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []twod.TextOption, ctx shaping) float32 {
 	if p.fonts == nil {
 		return twod.Measure(s, opts...).X
 	}
 	w := p.fonts.Advance(f, s)
-	if cf, ok := p.fonts.(box.ContextFonts); ok && ctx != [2]string{} {
-		w = cf.AdvanceIn(f, s, ctx[0], ctx[1])
+	wf, whole := p.fonts.(box.WholeFonts)
+	cf, joins := p.fonts.(box.ContextFonts)
+	switch {
+	case whole && (ctx.lead != "" || ctx.trail != ""):
+		w = wf.AdvanceAmid(f, s, ctx.lead, ctx.trail, ctx.before, ctx.after)
+	case joins && ctx != shaping{}:
+		w = cf.AdvanceIn(f, s, ctx.before, ctx.after)
 	}
 	return w + st.LetterGap()*float32(utf8.RuneCountInString(s))
 }
