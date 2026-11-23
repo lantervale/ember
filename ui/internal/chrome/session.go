@@ -95,7 +95,10 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
 		t.Fatal(err)
 	}
 	t.Cleanup(unlock)
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("", "ember-chrome-session-")
+	if err != nil {
+		t.Fatal(err)
+	}
 	toChrome, theirIn, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -121,11 +124,12 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
 	fromChrome.Close()
 	s := &Session{t: t, cmd: cmd, in: theirIn, out: bufio.NewReader(theirOut), size: size, scale: scale}
 	t.Cleanup(func() {
-		theirIn.Close()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+		s.close(closeWait)
 		cancel()
 		theirOut.Close()
+		if rmErr := removeProfile(dir, profileWait); rmErr != nil {
+			t.Logf("chrome: %v", rmErr)
+		}
 	})
 	var targets struct {
 		TargetInfos []struct {
@@ -159,6 +163,45 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
 	}
 	t.Fatal("chrome: the page never loaded")
 	return nil
+}
+
+// closeWait is how long Chrome may take to close its pages and helpers
+// once asked, before it is killed; profileWait how long its profile may
+// stay written once it has.
+const (
+	closeWait   = 5 * time.Second
+	profileWait = 10 * time.Second
+)
+
+// close asks Chrome to close, which takes its helpers down with it where
+// a kill leaves them writing in its profile, and kills it after wait.
+func (s *Session) close(wait time.Duration) {
+	_, _ = s.in.Write([]byte(`{"id":0,"method":"Browser.close"}` + "\x00"))
+	s.in.Close()
+	exited := make(chan struct{})
+	go func() {
+		_ = s.cmd.Wait()
+		close(exited)
+	}()
+	select {
+	case <-exited:
+	case <-time.After(wait):
+		_ = s.cmd.Process.Kill()
+		<-exited
+	}
+}
+
+// removeProfile removes the profile at dir, trying again for up to wait
+// while what Chrome left running still writes in it.
+func removeProfile(dir string, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		err := os.RemoveAll(dir)
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // call sends method with params and decodes its result into out.

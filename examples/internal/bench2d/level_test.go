@@ -262,14 +262,16 @@ func BenchmarkLevelLoad(b *testing.B) {
 }
 
 // setCost is how long a Set and a SetFlip of a cell take on a level of side
-// cells, averaged over calls of each, or over those two seconds allow. A
-// tall tile is set to itself and a plain one to another plain one, so no
-// tall tile's sprite comes or goes: BenchmarkLevelSet times those.
+// cells, averaged over at least calls of each and a tenth of a second, so
+// a coarse clock (Windows') can't read it as nothing, or over those two
+// seconds allow. A tall tile is set to itself and a plain one to another
+// plain one, so no tall tile's sprite comes or goes: BenchmarkLevelSet
+// times those.
 func setCost(side int, tall bool, calls int) time.Duration {
 	_, m := level{side: side, layers: 1, tall: tall}.build()
 	began := time.Now()
 	done := 0
-	for done < calls && time.Since(began) < 2*time.Second {
+	for (done < calls || time.Since(began) < 100*time.Millisecond) && time.Since(began) < 2*time.Second {
 		x, y := done%side, done*7%side
 		id := 1 + done%2
 		if tall && m.At(x, y) == 3 {
@@ -295,6 +297,7 @@ func TestSettingACellCostsTheSameOnALargeLevel(t *testing.T) {
 	for _, tall := range []bool{false, true} {
 		small, large := setCost(40, tall, 20000), setCost(400, tall, 20000)
 		t.Logf("tall tiles %v: %s a cell on 40×40, %s on 400×400", tall, small, large)
+		assert.Positive(t, small, "tall tiles %v: 40×40 timed", tall)
 		assert.LessOrEqual(t, large, 10*small, "tall tiles %v: 400×400 against 40×40", tall)
 	}
 }
