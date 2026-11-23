@@ -739,7 +739,7 @@ func lerpFilters(a, b []style.Filter, t float32) ([]style.Filter, bool) {
 		if x.Kind != y.Kind || x.Kind == style.FilterURL && x.Ref != y.Ref {
 			return a, false
 		}
-		out[i] = style.Filter{Ref: x.Ref,Kind: x.Kind, Amount: lerpf(x.Amount, y.Amount, t)}
+		out[i] = style.Filter{Ref: x.Ref, Kind: x.Kind, Amount: lerpf(x.Amount, y.Amount, t)}
 		if x.Kind == style.DropShadow {
 			out[i].Shadow = style.Shadow{
 				X: lerpf(x.Shadow.X, y.Shadow.X, t), Y: lerpf(x.Shadow.Y, y.Shadow.Y, t),

@@ -7,10 +7,11 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
-// Ink is where text's glyphs in f's own face draw across: from left of
-// the pen's start to left+width, glyph after glyph by their advances,
-// kerning left out. ok is false when the face draws none of it.
-func (s *Set) Ink(f style.Font, text string) (left, width float32, ok bool) {
+// Ink is where text's glyphs in f's own face draw across: from the
+// first value, past the pen's start, as wide as the second, glyph after
+// glyph by their advances, kerning left out; false when the face draws
+// none of it.
+func (s *Set) Ink(f style.Font, text string) (float32, float32, bool) {
 	c := s.Face(f)
 	if c == nil || c.font == nil || c.upem <= 0 {
 		return 0, 0, false
@@ -18,6 +19,7 @@ func (s *Set) Ink(f style.Font, text string) (left, width float32, ok bool) {
 	scale := f.Size * c.Look.adjust() / c.upem
 	ppem := fixed.I(int(c.upem))
 	var pen, x0, x1 float32
+	ok := false
 	for _, r := range text {
 		g, err := c.font.GlyphIndex(&s.buf, r)
 		if err != nil || g == 0 {

@@ -15,7 +15,9 @@ func TestAFilterElementIsHandedToUIInItsOwnModel(t *testing.T) {
 <feFlood flood-color="#ff0000" flood-opacity="0.5"/><feComposite in2="SourceAlpha" operator="in"/>
 <feComponentTransfer><feFuncA type="table" tableValues="0 1"/></feComponentTransfer></filter></svg>`))
 	require.NoError(t, err)
-	g, ok := v.(picture).FilterGraph("f", 50, 20)
+	pic, isPicture := v.(picture)
+	require.True(t, isPicture)
+	g, ok := pic.FilterGraph("f", 50, 20)
 	require.True(t, ok)
 	assert.Equal(t, geom.Rect{X: -5, Y: -2, W: 60, H: 24}, g.Region)
 	require.Len(t, g.Primitives, 3)
@@ -26,6 +28,6 @@ func TestAFilterElementIsHandedToUIInItsOwnModel(t *testing.T) {
 	assert.Equal(t, []fx.Input{0, fx.SourceAlpha}, g.Primitives[1].In)
 	assert.Equal(t, fx.In, g.Primitives[1].Operator)
 	assert.Equal(t, []float32{0, 1}, g.Primitives[2].Transfer[3].Table)
-	_, ok = v.(picture).FilterGraph("g", 50, 20)
+	_, ok = pic.FilterGraph("g", 50, 20)
 	assert.False(t, ok)
 }

@@ -30,8 +30,11 @@ const filters = `<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0">
 <filter id="blend"><feFlood flood-color="#3070d0"/><feBlend mode="multiply" in2="SourceGraphic"/>
   <feComposite in2="SourceGraphic" operator="atop"/></filter>
 <filter id="cut" x="10%" y="20%" width="60%" height="50%"><feOffset dx="0"/></filter>
-<filter id="out"><feFlood flood-color="#c03030" result="f"/><feComposite in="f" in2="SourceAlpha" operator="out"/></filter>
+<filter id="out"><feFlood flood-color="#c03030" result="f"/>
+  <feComposite in="f" in2="SourceAlpha" operator="out"/></filter>
 </svg>`
+
+const card = "card"
 
 const sheet = `
 html { background-color: #fff; }
@@ -49,12 +52,12 @@ func main() {
 	d := ui.NewDocument(ui.CSS(sheet))
 	d.Body().Append(ui.Svg(filters, ui.Style("position: absolute; width: 0; height: 0")))
 	for _, c := range []struct{ filter, text, class string }{
-		{"url(#blur)", "blur", "card"}, {"url(#srgb)", "sRGB", "card"}, {"url(#shadow)", "shadow", "card"},
-		{"url(#glow)", "glow", "card"}, {"url(#matrix)", "matrix", "card"}, {"url(#transfer)", "transfer", "card"},
-		{"url(#dilate)", "", "ring"}, {"url(#erode)", "", "ring"}, {"url(#offset)", "offset", "card"},
-		{"url(#blend)", "blend", "card"}, {"url(#cut)", "cut", "card"}, {"url(#out)", "out", "card"},
-		{"url(#blur) grayscale(1)", "then", "card"}, {"sepia(1) url(#shadow)", "before", "card"},
-		{"url(#missing)", "missing", "card"}, {"url(#cut) drop-shadow(3px 3px 0 #000)", "both", "card"},
+		{"url(#blur)", "blur", card}, {"url(#srgb)", "sRGB", card}, {"url(#shadow)", "shadow", card},
+		{"url(#glow)", "glow", card}, {"url(#matrix)", "matrix", card}, {"url(#transfer)", "transfer", card},
+		{"url(#dilate)", "", "ring"}, {"url(#erode)", "", "ring"}, {"url(#offset)", "offset", card},
+		{"url(#blend)", "blend", card}, {"url(#cut)", "cut", card}, {"url(#out)", "out", card},
+		{"url(#blur) grayscale(1)", "then", card}, {"sepia(1) url(#shadow)", "before", card},
+		{"url(#missing)", "missing", card}, {"url(#cut) drop-shadow(3px 3px 0 #000)", "both", card},
 	} {
 		d.Body().Append(ui.Div(ui.Class(c.class), ui.Style("filter: "+c.filter), ui.Text(c.text)))
 	}

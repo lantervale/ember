@@ -128,16 +128,16 @@ func TestChromesOwnMaskNamesAreReadAsTheirPlainOnes(t *testing.T) {
 }
 
 func TestChromesMaskPositionAxesAreTheLonghandsOfMaskPosition(t *testing.T) {
-	pct := func(v float32) style.Length { return style.Length{Kind: style.Fixed, Percent: v, IsPercent: true} }
+	percent := func(v float32) style.Length { return style.Length{Kind: style.Fixed, Percent: v, IsPercent: true} }
 	s := computed(t, `-webkit-mask-image: url(a.png), url(a.png), url(a.png);
 		-webkit-mask-position: right 4px bottom; -webkit-mask-position-x: center, left 2px`)
-	bottom := style.BackgroundPosition{Y: pct(0), FromBottom: true}
-	assert.Equal(t, style.BackgroundPosition{X: pct(50), Y: bottom.Y, FromBottom: true}, s.MaskLayer(0).Position)
+	bottom := style.BackgroundPosition{Y: percent(0), FromBottom: true}
+	assert.Equal(t, style.BackgroundPosition{X: percent(50), Y: bottom.Y, FromBottom: true}, s.MaskLayer(0).Position)
 	assert.Equal(t, style.BackgroundPosition{X: style.Px(2), Y: bottom.Y, FromBottom: true}, s.MaskLayer(1).Position)
-	assert.Equal(t, style.BackgroundPosition{X: pct(50), Y: bottom.Y, FromBottom: true}, s.MaskLayer(2).Position,
+	assert.Equal(t, style.BackgroundPosition{X: percent(50), Y: bottom.Y, FromBottom: true}, s.MaskLayer(2).Position,
 		"the x list repeats")
 	l := computed(t, "-webkit-mask-position-y: bottom 3px; mask-position: 5px").MaskLayer(0)
-	assert.Equal(t, style.BackgroundPosition{X: style.Px(5), Y: pct(50)}, l.Position, "the shorthand later sets both")
+	assert.Equal(t, style.BackgroundPosition{X: style.Px(5), Y: percent(50)}, l.Position, "the shorthand later sets both")
 	l = computed(t, "-webkit-mask: url(a.png) left 2px top 3px; -webkit-mask-position-y: bottom 1px").MaskLayer(0)
 	assert.Equal(t, style.BackgroundPosition{X: style.Px(2), Y: style.Px(1), FromBottom: true}, l.Position)
 	for _, decl := range []string{"-webkit-mask-position-x: top", "-webkit-mask-position-y: left 2px",

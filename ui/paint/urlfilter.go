@@ -219,7 +219,7 @@ func (p *painter) runGraph(f *filtering, src *twod.Picture, g *fx.Graph, xf geom
 	// A picture is first shown in its own pass, through the effects it
 	// is shown through then, and a clip reads that pass: those a
 	// composite cuts by are first shown plain, in a picture of no use.
-	clips := map[fx.Input]bool{}
+	clips := make(map[fx.Input]bool)
 	for _, pr := range g.Primitives {
 		if pr.Kind == fx.Composite && pr.Operator >= fx.In && pr.Operator <= fx.Xor {
 			for _, in := range pr.In {
@@ -301,7 +301,7 @@ func (p *painter) primitive(on Pictures, pr *fx.Primitive, ins []*twod.Picture, 
 	pixels := p.pixelsOf(xf)
 	switch pr.Kind {
 	case fx.GaussianBlur:
-		draw(in(0), linear(p.blurXY(on, nil, pr.StdDev.Scale(pixels)))...)
+		draw(in(0), linear(blurXY(on, nil, pr.StdDev.Scale(pixels)))...)
 	case fx.Offset:
 		draw(in(0), p.offsetEffect(on, pr.Offset, xf))
 	case fx.Flood:
@@ -323,58 +323,75 @@ func (p *painter) primitive(on Pictures, pr *fx.Primitive, ins []*twod.Picture, 
 			draw(pic)
 		}
 	case fx.Blend:
-		a, b := in(0), in(1)
-		switch {
-		case a == nil:
-			draw(b)
-		case b == nil:
-			draw(a)
-		default:
-			if pr.LinearRGB {
-				a, b = p.toLinear(on, a), p.toLinear(on, b)
-				on.BeginPicture()
-				on.DrawPicture(b)
-				on.DrawPictureOver(a, b, twod.Mix(pr.Mode))
-				on.DrawPicture(on.EndPicture(0), on.Effect(toSRGBShader))
-				return
-			}
-			on.DrawPicture(b)
-			on.DrawPictureOver(a, b, twod.Mix(pr.Mode))
-		}
+		blend(on, pr, in(0), in(1))
 	case fx.DropShadow:
-		src := in(0)
-		if src == nil {
-			return
+		if src := in(0); src != nil {
+			on.DrawPicture(src, p.dropShadow(on, pr, xf)...)
+			on.DrawPicture(src)
 		}
-		e := on.Effect(shadowShader)
-		e.SetVec2("uOffset", p.moved(pr.Offset, xf))
-		c := pr.Color
-		rgb := c.SRGB()
-		if pr.LinearRGB {
-			rgb = [3]float32{c.R, c.G, c.B}
-		}
-		e.SetVec4("uShadow", geom.Vec4{X: rgb[0] * c.A, Y: rgb[1] * c.A, Z: rgb[2] * c.A, W: c.A})
-		fxs := p.blurXY(on, []*render.Effect{e}, pr.StdDev.Scale(pixels))
-		if pr.LinearRGB {
-			fxs = append(fxs, on.Effect(toSRGBShader))
-		}
-		on.DrawPicture(src, fxs...)
-		on.DrawPicture(src)
 	case fx.Morphology:
-		var fxs []*render.Effect
-		for _, axis := range []struct {
-			step geom.Vec2
-			r    float32
-		}{{geom.V2(1, 0), pr.Radius.X}, {geom.V2(0, 1), pr.Radius.Y}} {
-			e := on.Effect(morphShader)
-			e.SetVec2("uStep", axis.step)
-			e.SetFloat("uRadius", float32(math.Round(float64(axis.r*pixels))))
-			e.SetFloat("uDilate", map[bool]float32{true: 1}[pr.Dilate])
-			fxs = append(fxs, e)
-		}
-		draw(in(0), fxs...)
+		draw(in(0), morphology(on, pr, pixels)...)
 	case fx.Clear, fx.Tile:
 	}
+}
+
+// blend draws a over b through pr's mode, either nil for nothing.
+func blend(on Pictures, pr *fx.Primitive, a, b *twod.Picture) {
+	switch {
+	case a == nil && b == nil:
+	case a == nil:
+		on.DrawPicture(b)
+	case b == nil:
+		on.DrawPicture(a)
+	case pr.LinearRGB:
+		a, b = linearOf(on, a), linearOf(on, b)
+		on.BeginPicture()
+		on.DrawPicture(b)
+		on.DrawPictureOver(a, b, twod.Mix(pr.Mode))
+		on.DrawPicture(on.EndPicture(0), on.Effect(toSRGBShader))
+	default:
+		on.DrawPicture(b)
+		on.DrawPictureOver(a, b, twod.Mix(pr.Mode))
+	}
+}
+
+// dropShadow are the effects that draw pr's shadow of a picture under
+// an element's transform xf.
+func (p *painter) dropShadow(on Pictures, pr *fx.Primitive, xf geom.Transform2D) []*render.Effect {
+	e := on.Effect(shadowShader)
+	e.SetVec2("uOffset", p.moved(pr.Offset, xf))
+	c := pr.Color
+	rgb := c.SRGB()
+	if pr.LinearRGB {
+		rgb = [3]float32{c.R, c.G, c.B}
+	}
+	e.SetVec4("uShadow", geom.Vec4{X: rgb[0] * c.A, Y: rgb[1] * c.A, Z: rgb[2] * c.A, W: c.A})
+	fxs := blurXY(on, []*render.Effect{e}, pr.StdDev.Scale(p.pixelsOf(xf)))
+	if pr.LinearRGB {
+		fxs = append(fxs, on.Effect(toSRGBShader))
+	}
+	return fxs
+}
+
+// morphology are the effects that thin or thicken a picture by pr's
+// radius, pixels to a point.
+func morphology(on Pictures, pr *fx.Primitive, pixels float32) []*render.Effect {
+	var fxs []*render.Effect
+	for _, axis := range []struct {
+		step geom.Vec2
+		r    float32
+	}{{geom.V2(1, 0), pr.Radius.X}, {geom.V2(0, 1), pr.Radius.Y}} {
+		e := on.Effect(morphShader)
+		e.SetVec2("uStep", axis.step)
+		e.SetFloat("uRadius", float32(math.Round(float64(axis.r*pixels))))
+		dilate := float32(0)
+		if pr.Dilate {
+			dilate = 1
+		}
+		e.SetFloat("uDilate", dilate)
+		fxs = append(fxs, e)
+	}
+	return fxs
 }
 
 // composite draws a with b by pr's operator, either nil for nothing.
@@ -423,26 +440,35 @@ func (p *painter) composite(on Pictures, pr *fx.Primitive, a, b *twod.Picture) {
 		draw(a, false)
 		draw(b, true)
 	case fx.Arithmetic:
-		k := pr.K
-		scaled := func(pic *twod.Picture, by float32, sum bool) {
-			if by == 0 {
-				return
-			}
-			e := on.Effect(scaleShader)
-			e.SetFloat("uK", by)
-			if pr.LinearRGB {
-				draw(pic, sum, on.Effect(toLinearShader), e, on.Effect(toSRGBShader))
-				return
-			}
-			draw(pic, sum, e)
-		}
-		scaled(a, k[1], false)
-		scaled(b, k[2], true)
+		arithmetic(on, pr, a, b)
 	}
 }
 
-// toLinear is pic in linear light.
-func (p *painter) toLinear(on Pictures, pic *twod.Picture) *twod.Picture {
+// arithmetic draws k2·a + k3·b of pr's K, either nil for nothing; k1·a·b
+// and k4 are left out.
+func arithmetic(on Pictures, pr *fx.Primitive, a, b *twod.Picture) {
+	scaled := func(pic *twod.Picture, by float32, sum bool) {
+		if pic == nil || by == 0 {
+			return
+		}
+		e := on.Effect(scaleShader)
+		e.SetFloat("uK", by)
+		fxs := []*render.Effect{e}
+		if pr.LinearRGB {
+			fxs = []*render.Effect{on.Effect(toLinearShader), e, on.Effect(toSRGBShader)}
+		}
+		if sum {
+			on.SumPicture(pic, fxs...)
+		} else {
+			on.DrawPicture(pic, fxs...)
+		}
+	}
+	scaled(a, pr.K[1], false)
+	scaled(b, pr.K[2], true)
+}
+
+// linearOf is pic in linear light.
+func linearOf(on Pictures, pic *twod.Picture) *twod.Picture {
 	on.BeginPicture()
 	on.DrawPicture(pic, on.Effect(toLinearShader))
 	return on.EndPicture(0)
@@ -476,7 +502,7 @@ func (p *painter) offsetEffect(on Pictures, d geom.Vec2, xf geom.Transform2D) *r
 
 // blurXY appends a Gaussian blur of deviation sigma pixels, across by
 // its X and down by its Y, to fx.
-func (p *painter) blurXY(on Pictures, fxs []*render.Effect, sigma geom.Vec2) []*render.Effect {
+func blurXY(on Pictures, fxs []*render.Effect, sigma geom.Vec2) []*render.Effect {
 	for _, axis := range []struct {
 		step geom.Vec2
 		s    float32

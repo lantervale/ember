@@ -98,8 +98,8 @@ func (p *painter) beginFilters(e entry, st *style.Computed) *filtering {
 	}
 	f := &filtering{on: on, filters: st.Filters, floor: p.floor, spread: p.spread}
 	if urlFilters(st.Filters) {
-		graphs, ok := p.graphs(e, st)
-		if !ok {
+		graphs, found := p.graphs(e, st)
+		if !found {
 			return nil
 		}
 		f.graphs, f.at, f.size = graphs, e.at, e.b.Size

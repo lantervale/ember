@@ -112,7 +112,8 @@ div { width: 20px; height: 20px; background-color: #36c; }
 .y { mask-image: url(img/panel.png); -webkit-mask-position-y: bottom -2px; mask-position: 5px; }
 `)}}
 	d := ui.NewDocument(ui.Stylesheet(fsys, "m.css"), ui.BrowserSheets())
-	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", ""}
+	classes := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+		"u", "v", "w", "x", "y", ""}
 	for _, class := range classes {
 		d.Body().Append(ui.Div(ui.Class(class)))
 	}

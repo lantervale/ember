@@ -37,7 +37,8 @@ func silhouetted(b *box.Box, st *style.Computed) bool {
 	inContent := func(c style.BackgroundBox) bool {
 		return b.Padding != (box.Edges{}) && (c == style.UnderContent || c == style.FillBox)
 	}
-	return l.Image.Source != "" && st.MaskBoxImage.Image.Source == "" && l.Mode != style.MaskLuminance && l.Clip != style.NoClip && !inContent(l.Clip) &&
+	return l.Image.Source != "" && st.MaskBoxImage.Image.Source == "" && l.Mode != style.MaskLuminance &&
+		l.Clip != style.NoClip && !inContent(l.Clip) &&
 		!inContent(st.BackgroundLayer(0).Clip) && len(b.Children) == 0 && !marked(b) && !tracked(b) &&
 		!outlined(b) && !paintsCells(st) && len(st.Shadows) == 0 && b.Border == (box.Edges{}) &&
 		st.BorderImage.Source == "" && st.BorderImage.Gradient == nil && !st.HasBackgroundImage()
