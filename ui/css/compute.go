@@ -1270,6 +1270,7 @@ func (x *ctx) finish(root bool) {
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
+	c.Strictness = x.strictness()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	c.Filters = followFilterColor(c.Filters, c.Color)
 	c.BackdropFilters = followFilterColor(c.BackdropFilters, c.Color)

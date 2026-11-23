@@ -186,6 +186,7 @@ func (t *Text) equal(o *Text) bool {
 		t.BreakAnywhere == o.BreakAnywhere &&
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
+		t.Strictness == o.Strictness &&
 		t.TabSize == o.TabSize &&
 		t.SkipInk == o.SkipInk &&
 		t.UnderlineOffset == o.UnderlineOffset &&

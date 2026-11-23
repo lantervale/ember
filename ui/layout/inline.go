@@ -1069,7 +1069,7 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		prev = adv
 		switch {
 		case at == len(g):
-		case st.LineBreak == style.LineBreakAnywhere || st.WordBreak == style.BreakAll && breaksAll(last, g):
+		case st.LineBreak == style.LineBreakAnywhere || st.WordBreak == style.BreakAll && breaksAll(last, g, st.Strictness):
 			c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
 		case st.WrapsAnywhere():
 			c.pieces = append(c.pieces, piece{kind: emergency, run: i, level: level})
@@ -1088,11 +1088,12 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 }
 
 // breaksAll reports whether word-break: break-all breaks between the graphemes a and b:
-// after a letter or a digit, before another or a hyphen, as Chrome breaks it.
-func breaksAll(a, b string) bool {
+// after a letter or a digit, before another or a hyphen, as Chrome breaks it, but before a
+// letter strictness s keeps off a line's start.
+func breaksAll(a, b string, s style.Strictness) bool {
 	ra, _ := utf8.DecodeLastRuneInString(a)
 	rb, _ := utf8.DecodeRuneInString(b)
-	return letterLike(ra) && (letterLike(rb) || rb == '-' || rb == '\u2010')
+	return letterLike(ra) && (letterLike(rb) && !startsNoLine(rb, s) || rb == '-' || rb == '\u2010')
 }
 
 func letterLike(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
@@ -1184,19 +1185,26 @@ func (c *inlineContent) closeSpans(i int) {
 // atoms as U+FFFC, so the rules see across run boundaries; breaks at spaces and newlines are
 // cut's own. As in Chrome, a path such as a/b doesn't break after its slash.
 func (c *inlineContent) softBreaks() []map[int]bool {
-	var all strings.Builder
+	var all, classes strings.Builder
 	starts := make([]int, len(c.runs))
+	classed := false
+	own, first := c.strictnesses()
 	for i, r := range c.runs {
 		starts[i] = all.Len()
 		if r.atomic != nil {
 			all.WriteString("\uFFFC")
+			classes.WriteString("\uFFFC")
 		} else {
 			all.WriteString(r.text)
+			classed = writeStrict(&classes, r.text, own[i], first[i]) || classed
 		}
 	}
 	soft := make([]map[int]bool, len(c.runs))
-	text := all.String()
-	rest, pos, state := text, 0, -1
+	text, classedText := all.String(), all.String()
+	if classed {
+		classedText = classes.String()
+	}
+	rest, pos, state := classedText, 0, -1
 	run := 0
 	for len(rest) > 0 {
 		var seg string
@@ -1224,11 +1232,15 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		}
 		soft[run][pos-starts[run]] = true
 	}
-	quoteBreaks(text, func(pos int) {
+	runAt := func(pos int) int {
 		k := 0
 		for k+1 < len(c.runs) && starts[k+1] <= pos {
 			k++
 		}
+		return k
+	}
+	add := func(pos int) {
+		k := runAt(pos)
 		if c.runs[k].atomic != nil || c.runs[k].st.WordBreak == style.KeepAll {
 			return
 		}
@@ -1236,6 +1248,18 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 			soft[k] = map[int]bool{}
 		}
 		soft[k][pos-starts[k]] = true
+	}
+	quoteBreaks(text, add)
+	c.anywhereEnds(add, starts)
+	looseBreaks(text, classedText, func(pos int) style.Strictness {
+		k := runAt(pos)
+		if pos == starts[k] {
+			return first[k]
+		}
+		return own[k]
+	}, add, func(pos int) {
+		k := runAt(pos)
+		delete(soft[k], pos-starts[k])
 	})
 	return soft
 }
