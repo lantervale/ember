@@ -140,6 +140,9 @@ type restyler struct {
 	// browser reads style attributes as a browser does
 	// (Transitions.BrowserSheets).
 	browser bool
+	// shown, when set, is a text node's text as layout shows it, which
+	// its first letter is taken from (Transitions.ShowText).
+	shown func(text *dom.Node) string
 	// before, after, marker, firstLine and firstLetter are set when some
 	// sheet has a rule for the pseudo-element: only then is one looked for.
 	before, after, marker, firstLine, firstLetter bool
@@ -2285,8 +2288,8 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
-		"text-decoration-skip-ink": keyword(func(c *style.Computed) *bool { return &c.InkThrough },
-			map[string]bool{"auto": false, "all": false, "none": true}),
+		"text-decoration-skip-ink": keyword(func(c *style.Computed) *style.SkipInk { return &c.SkipInk },
+			map[string]style.SkipInk{"auto": style.SkipInkAuto, "all": style.SkipInkAll, "none": style.SkipInkNone}),
 		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
 			func(x *ctx, v []Component) style.TabSize {
 				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
@@ -2426,8 +2429,13 @@ var props = func() map[string]prop {
 			decorationStyles),
 		"text-decoration-color": currentField(style.DecorationCurrent,
 			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
-		"text-decoration-thickness": lengthField(
-			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }, anyLength),
+		"text-decoration-thickness": field(func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness },
+			decorationThicknessOf, anyLength),
+		"text-underline-offset": lengthField(func(c *style.Computed) *style.Length { return &c.UnderlineOffset },
+			anyLength),
+		"text-underline-position": field(
+			func(c *style.Computed) *style.UnderlinePosition { return &c.UnderlinePosition }, underlinePosition,
+			flips[style.UnderlinePosition]()),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),

@@ -198,7 +198,7 @@ func (p *painter) drawList(pp popup, l menu) {
 		if o.Disabled {
 			ink = fade(ink, dimmed)
 		}
-		p.wordsIn(geom.V2(row.X+optionPad, row.Y+2), o.Text(), st, st.Font, smoothed([]twod.TextOption{
+		p.words(geom.V2(row.X+optionPad, row.Y+2), o.Text(), st, smoothed([]twod.TextOption{
 			twod.Typeface(face), twod.FontSize(st.Font.Size), twod.Color(ink), twod.Tracking(st.LetterGap()),
 		}, smoothingOf(st)))
 	}

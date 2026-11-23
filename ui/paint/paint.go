@@ -209,8 +209,9 @@ type painter struct {
 	control func(*dom.Node) any
 	sel     Selection
 	// around is the text round the fragment drawn, which its words are
-	// shaped between (box.Fragment's Before and After).
-	around [2]string
+	// shaped between (box.Fragment's Before and After), and amid the text
+	// beside it they are shaped as one with (its Lead and Trail).
+	around, amid [2]string
 	// inactive and system are Frame's Inactive and Highlight.
 	inactive bool
 	system   Highlight
@@ -256,6 +257,8 @@ type painter struct {
 	spread float32
 	// scratch holds pieces' parts.
 	scratch []piece
+	// standings are the styles of glyphs standing in vertical lines, by their own.
+	standings map[*style.Computed]*style.Computed
 	// base is the surface's transform as painting starts: the root's
 	// space, where the viewport culls.
 	base geom.Transform2D
@@ -276,6 +279,9 @@ type painter struct {
 	// glyphsOnly draws text as the shape of its glyphs and decorations,
 	// opaque white: the picture background-clip: text shows through.
 	glyphsOnly bool
+	// lineDecorated is set while the parts of a vertical line are drawn,
+	// whose text decorations are drawn along the whole line instead.
+	lineDecorated bool
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey

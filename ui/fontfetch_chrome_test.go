@@ -27,6 +27,7 @@ func foundry(t *testing.T) ui.FontFetcher {
 	t.Helper()
 	files := map[string][]byte{"heavy.ttf": gobold.TTF, "mono.ttf": gomono.TTF, "weighty.ttf": varfonttest.Weighty(),
 		"weighty-phantom.ttf": varfonttest.Build(varfonttest.Options{NoHVAR: true}),
+		"weighty-layout.ttf":  varfonttest.Build(varfonttest.Options{Layout: true}),
 		"layered.ttf":         colourtest.COLRv0(), "painted.ttf": colourtest.COLRv1(), "struck.ttf": colourtest.Sbix(true),
 		"bitmapped.ttf": colourtest.CBDT(true), "drawn.ttf": colourtest.SVG(true),
 		"bold-mono.ttc": colourtest.Collection(gobold.TTF, gomono.TTF)}
@@ -50,7 +51,7 @@ func foundry(t *testing.T) ui.FontFetcher {
 	files["devanagari.ttf"] = devanagari
 	for served, name := range map[string]string{"thai.ttf": "noto-thai.ttf", "lao.ttf": "noto-lao.ttf",
 		"hangul.ttf": "noto-hangul.ttf", "hebrew.ttf": "noto-hebrew.ttf", "old-thai.ttf": "go-thai.ttf",
-		"old-hebrew.ttf": "go-hebrew.ttf"} {
+		"old-hebrew.ttf": "go-hebrew.ttf", "spaced.ttf": "go-spaced.ttf"} {
 		b, rerr := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", name))
 		require.NoError(t, rerr)
 		files[served] = b

@@ -3,7 +3,8 @@
 // space with them and the one holding a no-break space drawn; and
 // visibility: collapse taking a row, a column and a row group out with
 // their room, their cells unpainted; the table round the collapsed column,
-// a flex item, keeps its width from before, as Chrome's.
+// a flex item, keeps its width from before, as Chrome's, while one stretched
+// in a grid area narrows by it.
 package main
 
 import (
@@ -24,6 +25,7 @@ td { padding: 4px 8px; border: 2px solid #345; background-color: #fde9c8; }
 .gone { visibility: collapse; }
 col.tint { background-color: #9cf; }
 .bare { background-color: transparent; }
+.area { display: grid; grid-template-columns: 150px; background-color: #ddd; }
 `
 
 func main() {
@@ -43,6 +45,8 @@ func main() {
 				ui.Tr(td("ten"), td("eleven")))),
 		ui.Table(ui.Thead(ui.Tr(td("head"), td("of it"))), ui.Tbody(ui.Class("gone"), ui.Tr(td("gone"), td("too"))),
 			ui.Tbody(ui.Tr(td("body"), td("stays")))),
+		ui.Div(ui.Class("area"), ui.Table(ui.Col(), ui.Col(ui.Class("gone")), ui.Col(ui.Class("tint")),
+			ui.Tbody(ui.Tr(td("a"), td("b"), td("c")), ui.Tr(td("d", ui.Attr("colspan", "2")), td("e"))))),
 	)
-	pages.Run(d, 520, 200)
+	pages.Run(d, 520, 240)
 }

@@ -411,10 +411,16 @@ func TestASpannerDeeperDownSpansTheColumns(t *testing.T) {
 	assert.Equal(t, float32(50), tr.Of[m].Size.Y)
 
 	s = el(dom.Div, func(st *style.Computed) { st.Display, st.ColumnSpanAll = style.Block, true }, text("H"))
-	padded := el(dom.Div, func(st *style.Computed) { st.Display, st.Padding.Top = style.Block, style.Px(1) },
-		para(2, nil), s)
+	a, b = para(4, nil), para(4, nil)
+	padded := el(dom.Div, func(st *style.Computed) {
+		st.Display, st.Padding = style.Block, style.Sides[style.Length]{Top: style.Px(3), Bottom: style.Px(5),
+			Left: style.Px(7), Right: style.Px(7)}
+	}, a, s, b)
 	tr = lay(multicol(2, nil, padded), 600)
-	assert.Equal(t, float32(190), tr.Of[s].Size.X, "a block with padding round it keeps it in its column")
+	assert.Equal(t, geom.Rect{Y: 23, W: 400, H: 10}, tr.Of[s].Rect(), "across the columns, not the padding")
+	assert.Equal(t, []geom.Rect{{W: 190, H: 23}, {X: 210, W: 190, H: 20}, {Y: 33, W: 190, H: 25},
+		{X: 210, Y: 33, W: 190, H: 25}}, parts(tr.Of[padded]), "its top padding above the spanner, its bottom below")
+	assert.Equal(t, geom.Rect{X: 7, Y: 3, W: 176, H: 20}, parts(tr.Of[a])[0], "inside the padding")
 }
 
 func TestATablesSpacingBelowItsLastRowGivesWayAtTheColumnsEnd(t *testing.T) {
