@@ -394,6 +394,13 @@ func (d *Document) Layout(size geom.Vec2) {
 			return
 		}
 		d.replay.repaint = true
+		if d.nearing(size) {
+			d.choosePictures(media, false)
+			d.style()
+			d.lay(size)
+			d.requery(size)
+			return
+		}
 		if d.trans.RequeryScroll(d.scrollState) {
 			d.style()
 			d.lay(size)
@@ -411,6 +418,7 @@ func (d *Document) Layout(size geom.Vec2) {
 		d.requery(size)
 	}
 	if d.choosePictures(media, true) {
+		d.choosePictures(media, false)
 		d.style()
 		d.lay(size)
 	}
@@ -579,6 +587,9 @@ func (d *Document) noteImg(n *Node) {
 		return
 	}
 	d.choices.imgs = append(d.choices.imgs, n)
+	if dom.Data(n).Dirty&dom.DirtyTree != 0 {
+		delete(d.choices.dppx, n)
+	}
 	if s := dom.ChosenSource(n); s != nil && dom.Data(s).Dirty&dom.DirtyStyle != 0 {
 		dom.Data(n).Dirty |= dom.DirtyStyle | dom.DirtyLayout
 	}

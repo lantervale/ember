@@ -5,10 +5,12 @@ import (
 	"image"
 	"strings"
 
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/srcset"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // choices are the imgs of a Document that choose their picture
@@ -21,11 +23,15 @@ type choices struct {
 	stale   bool
 	media   css.Media
 	waiting bool
+	// dppx is the density each img last chose for: Chrome's keeps it
+	// until something has it choose again.
+	dppx map[*Node]float32
 }
 
-// choosesPicture reports whether the img n chooses its picture.
+// choosesPicture reports whether the img n chooses its picture: one
+// that loads lazily shows none until it nears the viewport.
 func choosesPicture(n *Node) bool {
-	if _, ok := n.Attr("srcset"); ok {
+	if _, ok := n.Attr("srcset"); ok || lazy(n) {
 		return true
 	}
 	p := n.Parent()
@@ -34,20 +40,41 @@ func choosesPicture(n *Node) bool {
 
 // choosePictures has the imgs that choose their picture choose it for
 // m, when it or the tree changed since they last did, or one waits for
-// its picture. Once laid out, only those whose sizes say auto choose,
-// by the width they were laid out at; until then they show none. It
-// reports whether one chose by another source than before, which
-// restyles it.
+// its picture, or the media moved as mediaMoves says: each at the
+// density it last chose for, unless the media moved so as to have it
+// choose again. Once laid out,
+// only those whose sizes say auto choose, by the width they were laid
+// out at; until then they show none. An img that loads lazily shows
+// none until it nears the viewport (nearing).
+// It reports whether one chose by another source than before, which
+// restyles it, or neared the viewport.
 func (d *Document) choosePictures(m css.Media, laid bool) bool {
 	c := &d.choices
+	restyle, resized, other := false, false, false
 	if !laid {
-		if !c.stale && m == c.media && !c.waiting {
+		resized, other = mediaMoves(c.media, m)
+		if !c.stale && !resized && !other && !c.waiting {
+			c.media = m
 			return false
 		}
 		c.stale, c.media, c.waiting = false, m, false
+	} else {
+		restyle = d.nearing(geom.V2(m.Width, m.Height))
 	}
-	restyle := false
+	kept := c.dppx
+	c.dppx = make(map[*Node]float32, len(c.imgs))
 	for _, n := range c.imgs {
+		at := m
+		if dppx, ok := kept[n]; ok && !resized && !(other && mediaSources(n)) {
+			at.Resolution = dppx
+		}
+		c.dppx[n] = at.Resolution
+		if lazy(n) && !dom.Data(n).Near {
+			if !laid {
+				dom.Choose(n, "", 0, nil)
+			}
+			continue
+		}
 		auto := float32(-1)
 		if dom.AutoSizes(n) && lazy(n) {
 			b, _ := dom.Data(n).Placed.(*box.Box)
@@ -62,9 +89,98 @@ func (d *Document) choosePictures(m css.Media, laid bool) bool {
 		} else if laid {
 			continue
 		}
-		restyle = d.choosePicture(n, m, auto) || restyle
+		restyle = d.choosePicture(n, at, auto) || restyle
 	}
 	return restyle
+}
+
+// Chrome's margins round the viewport, and round each scroll container
+// an img is in, within which an img that loads lazily is near enough to
+// load: across and along its lines, in points, as a desktop Chrome on a
+// fast network has them (measured on Chrome for Testing 156).
+const nearAcross, nearAlong = 625, 1250
+
+// nearing has each img that loads lazily and is laid out within the
+// margins round the viewport, of size, and round every scroll container
+// it is in, choose its picture, as Chrome's do; reporting whether one
+// did.
+func (d *Document) nearing(size geom.Vec2) bool {
+	near := false
+	for _, n := range d.choices.imgs {
+		if !lazy(n) || dom.Data(n).Near {
+			continue
+		}
+		b, _ := dom.Data(n).Placed.(*box.Box)
+		if b == nil || !reaches(b, size) {
+			continue
+		}
+		dom.Data(n).Near = true
+		dom.Choose(n, "", 0, nil)
+		dom.Data(n).Dirty |= dom.DirtyLayout
+		d.choices.stale, near = true, true
+	}
+	return near
+}
+
+// reaches reports whether b lies within the margins round each scroll
+// container it is in and round the viewport of size: its edges inside
+// theirs, the far ones touching them, so that a box of no size counts.
+func reaches(b *box.Box, size geom.Vec2) bool {
+	r := b.Rect()
+	inside := func(c geom.Rect) bool {
+		c = geom.Rect{X: c.X - nearAcross, Y: c.Y - nearAlong, W: c.W + 2*nearAcross, H: c.H + 2*nearAlong}
+		x, y := max(r.X, c.X), max(r.Y, c.Y)
+		right, bottom := min(r.X+r.W, c.X+c.W), min(r.Y+r.H, c.Y+c.H)
+		if x >= c.X+c.W || y >= c.Y+c.H || right < x || bottom < y {
+			return false
+		}
+		r = geom.Rect{X: x, Y: y, W: right - x, H: bottom - y}
+		return true
+	}
+	for a := b.Parent; a != nil; a = a.Parent {
+		if a.Node == nil || a.Style == nil || !scrollContainer(a.Style.Overflow) || a.Parent == nil {
+			continue
+		}
+		p := a.Rect()
+		p = geom.Rect{X: p.X + a.Border.Left, Y: p.Y + a.Border.Top,
+			W: p.W - a.Border.Horizontal() - a.Scrollbar.X, H: p.H - a.Border.Vertical() - a.Scrollbar.Y}
+		if !inside(p) {
+			return false
+		}
+	}
+	return inside(geom.Rect{W: size.X, H: size.Y})
+}
+
+// scrollContainer reports whether an overflow makes a scroll container.
+func scrollContainer(o style.Size[style.Overflow]) bool {
+	sc := func(v style.Overflow) bool { return v != style.Visible && v != style.Clip }
+	return sc(o.Width) || sc(o.Height)
+}
+
+// mediaMoves reports what changed from was to now that has imgs choose
+// again, as Chrome's do: the viewport's size, which has them all choose,
+// and another feature but the density, which has those in a picture
+// with a source of media choose. Chrome for Testing 156 keeps the
+// pictures it chose when the density alone changes.
+func mediaMoves(was, now css.Media) (resized, other bool) {
+	resized = was.Width != now.Width || was.Height != now.Height
+	was.Width, was.Height, was.Resolution, was.Inactive = now.Width, now.Height, now.Resolution, now.Inactive
+	return resized, was != now
+}
+
+// mediaSources reports whether the img n is in a picture with a source
+// of media.
+func mediaSources(n *Node) bool {
+	p := n.Parent()
+	if p == nil || p.Tag() != dom.PictureElement {
+		return false
+	}
+	for _, s := range p.Children() {
+		if _, ok := s.Attr("media"); ok && s.Tag() == dom.Source {
+			return true
+		}
+	}
+	return false
 }
 
 // lazy reports whether the img n loads its picture lazily, which lets
