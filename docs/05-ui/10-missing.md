@@ -70,6 +70,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 |---|---|
 | a positioned box beside the lines of a flex or grid item or a table cell columns cut, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
+| a `br` clearing floats (`clear`, or the `clear` attribute) at the end of its block's lines, or before the closing edge of an inline element | the next line starts below the floats only when the `br` is the last thing of its line inside no element; where it ends the lines, the blocks after them don't move below the floats, as Chrome's do (WPT css/css-grid/grid-model/grid-empty-floating-positioned-and-inline-001.html, css/css-flexbox/abspos/flex-abspos-staticpos-fallback-justify-content-001.html) |
+| a picture of `height: 100%` in a grid item of `height: 100%` in an auto row | the item's row grows with the picture its own stretched height resolves, 3px past Chrome's row for a square picture (and its bottom margin's worth more with one), where Chrome keeps the row it sized (WPT css/css-grid/grid-items/replaced-element-015.html, which matches its reference all the same) |
+| a subgrid in both axes inside a subgrid in both axes | its rows are sized without the text of its items: the grid's auto row stays the height of a subgrid in one axis (WPT css/css-grid/subgrid/auto-track-sizing-002.html) |
+| a subgrid of the other direction inside a subgrid (`rtl` in `ltr`) | its item's column is placed from the wrong side's padding, border or margin (WPT css/css-grid/subgrid/writing-directions-002.html) |
+| a subgrid of another writing mode than its grid's | its tracks are not the grid's: the grid's rows don't grow for its items, and the subgrid takes its own size (WPT css/css-grid/subgrid/orthogonal-writing-mode-001.html and -006.html) |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
 | the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone | measured without the subgrid's rows: a percentage height or an aspect ratio there counts as on no row |
@@ -148,6 +153,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a pointer in the corner a rounded border cuts off | hits the box, where Chrome lets it through to what is under it |
 | a filtered element's live parts (a caret, a canvas element) when its Document draws them apart, and a filtered inline element holding absolute boxes | drawn unfiltered over it, placed by the nearest positioned block ([decision 0118](../99-decisions/0118-a-filtered-element-is-a-picture-drawn-through-wgsl-effects.md)) |
 | a `transform` holding fixed descendants | placed in the viewport, where Chrome places them in the transformed element, as it does under a `filter` |
+| the `translate`, `rotate` and `scale` properties | unknown, a warning: only `transform`'s functions move an element (WPT css/css-flexbox/flexbox-safe-overflow-position-006.html moves its item by `translate`) |
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |

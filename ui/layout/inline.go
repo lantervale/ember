@@ -3092,7 +3092,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			if p.kind == anchor {
 				k := c.anchors[p.span].node
 				c.oofs[k].static = point{x, y}
-				if c.anchors[p.span].top && !k.st.StaticInline && isBlockDisplay(k.st.Display) {
+				if c.anchors[p.span].top && !k.st.StaticInline {
 					// a block-level one starts a line: below this one when text is before it
 					c.oofs[k].static = point{inset.l, y}
 					if x > start {
