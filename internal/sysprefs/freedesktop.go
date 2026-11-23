@@ -2,7 +2,7 @@ package sysprefs
 
 import (
 	"bufio"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -120,11 +120,12 @@ func FromGTK(s *System, settings string) {
 }
 
 // findTool is the path of the first of dirs holding name as a program
-// exists says is one.
+// exists says is one. The places are Unix ones whatever the host, joined by
+// slash.
 func findTool(name string, dirs []string, exists func(string) bool) (string, bool) {
 	for _, dir := range dirs {
-		if path := filepath.Join(dir, name); exists(path) {
-			return path, true
+		if p := path.Join(dir, name); exists(p) {
+			return p, true
 		}
 	}
 	return "", false

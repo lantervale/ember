@@ -96,6 +96,6 @@ func TestBreakAllBreaksAsUAX14WithLettersAsIdeographs(t *testing.T) {
 		{"'", "b", false}, {"a", "/", false}, {"/", "b", true}, {"a", "_", true}, {"_", "b", true},
 		{"a", "。", false}, {"é́", "c", true}, {"a", "!", false},
 	} {
-		assert.Equal(t, c.breaks, breaksAll(c.a, c.b), "%q %q", c.a, c.b)
+		assert.Equal(t, c.breaks, breaksAll(c.a, c.b, style.StrictnessNormal), "%q %q", c.a, c.b)
 	}
 }

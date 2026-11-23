@@ -102,6 +102,7 @@ var pseudoElements = map[string]pseudoElement{
 
 	// The parts of a range, a progress and a meter, as Chrome lays them
 	// out once the control's appearance is none (decision 0160).
+	sliderContainer:   {},
 	sliderTrack:       {},
 	sliderThumb:       {},
 	progressBar:       {},
@@ -176,6 +177,7 @@ const (
 const (
 	progressInner     = "-webkit-progress-inner-element"
 	meterInner        = "-webkit-meter-inner-element"
+	sliderContainer   = "-webkit-slider-container"
 	sliderTrack       = "-webkit-slider-runnable-track"
 	sliderThumb       = "-webkit-slider-thumb"
 	progressBar       = "-webkit-progress-bar"
@@ -199,6 +201,8 @@ const (
 	partCornerPresent
 	partEnabled
 	partNoButton
+	// A hovered and a pressed part, a bar's or a control's, from under
+	// the pointer.
 	partHover
 	partActive
 	partDecrement
@@ -249,8 +253,20 @@ func scrollbarPart(name string) bool {
 	return strings.HasPrefix(name, webkitScrollbar) || name == webkitResizer
 }
 
+// controlPart reports whether name is a part of a range, a progress or a
+// meter, which takes :hover and :active.
+func controlPart(name string) bool {
+	switch name {
+	case progressInner, meterInner, sliderContainer, sliderTrack, sliderThumb, progressBar, progressValue, meterBar,
+		meterOptimum, meterSuboptimum, meterEvenLessGood:
+		return true
+	}
+	return false
+}
+
 // partStatesOf is cs without the pseudo-classes that follow a scrollbar's
-// part, and the states they ask for; cs as it is when it ends with none.
+// or a control's part, and the states they ask for; cs as it is when it
+// ends with none.
 func partStatesOf(cs []Component) ([]Component, partState) {
 	var want partState
 	n := len(cs)
@@ -262,8 +278,11 @@ func partStatesOf(cs []Component) ([]Component, partState) {
 		want |= st
 		n -= 2
 	}
-	if want == 0 || n < 3 || cs[n-2].Kind != Colon || cs[n-3].Kind != Colon || cs[n-1].Kind != Ident ||
-		!scrollbarPart(strings.ToLower(cs[n-1].Text)) {
+	if want == 0 || n < 3 || cs[n-2].Kind != Colon || cs[n-3].Kind != Colon || cs[n-1].Kind != Ident {
+		return cs, 0
+	}
+	if name := strings.ToLower(cs[n-1].Text); !scrollbarPart(name) &&
+		(!controlPart(name) || want&^(partHover|partActive) != 0) {
 		return cs, 0
 	}
 	return cs[:n], want

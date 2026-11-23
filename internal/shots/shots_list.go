@@ -110,6 +110,14 @@ var Shots = []Shot{ //nolint:gochecknoglobals // the guide's list of pictures
 		Run:  htmlElements,
 		Args: []string{element, "option"},
 	},
+	{
+		Out:  "05-ui/02-elements/optgroup.png",
+		Run:  htmlElements,
+		Args: []string{element, "optgroup"},
+		Env: map[string]string{
+			CaptureMouse: "100,28@0;100,28@10;left:12-14;100,150@20",
+		},
+	},
 	{Out: "05-ui/02-elements/p.png", Run: htmlElements, Args: []string{element, "p"}},
 	{Out: "05-ui/02-elements/pre.png", Run: htmlElements, Args: []string{element, "pre"}},
 	{

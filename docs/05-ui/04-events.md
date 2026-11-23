@@ -78,6 +78,8 @@ Text whose `user-select` allows it ([CSS](03-css.md#selecting-text)) is selected
 | Shift and an arrow, Home or End (with the platform's word and line keys) | moves the end of a selection that exists, by a character, a word, a line, to the line's or the text's end |
 | Escape | leaves it, as Chrome |
 
+On vertical lines ([writing modes](03-css.md#writing-modes)) the same works down them, as in Chrome: a press finds the place along the line it falls on, a drag and a double click select down and across lines, the selection is drawn along them, and with Shift the arrows along the lines step through the text while those across them go to the next or the previous line, Left the next in `vertical-rl` and Right in `vertical-lr` and `sideways-lr` ([decision 0193](../99-decisions/0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md)).
+
 Over text a press would select, the pointer is `platform.CursorText` while the element's `cursor` is `auto`; an author's `cursor` wins.
 
 | | |

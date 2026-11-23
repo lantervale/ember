@@ -1776,7 +1776,7 @@ func (r radii) grown(d float32) radii {
 // styles in its style, the others in the run's.
 func (p *painter) text(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) || p.probing {
 		return
 	}
 	if st.Mode.Vertical() {
@@ -1789,9 +1789,9 @@ func (p *painter) text(e entry, alpha float32) {
 // horizontalText is text for a run of horizontal lines.
 func (p *painter) horizontalText(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	var parts []Selected
-	if p.sel != nil {
-		parts = p.sel.Parts(b)
+	parts := p.selected(b)
+	if p.lineSelecting {
+		parts = p.lineParts
 	}
 	first := 0
 	for first < len(b.Lines) && b.Lines[first].Style != nil {
@@ -2299,7 +2299,7 @@ func clamp8(v int) uint8 { return uint8(max(0, min(255, v))) }
 func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text color.Color,
 	alpha float32) color.Color {
 	back, ink := p.selectionColors(st, text, alpha)
-	if back.A > 0 {
+	if back.A > 0 && !p.lineSelecting {
 		for _, s := range parts {
 			p.s.Rect(p.snap(geom.Rect{X: e.at.X + s.Rect.X, Y: e.at.Y + s.Rect.Y, W: s.Rect.W, H: s.Rect.H}), back)
 		}

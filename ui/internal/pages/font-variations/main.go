@@ -1,7 +1,9 @@
 // A variable font's instances against Chrome's: one file drawn at
 // weights from 100 to 900 and widths from 50% to 150%, by font-weight,
 // font-stretch and font-variation-settings, at several sizes, and a face
-// fixed at 400 made bold as Chrome makes it up.
+// fixed at 400 made bold as Chrome makes it up. Chrome 156 on Linux
+// advances by the varied widths but draws the default outlines, so the
+// Linux threshold only bounds that.
 package main
 
 import (

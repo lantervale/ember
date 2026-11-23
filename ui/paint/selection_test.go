@@ -124,3 +124,28 @@ func TestAPictureInsideASelectionIsTinted(t *testing.T) {
 	assert.Equal(t, pageSelection, rects[0].Color)
 	assert.Empty(t, selected(el(0, 0, 400, 300, nil, img), chosen{}).of("rect"))
 }
+
+func TestTheSelectionOfAVerticalLineIsDrawnAlongIt(t *testing.T) {
+	p := el(0, 0, 40, 100, func(s *style.Computed) {
+		s.Mode, s.Orientation = style.VerticalRL, style.OrientSideways
+		s.Color = red
+		s.SelectionColor, s.HasSelection = green, true
+		s.SelectionText, s.HasSelectionText = blue, true
+	})
+	run := &box.Box{Kind: box.TextRun, Style: p.Style, Pos: geom.V2(10, 0), Size: geom.V2(20, 40)}
+	run.Lines = []box.Fragment{{Text: "hello", Rect: geom.Rect{W: 20, H: 40}, Baseline: 5}}
+	p.Append(run)
+	r := selected(p, chosen{parts: map[*box.Box][]Selected{run: {{Rect: geom.Rect{Y: 8, W: 20, H: 16}}}}})
+	rects := r.of("rect")
+	require.Len(t, rects, 1, "drawn once, under the whole part")
+	assert.Equal(t, green, rects[0].Color)
+	assert.Equal(t, geom.Rect{X: 10, Y: 8, W: 20, H: 16}, TurnRect(rects[0].Xform, rects[0].Rect),
+		"down the line, from the part's first character to its last")
+	ts := r.of("text")
+	require.Len(t, ts, 3, "before, inside and after the part")
+	assert.Equal(t, []color.Color{red, blue, red}, []color.Color{ts[0].Color, ts[1].Color, ts[2].Color})
+	assert.Equal(t, LineTurn(style.VerticalRL, geom.Rect{X: 10, W: 20, H: 40}), ts[1].Xform,
+		"the text turned with its line")
+	assert.InDelta(t, 8, ts[1].Clip.X, 1e-4, "clipped along the line to the part")
+	assert.InDelta(t, 16, ts[1].Clip.W, 1e-4)
+}

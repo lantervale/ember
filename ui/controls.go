@@ -6,6 +6,7 @@ import (
 
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/layout"
 )
 
 // machine is n's control, made from its attributes the first time it is
@@ -59,19 +60,9 @@ func newMachine(n *Node) any {
 	case dom.Dialog:
 		return &control.Dialog{Open: has(n, "open")}
 	case dom.Select:
-		var opts []control.Option
-		selected := -1
-		for _, c := range n.Children() {
-			if c.Tag() != dom.Option {
-				continue
-			}
-			v, _ := c.Attr("value")
-			opts = append(opts, control.Option{Label: c.Text(), Value: v, Disabled: has(c, "disabled")})
-			if has(c, "selected") {
-				selected = len(opts) - 1
-			}
-		}
+		opts, groups, selected := listOf(n)
 		s := control.NewSelect(opts...)
+		s.Groups = groups
 		if selected >= 0 || has(n, "placeholder") {
 			s.Selected, s.Highlight = selected, selected
 		}
@@ -119,10 +110,44 @@ func newMachine(n *Node) any {
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source:
+		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source, dom.Optgroup:
 		// no control of their own
 	}
 	return nil
+}
+
+// listOf is what the select n offers: its options, its optgroups, each
+// label before its options, which a disabled one disables, and the
+// option chosen by its selected attribute, -1 for none.
+func listOf(n *Node) ([]control.Option, []control.Group, int) {
+	var opts []control.Option
+	var groups []control.Group
+	selected := -1
+	add := func(o *Node, group int, off bool) {
+		v, valued := o.Attr("value")
+		opts = append(opts, control.Option{
+			Label: o.Text(), Value: v, Valued: valued, Disabled: off || has(o, "disabled"), Group: group,
+		})
+		if has(o, "selected") {
+			selected = len(opts) - 1
+		}
+	}
+	for _, c := range n.Children() {
+		if c.Tag() == dom.Option {
+			add(c, 0, false)
+		}
+		if c.Tag() != dom.Optgroup {
+			continue
+		}
+		label, _ := c.Attr("label")
+		groups = append(groups, control.Group{Label: label, Disabled: has(c, "disabled"), At: len(opts)})
+		for _, o := range c.Children() {
+			if o.Tag() == dom.Option {
+				add(o, len(groups), has(c, "disabled"))
+			}
+		}
+	}
+	return opts, groups, selected
 }
 
 // buttonLabel is what an input that is a button shows: its value, else
@@ -254,7 +279,7 @@ func (d *Document) SetValue(n *Node, v string) {
 	switch m := d.machine(n).(type) {
 	case *control.Select:
 		for i, o := range m.Options {
-			if o.Value == v || o.Value == "" && o.Label == v {
+			if o.Value == v || o.Value == "" && !o.Valued && o.Label == v {
 				m.Selected, m.Highlight = i, i
 			}
 		}
@@ -387,18 +412,30 @@ func (d *Document) SetSelected(n *Node, i int) {
 // showOptions gives a select's options their labels as the player reads
 // them, which its list shows and typing matches.
 func (d *Document) showOptions(n *Node, m *control.Select) {
-	i := 0
-	for _, c := range n.Children() {
-		if c.Tag() != dom.Option || i >= len(m.Options) {
-			continue
+	for i, c := range dom.Options(n) {
+		if i >= len(m.Options) {
+			break
 		}
 		m.Options[i].Shown = ""
 		if d.translator != nil {
 			m.Options[i].Shown = say(c, d.shown)
 		}
+		g := c.Parent()
 		c.SetState(dom.Checked, i == m.Selected)
 		c.SetState(dom.Default, has(c, "selected"))
-		c.SetState(dom.Disabled, has(c, "disabled"))
+		c.SetState(dom.Disabled, has(c, "disabled") || g.Tag() == dom.Optgroup && has(g, "disabled"))
+	}
+	i := 0
+	for _, g := range n.Children() {
+		if g.Tag() != dom.Optgroup || i >= len(m.Groups) {
+			continue
+		}
+		label, _ := g.Attr("label")
+		m.Groups[i].Shown = ""
+		if d.translator != nil {
+			m.Groups[i].Shown = layout.TranslatedAt(g, label, d.tr())
+		}
+		g.SetState(dom.Disabled, has(g, "disabled"))
 		i++
 	}
 }

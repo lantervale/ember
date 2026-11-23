@@ -187,6 +187,8 @@ input:disabled, textarea:disabled {
 select:disabled { color: light-dark(gray, #aaa); border-color: rgba(118, 118, 118, 0.3); opacity: 0.7; }
 option { display: block; padding: 0 2px 1px; }
 option:disabled { color: light-dark(gray, #aaa); }
+optgroup { display: block; font-weight: bolder; }
+optgroup:disabled { color: light-dark(gray, #aaa); }
 input, select { white-space: nowrap; }
 input { overflow: hidden; }
 select { overflow: clip; }
@@ -237,9 +239,9 @@ input[type="checkbox"][switch]:checked:disabled:-ember-native {
   color: light-dark(#f8f8f8, #3b3b3b);
 }
 input[type="range"] {
-  width: 129px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff); overflow: visible;
+  inline-size: 129px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff); overflow: visible;
 }
-input[type="range"]:-ember-native { height: 16px; }
+input[type="range"]:-ember-native { block-size: 16px; }
 progress { width: 160px; height: 16px; color: light-dark(#0075ff, #99c8ff); vertical-align: -0.2em; }
 meter { width: 80px; height: 16px; vertical-align: -0.2em; }
 /* The parts of a range, a progress and a meter drawn from their CSS, as Chrome's sheet styles them. */

@@ -13,9 +13,10 @@ ui.Select(
 | Attribute | |
 |---|---|
 | `ui.Text(s)` | its text, in the list and in the select once chosen |
-| `ui.Value(v)` | the select's value when chosen; its text without one |
+| `ui.Value(v)` | the select's value when chosen, even empty; its text without one |
 | `ui.Selected()` | the select starts with it chosen |
 | `ui.Disabled()` | shown dimmed, never chosen |
+| inside an [`optgroup`](88-optgroup.md) | listed under its label, indented; disabled with it |
 
 | Default CSS | |
 |---|---|
