@@ -34,8 +34,8 @@ type columnSet struct {
 	top, width, gap, height float32
 }
 
-// columnPlace is where a column shows in the container's border box: x from the first
-// column's left, top and bottom down it. A spanner shows as a column at x 0.
+// columnPlace is where a column shows in the container's border box: x from the content
+// box's left (the first column's right edge is the content box's under rtl), top and bottom down it. A spanner shows as a column at x 0.
 type columnPlace struct{ x, top, bottom float32 }
 
 // columnRow is a row of count columns from the first, top down from the first column's
@@ -72,10 +72,11 @@ func (c *columnSet) shift(k int) point {
 // flowFrag is a node's place in the multi-column flow it is laid out in.
 type flowFrag struct {
 	cols *columnSet
-	// y is the border box's top in the flow, col the column its origin shows in and oy
-	// the origin's y from the container's border box, both less relative offsets.
-	y, oy float32
-	col   int
+	// y is the border box's top in the flow, col the column its border box's top shows
+	// in, and ox and oy the origin from where that column's part shows, all less relative
+	// offsets.
+	y, ox, oy float32
+	col       int
 	// pieces are the box's parts when columns cut it, from its origin.
 	pieces []geom.Rect
 }
@@ -84,7 +85,7 @@ type flowFrag struct {
 func (f *flowFrag) lineShift(y float32) (float32, float32) {
 	k := f.cols.at(f.y + y)
 	by := f.cols.shift(k)
-	return by.x - f.cols.places[f.col].x, by.y + f.y - f.oy
+	return by.x - f.cols.places[f.col].x - f.ox, by.y + f.y - f.oy
 }
 
 // columnar reports a node laid out as a multi-column container: a block container with
@@ -237,8 +238,12 @@ func (t *tree) columns(n *node, in input) output {
 		}
 		if k := len(cs.starts); starts != nil {
 			for j, start := range starts {
+				x := float32(j) * cs.pitch()
+				if st.Dir == style.RTL {
+					x = content - width - x
+				}
 				cs.starts = append(cs.starts, start)
-				cs.places = append(cs.places, columnPlace{x: float32(j) * cs.pitch(), top: y, bottom: y + h})
+				cs.places = append(cs.places, columnPlace{x: x, top: y, bottom: y + h})
 			}
 			cs.rows = append(cs.rows, columnRow{first: k, count: len(starts), top: y - inset.t, height: h})
 		} else {
@@ -769,9 +774,11 @@ func keepFlow(n, m *node, flow, moved point) {
 			f.pieces = append(f.pieces,
 				geom.Rect{X: at.x + shift.x, Y: top, W: n.unrounded.size.w, H: fmax(bottom-top, 0)})
 		}
+		left := origin.x
 		for _, p := range f.pieces {
-			origin.y = fmin(origin.y, p.Y)
+			origin.x, origin.y = fmin(origin.x, p.X), fmin(origin.y, p.Y)
 		}
+		f.ox = origin.x - left
 		for i := range f.pieces {
 			f.pieces[i].X -= origin.x
 			f.pieces[i].Y -= origin.y

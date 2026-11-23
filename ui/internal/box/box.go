@@ -144,7 +144,7 @@ type Box struct {
 }
 
 // Columns are a multi-column container's columns, side by side from its
-// content box's start, each Width wide and Gap apart, in rows the blocks
+// content box's start (its right under direction rtl), each Width wide and Gap apart, in rows the blocks
 // spanning them cut.
 type Columns struct {
 	Width, Gap float32

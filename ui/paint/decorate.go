@@ -428,9 +428,13 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 	}
 	b := e.b
 	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
+	right := e.at.X + b.Size.X - b.Border.Right - b.Padding.Right
 	for _, r := range c.Rows {
 		for k := 1; k < r.Count; k++ {
 			x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
+			if st.Dir == style.RTL {
+				x = right - float32(k)*(c.Width+c.Gap) + (c.Gap-w)/2
+			}
 			p.border(p.snap(geom.Rect{X: x, Y: top + r.Top, W: w, H: r.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
 		}
 	}

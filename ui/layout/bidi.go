@@ -163,7 +163,9 @@ func (c *inlineContent) levels() [][]bidi.Level {
 
 // levelEdges gives the pieces that hold no text of their own a level: a span's start
 // edge that of the first piece inside it, its end edge that of the last, so neither cuts
-// the text round them in two; the others that of the piece before them.
+// the text round them in two; an anchor that of the text after it, as Chrome's
+// out-of-flow placeholder takes the level of the run at its offset; the others that of
+// the piece before them.
 func (c *inlineContent) levelEdges() {
 	inside := func(i int, step int) (bidi.Level, bool) {
 		for k := i + step; k >= 0 && k < len(c.pieces); k += step {
@@ -195,11 +197,28 @@ func (c *inlineContent) levelEdges() {
 			if l, ok := inside(i, step); ok {
 				p.level = l
 			}
-		case breakHere, emergency, anchor:
+		case anchor:
+			p.level = prev
+			if l, ok := c.nextLevel(i); ok {
+				p.level = l
+			}
+		case breakHere, emergency:
 			p.level = prev
 		}
 		prev = p.level
 	}
+}
+
+// nextLevel is the level of the first piece holding text after piece i.
+func (c *inlineContent) nextLevel(i int) (bidi.Level, bool) {
+	for _, p := range c.pieces[i+1:] {
+		switch p.kind {
+		case word, gap, atomic, newline:
+			return p.level, true
+		case edge, breakHere, emergency, marker, anchor:
+		}
+	}
+	return 0, false
 }
 
 // visual is a line's pieces as shown in the order they stand from the left, and the
@@ -320,9 +339,7 @@ func visualText(s string, base bidi.Level) string {
 	for i, k := range bidi.Reorder(levels) {
 		out[i] = text[k]
 		if levels[k]%2 == 1 {
-			if m := []rune(xbidi.ReverseString(string(text[k]))); len(m) == 1 {
-				out[i] = m[0]
-			}
+			out[i], _ = bidi.Mirror(text[k])
 		}
 	}
 	return string(out)
