@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
@@ -45,7 +46,7 @@ type Document struct {
 	html, body *Node
 	tree       *box.Tree
 	fonts      *fonts.Set
-	faces      map[*fonts.Face]*twod.Face
+	faces      map[faceKey]*twod.Face
 	// authored are the stylesheets in cascade order, sheets what the
 	// cascade reads of those not disabled, and resheet is set once one
 	// changed: the next frame takes them again (take).
@@ -825,7 +826,8 @@ func (d *Document) face(f style.Font) *twod.Face {
 		return d.chainFace(ch)
 	}
 	ff := d.fonts.Face(f)
-	if tf, ok := d.faces[ff]; ok {
+	key := faceKey{ff, f.Palette}
+	if tf, ok := d.faces[key]; ok {
 		return tf
 	}
 	var opts []twod.FaceOption
@@ -835,15 +837,23 @@ func (d *Document) face(f style.Font) *twod.Face {
 	if d.emoji != nil {
 		opts = append(opts, twod.Emoji(d.emoji))
 	}
-	tf, err := twod.NewFace(ff.TTF, opts...)
-	if err != nil {
-		tf = twod.Regular()
+	tf := twod.Regular()
+	if df, err := draw.ParseFace(ff.Family, ff.TTF); err == nil {
+		if wrapped, ok := draw.Wrap(df.Styled(d.colourLook(ff.Family, f.Palette))).(*twod.Face); ok {
+			tf = wrapped.With(opts...)
+		}
 	}
 	if d.faces == nil {
-		d.faces = map[*fonts.Face]*twod.Face{}
+		d.faces = map[faceKey]*twod.Face{}
 	}
-	d.faces[ff] = tf
+	d.faces[key] = tf
 	return tf
+}
+
+// faceKey is a face of the Document's fonts drawn in a font-palette.
+type faceKey struct {
+	face    *fonts.Face
+	palette string
 }
 
 // warn keeps a style attribute's warning once, however often its element

@@ -2013,6 +2013,16 @@ var props = func() map[string]prop {
 		"font-style": field(func(c *style.Computed) *bool { return &c.Font.Italic }, func(_ *ctx, v []Component) bool {
 			return !isWord(v[0], "normal")
 		}, flips[bool]()),
+		"font-palette": field(func(c *style.Computed) *string { return &c.Font.Palette },
+			func(_ *ctx, v []Component) string {
+				if isWord(v[0], "normal") {
+					return ""
+				}
+				if strings.HasPrefix(v[0].Text, "--") {
+					return v[0].Text
+				}
+				return strings.ToLower(v[0].Text)
+			}, flips[string]()),
 		"font-stretch": field(func(c *style.Computed) *float32 { return &c.Font.Stretch },
 			func(_ *ctx, v []Component) float32 {
 				if w, ok := fontStretch(v[0]); ok {

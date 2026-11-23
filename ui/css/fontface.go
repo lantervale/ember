@@ -97,11 +97,12 @@ func (f FontFace) Readable() []FontSource {
 // Reads reports whether ui reads the source: by its format() when it
 // gives one (TrueType, OpenType, WOFF and WOFF2, a variable font drawn
 // as its default instance), else by its file's extension, one that says
-// nothing being read to see. A tech() of colour glyphs is not read, and
-// a local() is.
+// nothing being read to see. A tech() of SVG glyphs is not read, as
+// Chrome draws none, those of the other colour glyphs are, and a local()
+// is.
 func (s FontSource) Reads() bool {
 	for _, tech := range s.Tech {
-		if strings.HasPrefix(tech, "color-") || tech == "incremental" {
+		if strings.HasPrefix(strings.ToLower(tech), "color-") && !colourTech(tech) || tech == "incremental" {
 			return false
 		}
 	}

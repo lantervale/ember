@@ -34,7 +34,8 @@ func TestSupportsAppliesWhereUISupportsWhatItAsks(t *testing.T) {
 		"selector(a:state(open))":                          false,
 		"selector(::-moz-x)":                               false,
 		"selector(::-webkit-foo)":                          false,
-		"font-tech(color-COLRv1)":                          false,
+		"font-tech(color-COLRv1)":                          true,
+		"font-tech(color-SVG)":                             false,
 		"(display: flex) and (foo)":                        false,
 		"":                                                 false,
 	} {

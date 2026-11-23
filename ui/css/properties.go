@@ -78,6 +78,7 @@ var properties = map[string]property{
 	"font-size":                 {inherited: true, initial: "medium"},
 	"font-weight":               {inherited: true, initial: "normal"},
 	"font-style":                {inherited: true, initial: "normal"},
+	"font-palette":              {inherited: true, initial: "normal"},
 	"font-stretch":              {inherited: true, initial: "normal"},
 	"font-synthesis":            {inherited: true, initial: "weight style small-caps"},
 	propFontVariations:          {inherited: true, initial: "normal"},

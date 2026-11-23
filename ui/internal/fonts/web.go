@@ -1,6 +1,7 @@
 package fonts
 
 import (
+	"errors"
 	"fmt"
 	"hash/maphash"
 	"slices"
@@ -225,7 +226,7 @@ func Parse(ttf []byte) (*sfnt.Font, error) {
 			continue
 		}
 		idx := sfnt.GlyphIndex(g) //nolint:gosec // under the font's 65535 glyphs
-		if _, err = f.LoadGlyph(&buf, idx, ppem, nil); err != nil {
+		if _, err = f.LoadGlyph(&buf, idx, ppem, nil); err != nil && !errors.Is(err, sfnt.ErrColoredGlyph) {
 			return nil, err
 		}
 		if _, err = f.GlyphAdvance(&buf, idx, ppem, font.HintingNone); err != nil {
@@ -502,6 +503,7 @@ type chainKey struct {
 	italic    bool
 	stretch   float32
 	synthesis style.FontSynthesis
+	palette   string
 }
 
 //nolint:gochecknoglobals // the seed every chain key is hashed with
@@ -520,7 +522,7 @@ func keyOf(f style.Font) chainKey {
 		h.WriteByte(1)
 	}
 	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic,
-		stretch: f.Stretch, synthesis: f.Synthesis}
+		stretch: f.Stretch, synthesis: f.Synthesis, palette: f.Palette}
 }
 
 // Chain is the faces f draws with.

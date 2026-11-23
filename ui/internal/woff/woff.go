@@ -71,7 +71,8 @@ func Format(data []byte) string {
 }
 
 // Sfnt is the sfnt file data holds: data itself when it is one, the
-// file a WOFF or a WOFF2 packs, rebuilt, otherwise.
+// first font of a collection (First), the file a WOFF or a WOFF2 packs,
+// rebuilt, otherwise.
 func Sfnt(data []byte) ([]byte, error) {
 	switch Format(data) {
 	case "woff":
@@ -81,7 +82,7 @@ func Sfnt(data []byte) ([]byte, error) {
 	case "truetype", "opentype":
 		return data, nil
 	case "collection":
-		return nil, errCollection
+		return First(data)
 	}
 	return nil, errNoFont
 }

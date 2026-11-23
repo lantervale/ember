@@ -492,7 +492,13 @@ var checks = map[string]check{
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller",
 			"larger"))),
-	"font-style":     single(words("normal", "italic", "oblique")),
+	"font-style": single(words("normal", "italic", "oblique")),
+	"font-palette": single(either(words("normal", "light", "dark"), func(c Component) error {
+		if c.Kind == Ident && strings.HasPrefix(c.Text, "--") {
+			return nil
+		}
+		return fmt.Errorf("expected normal, light, dark or a --name, found %q", c.String())
+	})),
 	"font-weight":    single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
 	"line-height":    single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
 	"letter-spacing": single(either(lengthPercent, words("normal"))),
