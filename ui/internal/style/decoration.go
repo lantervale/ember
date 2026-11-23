@@ -31,6 +31,14 @@ type TextDecoration struct {
 	Thickness Length
 }
 
+// TextStroke is -webkit-text-stroke: each glyph's outline drawn Width
+// points wide, half outside it and half inside, in Color; none when
+// Width is 0.
+type TextStroke struct {
+	Width float32
+	Color color.Color
+}
+
 // Decoration is a text-decoration drawn on a box's text: its own, or one
 // of an ancestor's. Font is the decorating box's, which places the lines
 // and gives auto its thickness: the box that set the decoration while the
