@@ -48,7 +48,7 @@ type Font struct {
 	numHMetrics int
 	avar        [][]axisMap
 	gvar        gvar
-	hvar        *itemStore
+	hvar        *ItemStore
 	hvarMap     deltaSetMap
 }
 
@@ -276,7 +276,7 @@ func (f *Font) Advance(g uint16, c Coords) float32 {
 	}
 	if f.hvar != nil {
 		outer, inner := f.hvarMap.at(int(g))
-		return adv + f.hvar.delta(outer, inner, c)
+		return adv + f.hvar.Delta(outer, inner, c)
 	}
 	o, err := f.glyph(g, c, 0)
 	if err != nil {

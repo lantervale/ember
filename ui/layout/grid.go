@@ -467,6 +467,11 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	out := t.performChildLayout(n, s, cb, innerSpaces, inherentSize)
 	final := s.or(out.size).mClamp(minSize, maxSize)
+	if n.role == roleTable {
+		// A table is as big as it lays itself out: narrowed by its collapsed columns, shortened
+		// by its collapsed rows.
+		final = out.size
+	}
 	x, xMargin := alignItemWithinArea(span{area.l, area.r},
 		align(hAlign), final.w, pos, insetH, span{margin.l, margin.r}, 0)
 	y, yMargin := alignItemWithinArea(span{area.t, area.b}, align(vAlign),

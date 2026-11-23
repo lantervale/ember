@@ -60,15 +60,20 @@ type planMemo struct {
 	plan     *shape.Plan
 }
 
-// plan is face's plan for runs in script with features after its own.
+// plan is face's plan for runs in script with features after its own,
+// at the instance its look draws.
 func (f *Font) plan(face int, script shape.Tag, features string) *shape.Plan {
 	if f.memos == nil {
 		f.memos = make([]planMemo, len(f.layouts))
 	}
 	m := &f.memos[face]
 	if m.plan == nil || m.script != script || m.features != features {
-		*m = planMemo{script, features,
-			f.layouts[face].Plan(script, shape.Splice(features, f.looks[face].Features))}
+		spliced := shape.Splice(features, f.looks[face].Features)
+		p := f.layouts[face].Plan(script, spliced)
+		if v := f.looks[face].varied(); v != nil {
+			p = f.layouts[face].PlanAt(script, spliced, v.Font, v.Coords)
+		}
+		*m = planMemo{script, features, p}
 	}
 	return m.plan
 }
@@ -246,13 +251,8 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 	}
 	shaped := f.shaped(p, glyphs, ctx)
 	scale := f.size * f.looks[face].scale() / float32(f.sources[face].UnitsPerEm())
-	v := f.looks[face].varied()
 	for i, sg := range shaped {
 		advance := float32(sg.Advance)
-		if v != nil && advance != 0 {
-			// GPOS's values stay the default instance's; the advance is the instance's.
-			advance += v.Font.Advance(sg.ID, v.Coords) - v.Font.Advance(sg.ID, nil)
-		}
 		c := run[starts[sg.Cluster]]
 		next := n
 		if i+1 < len(shaped) {

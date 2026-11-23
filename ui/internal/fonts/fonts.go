@@ -72,7 +72,7 @@ type Set struct {
 	// shapedRuns are the widths of runs shaped so far, by plan and
 	// glyphs, shapedCount of them; run and ids are the glyphs of the run
 	// being measured.
-	shapedRuns  map[*shape.Plan]map[string]shapedRun
+	shapedRuns  map[*shape.Plan]map[string]int32
 	shapedCount int
 	run         []shape.Glyph
 	ids         []byte
