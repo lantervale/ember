@@ -1750,46 +1750,108 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	}
 	p.decorations(e, st, style.Underline|style.Overline, alpha)
 	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
-	if c.A <= 0 && ink == c {
+	stroked := st.TextStroke.Width > 0 || len(parts) > 0 && st.HasSelectionStroke
+	if c.A <= 0 && ink == c && !stroked {
 		p.decorations(e, st, style.LineThrough, alpha)
 		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
 	face := p.faceOf(st.Font)
 	if len(st.TextShadows) > 0 || len(parts) > 0 && len(st.SelectionShadows) > 0 {
-		for i, f := range b.Lines {
-			k := -1
-			if st.HasSelectionShadows {
-				k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
-			}
-			if k < 0 {
-				p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
-				continue
-			}
-			for j, clip := range p.partClips(e, st, f, parts[k]) {
-				shadows, current := st.TextShadows, st.Color
-				if j == 1 {
-					shadows, current = st.SelectionShadows, color.Color{}
-				}
-				if clip.W <= 0 || len(shadows) == 0 {
-					continue
-				}
-				p.s.PushClip(clip)
-				p.shadows(e, st, face, f, shadows, current, alpha)
-				p.s.PopClip()
-			}
-		}
+		p.runShadows(e, st, face, parts, alpha)
 	}
 	opts := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	if ink != c {
 		p.recoloured(e, st, face, parts, c, ink)
-	} else {
+	} else if c.A > 0 {
 		for _, f := range b.Lines {
 			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 	}
+	if stroked {
+		p.strokes(e, st, face, parts, alpha)
+	}
 	p.decorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// runShadows draws the text shadows of e's run, the selected parts' the
+// ::selection's where it sets them.
+func (p *painter) runShadows(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	for i, f := range e.b.Lines {
+		k := -1
+		if st.HasSelectionShadows {
+			k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		}
+		if k < 0 {
+			p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			shadows, current := st.TextShadows, st.Color
+			if j == 1 {
+				shadows, current = st.SelectionShadows, color.Color{}
+			}
+			if clip.W <= 0 || len(shadows) == 0 {
+				continue
+			}
+			p.s.PushClip(clip)
+			p.shadows(e, st, face, f, shadows, current, alpha)
+			p.s.PopClip()
+		}
+	}
+}
+
+// strokes draws -webkit-text-stroke over the fill of e's run: the
+// outline of each glyph, the selected parts' as the ::selection strokes
+// them.
+func (p *painter) strokes(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	plain := st.TextStroke
+	plain.Color = fade(plain.Color, alpha)
+	selected := plain
+	if len(parts) > 0 {
+		selected = p.selectionStroke(st, alpha)
+	}
+	draw := func(at geom.Vec2, f box.Fragment, s style.TextStroke) {
+		if s.Width > 0 && s.Color.A > 0 {
+			o := p.textOptions(face, st.Font.Size, st.LetterGap(), s.Color, smoothingOf(st))
+			p.words(at, f.Shown(), st, append(slices.Clip(o), twod.TextStroke(s.Width)))
+		}
+	}
+	for i, f := range e.b.Lines {
+		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
+		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		if k < 0 || plain == selected {
+			draw(at, f, plain)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			s := plain
+			if j == 1 {
+				s = selected
+			}
+			if clip.W > 0 {
+				p.s.PushClip(clip)
+				draw(at, f, s)
+				p.s.PopClip()
+			}
+		}
+	}
+}
+
+// selectionStroke is the stroke of the selected text: the ::selection's
+// where it sets one, else the text's own, in the selection's colour
+// where the stroke's is currentColor.
+func (p *painter) selectionStroke(st *style.Computed, alpha float32) style.TextStroke {
+	s := st.TextStroke
+	switch {
+	case st.HasSelectionStroke:
+		s = st.SelectionStroke
+	case st.HasSelectionText && st.CurrentColor&style.StrokeCurrent != 0:
+		s.Color = st.SelectionText
+	}
+	s.Color = fade(s.Color, alpha)
+	return s
 }
 
 // shadows draws the text shadows of fragment f of e's run, the last
