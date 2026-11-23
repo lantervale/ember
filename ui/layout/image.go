@@ -35,31 +35,6 @@ func pictured(e *dom.Node) bool {
 func (t *tree) buildImage(n *node, e *dom.Node) {
 	n.replaced = true
 	n.natural, n.shape, n.sized = pictureOf(e, n.st, t.images, t.fonts)
-	n.altLine = altLine(e, n.st, t.images, t.fonts)
-}
-
-// altLine is the baseline of the alt text the img e shows when its picture is broken, from
-// its content box's top, 0 for none: Chrome stands such a picture on its alt text's line.
-func altLine(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fonts) float32 {
-	if images == nil || e.Tag() != dom.Img || dom.AutoSizes(e) {
-		return 0
-	}
-	src, ok := dom.Picture(e)
-	if !ok {
-		return 0
-	}
-	if shapes, has := images.(box.IntrinsicImages); has {
-		if _, found := shapes.ImageIntrinsic(src); found {
-			return 0
-		}
-	}
-	if _, found := images.ImageSize(src); found {
-		return 0
-	}
-	if alt, _ := e.Attr("alt"); alt == "" {
-		return 0
-	}
-	return fonts.Metrics(st.Font).Ascent
 }
 
 // pictureOf is what the picture of the img e gives its box: its natural size at the
@@ -159,7 +134,6 @@ func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts
 		default:
 			n.natural, n.shape, n.sized = natural, shape, sized
 		}
-		n.altLine = 0
 	}
 }
 
