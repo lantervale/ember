@@ -206,6 +206,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0201 | [An optgroup is a label row of a select's list](0201-an-optgroup-is-a-label-row-of-a-selects-list.md) | api |
 | 0202 | [A select with multiple or a size is a listbox of rows in the page](0202-a-select-with-multiple-or-a-size-is-a-listbox-of-rows-in-the-page.md) | api |
 | 0204 | [A positioned box is laid out in its containing block's frame](0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md) | rendering |
+| 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
 
 ## Writing one
 
