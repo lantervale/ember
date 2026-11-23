@@ -329,6 +329,8 @@ func paintOnly(c *style.Computed) {
 	c.SelectionText, c.HasSelectionText, c.UserSelect = zero, false, 0
 	c.SelectionShadows, c.HasSelectionShadows = nil, false
 	c.SelectionDecoration, c.HasSelectionDecoration = style.TextDecoration{}, false
+	c.SelectionStroke, c.HasSelectionStroke = style.TextStroke{}, false
+	c.TextStroke, c.TextFill, c.TextFilled = style.TextStroke{}, zero, false
 	c.TextShadows, c.CurrentColor, c.Vars, c.Backdrop = nil, 0, nil, color.Color{}
 	c.TextDecoration, c.Decorations = style.TextDecoration{}, nil
 	c.ColorScheme, c.Dark = 0, false
@@ -444,7 +446,7 @@ var colored = map[string]bool{
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
 	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
-	"backdrop-filter": true, "-webkit-text-fill-color": true,
+	"backdrop-filter": true, "-webkit-text-stroke-color": true, "-webkit-text-fill-color": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -536,6 +538,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	c.SelectionText, c.HasSelectionText = parent.SelectionText, parent.HasSelectionText
 	c.SelectionShadows, c.HasSelectionShadows = parent.SelectionShadows, parent.HasSelectionShadows
 	c.SelectionDecoration, c.HasSelectionDecoration = parent.SelectionDecoration, parent.HasSelectionDecoration
+	c.SelectionStroke, c.HasSelectionStroke = parent.SelectionStroke, parent.HasSelectionStroke
 	if r.may(n, "selection") {
 		r.selection(x, n)
 	}
@@ -591,6 +594,19 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 	}
 	if slices.ContainsFunc(shorthands[shortDecoration], r.pm.declared) {
 		x.c.SelectionDecoration, x.c.HasSelectionDecoration = sel.TextDecoration, true
+	}
+	width, colour := r.pm.declared("-webkit-text-stroke-width"), r.pm.declared("-webkit-text-stroke-color")
+	if width || colour {
+		if !x.c.HasSelectionStroke {
+			x.c.SelectionStroke = x.c.TextStroke
+		}
+		if width {
+			x.c.SelectionStroke.Width = sel.TextStroke.Width
+		}
+		if colour {
+			x.c.SelectionStroke.Color = sel.TextStroke.Color
+		}
+		x.c.HasSelectionStroke = true
 	}
 }
 
@@ -1092,6 +1108,7 @@ func (x *ctx) finish(root bool) {
 	x.display(root)
 	x.transitions()
 	x.animations()
+	c.Font.Features = shapingFeatures(&c.Text)
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
@@ -1526,7 +1543,7 @@ func linear(c Component, cur color.Color) color.Color {
 var verticalAligns = map[string]style.VerticalAlign{
 	kwBaseline: style.AlignBaselineText, "sub": style.AlignSub, "super": style.AlignSuper,
 	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
-	kwTop: style.AlignTop, kwBottom: style.AlignBottom,
+	kwTop: style.AlignTop, kwBottom: style.AlignBottom, "-webkit-baseline-middle": style.AlignBaselineMiddle,
 }
 
 //nolint:gochecknoglobals,goconst // lookup table
@@ -1979,6 +1996,9 @@ var props = func() map[string]prop {
 			variantField(propAlternates), flips[string]()),
 		propPosition: field(func(c *style.Computed) *string { return &c.FontVariant.Position },
 			variantField(propPosition), flips[string]()),
+		propFeatures: field(func(c *style.Computed) *string { return &c.FeatureSettings }, featureSettings,
+			flips[string]()),
+		propKerning: keyword(func(c *style.Computed) *style.FontKerning { return &c.Kerning }, kerningWords),
 		"letter-spacing": field(func(c *style.Computed) *style.Spacing { return &c.LetterSpacing },
 			(*ctx).spacing, textSpacings),
 		"word-spacing": field(func(c *style.Computed) *style.Spacing { return &c.WordSpacing },
@@ -2153,6 +2173,13 @@ var props = func() map[string]prop {
 		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
 			clipPaths).painted(),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),
+		// thin, medium and thick are drawn 1, 3 and 5 pixels wide, as a
+		// border's are, though Chrome's getComputedStyle writes them as
+		// 48ths of the font size
+		"-webkit-text-stroke-width": field(func(c *style.Computed) *float32 { return &c.TextStroke.Width },
+			borderWidthOf, flips[float32]()),
+		"-webkit-text-stroke-color": currentField(style.StrokeCurrent,
+			func(c *style.Computed) *color.Color { return &c.TextStroke.Color }).painted(),
 		"text-decoration-line": field(func(c *style.Computed) *style.DecorationLine { return &c.TextDecoration.Line },
 			decorationLine, flips[style.DecorationLine]()),
 		"text-decoration-style": keyword(func(c *style.Computed) *style.DecorationStyle { return &c.TextDecoration.Style },
@@ -2550,6 +2577,7 @@ func gridLine(_ *ctx, v []Component) style.GridLine {
 //nolint:gochecknoglobals,goconst // lookup table
 var fontSizes = map[string]float32{
 	"xx-small": 9, "x-small": 10, "small": 13, "medium": 16, "large": 18, "x-large": 24, "xx-large": 32,
+	"xxx-large": 48,
 }
 
 func (x *ctx) fontSize(v []Component) float32 {

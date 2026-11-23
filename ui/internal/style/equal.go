@@ -104,7 +104,7 @@ func (f Font) Equal(o Font) bool {
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
-		f.Caps == o.Caps && sameSlice(f.Variations, o.Variations)
+		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations)
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -113,6 +113,8 @@ func (t *Text) equal(o *Text) bool {
 		t.LineHeight == o.LineHeight &&
 		t.LetterSpacing == o.LetterSpacing &&
 		t.FontVariant == o.FontVariant &&
+		t.FeatureSettings == o.FeatureSettings &&
+		t.Kerning == o.Kerning &&
 		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&
@@ -131,6 +133,9 @@ func (t *Text) equal(o *Text) bool {
 		t.HasSelectionShadows == o.HasSelectionShadows &&
 		t.SelectionDecoration == o.SelectionDecoration &&
 		t.HasSelectionDecoration == o.HasSelectionDecoration &&
+		t.SelectionStroke == o.SelectionStroke &&
+		t.HasSelectionStroke == o.HasSelectionStroke &&
+		t.TextStroke == o.TextStroke &&
 		sameSlice(t.TextShadows, o.TextShadows) &&
 		t.TextDecoration == o.TextDecoration &&
 		sameSliceFunc(t.Decorations, o.Decorations, (*Decoration).equal) &&

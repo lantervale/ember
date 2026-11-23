@@ -79,6 +79,10 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-variant-east-asian": func(s *style.Computed) string { return orNormal(s.FontVariant.EastAsian) },
 	"font-variant-alternates": func(s *style.Computed) string { return orNormal(s.FontVariant.Alternates) },
 	"font-variant-position":   func(s *style.Computed) string { return orNormal(s.FontVariant.Position) },
+	"font-feature-settings":   func(s *style.Computed) string { return orNormal(s.FeatureSettings) },
+	"font-kerning": func(s *style.Computed) string {
+		return [...]string{"auto", "normal", "none"}[s.Kerning]
+	},
 	"line-height": func(s *style.Computed) string {
 		switch {
 		case s.LineHeight.Normal:
@@ -662,6 +666,9 @@ var everything = func() map[string]func(s *style.Computed) string {
 		return rgb(s.AccentColor)
 	}
 	m["caret-color"] = func(s *style.Computed) string { return rgb(s.CaretColor) }
+	m["-webkit-text-stroke-width"] = func(s *style.Computed) string { return px(s.TextStroke.Width) }
+	m["-webkit-text-stroke-color"] = func(s *style.Computed) string { return rgb(s.TextStroke.Color) }
+	m["-webkit-text-fill-color"] = func(s *style.Computed) string { return rgb(s.Fill()) }
 	m["object-fit"] = func(s *style.Computed) string {
 		return []string{"fill", "contain", "cover", "none", "scale-down"}[s.ObjectFit]
 	}
@@ -788,7 +795,9 @@ func TestComputedValuesMatchChrome(t *testing.T) {
 .x3 { transform: matrix(1, 0.5, -0.5, 1, 7, 8) rotate(0.25turn); transform-origin: 3px 4px; }
 .ts {
   text-shadow: 1px 2px 3px #000, 0 0 4px; image-rendering: pixelated; accent-color: #ffce76; caret-color: currentColor;
+  -webkit-text-stroke: 2.25px rgb(0 0 200 / 0.5); -webkit-text-fill-color: transparent;
 }
+.ts span { -webkit-text-stroke: currentColor 1.5px; -webkit-text-fill-color: currentColor; }
 .f1 { object-fit: cover; object-position: right 4px bottom 10%; }
 .f2 { object-fit: scale-down; object-position: left; }
 .l2 { border-width: thin medium thick 0; border-style: solid; transition: none; flex: none; margin: 0 auto; }

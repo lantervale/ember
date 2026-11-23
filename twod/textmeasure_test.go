@@ -1,6 +1,7 @@
 package twod //nolint:testpackage // white-box: shares twod's test helpers, reaches unexported state
 
 import (
+	"os"
 	"slices"
 	"testing"
 
@@ -50,4 +51,17 @@ func BenchmarkCanvasText(b *testing.B) {
 		c.list.Vertices, c.list.Indices, c.list.Batches = c.list.Vertices[:0], c.list.Indices[:0], c.list.Batches[:0]
 		c.Text(geom.V2(10, 20), "tile 412 · walls · Edit", opts...)
 	}
+}
+
+func TestATextIsShapedWithTheFeaturesItAsksFor(t *testing.T) {
+	face, err := LoadFace(os.DirFS("../internal/shape/testdata"), "go-features.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := NewText("office", Features("-liga", "dlig"), Typeface(face))
+	assert.Equal(t, "-liga,dlig", text.Features())
+	tied, apart := Measure("office", Typeface(face)), Measure("office", Typeface(face), Features("-liga"))
+	assert.Less(t, tied.X, apart.X, "ffi is narrower than f, f and i")
+	text.SetFeatures()
+	assert.Empty(t, text.Features())
 }

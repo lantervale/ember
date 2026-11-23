@@ -86,21 +86,22 @@ type Document struct {
 	systemFonts bool
 	// rightDragSelects is whether a drag of the right button selects text.
 	rightDragSelects bool
-	// prefs are the system's preferences the Document follows, scheme and
-	// motion the program's answers over them, unknown for none, and touch
-	// whether the pointer last used is a finger on the screen (media.go);
-	// contrast, forced and touchOnly are the program's answers to the
-	// features no system says.
+	// prefs are the system's preferences the Document follows, scheme,
+	// motion, contrast and forced the program's answers over them,
+	// unknown for none, touch whether the pointer last used is a finger
+	// on the screen and touchOnly the program's answer to a device no
+	// system says (media.go).
 	prefs     *platform.Preferences
 	scheme    platform.Appearance
 	motion    platform.Motion
 	touch     bool
-	contrast  Contrast
-	forced    bool
+	contrast  platform.Contrast
+	forced    platform.ForcedColors
 	touchOnly bool
-	// inactive is the window the Document shows in not being focused, as
-	// last drawn.
-	inactive bool
+	// inactive is the window the Document shows in not being focused, and
+	// highlight the system's selection colours, as last drawn.
+	inactive  bool
+	highlight paint.Highlight
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool
@@ -599,6 +600,9 @@ func (d *Document) Draw(c *twod.Canvas) {
 			d.inactive, d.replay.repaint = !win.Focused(), true
 		}
 	}
+	if h := d.systemHighlight(); h != d.highlight {
+		d.highlight, d.replay.repaint = h, true
+	}
 	animating := d.tick(c)
 	if (animating || d.replay.animating) && d.tree != nil {
 		d.tree.Inked = false
@@ -644,7 +648,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.painted++
 	d.unsettled = false
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
-		Selection: d.selectionPaint(), Inactive: d.medium().Inactive}
+		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
 	d.replay.recorded = c.Keep(m, &d.replay.last)
 	d.paintApart(c, apart)

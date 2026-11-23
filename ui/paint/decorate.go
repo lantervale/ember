@@ -1750,46 +1750,108 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	}
 	p.decorations(e, st, style.Underline|style.Overline, alpha)
 	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
-	if c.A <= 0 && ink == c {
+	stroked := st.TextStroke.Width > 0 || len(parts) > 0 && st.HasSelectionStroke
+	if c.A <= 0 && ink == c && !stroked {
 		p.decorations(e, st, style.LineThrough, alpha)
 		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
 	face := p.faceOf(st.Font)
 	if len(st.TextShadows) > 0 || len(parts) > 0 && len(st.SelectionShadows) > 0 {
-		for i, f := range b.Lines {
-			k := -1
-			if st.HasSelectionShadows {
-				k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
-			}
-			if k < 0 {
-				p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
-				continue
-			}
-			for j, clip := range p.partClips(e, st, f, parts[k]) {
-				shadows, current := st.TextShadows, st.Color
-				if j == 1 {
-					shadows, current = st.SelectionShadows, color.Color{}
-				}
-				if clip.W <= 0 || len(shadows) == 0 {
-					continue
-				}
-				p.s.PushClip(clip)
-				p.shadows(e, st, face, f, shadows, current, alpha)
-				p.s.PopClip()
-			}
-		}
+		p.runShadows(e, st, face, parts, alpha)
 	}
 	opts := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	if ink != c {
 		p.recoloured(e, st, face, parts, c, ink)
-	} else {
+	} else if c.A > 0 {
 		for _, f := range b.Lines {
 			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 	}
+	if stroked {
+		p.strokes(e, st, face, parts, alpha)
+	}
 	p.decorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// runShadows draws the text shadows of e's run, the selected parts' the
+// ::selection's where it sets them.
+func (p *painter) runShadows(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	for i, f := range e.b.Lines {
+		k := -1
+		if st.HasSelectionShadows {
+			k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		}
+		if k < 0 {
+			p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			shadows, current := st.TextShadows, st.Color
+			if j == 1 {
+				shadows, current = st.SelectionShadows, color.Color{}
+			}
+			if clip.W <= 0 || len(shadows) == 0 {
+				continue
+			}
+			p.s.PushClip(clip)
+			p.shadows(e, st, face, f, shadows, current, alpha)
+			p.s.PopClip()
+		}
+	}
+}
+
+// strokes draws -webkit-text-stroke over the fill of e's run: the
+// outline of each glyph, the selected parts' as the ::selection strokes
+// them.
+func (p *painter) strokes(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	plain := st.TextStroke
+	plain.Color = fade(plain.Color, alpha)
+	selected := plain
+	if len(parts) > 0 {
+		selected = p.selectionStroke(st, alpha)
+	}
+	draw := func(at geom.Vec2, f box.Fragment, s style.TextStroke) {
+		if s.Width > 0 && s.Color.A > 0 {
+			o := p.textOptions(face, st.Font.Size, st.LetterGap(), s.Color, smoothingOf(st))
+			p.words(at, f.Shown(), st, append(slices.Clip(o), twod.TextStroke(s.Width)))
+		}
+	}
+	for i, f := range e.b.Lines {
+		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
+		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		if k < 0 || plain == selected {
+			draw(at, f, plain)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			s := plain
+			if j == 1 {
+				s = selected
+			}
+			if clip.W > 0 {
+				p.s.PushClip(clip)
+				draw(at, f, s)
+				p.s.PopClip()
+			}
+		}
+	}
+}
+
+// selectionStroke is the stroke of the selected text: the ::selection's
+// where it sets one, else the text's own, in the selection's colour
+// where the stroke's is currentColor.
+func (p *painter) selectionStroke(st *style.Computed, alpha float32) style.TextStroke {
+	s := st.TextStroke
+	switch {
+	case st.HasSelectionStroke:
+		s = st.SelectionStroke
+	case st.HasSelectionText && st.CurrentColor&style.StrokeCurrent != 0:
+		s.Color = st.SelectionText
+	}
+	s.Color = fade(s.Color, alpha)
+	return s
 }
 
 // shadows draws the text shadows of fragment f of e's run, the last
@@ -1845,9 +1907,13 @@ func (p *painter) selectionDecorations(e entry, st *style.Computed, parts []Sele
 // by st's word-spacing: whole without one, else word by word, each where
 // layout measured it.
 func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
-	runs := st.Font.SmallCaps(text)
+	f := st.Font
+	if c, ok := p.fonts.(capsFonts); ok {
+		f = c.Caps(f, text)
+	}
+	runs := f.SmallCaps(text)
 	if runs == nil {
-		p.wordsIn(at, text, st, st.Font, opts)
+		p.wordsIn(at, text, st, f, withFeatures(opts, f))
 		return
 	}
 	for _, r := range runs {
@@ -1855,8 +1921,22 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 		if r.Font.Size != st.Font.Size {
 			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
 		}
-		at.X = p.wordsIn(at, r.Text, st, r.Font, o)
+		at.X = p.wordsIn(at, r.Text, st, r.Font, withFeatures(o, r.Font))
 	}
+}
+
+// capsFonts are fonts that know which capitals a face draws itself
+// (fonts.Set.Caps).
+type capsFonts interface {
+	Caps(f style.Font, text string) style.Font
+}
+
+// withFeatures is opts drawing text shaped with f's OpenType features.
+func withFeatures(opts []twod.TextOption, f style.Font) []twod.TextOption {
+	if f.Features == "" {
+		return opts
+	}
+	return append(slices.Clip(opts), twod.Features(f.Features))
 }
 
 // wordsIn is words in font f, a part of st's text small capitals cut, and
@@ -1896,14 +1976,22 @@ func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []two
 // selectionColors are the ::selection of the element st styles: its
 // background-color and its color. A rule that sets either leaves the
 // other as CSS has it, no background and the text's own colour; with no
-// rule the background is Chrome's on macOS, greyed while the window is
-// inactive, and the text keeps its colour.
+// rule they are the system's, its background blended with white as Chrome
+// on macOS blends it, else Chrome's there, greyed while the window is
+// inactive, and the text keeps its colour where the system gives it none.
 func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha float32) (color.Color, color.Color) {
 	if !st.HasSelection && !st.HasSelectionText {
+		back, sys := pageSelection, p.system.Background
 		if p.inactive {
-			return fade(inactiveSelection, alpha), text
+			back, sys = inactiveSelection, p.system.Inactive
 		}
-		return fade(pageSelection, alpha), text
+		if sys.A > 0 {
+			back = blendWithWhite(sys)
+		}
+		if p.system.Text.A > 0 {
+			text = fade(p.system.Text, alpha)
+		}
+		return fade(back, alpha), text
 	}
 	var back color.Color
 	if st.HasSelection {
@@ -1914,6 +2002,34 @@ func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha fl
 	}
 	return back, text
 }
+
+// blendWithWhite is c made as translucent as it can be, from 60% to 80%
+// opaque, and still show as c over white, as Chrome draws a system's
+// selection colour (Color::BlendWithWhite): a colour too dark for that
+// keeps 80%, its channels clamped. A translucent colour stays as it is.
+func blendWithWhite(c color.Color) color.Color {
+	if c.A < 1 {
+		return c
+	}
+	srgb := c.SRGB()
+	var ch [3]int
+	alpha := 153
+	for ; alpha <= 204; alpha += 17 {
+		a := float32(alpha) / 255
+		negative := false
+		for i, v := range srgb {
+			ch[i] = int(float32(int(v*255+0.5)-(255-alpha)) / a)
+			negative = negative || ch[i] < 0
+		}
+		if !negative {
+			break
+		}
+	}
+	alpha = min(alpha, 204)
+	return color.RGB8(clamp8(ch[0]), clamp8(ch[1]), clamp8(ch[2])).Alpha(float32(alpha) / 255)
+}
+
+func clamp8(v int) uint8 { return uint8(max(0, min(255, v))) }
 
 // highlight draws the selection behind a text run's selected parts and
 // returns the colour their text takes.

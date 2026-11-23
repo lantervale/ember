@@ -87,10 +87,10 @@ type vendor struct {
 // Why a -webkit- property is in webkit.own.
 const (
 	ownChrome = "Chrome's own, with no plain property"
+	ownUI     = "a property of ui under this very name"
 	ownAxis   = "one axis of the plain property, which has no such longhand"
 	ownMask   = "Chrome's own masks, kept apart from mask and its longhands"
 	ownBreak  = "takes always, which the break-* property it sets refuses"
-	ownUI     = "a property of ui under this very name"
 )
 
 // webkit is -webkit-, the prefix Chrome itself reads. Its property tables
@@ -136,9 +136,10 @@ var webkit = vendor{
 	},
 	own: map[string]string{
 		"column-break-after": ownBreak, "column-break-before": ownBreak, "column-break-inside": ownBreak,
-		"font-smoothing": ownUI, "text-fill-color": ownUI,
-		"border-image": "fills the middle without the fill word, where border-image leaves it empty",
-		"box-align":    ownUI, "box-direction": ownUI, "box-flex": ownUI,
+		"font-smoothing": ownUI, "text-fill-color": ownUI, "text-stroke": ownUI, "text-stroke-color": ownUI,
+		"text-stroke-width": ownUI,
+		"border-image":      "fills the middle without the fill word, where border-image leaves it empty",
+		"box-align":         ownUI, "box-direction": ownUI, "box-flex": ownUI,
 		"box-ordinal-group": ownUI, "box-orient": ownUI, "box-pack": ownUI,
 		"mask-box-image": ownMask, "mask-box-image-outset": ownMask,
 		"mask-box-image-repeat": ownMask, "mask-box-image-slice": ownMask, "mask-box-image-source": ownMask,
@@ -150,7 +151,6 @@ var webkit = vendor{
 		"line-clamp": ownUI, "locale": ownChrome, "rtl-ordering": ownChrome, "ruby-position": ownChrome,
 		"tap-highlight-color": ownChrome, "text-combine": ownChrome, "text-decorations-in-effect": ownChrome,
 		"text-orientation": ownChrome, "text-security": ownChrome,
-		"text-stroke": ownChrome, "text-stroke-color": ownChrome, "text-stroke-width": ownChrome,
 		"user-drag": ownChrome, "user-modify": ownChrome, "writing-mode": ownChrome,
 	},
 	legacy: map[string]string{
