@@ -429,7 +429,8 @@ type ctx struct {
 //
 //nolint:gochecknoglobals,goconst // a fixed list
 var leading = []string{
-	propDirection, propColorScheme, "font-family", "font-style", "font-weight", propFontSize, "line-height", "color",
+	propDirection, propColorScheme, "font-family", "font-style", "font-weight", "font-stretch", propFontSize,
+	"line-height", "color",
 }
 
 // colored are the longhands whose values take colours, where a system
@@ -1812,6 +1813,26 @@ var props = func() map[string]prop {
 		"font-style": field(func(c *style.Computed) *bool { return &c.Font.Italic }, func(_ *ctx, v []Component) bool {
 			return !isWord(v[0], "normal")
 		}, flips[bool]()),
+		"font-stretch": field(func(c *style.Computed) *float32 { return &c.Font.Stretch },
+			func(_ *ctx, v []Component) float32 {
+				if w, ok := fontStretch(v[0]); ok {
+					return w
+				}
+				return 100
+			}, numbers(0, math.MaxFloat32)),
+		"font-synthesis": field(func(c *style.Computed) *style.FontSynthesis { return &c.Font.Synthesis },
+			func(_ *ctx, v []Component) style.FontSynthesis {
+				no := style.NoSyntheticBold | style.NoSyntheticItalic
+				for _, c := range v {
+					switch {
+					case isWord(c, "weight"):
+						no &^= style.NoSyntheticBold
+					case isWord(c, "style"):
+						no &^= style.NoSyntheticItalic
+					}
+				}
+				return no
+			}, flips[style.FontSynthesis]()),
 		"line-height": field(
 			func(c *style.Computed) *style.LineHeight { return &c.LineHeight },
 			func(x *ctx, v []Component) style.LineHeight {

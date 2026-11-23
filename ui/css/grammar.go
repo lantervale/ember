@@ -358,9 +358,13 @@ var checks = map[string]check{
 	"z-index": single(either(integer, words("auto"))),
 
 	"font-family": checkFontFamily,
-	// the widths the font shorthand may name, none of them drawn
+	// the widths the font shorthand may name
 	"font-stretch-word": single(words("ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
 		"semi-expanded", "expanded", "extra-expanded", "ultra-expanded")),
+	"font-stretch": single(either(dimTerm(allowPercent|noLength|nonNegative), words("normal", "ultra-condensed",
+		"extra-condensed", "condensed", "semi-condensed", "semi-expanded", "expanded", "extra-expanded",
+		"ultra-expanded"))),
+	"font-synthesis": checkFontSynthesis,
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
 	"font-style":      single(words("normal", "italic", "oblique")),

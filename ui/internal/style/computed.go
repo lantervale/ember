@@ -42,7 +42,7 @@ func Initial() Computed {
 			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto,
 		},
 		Text: Text{
-			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400},
+			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400, Stretch: 100},
 			LineHeight: LineHeight{Normal: true},
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
@@ -377,7 +377,24 @@ type Font struct {
 	Size   float32
 	Weight float32
 	Italic bool
+	// Stretch is font-stretch as a percentage of the normal width, 0
+	// standing for 100.
+	Stretch float32
+	// Synthesis is what font-synthesis forbids making up.
+	Synthesis FontSynthesis
 }
+
+// FontSynthesis is the faces font-synthesis forbids making up from
+// another of the family, none forbidden at zero.
+type FontSynthesis uint8
+
+const (
+	// NoSyntheticBold leaves a bold the family lacks drawn in its
+	// lighter face.
+	NoSyntheticBold FontSynthesis = 1 << iota
+	// NoSyntheticItalic leaves an italic the family lacks upright.
+	NoSyntheticItalic
+)
 
 // LineHeight is normal, a factor of the font size, or points.
 type LineHeight struct {

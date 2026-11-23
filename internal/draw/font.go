@@ -51,7 +51,9 @@ type Face struct {
 	// without any; blank those drawn as nothing when no face has them
 	// (Blank).
 	only, blank []Range
-	sizes       map[float32]*Font
+	// look is how the face is drawn other than as its file has it.
+	look  Look
+	sizes map[float32]*Font
 	// pixelSizes are the face's pixelated fonts (PixelSize), apart, so
 	// smoothed text never shares their atlas.
 	pixelSizes map[float32]*Font
@@ -92,8 +94,30 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, fallbacks: fallbacks, emoji: emoji,
-		sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: f.look, fallbacks: fallbacks,
+		emoji: emoji, sizes: map[float32]*Font{}}
+}
+
+// Look is how a face is drawn other than as its file has it, as an
+// @font-face and the font asked for have it: its glyphs and advances
+// scaled by Scale (0 for 1), made bold or slanted where its family has
+// no such face, kerned or not.
+type Look struct {
+	Scale                 float32
+	Bold, Oblique, NoKern bool
+}
+
+func (l Look) scale() float32 {
+	if l.Scale == 0 {
+		return 1
+	}
+	return l.Scale
+}
+
+// Styled is f drawn with look.
+func (f *Face) Styled(look Look) *Face {
+	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: look, fallbacks: f.fallbacks,
+		emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Range is the characters from Lo to Hi.
@@ -113,16 +137,16 @@ func Covers(ranges []Range, r rune) bool {
 // Only is f drawing only the characters in ranges, as an @font-face's
 // unicode-range has it: another is left to the faces after it.
 func (f *Face) Only(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, fallbacks: f.fallbacks, emoji: f.emoji,
-		sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, look: f.look, fallbacks: f.fallbacks,
+		emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Blank is f drawing nothing, in no room, for a character in ranges
 // that neither it nor its fallbacks have, where another shows as '?':
 // what a face still on its way may draw.
 func (f *Face) Blank(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, fallbacks: f.fallbacks, emoji: f.emoji,
-		sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, look: f.look, fallbacks: f.fallbacks,
+		emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Wrap makes the twod.Face of f, for the engine packages that build
@@ -271,8 +295,10 @@ type Font struct {
 	sources    []*opentype.Font
 	// only are the characters each source draws, and blank those drawn
 	// as nothing when no source has them (Face.Only, Face.Blank).
-	only       [][]Range
-	blank      []Range
+	only  [][]Range
+	blank []Range
+	// looks are how each source is drawn (Face.Styled).
+	looks      []Look
 	emoji      Emoji
 	buf        sfnt.Buffer
 	cell       int
@@ -303,13 +329,13 @@ func newFont(f *Face, px float32, how smoothing) (*Font, error) {
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
-			&opentype.FaceOptions{Size: float64(px * oversample), DPI: 72, Hinting: font.HintingNone},
+			&opentype.FaceOptions{Size: float64(px * oversample * src.look.scale()), DPI: 72, Hinting: font.HintingNone},
 		)
 		if err != nil {
 			return nil, err
 		}
 		out.faces, out.sources = append(out.faces, face), append(out.sources, src.font)
-		out.only = append(out.only, src.only)
+		out.only, out.looks = append(out.only, src.only), append(out.looks, src.look)
 		out.asciiKerns = append(out.asciiKerns, asciiKerning(src.font))
 	}
 	m := out.faces[0].Metrics()
@@ -391,7 +417,7 @@ func (f *Font) advance(face int, idx sfnt.GlyphIndex) float32 {
 	if err != nil {
 		return 0
 	}
-	return float32(a) / 64 * f.size / float32(upem)
+	return float32(a) / 64 * f.size * f.looks[face].scale() / float32(upem)
 }
 
 // kern is the room between glyphs p and g, drawn one after the other,
@@ -399,17 +425,18 @@ func (f *Font) advance(face int, idx sfnt.GlyphIndex) float32 {
 // after nothing (p's face < 0). ASCII pairs come from the face's table
 // read once; others are looked up and cached.
 func (f *Font) kern(p, g glyph) float32 {
-	if p.face < 0 || p.face != g.face || p.idx == 0 || g.idx == 0 {
+	if p.face < 0 || p.face != g.face || p.idx == 0 || g.idx == 0 || f.looks[g.face].NoKern {
 		return 0
 	}
 	src := f.sources[g.face]
 	upem := float32(src.UnitsPerEm())
+	size := f.size * f.looks[g.face].scale()
 	if p.r < 128 && g.r < 128 {
 		t := f.asciiKerns[g.face]
 		if t == nil {
 			return 0
 		}
-		return float32(t[p.r*128+g.r]) / 64 * f.size / upem
+		return float32(t[p.r*128+g.r]) / 64 * size / upem
 	}
 	key := uint64(g.face)<<32 | uint64(p.idx)<<16 | uint64(g.idx) //nolint:gosec // a face index and two 16-bit glyph ids
 	if k, ok := f.kerns[key]; ok {
@@ -419,7 +446,7 @@ func (f *Font) kern(p, g glyph) float32 {
 	if err != nil {
 		k = 0
 	}
-	v := float32(k) / 64 * f.size / upem
+	v := float32(k) / 64 * size / upem
 	f.kerns[key] = v
 	return v
 }
@@ -527,7 +554,15 @@ func (f *Font) raster(r rune, phase int) glyph {
 	}
 	g := glyph{advance: f.advance(face, idx), face: face, idx: idx, r: r}
 	x := fixed.Int26_6(phase * 64 / phases) //nolint:gosec // phase < phases, so at most 64
-	dr, mask, mp, _, ok := f.faces[face].Glyph(fixed.Point26_6{X: x}, r)
+	var dr image.Rectangle
+	var mask image.Image
+	var mp image.Point
+	var ok bool
+	if l := f.looks[face]; l.Bold || l.Oblique {
+		dr, mask, ok = f.synthetic(face, idx, x, l)
+	} else {
+		dr, mask, mp, _, ok = f.faces[face].Glyph(fixed.Point26_6{X: x}, r)
+	}
 	if ok && !dr.Empty() {
 		dst, room := f.place(dr.Dx()+2, dr.Dy()+2)
 		if !room {
