@@ -163,7 +163,7 @@ func readDIB(data []byte, pix int) (*dib, error) {
 // follows them, when they leave room for it.
 func (d *dib) setRuns(data []byte) {
 	d.runs = len(data)
-	if size := uint64(binary.LittleEndian.Uint32(data[20:])); size != 0 && uint64(d.pix)+size <= uint64(len(data)) {
+	if size := int64(binary.LittleEndian.Uint32(data[20:])); size != 0 && int64(len(data)-d.pix) >= size {
 		d.runs = d.pix + int(size)
 	}
 	d.mask = d.runs

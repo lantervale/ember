@@ -240,7 +240,8 @@ func rows(img image.Image) []string {
 	for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
 		var row []byte
 		for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
-			c, ok := names[color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)]
+			nrgba, _ := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			c, ok := names[nrgba]
 			if !ok {
 				c = '?'
 			}
@@ -295,7 +296,7 @@ func TestRunsLeaveBlackWhatTheySkipAndStopWhereTheyLeaveThePicture(t *testing.T)
 
 func TestAnICOsRunsAreCutByTheMaskThatFollowsThem(t *testing.T) {
 	b := coded(compRLE8, quadrantRuns(8))
-	b.Hole = func(x, y int) bool { return x == 0 }
+	b.Hole = func(x, _ int) bool { return x == 0 }
 	assert.Equal(t, []string{".rrggg", ".rrggg", ".bbwww", ".bbwww"}, rows(decode(t, icotest.ICO(b.Entry()))))
 
 	entry := b.Entry()

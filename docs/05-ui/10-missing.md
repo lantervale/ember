@@ -180,13 +180,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| an animated WebP | no picture, and a warning (`webp: invalid format`); an animated GIF shows its first frame |
-| AVIF | no picture, and a warning; `web.Images` does not ask for it |
-| a run-length encoded BMP (or such a bitmap in an ICO), a `.cur` cursor file | no picture, and a warning |
-| the picture of an ICO nearest the size it shows at | the largest of the file is shown, scaled, then the one of the most bits a pixel |
+| an animated picture off-screen, or in no element shown | plays on, where Chrome pauses it; it begins when it lands, where Chrome begins it when first painted ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
+| an animation of more than 2^25 pixels in all its frames | plays the frames before that, where Chrome decodes them as they show |
+| a GIF frame reaching past the picture's size | no picture, and a warning (`gif: frame bounds larger than image bounds`), where Chrome cuts the frame |
+| AVIF | no picture, and a warning; `web.Images` does not ask for it: no reader in pure Go ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
 | a `source` of AVIF (`type="image/avif"`) | passed over, where Chrome takes it: the next source, or the `img`'s own pictures |
-| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where Chrome waits for it to near the viewport |
-| the `width` and `height` attributes of a `source` | not read, where Chrome sizes the `img` by those of the source it chose |
+| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where a desktop Chrome waits for it to near the viewport; headless Chrome, the reference, asks for them all before the load event, so no margin can be checked ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
 | the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
 | an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |
 | an `svg` element whose markup changes every frame | each state is one more picture the Document keeps |

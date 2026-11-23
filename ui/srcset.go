@@ -35,15 +35,18 @@ func choosesPicture(n *Node) bool {
 // choosePictures has the imgs that choose their picture choose it for
 // m, when it or the tree changed since they last did, or one waits for
 // its picture. Once laid out, only those whose sizes say auto choose,
-// by the width they were laid out at; until then they show none.
-func (d *Document) choosePictures(m css.Media, laid bool) {
+// by the width they were laid out at; until then they show none. It
+// reports whether one chose by another source than before, which
+// restyles it.
+func (d *Document) choosePictures(m css.Media, laid bool) bool {
 	c := &d.choices
 	if !laid {
 		if !c.stale && m == c.media && !c.waiting {
-			return
+			return false
 		}
 		c.stale, c.media, c.waiting = false, m, false
 	}
+	restyle := false
 	for _, n := range c.imgs {
 		auto := float32(-1)
 		if dom.AutoSizes(n) && lazy(n) {
@@ -53,14 +56,15 @@ func (d *Document) choosePictures(m css.Media, laid bool) {
 			case b != nil:
 				auto = b.ContentRect().W
 			case !laid && !chose:
-				dom.Choose(n, "", 0)
+				restyle = dom.Choose(n, "", 0, nil) || restyle
 				continue
 			}
 		} else if laid {
 			continue
 		}
-		d.choosePicture(n, m, auto)
+		restyle = d.choosePicture(n, m, auto) || restyle
 	}
+	return restyle
 }
 
 // lazy reports whether the img n loads its picture lazily, which lets
@@ -72,22 +76,24 @@ func lazy(n *Node) bool {
 
 // choosePicture has the img n show its picture for m, auto the width
 // it was laid out at, when its sizes may say auto: once landed when it
-// shows another, which it keeps meanwhile.
-func (d *Document) choosePicture(n *Node, m css.Media, auto float32) {
-	url, density := d.choice(n, m, auto)
+// shows another, which it keeps meanwhile. It reports whether n chose
+// by another source than before.
+func (d *Document) choosePicture(n *Node, m css.Media, auto float32) bool {
+	url, density, source := d.choice(n, m, auto)
 	shown, chose := dom.Chosen(n)
 	if chose && url != shown && d.hasPicture(shown) && d.landing(url) {
 		d.choices.waiting = true
-		return
+		return false
 	}
-	dom.Choose(n, url, float32(density))
+	return dom.Choose(n, url, float32(density), source)
 }
 
-// choice is the picture the img n shows in m and its density: by the
-// first source before it in its picture whose srcset offers one, whose
-// media holds and whose type ui reads, else by its own srcset with its
-// src, else its src. A denser candidate d has cached wins.
-func (d *Document) choice(n *Node, m css.Media, auto float32) (string, float64) {
+// choice is the picture the img n shows in m, its density and the
+// source it is chosen by: the first source before it in its picture
+// whose srcset offers one, whose media holds and whose type ui reads,
+// else none, the img's own srcset with its src, else its src. A denser
+// candidate d has cached wins.
+func (d *Document) choice(n *Node, m css.Media, auto float32) (string, float64, *Node) {
 	dppx := 1.0
 	if m.Resolution > 0 {
 		dppx = float64(m.Resolution)
@@ -107,15 +113,17 @@ func (d *Document) choice(n *Node, m css.Media, auto float32) (string, float64) 
 			if len(set) == 0 || hasMedia && !css.ParseMediaQueries(media).Hold(m) || hasType && !readsType(typ) {
 				continue
 			}
-			return srcset.Choose(set, "", slotWidth(s, m, auto), dppx, d.cached)
+			url, density := srcset.Choose(set, "", slotWidth(s, m, auto), dppx, d.cached)
+			return url, density, s
 		}
 	}
 	src, _ := n.Attr("src")
 	text, ok := n.Attr("srcset")
 	if !ok {
-		return src, 1
+		return src, 1, nil
 	}
-	return srcset.Choose(srcset.Parse(text), src, slotWidth(n, m, auto), dppx, d.cached)
+	url, density := srcset.Choose(srcset.Parse(text), src, slotWidth(n, m, auto), dppx, d.cached)
+	return url, density, nil
 }
 
 // slotWidth is the width the sizes of n, an img or a source, give its

@@ -74,14 +74,15 @@ func TestAWebPKeepsItsAlpha(t *testing.T) {
 	}
 }
 
-func TestAnAnimatedWebPIsAWarning(t *testing.T) {
+func TestAFetchedAnimatedWebPLandsAsAPicture(t *testing.T) {
 	srv, _ := webps(t)
 	d := ui.NewDocument(ui.FetchImages(web.Images(srv.URL + "/")))
-	d.Body().Append(ui.Img(ui.Attr("src", "animated")))
-	warned := func() bool {
+	img := ui.Img(ui.Attr("src", "animated"))
+	d.Body().Append(img)
+	landed := func() bool {
 		d.Layout(geom.V2(400, 200))
-		return len(d.Warnings()) > 0
+		return img.Box().W > 16
 	}
-	require.Eventually(t, warned, 5*time.Second, 5*time.Millisecond)
-	assert.ErrorContains(t, d.Warnings()[0], "webp: invalid format")
+	require.Eventually(t, landed, 5*time.Second, 5*time.Millisecond)
+	assert.Empty(t, d.Warnings())
 }

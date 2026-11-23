@@ -67,6 +67,8 @@ type Document struct {
 	fetch    ImageFetcher
 	fetching fetches
 	choices  choices
+	// playing are the animated pictures, by url.
+	playing map[string]*playing
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -361,7 +363,9 @@ func (d *Document) Layout(size geom.Vec2) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
 	d.style()
-	d.choosePictures(media, false)
+	if d.choosePictures(media, false) {
+		d.style()
+	}
 	if d.relayout {
 		d.kept, d.relayout = layout.Retained{}, false
 	} else if d.tree != nil && size == d.laidAt && d.fonts.Scale() == d.laidScale &&
@@ -383,7 +387,10 @@ func (d *Document) Layout(size geom.Vec2) {
 		d.lay(size)
 		d.requery(size)
 	}
-	d.choosePictures(media, true)
+	if d.choosePictures(media, true) {
+		d.style()
+		d.lay(size)
+	}
 }
 
 // lay lays the tree out at size, points each node at its box, a node the
@@ -485,13 +492,7 @@ func (d *Document) style() {
 			if n.Tag() == dom.Form || n.Tag() == dom.Fieldset {
 				d.forms = append(d.forms, n)
 			}
-			switch {
-			case n.Tag() != dom.Img:
-			case choosesPicture(n):
-				d.choices.imgs = append(d.choices.imgs, n)
-			default:
-				dom.Unchoose(n)
-			}
+			d.noteImg(n)
 			return !n.IsText()
 		})
 	}
@@ -507,6 +508,22 @@ func (d *Document) style() {
 		if sh := dom.Data(n).Shadow; sh != nil {
 			dom.Data(sh).Style = dom.Data(n).Style
 		}
+	}
+}
+
+// noteImg keeps an img n among those that choose their picture, styled
+// again when the source it chose by changed, or has it show its src.
+func (d *Document) noteImg(n *Node) {
+	if n.Tag() != dom.Img {
+		return
+	}
+	if !choosesPicture(n) {
+		dom.Unchoose(n)
+		return
+	}
+	d.choices.imgs = append(d.choices.imgs, n)
+	if s := dom.ChosenSource(n); s != nil && dom.Data(s).Dirty&dom.DirtyStyle != 0 {
+		dom.Data(n).Dirty |= dom.DirtyStyle | dom.DirtyLayout
 	}
 }
 
@@ -628,6 +645,7 @@ func (d *Document) tick(c *twod.Canvas) bool {
 			animating = d.trans.Step(now - d.clock)
 		}
 		d.clock = now
+		d.animate()
 		d.drawnIn(w.Time().Frame)
 	}
 	return animating

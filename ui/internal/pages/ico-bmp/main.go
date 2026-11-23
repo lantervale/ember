@@ -33,7 +33,8 @@ img { display: block; width: 48px; height: 48px; image-rendering: pixelated; }
 `
 
 const (
-	side = 12
+	side    = 12
+	icoKind = "ico"
 
 	rle8      = 1
 	rle4      = 2
@@ -99,7 +100,7 @@ func runs8() []byte {
 	var out []byte
 	for i := range side {
 		y := side - 1 - i
-		out = append(out, side/2, byte(index(0, y)), side/2, byte(index(side-1, y)), 0, 0)
+		out = append(out, side/2, byte(index(0, y)), side/2, byte(index(side-1, y)), 0, 0) //nolint:gosec // 0 to 3
 	}
 	return append(out, 0, 1)
 }
@@ -110,7 +111,7 @@ func runs4() []byte {
 	var out []byte
 	for i := range side {
 		y := side - 1 - i
-		l, r := byte(index(0, y)), byte(index(side-1, y))
+		l, r := byte(index(0, y)), byte(index(side-1, y)) //nolint:gosec // 0 to 3
 		if y < 2 {
 			r = 3
 		}
@@ -198,8 +199,8 @@ func bitmaps() [][]byte {
 func main() {
 	files := fstest.MapFS{"page.css": {Data: []byte(sheet)}}
 	d := ui.NewDocument(ui.Stylesheet(files, "page.css"))
-	for kind, pictures := range map[string][][]byte{"ico": icons(), "bmp": bitmaps()} {
-		if kind == "ico" {
+	for kind, pictures := range map[string][][]byte{icoKind: icons(), "bmp": bitmaps()} {
+		if kind == icoKind {
 			n := len(pictures) - 2
 			for i, data := range pictures[n:] {
 				files[fmt.Sprintf("%02d.cur", i)] = &fstest.MapFile{Data: data}
@@ -210,7 +211,7 @@ func main() {
 			files[fmt.Sprintf("%02d.%s", i, kind)] = &fstest.MapFile{Data: data}
 		}
 	}
-	for _, kind := range []string{"ico", "cur", "bmp"} {
+	for _, kind := range []string{icoKind, "cur", "bmp"} {
 		for i := 0; ; i++ {
 			name := fmt.Sprintf("%02d.%s", i, kind)
 			if _, ok := files[name]; !ok {
