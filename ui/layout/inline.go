@@ -79,6 +79,8 @@ type inlineContent struct {
 	// height is the owner's content height its atomic inlines' percentages are of, none
 	// where it depends on the content.
 	height float32
+	// space is the advance of a space in the owner's font.
+	space float32
 }
 
 // inlineOOF is an absolutely positioned (or fixed) element inside inline content: its
@@ -473,6 +475,7 @@ func (t *tree) lineBreak(c *inlineContent, parent *box.Box, e *dom.Node, st *sty
 // edge pieces around its runs.
 func (c *inlineContent) cut(fonts box.Fonts) {
 	c.pieces, c.broken, c.unbroken = c.pieces[:0], nil, nil
+	c.space = fonts.Advance(c.owner.st.Font, " ")
 	afterSpace := true
 	soft := c.softBreaks()
 	levels := c.levels()
@@ -1351,6 +1354,11 @@ type breaker struct {
 	spaced int
 	empty  bool
 	blank  bool
+	// stop is a piece the line ends before where it may, whatever room it
+	// has left, 0 for none; seen, when set, is told of every other piece
+	// it may end before.
+	stop int
+	seen func(i int)
 }
 
 func (b *breaker) finish(next int) {
@@ -1409,9 +1417,14 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 				kept.step(c.pieces[k], 0)
 			}
 		}
-		if !b.blank && !hung && b.wrapsBefore(i) && (next.end() > width || c.joined(next, end).end() > width) {
-			b.finish(i)
-			return i, true
+		if !b.blank && !hung && b.wrapsBefore(i) {
+			if i == b.stop || next.end() > width || c.joined(next, end).end() > width {
+				b.finish(i)
+				return i, true
+			}
+			if b.seen != nil {
+				b.seen(i)
+			}
 		}
 		if b.empty && alone.end() > width {
 			if after, ok := b.breakInside(i, end, width); ok {
@@ -1631,7 +1644,7 @@ func (c *inlineContent) lines(width float32) []line {
 		return c.broken
 	}
 	b := breaker{c: c}
-	out := b.breakAll(width)
+	out := c.styled(width, b.breakAll(width))
 	if width >= unbounded {
 		c.unbroken = out
 	} else {
