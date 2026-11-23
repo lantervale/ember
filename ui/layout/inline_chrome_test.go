@@ -144,7 +144,9 @@ func matchText(t *testing.T, d *ui.Document, size geom.Vec2) {
 		for j := range w {
 			gt := strings.TrimSuffix(g[j].Text, "…")
 			// a tab splits ember's line into fragments joined back with a space
-			wt := strings.Join(strings.FieldsFunc(w[j].Text, func(r rune) bool { return r == '\t' }), " ")
+			// and a soft hyphen is no character of ember's line
+			chars := strings.ReplaceAll(w[j].Text, "\u00ad", "")
+			wt := strings.Join(strings.FieldsFunc(chars, func(r rune) bool { return r == '\t' }), " ")
 			if fold := cases.Fold(); fold.String(gt) != fold.String(wt) && !strings.HasPrefix(wt, gt) {
 				t.Errorf("%q line %d: ember %q, Chrome %q", nodes[i].Text(), j, g[j].Text, w[j].Text)
 				continue

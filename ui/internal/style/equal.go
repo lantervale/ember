@@ -128,6 +128,9 @@ func (t *Text) equal(o *Text) bool {
 		t.TextAlign == o.TextAlign &&
 		t.Dir == o.Dir &&
 		t.Bidi == o.Bidi &&
+		t.Mode == o.Mode &&
+		t.Orientation == o.Orientation &&
+		t.Combine == o.Combine &&
 		t.WhiteSpace == o.WhiteSpace &&
 		t.TextIndent == o.TextIndent &&
 		t.PlaceholderColor == o.PlaceholderColor &&
@@ -183,7 +186,16 @@ func (t *Text) equal(o *Text) bool {
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
 		t.TabSize == o.TabSize &&
-		t.InkThrough == o.InkThrough
+		t.InkThrough == o.InkThrough &&
+		t.WrapStyle == o.WrapStyle &&
+		t.Hyphens == o.Hyphens &&
+		t.HyphenChar == o.HyphenChar &&
+		t.HyphenChosen == o.HyphenChosen &&
+		t.TextBoxTrim == o.TextBoxTrim &&
+		t.TextBoxEdge == o.TextBoxEdge &&
+		t.SpacingTrim == o.SpacingTrim &&
+		t.Autospace == o.Autospace &&
+		t.KeywordSizes == o.KeywordSizes
 }
 
 func (d *Decoration) equal(o *Decoration) bool {

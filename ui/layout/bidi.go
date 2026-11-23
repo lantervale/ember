@@ -176,7 +176,7 @@ func (c *inlineContent) levelEdges() {
 				if c.pieces[k].start == (step < 0) {
 					return 0, false
 				}
-			case breakHere, emergency, marker, anchor, tab:
+			case breakHere, emergency, marker, anchor, tab, softHyphen:
 			}
 		}
 		return 0, false
@@ -185,7 +185,7 @@ func (c *inlineContent) levelEdges() {
 	for i := range c.pieces {
 		p := &c.pieces[i]
 		switch p.kind {
-		case word, gap, atomic, newline, tab:
+		case word, gap, atomic, newline, tab, softHyphen:
 		case marker:
 			p.level = c.base
 		case edge:
@@ -215,7 +215,7 @@ func (c *inlineContent) nextLevel(i int) (bidi.Level, bool) {
 		switch p.kind {
 		case word, gap, atomic, newline, tab:
 			return p.level, true
-		case edge, breakHere, emergency, marker, anchor:
+		case edge, breakHere, emergency, marker, anchor, softHyphen:
 		}
 	}
 	return 0, false
@@ -259,7 +259,7 @@ func trailing(k pieceKind) bool {
 	switch k {
 	case gap, breakHere, emergency, anchor, edge:
 		return true
-	case word, atomic, newline, marker, tab:
+	case word, atomic, newline, marker, tab, softHyphen:
 	}
 	return false
 }

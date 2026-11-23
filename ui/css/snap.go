@@ -16,6 +16,8 @@ const (
 	propOverscrollY          = "overscroll-behavior-y"
 	shortScrollPaddingInline = "scroll-padding-inline"
 	shortScrollMarginInline  = "scroll-margin-inline"
+	shortScrollPaddingBlock  = "scroll-padding-block"
+	shortScrollMarginBlock   = "scroll-margin-block"
 	kwContain                = "contain"
 )
 

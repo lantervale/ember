@@ -14,7 +14,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a rich copy's look, and one on a Linux desktop or the web | the HTML holds the elements and their attributes, where Chrome writes each element's computed style inline; a Linux desktop and the web get the plain text alone, GLFW offering no `text/html` target ([decision 0162](../99-decisions/0162-a-copy-puts-the-selections-markup-beside-its-text.md)) |
 | a carriage return in text that keeps it (`white-space: pre`) | laid out as a character of its line, the text after it on the same line, where Chrome breaks the line there |
 | `word-break: break-all` between two elements (`ab<b>cd</b>`), and between a letter and punctuation other than a hyphen | no break where the element changes; elsewhere ui breaks between two letters or digits and before a hyphen, which Chrome's table may differ from round brackets and marks |
-| `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
+| `hyphens: auto` | read, and words break at their soft hyphens alone, as `manual`: Chrome on macOS hyphenates through the system's dictionaries, which no pattern file ui could embed reproduces ([decision 0177](../99-decisions/0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md)) |
+| `white-space: break-spaces` and `white-space-collapse: break-spaces` | refused with a warning: the spaces would have to take room at a line's end and break after each one |
+| `text-wrap: balance` and `pretty` in a block whose lines go round floats, under a `::first-line` or a `line-clamp` | broken greedily, as `auto`, where Chrome scores them too (round floats it scores lines whose room is a float's alone) |
+| `text-spacing-trim` and `text-autospace: normal` | read and computed as Chrome's, laid out as `normal` and `no-autospace`: the full-width punctuation and the space between ideographs and letters are left as the face draws them |
+| `text-box-trim` on a flex or grid container, a table cell and columns, and a first line the block's first float or inline block holds | not compared with Chrome: trimmed as a block container's own lines, the propagation going into blocks of a block flow alone | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
 | `initial-letter` on an element (the first inline child of a block), `initial-letter-align`, and a drop cap in vertical text | not read: only a `::first-letter` is made a drop cap, its letter's ink measured in its first face |
@@ -38,6 +42,11 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without its ligatures and kerning, where Chrome's HarfBuzz reads them; most of the Mac's faces have GSUB and GPOS too |
 | a variable font's GPOS values at an instance (their device and variation deltas) and its GSUB feature variations (`rvrn` by axis) | the default instance's kerning and substitutions, the glyphs' advances the instance's |
 | ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole (joined forms do join across the edge, the text round a run shaping it); a pre-base matra after a letter of another element takes `init` as at a word's start; a space's pair kerning with the words beside it is Chrome's |
+| selecting text of vertical lines: a drag, a double click, a caret placed by the pointer, the selection drawn | the characters found and the selection drawn as if the lines ran across, the selection not drawn on them |
+| a face's vertical metrics (`vhea`, `vmtx`, `VORG`) and its vertical alternates (`vert`, `vrt2`): the CJK brackets and punctuation turned or moved for vertical lines | a standing character takes its font's ascent and descent, drawn as in a horizontal line; the faces ui ships have none |
+| UTR #50's orientation of each character under `text-orientation: mixed` | the CJK scripts, fullwidth forms and CJK symbols stand, all else turns: the symbols and the pictographs UTR #50 stands (emoji, ©, §) are turned |
+| inline elements of several font sizes on a vertical line | aligned on their alphabetic baseline, where Chrome aligns vertical text on its central baseline |
+| the vertical alignment of an inline-block in a `vertical-lr` line taller than it | placed as in `vertical-rl`, from the line's right, where Chrome places it from its left |
 
 ## Generated content
 
@@ -82,6 +91,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-clamp: auto` whose last line fits but the padding below it in its block doesn't | the blocks after the clamp laid out whole, where Chrome's keep the clamp it first tried, one line lower |
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
+| a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
+| an absolutely positioned box of a vertical box whose containing block is outside it, in another frame (a box of `vertical-rl` in a page of horizontal lines) | placed as its containing block's frame had it, sideways, where Chrome places it in that block's writing mode |
+| a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |
+| `position: sticky` in vertical writing modes | not checked against Chrome |
+| a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |
+| the rules between columns of a multi-column box of vertical lines | drawn as if its columns stood side by side |
 
 ## Backgrounds and borders
 
@@ -155,7 +170,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `container-type: anchored` | refused with a warning |
 | `@position-try` inside `@media`, `@container` or `@supports` | applies whatever the condition says |
-| `anchor()`'s `start` and `end`, and `position-area`'s logical keywords | read the positioned box's own direction, where Chrome reads its containing block's writing mode; no vertical writing modes |
+| `anchor()`'s `start` and `end`, and `position-area`'s logical keywords, in a box of another writing mode or direction than its containing block | read the positioned box's own writing mode and direction, where Chrome reads its containing block's |
 | `position-visibility: anchors-valid` | read, and hides nothing |
 | an anchored box placed in a grid area of its containing block | its anchors are measured from the containing block's padding box, not the grid area |
 | a box anchored to a scrolled anchor | laid out again on the frame the scroll moves its anchor: right, but a layout where Chrome moves it by the scroll |
@@ -168,7 +183,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `overscroll-behavior` on a touch's scroll, `overscroll-behavior: none`'s bounce | ui scrolls by no touch and bounces nothing: `contain` and `none` stop the chain alike |
 | `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
-| `calc-size()` and `interpolate-size: allow-keywords`, a transition or an animation to or from `auto` | refused with a warning, and a size keyword flips halfway: a box's size from layout is no value the cascade can hold yet ([decision 0174](../99-decisions/0174-registered-custom-properties-and-the-functions-a-cascade-substitutes.md)) |
+| `calc-size()` in `width`, the `min-` and `max-` sizes, `block-size`, `inline-size` and `flex-basis`, and a `calc-size()` height of a flex or grid item, a table part or an absolutely positioned box | refused with a warning outside `height`, and a size keyword flips halfway there; such a height is laid out as its keyword ([decision 0177](../99-decisions/0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md)) |
+| a `calc-size()` whose calculation isn't a multiple of `size` plus a length-percentage (`min(size, 100px)`) | read as the line through its values where `size` is 0 and 1 |
 | a registered `<transform-list>` interpolated between lists of other functions, a `<length-percentage>` or `<transform-function>` holding `min()` or another function over a percentage | flips halfway, and the value is unset, where Chrome interpolates the matrices and keeps the function |
 | a registered `<color>` in a space other than sRGB (`oklch(…)`), `<image>` and `<url>` values | computed as `rgb()`, and written as given, where Chrome keeps the colour's space and makes the url absolute |
 | the white space of a custom property's value, unregistered or of syntax `*` (`--a:  a   b`) | one space where the value had several, where Chrome keeps it as written |

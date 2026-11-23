@@ -144,16 +144,17 @@ func (n *node) lower(by float32) {
 // lines centred in it for a button, input or select, or where a cell's vertical-align
 // puts them, unless its align-content says where.
 func (t *tree) textTop(n *node, ls []line, top, contentHeight float32) float32 {
+	trim, end := t.trims(n.inline, ls)
 	share := contentShare(n)
 	if share == 0 {
-		return top + n.lowered
+		return top + n.lowered - trim
 	}
-	h := float32(0)
+	h := -trim - end
 	for _, l := range ls {
 		lh, _ := t.lineBox(n.inline, l)
 		h += l.push + lh
 	}
-	return top + max(contentHeight-h, 0)*share
+	return top + max(contentHeight-h, 0)*share - trim
 }
 
 // contentShare is the share of the free height a box that centres its content leaves

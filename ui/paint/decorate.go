@@ -1776,9 +1776,19 @@ func (r radii) grown(d float32) radii {
 // styles in its style, the others in the run's.
 func (p *painter) text(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) || p.probing {
 		return
 	}
+	if st.Mode.Vertical() {
+		p.verticalText(e, alpha)
+		return
+	}
+	p.horizontalText(e, alpha)
+}
+
+// horizontalText is text for a run of horizontal lines.
+func (p *painter) horizontalText(e entry, alpha float32) {
+	b, st := e.b, shown(e.b)
 	var parts []Selected
 	if p.sel != nil {
 		parts = p.sel.Parts(b)
@@ -2025,6 +2035,7 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 // right, each piece small capitals or a word gap cut placed from where
 // the fragment ends.
 func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
+	shown := f.Text + f.Hyphen
 	p.around = [2]string{f.Before, f.After}
 	defer func() { p.around = [2]string{} }()
 	if !f.RTL {
@@ -2032,17 +2043,17 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 			// The space starting its block's text takes no word-spacing.
 			at.X -= st.WordGap()
 		}
-		p.words(at, f.Text, st, opts)
+		p.words(at, shown, st, opts)
 		return
 	}
 	opts = append(slices.Clip(opts), twod.RightToLeft())
 	font := st.Font
 	if c, ok := p.fonts.(capsFonts); ok {
-		font = c.Caps(font, f.Text)
+		font = c.Caps(font, shown)
 	}
-	runs := font.SmallCaps(f.Text)
+	runs := font.SmallCaps(shown)
 	if runs == nil {
-		runs = []style.CapsRun{{Text: f.Text, Font: font}}
+		runs = []style.CapsRun{{Text: shown, Font: font}}
 	} else {
 		p.around = [2]string{}
 	}

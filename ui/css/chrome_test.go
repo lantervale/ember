@@ -133,7 +133,49 @@ var compared = map[string]func(s *style.Computed) string{
 		return []string{"none", "uppercase", "lowercase", "capitalize"}[s.TextTransform]
 	},
 	"white-space": func(s *style.Computed) string {
-		return []string{"normal", "nowrap", "pre", "pre-wrap", "pre-line"}[s.WhiteSpace]
+		return []string{"normal", "nowrap", "pre", "pre-wrap", "pre-line", "preserve-breaks nowrap"}[s.WhiteSpace]
+	},
+	"white-space-collapse": func(s *style.Computed) string {
+		return []string{"collapse", "preserve", "preserve-breaks"}[s.WhiteSpace.Collapse()]
+	},
+	"text-wrap-mode": wrapMode,
+	"text-wrap-style": func(s *style.Computed) string {
+		return []string{"auto", "balance", "pretty", "stable"}[s.WrapStyle]
+	},
+	"text-wrap": func(s *style.Computed) string {
+		if s.WrapStyle == style.WrapAuto {
+			return wrapMode(s)
+		}
+		return strings.TrimPrefix(wrapMode(s)+" ", "wrap ") + []string{"auto", "balance", "pretty", "stable"}[s.WrapStyle]
+	},
+	"hyphens": func(s *style.Computed) string { return []string{"manual", "none", "auto"}[s.Hyphens] },
+	"hyphenate-character": func(s *style.Computed) string {
+		if !s.HyphenChosen {
+			return "auto"
+		}
+		return strconv.Quote(s.HyphenChar)
+	},
+	"text-box-trim": boxTrim,
+	"text-box-edge": boxEdge,
+	"text-box": func(s *style.Computed) string {
+		switch {
+		case s.TextBoxTrim == style.TrimNone && !s.TextBoxEdge.Named:
+			return "normal"
+		case !s.TextBoxEdge.Named:
+			return boxTrim(s)
+		case s.TextBoxTrim == style.TrimBoth:
+			return boxEdge(s)
+		}
+		return boxTrim(s) + " " + boxEdge(s)
+	},
+	"text-spacing-trim": func(s *style.Computed) string {
+		return []string{"normal", "space-all", "space-first", "trim-start"}[s.SpacingTrim]
+	},
+	"text-autospace": func(s *style.Computed) string {
+		return map[bool]string{true: "normal", false: "no-autospace"}[s.Autospace]
+	},
+	"interpolate-size": func(s *style.Computed) string {
+		return map[bool]string{true: "allow-keywords", false: "numeric-only"}[s.KeywordSizes]
 	},
 	"overflow-x": func(s *style.Computed) string { return overflow(s.Overflow.Width) },
 	"overflow-y": func(s *style.Computed) string { return overflow(s.Overflow.Height) },
@@ -259,6 +301,26 @@ func channels(s string) []float64 {
 		out = append(out, v)
 	}
 	return out
+}
+
+func wrapMode(s *style.Computed) string {
+	return map[bool]string{true: "wrap", false: "nowrap"}[s.WhiteSpace.Wraps()]
+}
+
+func boxTrim(s *style.Computed) string {
+	return []string{"none", "trim-start", "trim-end", "trim-both"}[s.TextBoxTrim]
+}
+
+func boxEdge(s *style.Computed) string {
+	e := s.TextBoxEdge
+	if !e.Named {
+		return "auto"
+	}
+	over := []string{"text", "cap", "ex", "alphabetic"}[e.Over]
+	if e.Over == style.EdgeText && e.Under == style.EdgeText {
+		return over
+	}
+	return over + " " + []string{"text", "cap", "ex", "alphabetic"}[e.Under]
 }
 
 func matchChrome(t *testing.T, d *ui.Document) {

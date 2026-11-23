@@ -35,6 +35,21 @@ func TestPositionAreaAndFallbacksMatchChrome(t *testing.T) {
 			"span-left bottom", "span-top right", "span-all top", "block-start inline-end"),
 		"position-area spans and logical": areas("span-right top", "x-start y-end", "span-x-end span-y-start",
 			"self-block-end", "span-inline-start", "end start"),
+		"position-area logical in vertical writing modes": func() *ui.Document {
+			var nodes []*ui.Node
+			for _, mode := range []string{"vertical-rl", "vertical-lr; direction: rtl", "sideways-lr"} {
+				box := el("", "position: relative; width: 780px; height: 180px; writing-mode: "+mode, anchor(""))
+				for _, v := range []string{"block-start", "inline-end", "start end", "x-start y-end",
+					"span-inline-start block-end", "self-block-end"} {
+					box.Append(el("p s", "position-area: "+v))
+				}
+				box.Append(el("p s", "top: anchor(bottom); left: anchor(right); width: anchor-size(height)"),
+					el("p s", "right: anchor(left); bottom: anchor(top)"))
+				nodes = append(nodes, box)
+			}
+			return styled(page+`
+.a { left: 300px; top: 60px; }`, nodes...)
+		}(),
 		"position-area sizes its content": styled(page, anchor(""),
 			el("p", "position-area: bottom", ui.Text("some words in the area")),
 			el("p", "position-area: left span-all", ui.Text("some words in it")),

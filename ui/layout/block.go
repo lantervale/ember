@@ -166,7 +166,8 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 			n.captionRoom[0] = fmax(0, (legend.final.size.h-rBorder.t)/2)
 		}
 	}
-	outerH := mMax(or(known.h, mClamp(res.height, minSize.h, maxSize.h)), pbSize.h)
+	outerH := mMax(or(known.h, mClamp(sizedHeight(st, res.height, adj.h, in.parent.h), minSize.h, maxSize.h)),
+		pbSize.h)
 	final := size{outerW, outerH}
 	constrainedByMin := some(minSize.h) && minSize.h > 0 && minSize.h >= outerH
 	ownBottomCollapse := ownCollapse[1] && !constrainedByMin
@@ -284,6 +285,18 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 
 // renderedLegend is the legend a fieldset sets on its top border: its first box, when
 // that is a legend in the flow.
+// sizedHeight is the height of a block whose content takes h, its padding and
+// border included: a calc-size() height worked on that size, in the box its
+// box-sizing names (adj being the padding and border outside it), and h itself
+// for any other.
+func sizedHeight(st *style.Computed, h, adj, parent float32) float32 {
+	l := st.Size.Height
+	if !l.Sized {
+		return h
+	}
+	return l.Scale*(h-adj) + l.Px + l.Percent*or(parent, 0)/100 + adj
+}
+
 func renderedLegend(n *node, items []*blockItem) *blockItem {
 	if e := n.box.Node; e == nil || e.Tag() != dom.Fieldset || len(items) == 0 {
 		return nil
@@ -334,7 +347,7 @@ func (t *tree) blockItems(n *node, inner size) []*blockItem {
 		pbSum := padding.add(border).sum()
 		adj := boxSizingAdjustment(st, pbSum)
 		same := st.Display == style.Block && !outOfFlow(st.Position) && st.Float == style.FloatNone &&
-			!blockEstablishesBFC(st) && !standsBesideFloats(k)
+			!blockEstablishesBFC(st) && !standsBesideFloats(k) && k.inner == nil
 		items = append(items, &blockItem{
 			node:        k,
 			order:       order,
@@ -607,14 +620,19 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
-		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table
+		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across
 		if shrinks && widthStyle.Kind == style.Auto {
 			widthStyle = style.Length{Kind: style.FitContent}
 		}
 		keywordW := none
+		availH := maxContentSpace
+		if it.node.across && some(percentH) {
+			// an orthogonal flow's lines are as long as the height its container gives
+			availH = def(fmax(percentH-nonAuto.vertical(), 0))
+		}
 		switch k, s := resolveSizingKeyword(widthStyle, stretchW, innerW); k {
 		case keywordMeasure:
-			keywordW = t.measureChildSize(it.node, noSize, parent, spaces{s, maxContentSpace},
+			keywordW = t.measureChildSize(it.node, noSize, parent, spaces{s, availH},
 				inherentSize, horizontal, collapsibleIf(it.inSameBFC))
 		case keywordExact:
 			keywordW = s.v
@@ -633,7 +651,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			known:           known,
 			knownIsDefinite: bools{true, true},
 			parent:          parent,
-			avail:           spaces{def(stretchW), maxContentSpace},
+			avail:           spaces{def(stretchW), availH},
 			collapsible:     collapsibleIf(it.inSameBFC),
 		}
 		if left > 0 && it.inSameBFC {

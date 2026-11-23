@@ -612,6 +612,8 @@ func (a TextAlign) Resolve(d Direction) TextAlign {
 	return a
 }
 
+// WhiteSpace is white-space: its two longhands, white-space-collapse
+// and text-wrap-mode, as one value.
 type WhiteSpace uint8
 
 const (
@@ -620,7 +622,111 @@ const (
 	Pre
 	PreWrap
 	PreLine
+	// PreLineNoWrap keeps newlines and collapses spaces, on lines that
+	// don't wrap: white-space: preserve-breaks nowrap.
+	PreLineNoWrap
 )
+
+// Collapse is white-space-collapse.
+type Collapse uint8
+
+const (
+	CollapseSpaces Collapse = iota
+	Preserve
+	PreserveBreaks
+)
+
+// Collapse is w's white-space-collapse.
+func (w WhiteSpace) Collapse() Collapse {
+	switch w {
+	case Pre, PreWrap:
+		return Preserve
+	case PreLine, PreLineNoWrap:
+		return PreserveBreaks
+	case Normal, NoWrapSpace:
+	}
+	return CollapseSpaces
+}
+
+// Wraps is w's text-wrap-mode: whether its lines wrap.
+func (w WhiteSpace) Wraps() bool { return w != NoWrapSpace && w != Pre && w != PreLineNoWrap }
+
+// KeepsBreaks reports whether w keeps the newlines of its text.
+func (w WhiteSpace) KeepsBreaks() bool { return w.Collapse() != CollapseSpaces }
+
+// WhiteSpaceOf is the white-space of a white-space-collapse and a
+// text-wrap-mode.
+func WhiteSpaceOf(c Collapse, wraps bool) WhiteSpace {
+	switch {
+	case c == Preserve && wraps:
+		return PreWrap
+	case c == Preserve:
+		return Pre
+	case c == PreserveBreaks && wraps:
+		return PreLine
+	case c == PreserveBreaks:
+		return PreLineNoWrap
+	case wraps:
+		return Normal
+	}
+	return NoWrapSpace
+}
+
+// WrapStyle is text-wrap-style: how a block chooses where its lines
+// break.
+type WrapStyle uint8
+
+const (
+	WrapAuto WrapStyle = iota
+	// WrapBalance makes the lines of a short block about as long as each
+	// other.
+	WrapBalance
+	// WrapPretty avoids a short last line.
+	WrapPretty
+	// WrapStable breaks as WrapAuto, its lines kept as text is edited.
+	WrapStable
+)
+
+// Hyphens is hyphens: where a word may break at a hyphen of its own.
+type Hyphens uint8
+
+const (
+	// HyphensManual breaks at the soft hyphens of the text.
+	HyphensManual Hyphens = iota
+	HyphensNone
+	// HyphensAuto breaks where a dictionary would too.
+	HyphensAuto
+)
+
+// TextBoxTrim is text-box-trim: which ends of a block's text lose the
+// room above their glyphs' edge (TextBoxEdge).
+type TextBoxTrim uint8
+
+const (
+	TrimNone TextBoxTrim = iota
+	TrimStart
+	TrimEnd
+	TrimBoth
+)
+
+// TextEdge is an edge text-box-edge names.
+type TextEdge uint8
+
+const (
+	// EdgeText is the font's ascent above, its descent below.
+	EdgeText TextEdge = iota
+	EdgeCap
+	EdgeEx
+	EdgeAlphabetic
+)
+
+// TextBoxEdge is text-box-edge: the edges above and below the glyphs
+// that text-box-trim trims to, Named when they are; auto otherwise,
+// which trims to the text's.
+type TextBoxEdge struct {
+	Over, Under TextEdge
+	Named       bool
+}
 
 // Spacing is letter-spacing or word-spacing: Px points after each
 // character or word separator, and Percent of the font size, which a child
@@ -721,6 +827,12 @@ type Text struct {
 	// takes part in the bidi algorithm of the text round it.
 	Dir  Direction
 	Bidi UnicodeBidi
+	// Mode is writing-mode, Orientation text-orientation, and Combine set
+	// for text-combine-upright: all, the element's text set across one
+	// character's room of a vertical line.
+	Mode        WritingMode
+	Orientation TextOrientation
+	Combine     bool
 	// TextIndent is text-indent: how far the first line of a block's text
 	// starts in from its edge, out when negative; a percentage is of the
 	// block's width.
@@ -839,7 +951,31 @@ type Text struct {
 	// InkThrough is text-decoration-skip-ink: none: underlines and
 	// overlines go through the glyphs' ink, which they otherwise skip.
 	InkThrough bool
+	WrapStyle  WrapStyle
+	Hyphens    Hyphens
+	// HyphenChar is hyphenate-character's string when HyphenChosen,
+	// else it is auto.
+	HyphenChar   string
+	HyphenChosen bool
+	TextBoxTrim  TextBoxTrim
+	TextBoxEdge  TextBoxEdge
+	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:
+	// normal; both read and computed, laid out as their initial values.
+	SpacingTrim SpacingTrim
+	Autospace   bool
+	// KeywordSizes is interpolate-size: allow-keywords.
+	KeywordSizes bool
 }
+
+// SpacingTrim is text-spacing-trim.
+type SpacingTrim uint8
+
+const (
+	SpacingTrimNormal SpacingTrim = iota
+	SpaceAll
+	SpaceFirst
+	TrimStartSpacing
+)
 
 // WordBreak is word-break: where lines may break inside words.
 type WordBreak uint8

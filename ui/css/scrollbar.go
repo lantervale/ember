@@ -64,7 +64,7 @@ func (r *restyler) part(n *dom.Node, el *style.Computed, rem float32, name strin
 		return nil
 	}
 	r.pm.part = state
-	casc := r.pm.cascadeFor(r.pm.matchedFor(n, r.sheets, nil, name), name, el.Dir)
+	casc := r.pm.cascadeFor(r.pm.matchedFor(n, r.sheets, nil, name), name, el)
 	r.pm.part = 0
 	if !slices.ContainsFunc(casc.longhands, func(d *Declaration) bool { return d != nil }) && len(casc.custom) == 0 {
 		return nil

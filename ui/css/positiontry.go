@@ -96,9 +96,7 @@ func (r *restyler) tries(x *ctx, c *style.Computed, casc cascaded, root bool) {
 			for i := range rule.Decls {
 				d := &rule.Decls[i]
 				for _, name := range longhandsOf(d.Name) {
-					if casc.rtl && d.inline {
-						name = mirrored(name)
-					}
+					name = casc.flow.place(name, d)
 					if w := long[orderIndex[name]]; w == nil || !w.Important {
 						long[orderIndex[name]] = d
 					}
@@ -113,7 +111,7 @@ func (r *restyler) tries(x *ctx, c *style.Computed, casc cascaded, root bool) {
 		for _, flip := range f.Flips {
 			long = y.flipped(long, flip)
 		}
-		y.cascaded(cascaded{longhands: long, custom: casc.custom, rtl: casc.rtl}, root)
+		y.cascaded(cascaded{longhands: long, custom: casc.custom, flow: casc.flow}, root)
 		t.Anchoring.Tries = nil
 		out = append(out, &t)
 	}

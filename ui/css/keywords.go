@@ -113,9 +113,13 @@ const (
 	atLayer                  = "layer"
 	kwScope                  = "scope"
 	propDirection            = "direction"
+	propWritingMode          = "writing-mode"
 	shortMarginInline        = "margin-inline"
 	shortInsetInline         = "inset-inline"
 	shortPaddingInline       = "padding-inline"
+	shortMarginBlock         = "margin-block"
+	shortInsetBlock          = "inset-block"
+	shortPaddingBlock        = "padding-block"
 
 	propTextDecorationStyle     = "text-decoration-style"
 	propTextDecorationColor     = "text-decoration-color"

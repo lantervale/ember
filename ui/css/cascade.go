@@ -484,20 +484,20 @@ func levelOf(agent, important bool) level {
 type cascaded struct {
 	longhands []*Declaration
 	custom    []*Declaration
-	// rtl is set when the element's direction is rtl: its declarations
-	// of an inline side stand for the other physical one.
-	rtl bool
+	// flow is the element's writing-mode and direction: its logical
+	// declarations stand for the physical longhands they give.
+	flow flow
 }
 
 // cascade puts each longhand's winner at its place in order, under a
-// parent of direction dir. The result lives until the next call.
-func (m *matcher) cascade(list []applied, dir style.Direction) cascaded {
-	return m.cascadeFor(list, "", dir)
+// parent of style parent. The result lives until the next call.
+func (m *matcher) cascade(list []applied, parent *style.Computed) cascaded {
+	return m.cascadeFor(list, "", parent)
 }
 
 // cascadeFor is cascade for a pseudo-element, which leaves out the
 // declarations of the properties it doesn't take.
-func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction) cascaded {
+func (m *matcher) cascadeFor(list []applied, pseudo string, parent *style.Computed) cascaded {
 	if m.long == nil {
 		m.long = make([]*Declaration, len(order))
 	}
@@ -506,7 +506,7 @@ func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction)
 		m.at = make([]int, len(order))
 	}
 	m.custom = m.custom[:0]
-	rtl := directionIn(list, dir) == style.RTL
+	f := flow{mode: writingModeIn(list, parent.Mode), rtl: directionIn(list, parent.Dir) == style.RTL}
 	reverts := false
 	for k, a := range list {
 		d := a.decl
@@ -515,22 +515,16 @@ func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction)
 			continue
 		}
 		reverts = reverts || revertOf(d) != ""
-		mirror := rtl && d.inline
 		if long, ok := shorthands[d.Name]; ok {
 			for _, l := range long {
-				if mirror {
-					l = mirrored(l)
-				}
+				l = f.place(l, d)
 				if pseudo == "" || takesProperty(pseudo, l) {
 					m.long[orderIndex[l]], m.at[orderIndex[l]] = d, k
 				}
 			}
 			continue
 		}
-		name := d.Name
-		if mirror {
-			name = mirrored(name)
-		}
+		name := f.place(d.Name, d)
 		if pseudo == "" || takesProperty(pseudo, name) {
 			m.long[orderIndex[name]], m.at[orderIndex[name]] = d, k
 		}
@@ -542,7 +536,28 @@ func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction)
 			}
 		}
 	}
-	return cascaded{longhands: m.long, custom: m.custom, rtl: rtl}
+	return cascaded{longhands: m.long, custom: m.custom, flow: f}
+}
+
+// writingModeIn is the writing-mode the last declaration of list sets,
+// mode where none does or it inherits; a var() in it reads as inherit.
+func writingModeIn(list []applied, mode style.WritingMode) style.WritingMode {
+	for i := len(list) - 1; i >= 0; i-- {
+		d := list[i].decl
+		if d.Name != propWritingMode {
+			continue
+		}
+		if len(d.vals) == 1 && isWord(d.vals[0], "initial") {
+			return style.HorizontalTB
+		}
+		if len(d.vals) == 1 {
+			if v, ok := writingModes[strings.ToLower(d.vals[0].Text)]; ok {
+				return v
+			}
+		}
+		return mode
+	}
+	return mode
 }
 
 // directionIn is the direction the last declaration of list sets, dir

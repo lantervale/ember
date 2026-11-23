@@ -352,9 +352,7 @@ func (t *Transitions) resolve(n *dom.Node, an *animation) {
 		s := t.probe(n, decls)
 		for _, d := range decls {
 			for _, name := range longhandsOf(d.Name) {
-				if d.inline && s.Dir == style.RTL {
-					name = mirrored(name)
-				}
+				name = flowOf(s).place(name, &d)
 				an.add(name, key{at: f.At, easing: fe, s: s, op: op})
 			}
 		}

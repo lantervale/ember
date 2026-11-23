@@ -47,7 +47,8 @@ var (
 	fontProps = []string{"font", "font-family", "font-size", "font-style", "font-weight", "font-stretch",
 		propFontVariations, "line-height"}
 	markerProps = append([]string{"color", "content", "cursor", "letter-spacing", "overflow-wrap", "quotes",
-		"text-shadow", "text-transform", "white-space", "transition", "transition-property", "transition-duration",
+		"text-shadow", "text-transform", shortWhiteSpace, propCollapse, propTextWrapMode, "transition", "transition-property",
+		"transition-duration",
 		"transition-timing-function", "transition-delay", "-webkit-font-smoothing", "word-spacing"}, fontProps...)
 	// Longhands only: a shorthand is taken where one of its longhands is.
 	firstLineProps = append([]string{"color", "opacity", "visibility", "vertical-align", "box-shadow",

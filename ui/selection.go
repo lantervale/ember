@@ -269,7 +269,7 @@ func (d *Document) mapOf(n *Node) *runMap {
 		for _, r := range f.Text {
 			// What layout dropped stands before the character it kept:
 			// the white space it collapsed and the zero-width spaces.
-			for i < len(m.src) && (m.src[i] == zeroWidthSpace || isBlank(m.src[i]) && r != ' ') {
+			for i < len(m.src) && (m.src[i] == zeroWidthSpace || m.src[i] == '\u00ad' || isBlank(m.src[i]) && r != ' ') {
 				i++
 			}
 			offs = append(offs, int32(min(i, len(m.src)))) //nolint:gosec // a text node's length
@@ -917,7 +917,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 	}
 	metrics := d.fonts.Metrics(b.Style.Font)
 	ws := b.Style.WhiteSpace
-	keeps := ws == style.Pre || ws == style.PreWrap || ws == style.PreLine
+	keeps := ws.KeepsBreaks()
 	var out []paint.Selected
 	for k, f := range b.Lines {
 		if k > 0 && keeps {
@@ -962,7 +962,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 // stop, the first from the fragment's end.
 func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float32, float32) {
 	st, f := b.Style, b.Lines[k]
-	if m == nil || f.RTL || st.WhiteSpace != style.Pre && st.WhiteSpace != style.PreWrap {
+	if m == nil || f.RTL || st.WhiteSpace.Collapse() != style.Preserve {
 		return false, 0, 0
 	}
 	var after *box.Fragment
@@ -1201,12 +1201,12 @@ func (c *copier) dropped(src []rune, from, to int, ws style.WhiteSpace, wrap boo
 	if from >= to {
 		return
 	}
-	keeps := ws == style.Pre || ws == style.PreWrap || ws == style.PreLine
+	keeps := ws.KeepsBreaks()
 	for _, r := range src[from:to] {
 		switch {
 		case r == '\n' && keeps:
 			c.put('\n')
-		case r == '\t' && (ws == style.Pre || ws == style.PreWrap):
+		case r == '\t' && ws.Collapse() == style.Preserve:
 			c.put('\t')
 		case isBlank(r) && wrap:
 			if c.last != ' ' {

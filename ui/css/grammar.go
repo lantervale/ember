@@ -387,7 +387,7 @@ var checks = map[string]check{
 		"-webkit-box", "-webkit-inline-box")),
 	"box-sizing": single(words("content-box", "border-box")),
 	"width":      single(either(anchorSizeLP, words("auto"), boxSizes)),
-	"height":     single(either(anchorSizeLP, words("auto"), boxSizes)),
+	"height":     single(either(anchorSizeLP, words("auto"), boxSizes, calcSizeTerm)),
 	"min-width":  single(either(anchorSizeLP, words("auto"), boxSizes)),
 	"min-height": single(either(anchorSizeLP, words("auto"), boxSizes)),
 	"max-width":  single(either(anchorSizeLP, words("none"), boxSizes)),
@@ -531,6 +531,10 @@ var checks = map[string]check{
 	"table-layout":    single(words("auto", "fixed")),
 	"text-align":      single(textAlign),
 	"direction":       single(words("ltr", "rtl")),
+	propWritingMode: single(words("horizontal-tb", "vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr",
+		"lr", "lr-tb", "rl", "rl-tb", "tb", "tb-rl")),
+	"text-orientation":     single(words("mixed", "upright", "sideways", "sideways-right")),
+	"text-combine-upright": single(words("none", "all")),
 	"unicode-bidi": single(words("normal", "embed", "isolate", "bidi-override", "isolate-override",
 		"plaintext")),
 	"text-indent":               single(lengthPercent),
@@ -539,7 +543,16 @@ var checks = map[string]check{
 	"-webkit-text-fill-color":   single(colorTerm),
 	"-webkit-text-stroke-width": single(borderWidth),
 	"-webkit-text-stroke-color": single(colorTerm),
-	"white-space":               single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
+	"white-space-collapse":      single(words("collapse", "preserve", "preserve-breaks")),
+	"text-wrap-mode":            single(words("wrap", "nowrap")),
+	"text-wrap-style":           single(words("auto", "balance", "pretty", "stable")),
+	"hyphens":                   single(words("manual", "none", "auto")),
+	"hyphenate-character":       single(either(words("auto"), quoted)),
+	"text-box-trim":             single(words("none", "trim-start", "trim-end", "trim-both")),
+	"text-box-edge":             checkTextBoxEdge,
+	"text-spacing-trim":         single(words("normal", "space-all", "space-first", "trim-start")),
+	"text-autospace":            single(words("normal", "no-autospace")),
+	"interpolate-size":          single(words("numeric-only", "allow-keywords")),
 	"overflow-wrap":             single(words("normal", "break-word", "anywhere")),
 	"word-break":                single(words("normal", "break-all", "keep-all", "break-word")),
 	"line-break":                single(words("auto", "loose", "normal", "strict", "anywhere")),
@@ -672,7 +685,7 @@ func transitionTarget(c Component) error {
 		return nil
 	}
 	name := strings.ToLower(c.Text)
-	name = physical(name, false)
+	name = physical(name, flow{})
 	if _, long := properties[name]; c.Kind == Ident && (long || shorthands[name] != nil) {
 		return nil
 	}

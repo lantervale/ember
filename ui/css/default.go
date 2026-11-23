@@ -76,25 +76,25 @@ colgroup { display: table-column-group; }
 caption { text-align: center; }
 html { margin: 0; user-select: none; }
 body { margin: 8px; }
-p { margin: 1em 0; }
-h1 { margin: 0.67em 0; }
-h2 { margin: 0.83em 0; }
-h3 { margin: 1em 0; }
-h4 { margin: 1.33em 0; }
-h5 { margin: 1.67em 0; }
-h6 { margin: 2.33em 0; }
-ul, ol, menu { margin: 1em 0; padding-inline-start: 40px; }
+p { margin-block: 1em; margin-inline: 0; }
+h1 { margin-block: 0.67em; margin-inline: 0; }
+h2 { margin-block: 0.83em; margin-inline: 0; }
+h3 { margin-block: 1em; margin-inline: 0; }
+h4 { margin-block: 1.33em; margin-inline: 0; }
+h5 { margin-block: 1.67em; margin-inline: 0; }
+h6 { margin-block: 2.33em; margin-inline: 0; }
+ul, ol, menu { margin-block: 1em; margin-inline: 0; padding-inline-start: 40px; }
 ul, menu { list-style-type: disc; }
 ol { list-style-type: decimal; }
 ul ul, ul menu, ol ul, ol menu, menu ul, menu menu { list-style-type: circle; }
 ul ul ul, ul ul menu, ul ol ul, ul ol menu, ul menu ul, ul menu menu, ol ul ul, ol ul menu, ol ol ul, ol ol menu, ol
 menu ul, ol menu menu, menu ul ul, menu ul menu, menu ol ul, menu ol menu, menu menu ul, menu menu menu {
 list-style-type: square; }
-ul ul, ul ol, ul menu, ol ul, ol ol, ol menu, menu ul, menu ol, menu menu { margin-top: 0; margin-bottom: 0; }
-dl { margin: 1em 0; }
+ul ul, ul ol, ul menu, ol ul, ol ol, ol menu, menu ul, menu ol, menu menu { margin-block: 0; }
+dl { margin-block: 1em; margin-inline: 0; }
 dd { margin-inline-start: 40px; }
-blockquote, figure { margin: 1em 40px; }
-hr { margin: 0.5em auto; border: 1px inset gray; color: gray; overflow: hidden; }
+blockquote, figure { margin-block: 1em; margin-inline: 40px; }
+hr { margin-block: 0.5em; margin-inline: auto; border: 1px inset gray; color: gray; overflow: hidden; }
 h1 { font-size: 2em; }
 h2 { font-size: 1.5em; }
 h3 { font-size: 1.17em; }
@@ -117,10 +117,11 @@ q::before { content: open-quote; }
 q::after { content: close-quote; }
 big { font-size: larger; }
 center { text-align: -webkit-center; }
-fieldset { margin: 0 2px; padding: 0.35em 0.75em 0.625em; border: 2px groove ThreeDFace; min-width: min-content; }
+fieldset { margin-inline: 2px; padding-block: 0.35em 0.625em; padding-inline: 0.75em; border: 2px groove ThreeDFace;
+  min-width: min-content; }
 fieldset { display: flow-root; }
 fieldset > legend { width: fit-content; }
-legend { padding: 0 2px; }
+legend { padding-inline: 2px; }
 mark { background-color: Mark; color: MarkText; }
 a:link { color: LinkText; cursor: pointer; text-decoration: underline; }
 u, ins { text-decoration: underline; }
@@ -128,7 +129,7 @@ s, del { text-decoration: line-through; }
 abbr[title] { text-decoration: underline dotted; }
 a:link:active { color: ActiveText; }
 code, kbd, samp, pre { font-family: "Go Mono", monospace; font-size: 0.8125em; }
-pre { margin: 1em 0; white-space: pre; }
+pre { margin-block: 1em; margin-inline: 0; white-space: pre; }
 button, input, select, textarea {
   appearance: auto; margin: 0; padding: 0; border: 0; background: none;
   font-family: inherit; font-size: inherit; font-weight: inherit; font-style: inherit;
