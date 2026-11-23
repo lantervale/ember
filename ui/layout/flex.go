@@ -107,6 +107,7 @@ type flexItem struct {
 	minSize, maxSize        size
 	aspectRatio             float32
 	alignSelf               style.Align
+	safe                    bool
 	overflow                style.Size[style.Overflow]
 	scrollbarWidth          float32
 	shrink, grow            float32
@@ -127,6 +128,7 @@ type flexItem struct {
 	outerTargetSize         size
 	baseline                float32
 	synthetic               float32
+	lastBaseline            float32
 	offsetMain, offsetCross float32
 	oof                     []oofCandidate
 }
@@ -148,7 +150,13 @@ func (it *flexItem) isStretched(d flexDir) bool {
 }
 
 func (it *flexItem) baselineAligned(d flexDir) bool {
-	return it.alignSelf == style.AlignBaseline && !d.autoCrossStart(it.marginIsAuto) && !d.autoCrossEnd(it.marginIsAuto)
+	return it.alignSelf.Baseline() && !d.autoCrossStart(it.marginIsAuto) && !d.autoCrossEnd(it.marginIsAuto)
+}
+
+// atCrossEnd reports whether a baseline-aligned item shares its baseline with the items
+// packed at its line's cross end: on its last baseline, or its first in wrap-reverse.
+func (it *flexItem) atCrossEnd(c *flexConstants) bool {
+	return (it.alignSelf == style.AlignLastBaseline) != c.isWrapReverse
 }
 
 type flexLine struct {
@@ -324,11 +332,38 @@ func (t *tree) flexPreliminary(n *node, in input) output {
 			c.scrollOriginReversed(), c.isScrollContainer),
 		firstBaseline: first,
 		synthetic:     synthetic,
-		lastBaseline:  none,
+		lastBaseline:  flexLastBaseline(lines, c),
 		oof:           candidates,
 		area:          &area,
 	}
 	return out
+}
+
+// flexLastBaseline is a flex container's last baseline: that of its last line's items on
+// their last baseline, else the last baseline of its endmost item.
+func flexLastBaseline(lines []*flexLine, c *flexConstants) float32 {
+	if len(lines) == 0 {
+		return none
+	}
+	l := lines[len(lines)-1]
+	if c.isWrapReverse {
+		l = lines[0]
+	}
+	if len(l.items) == 0 {
+		return none
+	}
+	if c.isRow {
+		for _, it := range l.items {
+			if it.baselineAligned(c.dir) && it.alignSelf == style.AlignLastBaseline {
+				return it.lastBaseline
+			}
+		}
+	}
+	it := l.items[len(l.items)-1]
+	if c.isColumn && c.dir.isReverse() {
+		it = l.items[0]
+	}
+	return it.lastBaseline
 }
 
 func hasOutOfFlowOrHidden(n *node) bool {
@@ -481,7 +516,7 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 		if self == style.AlignAuto {
 			self = c.alignItems
 		}
-		it.alignSelf = normalToStretch(self)
+		it.alignSelf, it.safe = normalToStretch(self).Position(), self.Safe()
 		if st.Position == style.Relative {
 			inset := rect{
 				l: resolve(st.Inset.Left, c.nodeInnerSize.w), r: resolve(st.Inset.Right, c.nodeInnerSize.w),
@@ -1068,22 +1103,26 @@ func (t *tree) hypotheticalCrossSize(l *flexLine, c *flexConstants, nodeSize siz
 	}
 }
 
+// childrenBaselines measures the baseline of each baseline-aligned item from its cross-start
+// margin edge, its first or its last, where its line holds others sharing it. A column's
+// items have none across it, and share one synthesized from their line-left border edges.
 func (t *tree) childrenBaselines(nodeSize size, avail spaces, lines []*flexLine, c *flexConstants) {
-	if !c.isRow {
-		return
-	}
 	for _, l := range lines {
-		count := 0
+		var counts [2]int
 		for _, it := range l.items {
 			if it.baselineAligned(c.dir) {
-				count++
+				counts[b2i(it.atCrossEnd(c))]++
 			}
-		}
-		if count <= 1 {
-			continue
 		}
 		for _, it := range l.items {
 			if !it.baselineAligned(c.dir) {
+				continue
+			}
+			if !c.isRow {
+				it.baseline = it.margin.l
+				continue
+			}
+			if counts[b2i(it.atCrossEnd(c))] <= 1 {
 				continue
 			}
 			av := spaces{def(c.containerSize.w), spaceOr(nodeSize.h, avail.h)}.mSub(it.margin.sum()).mMax(size{})
@@ -1098,12 +1137,33 @@ func (t *tree) childrenBaselines(nodeSize size, avail spaces, lines []*flexLine,
 			})
 			h := out.size.h
 			own := childFirstBaseline(out.firstBaseline, h, it.overflow.Height)
-			it.baseline, it.synthetic = or(own, h)+it.margin.t, 0
+			if it.alignSelf == style.AlignLastBaseline {
+				own = childLastAlignedBaseline(out, h, it.overflow.Height)
+			}
+			it.baseline, it.synthetic = or(own, t.synthesizedBaseline(h, it.node.parent))+it.margin.t, 0
 			if !some(own) {
 				it.synthetic = h
 			}
 		}
 	}
+}
+
+// lineBaselines are the shared baselines of a line's two baseline-sharing groups: the
+// farthest baseline from the cross start of those packed there, and the farthest from
+// the cross end of those packed at the end.
+func lineBaselines(l *flexLine, c *flexConstants) (float32, float32) {
+	var start, end float32
+	for _, it := range l.items {
+		if !it.baselineAligned(c.dir) {
+			continue
+		}
+		if it.atCrossEnd(c) {
+			end = fmax(end, it.outerTargetSize.get(c.dir.cross())-it.baseline)
+		} else {
+			start = fmax(start, it.baseline)
+		}
+	}
+	return start, end
 }
 
 func calculateCrossSize(lines []*flexLine, nodeSize size, c *flexConstants) {
@@ -1115,15 +1175,25 @@ func calculateCrossSize(lines []*flexLine, nodeSize size, c *flexConstants) {
 		return
 	}
 	for _, l := range lines {
-		maxBaseline := float32(0)
+		maxAbove, maxBelow := float32(0), float32(0)
 		for _, it := range l.items {
-			maxBaseline = fmax(maxBaseline, it.baseline)
+			switch {
+			case !it.baselineAligned(d):
+			case it.atCrossEnd(c):
+				maxBelow = fmax(maxBelow, it.hypotheticalOuterSize.get(d.cross())-it.baseline)
+			default:
+				maxAbove = fmax(maxAbove, it.baseline)
+			}
 		}
 		l.crossSize = 0
 		for _, it := range l.items {
 			v := it.hypotheticalOuterSize.get(d.cross())
-			if it.baselineAligned(d) {
-				v = maxBaseline - it.baseline + v
+			switch {
+			case !it.baselineAligned(d):
+			case it.atCrossEnd(c):
+				v = maxBelow + it.baseline
+			default:
+				v = maxAbove - it.baseline + v
 			}
 			l.crossSize = fmax(l.crossSize, v)
 		}
@@ -1227,13 +1297,7 @@ func distributeRemainingFreeSpace(lines []*flexLine, c *flexConstants) {
 func resolveCrossAutoMargins(lines []*flexLine, c *flexConstants) {
 	d := c.dir
 	for _, l := range lines {
-		maxBaseline, maxBelow := float32(0), float32(0)
-		for _, it := range l.items {
-			maxBaseline = fmax(maxBaseline, it.baseline)
-			if it.baselineAligned(d) {
-				maxBelow = fmax(maxBelow, it.outerTargetSize.get(d.cross())-it.baseline)
-			}
-		}
+		maxAbove, maxBelow := lineBaselines(l, c)
 		for _, it := range l.items {
 			free := l.crossSize - it.outerTargetSize.get(d.cross())
 			start, end := d.autoCrossStart(it.marginIsAuto), d.autoCrossEnd(it.marginIsAuto)
@@ -1257,14 +1321,18 @@ func resolveCrossAutoMargins(lines []*flexLine, c *flexConstants) {
 					it.margin.r = free
 				}
 			default:
-				it.offsetCross = alignFlexItemCross(it, free, maxBaseline, maxBelow, c)
+				it.offsetCross = alignFlexItemCross(it, free, maxAbove, maxBelow, c)
 			}
 		}
 	}
 }
 
-func alignFlexItemCross(it *flexItem, free, maxBaseline, maxBelow float32, c *flexConstants) float32 {
-	switch it.alignSelf {
+func alignFlexItemCross(it *flexItem, free, maxAbove, maxBelow float32, c *flexConstants) float32 {
+	self := it.alignSelf
+	if it.safe && free < 0 {
+		self = style.AlignStart
+	}
+	switch self {
 	case style.AlignStart:
 		return 0
 	case style.AlignFlexStart, style.AlignStretch:
@@ -1281,18 +1349,12 @@ func alignFlexItemCross(it *flexItem, free, maxBaseline, maxBelow float32, c *fl
 		return free
 	case style.AlignCenter, style.AlignAnchorCenter:
 		return free / 2
-	case style.AlignBaseline:
-		if c.isRow {
-			if c.isWrapReverse {
-				lineCross := free + it.outerTargetSize.get(c.dir.cross())
-				return lineCross - maxBelow - it.baseline
-			}
-			return maxBaseline - it.baseline
+	case style.AlignBaseline, style.AlignLastBaseline:
+		if it.atCrossEnd(c) {
+			lineCross := free + it.outerTargetSize.get(c.dir.cross())
+			return lineCross - maxBelow - it.baseline
 		}
-		if c.isWrapReverse {
-			return free
-		}
-		return 0
+		return maxAbove - it.baseline
 	case style.AlignNormal, style.AlignAuto, style.AlignSpaceBetween, style.AlignSpaceAround, style.AlignSpaceEvenly:
 	}
 	return 0
@@ -1349,10 +1411,13 @@ func (t *tree) flexItemLayout(it *flexItem, totalMain *float32, totalCross,
 	if !some(own) {
 		it.synthetic = s.h
 	}
+	last := or(childLastAlignedBaseline(out, s.h, it.overflow.Height), s.h)
 	if d.isRow() {
-		it.baseline = totalCross + it.offsetCross + lineCross + d.crossStart(it.margin) + inner
+		it.baseline = offsetCross - it.relativeInset.get(d.cross()) + inner
+		it.lastBaseline = offsetCross - it.relativeInset.get(d.cross()) + last
 	} else {
 		it.baseline = *totalMain + it.offsetMain + d.mainStart(it.margin) + inner
+		it.lastBaseline = *totalMain + it.offsetMain + d.mainStart(it.margin) + last
 	}
 	loc := point{offsetCross, offsetMain}
 	if d.isRow() {
@@ -1449,7 +1514,7 @@ func (t *tree) flexOOFCandidates(n *node, c *flexConstants, lines []*flexLine) [
 		if self == style.AlignAuto {
 			self = c.alignItems
 		}
-		self = normalToStretch(self)
+		selfAlign := align(normalToStretch(self))
 		var mainEdge staticEdge
 		switch k := c.justifyContent.keyword; {
 		case k == style.AlignStart:
@@ -1467,7 +1532,7 @@ func (t *tree) flexOOFCandidates(n *node, c *flexConstants, lines []*flexLine) [
 			switch k {
 			case style.AlignStart, style.AlignBaseline:
 				return edgeStart
-			case style.AlignEnd:
+			case style.AlignEnd, style.AlignLastBaseline:
 				return edgeEnd
 			case style.AlignCenter, style.AlignAnchorCenter:
 				return edgeCenter
@@ -1484,9 +1549,8 @@ func (t *tree) flexOOFCandidates(n *node, c *flexConstants, lines []*flexLine) [
 			}
 			return edgeStart
 		}
-		selfAlign := alignment{keyword: self}
 		cross := staticPosition{area: crossArea, align: staticAlign{
-			keyword:  crossEdge(self),
+			keyword:  crossEdge(selfAlign.keyword),
 			safe:     selfAlign.safe,
 			unsafe:   selfAlign.unsafe,
 			fallback: crossEdge(resolveSelfAlignmentSafety(selfAlign, true)),

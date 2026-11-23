@@ -55,7 +55,7 @@ func alignmentGutterAdjustment(a alignment, inner float32, estimate trackEstimat
 		outer, innerWeight = 1, 2
 	case style.AlignSpaceEvenly:
 		outer, innerWeight = 1, 1
-	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignBaseline:
+	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignBaseline, style.AlignLastBaseline:
 	}
 	if innerWeight == 0 || !some(inner) {
 		return 0
@@ -118,7 +118,7 @@ func (t *tree) trackSizing(a axis, axisMin, axisMax float32,
 		tracks[i].resolveFitContentLimit(inner.get(a))
 	}
 	if hasBaselineItem {
-		t.resolveItemBaselines(a, items, inner)
+		t.resolveItemBaselines(a, items, tracks, other, inner)
 	}
 	allFixed := true
 	for i := range tracks {
@@ -151,56 +151,97 @@ func (t *tree) trackSizing(a axis, axisMin, axisMax float32,
 	}
 }
 
-func (t *tree) resolveItemBaselines(a axis, items []*gridItem, inner size) {
-	other := a.other()
-	sorted := append([]*gridItem(nil), items...)
-	sort.SliceStable(sorted,
-		func(i, j int) bool { return sorted[i].placement(other).start < sorted[j].placement(other).start })
-	for len(sorted) > 0 {
-		row := sorted[0].placement(other).start
-		n := 1
-		for n < len(sorted) && sorted[n].placement(other).start == row {
-			n++
-		}
-		rowItems := sorted[:n]
-		sorted = sorted[n:]
-		count := 0
-		for _, it := range rowItems {
-			if it.baselineAligned() {
-				count++
-			}
-		}
-		if count <= 1 {
+// resolveItemBaselines gives the items sharing a baseline in a their shims: those of a
+// row align on the baselines of their content, laid out as wide as their columns, the
+// first-baseline group of the row they start in and the last-baseline group of the one
+// they end in; those of a column on baselines synthesized from their line-left border
+// edges.
+func (t *tree) resolveItemBaselines(a axis, items []*gridItem, tracks, other []gridTrack, inner size) {
+	type group struct {
+		line int
+		last bool
+	}
+	groups := map[group][]*gridItem{}
+	var order []group
+	for _, it := range items {
+		it.shim[a] = 0
+		if !it.baselineAlignedIn(a) {
 			continue
 		}
-		for _, it := range rowItems {
-			if !it.baselineAligned() {
-				continue
-			}
-			out := t.probeChildLayout(it.node, noSize, inner, spaces{minContentSpace, minContentSpace}, inherentSize)
-			h := out.size.h
-			it.baseline = or(childFirstBaseline(out.firstBaseline, h, it.st.Overflow.Height), h)
+		g := group{it.placement(a).start, it.lastIn(a)}
+		if g.last {
+			g.line = it.placement(a).end
 		}
-		marginBox := func(it *gridItem) float32 {
-			return or(it.baseline, 0) + resolveOrZero(it.st.Margin.Top, inner.w)
+		if groups[g] == nil {
+			order = append(order, g)
 		}
-		maxBaseline := float32(0)
-		first := true
-		for _, it := range rowItems {
-			if it.baselineAligned() {
-				if v := marginBox(it); first || v > maxBaseline {
-					maxBaseline = v
-				}
-				first = false
-			}
+		groups[g] = append(groups[g], it)
+	}
+	for _, g := range order {
+		members := groups[g]
+		if len(members) <= 1 {
+			continue
 		}
-		for _, it := range rowItems {
-			if it.baselineAligned() {
-				it.baselineShim = maxBaseline - marginBox(it)
-				it.knownCache = nil
+		far := make([]float32, len(members))
+		most := float32(0)
+		for i, it := range members {
+			it.knownCache = nil
+			if a == horizontal {
+				far[i] = t.itemInlineReach(it, g.last, inner)
+			} else {
+				far[i] = t.itemBaselineReach(it, g.last, tracks, other, inner)
 			}
+			most = fmax(most, far[i])
+		}
+		for i, it := range members {
+			it.shim[a] = most - far[i]
+			it.minContentCache.set(a, none)
+			it.maxContentCache.set(a, none)
+			it.minimumCache.set(a, none)
 		}
 	}
+}
+
+// itemInlineReach is how far the baseline of the item across its column lies from its
+// margin box's left, or from its right for its last baseline: an orthogonal flow's own,
+// any other's synthesized from its line-left border edge.
+func (t *tree) itemInlineReach(it *gridItem, last bool, inner size) float32 {
+	m := it.st.Margin
+	w, b := it.knownDimensions(noSize).w, float32(0)
+	if it.node.across {
+		out := t.probeChildLayout(it.node, size{w, none}, inner, maxContentSpaces, inherentSize)
+		w, b = out.size.w, or(out.across[0], 0)
+		if last {
+			b = or(out.across[1], b)
+		}
+	} else if last && !some(w) {
+		w = t.measureChildSize(it.node, noSize, inner, maxContentSpaces, inherentSize, horizontal, [2]bool{})
+	}
+	if !last {
+		return resolveOrZero(m.Left, inner.w) + b
+	}
+	return w - b + resolveOrZero(m.Right, inner.w)
+}
+
+// itemBaselineReach is how far the item's first baseline lies from its margin box's top,
+// or its last from its margin box's bottom, laid out as wide as its columns.
+func (t *tree) itemBaselineReach(it *gridItem, last bool, rows, columns []gridTrack, inner size) float32 {
+	area := it.gridAreaSize(vertical, rows, columns, inner,
+		func(tr *gridTrack, _ float32) float32 { return tr.baseSize })
+	known := it.knownDimensions(size{area.w, none})
+	avail := spaces{maxContentSpace, maxContentSpace}
+	if some(area.w) {
+		avail.w = def(fmax(area.w-it.marginSums(area.w).w, 0))
+	}
+	out := t.probeChildLayout(it.node, size{known.w, none}, inner, avail, inherentSize)
+	h := out.size.h
+	m := it.st.Margin
+	if last {
+		b := or(childLastAlignedBaseline(out, h, it.st.Overflow.Height), t.synthesizedBaseline(h, it.node.parent))
+		return h - b + resolveOrZero(m.Bottom, inner.w)
+	}
+	return or(childFirstBaseline(out.firstBaseline, h, it.st.Overflow.Height), t.synthesizedBaseline(h, it.node.parent)) +
+		resolveOrZero(m.Top, inner.w)
 }
 
 func flushBaseIncreases(tracks []gridTrack) {

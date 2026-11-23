@@ -171,7 +171,9 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		innerH := outerH - rInset.vertical()
 		contentH := res.height - rInset.vertical()
 		free := innerH - contentH
-		k := applyAlignmentFallback(free, 1, align(alignContent))
+		a := align(alignContent)
+		a.safe = !a.unsafe
+		k := applyAlignmentFallback(free, 1, a)
 		offset := computeAlignmentOffset(free, 1, 0, k, false, true) + n.lowered
 		if some(res.firstBaseline) {
 			res.firstBaseline += offset
@@ -315,7 +317,7 @@ func staticFromAlignment(a alignment, area span) staticPosition {
 		switch k {
 		case style.AlignCenter, style.AlignAnchorCenter:
 			return edgeCenter
-		case style.AlignEnd, style.AlignFlexEnd:
+		case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 			return edgeEnd
 		// they sit at the start
 		case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
@@ -783,16 +785,21 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				start, free = avoid.x-resolved.l, avoidW-finalSize.w
 			}
 			off := float32(0)
-			switch justify {
+			pos := justify.Position()
+			if justify.Safe() && free < 0 {
+				pos = style.AlignStart
+			}
+			switch pos {
 			case style.AlignCenter, style.AlignAnchorCenter:
 				off = free / 2
 			case style.AlignEnd, style.AlignFlexEnd:
 				off = free
 			// they stay at the start
 			case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
-				style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround, style.AlignSpaceEvenly:
+				style.AlignBaseline, style.AlignLastBaseline, style.AlignSpaceBetween, style.AlignSpaceAround,
+				style.AlignSpaceEvenly:
 			}
-			if st.Dir == style.RTL && justify != style.AlignCenter {
+			if st.Dir == style.RTL && pos != style.AlignCenter {
 				off = free - off
 			}
 			loc.x = start + nonAuto.l + insetOffset.x + off

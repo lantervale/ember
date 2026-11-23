@@ -315,9 +315,7 @@ func (t *tree) hoist(s *gridItem, a axis, gap, parentGap, basis float32, out []*
 		default:
 			it.setPlacement(o, lineSpan{s.placement(o).start + l.start, s.placement(o).start + l.end})
 		}
-		if it.alignSelf == style.AlignBaseline {
-			it.alignSelf = style.AlignStart
-		}
+		it.alignSelf, it.justifySelf = baselineFallback(it.alignSelf), baselineFallback(it.justifySelf)
 		if it.subgrid[a] {
 			out = t.hoist(it, a, gap, own, basis, out)
 			continue
