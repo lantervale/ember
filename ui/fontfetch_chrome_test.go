@@ -15,6 +15,7 @@ import (
 	"golang.org/x/image/font/gofont/gomono"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/varfont/varfonttest"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
 )
@@ -23,7 +24,8 @@ import (
 // readers and Go's fonts.
 func foundry(t *testing.T) ui.FontFetcher {
 	t.Helper()
-	files := map[string][]byte{"heavy.ttf": gobold.TTF, "mono.ttf": gomono.TTF}
+	files := map[string][]byte{"heavy.ttf": gobold.TTF, "mono.ttf": gomono.TTF, "weighty.ttf": varfonttest.Weighty(),
+		"weighty-phantom.ttf": varfonttest.Build(varfonttest.Options{NoHVAR: true})}
 	for _, name := range []string{"go-regular-latin.woff2", "go-regular-latin.woff", "go-icons.woff2"} {
 		b, err := os.ReadFile(filepath.Join("internal", "woff", "testdata", name))
 		require.NoError(t, err)
@@ -32,6 +34,10 @@ func foundry(t *testing.T) ui.FontFetcher {
 	kerned, err := os.ReadFile(filepath.Join("..", "internal", "draw", "testdata", "go-kerned.ttf"))
 	require.NoError(t, err)
 	files["kerned.ttf"] = kerned
+	featured, err := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", "go-features.ttf"))
+	require.NoError(t, err)
+	files["features.ttf"] = featured
+	files["features-variable.ttf"] = varfonttest.Build(varfonttest.Options{Source: featured})
 	return func(url, _ string) ([]byte, error) {
 		if b, ok := files[url]; ok {
 			return b, nil

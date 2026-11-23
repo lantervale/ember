@@ -65,7 +65,7 @@ func TestParseWarnings(t *testing.T) {
 		{"p { display: -webkit-flex }", `t.css:1:14: display: expected block, inline, inline-block, flex, ` +
 			`inline-flex, grid, inline-grid, none, contents, list-item, flow-root, table, inline-table, table-row, ` +
 			`table-cell, table-row-group, table-header-group, table-footer-group, table-column, ` +
-			`table-column-group, table-caption, found "-webkit-flex"`},
+			`table-column-group, table-caption, -webkit-box, -webkit-inline-box, found "-webkit-flex"`},
 		{"p::-webkit-scrollbar { color: #f00 }",
 			`t.css:1:4: the vendor-prefixed pseudo-element ::-webkit-scrollbar is not supported; rule dropped`},
 		{"a:-webkit-any-link { color: #f00 }",

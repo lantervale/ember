@@ -42,6 +42,7 @@ static void emberWatchPreferences(void) {
 		NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 		[center addObserverForName:NSCurrentLocaleDidChangeNotification object:nil queue:nil usingBlock:changed];
 		[center addObserverForName:NSApplicationDidBecomeActiveNotification object:nil queue:nil usingBlock:changed];
+		[center addObserverForName:NSSystemColorsDidChangeNotification object:nil queue:nil usingBlock:changed];
 		[[[NSWorkspace sharedWorkspace] notificationCenter]
 			addObserverForName:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil queue:nil
 			usingBlock:changed];
@@ -52,6 +53,34 @@ static void emberWatchPreferences(void) {
 static int emberMotion(void) {
 	@autoreleasepool {
 		return [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion] ? 2 : 1;
+	}
+}
+
+// 1 no preference, 2 more, as platform.Contrast: Accessibility's Increase
+// contrast. macOS forces no colours.
+static int emberContrast(void) {
+	@autoreleasepool {
+		return [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldIncreaseContrast] ? 2 : 1;
+	}
+}
+
+// emberSelectionColors writes the colours AppKit selects text in, focused
+// then not, as sRGB 0x1RRGGBB, 0 for one it can't say, resolved in the
+// light appearance as Chrome resolves them whatever the scheme.
+static void emberSelectionColors(unsigned int *focused, unsigned int *unfocused) {
+	@autoreleasepool {
+		unsigned int (^rgb)(NSColor *) = ^unsigned int(NSColor *color) {
+			NSColor *c = [color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
+			if (!c) {
+				return 0;
+			}
+			return 1u << 24 | (unsigned int)lround([c redComponent] * 255) << 16 |
+				(unsigned int)lround([c greenComponent] * 255) << 8 | (unsigned int)lround([c blueComponent] * 255);
+		};
+		[[NSAppearance appearanceNamed:NSAppearanceNameAqua] performAsCurrentDrawingAppearance:^{
+			*focused = rgb([NSColor selectedTextBackgroundColor]);
+			*unfocused = rgb([NSColor unemphasizedSelectedTextBackgroundColor]);
+		}];
 	}
 }
 
@@ -91,19 +120,46 @@ import "C"
 
 import (
 	"strings"
-	"time"
 	"unsafe"
 
+	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/internal/sysprefs"
 	"github.com/lantervale/ember/platform"
 )
 
-// watchPreferences has AppKit note when the appearance, the reduced
-// motion setting or the languages may have changed.
+// watchPreferences has AppKit note when the appearance, the display's
+// accessibility options, the system's colours or the languages may have
+// changed.
 func watchPreferences() { C.emberWatchPreferences() }
 
 // systemChanged reports, once, that the preferences are to read again: at
 // the start, then when AppKit said so.
-func systemChanged(*time.Time) bool { return C.emberTakePrefsChanged() != 0 }
+func systemChanged(bool) bool { return C.emberTakePrefsChanged() != 0 }
+
+func systemPreferences() sysprefs.System {
+	return sysprefs.System{
+		Appearance: systemAppearance(), Motion: systemMotion(), Contrast: systemContrast(),
+		ForcedColors: platform.ForcedColorsNone, Highlight: systemHighlight(), Languages: systemLanguages(),
+	}
+}
+
+// systemContrast is whether Accessibility's Display asks for more
+// contrast.
+func systemContrast() platform.Contrast { return platform.Contrast(C.emberContrast()) }
+
+// systemHighlight is the colours AppKit selects text in, the text keeping
+// its own, as Chrome keeps it on macOS.
+func systemHighlight() platform.Highlight {
+	var focused, unfocused C.uint
+	C.emberSelectionColors(&focused, &unfocused)
+	rgb := func(v C.uint) color.Color {
+		if v>>24 == 0 {
+			return color.Color{}
+		}
+		return color.RGB8(uint8(v>>16), uint8(v>>8), uint8(v))
+	}
+	return platform.Highlight{Background: rgb(focused), Inactive: rgb(unfocused)}
+}
 
 // systemAppearance is the app's effective appearance, the system's unless
 // the program gave the app one of its own.

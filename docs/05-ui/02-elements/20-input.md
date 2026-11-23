@@ -16,7 +16,7 @@ ui.Input(ui.Type("radio"), ui.Attr("name", "camera"), ui.Value("follow"), ui.Che
 | `number` | number characters; Up and Down step it |
 | `range` | a slider, in the middle of its range without a value |
 | `checkbox` | checked or not; with `switch`, drawn as a switch |
-| `radio` | one checked among those of its `name`; arrows move the check, and the group is one Tab stop |
+| `radio` | one checked among those of its `name` in its form (the `form` above it, or the one its `form` attribute names), as in Chrome; arrows move the check, and the group is one Tab stop |
 | `search` | text; Escape or the pad's East clears it |
 | `password` | text shown as dots |
 | `hidden` | a value a form carries: no box, no focus |
@@ -30,7 +30,7 @@ No spin buttons on `number`, no clear button on `search`: `kit.NumberField` and 
 | `ui.Value(v)` | its starting value; `doc.Value(n)` reads it now, `doc.SetValue(n, v)` sets it (a focused text field takes it once changed or submitted, not while typed in) |
 | `ui.Placeholder(s)` | a text field's text while empty |
 | `ui.Checked(on)` | a checkbox or radio starts checked; `doc.Checked(n)`, `doc.SetChecked(n, on)` (checking a radio unchecks its group) |
-| `name` | a radio's group |
+| `name` | a radio's group, within its form |
 | `switch` | a checkbox drawn as a switch |
 | `min`, `max`, `step` | a range's (0, 100, 1) and a number's bounds and step; `step="any"` for a free number |
 | `readonly`, `maxlength` | a text field kept as is, or held to that many characters |

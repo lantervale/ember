@@ -45,6 +45,16 @@ var compared = map[string]func(s *style.Computed) string{
 	},
 	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
 	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
+	"font-variation-settings": func(s *style.Computed) string {
+		if len(s.Font.Variations) == 0 {
+			return "normal"
+		}
+		parts := make([]string, len(s.Font.Variations))
+		for i, v := range s.Font.Variations {
+			parts[i] = fmt.Sprintf("%q %s", v.Tag, num(v.Value))
+		}
+		return strings.Join(parts, ", ")
+	},
 	"text-decoration-skip-ink": func(s *style.Computed) string {
 		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
 	},
@@ -69,6 +79,10 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-variant-east-asian": func(s *style.Computed) string { return orNormal(s.FontVariant.EastAsian) },
 	"font-variant-alternates": func(s *style.Computed) string { return orNormal(s.FontVariant.Alternates) },
 	"font-variant-position":   func(s *style.Computed) string { return orNormal(s.FontVariant.Position) },
+	"font-feature-settings":   func(s *style.Computed) string { return orNormal(s.FeatureSettings) },
+	"font-kerning": func(s *style.Computed) string {
+		return [...]string{"auto", "normal", "none"}[s.Kerning]
+	},
 	"line-height": func(s *style.Computed) string {
 		switch {
 		case s.LineHeight.Normal:
@@ -391,6 +405,8 @@ func lengthCSS(l style.Length) string {
 		return "max-content"
 	case style.None:
 		return "none"
+	case style.Stretch:
+		return "stretch"
 	case style.Fr:
 		return num(l.Px) + "fr"
 	case style.FitContent:
@@ -650,6 +666,9 @@ var everything = func() map[string]func(s *style.Computed) string {
 		return rgb(s.AccentColor)
 	}
 	m["caret-color"] = func(s *style.Computed) string { return rgb(s.CaretColor) }
+	m["-webkit-text-stroke-width"] = func(s *style.Computed) string { return px(s.TextStroke.Width) }
+	m["-webkit-text-stroke-color"] = func(s *style.Computed) string { return rgb(s.TextStroke.Color) }
+	m["-webkit-text-fill-color"] = func(s *style.Computed) string { return rgb(s.Fill()) }
 	m["object-fit"] = func(s *style.Computed) string {
 		return []string{"fill", "contain", "cover", "none", "scale-down"}[s.ObjectFit]
 	}
@@ -761,7 +780,7 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   font-family: "Go Mono", monospace; font-size: larger; font-weight: 300; font-style: italic;
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
   white-space: pre-wrap; overflow-wrap: break-word; text-overflow: ellipsis; visibility: hidden; cursor: grab;
-  text-transform: capitalize; font-stretch: semi-condensed;
+  text-transform: capitalize; font-stretch: semi-condensed; font-variation-settings: "wght" 650, 'wdth' 75.5;
 }
 .l {
   background-color: rgb(1 2 3 / 0.25); border: 2px dashed steelblue; border-left: 4px dotted;
@@ -776,7 +795,9 @@ func TestComputedValuesMatchChrome(t *testing.T) {
 .x3 { transform: matrix(1, 0.5, -0.5, 1, 7, 8) rotate(0.25turn); transform-origin: 3px 4px; }
 .ts {
   text-shadow: 1px 2px 3px #000, 0 0 4px; image-rendering: pixelated; accent-color: #ffce76; caret-color: currentColor;
+  -webkit-text-stroke: 2.25px rgb(0 0 200 / 0.5); -webkit-text-fill-color: transparent;
 }
+.ts span { -webkit-text-stroke: currentColor 1.5px; -webkit-text-fill-color: currentColor; }
 .f1 { object-fit: cover; object-position: right 4px bottom 10%; }
 .f2 { object-fit: scale-down; object-position: left; }
 .l2 { border-width: thin medium thick 0; border-style: solid; transition: none; flex: none; margin: 0 auto; }
@@ -1010,6 +1031,61 @@ div { width: 100px; height: 10px; position: relative; color: #000; background-co
 			matchChromeShown(t, d, props, 2, script, then, func(n *dom.Node) *style.Computed { return dom.Data(n).Shown })
 		})
 	}
+}
+
+// TestLogicalAnimationsMatchChrome has keyframes and transitions of
+// logical properties run on elements of either direction, which move
+// their right side under rtl.
+func TestLogicalAnimationsMatchChrome(t *testing.T) {
+	src := `
+@keyframes in { from { margin-inline-start: 40px; padding-inline-end: 0 }
+  to { margin-inline-start: 0; padding-inline-end: 20px } }
+@keyframes ink { to { border-inline-start-color: #f00; inset-inline-end: 30px } }
+@keyframes both { to { margin-inline: 10px 50px } }
+div { width: 100px; height: 10px; position: relative; left: 0; right: 0; border: 2px solid #000; margin: 0;
+  padding: 0; }
+.rtl { direction: rtl; }
+.a { animation: in 1s linear }
+.b { animation: ink 1s linear }
+.c { animation: both 1s linear }
+.t { transition: margin-inline-start 1s linear, padding-inline 1s linear, border-inline-end-color 1s linear; }
+.t.on { margin-inline-start: 60px; padding-left: 20px; padding-right: 30px; border-right-color: #0f0; }
+`
+	props := map[string]func(*style.Computed) string{
+		"margin-left":        everything["margin-left"],
+		"margin-right":       compared["margin-right"],
+		"padding-left":       compared["padding-left"],
+		"padding-right":      everything["padding-right"],
+		"left":               func(s *style.Computed) string { return lengthCSS(s.Inset.Left) },
+		"right":              func(s *style.Computed) string { return lengthCSS(s.Inset.Right) },
+		"border-left-color":  compared["border-left-color"],
+		"border-right-color": func(s *style.Computed) string { return rgb(s.BorderColor.Right) },
+	}
+	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"a.css": {Data: []byte(src)}}, "a.css"))
+	for _, dir := range []string{"ltr", "rtl"} {
+		for _, c := range []string{"a", "b", "c", "t"} {
+			d.Body().Append(ui.Div(ui.Class(c, dir)))
+		}
+		d.Body().Append(ui.Div(ui.Class("rtl"), ui.Div(ui.Class("t", dir))))
+	}
+	tr := css.NewTransitions()
+	tr.Compute(d.HTML(), d.Sheets())
+	script := `els.forEach(e => getComputedStyle(e).marginLeft);
+	document.querySelectorAll(".t").forEach(e => e.classList.add("on"));
+	els.forEach(e => getComputedStyle(e).marginLeft);
+	document.getAnimations().forEach(a => { a.pause(); a.currentTime = 350; });`
+	then := func() {
+		d.HTML().Walk(func(n *dom.Node) bool {
+			if n.HasClass("t") {
+				n.AddClass("on")
+			}
+			return true
+		})
+		tr.Compute(d.HTML(), d.Sheets())
+		tr.Step(0.35)
+		tr.Compute(d.HTML(), d.Sheets())
+	}
+	matchChromeShown(t, d, props, 2, script, then, func(n *dom.Node) *style.Computed { return dom.Data(n).Shown })
 }
 
 // positionCSS is a background-position axis as Chrome computes it: an offset from the end

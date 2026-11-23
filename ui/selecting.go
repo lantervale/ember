@@ -227,9 +227,9 @@ func (d *Document) scrollSelection(at geom.Vec2) {
 			continue
 		}
 		off := bars.Scroll
-		off.X = min(max(off.X+dragSpeed(past.X)*dt, 0), max(bars.Content.X-bars.View.W, 0))
-		off.Y = min(max(off.Y+dragSpeed(past.Y)*dt, 0), max(bars.Content.Y-bars.View.H, 0))
-		d.setScroll(b, off)
+		off.X += dragSpeed(past.X) * dt
+		off.Y += dragSpeed(past.Y) * dt
+		d.setScroll(b, bars.Clamp(off))
 		return
 	}
 }
@@ -518,7 +518,7 @@ func (d *Document) revealRect(b *box.Box, r geom.Rect) {
 		v := bars.View
 		off := bars.Scroll
 		off.Y += nearest(r.Y, r.H, v.Y, v.H)
-		off.Y = min(max(off.Y, 0), max(bars.Content.Y-v.H, 0))
+		off = bars.Clamp(off)
 		if off != bars.Scroll {
 			d.setScroll(s, off)
 			r.Y -= off.Y - bars.Scroll.Y

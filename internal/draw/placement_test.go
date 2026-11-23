@@ -106,9 +106,9 @@ func TestTheBaselineSnapsToTheDeviceGrid(t *testing.T) {
 	assert.Equal(t, rd[0].Y, rc[0].Y, "20.2 rounds to the nearest device pixel, 20")
 }
 
-func TestAFontWithoutASCIIKerningSkipsIt(t *testing.T) {
-	assert.Nil(t, asciiKerning(Regular.font), "Go has no kerned pairs: no table, no lookups")
+func TestAFontWithoutLayoutTablesIsNotShaped(t *testing.T) {
 	f := Regular.Size(16)
+	assert.Empty(t, f.shapedRuns, "Go has no kern, GSUB or GPOS: nothing to shape")
 	assert.InDelta(t, f.Measure("A").X+f.Measure("V").X, f.Measure("AV").X, 1e-4)
 }
 

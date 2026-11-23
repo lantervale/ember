@@ -270,6 +270,18 @@ type node struct {
 	// node's place in the flow of the multi-column container it is in, nil outside one.
 	columns *columnSet
 	frag    *flowFrag
+	// clamp is what a line clamp left of the node's lines in its last layout, and
+	// discarded is set when the node follows the last line a line-clamp shows.
+	clamp     clampOut
+	discarded bool
+}
+
+// clampOut is what a line clamp leaves of a node's lines: how many it shows, 0 for all,
+// whether the last of them ends in an ellipsis, and whether those after are not drawn.
+type clampOut struct {
+	shown    int
+	ellipsis bool
+	hides    bool
 }
 
 func (n *node) context() context {
@@ -609,14 +621,11 @@ func tableParts(items []item, i int) ([]*dom.Node, int) {
 	return parts[:kept], end
 }
 
-// buildInline gives n inline content alone: its items as its own lines, and nodes for
-// those out of the flow or not shown.
+// buildInline gives n inline content alone: its items as its own lines, nodes for those
+// not shown, and, as its lines are gathered, for those out of the flow.
 func (t *tree) buildInline(n *node, items []item) {
 	for _, it := range items {
-		if it.element == nil {
-			continue
-		}
-		if st := styleOf(it.element); outOfFlow(st.Position) || st.Display == style.DisplayNone {
+		if it.element != nil && styleOf(it.element).Display == style.DisplayNone {
 			n.kids = append(n.kids, t.build(it.element, n))
 		}
 	}
@@ -954,9 +963,11 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Border = box.Edges{Top: f.border.t, Right: f.border.r, Bottom: f.border.b, Left: f.border.l}
 	b.Padding = box.Edges{Top: f.padding.t, Right: f.padding.r, Bottom: f.padding.b, Left: f.padding.l}
 	b.Content = geom.Vec2{X: f.overflow.rect.r - f.overflow.rect.l, Y: f.overflow.rect.b - f.overflow.rect.t}
+	b.ScrollStart = geom.Vec2{X: fmin(f.overflow.rect.l, 0), Y: fmin(f.overflow.rect.t, 0)}
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w, Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
+	b.Discarded = n.discarded
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
 	}

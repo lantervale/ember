@@ -409,7 +409,11 @@ func lineBox(e entry, l textedit.Layout, i int) geom.Rect {
 			return geom.Rect{X: origin.X + c.Pos.X + f.X, Y: origin.Y + c.Pos.Y + f.Y, W: f.W, H: f.H}
 		}
 		if i < len(c.Lines) {
+			// a one-line field's fragments, as bidi ordered them, from the leftmost
 			f := c.Lines[i].Rect
+			for _, g := range c.Lines {
+				f.X = min(f.X, g.Rect.X)
+			}
 			return geom.Rect{X: origin.X + c.Pos.X + f.X, Y: origin.Y + c.Pos.Y + f.Y, W: f.W, H: f.H}
 		}
 	}
@@ -440,6 +444,7 @@ func (p *painter) selection(e entry, alpha float32) {
 		a, z := max(from, start), min(to, end)
 		lb := lineBox(e, l, line)
 		x0, x1 := lb.X+l.X(a), lb.X+l.X(z)
+		x0, x1 = min(x0, x1), max(x0, x1)
 		if x1 > x0 {
 			p.s.Rect(geom.Rect{X: x0, Y: lb.Y, W: x1 - x0, H: lb.H}, fade(c, alpha))
 		}
