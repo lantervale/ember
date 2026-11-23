@@ -3,6 +3,7 @@ package fonts
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
@@ -58,7 +59,8 @@ type shapedRun struct {
 // at of a variable font (nil for its default): shaped with the
 // features, in script, when its layout does anything to them, else the
 // sum of their advances. GPOS's values stay the default instance's.
-func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph, at varfont.Coords) float32 {
+func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph, at varfont.Coords,
+	ctx context) float32 {
 	p := c.layout().Plan(script, c.joined(features))
 	if !p.Touches(run) {
 		if at != nil {
@@ -81,10 +83,14 @@ func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Gly
 	for _, g := range run {
 		ids = append(ids, byte(g.ID>>8), byte(g.ID&0xff))
 	}
+	if !p.Joins() {
+		ctx = context{}
+	}
+	ids = append(append(append(append(ids, 0xff), ctx.before...), 0xff), ctx.after...)
 	s.ids = ids
 	r, ok := s.shapedRuns[p][string(ids)]
 	if !ok {
-		for _, g := range p.Shape(run) {
+		for _, g := range p.ShapeIn(run, ctx.before, ctx.after) {
 			r.width += g.Advance
 			r.glyphs = append(r.glyphs, g.ID)
 		}
@@ -104,6 +110,31 @@ func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Gly
 		}
 	}
 	return w
+}
+
+// context is the text before a run of glyphs and after it, as much as
+// shaping reads.
+type context struct{ before, after string }
+
+// contextBytes is more than the characters of context shaping reads.
+const contextBytes = 32
+
+// around is the context of run, glyphs of text clustered by their bytes,
+// in text between before and after.
+func around(text string, run []shape.Glyph, before, after string) context {
+	if len(run) == 0 || before == "" && after == "" && len(run) == utf8.RuneCountInString(text) {
+		return context{}
+	}
+	last := run[len(run)-1]
+	start, end := int(run[0].Cluster), int(last.Cluster)+utf8.RuneLen(last.Char)
+	b, a := before+text[:start], text[end:]+after
+	if len(b) > contextBytes {
+		b = b[len(b)-contextBytes:]
+	}
+	if len(a) > contextBytes {
+		a = a[:contextBytes]
+	}
+	return context{strings.ToValidUTF8(b, ""), strings.ToValidUTF8(a, "")}
 }
 
 // SpaceTies reports whether f's face shapes a space with the words on

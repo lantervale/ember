@@ -680,14 +680,15 @@ func (ch *Chain) first() *Face {
 
 // chainAdvance is text's width in f through ch: each character in the
 // first face that draws it, shaped with those beside it of one face.
-func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
+func (s *Set) chainAdvance(ch *Chain, f style.Font, text, before, after string) float32 {
 	var w float32
 	var of *Face
 	script := shape.Script(text)
 	run := s.run[:0]
 	flush := func() {
 		if of != nil && len(run) > 0 {
-			w += s.shaped(of, script, f.Features, run, ch.Instance(of)) * f.Size * of.Look.adjust() / of.upem
+			w += s.shaped(of, script, f.Features, run, ch.Instance(of), around(text, run, before, after)) *
+				f.Size * of.Look.adjust() / of.upem
 		}
 		run = run[:0]
 	}
@@ -697,6 +698,10 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 			script = sc
 		}
 		c, g, waiting := ch.glyph(s, r)
+		if c == nil && of != nil && shape.VariationSelector(r) {
+			// Shaped with its character, whose face may draw the two as one.
+			c = of
+		}
 		if c == nil {
 			if waiting || ch.base == nil {
 				flush()

@@ -57,6 +57,10 @@ type Fragment struct {
 	// nil where the run's own draws it. Only a run's first fragments
 	// have one.
 	Style *style.Computed
+	// Before and After are the text of the paragraph round Text, which it
+	// is shaped between, where a letter of Text may join theirs; empty
+	// elsewhere.
+	Before, After string
 }
 
 // Shown is f's text as it is drawn from the left: right to left text reversed, by
@@ -258,6 +262,14 @@ type Fonts interface {
 	Metrics(f style.Font) Metrics
 	// Advance is the width of text on one line, letter spacing apart.
 	Advance(f style.Font, text string) float32
+}
+
+// ContextFonts is Fonts that shapes text with the text round it, as
+// HarfBuzz's buffer context: AdvanceIn is Advance for text between
+// before and after, whose letters it may join (an Arabic word cut by an
+// element).
+type ContextFonts interface {
+	AdvanceIn(f style.Font, text, before, after string) float32
 }
 
 // InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the

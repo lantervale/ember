@@ -208,6 +208,9 @@ type painter struct {
 	graph   func(id string, size geom.Vec2) *fx.Graph
 	control func(*dom.Node) any
 	sel     Selection
+	// around is the text round the fragment drawn, which its words are
+	// shaped between (box.Fragment's Before and After).
+	around [2]string
 	// inactive and system are Frame's Inactive and Highlight.
 	inactive bool
 	system   Highlight

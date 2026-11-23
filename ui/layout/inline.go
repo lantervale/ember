@@ -12,6 +12,7 @@ import (
 	"github.com/rivo/uniseg"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/internal/bidi"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -503,6 +504,7 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 		afterSpace = c.cutRun(fonts, i, r, soft[i], afterSpace, lv)
 		c.closeSpans(i)
 	}
+	c.joinRuns(fonts)
 	c.openSpans(len(c.runs))
 	c.anchorsAt(len(c.runs))
 	if c.reorders {
@@ -511,6 +513,69 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 	if c.line != nil && !c.firstOn {
 		c.cutFirst(fonts)
 	}
+}
+
+// joinRuns measures again, shaped between the text round them, the
+// words that start or end a run beside another run's letters: an Arabic
+// word an element cuts joins across it, as Chrome shapes it with its
+// paragraph's text as context.
+func (c *inlineContent) joinRuns(fonts box.Fonts) {
+	cf, ok := fonts.(box.ContextFonts)
+	if !ok {
+		return
+	}
+	for k := range c.pieces {
+		p := &c.pieces[k]
+		if p.kind != word {
+			continue
+		}
+		r := c.runs[p.run]
+		end := p.at + int32(utf8.RuneCountInString(p.text)) //nolint:gosec // a text node's length
+		if p.at > 0 && int(end) < utf8.RuneCountInString(r.text) {
+			continue
+		}
+		before, after := c.around(p.run, p.at, end)
+		if !shape.JoinsAcross(before, after) {
+			continue
+		}
+		text := strings.ReplaceAll(p.text, zeroWidthSpace, "")
+		p.width += cf.AdvanceIn(r.st.Font, text, before, after) - fonts.Advance(r.st.Font, text)
+	}
+}
+
+// contextRunes is how many characters of the text on either side of a
+// run its shaping reads.
+const contextRunes = 5
+
+// around is the text of the content before the characters from from to
+// to of run i and after them, as much as shaping reads: an atomic inline
+// stands as an object replacement character, which joins nothing.
+func (c *inlineContent) around(i int, from, to int32) (string, string) {
+	var before, after []rune
+	for k := i; k >= 0 && len(before) < contextRunes; k-- {
+		rs := []rune(c.runs[k].text)
+		if c.runs[k].atomic != nil {
+			rs = []rune{'\uFFFC'}
+		}
+		if k == i {
+			rs = rs[:min(int(from), len(rs))]
+		}
+		for j := len(rs) - 1; j >= 0 && len(before) < contextRunes; j-- {
+			before = append(before, rs[j])
+		}
+	}
+	for k := i; k < len(c.runs) && len(after) < contextRunes; k++ {
+		rs := []rune(c.runs[k].text)
+		if c.runs[k].atomic != nil {
+			rs = []rune{'\uFFFC'}
+		}
+		if k == i {
+			rs = rs[min(int(to), len(rs)):]
+		}
+		after = append(after, rs[:min(len(rs), contextRunes-len(after))]...)
+	}
+	slices.Reverse(before)
+	return string(before), string(after)
 }
 
 // cutFirst cuts the runs again as the first line has them, into firstPieces: the same
@@ -2307,6 +2372,11 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		r := geom.Rect{X: start, Y: y, W: max(end-start, 0), H: lh}
 		frag := t.fragment(c.runs[run].st, text, r, y+lb+c.runs[run].shift, cutStart, cut[1] && i == len(pieces))
 		frag.Start, frag.RTL, frag.Unspaced = from+c.runs[run].skip, rtl, unspaced
+		//nolint:gosec // a text node's length
+		if before, after := c.around(run, from, from+int32(utf8.RuneCountInString(text))); shape.JoinsAcross(before,
+			after) {
+			frag.Before, frag.After = before, after
+		}
 		if c.firstOn {
 			frag.Style = c.runs[run].st
 		}

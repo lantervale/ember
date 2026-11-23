@@ -79,3 +79,20 @@ func TestArabicIsJoinedWhetherDrawnRightToLeftOrMeasured(t *testing.T) {
 	assert.InDelta(t, 1399+1099+1399, joined.X, 0.5, "beh.init, teh.medi, beh.fina")
 	assert.Equal(t, joined, Measure("بتب", Typeface(face), FontSize(2048), RightToLeft()))
 }
+
+func TestATextBetweenOthersJoinsWithThem(t *testing.T) {
+	face, err := LoadFace(os.DirFS("../internal/shape/testdata"), "go-arabic.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := NewText("ت", Typeface(face), Between("ب", "ب"))
+	before, after := text.Between()
+	assert.Equal(t, [2]string{"ب", "ب"}, [2]string{before, after})
+	text.SetBetween("", "")
+	before, after = text.Between()
+	assert.Empty(t, before+after)
+	alone := Measure("ت", Typeface(face), FontSize(2048))
+	medial := Measure("ت", Typeface(face), FontSize(2048), Between("ب", "ب"))
+	assert.InDelta(t, 1099, medial.X, 0.5, "teh.medi, as in بتب")
+	assert.NotEqual(t, alone.X, medial.X)
+}

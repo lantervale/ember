@@ -9,6 +9,7 @@
 package shape
 
 import (
+	"slices"
 	"sync"
 
 	"golang.org/x/image/font/sfnt"
@@ -42,6 +43,8 @@ type Font struct {
 	glyphClasses data
 	markClasses  data
 	markSets     data
+	// uvs is cmap's subtable of variation sequences, nil for none.
+	uvs data
 	// kernTable is whether src has a kern table and GPOS no kern
 	// feature, so kerning comes from the old table, as HarfBuzz falls
 	// back to it.
@@ -106,17 +109,39 @@ func ParseFont(src *sfnt.Font, file []byte, index int) *Font {
 		}
 		tables[Tag(d.u32(rec))] = d[off : off+n]
 	}
-	if gdef := tables[MakeTag("GDEF")]; gdef != nil {
+	gdef := tables[MakeTag("GDEF")]
+	if slices.Contains(brokenGDEFs, [3]int{len(gdef), len(tables[MakeTag("GSUB")]), len(tables[MakeTag("GPOS")])}) {
+		gdef = nil
+	}
+	if gdef != nil {
 		f.glyphClasses = gdef.sub(4)
 		f.markClasses = gdef.sub(10)
 		if gdef.u32(0) >= 0x00010002 {
 			f.markSets = gdef.sub(12)
 		}
 	}
+	f.uvs = variationSequences(tables[MakeTag("cmap")])
 	f.gsub = newLayout(tables[MakeTag("GSUB")], false)
 	f.gpos = newLayout(tables[MakeTag("GPOS")], true)
 	f.kernTable = tables[MakeTag("kern")] != nil && !f.gpos.lists(kern)
 	return f
+}
+
+// brokenGDEFs are the lengths of the GDEF, GSUB and GPOS tables of the
+// fonts whose GDEF HarfBuzz leaves out, as it calls spacing glyphs
+// marks: versions of Tahoma, Times New Roman Italic and Courier New
+// (the Mac's among them), Microsoft Himalaya, Cantarell and Padauk.
+//
+//nolint:gochecknoglobals // HarfBuzz's list
+var brokenGDEFs = [][3]int{
+	{442, 2874, 42038}, {430, 2874, 40662}, {442, 2874, 39116}, {430, 2874, 39374}, {490, 3046, 41638},
+	{478, 3046, 41902}, {898, 12554, 46470}, {910, 12566, 47732}, {928, 23298, 59332}, {940, 23310, 60732},
+	{964, 23836, 60072}, {976, 23832, 61456}, {994, 24474, 60336}, {1006, 24470, 61740}, {1006, 24576, 61346},
+	{1018, 24572, 62828}, {1006, 24576, 61352}, {1018, 24572, 62834}, {832, 7324, 47162}, {844, 7302, 45474},
+	{180, 13054, 7254}, {192, 12638, 7254}, {192, 12690, 7254}, {188, 248, 3852}, {188, 264, 3426},
+	{1058, 47032, 11818}, {1046, 47030, 12600}, {1058, 71796, 16770}, {1046, 71790, 17862}, {1046, 71788, 17112},
+	{1058, 71794, 17514}, {1330, 109904, 57938}, {1330, 109904, 58972}, {1004, 59092, 14836}, {588, 5078, 14418},
+	{588, 5078, 14238}, {894, 17162, 33960}, {894, 17154, 34472}, {816, 7868, 17052}, {816, 7868, 17138},
 }
 
 // Glyph classes GDEF gives.

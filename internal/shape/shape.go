@@ -3,6 +3,7 @@ package shape
 import (
 	"slices"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
@@ -65,16 +66,18 @@ const maxDepth = 6
 // Touches reports whether p may do anything to run but give its glyphs
 // their advances: one of its lookups may start at one of them, the
 // font's old kern table kerns it, one is a mark whose advance shaping
-// takes away or a character the font draws from others, or the run is
-// of a script whose characters its shaper reorders.
+// takes away, a character the font draws from others or a variation
+// selector it may draw with its base, or the run is of a script whose
+// characters its shaper reorders or composes.
 func (p *Plan) Touches(run []Glyph) bool {
-	if len(run) > 1 && p.KernTable() || p.shaper >= indicShaper {
+	if len(run) > 1 && p.KernTable() || p.preprocesses() {
 		return true
 	}
 	fallback := p.fallbackMarks()
 	for _, g := range run {
 		if p.first.has(g.ID) || p.font.isMark(g.ID) || g.ID == 0 && g.Char != 0 ||
-			fallback && g.Char >= 0x300 && unicode.Is(unicode.Mn, g.Char) {
+			fallback && g.Char >= 0x300 && unicode.Is(unicode.Mn, g.Char) ||
+			p.shaper == hebrewShaper && isMarkChar(g.Char) || p.font.uvs != nil && VariationSelector(g.Char) {
 			return true
 		}
 	}
@@ -85,57 +88,92 @@ func (p *Plan) Touches(run []Glyph) bool {
 // their advances.
 func (p *Plan) Inert() bool {
 	return len(p.first) == 0 && !p.KernTable() && p.font.glyphClasses == nil && !p.fallbackMarks() &&
-		p.shaper < indicShaper
+		!p.preprocesses() && p.font.uvs == nil
+}
+
+// preprocesses is whether p's shaper may change its runs' characters
+// whatever the font: the syllabic shapers', Thai's sara am, Hangul's
+// jamo.
+func (p *Plan) preprocesses() bool {
+	return p.shaper >= indicShaper || p.shaper == thaiShaper || p.shaper == hangulShaper
 }
 
 // KernTable reports whether runs are kerned by the font's old kern
-// table, its GPOS having no kern feature.
-func (p *Plan) KernTable() bool { return p.kerns && p.font.kernTable && p.shaper <= arabicShaper }
+// table, its GPOS having no kern feature, as the shapers that place
+// marks a font cannot do.
+func (p *Plan) KernTable() bool {
+	return p.kerns && p.font.kernTable && p.shaper.fallbackPosition()
+}
+
+// Joins reports whether p's runs are of a script whose letters join, so
+// the text round a run shapes it (ShapeIn).
+func (p *Plan) Joins() bool { return p.joins }
 
 // RightToLeft reports whether p's runs are written right to left: Shape
 // keeps them in their order, and they are drawn from the last glyph.
 func (p *Plan) RightToLeft() bool { return p.rtl }
 
 // fallbackMarks is whether marks are placed by their combining classes,
-// the font having no GPOS to place them, as HarfBuzz's default and
-// Arabic shapers do (not its Thai and Hangul ones).
-func (p *Plan) fallbackMarks() bool {
-	return !p.positions && p.shaper <= arabicShaper && p.script != thai && p.script != lao && p.script != hang
-}
+// the font's GPOS not placing them, as HarfBuzz's default, Arabic,
+// Hebrew and Hangul shapers do.
+func (p *Plan) fallbackMarks() bool { return !p.positions && p.shaper.fallbackPosition() }
 
 // Shape substitutes and positions run, glyphs of p's font with their
 // clusters in the order of the text, and gives each its advance; run's
 // slice may be reused. A glyph 0 of a known character is one the font
 // lacks, which it may draw from the characters it decomposes to.
+func (p *Plan) Shape(run []Glyph) []Glyph { return p.ShapeIn(run, "", "") }
+
+// contextLength is how many characters of the text on either side of a
+// run its shaping reads, as HarfBuzz's buffer keeps them.
+const contextLength = 5
+
+// ShapeIn is Shape for a run between the text before it and the text
+// after it, which shapes it as HarfBuzz's buffer context does Chrome's
+// runs: a letter that joins does so with the text round it.
 //
 //nolint:funlen // HarfBuzz's steps, in their order
-func (p *Plan) Shape(run []Glyph) []Glyph {
+func (p *Plan) ShapeIn(run []Glyph, before, after string) []Glyph {
 	f := p.font
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	b := buffer{f: f, plan: p, glyphs: run, limit: maxGrowth*len(run) + 64}
+	for len(before) > 0 && len(b.before) < contextLength {
+		r, n := utf8.DecodeLastRuneInString(before)
+		b.before, before = append(b.before, r), before[:len(before)-n]
+	}
+	for _, r := range after {
+		if len(b.after) == contextLength {
+			break
+		}
+		b.after = append(b.after, r)
+	}
 	for i := range b.glyphs {
 		g := &b.glyphs[i]
 		g.mask, g.lig, g.comp, g.ligated = globalMask, 0, 0, false
 		g.props, g.syllable, g.cat, g.pos = 0, 0, 0, 0
 		g.cc = combiningClass(g.Char)
 	}
-	if len(b.glyphs) > 0 && isMarkChar(b.glyphs[0].Char) {
-		if id := f.nominal(dottedCircle); id != 0 {
-			dc := Glyph{ID: id, Char: dottedCircle, Cluster: b.glyphs[0].Cluster, mask: globalMask}
-			b.glyphs = slices.Insert(b.glyphs, 0, dc)
-		}
-	}
-	if p.shaper == indicShaper || p.shaper == useShaper {
+	switch p.shaper { //nolint:exhaustive // the shapers that do something here
+	case thaiShaper:
+		b.preprocessThai()
+	case hangulShaper:
+		b.preprocessHangul()
+	case indicShaper, useShaper:
 		b.vowelConstraints()
 	}
 	b.normalize()
 	switch p.shaper { //nolint:exhaustive // the shapers that do something here
 	case arabicShaper:
 		b.join(&p.forms)
+	case hangulShaper:
+		b.hangulMasks()
 	case indicShaper, khmerShaper, myanmarShaper:
 		b.indicCategories()
 	case useShaper:
+		if p.joins {
+			b.join(&p.forms)
+		}
 		b.useCategories()
 	}
 	if p.fallbackMarks() {
@@ -154,8 +192,7 @@ func (p *Plan) Shape(run []Glyph) []Glyph {
 	}
 	b.rtl = p.rtl
 	adjust := !p.positions && !p.rtl
-	early := p.shaper == myanmarShaper || p.shaper == useShaper
-	if early {
+	if p.shaper == myanmarShaper || p.shaper == useShaper {
 		b.zeroMarks(adjust)
 	}
 	for _, l := range p.gpos {
@@ -170,7 +207,8 @@ func (p *Plan) Shape(run []Glyph) []Glyph {
 			}
 		}
 	}
-	if p.shaper <= arabicShaper {
+	switch p.shaper { //nolint:exhaustive // the shapers that zero marks late
+	case defaultShaper, arabicShaper, thaiShaper, hebrewShaper:
 		b.zeroMarks(adjust)
 	}
 	for i := range b.glyphs {
@@ -226,6 +264,9 @@ type buffer struct {
 	// ligs is the last ligature made.
 	ligs uint8
 	rtl  bool
+	// before is the text before the run, nearest first, and after the
+	// text after it.
+	before, after []rune
 }
 
 // run applies l to every glyph of the run it may start at, left to

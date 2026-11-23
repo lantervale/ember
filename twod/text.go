@@ -42,7 +42,10 @@ type Text struct {
 	features string `node:"prop"`
 	// rightToLeft draws each line from its end (RightToLeft).
 	rightToLeft bool `node:"prop"`
-	face        *Face
+	// before and after are the text round it, which it is shaped between
+	// (Between).
+	before, after string
+	face          *Face
 	// expanded is text with its shortcodes replaced, for expandedFrom.
 	expanded, expandedFrom string
 }
@@ -134,6 +137,8 @@ func (t *Text) style() draw.Style {
 		Stroke:      t.stroke,
 		Features:    t.features,
 		RightToLeft: t.rightToLeft,
+		Before:      t.before,
+		After:       t.after,
 	}
 }
 
@@ -164,6 +169,20 @@ func (t *Text) RightToLeft() bool { return t.rightToLeft }
 
 // SetRightToLeft sets whether t's lines are drawn from their end.
 func (t *Text) SetRightToLeft(on bool) { t.rightToLeft = on }
+
+// Between shapes a text as the part of a longer one between before and
+// after, as a browser shapes a word cut by an element: a letter that
+// joins, Arabic's, takes the form the letters on either side give it.
+// Only the text round it is read, never drawn.
+func Between(before, after string) TextOption {
+	return textOption(func(t *Text) { t.before, t.after = before, after })
+}
+
+// Between is the text t is shaped between.
+func (t *Text) Between() (string, string) { return t.before, t.after }
+
+// SetBetween sets the text t is shaped between.
+func (t *Text) SetBetween(before, after string) { t.before, t.after = before, after }
 
 // Pixelated reports whether t's glyphs are drawn unsmoothed.
 func (t *Text) Pixelated() bool { return t.pixelated }

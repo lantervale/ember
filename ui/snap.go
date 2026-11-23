@@ -379,15 +379,22 @@ func abs32(v float32) float32 { return float32(math.Abs(float64(v))) }
 
 // snap is where a scroll of b from from, sent to to, lands once snapped,
 // noting the areas it is snapped to; to where b snaps on no axis. A
-// mandatory container scrolled ahead with no snap position that way on
-// one of its axes stays where it was, as Chrome's. A container snapping
-// on both axes lands where the areas it snaps to on each are seen
-// together, as Chrome's: each axis searched in the corridor of where
-// the scroll goes on the other, then, when the two areas found aren't
-// seen together, the other axis again among those seen with the nearer
-// one; with none found, an area aligned on both axes nearest the
-// corridor.
+// relative scroll that snaps on an axis keeps where it began on the
+// others, and one that snaps on none lands where it was sent, as
+// Chrome's. A container snapping on both axes lands where the areas it
+// snaps to on each are seen together, as Chrome's: each axis searched
+// in the corridor of where the scroll goes on the other, then, when the
+// two areas found aren't seen together, the other axis again among
+// those seen with the nearer one; with none found, an area aligned on
+// both axes nearest the corridor.
 func (d *Document) snap(b *box.Box, from, to geom.Vec2, kind snapKind) geom.Vec2 {
+	return d.snapFollowing(b, from, to, kind, -1)
+}
+
+// snapFollowing is snap, the areas found on both axes not seen together
+// resolved by keeping follow's, the axis nearer its aim where follow is
+// -1.
+func (d *Document) snapFollowing(b *box.Box, from, to geom.Vec2, kind snapKind, follow int) geom.Vec2 {
 	g := snapLines(b)
 	if g.lines[0] == nil && g.lines[1] == nil {
 		return to
@@ -417,18 +424,15 @@ func (d *Document) snap(b *box.Box, from, to geom.Vec2, kind snapKind) geom.Vec2
 		}
 	}
 	if searched[0] && searched[1] {
-		g.together(&picks, base, to, kind, pick)
+		g.together(&picks, base, to, kind, follow, pick)
 	}
 	out := to
-	for axis, l := range g.lines {
-		if !searched[axis] {
-			continue
-		}
-		switch p := picks[axis]; {
-		case p.ok:
+	if kind != snapEnd && (picks[0].ok || picks[1].ok) {
+		out = from
+	}
+	for axis := range g.lines {
+		if p := picks[axis]; searched[axis] && p.ok {
 			setAxis(&out, axis, p.at)
-		case kind != snapEnd && l.mandatory:
-			return from
 		}
 	}
 	s := d.scrollerOf(b.Node)
@@ -441,14 +445,15 @@ func (d *Document) snap(b *box.Box, from, to geom.Vec2, kind snapKind) geom.Vec2
 }
 
 // together has the picks of a two-axis container land where both their
-// areas are seen: the axis whose pick is the nearer to base kept, the
-// other searched again among the areas seen with it, or with neither
-// found, an area aligned on both axes nearest the corridor of to.
-func (g snapGrid) together(picks *[2]snapPick, base, to geom.Vec2, kind snapKind, pick func(int, *snapPick) snapPick) {
+// areas are seen: the axis follow, else whose pick is the nearer to base,
+// kept, the other searched again among the areas seen with it, or with
+// neither found, an area aligned on both axes nearest the corridor of to.
+func (g snapGrid) together(picks *[2]snapPick, base, to geom.Vec2, kind snapKind, follow int,
+	pick func(int, *snapPick) snapPick) {
 	x, y := picks[0], picks[1]
 	switch {
 	case x.ok && y.ok && !(x.seen.has(y.at) && y.seen.has(x.at)):
-		if abs32(x.at-base.X) <= abs32(y.at-base.Y) {
+		if follow == 0 || follow < 0 && abs32(x.at-base.X) <= abs32(y.at-base.Y) {
 			picks[1] = pick(1, &x)
 		} else {
 			picks[0] = pick(0, &y)
@@ -683,9 +688,16 @@ func (d *Document) resnap() {
 
 // relaid is where b, whose areas moved, snaps again: on each axis to
 // the area it was snapped to while that still is one of its areas, the
-// other axes as a scrollTo where it stands.
+// other axes as a scrollTo where it stands, except that areas found on
+// both axes not seen together keep the one on the axis b was snapped on
+// alone, else the block axis's, as Chrome's snap after a layout, its
+// first included.
 func (d *Document) relaid(b *box.Box, s *scrollerState, g snapGrid) geom.Vec2 {
 	off := b.Scroll
+	follow := 1
+	if s.targets[0] != nil && s.targets[1] == nil {
+		follow = 0
+	}
 	var held [2]*Node
 	for axis, l := range g.lines {
 		if l == nil || s.targets[axis] == nil {
@@ -700,7 +712,7 @@ func (d *Document) relaid(b *box.Box, s *scrollerState, g snapGrid) geom.Vec2 {
 	if (g.lines[0] == nil || held[0] != nil) && (g.lines[1] == nil || held[1] != nil) {
 		return off
 	}
-	to := d.snap(b, off, off, snapEnd)
+	to := d.snapFollowing(b, off, off, snapEnd, follow)
 	for axis, l := range g.lines {
 		switch {
 		case l == nil:

@@ -118,6 +118,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/colour-fonts", 520, 340, 0.0025},
 		{"./internal/pages/joined", 440, 400, 0.0055},
 		{"./internal/pages/syllables", 420, 400, 0.0058},
+		{"./internal/pages/scripts", 420, 400, 0.0045},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
