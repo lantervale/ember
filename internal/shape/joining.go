@@ -5,8 +5,6 @@ import (
 	"unicode"
 )
 
-//go:generate go run ./gen -src https://www.unicode.org/Public/17.0.0/ucd/ArabicShaping.txt -out joining_gen.go
-
 // joining is a character's joining type, Syriac's Alaph and Dalath
 // Rish groups apart, as HarfBuzz's Arabic shaper reads them; joinC
 // joins as joinD does.

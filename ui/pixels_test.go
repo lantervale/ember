@@ -109,6 +109,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/text-sizes", 420, 240, 0.008},
 		{"./internal/pages/font-variations", 520, 320, 0.0065},
 		{"./internal/pages/joined", 440, 400, 0.0055},
+		{"./internal/pages/syllables", 420, 400, 0.0058},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
