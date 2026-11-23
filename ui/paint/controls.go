@@ -440,16 +440,32 @@ func (p *painter) selection(e entry, alpha float32) {
 	l := t.Layout
 	p.s.PushClip(padding(e.b, e.at))
 	for line := l.Line(from); line <= l.Line(to); line++ {
-		start, end := l.Span(line)
-		a, z := max(from, start), min(to, end)
 		lb := lineBox(e, l, line)
-		x0, x1 := lb.X+l.X(a), lb.X+l.X(z)
-		x0, x1 = min(x0, x1), max(x0, x1)
-		if x1 > x0 {
-			p.s.Rect(geom.Rect{X: x0, Y: lb.Y, W: x1 - x0, H: lb.H}, fade(c, alpha))
+		for _, r := range fieldRanges(l, line, from, to) {
+			p.s.Rect(geom.Rect{X: lb.X + r[0], Y: lb.Y, W: r[1] - r[0], H: lb.H}, fade(c, alpha))
 		}
 	}
 	p.s.PopClip()
+}
+
+// ranged is a text layout that knows the stretches of a line a selection
+// is shown in, several where its text runs in both directions.
+type ranged interface {
+	Ranges(line, from, to int) [][2]float32
+}
+
+// fieldRanges are the stretches of line the selection from up to to
+// covers, from its left, each wider than nothing.
+func fieldRanges(l textedit.Layout, line, from, to int) [][2]float32 {
+	if r, ok := l.(ranged); ok {
+		return r.Ranges(line, from, to)
+	}
+	start, end := l.Span(line)
+	x0, x1 := l.X(max(from, start)), l.X(min(to, end))
+	if x1 <= x0 {
+		return nil
+	}
+	return [][2]float32{{x0, x1}}
 }
 
 // lineBreak draws the selection's mark on the line a br holds alone.
@@ -490,14 +506,11 @@ func (p *painter) fieldParts(e entry) []Selected {
 		} else if line < len(e.b.Lines) {
 			row = e.b.Lines[line].Rect
 		}
-		start, end := l.Span(line)
-		x0, x1 := row.X+l.X(max(from, start)), row.X+l.X(min(to, end))
-		if x1 <= x0 {
-			continue
-		}
 		for k, f := range e.b.Lines {
 			if f.Rect.Y < row.Y+row.H && row.Y < f.Rect.Y+f.Rect.H {
-				out = append(out, Selected{Line: k, Rect: geom.Rect{X: x0, Y: f.Rect.Y, W: x1 - x0, H: f.Rect.H}})
+				for _, r := range fieldRanges(l, line, from, to) {
+					out = append(out, Selected{Line: k, Rect: geom.Rect{X: row.X + r[0], Y: f.Rect.Y, W: r[1] - r[0], H: f.Rect.H}})
+				}
 				break
 			}
 		}
@@ -517,6 +530,10 @@ func caretInk(st *style.Computed, alpha float32) color.Color {
 func (p *painter) caret(e entry, ink color.Color) {
 	t := p.editing(e.b)
 	if t == nil || t.Editor.ReadOnly {
+		return
+	}
+	if from, to := t.Editor.Selection(); from != to {
+		// Chrome shows no caret beside selected characters
 		return
 	}
 	if p.record(livePart{kind: liveCaret, e: e, ink: ink}, intersect(caretRect(e, t).Inset(-1), padding(e.b, e.at))) {

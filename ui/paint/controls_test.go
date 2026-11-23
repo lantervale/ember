@@ -181,7 +181,7 @@ func (l line) X(i int) float32         { return float32(i) * 8 }
 func (l line) At(_ int, x float32) int { return int(x / 8) }
 func (l line) Page() int               { return 1 }
 
-func TestAFocusedTextInputDrawsItsSelectionUnderTheTextAndItsCaret(t *testing.T) {
+func TestAFocusedTextInputDrawsItsSelectionUnderTheTextWithoutItsCaret(t *testing.T) {
 	b := ctl(dom.Input, 100, 20, "type", "text")
 	b.Padding = box.Edges{Left: 4}
 	b.Append(text(4, 0, "hello", b.Style))
@@ -194,11 +194,9 @@ func TestAFocusedTextInputDrawsItsSelectionUnderTheTextAndItsCaret(t *testing.T)
 	b.Node.SetState(dom.Focus, true)
 	r := paintOne(b, opts)
 	rects := r.of("rect")
-	require.Len(t, rects, 2, "the selection, then the caret")
-	sel, caret := rects[0], rects[1]
+	require.Len(t, rects, 1, "the selection, and no caret beside it, as Chrome")
+	sel := rects[0]
 	assert.Equal(t, geom.Rect{X: 10 + 4 + 8, Y: 10, W: 16, H: 20}, sel.Rect)
-	assert.Equal(t, float32(10+4+24), caret.Rect.X, "the caret is at the selection's moving end")
-	assert.Equal(t, float32(1), caret.Rect.W)
 	var selAt, textAt int
 	for i, o := range r.ops {
 		switch {
@@ -210,9 +208,31 @@ func TestAFocusedTextInputDrawsItsSelectionUnderTheTextAndItsCaret(t *testing.T)
 	}
 	assert.Less(t, selAt, textAt, "the selection is behind the text")
 
-	m.Editor.Place(5, false)
+	m.Editor.Place(3, false)
 	rects = paintOne(b, opts).of("rect")
 	require.Len(t, rects, 1, "nothing selected: the caret alone")
+	assert.Equal(t, float32(10+4+24), rects[0].Rect.X, "the caret where the selection ended")
+	assert.Equal(t, float32(1), rects[0].Rect.W)
+}
+
+// bidiLine is a line of ten-point characters whose middle ones, 2 to 5,
+// show right to left: selecting 1 to 4 takes b on the left and the first
+// two of them at their run's right end.
+type bidiLine struct{ line }
+
+func (bidiLine) Ranges(int, int, int) [][2]float32 { return [][2]float32{{10, 20}, {40, 60}} }
+
+func TestAFieldsSelectionIsDrawnInEachStretchItShowsIn(t *testing.T) {
+	b := ctl(dom.Input, 100, 20, "type", "text")
+	b.Append(text(0, 0, "abאבגדc", b.Style))
+	b.Node.SetState(dom.Focus, true)
+	m := control.NewText("abאבגדc")
+	m.Layout = bidiLine{line{7}}
+	m.Editor.Select(1, 4)
+	rects := paintOne(b, Controls(func(*dom.Node) any { return m })).of("rect")
+	require.Len(t, rects, 2, "the latin b, and the first two hebrew letters at the run's other end")
+	assert.Equal(t, geom.Rect{X: 10 + 10, Y: 10, W: 10, H: 20}, rects[0].Rect)
+	assert.Equal(t, geom.Rect{X: 10 + 40, Y: 10, W: 20, H: 20}, rects[1].Rect)
 }
 
 func TestCaretColorAndSelectionColorPaintTheField(t *testing.T) {
@@ -224,15 +244,20 @@ func TestCaretColorAndSelectionColorPaintTheField(t *testing.T) {
 	m := control.NewText("hello")
 	m.Layout = line{5}
 	m.Editor.Select(1, 3)
-	rects := paintOne(b, Controls(func(*dom.Node) any { return m })).of("rect")
-	require.Len(t, rects, 2)
+	opts := Controls(func(*dom.Node) any { return m })
+	rects := paintOne(b, opts).of("rect")
+	require.Len(t, rects, 1)
 	assert.Equal(t, blue, rects[0].Color, "::selection's background-color")
-	assert.Equal(t, red, rects[1].Color, "caret-color")
+	m.Editor.Place(3, false)
+	rects = paintOne(b, opts).of("rect")
+	require.Len(t, rects, 1)
+	assert.Equal(t, red, rects[0].Color, "caret-color")
 
 	b.Style.CaretAuto, b.Style.HasSelection = true, false
-	rects = paintOne(b, Controls(func(*dom.Node) any { return m })).of("rect")
-	assert.Equal(t, selectionColor, rects[0].Color, "the default selection without a ::selection rule")
-	assert.Equal(t, black, rects[1].Color, "auto: the text's colour")
+	assert.Equal(t, black, paintOne(b, opts).of("rect")[0].Color, "auto: the text's colour")
+	m.Editor.Select(1, 3)
+	assert.Equal(t, selectionColor, paintOne(b, opts).of("rect")[0].Color,
+		"the default selection without a ::selection rule")
 }
 
 func TestAReadOnlyInputDrawsNoCaret(t *testing.T) {
