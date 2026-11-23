@@ -97,6 +97,35 @@ func TestTheCopiedTextIsChromesSelectionToString(t *testing.T) {
 	assert.Equal(t, chromeSelection(t, d), d.Selection().Text, "the whole page")
 }
 
+// TestTheCopiedHTMLHoldsChromesRangeContents compares the markup a copy
+// writes with Chrome's Range.cloneContents of the same selection, where
+// the selection's common ancestor is a block, so that no inline element
+// wraps it: the attributes the export adds for Chrome are left out.
+func TestTheCopiedHTMLHoldsChromesRangeContents(t *testing.T) {
+	d, texts := selectionPage()
+	at := func(name string, off int) ui.Position { return ui.Position{Node: texts[name], Offset: off} }
+	for name, ends := range map[string][2]ui.Position{
+		"a word":                 {at("long", 4), at("long", 9)},
+		"across a br":            {at("long", 80), at("after", 5)},
+		"title into paragraph":   {at("title", 2), at("long", 3)},
+		"from a paragraph's end": {at("after", 15), at("shout", 3)},
+		"backwards":              {at("end", 2), at("keep", 1)},
+		"into all":               {at("end", 1), at("all", 4)},
+		"to the last":            {at("all", 0), at("last", 8)},
+	} {
+		d.Select(ends[0], ends[1])
+		out, err := chrome.Eval(d, geom.V2(400, 800), `
+			const div = document.createElement("div");
+			div.appendChild(getSelection().getRangeAt(0).cloneContents());
+			for (const e of div.querySelectorAll("*"))
+				for (const a of [...e.attributes]) if (a.name.startsWith("data-ember")) e.removeAttribute(a.name);
+			return div.innerHTML`)
+		require.NoError(t, err)
+		var want string
+		require.NoError(t, json.Unmarshal(out, &want))
+		assert.Equal(t, want, d.SelectionHTML(), name)
+	}
+}
 func TestUserSelectResolvesAsChromes(t *testing.T) {
 	for _, opts := range [][]ui.DocumentOption{nil, {ui.BrowserSheets()}} {
 		d := ui.NewDocument(append(opts, ui.CSS(`.none { user-select: none; } .all { user-select: all; }

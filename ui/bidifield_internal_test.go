@@ -41,7 +41,8 @@ func tenPoints(n int) []float32 {
 func TestASelectionOverBothDirectionsLiesInAStretchPerRun(t *testing.T) {
 	text := []rune("ab אבג c")
 	edges, cells := visualLine(text, tenPoints(len(text)), false)
-	assert.Equal(t, [][2]float32{{10, 30}, {50, 60}}, ranges(edges, cells, 1, 4), "b and its space, then א at its run's right end")
+	assert.Equal(t, [][2]float32{{10, 30}, {50, 60}}, ranges(edges, cells, 1, 4),
+		"b and its space, then א at its run's right end")
 	assert.Equal(t, [][2]float32{{30, 60}}, ranges(edges, cells, 3, 6), "the hebrew run whole")
 	assert.Equal(t, [][2]float32{{10, 80}}, ranges(edges, cells, 1, 8), "all of it side by side: one stretch")
 	assert.Nil(t, ranges(edges, cells, 2, 2))

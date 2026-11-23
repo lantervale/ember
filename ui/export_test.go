@@ -192,9 +192,10 @@ func FieldSelectionRects(d *Document, n *Node) []geom.Rect {
 	var out []geom.Rect
 	for line := l.Line(from); line <= l.Line(to); line++ {
 		row := fieldLine(d, n, l, line)
-		for _, r := range l.(interface {
+		ranged, _ := l.(interface {
 			Ranges(line, from, to int) [][2]float32
-		}).Ranges(line, from, to) {
+		})
+		for _, r := range ranged.Ranges(line, from, to) {
 			out = append(out, geom.Rect{X: row.X + r[0], Y: row.Y, W: r[1] - r[0], H: row.H})
 		}
 	}

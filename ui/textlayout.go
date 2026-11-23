@@ -72,11 +72,11 @@ const firstRTL = 0x0590
 
 // visualLine lays text out in a paragraph of direction rtl or not, from
 // the line's left, xs being the edges of its characters in the text's
-// order. edges are where the caret stands for each place: before a
+// order. It returns where the caret stands for each place, before a
 // character on the side its text comes from (the right of one shown right
-// to left), at the end after the last one. cells are the room each
-// character is shown in.
-func visualLine(text []rune, xs []float32, rtl bool) (edges []float32, cells [][2]float32) {
+// to left), at the end after the last one, and the room each character is
+// shown in.
+func visualLine(text []rune, xs []float32, rtl bool) ([]float32, [][2]float32) {
 	var base bidi.Level
 	if rtl {
 		base = 1
@@ -86,14 +86,14 @@ func visualLine(text []rune, xs []float32, rtl bool) (edges []float32, cells [][
 	for i := range text {
 		levels[i] = p.Level(i)
 	}
-	cells = make([][2]float32, len(text))
+	cells := make([][2]float32, len(text))
 	var x float32
 	for _, k := range bidi.Reorder(levels) {
 		w := xs[k+1] - xs[k]
 		cells[k] = [2]float32{x, x + w}
 		x += w
 	}
-	edges = make([]float32, len(text)+1)
+	edges := make([]float32, len(text)+1)
 	for i := range text {
 		edges[i] = cells[i][0]
 		if levels[i]%2 == 1 {

@@ -432,6 +432,31 @@ func TestASelectedTabIsCopiedAndDrawnInItsRoom(t *testing.T) {
 	assert.InDelta(t, both[0].X+both[0].W, second[0].X+second[0].W, 0.01, "both end at the second's stop")
 }
 
+func TestTheCopiedHTMLKeepsTheInlineElementsRoundTheSelection(t *testing.T) {
+	link := ui.A(ui.Attr("href", `a"b`), ui.B(ui.Text("bold & <brave>")))
+	p := ui.P(ui.Text("a "), link, ui.Text(" end"))
+	l := selectableDoc(t, "", p)
+	word := textOf(link.Children()[0])
+	assert.Empty(t, l.doc.SelectionHTML(), "nothing selected")
+	l.doc.Select(ui.Position{Node: word, Offset: 0}, ui.Position{Node: word, Offset: 4})
+	assert.Equal(t, `<a href="a&quot;b"><b>bold</b></a>`, l.doc.SelectionHTML(), "a word of a bold link")
+	l.doc.Select(ui.Position{Node: word, Offset: 5}, ui.Position{Node: textOf(p), Offset: 1})
+	assert.Equal(t, ` <a href="a&quot;b"><b>bold </b></a>`, l.doc.SelectionHTML(),
+		"backwards, out of it: the paragraph's own text, the link cut to it")
+	l.doc.Select(ui.Position{Node: word, Offset: 5}, ui.Position{Node: word, Offset: 14})
+	assert.Equal(t, `<a href="a&quot;b"><b>&amp; &lt;brave&gt;</b></a>`, l.doc.SelectionHTML(), "escaped")
+}
+
+func TestACopyPutsTheSelectionsHTMLBesideItsText(t *testing.T) {
+	ui.SetPlatform(t, textedit.Mac)
+	p := ui.P(ui.Text("plain "), ui.B(ui.Text("bold")))
+	l := selectableDoc(t, "", p)
+	require.True(t, l.doc.SelectContents(p))
+	l.held(input.KeyLeftSuper, input.KeyC)
+	assert.Equal(t, "plain bold", l.win.Clipboard())
+	assert.Equal(t, "plain <b>bold</b>", l.win.ClipboardHTML())
+}
+
 func TestAFirstLetterIsSelectedWithItsText(t *testing.T) {
 	p := ui.P(ui.Class("drop"), ui.Text("Lantern light"))
 	l := selectableDoc(t, ".drop::first-letter { float: left; font-size: 40px; }", p)

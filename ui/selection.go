@@ -1024,7 +1024,8 @@ func (d *Document) tail(b *box.Box, k int, next *box.Box) float32 {
 			after = g
 		}
 	}
-	if after == nil && next != nil && len(next.Lines) > 0 && container(next) == container(b) && line(next.Rect(), next.Lines[0]) {
+	if after == nil && next != nil && len(next.Lines) > 0 && container(next) == container(b) &&
+		line(next.Rect(), next.Lines[0]) {
 		after, origin = &next.Lines[0], next.Rect()
 	}
 	if after == nil {
