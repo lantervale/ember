@@ -53,7 +53,12 @@ var compared = map[string]func(s *style.Computed) string{
 		}
 		return px(s.LineHeight.Px)
 	},
-	"letter-spacing": func(s *style.Computed) string { return px(s.LetterSpacing) },
+	"letter-spacing": func(s *style.Computed) string {
+		if l := s.LetterSpacing; l.Percent != 0 && l.Px == 0 {
+			return num(l.Percent) + "%"
+		}
+		return px(s.LetterSpacing.Px)
+	},
 	"word-spacing": func(s *style.Computed) string {
 		if w := s.WordSpacing; w.Percent != 0 && w.Px == 0 {
 			return num(w.Percent) + "%"
@@ -289,7 +294,7 @@ span { font-size: 1.5em; padding-left: 1rem; border-left-color: currentcolor; }
 .flex { display: flex; column-gap: var(--gap); }
 .flex > span { flex: 2 0 10px; order: 3; }
 .abs { position: absolute; z-index: 4; pointer-events: none; word-spacing: -2px; }
-.flex { word-spacing: 50%; }
+.flex { word-spacing: 50%; letter-spacing: 10%; }
 .vars {
   --pad: 11px; padding-top: var(--pad); margin-right: var(--missing, 7px);
   outline: 2px solid var(--ink); outline-offset: 1px;

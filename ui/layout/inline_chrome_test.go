@@ -233,6 +233,11 @@ func TestInlineTextMatchesChrome(t *testing.T) {
 			ui.P(ui.Style("width: 220px; word-spacing: calc(25% + 2px)"), ui.Text("A sum, "),
 				ui.Span(ui.Style("font-size: 24px"), ui.Text("in a bigger span")), ui.Text(" and back.")),
 		),
+		"letter-spacing as a percentage": page(
+			ui.P(ui.Style("width: 220px; letter-spacing: 10%; font-size: 12px"), ui.Text("A tenth of an em, "),
+				ui.Span(ui.Style("font-size: 24px"), ui.Text("then of a bigger one")), ui.Text(" and back.")),
+			ui.P(ui.Style("width: 220px; letter-spacing: calc(5% + 1px)"), ui.Text("A sum of both, wrapped where Chrome wraps it.")),
+		),
 		"word-spacing justified": page(
 			ui.P(ui.Style("width: 170px; text-align: justify; word-spacing: 4px"), ui.Text(sentence)),
 			ui.P(ui.Style("width: 170px; text-align: justify"), ui.Text("Justified with a "),

@@ -381,7 +381,7 @@ var checks = map[string]check{
 	"font-style":             single(words("normal", "italic", "oblique")),
 	"font-weight":            single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
 	"line-height":            single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
-	"letter-spacing":         single(either(length, words("normal"))),
+	"letter-spacing":         single(either(lengthPercent, words("normal"))),
 	"word-spacing":           single(either(lengthPercent, words("normal"))),
 	"border-spacing":         repeated(length, 2),
 	"border-collapse":        single(words("separate", "collapse")),

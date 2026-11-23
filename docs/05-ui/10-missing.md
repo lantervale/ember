@@ -26,7 +26,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a span ending a centred line | up to 3 points narrower than Chrome's |
 | a control's own font, colour and line height under `ui.BrowserSheets()` | a `button`, `input`, `select` or `textarea` takes its parent's `font`, `color` and `line-height`, where Chrome's sheet starts each from its own (13.33px Arial, a textarea's monospace, `FieldText`, `normal`); so does `option` its `white-space` and `optgroup` its weight |
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
-| `letter-spacing` as a percentage | refused with a warning; Chrome reads it as that much of the font size, as `word-spacing`'s |
 | `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
 | `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
 | an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |

@@ -440,10 +440,10 @@ const (
 	PreLine
 )
 
-// WordSpacing is word-spacing: Px points after each word separator, and
-// Percent of the font size, which a child inherits as a percentage of
-// its own.
-type WordSpacing struct{ Px, Percent float32 }
+// Spacing is letter-spacing or word-spacing: Px points after each
+// character or word separator, and Percent of the font size, which a child
+// inherits as a percentage of its own.
+type Spacing struct{ Px, Percent float32 }
 
 // WordSeparator reports whether word-spacing follows r: a space or a
 // no-break space, the two Chrome widens.
@@ -453,15 +453,19 @@ func WordSeparator(r rune) bool { return r == ' ' || r == '\u00a0' }
 // font.
 func (t *Text) WordGap() float32 { return t.WordSpacing.Px + t.WordSpacing.Percent*t.Font.Size/100 }
 
+// LetterGap is the room letter-spacing adds after each character in t's
+// font.
+func (t *Text) LetterGap() float32 { return t.LetterSpacing.Px + t.LetterSpacing.Percent*t.Font.Size/100 }
+
 // Spacing is the room letter-spacing and word-spacing add to s: the one
 // after each character, the other after each word separator.
 func (t *Text) Spacing(s string) float32 {
-	word := t.WordGap()
+	word, letter := t.WordGap(), t.LetterGap()
 	if word == 0 {
-		if t.LetterSpacing == 0 {
+		if letter == 0 {
 			return 0
 		}
-		return t.LetterSpacing * float32(utf8.RuneCountInString(s))
+		return letter * float32(utf8.RuneCountInString(s))
 	}
 	n, seps := 0, 0
 	for _, r := range s {
@@ -470,14 +474,14 @@ func (t *Text) Spacing(s string) float32 {
 			seps++
 		}
 	}
-	return t.LetterSpacing*float32(n) + word*float32(seps)
+	return letter*float32(n) + word*float32(seps)
 }
 
 type Text struct {
 	Font          Font
 	LineHeight    LineHeight
-	LetterSpacing float32
-	WordSpacing   WordSpacing
+	LetterSpacing Spacing
+	WordSpacing   Spacing
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace

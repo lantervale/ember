@@ -373,11 +373,11 @@ var lineHeights = interp[style.LineHeight]{
 }
 
 //nolint:gochecknoglobals // an interpolation, fixed
-var wordSpacings = interp[style.WordSpacing]{
-	lerp: func(a, b style.WordSpacing, t float32) (style.WordSpacing, bool) {
-		return style.WordSpacing{Px: lerpf(a.Px, b.Px, t), Percent: lerpf(a.Percent, b.Percent, t)}, true
+var textSpacings = interp[style.Spacing]{
+	lerp: func(a, b style.Spacing, t float32) (style.Spacing, bool) {
+		return style.Spacing{Px: lerpf(a.Px, b.Px, t), Percent: lerpf(a.Percent, b.Percent, t)}, true
 	},
-	equal: same[style.WordSpacing],
+	equal: same[style.Spacing],
 }
 
 // ratios interpolates aspect-ratio by its logarithm, as Chrome does; auto

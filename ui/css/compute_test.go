@@ -129,8 +129,8 @@ html { font-size: 10px; }
 	if s.Margin.Top != (style.Length{Kind: style.Fixed, Px: 26, Percent: 50, IsPercent: true}) {
 		t.Errorf("calc: %v", s.Margin.Top)
 	}
-	if s.LetterSpacing != 3 {
-		t.Errorf("letter-spacing: %v", s.LetterSpacing)
+	if s.LetterGap() != 3 {
+		t.Errorf("letter-spacing: %v", s.LetterGap())
 	}
 }
 

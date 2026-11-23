@@ -1652,13 +1652,13 @@ func (p *painter) text(e entry, alpha float32) {
 			if tc.A <= 0 {
 				continue
 			}
-			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, smoothingOf(st))
+			o := p.textOptions(face, st.Font.Size, st.LetterGap(), tc, smoothingOf(st))
 			for _, f := range b.Lines {
 				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Text, st, o)
 			}
 		}
 	}
-	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
+	opts := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	if ink != c {
 		p.recoloured(e, st, face, parts, c, ink)
 		p.decorations(e, st, style.LineThrough, alpha)
@@ -1701,7 +1701,7 @@ func (p *painter) advance(st *style.Computed, s string, opts []twod.TextOption) 
 	if p.fonts == nil {
 		return twod.Measure(s, opts...).X
 	}
-	return p.fonts.Advance(st.Font, s) + st.LetterSpacing*float32(utf8.RuneCountInString(s))
+	return p.fonts.Advance(st.Font, s) + st.LetterGap()*float32(utf8.RuneCountInString(s))
 }
 
 // selectionColors are the ::selection of the element st styles: its
@@ -1738,7 +1738,7 @@ func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text 
 // recoloured draws a text run whose selected parts take the colour ink:
 // each line's text in c outside its part and in ink inside it.
 func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts []Selected, c, ink color.Color) {
-	plain := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
+	plain := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	for i, f := range e.b.Lines {
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
@@ -1773,7 +1773,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(part.clip)
-			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, smoothingOf(st)))
+			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterGap(), part.ink, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}

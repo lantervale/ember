@@ -13,7 +13,7 @@ import (
 
 func wordSpaced(px float32, edits ...func(*style.Computed)) func(*style.Computed) {
 	return func(st *style.Computed) {
-		st.WordSpacing = style.WordSpacing{Px: px}
+		st.WordSpacing = style.Spacing{Px: px}
 		for _, e := range edits {
 			e(st)
 		}
@@ -140,7 +140,7 @@ func TestASpaceTakesTheWordSpacingOfTheElementItIsIn(t *testing.T) {
 func TestAChildKeepsItsParentsWordSpacingLengthAndTakesAPercentageOfItsOwnFont(t *testing.T) {
 	big := func(st *style.Computed) { st.Font.Size = 20 }
 	length := el(dom.Span, wordSpaced(5, big), text("H H"))
-	pct := el(dom.Span, func(st *style.Computed) { big(st); st.WordSpacing = style.WordSpacing{Percent: 50} },
+	pct := el(dom.Span, func(st *style.Computed) { big(st); st.WordSpacing = style.Spacing{Percent: 50} },
 		text("H H"))
 	tr := lay(el(dom.Div, block, el(dom.P, block, length), el(dom.P, block, pct)), 200)
 	assert.Equal(t, float32(65), tr.Of[length].Size.X, "three glyphs of 20 and 5")
@@ -186,7 +186,7 @@ func TestTextIndentIsNotWordSpaced(t *testing.T) {
 func TestSpacingFarBelowZeroLeavesNoNegativeWidth(t *testing.T) {
 	s := el(dom.Span, wordSpaced(-100), text("H H H"))
 	hug := el(dom.Div, inlineBlock, s)
-	tight := el(dom.Span, func(st *style.Computed) { st.LetterSpacing = -30 }, text("HHH"))
+	tight := el(dom.Span, func(st *style.Computed) { st.LetterSpacing = style.Spacing{Px: -30} }, text("HHH"))
 	none := el(dom.Div, inlineBlock, tight)
 	wrapped := el(dom.P, wordSpaced(-100, width(15)), text("H H H"))
 	tr := lay(el(dom.Div, block, el(dom.P, block, hug), el(dom.P, block, none), wrapped), 200)

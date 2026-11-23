@@ -1306,6 +1306,17 @@ func (x *ctx) unit(u relUnit) float32 {
 	}
 }
 
+// spacing is a letter-spacing or a word-spacing: a calc() resolved, a
+// percentage kept to resolve against the font size of each element that
+// inherits it.
+func (x *ctx) spacing(v []Component) style.Spacing {
+	l := x.length(v[0])
+	if l.Calc != (unique.Handle[style.Calc]{}) {
+		return style.Spacing{Px: l.At(x.em)}
+	}
+	return style.Spacing{Px: l.Px, Percent: l.Percent}
+}
+
 func (x *ctx) px(c Component) float32 {
 	return x.length(c).Px
 }
@@ -1638,16 +1649,10 @@ var props = func() map[string]prop {
 				return style.LineHeight{Px: l.At(x.em)}
 			}, lineHeights,
 		),
-		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
-			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, numbers(-math.MaxFloat32, math.MaxFloat32)),
-		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
-			func(x *ctx, v []Component) style.WordSpacing {
-				l := x.length(v[0])
-				if l.Calc != (unique.Handle[style.Calc]{}) {
-					return style.WordSpacing{Px: l.At(x.em)}
-				}
-				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
-			}, wordSpacings),
+		"letter-spacing": field(func(c *style.Computed) *style.Spacing { return &c.LetterSpacing },
+			(*ctx).spacing, textSpacings),
+		"word-spacing": field(func(c *style.Computed) *style.Spacing { return &c.WordSpacing },
+			(*ctx).spacing, textSpacings),
 		"color": field(
 			func(c *style.Computed) *color.Color { return &c.Color },
 			func(x *ctx, v []Component) color.Color {
