@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <filter id="soft"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="wide" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="sideways"><feGaussianBlur stdDeviation="4 0"/></filter>
+    <filter id="faint"><feGaussianBlur stdDeviation=".6"/></filter>
+    <filter id="cut" x="0" y="0" width="1" height="1"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="srgb" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="moved"><feOffset dx="4" dy="-3"/></filter>
+  </defs>
+  <rect width="120" height="120" fill="#fed"/>
+  <circle cx="20" cy="20" r="12" fill="#c33" filter="url(#soft)"/>
+  <rect x="44" y="8" width="24" height="24" fill="#36c" filter="url(#wide)"/>
+  <rect x="84" y="10" width="28" height="20" fill="#2a7" filter="url(#sideways)"/>
+  <path d="M6 46 L34 46 L20 74 Z" fill="none" stroke="#333" stroke-width="2" filter="url(#faint)"/>
+  <rect x="44" y="46" width="28" height="28" fill="#93c" filter="url(#cut)"/>
+  <g filter="url(#srgb)"><rect x="84" y="46" width="14" height="28" fill="#f00"/><rect x="98" y="46" width="14" height="28" fill="#0f0"/></g>
+  <g filter="url(#soft)" transform="translate(20 100) scale(1.5)"><rect x="-8" y="-8" width="16" height="16" fill="#e60"/></g>
+  <rect x="44" y="86" width="24" height="24" fill="#06c" filter="url(#moved)"/>
+  <g filter="url(#wide)"><rect x="84" y="86" width="14" height="28" fill="#f00"/><rect x="98" y="86" width="14" height="28" fill="#0f0"/></g>
+</svg>

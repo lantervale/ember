@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <rect width="120" height="120" fill="#eef"/>
+  <rect x="4" y="4" width="32" height="32" fill="#c33" style="clip-path: circle(40%)"/>
+  <rect x="44" y="4" width="32" height="32" fill="#36c" style="clip-path: ellipse(16px 8px at 50% 25%)"/>
+  <rect x="84" y="4" width="32" height="32" fill="#2a7" style="clip-path: inset(4px 8px round 6px)"/>
+  <rect x="4" y="44" width="32" height="32" fill="#93c" style="clip-path: polygon(50% 0, 100% 100%, 0 100%)"/>
+  <rect x="44" y="44" width="32" height="32" fill="#e60" stroke="#333" stroke-width="6" style="clip-path: circle(50% at 0 0) stroke-box"/>
+  <rect x="84" y="44" width="32" height="32" fill="#06c" style="clip-path: path('M0 0 L32 16 L0 32 Z')"/>
+  <circle cx="20" cy="100" r="16" fill="#c06" style="clip-path: inset(0 50% 0 0)"/>
+  <rect x="44" y="84" width="32" height="32" fill="#333" style="clip-path: circle(12px at 16px 16px) view-box"/>
+  <rect x="84" y="84" width="32" height="32" fill="#fc0" style="clip-path: xywh(4px 4px 50% 50% round 4px)"/>
+</svg>

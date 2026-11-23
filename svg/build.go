@@ -18,6 +18,7 @@ const (
 	elemUse      = "use"
 	elemRect     = "rect"
 	elemPolygon  = "polygon"
+	nonScaling   = "non-scaling-stroke"
 )
 
 const (
@@ -75,6 +76,7 @@ type style struct {
 	evenOdd, hidden            bool
 	strokeFirst                bool
 	clipEvenOdd, pixelated     bool
+	linearFilters              bool
 	// markers are marker-start, marker-mid and marker-end.
 	markers    [3]string
 	fontFamily string
@@ -251,6 +253,11 @@ var properties = map[string]func(st *style, v string, ctx lengthContext){ //noli
 			st.clipEvenOdd = rule
 		}
 	},
+	"color-interpolation-filters": func(st *style, v string, _ lengthContext) {
+		if linear, ok := map[string]bool{"sRGB": false, "linearRGB": true, valAuto: true}[v]; ok {
+			st.linearFilters = linear
+		}
+	},
 	"image-rendering": func(st *style, v string, _ lengthContext) {
 		st.pixelated = v == "pixelated" || v == "optimizeSpeed"
 	},
@@ -399,7 +406,7 @@ func build(doc *document, p *Picture) error {
 	}
 	b.base = style{
 		fill: paintSpec{kind: paintColor, c: color.NRGBA{A: 255}}, color: p.currentColor,
-		fillOpacity: 1, strokeOpacity: 1, width: 1, miter: 4, fontSize: 16,
+		fillOpacity: 1, strokeOpacity: 1, width: 1, miter: 4, fontSize: 16, linearFilters: true,
 	}
 	p.transform = Identity()
 	if t, ok := props["transform"]; ok {
@@ -515,38 +522,49 @@ func (b *builder) walk(n *node, st style, m Matrix, out *[]Item, useDepth int) e
 	if b.clipping {
 		return b.content(n, props, st, m, out, useDepth)
 	}
-	for _, k := range [...]string{"filter", "mix-blend-mode", "vector-effect"} {
-		if v, ok := props[k]; ok && v != none && v != valNormal && v != "" {
-			b.unsupported(k)
-		}
+	if v := strings.TrimSpace(props["vector-effect"]); v != "" && v != none && v != nonScaling {
+		b.unsupported("vector-effect")
 	}
 	opacity := 1.0
 	if f, ok := fraction(props["opacity"]); ok {
 		opacity = f
 	}
+	blend, blended := blendModes[strings.TrimSpace(props["mix-blend-mode"])]
+	if v := strings.TrimSpace(props["mix-blend-mode"]); v != "" && !blended {
+		b.unsupported("mix-blend-mode")
+	}
+	isolated := blend != BlendNormal || strings.TrimSpace(props["isolation"]) == "isolate"
+	filter := strings.TrimSpace(props["filter"])
+	filtered := filter != "" && filter != none
 	clip, cyclicClip := b.reference(props["clip-path"], "clip-path", "clipPath")
 	mask, cyclicMask := b.reference(props["mask"], "mask", "mask")
 	clipped, masked := clip != nil, mask != nil
 	if opacity == 0 || cyclicClip || cyclicMask {
 		return nil
 	}
-	if opacity == 1 && !clipped && !masked {
+	if opacity == 1 && !clipped && !masked && !filtered && !isolated {
 		return b.content(n, props, st, m, out, useDepth)
 	}
-	group := &Group{Opacity: opacity}
+	group := &Group{Opacity: opacity, Blend: blend}
 	if err := b.content(n, props, st, m, &group.Items, useDepth); err != nil {
 		return err
 	}
 	if len(group.Items) == 0 {
 		return nil
 	}
-	if !clipped && !masked {
+	if !clipped && !masked && !filtered && !isolated {
 		*out = append(*out, fold(group))
 		return nil
 	}
 	bbox := Box{}
 	if inv, ok := m.Inverse(); ok {
 		bbox = itemsBox(group.Items, inv)
+	}
+	if filtered {
+		var shown bool
+		if group.Filters, shown = b.filters(filter, &st, m, bbox); !shown {
+			return nil
+		}
 	}
 	var err error
 	if clipped {
@@ -766,6 +784,7 @@ func (b *builder) shape(n *node, props map[string]string, st *style, m Matrix, o
 	}
 	bounds, _ := path.Bounds()
 	if s := b.paintShape(path, st, m, bounds, n.name == elemLine); s != nil {
+		s.NonScalingStroke = strings.TrimSpace(props["vector-effect"]) == nonScaling
 		*out = append(*out, Item{Shape: s})
 	}
 	if n.name != elemRect && n.name != elemCircle && n.name != elemEllipse {
