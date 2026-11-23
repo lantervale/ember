@@ -39,7 +39,7 @@ var compared = map[string]func(s *style.Computed) string{
 		return []string{"none", "solid", "dashed", "dotted", "inset", "outset"}[s.BorderStyle.Bottom]
 	},
 	"font-size":   func(s *style.Computed) string { return px(s.Font.Size) },
-	"font-weight": func(s *style.Computed) string { return strconv.Itoa(s.Font.Weight) },
+	"font-weight": func(s *style.Computed) string { return num(s.Font.Weight) },
 	"font-style": func(s *style.Computed) string {
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
@@ -229,13 +229,21 @@ func matchChromeProps(t *testing.T, d *ui.Document, props map[string]func(*style
 func matchChromeShown(t *testing.T, d *ui.Document, props map[string]func(*style.Computed) string, skip int,
 	script string, then func(), read func(*dom.Node) *style.Computed) {
 	t.Helper()
+	matchChromeScaled(t, d, 1, props, skip, script, then, read)
+}
+
+// matchChromeScaled is matchChromeShown on a display of scale device
+// pixels per point.
+func matchChromeScaled(t *testing.T, d *ui.Document, scale float32, props map[string]func(*style.Computed) string,
+	skip int, script string, then func(), read func(*dom.Node) *style.Computed) {
+	t.Helper()
 	size := geom.V2(800, 600)
 	names := make([]string, 0, len(props))
 	for p := range props {
 		names = append(names, p)
 	}
 	slices.Sort(names)
-	want, err := chrome.StylesAfter(d, size, names, script)
+	want, err := chrome.StylesAfterScaled(d, size, scale, names, script)
 	if err != nil {
 		t.Fatal(err)
 	}

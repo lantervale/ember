@@ -3,14 +3,15 @@
 // it at any size. It is pure Go and reads nothing but the bytes it is
 // given: no file, no network, whatever the picture refers to.
 //
-// It draws the static, vector part of SVG that icons and logos are made
-// of: paths and the basic shapes, groups, use, transforms, solid colours,
-// linear and radial gradients, strokes with caps, joins and dashes, fill
-// rules, opacity, style sheets of simple selectors, the view box and
-// preserveAspectRatio. What a file uses beyond that (text, clipping,
-// masks, filters, patterns, images, markers, symbols…) is not drawn, and
-// Picture.Unsupported names it, so a caller can warn or fall back
-// instead of showing a wrong picture.
+// It draws the static part of SVG that icons and logos are made of:
+// paths and the basic shapes, groups, use, symbols, nested svg elements,
+// transforms, solid colours, linear and radial gradients, patterns,
+// strokes with caps, joins and dashes, markers, fill rules, opacity, clip
+// paths, masks, images held in data: addresses, text in Go's faces, style
+// sheets of simple selectors, the view box and preserveAspectRatio. What
+// a file uses beyond that (filters, foreignObject, textPath…) is not
+// drawn, and Picture.Unsupported names it, so a caller can warn or fall
+// back instead of showing a wrong picture.
 package svg
 
 import (
@@ -115,6 +116,9 @@ type Picture struct {
 	hasWidth, hasHeight bool
 	unsupported         []string
 	currentColor        color.NRGBA
+	// transform is the root's, about the viewport's centre in CSS pixels.
+	transform Matrix
+	nesting   int
 }
 
 // Option sets how a picture is read.
@@ -131,7 +135,11 @@ func (p *Picture) CurrentColor() color.NRGBA { return p.currentColor }
 
 // NewPicture parses the SVG file data.
 func NewPicture(data []byte, opts ...Option) (*Picture, error) {
-	p := &Picture{currentColor: color.NRGBA{A: 255}}
+	return newPicture(data, 0, opts...)
+}
+
+func newPicture(data []byte, nesting int, opts ...Option) (*Picture, error) {
+	p := &Picture{currentColor: color.NRGBA{A: 255}, nesting: nesting}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -230,14 +238,24 @@ func sortedKeys(set map[string]bool) []string {
 }
 
 // ViewTransform takes the picture's user space to a viewport of w×h
-// whose corner is the origin: the view box fitted as Aspect asks. A
-// picture with no view box is stretched from its width and height, and
-// keeps a unit a pixel along an axis it gives no size for.
+// whose corner is the origin: the view box fitted as Aspect asks, then
+// moved by the root's transform about the viewport's centre. A picture
+// with no view box is stretched from its width and height, and keeps a
+// unit a pixel along an axis it gives no size for.
 func (p *Picture) ViewTransform(w, h float64) Matrix { return p.viewTransform(w, h, 1) }
 
-// viewTransform is ViewTransform where an axis that keeps its unit takes
-// unit pixels for it.
+// viewTransform is ViewTransform where an axis that keeps its unit, and
+// the root's transform, take unit pixels for a CSS pixel.
 func (p *Picture) viewTransform(w, h, unit float64) Matrix {
+	m := p.fitted(w, h, unit)
+	if t := p.transform; t != (Matrix{}) && t != Identity() {
+		m = translate(w/2, h/2).Mul(scale(unit, unit)).Mul(t).Mul(scale(1/unit, 1/unit)).
+			Mul(translate(-w/2, -h/2)).Mul(m)
+	}
+	return m
+}
+
+func (p *Picture) fitted(w, h, unit float64) Matrix {
 	box := p.ViewBox
 	if box.Empty() {
 		sx, sy := unit, unit
@@ -249,9 +267,15 @@ func (p *Picture) viewTransform(w, h, unit float64) Matrix {
 		}
 		return scale(sx, sy)
 	}
+	return fit(box, p.Aspect, w, h)
+}
+
+// fit takes box to a viewport of w×h whose corner is the origin, as a
+// asks.
+func fit(box Box, a Aspect, w, h float64) Matrix {
 	sx, sy := w/box.W, h/box.H
-	if !p.Aspect.Stretch {
-		if p.Aspect.Slice {
+	if !a.Stretch {
+		if a.Slice {
 			sx = max(sx, sy)
 		} else {
 			sx = min(sx, sy)
@@ -268,6 +292,6 @@ func (p *Picture) viewTransform(w, h, unit float64) Matrix {
 		}
 		return 0.5
 	}
-	return translate((w-box.W*sx)*share(p.Aspect.X), (h-box.H*sy)*share(p.Aspect.Y)).
+	return translate((w-box.W*sx)*share(a.X), (h-box.H*sy)*share(a.Y)).
 		Mul(scale(sx, sy)).Mul(translate(-box.X, -box.Y))
 }

@@ -242,7 +242,7 @@ func keyOf(f style.Font) chainKey {
 		h.WriteString(name)
 		h.WriteByte(0)
 	}
-	return chainKey{families: h.Sum64(), n: len(f.Family), weight: f.Weight, italic: f.Italic}
+	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic}
 }
 
 // Chain is the faces f draws with.
@@ -277,7 +277,7 @@ func (s *Set) chain(f style.Font) *Chain {
 	based := false
 	for _, name := range f.Family {
 		if s.hasWeb(name) {
-			ch.entries = append(ch.entries, s.webFaces(name, f.Weight, f.Italic)...)
+			ch.entries = append(ch.entries, s.webFaces(name, int(f.Weight), f.Italic)...)
 			continue
 		}
 		if !based && ch.base != nil && s.draws(name, ch.base) {

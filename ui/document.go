@@ -682,7 +682,7 @@ func (d *Document) face(f style.Font) *twod.Face {
 	}
 	var opts []twod.FaceOption
 	if fb := d.fonts.Fallback(); fb != nil && fb != ff {
-		opts = append(opts, twod.Fallback(d.face(style.Font{Family: []string{fb.Family}, Weight: fb.Weight})))
+		opts = append(opts, twod.Fallback(d.face(style.Font{Family: []string{fb.Family}, Weight: float32(fb.Weight)})))
 	}
 	if d.emoji != nil {
 		opts = append(opts, twod.Emoji(d.emoji))

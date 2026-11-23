@@ -33,6 +33,10 @@ type Transitions struct {
 	media Media
 	off   [][]bool
 	ranks [][]int32
+	// startOff is off with the rules of @starting-style on, when some
+	// sheet has one (starts).
+	startOff [][]bool
+	starts   bool
 	// stale is set once media has changed which rules apply, or what a
 	// unit some length is in stands for: the next Compute restyles the
 	// whole tree.
@@ -72,6 +76,10 @@ type nodeAnim struct {
 	// follows is set while the element shows an ancestor's colour
 	// transition through inheritance, built once shown is.
 	follows, touched, built bool
+	// after is the style its transitions on Style run to, while ending
+	// is set.
+	after  style.Computed
+	ending bool
 }
 
 // run is one transition, between the values of its longhand in two
@@ -116,8 +124,10 @@ func (t *Transitions) SetMedia(m Media) bool {
 	t.media = m
 	resized := t.env.width != m.Width || t.env.height != m.Height
 	flipped := t.env.dark != m.Dark
+	rescaled := t.env.dppx != m.Resolution
 	blurred := t.env.inactive != m.Inactive
-	t.env.width, t.env.height, t.env.dark, t.env.inactive = m.Width, m.Height, m.Dark, m.Inactive
+	t.env.width, t.env.height, t.env.dark, t.env.dppx, t.env.inactive = m.Width, m.Height, m.Dark, m.Resolution,
+		m.Inactive
 	if t.all == nil {
 		return false
 	}
@@ -126,7 +136,9 @@ func (t *Transitions) SetMedia(m Media) bool {
 	}
 	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
 		t.off, t.stale, t.rekey = off, true, true
-	} else if resized && t.env.used&viewportUnits != 0 || flipped && t.env.prefersRead || blurred && t.env.inactiveRead {
+		t.startOff = rulesOff(t.all, m, true)
+	} else if resized && t.env.used&viewportUnits != 0 || flipped && t.env.prefersRead || rescaled ||
+		blurred && t.env.inactiveRead {
 		t.stale = true
 	}
 	return t.stale
@@ -167,6 +179,8 @@ func (t *Transitions) SetSheets(sheets []*Sheet) {
 	t.all = append([]*Sheet{agent}, sheets...)
 	t.styles, t.stylesOn = nil, counterStylesOn(t.all, t.media)
 	t.off, t.ranks, t.queries = mediaOff(t.all, t.media), layerRanks(t.all), containerQueries(t.all)
+	t.starts = startingRules(t.all)
+	t.startOff = rulesOff(t.all, t.media, true)
 }
 
 // Compute restyles root as css.Compute does, starting a transition for
@@ -187,8 +201,8 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 		t.styles = authorStyles(t.all, t.media)
 	}
 	r := restyler{sheets: t.all, styles: t.styles, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides,
-		transit: t.transition, transits: t.Running, computed: &t.computed, overlay: t.overlay, viewport: t.viewport,
-		browser: t.browser, env: &t.env}
+		transit: t.transition, transits: t.Running, afterChange: t.after, computed: &t.computed, overlay: t.overlay,
+		viewport: t.viewport, browser: t.browser, env: &t.env}
 	r.run(root, t.stale)
 	t.stale = false
 	if (len(t.anims) > 0 || t.rekey) && t.animate() {
@@ -230,7 +244,7 @@ func (t *Transitions) Step(dt float32) bool {
 		for i, r := range a.runs {
 			r.elapsed += dt
 			switch {
-			case longhands[i].prop.anim.kind == interpolated:
+			case longhands[i].prop.anim.kind != painted:
 				restyle(n)
 			case r.over():
 				delete(a.runs, i)
@@ -271,7 +285,19 @@ func (t *Transitions) restyled(n *dom.Node, old, next *style.Computed) {
 func (t *Transitions) transition(n *dom.Node, next *style.Computed) []override {
 	old := dom.Data(n).Style
 	a := t.nodes[n]
-	if old == nil || a == nil && !anyTransition(next.Transitions) {
+	if old == nil || old.Display == style.DisplayNone {
+		// An element that showed no box starts from its starting style,
+		// and transitions nothing without one.
+		if a != nil {
+			delete(t.nodes, n)
+			a = nil
+		}
+		if !t.starts || next.Display == style.DisplayNone || !anyTransition(next.Transitions) {
+			return nil
+		}
+		old = t.probeIn(n, nil, t.startOff)
+	}
+	if a == nil && !anyTransition(next.Transitions) {
 		return nil
 	}
 	shown := old
@@ -306,7 +332,7 @@ func (t *Transitions) transition(n *dom.Node, next *style.Computed) []override {
 	var over []override
 	for _, i := range moving {
 		r := a.runs[i]
-		if r == nil || longhands[i].prop.anim.kind != interpolated {
+		if r == nil || longhands[i].prop.anim.kind == painted {
 			continue
 		}
 		over = append(over, r.override(i))
@@ -314,7 +340,19 @@ func (t *Transitions) transition(n *dom.Node, next *style.Computed) []override {
 			delete(a.runs, i)
 		}
 	}
+	if a.ending = len(over) > 0; a.ending {
+		a.after = *next
+	}
 	return over
+}
+
+// after is the style n's transitions on Style run to, nil while none
+// runs.
+func (t *Transitions) after(n *dom.Node) *style.Computed {
+	if a := t.nodes[n]; a != nil && a.ending {
+		return &a.after
+	}
+	return nil
 }
 
 // retarget is the transition of the longhand at place i of longhands as
@@ -326,18 +364,20 @@ func (t *Transitions) retarget(i int, r *run, shown, next *style.Computed, to **
 	an := &l.prop.anim
 	tr, ok := transitionFor(next.Transitions, l.name)
 	switch {
-	case r != nil && an.equal(r.to, next):
+	case r == nil && (!ok || an.kind == discrete && !tr.Discrete):
+		return nil, true
+	case r != nil && t.same(i, r.to, next):
 		return r, true
 	case !ok:
-		return nil, r == nil
-	case r == nil && an.equal(shown, next):
+		return nil, false
+	case r == nil && t.same(i, shown, next):
 		return nil, true
 	}
 	from := shown
 	if r != nil {
 		from = r.now(i, shown)
 	}
-	if !an.lerp(&t.scratch, from, next, 0.5) {
+	if !tr.Discrete && !t.interpolates(i, from, next) {
 		return nil, r == nil
 	}
 	if *to == nil {
@@ -346,7 +386,7 @@ func (t *Transitions) retarget(i int, r *run, shown, next *style.Computed, to **
 	}
 	nr := &run{from: from, to: *to, reverseStart: from, factor: 1,
 		delay: tr.Delay, length: tr.Duration, easing: easing(tr.Easing)}
-	if r != nil && an.equal(r.reverseStart, next) {
+	if r != nil && t.same(i, r.reverseStart, next) {
 		nr.reverseStart = r.to
 		nr.factor = clamp01f(r.easing(r.progress())*r.factor + 1 - r.factor)
 		nr.length *= nr.factor
@@ -358,6 +398,25 @@ func (t *Transitions) retarget(i int, r *run, shown, next *style.Computed, to **
 		return nil, r == nil
 	}
 	return nr, false
+}
+
+// same reports whether a and b hold the same value of the longhand at
+// place i of longhands.
+func (t *Transitions) same(i int, a, b *style.Computed) bool {
+	p := &longhands[i].prop
+	if p.anim.equal != nil {
+		return p.anim.equal(a, b)
+	}
+	t.scratch = *b
+	p.inherit(&t.scratch, a)
+	return t.scratch.Equal(b)
+}
+
+// interpolates reports whether the longhand at place i of longhands moves
+// between a's value and b's, where it would otherwise flip.
+func (t *Transitions) interpolates(i int, a, b *style.Computed) bool {
+	an := &longhands[i].prop.anim
+	return an.kind != discrete && an.lerp != nil && an.lerp(&t.scratch, a, b, 0.5)
 }
 
 // anyTransition reports whether list runs a transition on some property.
@@ -500,9 +559,11 @@ func (r *run) progress() float32 {
 // while it waits out its delay.
 func (r *run) on(dst *style.Computed, i int) {
 	p := &longhands[i].prop
-	if r.elapsed < r.delay || !p.anim.lerp(dst, r.from, r.to, r.easing(r.progress())) {
+	if r.elapsed < r.delay {
 		p.inherit(dst, r.from)
+		return
 	}
+	p.blend(dst, r.from, r.to, r.easing(r.progress()))
 }
 
 // now is under with the value r gives the longhand i now.
@@ -538,12 +599,14 @@ func transitionFor(list []style.Transition, name string) (style.Transition, bool
 var (
 	// colorIndex is color's place in longhands.
 	colorIndex = orderIndex["color"]
-	// moving are the places in longhands of those that interpolate, in
-	// their order.
+	// displayIndex is display's.
+	displayIndex = orderIndex[propDisplay]
+	// moving are the places in longhands of those that transition, in
+	// their order: the discrete ones under allow-discrete.
 	moving = func() []int {
 		var out []int
 		for i, l := range longhands {
-			if l.prop.anim.moves() {
+			if l.prop.anim.moves() || l.prop.anim.kind == discrete {
 				out = append(out, i)
 			}
 		}

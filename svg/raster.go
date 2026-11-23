@@ -60,17 +60,29 @@ func (d *drawer) items(dst *image.RGBA, clip image.Rectangle, items []Item, fade
 		switch {
 		case it.Shape != nil:
 			d.shape(dst, clip, it.Shape, fade)
+		case it.Image != nil:
+			d.image(dst, clip, it.Image, fade)
 		case it.Group == nil:
-		case depth >= maxLayers:
+		case it.Group.Clip == nil && it.Group.Mask == nil && depth >= maxLayers:
 			d.items(dst, clip, it.Group.Items, fade*it.Group.Opacity, depth)
 		default:
-			box := d.bounds(it.Group.Items).Intersect(clip)
-			if box.Empty() {
+			g := it.Group
+			box := d.bounds(g.Items).Intersect(clip)
+			if g.Clip != nil {
+				box = box.Intersect(d.clipBounds(g.Clip))
+			}
+			if box.Empty() || depth >= maxEffectLayers {
 				continue
 			}
 			layer := d.layer(depth, box)
-			d.items(layer, box, it.Group.Items, 1, depth+1)
-			composite(dst, layer, fade*it.Group.Opacity)
+			d.items(layer, box, g.Items, 1, depth+1)
+			if g.Clip != nil {
+				applyCover(layer, d.clipCover(g.Clip, box))
+			}
+			if g.Mask != nil {
+				d.mask(layer, g.Mask, depth+1)
+			}
+			composite(dst, layer, fade*g.Opacity)
 		}
 	}
 }
@@ -154,10 +166,17 @@ func shapeBounds(s *Shape, m Matrix) image.Rectangle {
 func (d *drawer) bounds(items []Item) image.Rectangle {
 	var r image.Rectangle
 	for _, it := range items {
-		if it.Shape != nil {
+		switch {
+		case it.Shape != nil:
 			r = r.Union(shapeBounds(it.Shape, d.view.Mul(it.Shape.Transform)))
-		} else if it.Group != nil {
-			r = r.Union(d.bounds(it.Group.Items))
+		case it.Image != nil:
+			r = r.Union(imageBounds(it.Image, d.view.Mul(it.Image.Transform)))
+		case it.Group != nil:
+			g := d.bounds(it.Group.Items)
+			if it.Group.Clip != nil {
+				g = g.Intersect(d.clipBounds(it.Group.Clip))
+			}
+			r = r.Union(g)
 		}
 	}
 	return r
@@ -259,6 +278,10 @@ func (d *drawer) paint(dst *image.RGBA, p Paint, m Matrix, fade float64, evenOdd
 		d.cover.fill(evenOdd, func(y, x0 int, cover []float32) {
 			d.shader.row(dst.Pix[dst.PixOffset(x0, y):], x0, y, cover)
 		})
+		return
+	}
+	if p.Kind == PatternPaint {
+		d.pattern(dst, p.Pattern, m, opacity, evenOdd)
 		return
 	}
 	a := float32(p.Color.A) / 255 * opacity

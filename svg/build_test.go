@@ -27,7 +27,7 @@ func shapes(items []Item) []*Shape {
 	for _, it := range items {
 		if it.Shape != nil {
 			out = append(out, it.Shape)
-		} else {
+		} else if it.Group != nil {
 			out = append(out, shapes(it.Group.Items)...)
 		}
 	}
@@ -516,17 +516,19 @@ func TestViewTransformFitsTheViewBox(t *testing.T) {
 func TestUnsupportedNamesWhatIsNotDrawn(t *testing.T) {
 	for body, want := range map[string][]string{
 		`<rect width="1" height="1"/>`:                                                      nil,
-		`<text>hello</text>`:                                                                {"text"},
-		`<image href="a.png"/>`:                                                             {"image"},
+		`<text>hello</text>`:                                                                nil,
+		`<text>a <textPath href="#p">b</textPath></text>`:                                   {"textPath"},
+		`<image href="a.png"/>`:                                                             {"external reference"},
 		`<foreignObject/>`:                                                                  {"foreignObject"},
-		`<rect width="1" height="1" clip-path="url(#c)"/>`:                                  {"clip-path"},
-		`<g mask="url(#m)"/>`:                                                               {"mask"},
+		`<rect width="1" height="1" clip-path="url(#c)"/>`:                                  nil,
+		`<rect width="1" height="1" clip-path="circle(1px)"/>`:                              {"clip-path"},
+		`<g mask="url(#m)"/>`:                                                               nil,
 		`<g style="filter:url(#f)"/>`:                                                       {"filter"},
 		`<g filter="none" clip-path="none" mask="none"/>`:                                   nil,
-		`<pattern id="p"/><rect width="1" height="1" fill="url(#p)"/>`:                      {"pattern"},
-		`<symbol id="s"/><use href="#s"/>`:                                                  {"symbol"},
-		`<svg><rect width="1" height="1"/></svg>`:                                           {"nested svg"},
-		`<path d="M0 0h5" stroke="red" marker-end="url(#m)"/>`:                              {"marker"},
+		`<pattern id="p"/><rect width="1" height="1" fill="url(#p)"/>`:                      nil,
+		`<symbol id="s"/><use href="#s"/>`:                                                  nil,
+		`<svg><rect width="1" height="1"/></svg>`:                                           nil,
+		`<path d="M0 0h5" stroke="red" marker-end="url(#m)"/>`:                              nil,
 		`<g marker-start="url(#m)"><rect width="1" height="1"/></g>`:                        nil,
 		`<use href="other.svg#a"/>`:                                                         {"external reference"},
 		`<rect width="1" height="1" fill="url(other.svg#g)"/>`:                              {"external reference"},
@@ -537,15 +539,12 @@ func TestUnsupportedNamesWhatIsNotDrawn(t *testing.T) {
 			`red }</style>`: {"@media", "style selector"},
 		`<g display="none"><text>hidden</text></g>`:                         nil,
 		`<defs><text id="t">kept for later</text><clipPath id="c"/></defs>`: nil,
-		`<text>a</text><text>b</text><image/>`:                              {"image", "text"},
+		`<text>a</text><image href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E` +
+			`%3CforeignObject/%3E%3C/svg%3E"/>`: {"foreignObject"},
 	} {
 		if got := picture(t, body).Unsupported(); !slices.Equal(got, want) {
 			t.Errorf("%s: %v, want %v", body, got, want)
 		}
-	}
-	p, err := NewPicture([]byte(`<svg ` + xmlns + ` transform="scale(2)"/>`))
-	if err != nil || !slices.Equal(p.Unsupported(), []string{"transform on the root"}) {
-		t.Errorf("a transform on the root: %v %v", p.Unsupported(), err)
 	}
 }
 

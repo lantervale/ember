@@ -103,6 +103,8 @@ func (t *Text) equal(o *Text) bool {
 		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&
+		t.Dir == o.Dir &&
+		t.Bidi == o.Bidi &&
 		t.WhiteSpace == o.WhiteSpace &&
 		t.TextIndent == o.TextIndent &&
 		t.PlaceholderColor == o.PlaceholderColor &&

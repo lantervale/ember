@@ -1725,7 +1725,7 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		p.recoloured(e, st, face, parts, c, ink)
 	} else {
 		for _, f := range b.Lines {
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Text, st, opts)
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 	}
 	p.decorations(e, st, style.LineThrough, alpha)
@@ -1748,7 +1748,7 @@ func (p *painter) shadows(e entry, st *style.Computed, face *twod.Face, f box.Fr
 				continue
 			}
 			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Text, st, o)
+			p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Shown(), st, o)
 		}
 	}
 }
@@ -1854,7 +1854,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
 		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
 		if k < 0 {
-			p.words(at, f.Text, st, plain)
+			p.words(at, f.Shown(), st, plain)
 			continue
 		}
 		for j, clip := range p.partClips(e, st, f, parts[k]) {
@@ -1866,7 +1866,7 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 				continue
 			}
 			p.s.PushClip(clip)
-			p.words(at, f.Text, st, p.textOptions(face, st.Font.Size, st.LetterSpacing, drawn, smoothingOf(st)))
+			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterSpacing, drawn, smoothingOf(st)))
 			p.s.PopClip()
 		}
 	}
