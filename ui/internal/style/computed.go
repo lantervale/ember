@@ -1057,6 +1057,9 @@ const (
 	BlendSaturation
 	BlendColor
 	BlendLuminosity
+	// BlendPlusLighter adds the colours and alphas, premultiplied, up to
+	// white and opaque: mix-blend-mode only.
+	BlendPlusLighter
 )
 
 // Filtered reports whether the element filters itself or its backdrop,

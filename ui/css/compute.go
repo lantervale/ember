@@ -2696,7 +2696,7 @@ var blendModes = map[string]style.BlendMode{
 	"color-dodge": style.BlendColorDodge, "color-burn": style.BlendColorBurn, "hard-light": style.BlendHardLight,
 	"soft-light": style.BlendSoftLight, "difference": style.BlendDifference, "exclusion": style.BlendExclusion,
 	"hue": style.BlendHue, "saturation": style.BlendSaturation, "color": style.BlendColor,
-	"luminosity": style.BlendLuminosity,
+	"luminosity": style.BlendLuminosity, "plus-lighter": style.BlendPlusLighter,
 }
 
 //nolint:gochecknoglobals // lookup table

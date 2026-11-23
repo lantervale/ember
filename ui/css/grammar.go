@@ -463,7 +463,7 @@ var checks = map[string]check{
 	"transform":             checkTransform,
 	"filter":                checkFilter,
 	"backdrop-filter":       checkFilter,
-	"mix-blend-mode":        single(blendMode),
+	"mix-blend-mode":        single(either(blendMode, words("plus-lighter"))),
 	"isolation":             single(words("auto", "isolate")),
 	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,

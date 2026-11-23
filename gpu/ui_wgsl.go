@@ -322,6 +322,14 @@ fn mixed(t: vec4f, pos: vec2f) -> vec4f {
 	if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)) || b.a <= 0.0) {
 		return t;
 	}
+	let mode = u32(u.backU.w + 0.5);
+	if (mode == 16u) {
+		// plus-lighter: the sum, drawn over the backdrop as the colour and
+		// alpha that make it
+		let a = min(1.0, t.a + b.a);
+		let k = select((a - b.a) / (1.0 - b.a), 1.0, b.a >= 1.0);
+		return vec4f(min(vec3f(1.0), t.rgb + b.rgb) - (1.0 - k) * b.rgb, k);
+	}
 	let s = t.rgb / t.a;
 	let m = clamp(blended(u32(u.backU.w + 0.5), b.rgb / b.a, s), vec3f(0.0), vec3f(1.0));
 	return vec4f(((1.0 - b.a) * s + b.a * m) * t.a, t.a);
