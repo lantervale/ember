@@ -18,7 +18,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
-| `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
+| `initial-letter` | refused with a warning, where Chrome sizes and sinks the first letter by lines: float a `::first-letter` for a drop cap |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
 | a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
 | a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
@@ -35,27 +35,32 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
 | `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
 | `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
-| `font-variant-position` on a face that has `sups` or `subs` | read and kept, drawn as `normal`, where Chrome takes the face's superiors and inferiors |
 | an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
-| shaping right-to-left scripts: Arabic's joined forms, ligatures | each letter drawn in its own form, where Chrome joins them ([decision 0145](../99-decisions/0145-text-is-shaped-by-a-pure-go-opentype-layout-reader.md) shapes Latin, Greek and Cyrillic) |
-| marks placed on their bases and cursive attachment (GPOS lookups 3 to 6), Indic reordering | left out: a combining mark is drawn as its cluster's first character draws it |
+| Arabic in a face without `init`, `medi` and `fina` (only the presentation forms of its cmap) | each letter in its own form, where Chrome's HarfBuzz joins it with those forms; Mongolian's variation selectors and `stch` too |
+| Indic, Khmer, Myanmar and the USE scripts' reordering, a mark placed by its combining class in a face whose GPOS does not place it, a precomposed character a face lacks drawn from its decomposition | left out ([decision 0157](../99-decisions/0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) shapes Arabic, Hebrew and the joining scripts); a character the face lacks breaks the run, so letters on either side of it are not joined |
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without its ligatures and kerning, where Chrome's HarfBuzz reads them; most of the Mac's faces have GSUB and GPOS too |
 | a variable font's GPOS values at an instance (their device and variation deltas) and its GSUB feature variations (`rvrn` by axis) | the default instance's kerning and substitutions, the glyphs' advances the instance's |
-| ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole; a space's pair kerning with the words beside it is Chrome's || selecting, the caret and `text-overflow` in text shown right to left | a selection and the caret measure a right-to-left run from its left, and the ellipsis cuts a line's right end |
-| mirroring the characters of right-to-left text but brackets (`<`, `>`, `«`…) | drawn as they are, where Chrome mirrors every Bidi_Mirrored character |
-| the text and the arrow of a text field, a `select` or a button of direction `rtl` | laid out as left-to-right controls |
+| ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole; a space's pair kerning with the words beside it is Chrome's |
+| a selected space where a line's text changes direction (`שלום abc` from the `ם` into `abc`) | its room is highlighted with the run it is shown in, where Chrome's range leaves it out |
+| the caret and the selection of a `textarea` in text shown right to left; a field's selection over text of both directions | measured from the left; one rectangle from the first selected character's edge to the last's, where Chrome draws one per run |
 
 ## Generated content
 
 | Missing | Today |
 |---|---|
 | `::before`, `::after` on `progress`, `meter` and range inputs | no box, where Chrome lays one out among the control's own parts: in a progress or a meter on lines above and below its bar, overflowing the box, the last line giving the inline-block its baseline; in a range input at the start and the end of a row with the track between them |
+| `::-webkit-slider-runnable-track` and `::-webkit-slider-thumb`, `::-webkit-progress-bar` and `::-webkit-progress-value`, `::-webkit-meter-bar` and its values (`-optimum-value`, `-suboptimum-value`, `-even-less-good-value`) | refused, or under `ui.BrowserSheets()` matching nothing: ui draws a range, a progress and a meter its own way. Chrome lays each part out as a box: a range of `appearance: none` centres its track across the input, the thumb a box in it at the value along the track less its own width, placed down by its `margin-top`, the input as tall as the thumb when its height is auto; a progress of `appearance: none` shows its bar part (grey) and its value part (green) unless styled; a meter draws its styled parts whatever its `appearance` |
+| `appearance: none` on a control | read, changes nothing: ui's controls draw their marks always. Chrome then draws a checkbox or a radio as an empty box, 0 by 0 unless sized and with no tick; a range without its track, its thumb kept; a progress with its default parts |
+| `accent-color` on a checkbox, a radio and a range's thumb | read for a range's fill and a progress's value only. Chrome fills a checked checkbox, a radio's ring and dot and a range's thumb in it too, the tick white or dark as the accent is dark or light |
+| a viewport's styled bars, the scrollbar parts' `:hover`, `:active` and `:window-inactive`, `::-webkit-scrollbar-button`, `::-webkit-resizer`, styled parts under `scrollbar-width: thin` | ui's own bars on a scrolling viewport, the parts drawn as at rest, no buttons and no resizer, and the parts drawn under `thin`, where Chrome draws the root's styled bars on the viewport, its hovered and pressed parts, buttons sized by their rules, and its system bars once `scrollbar-width` isn't `auto` |
+| `scrollbar-gutter: both-edges`, the content under an empty stable gutter | read: the gutter is kept at the end only, and nothing is drawn in it, where Chrome keeps one at each edge and draws the content under the gutter while no bar shows |
+| `scrollbar-color` | ui's own thumbs in its first colour on gutters of its second, where Chrome draws its system bars in them, overlay ones on macOS |
 | a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
 | where a `::marker` takes the pointer, its own `cursor` shown | over its bullet's box, where Chrome's is its text's: the bullet and the space after it, the line's height |
 | a list item's colour transition under a `::marker` a rule styles | the marker shows the item's end colour, where Chrome's follows the item's |
 | `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
-| the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
-| a `list-style-image` gradient, `list-style-position: inside` | refused |
+| a counter style's text in a font of its own, and its glyphs a face lacks | the complex predefined styles write their CJK, Korean and Ethiopic characters through the face's fallbacks, which ui has none of unless `ui.SystemFonts()` finds them |
+| a marker inside a right-to-left item | laid out as at the start of a left-to-right line; not compared with Chrome |
 | a `list-style-image` fetched off the frame (`ui.FetchImages`) | the marker is laid out once the picture is found by another layout, not when it lands |
 
 ## Layout
@@ -65,12 +70,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
-| columns right to left | left to right only, their content laid out right to left in each |
 | a table with a collapsed column as a grid item, or as a flex item with a width of its own | laid out at the width its container gives it, where Chrome narrows the grid item's by the column and sizes the flex item's apart; a flex item of an automatic width keeps it, as Chrome |
-| a scroller of direction `rtl` | scrolls from its left, where Chrome starts it at its right end; its bar is on its left, as Chrome's |
-| collapsed borders of a table of direction `rtl` | each cell's left border still wins its left edge, where Chrome resolves its start edge first |
-| logical properties in `@keyframes` and `transition-property` under `direction: rtl` | the left side's |
-| a float of direction `rtl` beside a block that avoids floats, a block's own `text-align` of `-webkit-left` under rtl | not compared with Chrome |
+| a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
@@ -120,7 +121,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
 | a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
 | `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |
-| a `url()` filter, in `filter` or `backdrop-filter`; `mix-blend-mode: plus-lighter`, `plus-darker` | refused |
+| a `url()` filter, in `filter` or `backdrop-filter`, to an inline `svg` element's `filter` | refused with a warning: the svg package runs the filter for an SVG picture (decision 0150), not over an element's picture |
+| `mix-blend-mode: plus-lighter` over a backdrop seen through | added in encoded colours and drawn over the backdrop as the colour and alpha that make the sum: exact on an opaque backdrop, near it where the backdrop is translucent |
 | a backdrop filter inside an isolated group that is no backdrop root (`isolation: isolate`, a `z-index` holding a mixed element) | reads the group only, where Chrome reads on to the backdrop root ([decision 0130](../99-decisions/0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md)) |
 | a mixed element or a backdrop filter reaching the page | mixes with the Document's canvas, not with what the game drew under the Document |
 | `opacity` below 1 on an ancestor of an element drawn as a picture, itself not one | each of its pictures and boxes faded apart, where Chrome fades the ancestor as one |
@@ -133,15 +135,15 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |
-| `-webkit-mask-position` and `-webkit-mask` with three-value positions, `-webkit-mask-position-x` and `-y`, `-webkit-mask-composite`'s other words (`destination-in`, `copy`, `plus-lighter`…), `-webkit-mask-box-image` | refused with a warning; `-webkit-mask: … no-clip`, which Chrome refuses, is read |
-| `mask-composite` serialised after `-webkit-mask-composite` | as the plain word (`exclude`), where Chrome keeps the legacy one (`xor`) |
+| `-webkit-mask-position-x` and `-y`, `-webkit-mask-box-image` and its longhands | refused with a warning: ui's `mask-position` has no axis of its own, and draws no nine-patch mask |
 | a masked element under a rotation or a skew | hit in its border box, where Chrome reaches about half a pixel further |
 | a masked element on a surface other than `twod.Canvas` | drawn unmasked, but for the one-colour icon |
 | a `pattern` of a property of strings (`\p{RGI_Emoji}`), an emoji or case-mapping property (`\p{Emoji}`, `\p{Cased}`), a script's short name (`\p{sc=Grek}`) or `Script_Extensions`, or a group name used twice | constrains nothing, where Chrome reads it ([decision 0159](../99-decisions/0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md)) |
 | a typed email's `Value` | the address as typed, where Chrome's value holds its domain in punycode |
 | a form's submission | Chrome's validation bubble is not shown, and nothing is sent: `action`, `method`, `formaction`, `target` are the program's to read |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
-| `scroll-state()` container queries and `container-type: scroll-state` | refused, with a warning: the condition never holds |
+| `scroll-state(scrolled: …)`, `snapped` other than `none`, `container-type: anchored` | refused with a warning, or never holds: ui keeps no last scroll direction and snaps no scroll |
+| `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 

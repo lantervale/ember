@@ -28,8 +28,10 @@ type inlineContent struct {
 	pieces []piece
 	// metrics caches each style's font metrics for this layout.
 	metrics map[*style.Computed]box.Metrics
-	// marker is a summary's disclosure triangle, nil elsewhere.
+	// marker is a summary's disclosure triangle, or the ::marker of a list item whose
+	// marker stands inside it, which mark draws; nil elsewhere.
 	marker *box.Box
+	mark   *markerContent
 	// oofs are the out-of-flow elements inside the content, by their node.
 	oofs map[*node]*inlineOOF
 	// anchors are where in the runs each sits: before run i.
@@ -235,12 +237,17 @@ func isAtomicDisplay(d style.Display) bool {
 }
 
 // inlineOf gathers the inline content of items for owner, nil when it is only collapsible
-// whitespace.
-func (t *tree) inlineOf(owner *node, items []item) *inlineContent {
+// whitespace; listItem is the item whose marker stands inside it, first on its first
+// line, nil for none.
+func (t *tree) inlineOf(owner *node, items []item, listItem *node) *inlineContent {
 	c := &inlineContent{owner: owner, unit: unitsPerPoint(t.fonts), line: firstLineOf(owner), height: none}
 	t.gather(c, owner.box, items)
 	if n := owner.box.Node; n != nil && n.Tag() == dom.Summary && owner.st.ListItem && markerOf(owner.st) != "" {
 		c.marker = &box.Box{Kind: box.Marker, Node: n, Style: owner.st}
+	} else if listItem != nil {
+		if m, ok := t.markerOf(listItem); ok {
+			c.mark, c.marker = &m, &box.Box{Kind: box.Marker, Node: listItem.box.Node, Style: m.st}
+		}
 	}
 	visible := c.marker != nil || framedCut(items)
 	for _, r := range c.runs {
@@ -466,7 +473,9 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 	soft := c.softBreaks()
 	levels := c.levels()
 	c.reorders = levels != nil
-	if c.marker != nil {
+	if c.mark != nil {
+		c.pieces = append(c.pieces, piece{kind: marker, width: c.mark.insideWidth(fonts)})
+	} else if c.marker != nil {
 		c.pieces = append(c.pieces, piece{kind: marker, width: markerWidth(fonts, c.owner.st)})
 	}
 	for i, r := range c.runs {
@@ -1709,6 +1718,11 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 	lo, hi := len(c.spans), -1
 	for i := l.from; i < l.to; i++ {
 		p := c.pieces[i]
+		if p.kind == marker && c.mark != nil {
+			// an item's marker inside it is an inline box of its own style
+			mh, mb := t.lineHeight(c, c.mark.st)
+			*root = root.with(extent{max(mb, c.mark.picture.Y), mh - mb}, 0)
+		}
 		if p.kind == marker || p.kind == anchor {
 			continue
 		}
@@ -2291,20 +2305,24 @@ func (t *tree) fragment(st *style.Computed, text string, r geom.Rect, baseline f
 
 // placeMarker puts the ::marker box at r, its triangle on baseline lb.
 func (c *inlineContent) placeMarker(r geom.Rect, lb float32) {
+	if c.mark != nil {
+		c.mark.place(c.marker, r, lb)
+		return
+	}
 	c.marker.Pos = geom.Vec2{X: r.X, Y: r.Y}
 	c.marker.Size = geom.Vec2{X: r.W, Y: r.H}
 	c.marker.Lines = []box.Fragment{{Text: markerOf(c.owner.st), Rect: geom.Rect{W: r.W, H: r.H}, Baseline: lb}}
 }
 
 // ellipsizeLine cuts a line too wide for content and puts the ellipsis at its end, or at
-// its start, then flush with the content's end.
+// its left, then flush with the content's right: the end of a line of direction rtl.
 func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left, content float32) ([]piece, float32,
 	bool, bool) {
-	if !n.st.EllipsisStart {
+	if !n.st.EllipsisStart && n.st.Dir != style.RTL {
 		kept, cut := t.ellipsize(c, pieces, content)
 		return kept, x, cut, false
 	}
-	pieces = t.ellipsizeStart(c, pieces, content)
+	pieces = t.ellipsizeStart(c, pieces, content, n.st.EllipsisStart)
 	w := newPen(c.unit, 0)
 	for _, p := range pieces {
 		w.step(p, 0)
@@ -2394,9 +2412,10 @@ func (t *tree) ellipsize(c *inlineContent, pieces []piece, width float32) ([]pie
 }
 
 // ellipsizeStart drops the line's start until an ellipsis and the rest fit in width, the
-// ellipsis a word of the first run kept. The line then ends at the box's end, as Chrome's
+// ellipsis a word of the first run kept, a space after it dropped when trim says so, as
+// truncate-start's isolated text has none there. The line then ends at the box's end, as Chrome's
 // right-to-left cut leaves its room before the ellipsis.
-func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32) []piece {
+func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32, trim bool) []piece {
 	last := pieces[len(pieces)-1].run
 	room := width - t.fonts.Advance(c.runs[last].st.Font, "…")
 	used := float32(0)
@@ -2416,7 +2435,7 @@ func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32) [
 		break
 	}
 	out = append(out, pieces[i:]...)
-	for len(out) > 0 && out[0].kind == gap {
+	for trim && len(out) > 0 && out[0].kind == gap {
 		out = out[1:]
 	}
 	run := last
@@ -2440,6 +2459,10 @@ func (c *inlineContent) align(st *style.Computed, l line, last bool, free float3
 		if c.base%2 == 1 {
 			dir = style.RTL
 		}
+	}
+	if free < 0 && dir == style.RTL {
+		// a line too long for its box is start aligned, and overflows its end
+		return free, 0
 	}
 	start := alignOffset(style.Start.Resolve(dir), free)
 	if a := st.TextAlign; a != style.Justify {

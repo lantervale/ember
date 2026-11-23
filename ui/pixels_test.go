@@ -34,6 +34,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/markers", 400, 330, 0.0056},
 		{"./internal/pages/pixelated", 420, 130, 0.0002},
 		{"./internal/pages/scrolled", 300, 320, 0.0125},
+		{"./internal/pages/scrollbar-parts", 480, 230, 0.0003},
 		{"./internal/pages/viewport-top", 320, 260, 0.0055},
 		{"./internal/pages/viewport-end", 320, 260, 0.006},
 		{"./internal/pages/top-layer", 320, 240, 0.002},
@@ -76,6 +77,8 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/filters", 600, 420, 0.003},
 		{"./internal/pages/masks", 680, 560, 0.0009},
 		{"./internal/pages/blend-modes", 600, 330, 0.0015},
+		{"./internal/pages/plus-lighter", 420, 180, 0.0006},
+		{"./internal/pages/mask-composite", 460, 260, 0.0004},
 		{"./internal/pages/backdrop-filter", 560, 360, 0.001},
 		{"./internal/pages/background-blend", 600, 260, 0.0012},
 		{"./internal/pages/svg-pictures", 860, 640, 0.0008},
@@ -97,7 +100,9 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/rounded-dashes", 560, 160, 0.0012},
 		{"./internal/pages/outline-styles", 520, 160, 0.001},
 		{"./internal/pages/direction", 400, 400, 0.003},
+		{"./internal/pages/direction-more", 400, 420, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
+		{"./internal/pages/list-inside", 520, 360, 0.0072},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/text-stroke", 480, 420, 0.0095},
@@ -105,6 +110,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/opentype", 440, 360, 0.0095},
 		{"./internal/pages/background-text", 640, 300, 0.0031},
 		{"./internal/pages/font-variations", 520, 320, 0.0065},
+		{"./internal/pages/joined", 440, 400, 0.0055},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			if strings.HasSuffix(c.pkg, "/mitres") && os.Getenv("CI") != "" && runtime.GOOS != "windows" {

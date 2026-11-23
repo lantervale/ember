@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	"golang.org/x/text/unicode/bidi"
+
+	"github.com/lantervale/ember/internal/shape"
 )
 
 // maxBrackets is how many opening brackets BD16 keeps open at most.
@@ -106,3 +108,7 @@ func (s *sequence) brackets() {
 		}
 	}
 }
+
+// Mirror is r's Bidi_Mirroring_Glyph, the character drawn for it at an odd level (L4),
+// and false when it has none: the shaper's, which mirrors text drawn right to left.
+func Mirror(r rune) (rune, bool) { return shape.Mirror(r) }

@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -171,6 +172,8 @@ type Selector struct {
 	// inactive is a ::selection's :window-inactive: it matches only while
 	// the Document's window is not the active one.
 	inactive bool
+	// part is the states a scrollbar part's pseudo-classes ask for.
+	part partState
 }
 
 func (s Selector) String() string {
@@ -190,6 +193,7 @@ func (s Selector) String() string {
 	if s.inactive {
 		b.WriteString(":window-inactive")
 	}
+	b.WriteString(s.part.String())
 	return b.String()
 }
 
@@ -797,6 +801,7 @@ func matched(cs []Component) []Component {
 
 func parseComplex(cs []Component) (Selector, *SelectorError) {
 	var s Selector
+	cs, s.part = partStatesOf(cs)
 	cs, s.inactive = windowInactive(cs)
 	name, n, err := pseudoElementAt(cs)
 	if err != nil {
@@ -870,6 +875,7 @@ func (s *Selector) specificity() Specificity {
 	if s.inactive {
 		sp[1]++
 	}
+	sp[1] += bits.OnesCount16(uint16(s.part))
 	if s.PseudoElement == beforeMarker || s.PseudoElement == afterMarker {
 		sp[2]++
 	}

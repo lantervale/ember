@@ -65,6 +65,9 @@ type containerCond struct {
 	name  string
 	query *mediaCond
 	axes  sizeAxes
+	// scroll is set when the query asks scroll-state(), which only a
+	// scroll-state container answers.
+	scroll bool
 }
 
 // holds reports whether one of r's conditions holds for e, or for its
@@ -100,7 +103,7 @@ func (c *containerCond) picks(st *style.Computed) bool {
 	if c.name != "" && !slices.Contains(st.ContainerNames, c.name) {
 		return false
 	}
-	return c.axes&^axesOf(st.ContainerType) == 0
+	return c.axes&^axesOf(st.ContainerType) == 0 && (!c.scroll || st.ContainerScrollState)
 }
 
 // axes are the axes c's size features read.
@@ -141,7 +144,7 @@ func (p *mediaParser) containerRule(prelude []Component) (*containerRule, bool) 
 			if p.standardStyle {
 				cond = &mediaCond{op: mediaOr}
 			}
-			c.query, c.axes = cond, cond.axes()
+			c.query, c.axes, c.scroll = cond, cond.axes(), cond.readsScrollState()
 			r.viewport = r.viewport || cond.readsViewport()
 		}
 		r.conds = append(r.conds, c)
@@ -220,7 +223,11 @@ func (p *mediaParser) styleFeature(at Component, args []Component) mediaCond {
 // on the axes it answers once laid out, and its custom properties.
 func (m *measures) subjectOf(a *dom.Node) *subject {
 	st := dom.Data(a).Style
-	s := &subject{vars: st.Vars, of: a, env: m}
+	s := &subject{vars: st.Vars, of: a, env: m, rtl: st.Dir == style.RTL}
+	if st.ContainerScrollState {
+		scroll := m.scrollOf(a)
+		s.scroll = &scroll
+	}
 	if size, ok := m.size(a); ok {
 		s.m, s.sized = Media{Width: size[0], Height: size[1]}, axesOf(st.ContainerType)
 	}
@@ -347,10 +354,14 @@ func (t *Transitions) Requery(size func(n *dom.Node) (w, h float32, ok bool)) bo
 	changed := false
 	for n := range env.containers {
 		st := dom.Data(n).Style
-		if st == nil || st.ContainerType == style.ContainerNormal || !t.attached(n) {
+		if st == nil || st.ContainerType == style.ContainerNormal && !st.ContainerScrollState || !t.attached(n) {
 			delete(env.containers, n)
 			delete(env.sizes, n)
 			delete(env.read, n)
+			delete(env.scroll, n)
+			continue
+		}
+		if st.ContainerType == style.ContainerNormal {
 			continue
 		}
 		w, h, ok := size(n)

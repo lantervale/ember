@@ -85,9 +85,14 @@ type Box struct {
 	Border  Edges
 	Padding Edges
 	// Content is the size of the scrollable overflow, and Scroll the
-	// node's dom Scroll offset clamped to it by layout.
-	Content geom.Vec2
-	Scroll  geom.Vec2
+	// node's dom Scroll offset clamped to it by layout, from ScrollStart
+	// to ScrollStart plus what Content leaves past the scrollport. A box
+	// that scrolls from its end (direction rtl, a reversed flex box) has a
+	// ScrollStart below zero by what overflows its start, and scrolls from
+	// zero towards it, as Chrome's scrollLeft.
+	Content     geom.Vec2
+	Scroll      geom.Vec2
+	ScrollStart geom.Vec2
 	// Scrollbar is the room the box's scrollbars take along its right and bottom
 	// padding edges: overflow: scroll's, and auto's once the content overflows.
 	Scrollbar geom.Vec2
@@ -121,8 +126,10 @@ type Box struct {
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Picture is the address of the picture a Marker shows, its item's
-	// list-style-image, "" for its text or its bullet.
-	Picture string
+	// list-style-image, "" for its text or its bullet; Gradient the
+	// gradient it shows in its place.
+	Picture  string
+	Gradient *style.Gradient
 	// Fragments is an inline element's border box on each line it spans,
 	// in the box's space: the first holds its left edge and the last its
 	// right, as Chrome's getClientRects. With Broken they are a block's
@@ -151,7 +158,7 @@ type Box struct {
 }
 
 // Columns are a multi-column container's columns, side by side from its
-// content box's start, each Width wide and Gap apart, in rows the blocks
+// content box's start (its right under direction rtl), each Width wide and Gap apart, in rows the blocks
 // spanning them cut.
 type Columns struct {
 	Width, Gap float32
@@ -163,6 +170,15 @@ type Columns struct {
 type ColumnRow struct {
 	Count       int
 	Top, Height float32
+}
+
+// ClampScroll is off kept within what a scrollport of size port scrolls
+// over content of size content starting at start, a box's ScrollStart.
+func ClampScroll(off, start, content, port geom.Vec2) geom.Vec2 {
+	return geom.Vec2{
+		X: min(max(off.X, start.X), start.X+max(content.X-port.X, 0)),
+		Y: min(max(off.Y, start.Y), start.Y+max(content.Y-port.Y, 0)),
+	}
 }
 
 // Append adds children to b.

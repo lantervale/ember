@@ -112,7 +112,7 @@ var webkit = vendor{
 		border-top-right-radius box-shadow box-sizing clip-path column-count column-gap column-rule
 		column-rule-color column-rule-style column-rule-width column-span column-width columns filter flex
 		flex-basis flex-direction flex-flow flex-grow flex-shrink flex-wrap font-feature-settings
-		hyphenate-character justify-content mask-clip mask-composite mask-image mask-origin mask-repeat mask-size
+		hyphenate-character justify-content mask-clip mask-image mask-origin mask-repeat mask-size
 		opacity order
 		perspective perspective-origin print-color-adjust shape-image-threshold shape-margin shape-outside
 		text-emphasis text-emphasis-color text-emphasis-position text-emphasis-style text-size-adjust transform
@@ -155,13 +155,10 @@ var webkit = vendor{
 		"user-drag": ownChrome, "user-modify": ownChrome, "writing-mode": ownChrome,
 	},
 	legacy: map[string]string{
-		"mask":          "a shorthand of Chrome's own longhands, which take three-value positions and refuse no-clip",
+		"mask": "a shorthand of Chrome's own longhands, which take three-value positions and refuse no-clip",
+		"mask-composite": "takes the compositing operators (copy, destination-in…), which mask-composite keeps " +
+			"as written",
 		"mask-position": "a shorthand of -webkit-mask-position-x and -y, which take three-value positions",
-	},
-	// Chrome reads -webkit-mask-composite's compositing words, the four
-	// that are mask-composite's as theirs; the others stay refused.
-	words: map[string]map[string]string{
-		"mask-composite": {"source-over": "add", "source-in": "intersect", "source-out": "subtract", "xor": "exclude"},
 	},
 	// Safari's and old Chrome's (-webkit-touch-callout,
 	// -webkit-overflow-scrolling…): today's Chrome knows none of them.
@@ -182,7 +179,8 @@ var webkit = vendor{
 
 	elements: map[string]string{"input-placeholder": "placeholder"},
 	// Chrome takes any ::-webkit- name as a pseudo-element, most of them
-	// parts of its own controls and bars, which ui draws its own way.
+	// parts of its own controls, which ui draws its own way; the parts ui
+	// styles too are in pseudoElements under their prefixed names.
 	otherElements: unmatched,
 	classes:       map[string]string{"any-link": "any-link"},
 	never:         []string{"autofill", "drag", "full-page-media", "full-screen", "full-screen-ancestor"},
@@ -360,6 +358,8 @@ func vendorSelector(sel []Component) treatment {
 		switch as, ok := aliases[rest]; {
 		case ok:
 			sel[at].Text = as
+		case element && ownPart(strings.ToLower(sel[at].Text)):
+			// left for the selector's own check
 		case !element && slices.Contains(v.never, rest):
 			result = unmatched
 		case !element && slices.Contains(v.ownClasses, rest):

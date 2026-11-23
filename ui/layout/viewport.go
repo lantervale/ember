@@ -99,17 +99,17 @@ func fitViewport(st *style.Computed, auto *size, content, port size) bool {
 	}
 	const slack = 0.01
 	changed := false
-	fit := func(is bool, room *float32, overflows bool) {
+	fit := func(is bool, room *float32, bar float32, overflows bool) {
 		if want := overflows && is; want != (*room != 0) {
 			*room = 0
 			if want {
-				*room = st.ScrollbarWidth
+				*room = bar
 			}
 			changed = true
 		}
 	}
-	fit(st.Overflow.Height == style.OverflowAuto, &auto.w, content.h > port.h+slack)
-	fit(st.Overflow.Width == style.OverflowAuto, &auto.h, content.w > port.w+slack)
+	fit(st.Overflow.Height == style.OverflowAuto, &auto.w, st.ScrollbarWidth, content.h > port.h+slack)
+	fit(st.Overflow.Width == style.OverflowAuto, &auto.h, st.ScrollbarHeight, content.w > port.w+slack)
 	return changed
 }
 

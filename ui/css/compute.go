@@ -306,7 +306,7 @@ func (r *restyler) children(n *dom.Node, parent *style.Computed, rem float32, fo
 func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Computed, rem float32) bool {
 	s := r.compute(n, parent, rem)
 	*r.computed++
-	if s.ContainerType != style.ContainerNormal {
+	if s.ContainerType != style.ContainerNormal || s.ContainerScrollState {
 		r.env.contain(n)
 	}
 	old := data.Style
@@ -565,6 +565,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
+	r.scrollbars(&c, n, rem)
 	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
 		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
 		r.counts = true
@@ -588,6 +589,9 @@ func (r *restyler) overKeyframe(casc cascaded) {
 	for i := range r.keyframe {
 		d := &r.keyframe[i]
 		for _, name := range longhandsOf(d.Name) {
+			if casc.rtl && d.inline {
+				name = mirrored(name)
+			}
 			if w := casc.longhands[orderIndex[name]]; w == nil || !w.Important {
 				casc.longhands[orderIndex[name]] = d
 			}
@@ -1072,14 +1076,14 @@ func (x *ctx) propagateOverflow(root bool) {
 	v.ScrollbarNone = c.ScrollbarNone
 	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
 		if v.ScrollbarOverlay = x.overlay; !x.overlay {
-			v.ScrollbarWidth = 15
+			v.ScrollbarWidth, v.ScrollbarHeight = barGutter, barGutter
 		}
 	}
 	c.Viewport = &v
 	if own {
 		c.OverflowPropagated = true
 		c.Overflow = style.Size[style.Overflow]{}
-		c.ScrollbarWidth, c.ScrollbarOverlay = 0, false
+		c.ScrollbarWidth, c.ScrollbarHeight, c.ScrollbarOverlay = 0, 0, false
 	}
 }
 
@@ -1111,9 +1115,10 @@ func (x *ctx) finish(root bool) {
 		return o
 	}
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
-		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto) && !c.ScrollbarNone {
+		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto ||
+		c.GutterStable && scrolls(oy)) && !c.ScrollbarNone {
 		if c.ScrollbarOverlay = x.overlay; !x.overlay {
-			c.ScrollbarWidth = 15
+			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
 	if scrolls(ox) && !scrolls(oy) {
@@ -1551,7 +1556,7 @@ func linear(c Component, cur color.Color) color.Color {
 
 //nolint:gochecknoglobals // lookup table
 var verticalAligns = map[string]style.VerticalAlign{
-	kwBaseline: style.AlignBaselineText, "sub": style.AlignSub, "super": style.AlignSuper,
+	kwBaseline: style.AlignBaselineText, kwSub: style.AlignSub, kwSuper: style.AlignSuper,
 	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
 	kwTop: style.AlignTop, kwBottom: style.AlignBottom, "-webkit-baseline-middle": style.AlignBaselineMiddle,
 }
@@ -1754,9 +1759,25 @@ var props = func() map[string]prop {
 				return sided(x, v[0], map[string]style.Clear{"none": style.ClearNone, "left": style.ClearLeft,
 					"right": style.ClearRight, "both": style.ClearBoth}, style.ClearLeft, style.ClearRight)
 			}, flips[style.Clear]()),
-		"container-type": keyword(func(c *style.Computed) *style.ContainerType { return &c.ContainerType },
-			map[string]style.ContainerType{"normal": style.ContainerNormal, "size": style.ContainerSize,
-				"inline-size": style.ContainerInlineSize}),
+		"container-type": {
+			set: func(x *ctx, v []Component) {
+				x.c.ContainerType, x.c.ContainerScrollState = style.ContainerNormal, false
+				for _, c := range v {
+					switch {
+					case isWord(c, "size"):
+						x.c.ContainerType = style.ContainerSize
+					case isWord(c, "inline-size"):
+						x.c.ContainerType = style.ContainerInlineSize
+					case isWord(c, kwScrollState):
+						x.c.ContainerScrollState = true
+					}
+				}
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.ContainerType, dst.ContainerScrollState = src.ContainerType, src.ContainerScrollState
+			},
+			anim: anim{kind: discrete},
+		},
 		"container-name": field(func(c *style.Computed) *[]string { return &c.ContainerNames },
 			func(_ *ctx, v []Component) []string {
 				if isWord(v[0], kwNone) {
@@ -2064,16 +2085,28 @@ var props = func() map[string]prop {
 				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
+		"scrollbar-gutter": field(func(c *style.Computed) *bool { return &c.GutterStable },
+			func(_ *ctx, v []Component) bool { return !isWord(v[0], "auto") }, flips[bool]()),
+		"scrollbar-color": scrollbarColor(),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
-		"list-style-image": field(func(c *style.Computed) *string { return &c.ListImage },
-			func(x *ctx, v []Component) string {
-				if isWord(v[0], kwNone) {
-					return ""
+		"list-style-image": {
+			set: func(x *ctx, v []Component) {
+				x.c.ListImage, x.c.ListGradient = "", nil
+				switch {
+				case isWord(v[0], kwNone):
+				case gradientTerm(v[0]) == nil:
+					x.c.ListGradient = x.gradient(v[0])
+				default:
+					x.c.ListImage = imageSource(x, v)
 				}
-				return imageSource(x, v)
-			}, flips[string]()),
+			},
+			inherit: func(dst, src *style.Computed) { dst.ListImage, dst.ListGradient = src.ListImage, src.ListGradient },
+			anim:    anim{kind: discrete},
+		},
+		"list-style-position": field(func(c *style.Computed) *bool { return &c.ListInside },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "inside") }, flips[bool]()),
 		"list-style-type": {
 			set:     listStyle,
 			inherit: func(dst, src *style.Computed) { dst.ListStyle, dst.ListName = src.ListStyle, src.ListName },
@@ -2152,10 +2185,7 @@ var props = func() map[string]prop {
 				"match-source": style.MaskMatchSource, "alpha": style.MaskAlpha, "luminance": style.MaskLuminance,
 			}), flips[[]style.MaskMode]()),
 		"mask-composite": layered(func(c *style.Computed) *[]style.MaskComposite { return &c.MaskComposites },
-			wordOf(map[string]style.MaskComposite{
-				"add": style.CompositeAdd, "subtract": style.CompositeSubtract, "intersect": style.CompositeIntersect,
-				"exclude": style.CompositeExclude,
-			}), flips[[]style.MaskComposite]()),
+			wordOf(maskComposites), flips[[]style.MaskComposite]()),
 		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
 			clipPaths).painted(),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),
@@ -2373,6 +2403,26 @@ func followFilterColor(filters []style.Filter, c color.Color) []style.Filter {
 
 // autoColor is a colour whose auto (and currentColor) follow the element's own
 // color, inherited as the keyword.
+// scrollbarColor is scrollbar-color: the thumb's colour and the track's,
+// or none set for auto. It changes at once, as Chrome's discrete one.
+func scrollbarColor() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			c := x.c
+			c.ScrollbarColored = len(v) == 2
+			c.ScrollbarThumb, c.ScrollbarTrack = color.Color{}, color.Color{}
+			if c.ScrollbarColored {
+				c.ScrollbarThumb, c.ScrollbarTrack = linear(v[0], c.Color), linear(v[1], c.Color)
+			}
+		},
+		inherit: func(dst, src *style.Computed) {
+			dst.ScrollbarColored, dst.ScrollbarThumb, dst.ScrollbarTrack =
+				src.ScrollbarColored, src.ScrollbarThumb, src.ScrollbarTrack
+		},
+		anim: anim{kind: discrete},
+	}
+}
+
 func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 	return prop{
 		set: func(x *ctx, v []Component) {
@@ -2781,7 +2831,7 @@ var blendModes = map[string]style.BlendMode{
 	"color-dodge": style.BlendColorDodge, "color-burn": style.BlendColorBurn, "hard-light": style.BlendHardLight,
 	"soft-light": style.BlendSoftLight, "difference": style.BlendDifference, "exclusion": style.BlendExclusion,
 	"hue": style.BlendHue, "saturation": style.BlendSaturation, "color": style.BlendColor,
-	"luminosity": style.BlendLuminosity,
+	"luminosity": style.BlendLuminosity, "plus-lighter": style.BlendPlusLighter,
 }
 
 //nolint:gochecknoglobals // lookup table

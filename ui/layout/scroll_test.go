@@ -64,7 +64,7 @@ func autoBox(w, h float32) func(*style.Computed) {
 		st.Display = style.Block
 		st.Size = style.Size[style.Length]{Width: style.Px(w), Height: style.Px(h)}
 		st.Overflow = style.Size[style.Overflow]{Width: style.OverflowAuto, Height: style.OverflowAuto}
-		st.ScrollbarWidth = 15
+		st.ScrollbarWidth, st.ScrollbarHeight = 15, 15
 	}
 }
 

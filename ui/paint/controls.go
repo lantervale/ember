@@ -326,6 +326,10 @@ func (p *painter) marker(e entry, alpha float32) {
 		}
 		return
 	}
+	if e.b.Gradient != nil {
+		p.gradient(r, radii{}, e.b.Gradient, alpha)
+		return
+	}
 	ink := fade(st.Color, alpha)
 	if ink.A <= 0 {
 		return
@@ -338,7 +342,7 @@ func (p *painter) marker(e entry, alpha float32) {
 		for _, f := range e.b.Lines {
 			p.shadows(e, st, p.faceOf(st.Font), f, st.TextShadows, st.Color, alpha)
 			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), ink, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 		return
 	case st.ListStyle == style.ListDisc:
@@ -418,7 +422,11 @@ func lineBox(e entry, l textedit.Layout, i int) geom.Rect {
 			return geom.Rect{X: origin.X + c.Pos.X + f.X, Y: origin.Y + c.Pos.Y + f.Y, W: f.W, H: f.H}
 		}
 		if i < len(c.Lines) {
+			// a one-line field's fragments, as bidi ordered them, from the leftmost
 			f := c.Lines[i].Rect
+			for _, g := range c.Lines {
+				f.X = min(f.X, g.Rect.X)
+			}
 			return geom.Rect{X: origin.X + c.Pos.X + f.X, Y: origin.Y + c.Pos.Y + f.Y, W: f.W, H: f.H}
 		}
 	}
@@ -449,6 +457,7 @@ func (p *painter) selection(e entry, alpha float32) {
 		a, z := max(from, start), min(to, end)
 		lb := lineBox(e, l, line)
 		x0, x1 := lb.X+l.X(a), lb.X+l.X(z)
+		x0, x1 = min(x0, x1), max(x0, x1)
 		if x1 > x0 {
 			p.s.Rect(geom.Rect{X: x0, Y: lb.Y, W: x1 - x0, H: lb.H}, fade(c, alpha))
 		}
