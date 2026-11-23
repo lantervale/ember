@@ -150,6 +150,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0148 | [Variable fonts are read in pure Go, and font-display is timed on the Document's clock](0148-variable-fonts-are-read-in-pure-go-and-font-display-is-timed-on-the-documents-clock.md) | rendering |
 | 0149 | [Rounded sides are bands of the ring cut to their side, as Chrome paints them](0149-rounded-sides-are-bands-of-the-ring-cut-to-their-side-as-chrome-paints-them.md) | rendering |
 | 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
+| 0154 | [Complex counter styles, inside markers and scroll state follow Chrome's algorithms](0154-complex-counter-styles-inside-markers-and-scroll-state-follow-chromes-algorithms.md) | rendering |
 
 ## Writing one
 

@@ -16,7 +16,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
-| `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
+| `initial-letter` | refused with a warning, where Chrome sizes and sinks the first letter by lines: float a `::first-letter` for a drop cap |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
 | a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
 | a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
@@ -48,8 +48,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
 | `::marker` with `line-height`, `white-space`, `overflow-wrap`, `cursor`, `quotes`, transitions | read, and they change nothing |
 | `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
-| the complex predefined counter styles (`japanese-formal`, `simp-chinese-informal`, `korean-hangul-formal`, `ethiopic-numeric`…), `symbols()`, a picture as a counter symbol | written as `decimal`; `symbols()` and pictures refused |
-| a `list-style-image` gradient, `list-style-position: inside` | refused |
+| a counter style's text in a font of its own, and its glyphs a face lacks | the complex predefined styles write their CJK, Korean and Ethiopic characters through the face's fallbacks, which ui has none of unless `ui.SystemFonts()` finds them |
+| a marker inside a right-to-left item | laid out as at the start of a left-to-right line; not compared with Chrome |
 | a `list-style-image` fetched off the frame (`ui.FetchImages`) | the marker is laid out once the picture is found by another layout, not when it lands |
 
 ## Layout
@@ -113,7 +113,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
 | a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
 | `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |
-| a `url()` filter, in `filter` or `backdrop-filter`; `mix-blend-mode: plus-lighter`, `plus-darker` | refused |
+| a `url()` filter, in `filter` or `backdrop-filter`, to an inline `svg` element's `filter` | refused with a warning: the svg package runs the filter for an SVG picture (decision 0150), not over an element's picture |
+| `mix-blend-mode: plus-lighter` over a backdrop seen through | added in encoded colours and drawn over the backdrop as the colour and alpha that make the sum: exact on an opaque backdrop, near it where the backdrop is translucent |
 | a backdrop filter inside an isolated group that is no backdrop root (`isolation: isolate`, a `z-index` holding a mixed element) | reads the group only, where Chrome reads on to the backdrop root ([decision 0130](../99-decisions/0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md)) |
 | a mixed element or a backdrop filter reaching the page | mixes with the Document's canvas, not with what the game drew under the Document |
 | `opacity` below 1 on an ancestor of an element drawn as a picture, itself not one | each of its pictures and boxes faded apart, where Chrome fades the ancestor as one |
@@ -126,8 +127,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |
-| `-webkit-mask-position` and `-webkit-mask` with three-value positions, `-webkit-mask-position-x` and `-y`, `-webkit-mask-composite`'s other words (`destination-in`, `copy`, `plus-lighter`…), `-webkit-mask-box-image` | refused with a warning; `-webkit-mask: … no-clip`, which Chrome refuses, is read |
-| `mask-composite` serialised after `-webkit-mask-composite` | as the plain word (`exclude`), where Chrome keeps the legacy one (`xor`) |
+| `-webkit-mask-position-x` and `-y`, `-webkit-mask-box-image` and its longhands | refused with a warning: ui's `mask-position` has no axis of its own, and draws no nine-patch mask |
 | a masked element under a rotation or a skew | hit in its border box, where Chrome reaches about half a pixel further |
 | a masked element on a surface other than `twod.Canvas` | drawn unmasked, but for the one-colour icon |
 | a `:has()` reading, through an `:is()` or a `:not()` in it, an element above the one it is on (`.card:has(:is(.dark img))`, `.dark` on `body`) | matched, but a change of that element above does not restyle the card |
@@ -137,7 +137,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
 | a radio group by its form | grouped by name across the Document, where Chrome groups by name within each form |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
-| `scroll-state()` container queries and `container-type: scroll-state` | refused, with a warning: the condition never holds |
+| `scroll-state(scrolled: …)`, `snapped` other than `none`, `container-type: anchored` | refused with a warning, or never holds: ui keeps no last scroll direction and snaps no scroll |
+| `scroll-state(scrollable: …)` on the root's viewport, and on a right-to-left scroller | the root answers none; a right-to-left scroller starts at its left edge in ui, at its right in Chrome |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
 
