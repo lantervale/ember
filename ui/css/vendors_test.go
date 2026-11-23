@@ -31,6 +31,21 @@ func read(decl string, opts ...ParseOption) string {
 	return strings.Join(append(out, warnings(warns)), " | ")
 }
 
+func TestABrowsersSheetReadsOldNamesAsTheirNewOnes(t *testing.T) {
+	for old, as := range oldNames {
+		value := "3px"
+		if as == "overflow-wrap" {
+			value = "break-word"
+		}
+		if got, want := read(old+": "+value, Browser()), as+": "+value+" | "; got != want {
+			t.Errorf("%s: got %q, want %q", old, got, want)
+		}
+		if got := read(old + ": " + value); !strings.Contains(got, "old name") {
+			t.Errorf("%s in a game's sheet: got %q, want its warning", old, got)
+		}
+	}
+}
+
 func TestWebkitPropertiesAreReadAsTheirPlainOnes(t *testing.T) {
 	if len(webkit.same) != 73 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 3 {
 		t.Errorf("-webkit-: %d of the same name, %d renamed, %d its own, %d its own read as plain ones",

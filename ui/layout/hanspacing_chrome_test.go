@@ -249,6 +249,42 @@ p { margin: 0 10px 0 0; }
 	matchSpanFragments(t, d, geom.V2(800, 1000))
 }
 
+// TestHanSpacingInSidewaysLinesAsChrome compares both properties in
+// sideways lines (text-orientation: sideways, writing-mode: sideways-*)
+// with Chrome's, each character in a span of its own: every character
+// turned with the line and spaced as in a horizontal line.
+func TestHanSpacingInSidewaysLinesAsChrome(t *testing.T) {
+	chars := func(s string) []ui.Arg {
+		var out []ui.Arg
+		for _, r := range s {
+			out = append(out, hanSpan("", string(r)))
+		}
+		return out
+	}
+	d := hanPage(t, `p { writing-mode: vertical-rl; text-orientation: sideways; width: auto; height: 300px;
+  display: inline-block; margin: 0 10px 0 0; }
+.rl { writing-mode: sideways-rl; text-orientation: mixed; }
+.lr { writing-mode: sideways-lr; text-orientation: mixed; }
+.auto { text-autospace: normal; }`,
+		hanP("", chars("漢」「漢。「漢、」漢」」漢「「漢")...),
+		hanP("", chars("漢・「漢」・漢：「漢“漢”「漢")...),
+		hanP("text-spacing-trim: space-all", chars("漢」「漢。「漢")...),
+		hanP("", append([]ui.Arg{ui.Class("gb")}, chars("漢」「漢。「漢、」漢，「漢“漢”「漢")...)...),
+		hanP("", append([]ui.Arg{ui.Class("rl")}, chars("漢」「漢。「漢、」漢」」漢")...)...),
+		hanP("", append([]ui.Arg{ui.Class("lr")}, chars("漢」「漢。「漢、」漢」」漢")...)...),
+		hanP("", ui.Class("auto"), hanSpan("", "漢A漢"), ui.Text(" "), hanSpan("", "漢1漢"), ui.Text(" "),
+			hanSpan("", "かAB字"), ui.Text("字Kana字")),
+		hanP("", ui.Class("auto", "rl"), hanSpan("", "漢A漢"), ui.Text(" "), hanSpan("", "かAB字")),
+		hanP("", ui.Class("auto", "lr"), hanSpan("", "漢A漢"), ui.Text(" "), hanSpan("", "かAB字")),
+		hanP("height: 100px", ui.Text("漢字漢字」"), hanSpan("", "「"), ui.Text("漢字字字字」「字")),
+		hanP("height: 100px; text-spacing-trim: trim-start", hanSpan("", "「"), ui.Text("字」漢字字")),
+		hanP("height: 100px", ui.Class("lr"), ui.Text("漢字漢字」"), hanSpan("", "「"), ui.Text("漢字字字字」「字")),
+	)
+	r := chrome.Match(t, d, geom.V2(800, 1000))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+	matchSpanFragments(t, d, geom.V2(800, 1000))
+}
+
 func matchHan(t *testing.T, d *ui.Document) {
 	t.Helper()
 	size := geom.V2(800, 1000)

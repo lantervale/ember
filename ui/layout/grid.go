@@ -280,6 +280,9 @@ func (t *tree) grid(n *node, in input) output {
 		order++
 	}
 	n.grid = newGridInfo(colLines, finalCols, columns, rowLines, finalRows, rows)
+	if st.Dir == style.RTL {
+		n.grid.mirror = borderBox.w
+	}
 	area := oofArea{size: borderBox.sub(paddingBoxInset.sum()), offset: point{paddingBoxInset.l, paddingBoxInset.t}}
 	if isScrollContainer(st) {
 		overflow = overflow.union(rect{r: padding.r, b: padding.b})
@@ -605,9 +608,11 @@ type gridAxisInfo struct {
 	emptyLine float32
 }
 
-// gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo.
+// gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo. A right to
+// left grid's columns are laid out in its mirror image, mirror its border box's width.
 type gridInfo struct {
 	columns, rows gridAxisInfo
+	mirror        float32
 }
 
 func newGridAxisInfo(lines gridLines, counts trackCounts, tracks []gridTrack) gridAxisInfo {
@@ -720,7 +725,13 @@ func (g *gridAxisInfo) resolve(lines [2]style.GridLine, paddingStart, paddingEnd
 // absoluteArea is the containing block an absolutely positioned child's grid lines give it
 // inside the padding box.
 func (g *gridInfo) absoluteArea(st *style.Computed, paddingBox rect) rect {
-	c := g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	var c span
+	if w := g.mirror; w > 0 {
+		c = g.columns.resolve(st.Column, w-paddingBox.r, w-paddingBox.l)
+		c = span{w - c.end, w - c.start}
+	} else {
+		c = g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	}
 	r := g.rows.resolve(st.Row, paddingBox.t, paddingBox.b)
 	return rect{l: c.start, r: c.end, t: r.start, b: r.end}
 }

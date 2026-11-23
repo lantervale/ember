@@ -27,7 +27,9 @@ func DefaultImages() map[string][]byte {
 // textarea's monospace) at a normal line height, where a game's takes
 // its parent's (TestChromeFontsTheControlsAsABrowsersSheetDoes); a
 // text field takes its parent's white-space, a button's or a select's
-// keeps it as written, and an option's on one line.
+// keeps it as written, and an option's on one line. A textarea takes
+// resize: auto, Chrome's grip the user drags, where a game's takes none
+// but where its sheet asks (decision 0213).
 const BrowserDefault = `* { box-sizing: content-box; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
@@ -40,7 +42,7 @@ button, input, select, textarea {
   letter-spacing: normal; word-spacing: normal; text-transform: none; text-shadow: none;
 }
 button, input, select, textarea { font: 13.333333px Arial; }
-textarea { font-family: monospace; }
+textarea { font-family: monospace; resize: auto; }
 input { white-space: inherit; }
 input[type="button"], input[type="submit"], input[type="reset"], select { white-space: pre; }
 select:-ember-listbox, option { white-space: nowrap; }

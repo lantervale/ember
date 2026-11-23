@@ -45,8 +45,9 @@ func Snapshots(of func(n *ui.Node) ([]byte, bool)) Option {
 }
 
 // generatedBoxes sizes Chrome's ::before and ::after boxes by their
-// border box as ui's are, which the user-agent sheet's * rule leaves out.
-const generatedBoxes = "::before, ::after { box-sizing: border-box; }\n"
+// border box as ui's are, which the user-agent sheet's * rule leaves out,
+// and takes Chrome's resizer off a game's textareas, as ui gives them none.
+const generatedBoxes = "::before, ::after { box-sizing: border-box; }\ntextarea { resize: none; }\n"
 
 // Write writes d as a self-contained HTML page: the user-agent sheet,
 // the fonts as data URLs, the document's sheets, then its tree.

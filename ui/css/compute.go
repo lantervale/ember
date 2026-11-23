@@ -2548,7 +2548,9 @@ var props = func() map[string]prop {
 		"resize": keyword(func(c *style.Computed) *style.Resize { return &c.Resize },
 			map[string]style.Resize{"none": style.ResizeNone, "both": style.ResizeBoth,
 				"horizontal": style.ResizeHorizontal, "vertical": style.ResizeVertical, "block": style.ResizeBlock,
-				"inline": style.ResizeInline}),
+				"inline": style.ResizeInline,
+				// Chrome computes auto as both, on any box
+				"auto": style.ResizeBoth}),
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
 			cornerOf, pairs(sizeLength)),
