@@ -152,7 +152,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an additive `rotate` animation missing a keyframe | moves from the value under it by the keyframe's angle added to it, where Chrome moves it toward no turn at all; with both keyframes it adds as Chrome's |
 | a transformed box in a vertical writing mode's scroller, an inline-block's or the root's transform | its scrollable overflow is the box as laid out, untransformed, where Chrome's is the box as turned |
 | a point within a pixel and a half past the edge of a turned or scaled box | misses it, where Chrome hits it |
-| a `linear-gradient()` background of a box turned by `transform` or `rotate` | drawn upright over the rect round the turned box, cut at its corners, where Chrome turns it with the box |
+| the edges of a picture, a border or a border-image under a rotation or a skew, and a gradient's hard stop at a slant | stepped from pixel to pixel, where Chrome anti-aliases them; a turned box's own edges, where its background is cut, are anti-aliased as Chrome's |
+| a square clip inside a rounded one, both under a rotation or a skew (an `overflow: hidden` box with a `border-radius` holding a scroller, under `rotate`) | cuts as the rect round it on the screen, where Chrome cuts it turned |
 | a blur reaching past the window | what lies past the window's edge is not blurred in |
 | a mask inside an element's `clip-path` | the mask cuts, the clip-path only by its bounds ([decision 0133](../99-decisions/0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md)) |
 | `mask-image: url(#id)`, an SVG `mask` element | drawn as a picture that is not there: nothing of the element shows |

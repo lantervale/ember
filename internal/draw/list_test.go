@@ -307,7 +307,7 @@ func TestARoundedClipRoundsItsBatchesAndTheClipsInsideIt(t *testing.T) {
 	}
 }
 
-func TestARoundedClipFollowsAScaleButNotARotation(t *testing.T) {
+func TestARoundedClipFollowsAScale(t *testing.T) {
 	var c List
 	c.SetTransform(geom.Transform2D{X: geom.V2(2, 0), Y: geom.V2(0, 2), Origin: geom.V2(5, 5)})
 	c.PushClipRounded(geom.Rect{W: 10, H: 10}, [4]float32{3, 3, 3, 3})
@@ -329,12 +329,54 @@ func TestARoundedClipFollowsAScaleButNotARotation(t *testing.T) {
 	if r := flipped.Batches[0].Round.Radii; r != [4]float32{4, 3, 2, 1} {
 		t.Fatalf("flipped upside down, too: %v", r)
 	}
+}
+
+func TestAClipUnderARotationOrASkewCutsInItsOwnSpace(t *testing.T) {
+	turn := geom.Transform2DFrom(geom.V2(40, 10), 0.3, 0, geom.V2(2, 2))
 	var turned List
-	turned.SetTransform(geom.Transform2DFrom(geom.Vec2{}, 0.3, 0, geom.V2(1, 1)))
-	turned.PushClipRounded(geom.Rect{W: 10, H: 10}, [4]float32{3, 3, 3, 3})
+	turned.SetTransform(turn)
+	r := geom.Rect{X: 1, Y: 2, W: 10, H: 10}
+	turned.PushClipRounded(r, [4]float32{3, 3, 3, 3})
 	turned.Rect(geom.Rect{W: 1, H: 1}, color.White)
-	if b := turned.Batches[0]; !b.Clipped || !b.Round.IsZero() {
-		t.Fatalf("turned, it clips to its bounds, square: %+v", b)
+	b := turned.Batches[0]
+	if !b.Clipped || b.Clip != Bounds(turn, r) {
+		t.Fatalf("its scissor is the rect round the turned clip: %+v", b.Clip)
+	}
+	want := Rounded{Rect: r, Radii: [4]float32{3, 3, 3, 3}, ToLocal: turn.Inverse(), Scale: 2}
+	if b.Round != want {
+		t.Fatalf("it is rounded in its own space, the points it cuts taken back there: %+v", b.Round)
+	}
+	var square List
+	skew := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0.4, 1)}
+	square.SetTransform(skew)
+	square.PushClip(r)
+	square.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if got := square.Batches[0].Round; got != (Rounded{Rect: r, ToLocal: skew.Inverse(), Scale: 1}) {
+		t.Fatalf("a square clip under a skew cuts as its rect skewed: %+v", got)
+	}
+	square.PushClip(geom.Rect{W: 4, H: 4})
+	square.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if got := square.Batches[1].Round; got.Rect != (geom.Rect{X: 1, Y: 2, W: 3, H: 2}) {
+		t.Fatalf("one inside, skewed alike, cuts their overlap: %+v", got)
+	}
+	var nested List
+	nested.SetTransform(turn)
+	nested.PushClipRounded(r, [4]float32{3, 3, 3, 3})
+	nested.PushClip(geom.Rect{W: 4, H: 4})
+	nested.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if got := nested.Batches[0].Round; got.Rect != r || got.Radii[0] != 3 {
+		t.Fatalf("one inside a rounded clip leaves it cutting: %+v", got)
+	}
+	square.Shift(geom.V2(5, 7))
+	if got := square.Batches[0].Round; got.Rect != r || got.ToLocal.Xform(geom.V2(5, 7)) != (geom.Vec2{}) {
+		t.Fatalf("shifted, its rect stays and the points are taken back past the shift: %+v", got)
+	}
+	var scaled List
+	scaled.SetTransform(geom.Transform2D{X: geom.V2(2, 0), Y: geom.V2(0, 3)})
+	scaled.PushClip(r)
+	scaled.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if !scaled.Batches[0].Round.IsZero() {
+		t.Fatalf("scaled, a square clip is its scissor alone: %+v", scaled.Batches[0].Round)
 	}
 }
 

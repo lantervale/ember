@@ -29,7 +29,25 @@ type sample struct {
 // (decision 0058), whose coverage anti-aliases the corners as Chrome does;
 // inside a rounded overflow clip, that one is then the innermost, and the
 // outer curve cuts the gradient as its rect.
+//
+// Turned or skewed, the bands reach a point past area, and its clip,
+// turned with it, cuts them anti-aliased, as Chrome's edges are.
 func (p *painter) gradient(area geom.Rect, radius radii, g *style.Gradient, alpha float32) {
+	xf := p.s.Transform()
+	if xf.X.Y == 0 && xf.Y.X == 0 {
+		p.gradientIn(area, radius, g, alpha, 0)
+		return
+	}
+	if radius == (radii{}) {
+		p.s.PushClip(area)
+		defer p.s.PopClip()
+	}
+	p.gradientIn(area, radius, g, alpha, 1)
+}
+
+// gradientIn is gradient, a linear one's bands reaching bleed past area.
+// A tile, cut by its view's clip, has none, so tiles meet edge to edge.
+func (p *painter) gradientIn(area geom.Rect, radius radii, g *style.Gradient, alpha, bleed float32) {
 	if len(g.Stops) == 0 || area.W <= 0 || area.H <= 0 {
 		return
 	}
@@ -56,7 +74,7 @@ func (p *painter) gradient(area geom.Rect, radius radii, g *style.Gradient, alph
 	start := geom.V2(area.X+area.W/2, area.Y+area.H/2).Sub(d.Scale(span / 2))
 	along := func(q geom.Vec2) float32 { return q.Sub(start).Dot(d) }
 	samples := gradientSamples(g, span)
-	shape := roundedShape(area, radius)
+	shape := roundedShape(grow(area, bleed), radius)
 	var points []geom.Vec2
 	var colors []color.Color
 	var indices []int
