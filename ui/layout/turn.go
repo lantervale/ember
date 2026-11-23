@@ -274,6 +274,11 @@ func (t *tree) turnedLayout(n *node, in input) output {
 		// Chrome's when nothing gives them a length.
 		tin.avail.w = def(t.icbAlong(from))
 	}
+	if !some(tin.known.h) {
+		// the room its parent's lines leave is no block size it fills: an orthogonal
+		// flow's blocks take their content's, as Chrome's
+		tin.avail.h = maxContentSpace
+	}
 	out := t.computeChildIn(n, tin, nil)
 	turnedOut := out
 	turnedOut.size = out.size.across()
@@ -421,6 +426,24 @@ func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geo
 			b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
 		}
 	}
+}
+
+// turnPicture turns the natural size and proportions of a replaced node into the frame
+// its style is in.
+func (n *node) turnPicture() {
+	n.natural, n.shape = turnPicture(n.natural, n.shape, outerFrame(n.parent, n.box.Style))
+}
+
+// turnPicture is a picture's natural size and proportions in the frame of mode.
+func turnPicture(natural size, shape box.Intrinsic, mode style.WritingMode) (size, box.Intrinsic) {
+	if !mode.Vertical() {
+		return natural, shape
+	}
+	shape.Width, shape.Height = shape.Height, shape.Width
+	if shape.Ratio > 0 {
+		shape.Ratio = 1 / shape.Ratio
+	}
+	return natural.across(), shape
 }
 
 // advance is the length of text s of style st along its line: in vertical lines each

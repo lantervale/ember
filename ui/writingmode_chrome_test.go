@@ -3,6 +3,10 @@
 package ui_test
 
 import (
+	"bytes"
+	"encoding/base64"
+	"image"
+	"image/png"
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
@@ -179,4 +183,36 @@ func matchVertical(t *testing.T, cases map[string]func(t *testing.T) *ui.Documen
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 		})
 	}
+}
+
+func TestVerticalFlexPicturesAsChrome(t *testing.T) {
+	pic := func(w, h int) string {
+		var b bytes.Buffer
+		if err := png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, w, h))); err != nil {
+			t.Fatal(err)
+		}
+		return "data:image/png;base64," + base64.StdEncoding.EncodeToString(b.Bytes())
+	}
+	square, tall := pic(100, 100), pic(20, 50)
+	page := func(sheet, src string) func(t *testing.T) *ui.Document {
+		return func(_ *testing.T) *ui.Document {
+			d := ui.NewDocument(ui.CSS(sheet))
+			d.Body().Append(ui.Div(ui.Class("f"), ui.Img(ui.Attr("src", src)), ui.Div(ui.Class("abs"))))
+			return d
+		}
+	}
+	matchVertical(t, map[string]func(t *testing.T) *ui.Document{
+		"a picture in a vertical-lr flex row": page(`.f { writing-mode: vertical-lr; display: flex; }`, square),
+		"a picture in a vertical-rl flex row": page(`.f { writing-mode: vertical-rl; display: flex; }`, square),
+		"a picture of a set width in a vertical flex row of a set width": page(`.f { position: relative;
+			display: flex; writing-mode: vertical-lr; width: 100px; align-items: start; } img { width: 40px; }
+			.abs { position: absolute; left: 40px; width: 60px; height: 100px; }`, tall),
+		"a vertical flow in an inline flex box of a percentage height": func(_ *testing.T) *ui.Document {
+			d := ui.NewDocument(ui.CSS(`.t { width: 100px; height: 100px; line-height: 0; }
+				.f { display: inline-flex; height: 100%; } .v { writing-mode: vertical-rl; }
+				span { display: inline-block; inline-size: 100px; block-size: 50px; }`))
+			d.Body().Append(ui.Div(ui.Class("t"), ui.Div(ui.Class("f"), ui.Div(ui.Class("v"), ui.Span(), ui.Span()))))
+			return d
+		},
+	})
 }
