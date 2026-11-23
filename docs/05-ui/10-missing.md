@@ -142,6 +142,14 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a form's submission | Chrome's validation bubble is not shown, and nothing is sent: `action`, `method`, `formaction`, `target` are the program's to read |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `container-type: anchored` | refused with a warning |
+| `@position-try` inside `@media`, `@container` or `@supports` | applies whatever the condition says |
+| `anchor()`'s `start` and `end`, and `position-area`'s logical keywords | read the positioned box's own direction, where Chrome reads its containing block's writing mode; no vertical writing modes |
+| `position-visibility: anchors-valid` | read, and hides nothing |
+| an anchored box placed in a grid area of its containing block | its anchors are measured from the containing block's padding box, not the grid area |
+| a box anchored to a scrolled anchor | laid out again on the frame the scroll moves its anchor: right, but a layout where Chrome moves it by the scroll |
+| `interestfor`, popover `beforetoggle` that a callback cancels, `showPopover()` and `hidePopover()` as DOM events | not read: no interest invokers, and `Toggled` is told after the change |
+| a popover shown under a transformed or filtered element | laid out in that element as its containing block, where Chrome's top layer lays it out in the viewport |
+
 | a scroll by the user gliding, `scroll-snap-type` on both axes snapping to one area on both (Chrome's mutual snap), snapping a selection's drag | the wheel, the keys and a held thumb move at once, the keys to their snap position too (the wheel and the thumb glide to theirs), each axis picks its own nearest area, and a drag past an edge never snaps, where Chrome glides the user's scrolls as the system says, prefers an area aligned on both axes and snaps once a drag ends |
 | `overscroll-behavior` on a touch's scroll, `overscroll-behavior: none`'s bounce | ui scrolls by no touch and bounces nothing: `contain` and `none` stop the chain alike |
 | `scroll-state(scrollable: …)` asked of the root, for the viewport's scroll | answers none: ui answers it for scroll containers only |
