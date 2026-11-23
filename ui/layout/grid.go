@@ -316,6 +316,9 @@ func (t *tree) grid(n *node, in input) output {
 			}
 		}
 		out.firstBaseline = first.yPosition + or(first.baseline, first.height)
+		if !some(first.baseline) {
+			out.synthetic = first.height
+		}
 	}
 	return out
 }

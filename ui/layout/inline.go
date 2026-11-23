@@ -1518,6 +1518,10 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 			a.node.slider:
 		case some(out.lastBaseline):
 			a.baseline = out.lastBaseline
+		case out.synthetic > 0 && c.owner.st.Stands():
+			// a central line synthesizes it across the middle of the item, as Chrome
+			h := out.synthetic
+			a.baseline = out.firstBaseline - float32(math.Floor(float64(h*c.unit)/2))/c.unit
 		case some(out.firstBaseline):
 			a.baseline = out.firstBaseline
 		}

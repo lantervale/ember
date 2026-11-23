@@ -142,6 +142,15 @@ func TestVerticalLinesAlignAsChrome(t *testing.T) {
 				ui.Text(" and "), ui.Span(ui.Class("small"), ui.Text("small words")), ui.Text(" on lines going down."))))
 			return d
 		},
+		"inline flex and grid boxes of no line synthesize a central baseline": func(_ *testing.T) *ui.Document {
+			d := ui.NewDocument(ui.CSS(`.v { writing-mode: vertical-rl; width: 100px; height: 160px; line-height: 0;
+				background: #c33; } .ib { display: inline-block; width: 100px; height: 40px; background: #3a3; }
+				.f { display: inline-flex; } .g { display: inline-grid; } .f > div, .g > div { width: 60px; height: 40px;
+				background: #36c; } .pad { padding-left: 12px; }`))
+			d.Body().Append(ui.Div(ui.Class("v"), ui.Span(ui.Class("ib")), ui.Span(ui.Class("f"), ui.Div()),
+				ui.Span(ui.Class("g", "pad"), ui.Div())))
+			return d
+		},
 		"inline-blocks in lines taller than them": func(t *testing.T) *ui.Document {
 			d := cjkDocument(t, `.v { height: 200px; line-height: 40px; } .rl { writing-mode: vertical-rl; }
 				.lr { writing-mode: vertical-lr; } .ib { display: inline-block; inline-size: 30px; block-size: 12px;

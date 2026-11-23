@@ -100,33 +100,64 @@ func (s *scopeRule) chain() []*scopeRule {
 // first, and how many generations e is under it, until fn returns true;
 // it reports whether fn did.
 func (s *scopeRule) within(e *dom.Node, fn func(root *dom.Node, near int) bool) bool {
-	near := 0
-	for a := e; a != nil; a = a.Parent() {
-		if s.rooted(a) && !s.limited(e, a) && fn(a, near) {
+	for _, r := range s.roots(e) {
+		if !s.limited(e, r.node) && fn(r.node, r.near) {
 			return true
 		}
-		near++
 	}
 	return false
 }
 
-// rooted reports whether a is a root of s.
-func (s *scopeRule) rooted(a *dom.Node) bool {
-	at := func(root *dom.Node) bool {
-		if s.start == nil {
-			return a == root || root == nil && a.Parent() == nil
+// root is a root of an @scope rule, near generations above the element
+// its roots were found from.
+type root struct {
+	node *dom.Node
+	near int
+}
+
+// roots is the roots of s among e and its ancestors, the nearest first.
+// Each rule it stands in finds its own roots once, so nested @scope
+// rules cost the product of their depth and e's, never a power of it.
+func (s *scopeRule) roots(e *dom.Node) []root {
+	var outer []root
+	if s.parent != nil {
+		outer = s.parent.roots(e)
+		if len(outer) == 0 {
+			return nil
 		}
-		for _, sel := range s.start {
-			if sel.MatchesIn(a, root) {
-				return true
+	}
+	var out []root
+	near := 0
+	for a := e; a != nil; a = a.Parent() {
+		if s.parent == nil {
+			if s.at(a, nil) {
+				out = append(out, root{a, near})
+			}
+		} else {
+			for _, r := range outer {
+				if r.near >= near && !s.parent.limited(a, r.node) && s.at(a, r.node) {
+					out = append(out, root{a, near})
+					break
+				}
 			}
 		}
-		return false
+		near++
 	}
-	if s.parent == nil {
-		return at(nil)
+	return out
+}
+
+// at reports whether a is a root of s in the scope of root, its parent
+// rule's root, nil for s outermost.
+func (s *scopeRule) at(a, root *dom.Node) bool {
+	if s.start == nil {
+		return a == root || root == nil && a.Parent() == nil
 	}
-	return s.parent.within(a, func(root *dom.Node, _ int) bool { return at(root) })
+	for _, sel := range s.start {
+		if sel.MatchesIn(a, root) {
+			return true
+		}
+	}
+	return false
 }
 
 // limited reports whether e, under root, is out of its scope: e or an

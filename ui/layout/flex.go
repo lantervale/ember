@@ -126,6 +126,7 @@ type flexItem struct {
 	targetSize              size
 	outerTargetSize         size
 	baseline                float32
+	synthetic               float32
 	offsetMain, offsetCross float32
 	oof                     []oofCandidate
 }
@@ -291,7 +292,7 @@ func (t *tree) flexPreliminary(n *node, in input) output {
 			t.performChildLayout(k, noSize, noSize, maxContentSpaces, contentSize)
 		}
 	}
-	first := none
+	first, synthetic := none, float32(0)
 	var firstLine *flexLine
 	if len(lines) > 0 {
 		firstLine = lines[0]
@@ -305,12 +306,12 @@ func (t *tree) flexPreliminary(n *node, in input) output {
 			if d.isReverse() {
 				it = firstLine.items[len(firstLine.items)-1]
 			}
-			first = it.baseline
+			first, synthetic = it.baseline, it.synthetic
 		} else {
-			first = firstLine.items[0].baseline
+			first, synthetic = firstLine.items[0].baseline, firstLine.items[0].synthetic
 			for _, it := range firstLine.items {
 				if it.baselineAligned(d) {
-					first = it.baseline
+					first, synthetic = it.baseline, it.synthetic
 					break
 				}
 			}
@@ -322,6 +323,7 @@ func (t *tree) flexPreliminary(n *node, in input) output {
 			c.containerSize.sub(c.border.sum()).sub(size{c.scrollbarGutter.x, c.scrollbarGutter.y}),
 			c.scrollOriginReversed(), c.isScrollContainer),
 		firstBaseline: first,
+		synthetic:     synthetic,
 		lastBaseline:  none,
 		oof:           candidates,
 		area:          &area,
@@ -1095,8 +1097,11 @@ func (t *tree) childrenBaselines(nodeSize size, avail spaces, lines []*flexLine,
 				avail:           av,
 			})
 			h := out.size.h
-			b := or(childFirstBaseline(out.firstBaseline, h, it.overflow.Height), h)
-			it.baseline = b + it.margin.t
+			own := childFirstBaseline(out.firstBaseline, h, it.overflow.Height)
+			it.baseline, it.synthetic = or(own, h)+it.margin.t, 0
+			if !some(own) {
+				it.synthetic = h
+			}
 		}
 	}
 }
@@ -1338,7 +1343,12 @@ func (t *tree) flexItemLayout(it *flexItem, totalMain *float32, totalCross,
 	s := out.size
 	offsetMain := *totalMain + it.offsetMain + d.mainStart(it.margin) + it.relativeInset.get(d.main())
 	offsetCross := totalCross + it.offsetCross + lineCross + d.crossStart(it.margin) + it.relativeInset.get(d.cross())
-	inner := or(childFirstBaseline(out.firstBaseline, s.h, it.overflow.Height), s.h)
+	own := childFirstBaseline(out.firstBaseline, s.h, it.overflow.Height)
+	inner := or(own, s.h)
+	it.synthetic = 0
+	if !some(own) {
+		it.synthetic = s.h
+	}
 	if d.isRow() {
 		it.baseline = totalCross + it.offsetCross + lineCross + d.crossStart(it.margin) + inner
 	} else {
