@@ -180,6 +180,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0175 | [Relative snaps keep their unsnapped axes, and a held track pages on](0175-relative-snaps-keep-their-unsnapped-axes-and-a-held-track-pages-on.md) | api |
 | 0176 | [Vertical writing modes are laid out turned into their own frame](0176-vertical-writing-modes-are-laid-out-turned-into-their-own-frame.md) | rendering |
 | 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
+| 0178 | [Spaces break-spaces keeps are units of a line, and break-all reads letters as ideographs](0178-spaces-break-spaces-keeps-are-units-of-a-line-and-break-all-reads-letters-as-ideographs.md) | api |
 
 ## Writing one
 
