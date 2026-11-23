@@ -5,6 +5,7 @@ package ui_test
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,10 +76,6 @@ func TestScrollStateQueriesAnswerAsChromes(t *testing.T) {
 document.querySelectorAll(".scroller").forEach((s, i) => { s.scrollLeft = offs[i][0]; s.scrollTop = offs[i][1]; });
 await new Promise(r => setTimeout(r, 300));
 return [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().width);`
-	raw, err := chrome.Eval(d, geom.V2(600, 800), script)
-	require.NoError(t, err)
-	var want []float32
-	require.NoError(t, json.Unmarshal(raw, &want))
 	d.Layout(geom.V2(600, 800))
 	for i, s := range scrollers {
 		d.SetScroll(s, scrolls[i])
@@ -91,6 +88,18 @@ return [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().wi
 		}
 		return true
 	})
+	// Headless Chrome answers scroll-state() from a snapshot it takes at
+	// a frame, which its virtual time sometimes runs after the script on a
+	// loaded machine: a run that answers otherwise is asked again.
+	var want []float32
+	for range 4 {
+		raw, err := chrome.Eval(d, geom.V2(600, 800), script)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &want))
+		if slices.Equal(want, got) {
+			break
+		}
+	}
 	require.Len(t, got, len(want))
 	for i := range want {
 		assert.InDelta(t, want[i], got[i], 0.01, "scroller %d, box %d", i/33, i%33)
