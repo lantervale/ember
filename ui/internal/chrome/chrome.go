@@ -433,8 +433,7 @@ func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]b
 	if len(features) > 0 {
 		args = append([]string{"--enable-blink-features=" + strings.Join(features, ",")}, args...)
 	}
-	//nolint:gosec // the Chrome found on this machine, run on our own page
-	cmd := exec.CommandContext(ctx, browser(), args...)
+	cmd := browserCommand(ctx, helpersWait, browser(), args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -445,6 +444,19 @@ func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]b
 		return nil, fmt.Errorf("chrome: %w: %s", err, stderr.String())
 	}
 	return out, nil
+}
+
+// helpersWait is how long Chrome's helper processes may keep its output
+// open once the browser has exited or been killed.
+const helpersWait = 10 * time.Second
+
+// browserCommand runs the browser at path until ctx is done, then kills it
+// and, wait later, closes its output under any helper still holding it,
+// which would otherwise hang the read for as long as that helper lives.
+func browserCommand(ctx context.Context, wait time.Duration, path string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.WaitDelay = wait
+	return cmd
 }
 
 // blinkSettings has Chrome answer the media features as m does, whatever
@@ -718,24 +730,34 @@ addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` 
 // EvalPage loads the page at url, served from this machine, in Chrome in
 // a viewport of size points, and returns the value of its EvalScript as
 // JSON: what it fetches comes as the server sends it, timed as Chrome
-// times it.
+// times it. A Chrome that exits printing no page, as Windows' sometimes
+// does, is run again.
 func EvalPage(url string, size geom.Vec2) ([]byte, error) {
 	unlock, err := lockChrome()
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
+	var out []byte
+	for range 3 {
+		if out, err = evalPageOnce(url, size); err != nil || done(dumpDOM, out) {
+			break
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return evalResult(out)
+}
+
+func evalPageOnce(url string, size geom.Vec2) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "ember-chrome-")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
 	marginOnce.Do(measureMargin)
-	out, err := runAt(dir, url, size.Add(margin), dumpDOM, css.Media{})
-	if err != nil {
-		return nil, err
-	}
-	return evalResult(out)
+	return runAt(dir, url, size.Add(margin), dumpDOM, css.Media{})
 }
 
 // Eval lays d out in Chrome in a viewport of size points, evaluates the

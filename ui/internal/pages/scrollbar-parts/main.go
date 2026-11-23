@@ -18,7 +18,7 @@ html { background-color: #1b1714; }
 body { margin: 0; padding: 8px; }
 .s { display: inline-block; vertical-align: top; width: 100px; height: 80px; margin: 4px; overflow: scroll;
   background-color: #3a332c; }
-.s > div { width: 200px; height: 300px; background-color: #ad9773; border-bottom: 40px solid #6b8f5a; }
+.s > div { width: 200px; height: 90px; background-color: #ad9773; border-bottom: 40px solid #6b8f5a; }
 .round::-webkit-scrollbar { width: 12px; height: 8px; background-color: #5a1f1f; }
 .round::-webkit-scrollbar-thumb { background-color: #4f7cff; border-radius: 4px; }
 .track::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -47,7 +47,7 @@ body { margin: 0; padding: 8px; }
 
 func main() {
 	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"page.css": {Data: []byte(sheet)}}, "page.css"))
-	scrolled := map[string]geom.Vec2{"track": geom.V2(30, 100), "pieces": geom.V2(100, 120), "margins": geom.V2(0, 260)}
+	scrolled := map[string]geom.Vec2{"track": geom.V2(30, 30), "pieces": geom.V2(100, 30), "margins": geom.V2(0, 260)}
 	for _, c := range []string{"round", "track", "pieces", "least", "inset", "margins", "none", "stable"} {
 		s := ui.Div(ui.Class("s", c), ui.Div())
 		d.Body().Append(s)
