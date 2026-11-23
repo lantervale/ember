@@ -167,7 +167,10 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		out.lastBaseline = pb.t + shift + last
 	}
 	if in.run == performLayout && n.inline != nil {
-		t.placeText(n, s.sub(size{gutter.x, gutter.y}), pb)
+		ge := gutterEdges(st, gutter)
+		text := pb
+		text.l, text.r, text.b = text.l+ge.l, text.r+ge.r, text.b+ge.b
+		t.placeText(n, s, text)
 	}
 	if in.run == performLayout && len(n.kids) > 0 {
 		t.leafChildren(n, &out, pb, border, gutter)

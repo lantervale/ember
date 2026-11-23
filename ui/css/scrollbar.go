@@ -136,14 +136,11 @@ func partHeld(at style.BarPart, horizontal bool, part style.BarPart) bool {
 	if at == style.NoBarPart || (at&style.BarHorizontal != 0) != horizontal {
 		return false
 	}
-	switch on := at.Part(); part {
-	case style.BarBackground:
-		return true
-	case barTrack:
+	on := at.Part()
+	if part == barTrack {
 		return on == style.BarBackTrack || on == style.BarThumb || on == style.BarForwardTrack
-	default:
-		return on == part
 	}
+	return part == style.BarBackground || on == part
 }
 
 // part is the style of n's scrollbar part name in the states state,

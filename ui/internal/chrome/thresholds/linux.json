@@ -89,6 +89,7 @@
   "scrollbar-buttons": 0.0008,
   "scrollbar-hover": 0.0008,
   "scrollbar-viewport": 0.0008,
+  "scrollbar-fields": 0.006,
   "control-parts": 0.002,
   "control-generated": 0.006,
   "scrolled": 0.0153,

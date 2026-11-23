@@ -55,6 +55,13 @@ func TestAScrolledViewportMatchesChrome(t *testing.T) {
 		"html's overflow hidden":        {300, "html { overflow: hidden; }", nil},
 		"body's overflow-y scroll":      {300, "body { overflow-y: scroll; } .row, #note { display: none; }", nil},
 		"html and body a viewport high": {900, "html, body { height: 100%; }", nil},
+		"a stable gutter, the page fitting": {0, "html { scrollbar-gutter: stable; } .row, #note { display: none; }",
+			nil},
+		"both edges": {700, "html { scrollbar-gutter: stable both-edges; }", nil},
+		"both edges, the page fitting": {0,
+			"html { scrollbar-gutter: stable both-edges; } .row, #note { display: none; }", nil},
+		"both edges, right to left":     {700, "html { scrollbar-gutter: stable both-edges; direction: rtl; }", nil},
+		"body's gutter, not the root's": {700, "body { scrollbar-gutter: stable both-edges; }", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := chrome.Match(t, chromeDoc(c.y, c.sheet, c.opts...), geom.V2(640, 400))

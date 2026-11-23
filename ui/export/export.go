@@ -256,7 +256,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		write("data-ember-modal", strconv.FormatUint(layer, 10))
 	}
 	popoverAttrs(d, n, write)
-	if st := dom.Data(n).Style; st != nil && (st.Scrollbar != nil || viewportBars(n)) {
+	if styledBars(n) {
 		write("data-ember-bars", "")
 	}
 	if bare(n) {
@@ -756,16 +756,24 @@ const thumbs = ownBars + "::-webkit-scrollbar-thumb { background-color: rgba(255
 	"border-radius: 7px / 10px 10px 5px 5px; }\n" +
 	ownBars + "::-webkit-scrollbar-corner { background: transparent; }\n"
 
-// viewportBars reports whether n is the root or body of a Document whose
-// viewport's bars their rules style: both then go without ui's look, so
-// Chrome takes the viewport's from body's rules, else the root's.
-func viewportBars(n *ui.Node) bool {
-	if n.Tag() == dom.Body && n.Parent() != nil {
-		if st := dom.Data(n.Parent()).Style; st != nil && st.ViewportBars != nil {
+// styledBars reports whether n's bars are drawn from its sheets, or n is
+// the root or body of a Document whose viewport's bars their rules
+// style: both then go without ui's look, so Chrome takes the viewport's
+// from body's rules, else the root's.
+func styledBars(n *ui.Node) bool {
+	st := dom.Data(n).Style
+	if st == nil {
+		return false
+	}
+	if st.Scrollbar != nil || st.ViewportBars != nil {
+		return true
+	}
+	if p := n.Parent(); n.Tag() == dom.Body && p != nil {
+		if ps := dom.Data(p).Style; ps != nil && ps.ViewportBars != nil {
 			return true
 		}
 	}
-	return dom.Data(n).Style.ViewportBars != nil
+	return false
 }
 
 // ownBars keeps ui's look off the bars an element's sheets style

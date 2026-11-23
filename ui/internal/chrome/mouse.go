@@ -62,9 +62,9 @@ func PixelsUnderMouse(t testing.TB, pkg, name string, w, h int, mouse string, ac
 	report := filepath.Join(reports, name+".png")
 	// The report is for reading the difference; failing to write it
 	// leaves the comparison as it is.
-	if f, err := os.Create(report); err == nil { //nolint:gosec // the folder the gate names in EMBER_UI_REPORTS
-		if err = png.Encode(f, d.Report); err != nil {
-			t.Logf("%s: %v", report, err)
+	if f, ferr := os.Create(report); ferr == nil { //nolint:gosec // the folder the gate names in EMBER_UI_REPORTS
+		if ferr = png.Encode(f, d.Report); ferr != nil {
+			t.Logf("%s: %v", report, ferr)
 		}
 		f.Close()
 	}

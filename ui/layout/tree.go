@@ -43,6 +43,9 @@ type Retained struct {
 	// the room its overflow: auto bars took in the last layout.
 	viewport       *box.Box
 	viewportGutter size
+	// barsOn is the viewport's style barsView with its styled bars.
+	barsView, barsOn *style.Computed
+	bars             *style.StyledBars
 	// anchors are the anchors of the elements placed by them, where the
 	// last layout placed them.
 	anchors *anchoring
@@ -142,7 +145,7 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 	if r == nil {
 		return t.out, nil, t
 	}
-	port := viewportOf(root)
+	port := t.viewportOf(root)
 	if !avail.values().both() || frameOf(r).Vertical() {
 		port = nil
 	}
@@ -1187,7 +1190,11 @@ func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 		return content, start
 	}
 	lo, hi := float32(0), over
-	if st.Dir == style.RTL {
+	switch {
+	case st.Mode.BlockFromRight():
+		lo, hi = -over, 0
+	case st.Mode.Vertical():
+	case st.Dir == style.RTL:
 		shift := g.l + g.r - bar
 		lo, hi = -(shift + over), -shift
 	}

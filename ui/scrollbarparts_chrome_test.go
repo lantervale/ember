@@ -120,6 +120,38 @@ func TestGuttersBoundTheSidewaysScrollAsChromes(t *testing.T) {
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
+// In a vertical writing mode a stable gutter is the horizontal bar's, at
+// the block end, and both-edges keeps one at the top as well.
+func TestVerticalGuttersAsChromes(t *testing.T) {
+	const sheet = `.s { width: 120px; height: 80px; overflow: auto; margin: 4px; position: relative;
+  writing-mode: vertical-rl; }
+.s > div { width: 20px; }
+.s > .abs { position: absolute; top: 3px; bottom: 5px; left: 30px; }
+.both { scrollbar-gutter: stable both-edges; }
+.stable { scrollbar-gutter: stable; }
+.wide > div:first-child { width: 200px; }
+.lr { writing-mode: vertical-lr; }
+.styled::-webkit-scrollbar { width: 9px; height: 11px; }
+.flex { display: flex; }`
+	d := ui.NewDocument(ui.CSS(sheet))
+	for _, c := range []struct {
+		classes []string
+		scroll  geom.Vec2
+	}{
+		{[]string{"stable"}, geom.Vec2{}}, {[]string{"both"}, geom.Vec2{}}, {[]string{"both", "wide"}, geom.Vec2{}},
+		{[]string{"both", "lr"}, geom.Vec2{}}, {[]string{"both", "styled"}, geom.Vec2{}},
+		{[]string{"stable", "styled"}, geom.Vec2{}}, {[]string{"both", "flex"}, geom.Vec2{}},
+		{[]string{"both", "wide"}, geom.V2(-1e6, 0)}, {[]string{"stable", "wide"}, geom.V2(-1e6, 0)},
+		{[]string{"both", "wide", "lr"}, geom.V2(1e6, 0)}, {[]string{"stable", "wide", "lr"}, geom.V2(1e6, 0)},
+	} {
+		s := ui.Div(ui.Class(append([]string{"s"}, c.classes...)...), ui.Div(), ui.Div(), ui.Div(ui.Class("abs")))
+		d.Body().Append(s)
+		dom.Data(s).Scroll = c.scroll
+	}
+	r := chrome.Match(t, d, geom.V2(640, 1200))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
 // scrollbar-width: thin asks for the system's bars as scrollbar-color
 // does, which Chrome on macOS lays over the content, its
 // ::-webkit-scrollbar rules ignored.

@@ -65,21 +65,14 @@ func (b *BarParts) equal(o *BarParts) bool {
 type StyledBars struct {
 	Parts         *ScrollbarParts
 	Width, Height float32
-	// on and styled are the last viewport style On was given and its
-	// copy with these bars.
-	on, styled *Computed
 }
 
-// On is base, the viewport's style, with b's bars, the same copy while
-// base is the same.
+// On is a copy of base, the viewport's style, with b's bars.
 func (b *StyledBars) On(base *Computed) *Computed {
-	if b.on != base {
-		c := *base
-		c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = b.Parts, b.Width, b.Height
-		c.ScrollbarNone = b.Parts == nil
-		b.on, b.styled = base, &c
-	}
-	return b.styled
+	c := *base
+	c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = b.Parts, b.Width, b.Height
+	c.ScrollbarNone = b.Parts == nil
+	return &c
 }
 
 // Equal reports whether b and o are the same bars.

@@ -153,16 +153,7 @@ func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
 	l.V, l.H = l.V && w > 0, l.H && h > 0
 	port := geom.V2(view.W-b.Scrollbar.X, view.H-b.Scrollbar.Y)
 	rtl := st.Dir == style.RTL
-	cw, ch := w, h
-	switch {
-	case l.V && l.H:
-	case l.V && st.Resizable:
-		ch = w
-	case l.H && st.Resizable:
-		cw = h
-	default:
-		cw, ch = 0, 0
-	}
+	cw, ch := l.corner(st.Resizable, w, h)
 	margin := func(m style.Length) float32 { v, _ := m.Resolve(0); return v }
 	if l.V {
 		l.VBar = geom.Rect{X: view.X + view.W - w, Y: view.Y, W: w, H: view.H - ch}
@@ -225,20 +216,14 @@ func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
 
 // resizer gives l the resizer of a box of style st the user may resize,
 // its bars w and h thick, in the corner Chrome keeps for it: where the
-// bars meet, square beside a lone bar, and as thick as ui's own bars
+// bars meet, square beside a lone bar, and as thick as Chrome's own bars
 // with none.
 func (l Bars) resizer(st *style.Computed, w, h float32) Bars {
 	if !st.Resizable || st.Resizer == nil {
 		return l
 	}
-	switch {
-	case l.V && l.H:
-	case l.V:
-		h = w
-	case l.H:
-		w = h
-	default:
-		w, h = 15, 15
+	if w, h = l.corner(true, w, h); w == 0 {
+		w, h = barGutter, barGutter
 	}
 	l.Resizer = st.Resizer
 	l.ResizerAt = geom.Rect{X: l.View.X + l.View.W - w, Y: l.View.Y + l.View.H - h, W: w, H: h}
@@ -247,6 +232,23 @@ func (l Bars) resizer(st *style.Computed, w, h float32) Bars {
 	}
 	return l
 }
+
+// corner is the size of the corner where l's bars, w and h thick, meet,
+// or beside a lone bar of a box resizable; none otherwise.
+func (l Bars) corner(resizable bool, w, h float32) (float32, float32) {
+	switch {
+	case l.V && l.H:
+		return w, h
+	case l.V && resizable:
+		return w, w
+	case l.H && resizable:
+		return h, h
+	}
+	return 0, 0
+}
+
+// barGutter is the thickness of Chrome's own bars on macOS.
+const barGutter = 15
 
 // autoButton is the length of a styled button whose height (width on a
 // horizontal bar) is auto, measured from Chrome 157.
@@ -476,8 +478,9 @@ type Scrolling struct {
 
 // Input is the offset l's container scrolls to for p, step points a wheel
 // line, as the old ember/ui's bars do: the wheel turns it, a thumb drags it, a
-// click on a track pages it, and one on a styled button scrolls a line. It reports whether the bars took the mouse,
-// so what is under them doesn't also take the click.
+// click on a track pages it, and one on a styled button scrolls a line.
+// It reports whether the bars took the mouse, so what is under them
+// doesn't also take the click.
 func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 	offset, took := l.Scroll, false
 	if w := p.Wheel; p.Hover && (w.X != 0 || w.Y != 0) {
@@ -487,37 +490,7 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 		offset = offset.Add(w.Scale(step * 3))
 	}
 	if p.Pressed {
-		switch {
-		case l.V && l.VTrack.Contains(p.At):
-			took = true
-			if l.VThumb.Contains(p.At) {
-				s.dragV, s.grab = true, p.At.Y-l.VThumb.Y
-			} else if l.VThumb.H > 0 {
-				offset.Y += page(p.At.Y < l.VThumb.Y, orView(p.Page.Y, l.View.H))
-			}
-		case l.H && l.HTrack.Contains(p.At):
-			took = true
-			if l.HThumb.Contains(p.At) {
-				s.dragH, s.grab = true, p.At.X-l.HThumb.X
-			} else if l.HThumb.W > 0 {
-				offset.X += page(p.At.X < l.HThumb.X, orView(p.Page.X, l.View.W))
-			}
-		case l.Over(p.At):
-			took = true
-			by, part := p.Line, l.PartAt(p.At)
-			switch part.Part() {
-			case style.BarBackStart, style.BarBackEnd:
-				by = -by
-			case style.BarForwardStart, style.BarForwardEnd:
-			default:
-				by = 0
-			}
-			if part&style.BarHorizontal != 0 {
-				offset.X += by
-			} else {
-				offset.Y += by
-			}
-		}
+		offset, took = s.press(l, p, offset)
 	}
 	switch {
 	case !p.Down:
@@ -534,6 +507,47 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 		took = true
 	}
 	return l.Clamp(offset), took
+}
+
+// press is offset after p presses l's bars, and whether they took the
+// press: on a thumb to drag it, on a track to page it, on a styled button
+// to scroll a line.
+func (s *Scrolling) press(l Bars, p Pointer, offset geom.Vec2) (geom.Vec2, bool) {
+	switch {
+	case l.V && l.VTrack.Contains(p.At):
+		if l.VThumb.Contains(p.At) {
+			s.dragV, s.grab = true, p.At.Y-l.VThumb.Y
+		} else if l.VThumb.H > 0 {
+			offset.Y += page(p.At.Y < l.VThumb.Y, orView(p.Page.Y, l.View.H))
+		}
+	case l.H && l.HTrack.Contains(p.At):
+		if l.HThumb.Contains(p.At) {
+			s.dragH, s.grab = true, p.At.X-l.HThumb.X
+		} else if l.HThumb.W > 0 {
+			offset.X += page(p.At.X < l.HThumb.X, orView(p.Page.X, l.View.W))
+		}
+	case l.Over(p.At):
+		part := l.PartAt(p.At)
+		if by := p.Line * buttonWay(part); part&style.BarHorizontal != 0 {
+			offset.X += by
+		} else {
+			offset.Y += by
+		}
+	default:
+		return offset, false
+	}
+	return offset, true
+}
+
+// buttonWay is the way a press on part scrolls: back, on, or not at all
+// off the buttons.
+func buttonWay(part style.BarPart) float32 {
+	if p := part.Part(); p == style.BarBackStart || p == style.BarBackEnd {
+		return -1
+	} else if p == style.BarForwardStart || p == style.BarForwardEnd {
+		return 1
+	}
+	return 0
 }
 
 // Dragging reports whether a thumb is being dragged.
