@@ -334,8 +334,9 @@ func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Comput
 }
 
 // layoutChanged reports whether a and b differ in what layout reads: not
-// in colours, backgrounds, borders' looks, shadows, opacity or
-// transforms, which paint reads through Shown.
+// in colours, backgrounds, borders' looks, shadows or opacity, which
+// paint reads through Shown. Transforms are read by both: their own
+// values grow a scroller's overflow, and their animations repaint.
 func (r *restyler) layoutChanged(a, b *style.Computed) bool {
 	r.la, r.lb = *a, *b
 	paintOnly(&r.la)
@@ -344,7 +345,8 @@ func (r *restyler) layoutChanged(a, b *style.Computed) bool {
 }
 
 func paintOnly(c *style.Computed) {
-	c.Look = style.Look{}
+	c.Look = style.Look{Transform: c.Transform, TransformOrigin: c.TransformOrigin, Translate: c.Translate,
+		Rotate: c.Rotate, Scale: c.Scale}
 	var zero color.Color
 	c.Color, c.PlaceholderColor, c.SelectionColor, c.AccentColor, c.CaretColor = zero, zero, zero, zero, zero
 	c.HasPlaceholder, c.HasSelection, c.AccentAuto, c.CaretAuto, c.ColorInherited = false, false, false, false, false
@@ -2544,11 +2546,19 @@ var props = func() map[string]prop {
 			wordOf(blendModes), flips[[]style.BlendMode]()),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
+		"translate": field(func(c *style.Computed) *style.Translation { return &c.Translate },
+			(*ctx).translate, translations).painted(),
+		"rotate": field(func(c *style.Computed) *style.Rotation { return &c.Rotate },
+			(*ctx).rotate, rotations).painted(),
+		"scale": field(func(c *style.Computed) *style.Scaling { return &c.Scale },
+			(*ctx).scale, scalings).painted(),
 		"appearance": keyword(func(c *style.Computed) *style.Appearance { return &c.Appearance }, appearances),
 		"resize": keyword(func(c *style.Computed) *style.Resize { return &c.Resize },
 			map[string]style.Resize{"none": style.ResizeNone, "both": style.ResizeBoth,
 				"horizontal": style.ResizeHorizontal, "vertical": style.ResizeVertical, "block": style.ResizeBlock,
-				"inline": style.ResizeInline}),
+				"inline": style.ResizeInline,
+				// Chrome computes auto as both, on any box
+				"auto": style.ResizeBoth}),
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
 			cornerOf, pairs(sizeLength)),
@@ -3281,6 +3291,37 @@ func (x *ctx) transformOp(name string, a []Component) style.TransformOp {
 		}
 	}
 	return op
+}
+
+func (x *ctx) translate(v []Component) style.Translation {
+	if isWord(v[0], kwNone) {
+		return style.Translation{}
+	}
+	t := style.Translation{X: x.length(v[0]), Y: style.Px(0), Set: true}
+	if len(v) > 1 {
+		t.Y = x.length(v[1])
+	}
+	return t
+}
+
+func (x *ctx) rotate(v []Component) style.Rotation {
+	if isWord(v[0], kwNone) {
+		return style.Rotation{}
+	}
+	deg, sign, _ := rotation(v)
+	return style.Rotation{Deg: sign * float32(x.angle(deg)), Set: true}
+}
+
+func (x *ctx) scale(v []Component) style.Scaling {
+	if isWord(v[0], kwNone) {
+		return style.Scaling{}
+	}
+	s := style.Scaling{X: x.num(v[0]), Set: true}
+	s.Y = s.X
+	if len(v) > 1 {
+		s.Y = x.num(v[1])
+	}
+	return s
 }
 
 func (x *ctx) origin(v []Component) style.Size[style.Length] {

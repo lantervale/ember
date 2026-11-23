@@ -66,7 +66,7 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandBox(long, v, out)
 	case "place-items", "place-content", "place-self":
 		err = expandPlace(long, v, out)
-	case "gap", "overflow", shortMarginInline, shortMarginBlock,
+	case shortGap, "overflow", shortMarginInline, shortMarginBlock,
 		shortPaddingInline, shortPaddingBlock, shortInsetInline, shortInsetBlock, "border-inline-width",
 		"border-inline-style", "border-inline-color", "border-block-width", "border-block-style", "border-block-color",
 		shortScrollPaddingInline, shortScrollPaddingBlock, shortScrollMarginInline, shortScrollMarginBlock,

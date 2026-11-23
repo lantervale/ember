@@ -168,7 +168,11 @@ func TestVerticalLinesTrimTheirPunctuationAndAutospaceTheirTurnedLetters(t *test
 	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}}, frags[0].Spacing, "no room beside upright letters")
 
 	_, frags = hanText(vertical(style.OrientSideways), 200, "」「漢A")
-	assert.Nil(t, frags[0].Spacing, "sideways lines are left as the face draws them")
+	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}, {At: 6, Space: 1.25}}, frags[0].Spacing,
+		"sideways lines spaced as horizontal ones")
+
+	_, frags = hanText(func(st *style.Computed) { st.Mode, st.Autospace = style.SidewaysLR, true }, 200, "」「漢A")
+	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}, {At: 6, Space: 1.25}}, frags[0].Spacing)
 }
 
 func TestTextSpacingClasses(t *testing.T) {

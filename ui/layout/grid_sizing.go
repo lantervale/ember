@@ -165,6 +165,10 @@ func (t *tree) resolveItemBaselines(a axis, items []*gridItem, tracks, other []g
 	var order []group
 	for _, it := range items {
 		it.shim[a] = 0
+		if a == vertical && it.sharesItsGrids() {
+			it.shim[a], it.knownCache = it.node.shim, nil
+			continue
+		}
 		if !it.baselineAlignedIn(a) {
 			continue
 		}
@@ -195,6 +199,9 @@ func (t *tree) resolveItemBaselines(a axis, items []*gridItem, tracks, other []g
 		}
 		for i, it := range members {
 			it.shim[a] = most - far[i]
+			if a == vertical && it.hoisted {
+				it.node.shim, it.node.sharing = it.shim[a], true
+			}
 			it.minContentCache.set(a, none)
 			it.maxContentCache.set(a, none)
 			it.minimumCache.set(a, none)
@@ -218,9 +225,9 @@ func (t *tree) itemInlineReach(it *gridItem, last bool, inner size) float32 {
 		w = t.measureChildSize(it.node, noSize, inner, maxContentSpaces, inherentSize, horizontal, [2]bool{})
 	}
 	if !last {
-		return resolveOrZero(m.Left, inner.w) + b
+		return resolveOrZero(m.Left, inner.w) + it.extra[horizontal].start + b
 	}
-	return w - b + resolveOrZero(m.Right, inner.w)
+	return w - b + resolveOrZero(m.Right, inner.w) + it.extra[horizontal].end
 }
 
 // itemBaselineReach is how far the item's first baseline lies from its margin box's top,
@@ -238,10 +245,10 @@ func (t *tree) itemBaselineReach(it *gridItem, last bool, rows, columns []gridTr
 	m := it.st.Margin
 	if last {
 		b := or(childLastAlignedBaseline(out, h, it.st.Overflow.Height), t.synthesizedBaseline(h, it.node.parent))
-		return h - b + resolveOrZero(m.Bottom, inner.w)
+		return h - b + resolveOrZero(m.Bottom, inner.w) + it.extra[vertical].end
 	}
 	return or(childFirstBaseline(out.firstBaseline, h, it.st.Overflow.Height), t.synthesizedBaseline(h, it.node.parent)) +
-		resolveOrZero(m.Top, inner.w)
+		resolveOrZero(m.Top, inner.w) + it.extra[vertical].start
 }
 
 func flushBaseIncreases(tracks []gridTrack) {

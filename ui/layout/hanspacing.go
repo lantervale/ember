@@ -533,7 +533,7 @@ func (c *inlineContent) spaceHan(fonts box.Fonts) {
 			continue
 		}
 		st := c.runs[p.run].st
-		if st.Mode.Vertical() && (!st.Stands() || st.Combine) {
+		if st.Mode.Vertical() && st.Combine {
 			have = false
 			continue
 		}

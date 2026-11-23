@@ -245,6 +245,18 @@ func (t *tree) frame(n *node, physical *style.Computed, outer style.WritingMode)
 	}
 }
 
+// reframe has n stand in the frame mode, as though its parent's content were in it, until
+// the function it returns puts it back.
+func (t *tree) reframe(n *node, mode style.WritingMode) func() {
+	st, inner, acrossed := n.st, n.inner, n.across
+	t.frame(n, n.box.Style, mode)
+	n.cache.clear()
+	return func() {
+		n.st, n.inner, n.across = st, inner, acrossed
+		n.cache.clear()
+	}
+}
+
 // turnedLayout lays out n, whose content is in another frame than its parent's: in its
 // own, with its own style, the space it is given and the size it takes turned across
 // when the two frames' lines run on other axes.

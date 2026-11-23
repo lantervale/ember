@@ -1,9 +1,11 @@
 package style
 
 import (
+	"math"
 	"unicode/utf8"
 
 	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/geom"
 )
 
 // Computed is one node's computed style. The zero value is CSS's initial
@@ -1381,6 +1383,11 @@ type Look struct {
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
 	TransformOrigin Size[Length]
+	// Translate, Rotate and Scale are the individual transform
+	// properties, applied in that order before Transform.
+	Translate Translation
+	Rotate    Rotation
+	Scale     Scaling
 	// Filters is filter's functions in order, none when empty, and
 	// BackdropFilters backdrop-filter's.
 	Filters         []Filter
@@ -1411,6 +1418,74 @@ type TransformOp struct {
 	Kind TransformKind
 	X, Y Length
 	A    [6]float32
+}
+
+// Translation is translate: X and Y, lengths of the border box; none
+// unless Set.
+type Translation struct {
+	X, Y Length
+	Set  bool
+}
+
+// Rotation is rotate about the z axis by Deg degrees; none unless Set.
+type Rotation struct {
+	Deg float32
+	Set bool
+}
+
+// Scaling is scale: X and Y factors; none unless Set.
+type Scaling struct {
+	X, Y float32
+	Set  bool
+}
+
+// Transformed reports whether transform, translate, rotate or scale is
+// other than none: the box is then drawn through TransformAt, and stacks
+// on its own.
+func (s *Computed) Transformed() bool {
+	return len(s.Transform) > 0 || s.Translate.Set || s.Rotate.Set || s.Scale.Set
+}
+
+// TransformAt is the transform of a border box of size at at: translate,
+// rotate, scale, then transform's functions, about the transform origin.
+func (s *Computed) TransformAt(at, size geom.Vec2) geom.Transform2D {
+	ox, _ := s.TransformOrigin.Width.Resolve(size.X)
+	oy, _ := s.TransformOrigin.Height.Resolve(size.Y)
+	o := at.Add(geom.V2(ox, oy))
+	m := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o}
+	if t := s.Translate; t.Set {
+		m = m.Mul(TransformOp{Kind: Translate, X: t.X, Y: t.Y}.At(size))
+	}
+	if r := s.Rotate; r.Set {
+		m = m.Mul(TransformOp{Kind: Rotate, A: [6]float32{r.Deg * math.Pi / 180}}.At(size))
+	}
+	if k := s.Scale; k.Set {
+		m = m.Mul(TransformOp{Kind: ScaleOp, A: [6]float32{k.X, k.Y}}.At(size))
+	}
+	for _, op := range s.Transform {
+		m = m.Mul(op.At(size))
+	}
+	return m.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o.Scale(-1)})
+}
+
+// At is op on a border box of size.
+func (op TransformOp) At(size geom.Vec2) geom.Transform2D {
+	a := op.A
+	switch op.Kind {
+	case Translate:
+		x, _ := op.X.Resolve(size.X)
+		y, _ := op.Y.Resolve(size.Y)
+		return geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(x, y)}
+	case ScaleOp:
+		return geom.Transform2D{X: geom.V2(a[0], 0), Y: geom.V2(0, a[1])}
+	case Rotate:
+		return geom.Transform2DFrom(geom.Vec2{}, a[0], 0, geom.V2(1, 1))
+	case Skew:
+		return geom.Transform2D{X: geom.V2(1, geom.Tan(a[1])), Y: geom.V2(geom.Tan(a[0]), 1)}
+	case Matrix:
+		return geom.Transform2D{X: geom.V2(a[0], a[1]), Y: geom.V2(a[2], a[3]), Origin: geom.V2(a[4], a[5])}
+	}
+	return geom.Identity2D()
 }
 
 // BlendMode is how colours mix with those under them, as the

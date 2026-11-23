@@ -1,6 +1,6 @@
 # 0058. Rounded clips through a per-batch rounded rect
 
-- Status: Accepted
+- Status: Superseded by [0216](0216-a-clip-under-a-rotation-or-a-skew-cuts-in-its-own-space.md) for a clip under a rotation or a skew, which cuts in its own space; the rest stands
 - Date: 2026-11-03
 - Area: rendering
 - Owner: architect

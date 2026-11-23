@@ -36,6 +36,14 @@ type gridItem struct {
 	loose   [2]bool
 	owner   *node
 	local   lineSpan
+	// localAxis is the axis of owner's own tracks local is on, and frame the writing mode the
+	// item is sized in when it isn't that of its parent's content: a subgrid's item hoisted
+	// to a grid of another.
+	localAxis axis
+	frame     *style.WritingMode
+	hoisted   bool
+	// fixed is the extent of local where owner's tracks there are of fixed sizes.
+	fixed float32
 }
 
 func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *gridItem {
@@ -91,7 +99,14 @@ func (it *gridItem) baselineAlignedIn(a axis) bool {
 		return it.justifySelf.Baseline() && m.Left.Kind != style.Auto && m.Right.Kind != style.Auto
 	}
 	cyclic := hasPercent(it.st.Size.Height) && (it.crossesIntrinsicRow || it.crossesFlexibleRow)
-	return it.alignSelf.Baseline() && !it.hasAutoBlockMargin() && !cyclic
+	return it.alignSelf.Baseline() && !it.hasAutoBlockMargin() && !cyclic && !it.subgrid[vertical]
+}
+
+// sharesItsGrids reports whether the item, of a subgrid of rows, aligned on its baseline with
+// the grid round it, hoisted there: it keeps the shim it took there.
+func (it *gridItem) sharesItsGrids() bool {
+	k := it.node
+	return !it.hoisted && k != nil && k.sharing && it.baselineAligned() && k.parent.handed()[vertical] != nil
 }
 
 // lastIn reports whether the item aligns on its last baseline in a.
@@ -182,6 +197,9 @@ func (it *gridItem) paddingBorderSize(basis float32) size {
 	if it.node == nil {
 		return size{}
 	}
+	if it.frame != nil {
+		return edges(it.st.Padding, basis).add(borders(it.st)).sum()
+	}
 	return edges(it.st.Padding, basis).add(it.node.borders()).sum()
 }
 
@@ -258,8 +276,11 @@ func (it *gridItem) gridAreaSize(a axis, tracks, other []gridTrack,
 	}
 	s.set(a, sum)
 	if it.loose[a.other()] {
-		if it.owner != nil && it.owner.grid != nil {
-			s.set(a.other(), it.owner.grid.axis(a.other()).extent(it.local))
+		switch {
+		case some(it.fixed):
+			s.set(a.other(), it.fixed)
+		case it.owner != nil && it.owner.grid != nil:
+			s.set(a.other(), it.owner.grid.axis(it.localAxis).extent(it.local))
 		}
 		return s
 	}
@@ -349,6 +370,9 @@ func (t *tree) gridContribution(it *gridItem, a axis, area, avail size, fallback
 	}
 	am := it.availMinusMargins(area, avail)
 	space := spaces{spaceOr(am.w, fallback), spaceOr(am.h, fallback)}
+	if it.frame != nil {
+		defer t.reframe(it.node, *it.frame)()
+	}
 	return t.measureChildSize(it.node, known, area, it.keywordAdjustedSpace(area, space), inherentSize, a, [2]bool{})
 }
 

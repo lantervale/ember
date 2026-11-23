@@ -1,6 +1,10 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"slices"
+
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 func gridAlignContent(a style.Align) alignment {
 	if a.Position() == style.AlignNormal {
@@ -84,8 +88,8 @@ func (t *tree) grid(n *node, in input) output {
 	gaps := [2]float32{usedGap(n, horizontal, basis), usedGap(n, vertical, basis)}
 	columns := p.tracks(n, horizontal, gaps[horizontal], in.parent.w)
 	rows := p.tracks(n, vertical, gaps[vertical], in.parent.w)
-	colItems := t.sizingItems(items, horizontal, gaps[horizontal], basis)
-	rowItems := t.sizingItems(items, vertical, gaps[vertical], basis)
+	colItems := t.sizingItems(n, items, horizontal, gaps, basis)
+	rowItems := t.sizingItems(n, items, vertical, gaps, basis)
 	resolveItemTrackIndexes(items, finalCols, finalRows)
 	resolveItemTrackIndexes(colItems, finalCols, finalRows)
 	resolveItemTrackIndexes(rowItems, finalCols, finalRows)
@@ -113,8 +117,9 @@ func (t *tree) grid(n *node, in input) output {
 	for _, it := range rowItems {
 		it.areaCache = nil
 	}
+	rowBaseline := hasBaseline || slices.ContainsFunc(rowItems, (*gridItem).baselineAligned)
 	t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, hasBaseline)
+		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, rowBaseline)
 	handTracks(items, vertical, rows, gaps[vertical], false)
 	rowSum := sumBaseSizes(rows)
 	borderBox := size{
@@ -191,7 +196,7 @@ func (t *tree) grid(n *node, in input) output {
 	}
 	if rerunRows {
 		t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, hasBaseline)
+			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, rowBaseline)
 		handTracks(items, vertical, rows, gaps[vertical], false)
 	}
 	if columnChanged && !hasPercentColumn {
@@ -280,6 +285,9 @@ func (t *tree) grid(n *node, in input) output {
 		order++
 	}
 	n.grid = newGridInfo(colLines, finalCols, columns, rowLines, finalRows, rows)
+	if st.Dir == style.RTL {
+		n.grid.mirror = borderBox.w
+	}
 	area := oofArea{size: borderBox.sub(paddingBoxInset.sum()), offset: point{paddingBoxInset.l, paddingBoxInset.t}}
 	if isScrollContainer(st) {
 		overflow = overflow.union(rect{r: padding.r, b: padding.b})
@@ -424,7 +432,10 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	vAlign := self
 	if vAlign == style.AlignNormal {
-		if some(inherent.h) || isSizingKeyword(st.Size.Height) || some(ratio) {
+		// an item of an aspect ratio stretches in one axis, its other following: across, unless
+		// it fills its row or has a width
+		if some(inherent.h) || isSizingKeyword(st.Size.Height) ||
+			some(ratio) && (hAlign == style.AlignStretch || some(inherent.w) || n.replaced) {
 			vAlign = style.AlignStart
 		} else {
 			vAlign = style.AlignStretch
@@ -523,7 +534,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		margin:    resolvedMargin,
 	}
 	contribution := overflowContribution(point{x - paddingBoxInset.l, y - paddingBoxInset.t},
-		final, out.overflow.rect, border, st.Overflow, container, resolvedMargin)
+		final, out.overflow.rect, border, st.Overflow, st, container, resolvedMargin)
 	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height),
 		childLastAlignedBaseline(out, final.h, st.Overflow.Height)
 }
@@ -630,9 +641,11 @@ type gridAxisInfo struct {
 	emptyLine float32
 }
 
-// gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo.
+// gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo. A right to
+// left grid's columns are laid out in its mirror image, mirror its border box's width.
 type gridInfo struct {
 	columns, rows gridAxisInfo
+	mirror        float32
 }
 
 func newGridAxisInfo(lines gridLines, counts trackCounts, tracks []gridTrack) gridAxisInfo {
@@ -745,7 +758,13 @@ func (g *gridAxisInfo) resolve(lines [2]style.GridLine, paddingStart, paddingEnd
 // absoluteArea is the containing block an absolutely positioned child's grid lines give it
 // inside the padding box.
 func (g *gridInfo) absoluteArea(st *style.Computed, paddingBox rect) rect {
-	c := g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	var c span
+	if w := g.mirror; w > 0 {
+		c = g.columns.resolve(st.Column, w-paddingBox.r, w-paddingBox.l)
+		c = span{w - c.end, w - c.start}
+	} else {
+		c = g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	}
 	r := g.rows.resolve(st.Row, paddingBox.t, paddingBox.b)
 	return rect{l: c.start, r: c.end, t: r.start, b: r.end}
 }

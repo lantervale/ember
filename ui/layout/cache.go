@@ -72,7 +72,7 @@ func keyOf(in input) cacheKey {
 	}
 }
 
-func (k cacheKey) xParent() uint64       { return k.parent & (xAxisValueMask & nonSignBits) }
+func (k cacheKey) parentSize() uint64    { return k.parent & nonSignBits }
 func (k cacheKey) requestedBits() uint64 { return k.parent & bothSignBits }
 
 func (k cacheKey) sizeValidFor(o cacheKey) bool {
@@ -135,7 +135,7 @@ func (c *cache) get(in input) (output, bool) {
 				continue
 			}
 			if e.key.knownAvail == key.knownAvail && e.key.knownIsDefinite == key.knownIsDefinite && e.key.mode == key.mode &&
-				e.key.clamp == key.clamp && e.key.xParent() == key.xParent() && e.key.sizeValidFor(key) {
+				e.key.clamp == key.clamp && e.key.parentSize() == key.parentSize() && e.key.sizeValidFor(key) {
 				c.recent |= 1 << i
 				return sizeOutput(e.size), true
 			}
