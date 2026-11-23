@@ -79,9 +79,17 @@ func TestHanPunctuationTrimsAsChrome(t *testing.T) {
 				hanP("", ui.Text("字字字字”字")), hanP("", ui.Class("gb"), ui.Text("字字字字”字")),
 				hanP("", ui.Class("gb"), ui.Text("字字字字，字")), hanP("", ui.Text("字字字字。字")),
 				hanP("width: 85px", ui.Text("字字字字」字")), hanP("text-spacing-trim: space-all", ui.Text("字字字字」字")),
-				hanP("text-spacing-trim: trim-start", ui.Text("字字字字」字")), hanP("", ui.Text("字字字字」")),
+				hanP("text-spacing-trim: trim-start", ui.Text("字字字字」字")),
 				hanP("width: 91px", ui.Text("字字字字」」字")), hanP("text-align: right", ui.Text("字字字字」字")),
 				hanP("", ui.Text("字字字字」"), ui.Br(), ui.Text("字")),
+			)
+		},
+		"the content's end": func(t *testing.T) *ui.Document {
+			chrome.Since(t, 158, "a closing bracket the content's last line would overflow by is trimmed")
+			return hanPage(t, "p { width: 95px; }",
+				hanP("", ui.Text("字字字字」")), hanP("", ui.Text("字字字字）")), hanP("", ui.Text("字字字字」 ")),
+				hanP("text-align: right", ui.Text("字字字字」")), hanP("width: 100px", ui.Text("字字字字」")),
+				hanP("text-spacing-trim: space-all", ui.Text("字字字字」")),
 			)
 		},
 	}
