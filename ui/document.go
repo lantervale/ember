@@ -392,6 +392,11 @@ func (d *Document) Layout(size geom.Vec2) {
 			return
 		}
 		d.replay.repaint = true
+		if d.trans.RequeryScroll(d.scrollState) {
+			d.style()
+			d.lay(size)
+			d.requery(size)
+		}
 		return
 	}
 	d.replay.repaint = true
@@ -441,6 +446,7 @@ func (d *Document) lay(size geom.Vec2) {
 	}
 	d.findFollowers()
 	d.placed += len(d.tree.Of)
+	d.resnap()
 }
 
 // maxRequeries bounds the layouts one Layout runs again for its @container
@@ -452,7 +458,7 @@ const maxRequeries = 8
 // that changes an answer (decision 0120).
 func (d *Document) requery(size geom.Vec2) {
 	for range maxRequeries {
-		if !d.trans.Requery(contentBox) {
+		if !d.trans.Requery(contentBox) && !d.trans.RequeryScroll(d.scrollState) {
 			return
 		}
 		d.style()
@@ -475,6 +481,39 @@ func contentBox(n *Node) (float32, float32, bool) {
 	w := b.Size.X - b.Border.Horizontal() - b.Padding.Horizontal() - b.Scrollbar.X
 	h := b.Size.Y - b.Border.Vertical() - b.Padding.Vertical() - b.Scrollbar.Y
 	return max(w, 0), max(h, 0), true
+}
+
+// scrollState is n's scroll state as a scroll-state() query reads it: the
+// sides a sticky box stands moved from; those a scroll container can
+// scroll toward and those it last scrolled toward; the axes a snap area
+// is snapped on.
+func (d *Document) scrollState(n *Node) css.ScrollState {
+	var s css.ScrollState
+	b, placed := dom.Data(n).Placed.(*box.Box)
+	if !placed || b == nil || b.Style == nil {
+		return s
+	}
+	s.Snapped, s.Scrolled = d.snappedOf(n), d.scrolledOf(n)
+	const near = 0.5
+	if b.Style.Position == style.Sticky {
+		s.Stuck |= side(b.Sticky.Y > near, css.SideTop) | side(b.Sticky.Y < -near, css.SideBottom) |
+			side(b.Sticky.X > near, css.SideLeft) | side(b.Sticky.X < -near, css.SideRight)
+	}
+	scrolls := func(o style.Overflow) bool { return o != style.Visible && o != style.Clip }
+	if scrolls(b.Style.Overflow.Width) || scrolls(b.Style.Overflow.Height) {
+		client := b.Size.Sub(geom.V2(b.Border.Horizontal(), b.Border.Vertical())).Sub(b.Scrollbar)
+		from, to := b.ScrollStart, b.ScrollStart.Add(b.Content.Sub(client))
+		s.Scrollable |= side(b.Scroll.Y > from.Y+near, css.SideTop) | side(b.Scroll.Y < to.Y-near, css.SideBottom) |
+			side(b.Scroll.X > from.X+near, css.SideLeft) | side(b.Scroll.X < to.X-near, css.SideRight)
+	}
+	return s
+}
+
+func side(on bool, s css.Sides) css.Sides {
+	if on {
+		return s
+	}
+	return 0
 }
 
 // dropNode is s less n.
@@ -668,6 +707,9 @@ func (d *Document) tick(c *twod.Canvas) bool {
 		}
 		d.clock = now
 		d.animate()
+		if d.stepScrolls() {
+			animating = true
+		}
 		d.drawnIn(w.Time().Frame)
 	}
 	return animating

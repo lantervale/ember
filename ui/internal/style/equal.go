@@ -68,6 +68,8 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
+		b.ContainerScrollState == o.ContainerScrollState &&
+		b.Snap == o.Snap &&
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
 		b.WebkitBox == o.WebkitBox &&
@@ -152,6 +154,8 @@ func (t *Text) equal(o *Text) bool {
 		t.ListStyle == o.ListStyle &&
 		t.ListName == o.ListName &&
 		t.ListImage == o.ListImage &&
+		t.ListGradient.equal(o.ListGradient) &&
+		t.ListInside == o.ListInside &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
 		t.EmptyCellsHide == o.EmptyCellsHide &&

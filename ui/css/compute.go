@@ -108,7 +108,7 @@ type restyler struct {
 	// hasStates are the states the :has() read, and empty is set when
 	// some selector reads :empty, whose change on an element restyles it.
 	anchors, hasBeside, empty bool
-	hasStates                 dom.State
+	hasStates, hasAwayStates  dom.State
 	// computed counts the elements whose style was worked out.
 	computed *int
 	// la and lb are scratch styles for comparing what layout or
@@ -176,6 +176,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 		r.anchors = r.anchors || len(x.has) > 0
 		r.hasBeside = r.hasBeside || slices.ContainsFunc(x.has, func(h hasRead) bool { return h.beside })
 		r.hasStates |= x.hasStates
+		r.hasAwayStates |= x.hasAwayStates
 		r.empty = r.empty || x.empty
 	}
 	if r.env == nil {
@@ -218,10 +219,13 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	}
 	dirty := data.Dirty
 	moved := movedStates(n)
+	if dirMoved(n, data) {
+		force, deep = true, true
+	}
 	inherits := false
-	if force || deep || dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) ||
-		r.empty && moved&dom.Empty != 0 {
+	if force || deep || r.unstyled(n, data, moved) {
 		inherits = r.restyle(n, data, parent, rem)
+		data.StyledDir = autoDirection(n)
 	}
 	data.StyledState = n.State()
 	data.Dirty &^= dom.DirtyStyle | dom.DirtyTree | dom.DirtyState
@@ -260,6 +264,20 @@ func (r *restyler) visit(n *dom.Node, parent *style.Computed, rem float32, force
 	return below || data.Dirty&dom.DirtyLayout != 0
 }
 
+// unstyled reports whether n, of pipeline data, whose states moved, needs
+// its style worked out again for itself.
+func (r *restyler) unstyled(n *dom.Node, data *dom.Pipeline, moved dom.State) bool {
+	return data.Dirty&dom.DirtyStyle != 0 || data.Style == nil || r.reached(n) || r.empty && moved&dom.Empty != 0
+}
+
+// dirMoved reports whether n, of dir="auto" or a bdi, reads another
+// direction from the text below it than when it was styled: what :dir()
+// answers in its subtree changed.
+func dirMoved(n *dom.Node, data *dom.Pipeline) bool {
+	return data.StyledDir != "" && data.Dirty&(dom.DirtyDescendant|dom.DirtyTree) != 0 &&
+		autoDirection(n) != data.StyledDir
+}
+
 // children visits n's children, whose parent's style is parent, and
 // reports whether one or a node below needs layout. What a sibling
 // combinator reads on one restyles those after it: all of them and
@@ -288,7 +306,7 @@ func (r *restyler) children(n *dom.Node, parent *style.Computed, rem float32, fo
 func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Computed, rem float32) bool {
 	s := r.compute(n, parent, rem)
 	*r.computed++
-	if s.ContainerType != style.ContainerNormal {
+	if s.ContainerType != style.ContainerNormal || s.ContainerScrollState {
 		r.env.contain(n)
 	}
 	old := data.Style
@@ -731,6 +749,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 			px.lined = true
 		}
 	}
+	px.transitions()
 	ps.FollowColor(ps.Color)
 	ps.TextShadows = followColor(ps.TextShadows, ps.Color)
 	return &ps, true
@@ -1740,9 +1759,25 @@ var props = func() map[string]prop {
 				return sided(x, v[0], map[string]style.Clear{"none": style.ClearNone, "left": style.ClearLeft,
 					"right": style.ClearRight, "both": style.ClearBoth}, style.ClearLeft, style.ClearRight)
 			}, flips[style.Clear]()),
-		"container-type": keyword(func(c *style.Computed) *style.ContainerType { return &c.ContainerType },
-			map[string]style.ContainerType{"normal": style.ContainerNormal, "size": style.ContainerSize,
-				"inline-size": style.ContainerInlineSize}),
+		"container-type": {
+			set: func(x *ctx, v []Component) {
+				x.c.ContainerType, x.c.ContainerScrollState = style.ContainerNormal, false
+				for _, c := range v {
+					switch {
+					case isWord(c, "size"):
+						x.c.ContainerType = style.ContainerSize
+					case isWord(c, "inline-size"):
+						x.c.ContainerType = style.ContainerInlineSize
+					case isWord(c, kwScrollState):
+						x.c.ContainerScrollState = true
+					}
+				}
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.ContainerType, dst.ContainerScrollState = src.ContainerType, src.ContainerScrollState
+			},
+			anim: anim{kind: discrete},
+		},
 		"container-name": field(func(c *style.Computed) *[]string { return &c.ContainerNames },
 			func(_ *ctx, v []Component) []string {
 				if isWord(v[0], kwNone) {
@@ -2056,13 +2091,22 @@ var props = func() map[string]prop {
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
-		"list-style-image": field(func(c *style.Computed) *string { return &c.ListImage },
-			func(x *ctx, v []Component) string {
-				if isWord(v[0], kwNone) {
-					return ""
+		"list-style-image": {
+			set: func(x *ctx, v []Component) {
+				x.c.ListImage, x.c.ListGradient = "", nil
+				switch {
+				case isWord(v[0], kwNone):
+				case gradientTerm(v[0]) == nil:
+					x.c.ListGradient = x.gradient(v[0])
+				default:
+					x.c.ListImage = imageSource(x, v)
 				}
-				return imageSource(x, v)
-			}, flips[string]()),
+			},
+			inherit: func(dst, src *style.Computed) { dst.ListImage, dst.ListGradient = src.ListImage, src.ListGradient },
+			anim:    anim{kind: discrete},
+		},
+		"list-style-position": field(func(c *style.Computed) *bool { return &c.ListInside },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "inside") }, flips[bool]()),
 		"list-style-type": {
 			set:     listStyle,
 			inherit: func(dst, src *style.Computed) { dst.ListStyle, dst.ListName = src.ListStyle, src.ListName },
@@ -2141,10 +2185,7 @@ var props = func() map[string]prop {
 				"match-source": style.MaskMatchSource, "alpha": style.MaskAlpha, "luminance": style.MaskLuminance,
 			}), flips[[]style.MaskMode]()),
 		"mask-composite": layered(func(c *style.Computed) *[]style.MaskComposite { return &c.MaskComposites },
-			wordOf(map[string]style.MaskComposite{
-				"add": style.CompositeAdd, "subtract": style.CompositeSubtract, "intersect": style.CompositeIntersect,
-				"exclude": style.CompositeExclude,
-			}), flips[[]style.MaskComposite]()),
+			wordOf(maskComposites), flips[[]style.MaskComposite]()),
 		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
 			clipPaths).painted(),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),
@@ -2302,6 +2343,7 @@ var props = func() map[string]prop {
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}}
 	m["border-image-outset"] = noop
 	maps.Copy(m, contentProps())
+	maps.Copy(m, snapProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
@@ -2790,7 +2832,7 @@ var blendModes = map[string]style.BlendMode{
 	"color-dodge": style.BlendColorDodge, "color-burn": style.BlendColorBurn, "hard-light": style.BlendHardLight,
 	"soft-light": style.BlendSoftLight, "difference": style.BlendDifference, "exclusion": style.BlendExclusion,
 	"hue": style.BlendHue, "saturation": style.BlendSaturation, "color": style.BlendColor,
-	"luminosity": style.BlendLuminosity,
+	"luminosity": style.BlendLuminosity, "plus-lighter": style.BlendPlusLighter,
 }
 
 //nolint:gochecknoglobals // lookup table
@@ -2991,6 +3033,9 @@ func (r *restyler) anchor(n *dom.Node) {
 	if movedStates(n)&r.hasStates != 0 || tree && slices.ContainsFunc(data.Changed, r.readInHas) {
 		r.flagAround(n, false)
 	}
+	if movedStates(n)&r.hasAwayStates != 0 || tree && slices.ContainsFunc(data.Changed, r.readAwayInHas) {
+		r.flagUnder(n)
+	}
 	if data.Dirty&dom.DirtyDescendant == 0 {
 		return
 	}
@@ -3048,6 +3093,32 @@ func (r *restyler) flag(a *dom.Node, beside bool) {
 			}
 		}
 	}
+}
+
+// flagUnder flags for their :has() the elements under e's parent, the
+// elements after e and theirs included, where an :is() in a :has() reads
+// what changed on e above or before them.
+func (r *restyler) flagUnder(e *dom.Node) {
+	top := e
+	if p := e.Parent(); p != nil {
+		top = p
+	}
+	top.Walk(func(a *dom.Node) bool {
+		if a.IsText() || dom.Data(a).Style == nil {
+			return false
+		}
+		r.flag(a, false)
+		if r.hasBeside {
+			r.flag(a, true)
+		}
+		return true
+	})
+}
+
+// readAwayInHas reports whether an :is() in some :has() reads the class,
+// id or attribute a dom.Pipeline.Changed key names away from its subject.
+func (r *restyler) readAwayInHas(key string) bool {
+	return slices.ContainsFunc(r.sheets, func(s *Sheet) bool { return s.indexed().hasAway[key] })
 }
 
 // readInHas reports whether some :has() reads the class, id or attribute

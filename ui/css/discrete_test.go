@@ -93,6 +93,22 @@ func TestStartingStyleRulesApplyToNothingElse(t *testing.T) {
 	}
 }
 
+func TestANestedStartingStyleStartsItsRulesSelectors(t *testing.T) {
+	s := sheet(t, `div.a, p { opacity: 1; @starting-style { opacity: 0.2 } color: red }`)
+	if len(s.Rules) != 2 || !s.Rules[1].starting || s.Rules[0].starting || len(s.Rules[0].Decls) != 2 ||
+		len(s.Rules[1].Selectors) != 2 {
+		t.Fatalf("read as %s", s.String())
+	}
+	tr, root, _, sheets := animationPage(t,
+		`div { opacity: 1; transition: opacity 1s linear; @starting-style { opacity: 0 } }`)
+	d := el(dom.Div, "n")
+	root.Children()[0].Append(d)
+	tr.Compute(root, sheets)
+	tr.Step(0.5)
+	tr.Compute(root, sheets)
+	opacityAt(t, "from the nested starting style", d, 0.5)
+}
+
 func TestCompositionAddsToTheElementsOwnValue(t *testing.T) {
 	src := `@keyframes w { from { width: 10px } to { width: 20px } }
 div { width: 100px; animation: w 1s linear; animation-composition: %s }`

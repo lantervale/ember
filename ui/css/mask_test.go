@@ -100,20 +100,31 @@ func TestChromesOwnMaskNamesAreReadAsTheirPlainOnes(t *testing.T) {
 	assert.Equal(t, style.BackgroundPosition{X: style.Px(3), Y: style.Px(4)}, l.Position)
 	assert.Equal(t, style.ScaleContain, l.Size.Scale)
 	assert.Equal(t, style.UnderPadding, l.Clip)
-	assert.Equal(t, style.CompositeExclude, l.Composite, "xor is exclude")
+	assert.Equal(t, style.CompositeXor, l.Composite, "xor is kept as written")
+	assert.Equal(t, style.CompositeExclude, l.Composite.Plain(), "and joins as exclude")
 	for word, as := range map[string]style.MaskComposite{
-		"source-over": style.CompositeAdd, "source-in": style.CompositeIntersect, "source-out": style.CompositeSubtract,
+		"source-over": style.CompositeSourceOver, "destination-in": style.CompositeDestinationIn,
+		"COPY": style.CompositeCopy, "plus-lighter": style.CompositePlusLighter,
 	} {
 		assert.Equal(t, as, computed(t, "-webkit-mask-composite: "+word).MaskLayer(0).Composite, word)
 	}
-	_, warns := Parse("t.css", "div { -webkit-mask-composite: destination-in }", Browser())
-	assert.Len(t, warns, 1, "a compositing word ui does not draw")
+	_, warns := Parse("t.css", "div { mask-composite: copy; -webkit-mask-composite: plus-darker; "+
+		"-webkit-mask: url(a.png) no-clip }", Browser())
+	assert.Len(t, warns, 3, "the plain property refuses the compositing words, as Chrome refuses plus-darker and no-clip")
+	l = computed(t, "-webkit-mask: url(a.png) right 4px top / 10px; "+
+		"-webkit-mask-position: center bottom 3px, left 2px center").MaskLayer(0)
+	half := style.Length{Kind: style.Fixed, Percent: 50, IsPercent: true}
+	assert.Equal(t, style.BackgroundPosition{X: half, Y: style.Px(3), FromBottom: true}, l.Position)
 
 	s = computed(t, `-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
 		-webkit-mask-composite: xor; mask-composite: exclude`)
 	require.Equal(t, 2, s.MaskLayers(), "the gradient border")
 	assert.Equal(t, style.UnderContent, s.MaskLayer(0).Clip)
 	assert.Equal(t, style.CompositeExclude, s.MaskLayer(0).Composite)
+	l = computed(t, "-webkit-mask: url(a.png) right 4px top / 10px").MaskLayer(0)
+	top := style.Length{Kind: style.Fixed, IsPercent: true}
+	assert.Equal(t, style.BackgroundPosition{X: style.Px(4), Y: top, FromRight: true}, l.Position,
+		"three values, as Chrome's own longhands take them")
 }
 
 // computed is the style of a div under decls, read as a browser's sheet.

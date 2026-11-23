@@ -43,10 +43,13 @@ func (s *Set) Intercepts(f style.Font, text string, letter, word, top, bottom fl
 			continue
 		}
 		if g == 0 {
-			if fb := s.Fallback(); fb != nil && fb != c {
-				if fg, ferr := fb.font.GlyphIndex(&s.buf, r); ferr == nil && fg != 0 {
-					face, g = fb, fg
-				}
+			face, g = s.fallbackGlyph(c, r)
+		}
+		if g == 0 {
+			if a, ok := s.spaceAdvance(c, r, f.Size); ok {
+				x += a + letter
+				prev = 0
+				continue
 			}
 		}
 		fscale, fppem := f.Size/face.upem, fixed.I(int(face.upem))
@@ -73,6 +76,17 @@ func (s *Set) Intercepts(f style.Font, text string, letter, word, top, bottom fl
 		}
 	}
 	return out
+}
+
+// fallbackGlyph is r's glyph in the Fallback face when c lacks it and it has it, else
+// c's missing glyph.
+func (s *Set) fallbackGlyph(c *Face, r rune) (*Face, sfnt.GlyphIndex) {
+	if fb := s.Fallback(); fb != nil && fb != c {
+		if g, err := fb.font.GlyphIndex(&s.buf, r); err == nil && g != 0 {
+			return fb, g
+		}
+	}
+	return c, 0
 }
 
 func spacing(text string, letter, word float32) float32 {

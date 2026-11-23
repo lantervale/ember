@@ -233,3 +233,63 @@ section:has(:target) p { padding-left: 4px; }
 	matchChromeShown(t, d, props, 2, `location.hash = "#t"; document.querySelector("input").focus();`, then,
 		func(n *dom.Node) *style.Computed { return dom.Data(n).Style })
 }
+
+// TestWhatHasAndDirReadAboveOrBelowRestylesAsInChrome changes what an
+// :is() in a :has() reads above the element the :has() is on, and the
+// text under elements of dir="auto", in Chrome by a script and in ui
+// through the tree.
+func TestWhatHasAndDirReadAboveOrBelowRestylesAsInChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+div, p, span, b { color: #000; }
+.card:has(:is(.dark img)) { color: #f00; }
+.card:not(:has(img:not(.light *))) { background-color: #0f0; }
+.card:has(:is(:target > .card img)) { padding-left: 2px; }
+.card:has(:is(.on ~ div img)) { padding-top: 3px; }
+:dir(rtl) > b { color: #00f; }
+`))
+	field := ui.Input()
+	auto := ui.Span(ui.Text("hello"))
+	second := ui.Div(ui.Attr("dir", "auto"), ui.Text("שלום"), ui.Span(ui.Text("abc")), ui.B(ui.Text("b")))
+	bdi := ui.Bdi(ui.Text("abc"), ui.B(ui.Text("b")))
+	before := ui.P(ui.Text("before"))
+	wrap := ui.Div(ui.ID("w"), ui.Class("wrap"), field, before, ui.Div(ui.Class("card"), ui.Img(), ui.B(ui.Text("b"))))
+	d.Body().Append(wrap,
+		ui.Div(ui.Attr("dir", "auto"), auto, ui.B(ui.Text("b"))),
+		second,
+		ui.P(bdi))
+	d.Layout(geom.V2(800, 600))
+	then := func() {
+		win := platform.NewWindow(platform.Size(800, 600))
+		win.Add(d)
+		w := ember.New().AddEntities(win)
+		w.RunFrames(1)
+		d.Body().AddClass("dark")
+		wrap.AddClass("light")
+		before.AddClass("on")
+		d.SetTarget(wrap)
+		auto.Children()[0].SetText("שלום")
+		second.Remove(second.Children()[0])
+		bdi.Children()[0].SetText("עברית")
+		w.RunFrames(2)
+	}
+	props := map[string]func(*style.Computed) string{
+		"color": compared["color"], "background-color": compared["background-color"],
+		"padding-left": compared["padding-left"], "padding-top": compared["padding-top"],
+		"direction": func(c *style.Computed) string {
+			if c.Dir == style.RTL {
+				return "rtl"
+			}
+			return "ltr"
+		},
+	}
+	matchChromeShown(t, d, props, 2, `
+document.body.classList.add("dark");
+document.querySelector(".wrap").classList.add("light");
+document.querySelector(".wrap > p").classList.add("on");
+location.hash = "#w";
+const autos = document.querySelectorAll("[dir=auto]");
+autos[0].firstElementChild.firstChild.data = "שלום";
+autos[1].firstChild.remove();
+document.querySelector("bdi").firstChild.data = "עברית";`, then,
+		func(n *dom.Node) *style.Computed { return dom.Data(n).Style })
+}

@@ -9,11 +9,12 @@ const (
 	After
 	FirstLetter
 	FirstLine
+	Marker
 )
 
 func (p Pseudo) String() string {
 	return [...]string{NoPseudo: "", Before: "before", After: "after", FirstLetter: "first-letter",
-		FirstLine: "first-line"}[p]
+		FirstLine: "first-line", Marker: "marker"}[p]
 }
 
 // NewGenerated is the node of origin's ::before, ::after, ::first-letter or ::first-line box: a span

@@ -21,19 +21,31 @@ import (
 // chromeFrames is what Chrome's ImageDecoder reads of each picture of
 // the page, by its title: how many times it repeats after its first
 // play (null for ever), and each frame's duration in microseconds and
-// its pixels, not premultiplied.
+// its pixels, not premultiplied. The decoder works off the main thread,
+// which headless Chrome's virtual clock does not wait for: with the page
+// idle it runs the clock out and dumps the page before the frames come
+// back (Chrome for Testing 156), so held keeps the main thread busy with
+// messages, which stop the clock, until each step settles.
 const chromeFrames = `
+const held = p => new Promise((resolve, reject) => {
+	let settled = false;
+	p.then(v => { settled = true; resolve(v); }, e => { settled = true; reject(e); });
+	const ch = new MessageChannel();
+	ch.port1.onmessage = () => { if (!settled) ch.port2.postMessage(0); };
+	ch.port2.postMessage(0);
+});
 const out = {};
 try {
 for (const img of document.querySelectorAll("img")) {
 	const type = img.src.slice(5, img.src.indexOf(";"));
-	const dec = new ImageDecoder({data: await (await fetch(img.src)).arrayBuffer(), type});
-	await dec.tracks.ready;
-	await dec.completed;
+	const data = await held((async () => (await fetch(img.src)).arrayBuffer())());
+	const dec = new ImageDecoder({data, type});
+	await held(dec.tracks.ready);
+	await held(dec.completed);
 	const track = dec.tracks.selectedTrack;
 	const frames = [];
 	for (let i = 0; i < track.frameCount; i++) {
-		const f = (await dec.decode({frameIndex: i})).image;
+		const f = (await held(dec.decode({frameIndex: i}))).image;
 		const c = new OffscreenCanvas(f.displayWidth, f.displayHeight);
 		const g = c.getContext("2d");
 		g.drawImage(f, 0, 0);
@@ -69,6 +81,11 @@ func TestAnimationsDecodeToChromesFramesTimesAndLoops(t *testing.T) {
 	}
 	out, err := chrome.Eval(d, geom.V2(400, 300), chromeFrames)
 	require.NoError(t, err)
+	var failed struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(out, &failed))
+	require.Empty(t, failed.Error, "Chrome's decoder")
 	var want map[string]chromeAnimation
 	require.NoError(t, json.Unmarshal(out, &want))
 	require.Len(t, want, len(pictures))

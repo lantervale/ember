@@ -205,3 +205,7 @@ func lengthText(l style.Length) string {
 	}
 	return "calc(" + n(l.Percent) + "% + " + n(l.Px) + "px)"
 }
+
+// Represent is n written in the predefined counter style name, or in
+// its fallback.
+func Represent(name string, n int) string { return predefined().represent(name, n) }

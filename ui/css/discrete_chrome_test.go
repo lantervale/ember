@@ -163,6 +163,22 @@ func TestStartingStyleMatchesChrome(t *testing.T) {
 	}
 }
 
+// TestNestedStartingStyleMatchesChrome nests @starting-style in the
+// style rules it starts, declarations after it still the rule's.
+func TestNestedStartingStyleMatchesChrome(t *testing.T) {
+	src := `.t0 { display: none; opacity: 1; transition: opacity 1s linear, display 1s linear allow-discrete;
+  @starting-style { opacity: 0 } }
+.t0.on { display: block }
+.s0 { transition: opacity 1s linear; @starting-style { opacity: 0.2 } opacity: 0.8 }
+.t2 { opacity: 1; transition: opacity 1s linear; @starting-style { opacity: 0; @starting-style { opacity: 0.4 } } }`
+	props := map[string]func(*style.Computed) string{"display": compared["display"], "opacity": compared["opacity"]}
+	for _, at := range []float32{0.1, 0.65} {
+		t.Run(fmt.Sprint(at), func(t *testing.T) {
+			matchMovedAt(t, src, divs("t0", "s0", "t2"), props, at, 1)
+		})
+	}
+}
+
 // TestAnimationCompositionMatchesChrome runs one @keyframes replacing,
 // adding to and accumulating on each element's own values, then two
 // animations, the second adding to what the first gives, and a keyframe
