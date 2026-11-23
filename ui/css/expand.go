@@ -578,7 +578,7 @@ func expandBackground(v []Component, out map[string][]Component) error {
 }
 
 func backgroundLayer(v []Component, out map[string][]Component) error {
-	var pos, boxes, text []Component
+	var pos, boxes []Component
 	posEnd := -1
 	for i := 0; i < len(v); i++ {
 		c := v[i]
@@ -609,10 +609,8 @@ func backgroundLayer(v []Component, out map[string][]Component) error {
 			}
 		case out["background-attachment"] == nil && checks["background-attachment"](one) == nil:
 			out["background-attachment"] = one
-		case len(boxes) < 2 && backgroundBox(c) == nil:
+		case len(boxes) < 3 && (backgroundBox(c) == nil || isWord(c, "text")):
 			boxes = append(boxes, c)
-		case text == nil && isWord(c, "text"):
-			text = one
 		case out["background-size"] != nil && posEnd >= 0:
 			return fmt.Errorf("background: %s after the size", c.String())
 		case posEnd >= 0 && posEnd != i:
@@ -627,7 +625,27 @@ func backgroundLayer(v []Component, out map[string][]Component) error {
 		}
 		out["background-position"] = pos
 	}
+	return backgroundBoxes(boxes, out)
+}
+
+// backgroundBoxes are a background layer's boxes: one the origin and the
+// clip, two the origin then the clip; text the clip alone, beside one box
+// the origin.
+func backgroundBoxes(all []Component, out map[string][]Component) error {
+	var boxes, text []Component
+	for i, c := range all {
+		switch {
+		case !isWord(c, "text"):
+			boxes = append(boxes, c)
+		case text != nil:
+			return fmt.Errorf("background: text twice")
+		default:
+			text = all[i : i+1]
+		}
+	}
 	switch {
+	case len(boxes) > 2:
+		return fmt.Errorf("background: three boxes")
 	case text != nil && len(boxes) > 1:
 		return fmt.Errorf("background: text after two boxes")
 	case text != nil:

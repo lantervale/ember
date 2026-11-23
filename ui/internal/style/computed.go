@@ -962,7 +962,8 @@ const (
 	ColumnRuleCurrent
 )
 
-// FollowColor sets every colour marked currentColor to c.
+// FollowColor sets every colour marked currentColor to c, a decoration's
+// to -webkit-text-fill-color's when one is set.
 func (s *Computed) FollowColor(c color.Color) {
 	for f, p := range map[CurrentColorFields]*color.Color{
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
@@ -973,6 +974,10 @@ func (s *Computed) FollowColor(c color.Color) {
 		if s.CurrentColor&f != 0 {
 			*p = c
 		}
+	}
+	if s.CurrentColor&DecorationCurrent != 0 && s.TextFilled {
+		// Chrome draws a decoration of currentColor in the glyphs' fill.
+		s.TextDecoration.Color = s.TextFill
 	}
 }
 

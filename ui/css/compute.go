@@ -440,8 +440,8 @@ var colored = map[string]bool{
 	"color": true, "background-color": true, "background-image": true, "border-top-color": true,
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
-	"caret-color": true, "-webkit-text-fill-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
-	"backdrop-filter": true,
+	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
+	"backdrop-filter": true, "-webkit-text-fill-color": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -1070,10 +1070,6 @@ func (x *ctx) finish(root bool) {
 	x.transitions()
 	x.animations()
 	c.FollowColor(c.Color)
-	if c.CurrentColor&style.DecorationCurrent != 0 && c.TextFilled {
-		// Chrome draws a decoration of currentColor in the glyphs' fill.
-		c.TextDecoration.Color = c.TextFill
-	}
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
 	c.Shadows = followColor(c.Shadows, c.Color)
@@ -1974,9 +1970,11 @@ var props = func() map[string]prop {
 			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }, anyLength),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
-		"accent-color":            autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
-		"caret-color":             autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.CaretColor, &c.CaretAuto }),
+		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
+		"caret-color":  autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.CaretColor, &c.CaretAuto }),
+
 		"-webkit-text-fill-color": textFill(),
+
 		"object-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.ObjectPosition },
 			(*ctx).position, positions),
 		"object-fit": keyword(func(c *style.Computed) *style.ObjectFit { return &c.ObjectFit },
