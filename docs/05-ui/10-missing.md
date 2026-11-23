@@ -41,7 +41,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | text shaped as one across elements ([decision 0183](../99-decisions/0183-text-is-shaped-as-one-across-elements-of-one-font-and-spacing.md)) right to left or set vertically | shaped apart, the text round each part its context, where Chrome shapes it as one |
 | a line whose ends, shaped again ([decision 0190](../99-decisions/0190-line-ends-are-shaped-again-and-carets-share-a-ligature.md)), fit differently | broken where the text shaped whole fits, then its ends reshaped, where Chrome fits the line again with them |
 | a ligature that draws a space (a face with `liga` across one) | a shrink-to-fit box measures it whole at a line's end where Chrome measures its characters' shares; a line may break at the space before it where Chrome takes a later break; a chain of such ligatures is shaped with five characters on either side and may pair them otherwise |
-| selecting text of vertical lines: a drag, a double click, a caret placed by the pointer, the selection drawn | the characters found and the selection drawn as if the lines ran across, the selection not drawn on them |
+| a selection of vertical lines going past an empty line of preformatted text, a br alone on its line or a tab kept between fragments ([decision 0193](../99-decisions/0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md)) | the empty line and the br unmarked and the tab's room left out, where Chrome marks them as on horizontal lines |
+| a double click on ideographs | takes one ideograph, where Chrome takes the word ICU's dictionary finds (一丁) |
 | a character standing in a vertical line that a fallback face draws (an emoji of the system's colour font, a symbol of Go Mono) | it takes the first face's ascent and descent, or its vertical advance, where Chrome takes the fallback face's |
 
 ## Generated content
