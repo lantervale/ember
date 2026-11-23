@@ -384,7 +384,7 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 		justify.keyword = style.AlignFlexStart
 	}
 	gutter := n.ownGutter()
-	ge := gutterEdges(st, gutter)
+	ge := mirroredGutterEdges(st, gutter)
 	inset := padding.add(border).add(ge)
 	paddingBoxInset := border.add(ge)
 	inner := known.mSub(inset.sum())
