@@ -12,6 +12,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/layout"
 )
 
 // An open select's list draws over everything, after the whole tree, like
@@ -80,7 +81,8 @@ func (p *painter) place(pp popup) menu {
 	if p.fonts != nil {
 		for _, r := range lines {
 			f, text := lineText(st, pp.m, r)
-			w = max(w, p.fonts.Advance(f, text)+st.Spacing(text)+2*optionPad+2*l.border)
+			w = max(w, p.fonts.Advance(f, text)+st.Spacing(text)+hanRoom(p.hanSpacing(st, f, text))+
+				2*optionPad+2*l.border)
 		}
 	}
 	vp := p.viewport
@@ -245,11 +247,30 @@ func (p *painter) drawList(pp popup, l menu) {
 			bold.Font = f
 			look = &bold
 		}
-		p.words(geom.V2(row.X+optionPad, row.Y+2), text, look, smoothed([]twod.TextOption{
+		p.spaced(geom.V2(row.X+optionPad, row.Y+2), text, p.hanSpacing(st, f, text), look, smoothed([]twod.TextOption{
 			twod.Typeface(p.faceOf(f)), twod.FontSize(f.Size), twod.Color(ink), twod.Tracking(st.LetterGap()),
 		}, smoothingOf(st)))
 	}
 	p.s.PopClip()
+}
+
+// hanSpacing is the room text-spacing-trim and text-autospace give a row
+// of an open select's list, text of style st in font f.
+func (p *painter) hanSpacing(st *style.Computed, f style.Font, text string) []box.Spacing {
+	if p.fonts == nil {
+		return nil
+	}
+	row := *st
+	row.Font = f
+	return layout.LineSpacing(p.fonts, &row, text)
+}
+
+func hanRoom(spacing []box.Spacing) float32 {
+	var w float32
+	for _, s := range spacing {
+		w += s.Space
+	}
+	return w
 }
 
 // Pick is what is under the pointer while a select is open: the select,

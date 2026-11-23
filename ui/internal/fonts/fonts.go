@@ -55,9 +55,11 @@ type Face struct {
 	// character, -1 once known not to.
 	ascii int8
 	// shaper is the face's layout tables, read when it is first shaped;
-	// han what text-spacing-trim reads of its glyphs, by character.
+	// han what text-spacing-trim reads of its glyphs, by character, and
+	// pairs what its chws does to two side by side.
 	shaper *shape.Font
-	han    map[rune]hanGlyph
+	han    map[hanKey]hanGlyph
+	pairs  map[[2]rune]hanPair
 	// vertical is the face's vertical metrics, read when it first sets a
 	// character upright in a vertical line.
 	vertical *vertical

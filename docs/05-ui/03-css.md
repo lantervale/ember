@@ -250,7 +250,7 @@ Full-width punctuation standing together is set half wide, as Chrome sets it ([d
 :lang(ja) { text-spacing-trim: trim-start; text-autospace: normal; }
 ```
 
-Vertical text and text fields are neither trimmed nor spaced yet ([missing](10-missing.md)).
+Where the face has a `chws` feature of its own, Chrome hands it every pair of punctuation in place of its rules, across elements as well, and so does ui ([decision 0211](../99-decisions/0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md)): a line's start and end keep the rules, except that a closing bracket a line parts from the punctuation after it is drawn whole and never trimmed to fit. Vertical text trims by the same rules through the face's `vhal`, the punctuation standing upright moved up its line, and `text-autospace` adds its room beside the letters turned with the line, none under `text-orientation: upright`. Text fields, a select's open list and an input's caret and selection are spaced as the text of the page.
 
 ### Line breaking rules
 

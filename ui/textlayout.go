@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/control"
@@ -11,6 +12,7 @@ import (
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
+	"github.com/lantervale/ember/ui/layout"
 )
 
 // line is a one-line text field's text laid out: where each position is
@@ -30,10 +32,16 @@ type line struct {
 }
 
 // spacing is the room a style adds after each character and after each
-// word separator.
-type spacing struct{ letter, word float32 }
+// word separator, and its text-spacing-trim and text-autospace.
+type spacing struct {
+	letter, word float32
+	trim         style.SpacingTrim
+	auto         bool
+}
 
-func spacingOf(st *style.Computed) spacing { return spacing{st.LetterGap(), st.WordGap()} }
+func spacingOf(st *style.Computed) spacing {
+	return spacing{st.LetterGap(), st.WordGap(), st.SpacingTrim, st.Autospace}
+}
 
 // after is the room s adds after r.
 func (s spacing) after(r rune) float32 {
@@ -45,19 +53,28 @@ func (s spacing) after(r rune) float32 {
 
 func newLine(text []rune, st *style.Computed, fonts box.Fonts) *line {
 	l := &line{font: st.Font, spacing: spacingOf(st)}
-	l.xs, l.cells = measureLine(text, st, fonts)
+	l.xs, l.cells = measureLine(text, st, fonts, layout.LineSpacing(fonts, st, string(text)))
 	return l
 }
 
 // measureLine is where each position of text stands along its line and,
 // for a line shown right to left or in both directions, the room each
-// character is shown in, as visualLine gives them.
-func measureLine(text []rune, st *style.Computed, fonts box.Fonts) ([]float32, [][2]float32) {
+// character is shown in, as visualLine gives them. han is the room
+// text-spacing-trim and text-autospace give its characters, by byte.
+func measureLine(text []rune, st *style.Computed, fonts box.Fonts, han []box.Spacing) ([]float32, [][2]float32) {
 	xs := make([]float32, len(text)+1)
 	sp := spacingOf(st)
 	var room float32
+	at := 0
 	for i, r := range text {
 		room += sp.after(r)
+		for len(han) > 0 && han[0].At <= at {
+			if han[0].At == at {
+				room += han[0].Space
+			}
+			han = han[1:]
+		}
+		at += utf8.RuneLen(r)
 		xs[i+1] = fonts.Advance(st.Font, string(text[:i+1])) + room
 	}
 	if st.Dir == style.RTL || slices.ContainsFunc(text, func(r rune) bool { return r >= firstRTL }) {
@@ -487,7 +504,7 @@ func newArea(text []rune, run *box.Box, st *style.Computed, fonts box.Fonts, row
 	}
 	next := float32(0)
 	add := func(start, end int, r row) {
-		xs, cells := measureLine(text[start:end], st, fonts)
+		xs, cells := measureLine(text[start:end], st, fonts, rowSpacing(text, r, start))
 		if cells == nil && slices.Contains(text[start:end], '\t') {
 			tabbed(xs, start, r)
 		}
@@ -526,6 +543,25 @@ func newArea(text []rune, run *box.Box, st *style.Computed, fonts box.Fonts, row
 	}
 	a.page = max(rowsShown, 1)
 	return a
+}
+
+// rowSpacing is the room text-spacing-trim and text-autospace give the
+// characters of row r of text, which starts at character start, by byte
+// from there.
+func rowSpacing(text []rune, r row, start int) []box.Spacing {
+	var out []box.Spacing
+	for _, f := range r.frags {
+		if len(f.Spacing) == 0 || int(f.Start) < start {
+			continue
+		}
+		before := len(string(text[start:f.Start]))
+		for _, s := range f.Spacing {
+			s.At += before
+			out = append(out, s)
+		}
+	}
+	slices.SortFunc(out, func(a, b box.Spacing) int { return cmp.Compare(a.At, b.At) })
+	return out
 }
 
 // tabbed moves the places xs measured along a row from start to where
