@@ -26,6 +26,8 @@ func TestShadesAreChromesForAnInsetOrOutsetSide(t *testing.T) {
 		{"gray", color.RGB8(128, 128, 128), [3]float32{44, 44, 44}, [3]float32{212, 212, 212}},
 		{"red", color.RGB8(224, 60, 49), [3]float32{140, 37, 30}, [3]float32{255, 68, 55}},
 		{"black", color.RGB8(0, 0, 0), [3]float32{84, 84, 84}, [3]float32{168, 168, 168}},
+		{"an iframe's grey", color.RGB8(238, 238, 238), [3]float32{154, 154, 154}, [3]float32{238, 238, 238}},
+		{"just darker than #ebebeb", color.RGB8(234, 234, 234), [3]float32{150, 150, 150}, [3]float32{255, 255, 255}},
 	} {
 		d, l := shades(c.c)
 		near(c.darker, d, c.name+": darker, as Chrome draws it")

@@ -199,3 +199,24 @@ func TestASourcesTypeIsOneUIReads(t *testing.T) {
 	}
 	assert.True(t, readsType(" image/png ; x=1"), "spaces round it")
 }
+
+func TestAnImgTakesTheSizeOfTheSourceItChoseByWhenThatSaysOne(t *testing.T) {
+	sourced := Source(Attr("srcset", "p100.png"), Attr("width", "80"), Attr("media", "(min-width: 500px)"))
+	img := Img(Attr("src", "p200.png"), Attr("width", "20"), Attr("height", "30"))
+	d := NewDocument(Images(sized(t, 100, 200)))
+	d.Body().Append(Picture(sourced, img))
+
+	d.Layout(geom.V2(800, 600))
+	_, size := shownAs(t, img)
+	assert.Equal(t, geom.V2(80, 40), size, "the source's width, its picture's proportions")
+
+	d.Layout(geom.V2(400, 600))
+	_, size = shownAs(t, img)
+	assert.Equal(t, geom.V2(20, 30), size, "its own once it shows its src")
+
+	d.Layout(geom.V2(800, 600))
+	sourced.RemoveAttr("width")
+	d.Layout(geom.V2(800, 600))
+	_, size = shownAs(t, img)
+	assert.Equal(t, geom.V2(20, 30), size, "a source of no size leaves the img's")
+}

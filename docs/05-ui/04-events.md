@@ -29,14 +29,17 @@ func (s *Settings) Update(f world.Frame) {
 | `ui.OnToggle` | `ui.Toggled{Node}` | a details element opened or closed |
 | `ui.OnClose` | `ui.Closed{Node, Value}` | a dialog closed, with its return value, "" for Escape |
 | `ui.OnSort` | `ui.Sorted{Node, Column, Descending}` | a table's column header pressed |
-| `ui.OnKey` | `ui.KeyPressed{Node, Key, Text, Command, Pad}` | a key nothing took, on the focused element or the open modal dialog; also a pad button focus navigation leaves (West, North, shoulders, triggers, Back, Start), as `Pad` with `Key` `input.KeyUnknown` |
+| `ui.OnKey` | `ui.KeyPressed{Node, Key, Text, Command, Pad}` | a key nothing took, on the focused element or the open modal dialog; also a pad button focus navigation leaves (West, North, shoulders, triggers, Back, Start), as `Pad` with `Key` `input.KeyUnknown`. In a focused text field the callback hears every key before the field, as a keydown, and `e.PreventDefault()` keeps it from the field; those emit no World event |
 | `ui.OnBack` | `ui.BackPressed{Node}` | Escape or the pad's East that nothing took: a screen's way back |
 | `ui.OnPointerEnter` | `ui.PointerEntered{Node}` | the pointer coming over it, once, not again for its children (mouseenter) |
 | `ui.OnPointerLeave` | `ui.PointerLeft{Node}` | the pointer leaving it and all its children (mouseleave) |
 | `ui.OnMove` | `ui.WindowMoved{Node, At}` | a window dragged by its bar and let go elsewhere |
 | `ui.OnResize` | `ui.WindowResized{Node, Size}` | a window's edge drag let go with a new size |
 | `ui.OnFold` | `ui.WindowFolded{Node, Folded}` | a window folded to its bar or unfolded |
-| `ui.OnContextMenu` | `ui.ContextClicked{Node}` | the right button pressed and released on it; bubbles like Back |
+| `ui.OnContextMenu` | `ui.ContextClicked{Node, At}` | the right button pressed and released on it, or on macOS the left one with Control held; `At` is the pointer's place; bubbles like Back |
+| `ui.OnPointerDown` | `ui.PointerPressed{Node, At, Button}` | a mouse button pressed over it (pointerdown); the press then focuses, clicks and selects as ever |
+| `ui.OnPointerMove` | `ui.PointerMoved{Node, At}` | the pointer moved over it, or anywhere while it holds the pointer (pointermove) |
+| `ui.OnPointerUp` | `ui.PointerReleased{Node, At, Button}` | a mouse button released over it, or anywhere while it holds the pointer (pointerup) |
 | `ui.OnDrop` | `ui.Dropped{Target, Dragged}` | a draggable element let go over it, a drop target |
 | `ui.OnDragEnd` | `ui.DragEnded{Source, Dropped}` | its drag ended, taken by a target or cancelled |
 | `ui.OnSelectionChange` | `ui.SelectionChanged{Node}` | the Document's selected text set, moved or cleared; `Node` is `body`, so the callback goes on `body` or `html` |
@@ -45,14 +48,14 @@ func (s *Settings) Update(f world.Frame) {
 | A callback is | |
 |---|---|
 | `func()` | told nothing |
-| `func(ui.Event)` | told the event: `Type` (`ui.EventClick`…), `Node`, and what its World event carries (`Clicks`, `Value`, `Column`, `Descending`, `Key`, `Text`, `Command`, `At`, `Size`, `Folded`, `Dragged`, `Dropped`) |
+| `func(ui.Event)` | told the event: `Type` (`ui.EventClick`…), `Node`, and what its World event carries (`Clicks`, `Value`, `Column`, `Descending`, `Key`, `Text`, `Command`, `At`, `Size`, `Folded`, `Dragged`, `Dropped`, `Button`) |
 | `func(*world.World, ui.Event)` | told the World too |
 
 ```go
 remove := ui.On(slot, ui.EventClick, equip) // added to a live element; remove() takes it off
 ```
 
-Every event is emitted as a World event whether or not it has callbacks. Callbacks run right after their event, in the Document's Update, in the order they were added, and only while their element is in the Document. Most stay on their element; `OnBack`, `OnKey`, `OnContextMenu`, `OnSelectionChange` and `OnRightDragSelect` bubble: the focused element's handlers run, then each ancestor's up to `html`, innermost first, `e.Node` still the focused element, until one calls `e.StopPropagation()`. So one `OnBack` on a screen's root hears its Escape and pad East; on `body` or `html` it also hears a Back with nothing focused, which emits no World event ([decision 0060](../99-decisions/0060-back-and-key-callbacks-bubble.md)). World events are emitted late in a frame and read the next. A point on a box's right or bottom edge is outside it, as Chrome's `elementFromPoint` has it. `doc.Value(e.Node)` reads what a control now holds.
+Every event is emitted as a World event whether or not it has callbacks. Callbacks run right after their event, in the Document's Update, in the order they were added, and only while their element is in the Document. Most stay on their element; `OnBack`, `OnKey`, `OnContextMenu`, the pointer's `OnPointerDown`, `OnPointerMove` and `OnPointerUp`, `OnSelectionChange` and `OnRightDragSelect` bubble: the focused element's handlers run, then each ancestor's up to `html`, innermost first, `e.Node` still the focused element, until one calls `e.StopPropagation()`. So one `OnBack` on a screen's root hears its Escape and pad East; on `body` or `html` it also hears a Back with nothing focused, which emits no World event ([decision 0060](../99-decisions/0060-back-and-key-callbacks-bubble.md)). In a Document shown by an iframe, a key or a Back nothing stopped goes on from the iframe in the Document round it, `e.Node` there the iframe, a key in a focused field included, whose default `e.PreventDefault()` still keeps ([decision 0141](../99-decisions/0141-keys-and-the-arrows-cross-a-frame-the-frame-fades-and-moves-with-its-iframe.md)). World events are emitted late in a frame and read the next. A point on a box's right or bottom edge is outside it, as Chrome's `elementFromPoint` has it. `doc.Value(e.Node)` reads what a control now holds.
 
 ## Selected text
 
@@ -102,6 +105,19 @@ slot := kit.Panel(ui.Draggable(), ui.OnDragEnd(func(e ui.Event) { if !e.Dropped 
 bag := kit.Panel(ui.OnDrop(func(e ui.Event) { equip(e.Dragged) }))
 card := kit.Panel(ui.OnContextMenu(func(e ui.Event) { doc.ShowModal(menu) }))
 ```
+
+A drag of the page's own, such as a panel's edge, takes the pointer from its `OnPointerDown`: `doc.SetPointerCapture(n)` sends `n` the pointer's moves and its release wherever the pointer goes, and lets go once no button is down; `doc.PointerCapture()` reads it. The pointer's events skip the page's `html` and `body`, which are the game's, but for an element holding the pointer. Places are in the Document's points ([decision 0142](../99-decisions/0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md)).
+
+```go
+edge := ui.Div(ui.Class("edge"), ui.OnPointerDown(func(e ui.Event) { doc.SetPointerCapture(e.Node) }),
+	ui.OnPointerMove(func(e ui.Event) {
+		if doc.PointerCapture() == e.Node {
+			resize(e.At.X)
+		}
+	}))
+```
+
+An element's `title` shows as Chrome's tooltip once the pointer rests half a second over it: below and right of the pointer, above it near the window's foot, its lines kept, until the pointer leaves for another title, a button or a key is pressed, or ten seconds pass. An empty `title` shows none, not its ancestor's. Its box is `.ember-title-tip`, the last child of `html` while it shows: Chrome's look by default, a kit tip's under kit's theme; `doc.TitleTip()` returns it.
 
 A `ui.Draggable()` element drags once the left button has moved it 4 points; less is a click. Let go over an element with `OnDrop`, the target's `OnDrop` runs, then the source's `OnDragEnd`; let go over no target, or Escape, cancels it. While it drags, the source carries `data-dragging` and the target under the pointer `data-drag-over`, for CSS, and the pointer is a hand. A right click on the page's `html` or `body` stays the game's. Not yet: a picture following the pointer, drags by keys or pad, and drags between Documents or windows ([decision 0062](../99-decisions/0062-ui-elements-take-a-right-click-and-drag-and-drop-of-their-own.md)).
 

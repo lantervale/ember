@@ -345,10 +345,11 @@ func (c *floatContext) lineSlot(y, height float32, cbInsets [2]float32) (float32
 
 // floatWidths sums what a block's floats add to its intrinsic width, Taffy's
 // FloatIntrinsicWidthCalculator: side by side under max-content or a width to fit in,
-// the widest alone under min-content.
+// the widest alone under min-content. run is the floats since the last block in the flow.
 type floatWidths struct {
 	avail        space
 	sides        [2]float32
+	run          [2]float32
 	contribution float32
 	widest       float32
 }
@@ -358,16 +359,20 @@ func (f *floatWidths) add(width float32, side floatSide, clearing style.Clear) {
 		f.contribution = fmax(f.contribution, width)
 	} else {
 		if clearing == style.ClearLeft || clearing == style.ClearBoth {
-			f.sides[0] = 0
+			f.sides[0], f.run[0] = 0, 0
 		}
 		if clearing == style.ClearRight || clearing == style.ClearBoth {
-			f.sides[1] = 0
+			f.sides[1], f.run[1] = 0, 0
 		}
 		f.sides[side] += width
+		f.run[side] += width
 		f.contribution = fmax(f.contribution, f.sides[0]+f.sides[1])
 	}
 	f.widest = fmax(f.widest, width)
 }
+
+// leading is how wide the floats since the last block in the flow stand side by side.
+func (f *floatWidths) leading() float32 { return f.run[0] + f.run[1] }
 
 func (f *floatWidths) result() float32 {
 	if f.avail.definite() {

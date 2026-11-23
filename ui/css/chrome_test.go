@@ -43,7 +43,32 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-style": func(s *style.Computed) string {
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
-	"font-family": func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
+	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
+	"text-decoration-skip-ink": func(s *style.Computed) string {
+		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
+	},
+	"tab-size": func(s *style.Computed) string {
+		if s.TabSize.Length {
+			return px(s.TabSize.Px)
+		}
+		return num(s.TabSize.Spaces)
+	},
+	"word-break": func(s *style.Computed) string {
+		return [...]string{"normal", "break-all", "keep-all", "break-word"}[s.WordBreak]
+	},
+	"line-break": func(s *style.Computed) string {
+		return [...]string{"auto", "loose", "normal", "strict", "anywhere"}[s.LineBreak]
+	},
+	"font-variant-caps": func(s *style.Computed) string {
+		return [...]string{"normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps", "unicase",
+			"titling-caps"}[s.Font.Caps]
+	},
+	"font-variant-ligatures":  func(s *style.Computed) string { return orNormal(s.FontVariant.Ligatures) },
+	"font-variant-numeric":    func(s *style.Computed) string { return orNormal(s.FontVariant.Numeric) },
+	"font-variant-east-asian": func(s *style.Computed) string { return orNormal(s.FontVariant.EastAsian) },
+	"font-variant-alternates": func(s *style.Computed) string { return orNormal(s.FontVariant.Alternates) },
+	"font-variant-position":   func(s *style.Computed) string { return orNormal(s.FontVariant.Position) },
 	"line-height": func(s *style.Computed) string {
 		switch {
 		case s.LineHeight.Normal:
@@ -53,7 +78,12 @@ var compared = map[string]func(s *style.Computed) string{
 		}
 		return px(s.LineHeight.Px)
 	},
-	"letter-spacing": func(s *style.Computed) string { return px(s.LetterSpacing) },
+	"letter-spacing": func(s *style.Computed) string {
+		if l := s.LetterSpacing; l.Percent != 0 && l.Px == 0 {
+			return num(l.Percent) + "%"
+		}
+		return px(s.LetterSpacing.Px)
+	},
 	"word-spacing": func(s *style.Computed) string {
 		if w := s.WordSpacing; w.Percent != 0 && w.Px == 0 {
 			return num(w.Percent) + "%"
@@ -306,7 +336,7 @@ span { font-size: 1.5em; padding-left: 1rem; border-left-color: currentcolor; }
 .flex { display: flex; column-gap: var(--gap); }
 .flex > span { flex: 2 0 10px; order: 3; }
 .abs { position: absolute; z-index: 4; pointer-events: none; word-spacing: -2px; }
-.flex { word-spacing: 50%; }
+.flex { word-spacing: 50%; letter-spacing: 10%; }
 .vars {
   --pad: 11px; padding-top: var(--pad); margin-right: var(--missing, 7px);
   outline: 2px solid var(--ink); outline-offset: 1px;
@@ -342,6 +372,13 @@ input[type=range][title] { background-color: RebeccaPurple; border-top: 2px soli
 		),
 	)
 	matchChrome(t, d)
+}
+
+func orNormal(s string) string {
+	if s == "" {
+		return "normal"
+	}
+	return s
 }
 
 func lengthCSS(l style.Length) string {
@@ -724,7 +761,7 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   font-family: "Go Mono", monospace; font-size: larger; font-weight: 300; font-style: italic;
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
   white-space: pre-wrap; overflow-wrap: break-word; text-overflow: ellipsis; visibility: hidden; cursor: grab;
-  text-transform: capitalize;
+  text-transform: capitalize; font-stretch: semi-condensed;
 }
 .l {
   background-color: rgb(1 2 3 / 0.25); border: 2px dashed steelblue; border-left: 4px dotted;

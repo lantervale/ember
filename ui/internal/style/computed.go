@@ -42,11 +42,12 @@ func Initial() Computed {
 			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto,
 		},
 		Text: Text{
-			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400},
+			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400, Stretch: 100},
 			LineHeight: LineHeight{Normal: true},
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
 			Orphans:    2, Widows: 2,
+			TabSize: TabSize{Spaces: 8},
 		},
 		Look: Look{
 			Opacity: 1, Visible: true, TransformOrigin: Size[Length]{Percent(50), Percent(50)},
@@ -81,6 +82,19 @@ const (
 	SelectNone
 	// SelectAll is taken whole or not at all.
 	SelectAll
+)
+
+// AppRegion is app-region: what a press there does to the system's window.
+type AppRegion uint8
+
+const (
+	// AppRegionNone is none set on the box or above it: the page's own.
+	AppRegionNone AppRegion = iota
+	// AppRegionDrag moves the window.
+	AppRegionDrag
+	// AppRegionNoDrag takes the box out of a drag region, as Chrome computes
+	// none once set too.
+	AppRegionNoDrag
 )
 
 type BoxSizing uint8
@@ -364,7 +378,27 @@ type Font struct {
 	Size   float32
 	Weight float32
 	Italic bool
+	// Stretch is font-stretch as a percentage of the normal width, 0
+	// standing for 100.
+	Stretch float32
+	// Synthesis is what font-synthesis forbids making up.
+	Synthesis FontSynthesis
+	// Caps is font-variant-caps, which measuring and drawing synthesise
+	// (SmallCaps).
+	Caps FontCaps
 }
+
+// FontSynthesis is the faces font-synthesis forbids making up from
+// another of the family, none forbidden at zero.
+type FontSynthesis uint8
+
+const (
+	// NoSyntheticBold leaves a bold the family lacks drawn in its
+	// lighter face.
+	NoSyntheticBold FontSynthesis = 1 << iota
+	// NoSyntheticItalic leaves an italic the family lacks upright.
+	NoSyntheticItalic
+)
 
 // LineHeight is normal, a factor of the font size, or points.
 type LineHeight struct {
@@ -483,28 +517,43 @@ const (
 	PreLine
 )
 
-// WordSpacing is word-spacing: Px points after each word separator, and
-// Percent of the font size, which a child inherits as a percentage of
-// its own.
-type WordSpacing struct{ Px, Percent float32 }
+// Spacing is letter-spacing or word-spacing: Px points after each
+// character or word separator, and Percent of the font size, which a child
+// inherits as a percentage of its own.
+type Spacing struct{ Px, Percent float32 }
 
 // WordSeparator reports whether word-spacing follows r: a space or a
 // no-break space, the two Chrome widens.
 func WordSeparator(r rune) bool { return r == ' ' || r == '\u00a0' }
 
+// Fill is the colour glyphs are filled with: -webkit-text-fill-color's,
+// else color.
+func (t *Text) Fill() color.Color {
+	if t.TextFilled {
+		return t.TextFill
+	}
+	return t.Color
+}
+
 // WordGap is the room word-spacing adds after each word separator in t's
 // font.
 func (t *Text) WordGap() float32 { return t.WordSpacing.Px + t.WordSpacing.Percent*t.Font.Size/100 }
 
+// LetterGap is the room letter-spacing adds after each character in t's
+// font.
+func (t *Text) LetterGap() float32 {
+	return t.LetterSpacing.Px + t.LetterSpacing.Percent*t.Font.Size/100
+}
+
 // Spacing is the room letter-spacing and word-spacing add to s: the one
 // after each character, the other after each word separator.
 func (t *Text) Spacing(s string) float32 {
-	word := t.WordGap()
+	word, letter := t.WordGap(), t.LetterGap()
 	if word == 0 {
-		if t.LetterSpacing == 0 {
+		if letter == 0 {
 			return 0
 		}
-		return t.LetterSpacing * float32(utf8.RuneCountInString(s))
+		return letter * float32(utf8.RuneCountInString(s))
 	}
 	n, seps := 0, 0
 	for _, r := range s {
@@ -513,14 +562,36 @@ func (t *Text) Spacing(s string) float32 {
 			seps++
 		}
 	}
-	return t.LetterSpacing*float32(n) + word*float32(seps)
+	return letter*float32(n) + word*float32(seps)
+}
+
+// FontCaps is font-variant-caps.
+type FontCaps uint8
+
+const (
+	NormalCaps FontCaps = iota
+	SmallCaps
+	AllSmallCaps
+	PetiteCaps
+	AllPetiteCaps
+	Unicase
+	TitlingCaps
+)
+
+// FontVariant is font-variant's longhands but its capitals (Font.Caps),
+// kept as written, their keywords in the order CSS lists them, "" for
+// normal. They change nothing drawn: ui applies no OpenType feature of a
+// face.
+type FontVariant struct {
+	Ligatures, Numeric, EastAsian, Alternates, Position string
 }
 
 type Text struct {
 	Font          Font
+	FontVariant   FontVariant
 	LineHeight    LineHeight
-	LetterSpacing float32
-	WordSpacing   WordSpacing
+	LetterSpacing Spacing
+	WordSpacing   Spacing
 	Color         color.Color
 	TextAlign     TextAlign
 	WhiteSpace    WhiteSpace
@@ -549,6 +620,15 @@ type Text struct {
 	HasSelection     bool
 	SelectionText    color.Color
 	HasSelectionText bool
+	// SelectionShadows is the ::selection's text-shadow, set when
+	// HasSelectionShadows is: the selected text's shadows in place of its
+	// own. SelectionDecoration is its text-decoration, set when
+	// HasSelectionDecoration is, drawn on the selected text over the
+	// text's own.
+	SelectionShadows       []Shadow
+	HasSelectionShadows    bool
+	SelectionDecoration    TextDecoration
+	HasSelectionDecoration bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations
@@ -561,6 +641,10 @@ type Text struct {
 	// or currentColor, kept as such when inherited).
 	AccentColor, CaretColor color.Color
 	AccentAuto, CaretAuto   bool
+	// TextFill is -webkit-text-fill-color, the colour glyphs are filled
+	// with when TextFilled; else they take color, as for currentColor.
+	TextFill   color.Color
+	TextFilled bool
 	// ColorScheme is color-scheme, and Dark the scheme the element is
 	// drawn in: its system colours and light-dark() resolved, and the
 	// canvas behind a dark root.
@@ -614,7 +698,64 @@ type Text struct {
 	// BreakAnywhere is overflow-wrap: anywhere, whose breaks also count
 	// in min-content widths.
 	BreakAnywhere bool
+	WordBreak     WordBreak
+	LineBreak     LineBreak
+	TabSize       TabSize
+	// InkThrough is text-decoration-skip-ink: none: underlines and
+	// overlines go through the glyphs' ink, which they otherwise skip.
+	InkThrough bool
 }
+
+// WordBreak is word-break: where lines may break inside words.
+type WordBreak uint8
+
+const (
+	WordBreakNormal WordBreak = iota
+	// BreakAll breaks between any two letters, as between ideographs.
+	BreakAll
+	// KeepAll breaks no word of letters, ideographs neither.
+	KeepAll
+	// WordBreakBreakWord is break-word, the old name of overflow-wrap:
+	// anywhere.
+	WordBreakBreakWord
+)
+
+// LineBreak is line-break. Its values but anywhere differ only on the
+// punctuation of Chinese and Japanese, where ui breaks as normal.
+type LineBreak uint8
+
+const (
+	LineBreakAuto LineBreak = iota
+	LineBreakLoose
+	LineBreakNormal
+	LineBreakStrict
+	// LineBreakAnywhere breaks between any two characters.
+	LineBreakAnywhere
+)
+
+// TabSize is tab-size: Spaces spaces of the text's font, or Px points
+// when Length.
+type TabSize struct {
+	Spaces, Px float32
+	Length     bool
+}
+
+// TabStop is the distance between t's tab stops, space the advance of a
+// space in its font.
+func (t *Text) TabStop(space float32) float32 {
+	if t.TabSize.Length {
+		return t.TabSize.Px
+	}
+	return t.TabSize.Spaces * space
+}
+
+// WrapsAnywhere reports whether a word too wide for its line breaks
+// where it must: overflow-wrap or word-break: break-word.
+func (t *Text) WrapsAnywhere() bool { return t.BreakWord || t.WordBreak == WordBreakBreakWord }
+
+// MinAnywhere reports whether those breaks also count in min-content
+// widths: overflow-wrap: anywhere, word-break: break-word.
+func (t *Text) MinAnywhere() bool { return t.BreakAnywhere || t.WordBreak == WordBreakBreakWord }
 
 type BorderStyle uint8
 
@@ -651,8 +792,10 @@ type Shadow struct {
 // border-image's slice for nine-patches, or a background's
 // linear-gradient().
 type Image struct {
-	Source   string
-	Slice    Sides[float32]
+	Source string
+	Slice  Sides[float32]
+	// Fill is border-image-slice's fill: the middle drawn too.
+	Fill     bool
 	Gradient *Gradient
 }
 
@@ -828,9 +971,9 @@ type Look struct {
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool
-	// AppDrag is app-region: drag, its own or the one of the box it is
-	// in: a press there moves the system's window.
-	AppDrag bool
+	// AppRegion is app-region, inherited: drag, its own or the one of the
+	// box it is in, has a press there move the system's window.
+	AppRegion AppRegion
 	// Cursor is the cursor keyword, "" for auto.
 	Cursor string
 	// UserSelect is user-select as used: auto is its parent's, text on the
@@ -947,7 +1090,8 @@ const (
 	ColumnRuleCurrent
 )
 
-// FollowColor sets every colour marked currentColor to c.
+// FollowColor sets every colour marked currentColor to c, a decoration's
+// to -webkit-text-fill-color's when one is set.
 func (s *Computed) FollowColor(c color.Color) {
 	for f, p := range map[CurrentColorFields]*color.Color{
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
@@ -958,6 +1102,10 @@ func (s *Computed) FollowColor(c color.Color) {
 		if s.CurrentColor&f != 0 {
 			*p = c
 		}
+	}
+	if s.CurrentColor&DecorationCurrent != 0 && s.TextFilled {
+		// Chrome draws a decoration of currentColor in the glyphs' fill.
+		s.TextDecoration.Color = s.TextFill
 	}
 }
 
@@ -1031,6 +1179,9 @@ const (
 	// NoClip is mask-clip: no-clip, a mask shown wherever the element
 	// draws.
 	NoClip
+	// UnderText is background-clip: text, a layer shown through the
+	// glyphs of the element and of those it holds.
+	UnderText
 )
 
 // MaskMode is mask-mode: what of a mask layer's picture the element

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -73,6 +74,7 @@ type selecting struct {
 	// runs are the text nodes with fragments in tree order and maps what
 	// was asked of them, as layout serial laid them out.
 	runs    []*Node
+	breaks  []*Node
 	maps    map[*Node]*runMap
 	serial  int
 	indexed bool
@@ -192,13 +194,14 @@ func selects(st *style.Computed) bool {
 }
 
 // textRuns are the text nodes layout cut into fragments, in tree order:
-// not a field's, which selects its own, nor a select's.
+// not a field's, which selects its own, nor a select's. It lists the brs
+// laid out too, in sel.breaks.
 func (d *Document) textRuns() []*Node {
 	s := &d.sel
 	if s.indexed && s.serial == d.placed {
 		return s.runs
 	}
-	s.runs, s.maps, s.serial, s.indexed = s.runs[:0], nil, d.placed, true
+	s.runs, s.breaks, s.maps, s.serial, s.indexed = s.runs[:0], s.breaks[:0], nil, d.placed, true
 	if d.tree == nil {
 		return nil
 	}
@@ -206,6 +209,12 @@ func (d *Document) textRuns() []*Node {
 		if n.IsText() {
 			if b := d.tree.Of[n]; b != nil && b.Kind == box.TextRun && len(b.Lines) > 0 {
 				s.runs = append(s.runs, n)
+			}
+			return false
+		}
+		if n.Tag() == dom.Br {
+			if d.tree.Of[n] != nil {
+				s.breaks = append(s.breaks, n)
 			}
 			return false
 		}
@@ -543,23 +552,132 @@ func (d *Document) textIn(e *Node) (Position, Position, bool) {
 }
 
 // wordAt is the word, the white space or the mark at p, as a double
-// click takes it.
+// click takes it: across the text nodes the inline elements round p cut
+// it in, as Chrome reads wo<b>rd</b> as one word.
 func (d *Document) wordAt(p Position) (Position, Position) {
-	m := d.mapOf(p.Node)
-	if m == nil {
+	return d.wordSpan(p, false)
+}
+
+// wordSpan is wordAt, with the spaces and tabs after the word up to the
+// next line break when trailing is set.
+func (d *Document) wordSpan(p Position, trailing bool) (Position, Position) {
+	if d.mapOf(p.Node) == nil {
 		return p, p
 	}
-	at, state, s := 0, -1, string(m.src)
-	for len(s) > 0 {
-		var w string
-		w, s, state = uniseg.FirstWordInString(s, state)
-		n := utf8.RuneCountInString(w)
-		if p.Offset < at+n || len(s) == 0 {
-			return Position{p.Node, at}, Position{p.Node, at + n}
+	runs := d.textRuns()
+	i := indexOf(runs, p.Node)
+	lo, hi := i, i
+	for i >= 0 && lo > 0 && d.joined(runs[lo-1], runs[lo]) {
+		lo--
+	}
+	for i >= 0 && hi+1 < len(runs) && d.joined(runs[hi], runs[hi+1]) {
+		hi++
+	}
+	nodes := []*Node{p.Node}
+	if i >= 0 {
+		nodes = runs[lo : hi+1]
+	}
+	var src []rune
+	starts := make([]int, 0, len(nodes)+1)
+	at := p.Offset
+	for _, n := range nodes {
+		if n == p.Node {
+			at += len(src)
 		}
-		at += n
+		starts = append(starts, len(src))
+		src = append(src, d.mapOf(n).src...)
+	}
+	starts = append(starts, len(src))
+	place := func(k int, end bool) Position {
+		j := 0
+		for j+1 < len(nodes) && (k > starts[j+1] || !end && k == starts[j+1]) {
+			j++
+		}
+		return Position{nodes[j], k - starts[j]}
+	}
+	from, state, rest := 0, -1, string(src)
+	for len(rest) > 0 {
+		var w string
+		w, rest, state = uniseg.FirstWordInString(rest, state)
+		n := utf8.RuneCountInString(w)
+		if at < from+n || len(rest) == 0 {
+			to := from + n
+			for trailing && to < len(src) && (src[to] == ' ' || src[to] == '\t' || src[to] == ' ') {
+				to++
+			}
+			return place(from, false), place(to, true)
+		}
+		from += n
 	}
 	return p, p
+}
+
+// joined reports whether the text runs a and b, b next after a, are one
+// stretch of text: on the lines of one block, with only inline elements
+// between them, no br, no picture, no control.
+func (d *Document) joined(a, b *Node) bool {
+	if container(d.tree.Of[a]) != container(d.tree.Of[b]) || !selects(d.tree.Of[b].Style) {
+		return false
+	}
+	top := a.Parent()
+	for ; top != nil && !nodeInside(b, top); top = top.Parent() {
+		if !plainInline(top) {
+			return false
+		}
+	}
+	for e := b.Parent(); e != nil && e != top; e = e.Parent() {
+		if !plainInline(e) {
+			return false
+		}
+	}
+	between := false
+	for _, k := range top.Children() {
+		switch {
+		case nodeInside(a, k):
+			between = true
+		case nodeInside(b, k):
+			return true
+		case between && !emptyInline(k):
+			return false
+		}
+	}
+	return true
+}
+
+// plainInline reports an element that lays its content out on its
+// parent's lines: display inline, no br, no picture, no control.
+func plainInline(e *Node) bool {
+	st := dom.Data(e).Style
+	if st == nil || st.Display != style.Inline && st.Display != style.Contents || flexItem(e) {
+		return false
+	}
+	switch e.Tag() { //nolint:exhaustive // the inline elements that break a stretch of text
+	case dom.Br, dom.Img, dom.Svg, dom.Input, dom.Textarea, dom.Select, dom.Button, dom.Canvas, dom.Iframe:
+		return false
+	}
+	_, pictured := dom.ContentPicture(e)
+	return !pictured
+}
+
+// emptyInline reports a node between two text runs that leaves them one
+// stretch: text laid out as nothing, a plain inline element holding only
+// such, or what display: none hides.
+func emptyInline(n *Node) bool {
+	if n.IsText() {
+		return true
+	}
+	if st := dom.Data(n).Style; st != nil && st.Display == style.DisplayNone {
+		return true
+	}
+	if !plainInline(n) {
+		return false
+	}
+	for _, k := range n.Children() {
+		if !emptyInline(k) {
+			return false
+		}
+	}
+	return true
 }
 
 // blockAt is the text of the block p's text is in, as a triple click
@@ -691,7 +809,55 @@ func (d *Document) selectedParts() map[*box.Box][]paint.Selected {
 			s.order = append(s.order, b)
 		}
 	}
+	marked := false
+	for _, n := range s.breaks {
+		if !treeBefore(start.Node, n) || !treeBefore(n, end.Node) {
+			continue
+		}
+		if b := d.tree.Of[n]; selects(b.Style) && d.aloneOnLine(b) {
+			s.parts[b] = []paint.Selected{d.breakMark(b)}
+			s.order, marked = append(s.order, b), true
+		}
+	}
+	if marked {
+		slices.SortStableFunc(s.order, func(a, b *box.Box) int {
+			switch {
+			case treeBefore(a.Node, b.Node):
+				return -1
+			case treeBefore(b.Node, a.Node):
+				return 1
+			}
+			return 0
+		})
+	}
 	return s.parts
+}
+
+// aloneOnLine reports whether the br b holds a line no text of its block
+// is on: an empty line, which a selection going past it marks.
+func (d *Document) aloneOnLine(b *box.Box) bool {
+	runs := d.sel.runs
+	i := sort.Search(len(runs), func(i int) bool { return treeBefore(b.Node, runs[i]) }) - 1
+	if i < 0 {
+		return true
+	}
+	prev := d.tree.Of[runs[i]]
+	if container(prev) != container(b) {
+		return true
+	}
+	at, f := prev.Rect(), prev.Lines[len(prev.Lines)-1]
+	r := b.Rect()
+	return at.Y+f.Rect.Y >= r.Y+r.H || r.Y >= at.Y+f.Rect.Y+f.Rect.H
+}
+
+// breakMark is the mark of the empty line the br b holds, in its box's
+// space: a space wide from the line's start, as high as the line, as
+// Chrome draws a selected line break.
+func (d *Document) breakMark(b *box.Box) paint.Selected {
+	m := d.fonts.Metrics(b.Style.Font)
+	h, base := layout.LineHeight(m, b.Style)
+	top := m.Ascent - base
+	return paint.Selected{Rect: geom.Rect{Y: top, W: d.fonts.Advance(b.Style.Font, " "), H: h}}
 }
 
 // partsOf are the rectangles of the characters from to to of n's run b:
@@ -708,8 +874,13 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 		m = d.mapOf(n)
 	}
 	metrics := d.fonts.Metrics(b.Style.Font)
+	ws := b.Style.WhiteSpace
+	keeps := ws == style.Pre || ws == style.PreWrap || ws == style.PreLine
 	var out []paint.Selected
 	for k, f := range b.Lines {
+		if k > 0 && keeps {
+			out = append(out, d.emptyLines(n, b, k, from, to)...)
+		}
 		x0, x1, goesOn := float32(0), f.Rect.W, true
 		if !whole {
 			offs := m.frags[k].offs
@@ -727,6 +898,34 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 		top := min(f.Rect.Y, f.Baseline-metrics.Ascent)
 		bottom := max(f.Rect.Y+f.Rect.H, f.Baseline+metrics.Descent)
 		out = append(out, paint.Selected{Line: k, Rect: geom.Rect{X: f.Rect.X + x0, Y: top, W: x1 - x0, H: bottom - top}})
+	}
+	return out
+}
+
+// emptyLines are the marks of the empty lines between fragments k-1 and
+// k of n's run b, whose white space keeps its line breaks, that the
+// selection from to to goes past: a space wide from the line's start, as
+// high as the line. Their Line is -1, a fragment of none.
+func (d *Document) emptyLines(n *Node, b *box.Box, k, from, to int) []paint.Selected {
+	m := d.mapOf(n)
+	prev, next := m.frags[k-1].offs, m.frags[k].offs
+	var breaks []int
+	for i := int(prev[len(prev)-1]); i < int(next[0]); i++ {
+		if m.src[i] == '\n' {
+			breaks = append(breaks, i)
+		}
+	}
+	if len(breaks) < 2 {
+		return nil
+	}
+	above, below := b.Lines[k-1].Rect, b.Lines[k].Rect
+	step := (below.Y - above.Y) / float32(len(breaks))
+	var out []paint.Selected
+	for j := 1; j < len(breaks); j++ {
+		if breaks[j] >= from && breaks[j] < to {
+			out = append(out, paint.Selected{Line: -1, Rect: geom.Rect{X: below.X, Y: above.Y + step*float32(j),
+				W: d.fonts.Advance(b.Style.Font, " "), H: step}})
+		}
 	}
 	return out
 }

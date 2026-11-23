@@ -7,10 +7,12 @@ import (
 	_ "image/png" // ui.Images and url() backgrounds decode PNG
 	"io/fs"
 	"sync"
+	"time"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/css"
+	"github.com/lantervale/ember/ui/internal/animated"
 	"github.com/lantervale/ember/ui/internal/box"
 )
 
@@ -54,6 +56,8 @@ const fetchesAtOnce = 6
 type fetchedImage struct {
 	url string
 	img image.Image
+	// anim is the picture when it moves.
+	anim *animated.Picture
 	// vec is the picture when it is one of shapes, warning what of it
 	// isn't drawn.
 	vec     VectorImage
@@ -110,7 +114,9 @@ func fetched(url string, fetch ImageFetcher) fetchedImage {
 	}
 	format, shapes := vectorFormatOf(url, data)
 	if !shapes {
-		got.img, _, got.err = image.Decode(bytes.NewReader(data))
+		if got.anim, got.err = animated.Decode(data); got.anim == nil && got.err == nil {
+			got.img, _, got.err = image.Decode(bytes.NewReader(data))
+		}
 		return got
 	}
 	if got.vec, got.err = format.parse(data); got.err == nil {
@@ -137,6 +143,8 @@ func (d *Document) landImages() {
 			continue
 		case got.vec != nil:
 			d.keepVector(got.url, got.vec, got.warning, true)
+		case got.anim != nil:
+			d.images[got.url] = d.play(got.url, got.anim)
 		default:
 			d.images[got.url] = twod.NewTexture(got.img, twod.Encoded())
 		}
@@ -195,12 +203,64 @@ func (d *Document) decoded(url string, b []byte) *twod.Texture {
 		d.keepVector(url, pic, format.undrawn(url, pic), false)
 		return nil
 	}
+	anim, err := animated.Decode(b)
+	if anim != nil {
+		return d.play(url, anim)
+	}
+	if err != nil {
+		d.warn(fmt.Errorf("ui: image %s: %w", url, err))
+		return nil
+	}
 	img, _, err := image.Decode(bytes.NewReader(b))
 	if err != nil {
 		d.warn(err)
 		return nil
 	}
 	return twod.NewTexture(img, twod.Encoded())
+}
+
+// playing is an animated picture on show: one texture every element
+// showing its url draws, whose image is the frame of the moment, as
+// Chrome's pictures of one address play as one.
+type playing struct {
+	pic   *animated.Picture
+	tex   *twod.Texture
+	frame int
+	// start is the clock when it began, -1 until a frame is drawn; done
+	// is set once it has played its times.
+	start float32
+	done  bool
+}
+
+// play is the texture of url's animation, which the Document's clock
+// moves from the next frame drawn on.
+func (d *Document) play(url string, pic *animated.Picture) *twod.Texture {
+	p := &playing{pic: pic, tex: twod.NewTexture(pic.Frames[0], twod.Encoded()), start: -1}
+	if d.playing == nil {
+		d.playing = map[string]*playing{}
+	}
+	d.playing[url] = p
+	return p.tex
+}
+
+// animate shows each animation's frame at the clock, and repaints where
+// one changed.
+func (d *Document) animate() {
+	for _, p := range d.playing {
+		if p.done {
+			continue
+		}
+		if p.start < 0 {
+			p.start = d.clock
+		}
+		i, more := p.pic.At(time.Duration(float64(d.clock-p.start) * float64(time.Second)))
+		p.done = !more
+		if i != p.frame {
+			p.frame, p.tex.Image = i, p.pic.Frames[i]
+			p.tex.Touch()
+			d.replay.repaint = true
+		}
+	}
 }
 
 type missingImageError struct{ url string }

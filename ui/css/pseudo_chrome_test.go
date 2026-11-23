@@ -46,9 +46,8 @@ func TestChromeReadsThePseudoElementsOfTheTable(t *testing.T) {
 	}
 }
 
-// Where a pseudo-element may stand in a selector, as Chrome has it. The
-// form Chrome reads that ui refuses is the last one: a pseudo-class of a
-// pseudo-element.
+// Where a pseudo-element may stand in a selector, as Chrome has it, the
+// pseudo-classes of a pseudo-element among them.
 func TestPseudoElementsStandWhereChromeTakesThem(t *testing.T) {
 	sels := []string{"div::before", "div:before", "div:after", "div::BEFORE", "::before", "*::after",
 		"div:hover::before", "ul li:nth-child(2)::before", "div > p::after", "li::marker", "div.a#b::before",
@@ -56,22 +55,17 @@ func TestPseudoElementsStandWhereChromeTakesThem(t *testing.T) {
 		"div :: before", "div::after::before", "li::marker::before", "div::before:first-child", "div:marker",
 		"div:placeholder", "div:selection", "div:backdrop", "div::before::before", "input::placeholder:hover",
 		"div::marker:hover", "div::before:active",
-		"div::before::marker", "div::after::marker", "div::selection:window-inactive"}
-	const onlyChrome = 1
+		"div::before::marker", "div::after::marker", "div::selection:window-inactive", "::selection:window-inactive",
+		"div::selection:WINDOW-INACTIVE", "div::before:window-inactive", "div:window-inactive",
+		"div::selection:window-inactive:hover", "div::selection::window-inactive"}
 	names, _ := json.Marshal(sels)
 	var got map[string]bool
 	ask(t, geom.V2(400, 300), fmt.Sprintf(
 		`return Object.fromEntries(%s.map(s => [s, CSS.supports("selector(" + s + ")")]));`, names), &got)
-	for i, s := range sels {
+	for _, s := range sels {
 		_, err := css.ParseSelectors(s)
 		ours := err == nil
 		want := got[s]
-		if i >= len(sels)-onlyChrome {
-			if !want {
-				t.Errorf("%s: Chrome no longer reads it", s)
-			}
-			want = false
-		}
 		if ours != want {
 			t.Errorf("%s: ui reads it: %v (%v), Chrome: %v", s, ours, err, got[s])
 		}

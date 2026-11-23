@@ -95,7 +95,7 @@ Full table: `docs/05-ui/03-css.md`. Lay screens out with flex or grid.
 
 ## React to the player
 
-Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`, `OnToggle`, `OnClose`, `OnSort`, `OnKey`, `OnBack`, `OnContextMenu`, `OnDrop`, `OnDragEnd`, `OnPointerEnter`, `OnPointerLeave`, `OnSelectionChange` (on `body`). `fn` is any of `func()`, `func(ui.Event)` and `func(*world.World, ui.Event)`.
+Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`, `OnToggle`, `OnClose`, `OnSort`, `OnKey`, `OnBack`, `OnContextMenu`, `OnDrop`, `OnDragEnd`, `OnPointerEnter`, `OnPointerLeave`, `OnPointerDown`, `OnPointerMove`, `OnPointerUp` (`e.At`, `e.Button`; `doc.SetPointerCapture(n)` to drag past its box), `OnSelectionChange` (on `body`). `fn` is any of `func()`, `func(ui.Event)` and `func(*world.World, ui.Event)`.
 
 | Need | API |
 |---|---|
@@ -106,7 +106,7 @@ Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`
 
 - A click reaches the innermost element with behaviour: a control, a canvas, a `label`, a `summary` or an element with a `tabindex`. A plain `div` needs `ui.TabIndex(0)` for its OnClick.
 - What a callback changes shows the next frame.
-- A menu of the screen's own on a right click: `ui.OnContextMenu` on the root (it bubbles), `win.Input().Mouse()` for where, `doc.ElementAt(at) *ui.Node` for what is under a point (window points, as `BoxOf`; nil where no box takes the pointer).
+- A menu of the screen's own on a right click: `ui.OnContextMenu` on the root (it bubbles; Control+click on macOS too), `e.At` for where (the Document's points), `doc.ElementAt(at) *ui.Node` for what is under a point (window points, as `BoxOf`; nil where no box takes the pointer).
 - A text field's selection: `doc.SelectionRange(n) (from, to int)`, `doc.SetSelectionRange(n, from, to)`, in characters of `doc.Value(n)`.
 - Values: `doc.Value(n)`, `doc.SetValue(n, v)`, `doc.Checked(n)`, `doc.SetChecked(n, on)`, `doc.Selected(n)`, `doc.SetSelected(n, i)`. The setters emit no event.
 
@@ -154,7 +154,7 @@ Callbacks go on the element: `ui.OnClick(fn)`, `OnInput`, `OnChange`, `OnSubmit`
 |---|---|
 | give or read the focus | `doc.Focus(n)`, `doc.Focused(n) bool`: an element shown this frame takes it at its first layout |
 | one Back for a whole screen | `ui.OnBack(fn)` on its root; with nothing focused, Back reaches the body's: `ui.On(doc.Body(), ui.EventBack, fn)` |
-| a key nothing took | `ui.OnKey(func(e ui.Event) { … e.Key … })`; a pad button navigation leaves (West, North, shoulders, triggers, Back, Start) comes as `e.Pad` with `e.Key == input.KeyUnknown` |
+| a key nothing took | `ui.OnKey(func(e ui.Event) { … e.Key … })`; a pad button navigation leaves (West, North, shoulders, triggers, Back, Start) comes as `e.Pad` with `e.Key == input.KeyUnknown`; in a focused text field it hears every key first, `e.PreventDefault()` keeps it from the field, and `doc.SetValue` there sets the field at once; `doc.Blur()` leaves the field |
 | keyboard order | Tab and Shift-Tab once something has the focus; the arrows move it spatially |
 | keys left to the game | with nothing focused and no modal open; read `win.Input()` as usual |
 

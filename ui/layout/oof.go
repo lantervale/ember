@@ -148,11 +148,13 @@ func (a *oofAxis) stretchFitSize() float32 {
 	return fmax(r.end-r.start-or(a.margin.start, 0)-or(a.margin.end, 0), 0)
 }
 
-func (a *oofAxis) isStretchSized() bool {
+// isStretchSized reports an axis whose insets set the box's size: a replaced box aligned
+// normal keeps its own, as start, CSS Positioned Layout §4.1.
+func (a *oofAxis) isStretchSized(replaced bool) bool {
 	if !some(a.inset.start) || !some(a.inset.end) {
 		return false
 	}
-	return a.alignment == oofStretch || a.alignment == oofNormal
+	return a.alignment == oofStretch || a.alignment == oofNormal && !replaced
 }
 
 func (a *oofAxis) resolveMargins(s float32) span {
@@ -303,8 +305,8 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 		t.resolveAbsoluteSizingKeywords(n, &known, st.Size, area, inset, margin, minSize, maxSize, contentSize)
 		known = known.withAspectRatio(ratio).mClamp(minSize, maxSize)
 	}
-	stretchW := !some(known.w) && h.isStretchSized()
-	stretchH := !some(known.h) && v.isStretchSized()
+	stretchW := !some(known.w) && h.isStretchSized(n.replaced)
+	stretchH := !some(known.h) && v.isStretchSized(n.replaced)
 	stretchRatio := ratio
 	if stretchW && stretchH && h.alignment == oofStretch && v.alignment == oofStretch {
 		stretchRatio = none

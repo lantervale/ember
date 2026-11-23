@@ -37,6 +37,31 @@ func TestABlockAloneInAnInlineLeavesNoLines(t *testing.T) {
 	require.Len(t, tr.Of[root].Children, 1)
 }
 
+func TestAFramedPartWithoutTextKeepsALine(t *testing.T) {
+	inner := el(dom.Div, block, text("HHH"))
+	span := el(dom.Span, func(st *style.Computed) {
+		st.Padding.Left, st.Padding.Right = style.Px(5), style.Px(7)
+	}, inner)
+	root := el(dom.Div, width(100), span)
+	tr := lay(root, 200)
+	assert.Equal(t, geom.Rect{Y: 10, W: 100, H: 10}, tr.Of[inner].Rect(), "below the line of the start's padding")
+	assert.Equal(t, float32(30), tr.Of[root].Size.Y, "and above the line of the end's")
+	assert.Equal(t, geom.Rect{W: 100, H: 30}, tr.Of[span].Rect())
+}
+
+func TestPositionRelativeMovesAnInlineAndTheBlocksItHolds(t *testing.T) {
+	inner := el(dom.Div, block, text("HHH"))
+	span := el(dom.Span, func(st *style.Computed) {
+		st.Position = style.Relative
+		st.Inset.Left, st.Inset.Top = style.Px(20), style.Px(5)
+	}, text("HH"), inner, text("H"))
+	root := el(dom.Div, width(100), span)
+	tr := lay(root, 200)
+	assert.Equal(t, geom.Rect{X: 20, Y: 15, W: 100, H: 10}, tr.Of[inner].Rect(), "the block moves with it")
+	assert.Equal(t, geom.Rect{X: 20, Y: 5, W: 100, H: 30}, tr.Of[span].Rect())
+	assert.Equal(t, float32(30), tr.Of[root].Size.Y, "and leaves its room where it was")
+}
+
 func TestABlockInNestedInlinesCutsThemAll(t *testing.T) {
 	inner := el(dom.Div, block, text("HHH"))
 	em := el(dom.Em, nil, text("H"), inner, text("HH"))

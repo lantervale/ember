@@ -110,6 +110,16 @@ type interaction struct {
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
 	rightPressed *Node
+	// controlClick is a left press with Control on macOS, a right one.
+	controlClick bool
+	// capture is the element holding the pointer, and releasing set once
+	// the buttons are up, to let go of it after the release's callbacks.
+	capture   *Node
+	releasing bool
+	// pointerWas is where the pointer was the last frame, once
+	// pointerMoved, for PointerMoved.
+	pointerWas   geom.Vec2
+	pointerMoved bool
 	// dragPressed, dragPressAt and dragPressFrom are the last press in a
 	// drag region (app-region), when and where, for the double click that
 	// follows it.
@@ -145,6 +155,8 @@ type interaction struct {
 	raisedZ int
 	// sel is the text selected outside the fields (decision 0090).
 	sel selecting
+	// title is the title attribute's tooltip.
+	title titleTip
 }
 
 // navKeys and navPad are what focus navigation reads while it shows.
@@ -184,6 +196,15 @@ func (d *Document) Focus(n *Node) {
 	if !d.moveFocus(func() bool { return d.focus.Set(n, true) }) {
 		d.pendingFocus = n
 	}
+}
+
+// Blur takes the focus from the element holding it, as the DOM's blur(): a
+// text field commits its edit, emitting Changed when it changed, and the
+// keys are the game's again. A Focus waiting for its element is dropped
+// (decision 0142).
+func (d *Document) Blur() {
+	d.pendingFocus = nil
+	d.moveFocus(func() bool { d.focus.Blur(); return true })
 }
 
 // ScrollIntoView scrolls the containers holding n by the least that shows
@@ -473,6 +494,9 @@ func (d *Document) interact(c *twod.Canvas) bool {
 		}
 	}
 	d.events = d.events[:0]
+	if d.releasing {
+		d.capture, d.releasing = nil, false
+	}
 	d.retargeting = changed
 	return changed
 }
@@ -524,6 +548,19 @@ func emit(w *world.World, e any) {
 	case AnimationEnded:
 		world.Emit(w, e)
 	case AnimationCanceled:
+		world.Emit(w, e)
+	default:
+		emitPointer(w, e)
+	}
+}
+
+func emitPointer(w *world.World, e any) {
+	switch e := e.(type) {
+	case PointerPressed:
+		world.Emit(w, e)
+	case PointerMoved:
+		world.Emit(w, e)
+	case PointerReleased:
 		world.Emit(w, e)
 	}
 }
@@ -703,6 +740,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.crossed(was, d.hovered)
 	}
 	d.menuHover(d.hovered)
+	d.titleTips(in)
 	if n != nil && n != d.html && n != d.body {
 		inputfeed.Of(in).CapturePointer()
 		d.cover(c)
@@ -711,7 +749,10 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		d.cssCursor(c)
 		d.selectionCursor(c, hit, at)
 	}
-	d.rightClick(in, at)
+	d.pointerEvents(in, at, n)
+	if d.rightClick(in, at) {
+		return
+	}
 	if d.pointerTaken(c, in, at, hit) {
 		return
 	}
@@ -963,26 +1004,94 @@ func (d *Document) endDrag(dropped bool) {
 }
 
 // rightClick reports a right click: the right button pressed and released
-// on the same element, not the page's html or body, which are the game's.
-// A drag that selected text between the two, where RightDragSelects, in
-// the Document or in one of its iframes, is none.
-func (d *Document) rightClick(in *input.State, at geom.Vec2) {
+// on the same element, not the page's html or body, which are the game's;
+// on macOS the left one with Control held too, a press that then does
+// nothing else, which rightClick reports taking. A drag that selected text
+// between the two, where RightDragSelects, in the Document or in one of its
+// iframes, is none.
+func (d *Document) rightClick(in *input.State, at geom.Vec2) bool {
 	n := firstOf(d.hovered)
 	if n == d.html || n == d.body {
 		n = nil
 	}
 	if in.Pressed(input.MouseRight) {
-		d.rightPressed = n
+		d.rightPressed, d.controlClick = n, false
 		d.pressRightSelection(at)
+	}
+	if d.platform == textedit.Mac && in.Pressed(input.MouseLeft) && inputfeed.Of(in).RawDown(int(input.KeyControl)) {
+		d.rightPressed, d.controlClick = n, true
+	}
+	if d.controlClick {
+		if !in.Down(input.MouseLeft) {
+			if n != nil && n == d.rightPressed {
+				d.events = append(d.events, ContextClicked{Node: n, At: at})
+			}
+			d.rightPressed, d.controlClick = nil, false
+		}
+		return true
 	}
 	d.heldRightSelection(in, at)
 	if in.Released(input.MouseRight) {
 		if n != nil && n == d.rightPressed && !d.rightSelected() {
-			d.events = append(d.events, ContextClicked{Node: n})
+			d.events = append(d.events, ContextClicked{Node: n, At: at})
 		}
 		d.rightPressed = nil
 	}
+	return false
 }
+
+// pointerButtons are the buttons pointerEvents reports.
+//
+//nolint:gochecknoglobals // a read-only table
+var pointerButtons = []input.MouseButton{input.MouseLeft, input.MouseRight, input.MouseMiddle}
+
+// pointerEvents reports the pointer's presses, moves and releases over n,
+// the innermost element under it, or to the element holding the pointer
+// wherever it is, which lets go of it once every button is up (decision
+// 0142). The html and body are the game's: nothing is reported over them
+// but to an element holding the pointer.
+func (d *Document) pointerEvents(in *input.State, at geom.Vec2, n *Node) {
+	if n == d.html || n == d.body || d.shield {
+		n = nil
+	}
+	if d.capture != nil && !d.holds(d.capture) {
+		d.capture = nil
+	}
+	moved := d.pointerMoved && at != d.pointerWas && !d.shield
+	d.pointerWas, d.pointerMoved = at, true
+	to := n
+	if d.capture != nil {
+		to = d.capture
+	}
+	if moved && to != nil {
+		d.events = append(d.events, PointerMoved{Node: to, At: at})
+	}
+	for _, b := range pointerButtons {
+		if in.Pressed(b) && n != nil {
+			d.events = append(d.events, PointerPressed{Node: n, At: at, Button: b})
+		}
+	}
+	for _, b := range pointerButtons {
+		if in.Released(b) && to != nil {
+			d.events = append(d.events, PointerReleased{Node: to, At: at, Button: b})
+		}
+	}
+	if d.capture != nil && !slices.ContainsFunc(pointerButtons, func(b input.MouseButton) bool {
+		return in.Down(b) && !in.Released(b)
+	}) {
+		d.releasing = true
+	}
+}
+
+// SetPointerCapture has n hold the pointer while a button is down, as the
+// DOM's setPointerCapture: its moves and the release go to n wherever the
+// pointer is, such as an edge dragged past its own box; nil lets go. It
+// is let go of on its own once no button is down, after the release's
+// callbacks, and when n leaves the Document (decision 0142).
+func (d *Document) SetPointerCapture(n *Node) { d.capture, d.releasing = n, false }
+
+// PointerCapture is the element holding the pointer, nil for none.
+func (d *Document) PointerCapture() *Node { return d.capture }
 
 // appRegionPress hands a left press in a drag region (app-region: drag)
 // to the window: it moves the system's window, and a second press within
@@ -1009,7 +1118,7 @@ func (d *Document) appRegionPress(c *twod.Canvas, in *input.State) bool {
 // what clicks in it.
 func (d *Document) inDragRegion() bool {
 	for i, n := range d.hovered {
-		if st := dom.Data(n).Style; st == nil || !st.AppDrag {
+		if st := dom.Data(n).Style; st == nil || st.AppRegion != style.AppRegionDrag {
 			return i > 0
 		}
 		if d.activates(n) {
@@ -1250,7 +1359,7 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 		return n, true
 	}
 	if n == nil {
-		if i == control.Back && hasBack(d.body) {
+		if i == control.Back && (hasBack(d.body) || d.framed != nil) {
 			d.events = append(d.events, bodyBack{})
 			return n, true
 		}
@@ -1272,7 +1381,11 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent)
 		return n, true
 	}
 	if dir := focusDir(i); dir != (geom.Vec2{}) {
-		d.moveFocus(func() bool { return d.focus.Move(dir) })
+		if d.moveFocus(func() bool { return d.focus.Move(dir) }) {
+			d.enterFrame(dir)
+		} else if d.focus.Active() {
+			d.leaveFrame(dir)
+		}
 		return n, true
 	}
 	return n, false
@@ -1301,6 +1414,9 @@ func (d *Document) keysLeft(in *input.State, n *Node, taken *keySet) {
 	}
 	if n == nil && len(d.modals) > 0 {
 		n = d.modals[len(d.modals)-1]
+	}
+	if n == nil && d.framed != nil {
+		n = d.body
 	}
 	if n == nil {
 		return
@@ -1374,7 +1490,8 @@ func (d *Document) intent(n *Node, m any, i control.Intent) bool {
 	return false
 }
 
-// edit hands a focused text field the typed text and the editing keys.
+// edit hands a focused text field the typed text and the editing keys,
+// once its OnKey callbacks heard them.
 func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Text) {
 	f := inputfeed.Of(in)
 	m := textedit.Mods{
@@ -1383,8 +1500,12 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 		Alt:     f.RawDown(int(input.KeyAlt)),
 		Super:   f.RawDown(int(input.KeySuper)),
 	}
+	prevented, typed, stays := d.fieldKeys(c, in, n, t)
+	if !stays {
+		return
+	}
 	if !m.Super && !m.Control {
-		for _, r := range in.Text() {
+		for _, r := range typed {
 			if num, ok := d.machine(n).(*control.Number); ok {
 				d.fire(n, num.Type(string(r)))
 				continue
@@ -1408,7 +1529,7 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 	if w := c.Window(); w != nil {
 		clip = w
 	}
-	if f.RawPressed(int(input.KeyEscape)) {
+	if f.RawPressed(int(input.KeyEscape)) && !prevented.has(input.KeyEscape) {
 		if t.Handles(control.Back) {
 			d.fire(n, t.Do(control.Back))
 		} else if !d.backFromModal() {
@@ -1417,7 +1538,7 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 		return
 	}
 	for _, k := range textedit.Keys {
-		if !f.RawPressed(int(k)) && !f.RawRepeated(int(k)) {
+		if !f.RawPressed(int(k)) && !f.RawRepeated(int(k)) || prevented.has(k) {
 			continue
 		}
 		if k == input.KeyTab {
@@ -1437,6 +1558,67 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 		}
 		d.fire(n, t.Key(a, extend, clip))
 	}
+}
+
+// fieldKeys tells the OnKey callbacks of the focused text field n and its
+// ancestors each key pressed or repeated this frame, the typed text with
+// the first, before n acts on them (decision 0142). It returns the keys a
+// callback prevented, the text left to type, nothing when the key that
+// typed it was prevented, and whether n still has the focus and t as its
+// field: a callback may blur it or move the focus on.
+func (d *Document) fieldKeys(c *twod.Canvas, in *input.State, n *Node, t *control.Text) (keySet, []rune, bool) {
+	var prevented keySet
+	typed := in.Text()
+	var w *world.World
+	if c != nil {
+		w = c.World()
+	}
+	if w == nil || !d.heardKeys(n) {
+		return prevented, typed, true
+	}
+	f := inputfeed.Of(in)
+	command := input.KeyControl
+	if d.platform == textedit.Mac {
+		command = input.KeySuper
+	}
+	text := string(typed)
+	for k := input.Key(0); k <= input.KeyMenu; k++ {
+		if modifier(k) || !f.RawPressed(int(k)) && !f.RawRepeated(int(k)) {
+			continue
+		}
+		e := KeyPressed{Node: n, Key: k, Text: text, Command: f.RawDown(int(command))}
+		if d.dispatch(w, e) {
+			prevented.add(k)
+			if text != "" {
+				typed = nil
+			}
+		}
+		text = ""
+		if d.focused() != n || textOf(d.machine(n)) != t {
+			return prevented, nil, false
+		}
+	}
+	return prevented, typed, true
+}
+
+// heardKeys reports whether a key on n reaches an OnKey: of n, of an
+// ancestor, or of the Document round d from its iframe up.
+func (d *Document) heardKeys(n *Node) bool {
+	if heardUp(n, EventKey) {
+		return true
+	}
+	f := d.framed
+	return f != nil && f.host.heardKeys(f.n)
+}
+
+// heardUp reports whether n or an ancestor has a handler for t.
+func heardUp(n *Node, t EventType) bool {
+	for ; n != nil; n = n.Parent() {
+		if handles(n, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // states sets each element's hover, active and focus pseudo-classes. While

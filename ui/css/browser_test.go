@@ -239,8 +239,8 @@ text-shadow: 1px 1px #f00; }`)}
 	NewTransitions().Compute(root, sheets)
 	for _, n := range append(controls, p) {
 		s := styleOf(n)
-		if s.WordGap() != 20 || s.LetterSpacing != 2 || s.TextTransform != style.Uppercase || len(s.TextShadows) != 1 {
-			t.Errorf("%s: a game's control takes the page's text: %v %v %v %v", n.Tag(), s.WordGap(), s.LetterSpacing,
+		if s.WordGap() != 20 || s.LetterGap() != 2 || s.TextTransform != style.Uppercase || len(s.TextShadows) != 1 {
+			t.Errorf("%s: a game's control takes the page's text: %v %v %v %v", n.Tag(), s.WordGap(), s.LetterGap(),
 				s.TextTransform, s.TextShadows)
 		}
 	}
@@ -250,12 +250,12 @@ text-shadow: 1px 1px #f00; }`)}
 	tr.Compute(root, sheets)
 	for _, n := range controls {
 		s := styleOf(n)
-		if s.WordGap() != 0 || s.LetterSpacing != 0 || s.TextTransform != style.NoTransform || len(s.TextShadows) != 0 {
-			t.Errorf("%s: a browser's control starts from its own: %v %v %v %v", n.Tag(), s.WordGap(), s.LetterSpacing,
+		if s.WordGap() != 0 || s.LetterGap() != 0 || s.TextTransform != style.NoTransform || len(s.TextShadows) != 0 {
+			t.Errorf("%s: a browser's control starts from its own: %v %v %v %v", n.Tag(), s.WordGap(), s.LetterGap(),
 				s.TextTransform, s.TextShadows)
 		}
 	}
-	if s := styleOf(p); s.WordGap() != 20 || s.LetterSpacing != 2 || s.TextTransform != style.Uppercase {
-		t.Errorf("a paragraph keeps the page's: %v %v %v", s.WordGap(), s.LetterSpacing, s.TextTransform)
+	if s := styleOf(p); s.WordGap() != 20 || s.LetterGap() != 2 || s.TextTransform != style.Uppercase {
+		t.Errorf("a paragraph keeps the page's: %v %v %v", s.WordGap(), s.LetterGap(), s.TextTransform)
 	}
 }

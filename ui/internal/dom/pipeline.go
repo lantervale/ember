@@ -102,10 +102,12 @@ type Pipeline struct {
 	picture  string
 	pictured color.Color
 	// chosen is the picture an img shows in place of its src while
-	// choosing, of density device pixels a point (Choose).
+	// choosing, of density device pixels a point, and source the source
+	// element it was chosen by, if any (Choose).
 	chosen   string
 	density  float32
 	choosing bool
+	source   *Node
 	// Canvas is a canvas element's machine, made with it since it holds
 	// the game's drawing, for the Document to take as the element's.
 	Canvas any
@@ -115,6 +117,9 @@ type Pipeline struct {
 	Frame   any
 	Guarded bool
 	Broken  error
+	// Root marks the html element of a Document, which an iframe moved
+	// into keeps what it showed.
+	Root bool
 	// Handlers are the node's callbacks (decision 0057), kept by ui.
 	Handlers any
 	// Follow is the entity the node follows on screen, kept by ui.

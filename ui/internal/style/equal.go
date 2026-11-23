@@ -92,7 +92,8 @@ func (f Font) Equal(o Font) bool {
 	return sameSlice(f.Family, o.Family) &&
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
-		f.Italic == o.Italic
+		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
+		f.Caps == o.Caps
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -100,6 +101,7 @@ func (t *Text) equal(o *Text) bool {
 	return t.Font.Equal(o.Font) &&
 		t.LineHeight == o.LineHeight &&
 		t.LetterSpacing == o.LetterSpacing &&
+		t.FontVariant == o.FontVariant &&
 		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&
@@ -114,6 +116,10 @@ func (t *Text) equal(o *Text) bool {
 		t.HasSelection == o.HasSelection &&
 		t.SelectionText == o.SelectionText &&
 		t.HasSelectionText == o.HasSelectionText &&
+		sameSlice(t.SelectionShadows, o.SelectionShadows) &&
+		t.HasSelectionShadows == o.HasSelectionShadows &&
+		t.SelectionDecoration == o.SelectionDecoration &&
+		t.HasSelectionDecoration == o.HasSelectionDecoration &&
 		sameSlice(t.TextShadows, o.TextShadows) &&
 		t.TextDecoration == o.TextDecoration &&
 		sameSliceFunc(t.Decorations, o.Decorations, (*Decoration).equal) &&
@@ -123,6 +129,8 @@ func (t *Text) equal(o *Text) bool {
 		t.CaretColor == o.CaretColor &&
 		t.AccentAuto == o.AccentAuto &&
 		t.CaretAuto == o.CaretAuto &&
+		t.TextFill == o.TextFill &&
+		t.TextFilled == o.TextFilled &&
 		t.Content.equal(&o.Content) &&
 		sameSlice(t.CounterReset, o.CounterReset) &&
 		sameSlice(t.CounterIncrement, o.CounterIncrement) &&
@@ -145,7 +153,11 @@ func (t *Text) equal(o *Text) bool {
 		t.Orphans == o.Orphans &&
 		t.Widows == o.Widows &&
 		t.BreakWord == o.BreakWord &&
-		t.BreakAnywhere == o.BreakAnywhere
+		t.BreakAnywhere == o.BreakAnywhere &&
+		t.WordBreak == o.WordBreak &&
+		t.LineBreak == o.LineBreak &&
+		t.TabSize == o.TabSize &&
+		t.InkThrough == o.InkThrough
 }
 
 func (d *Decoration) equal(o *Decoration) bool {
@@ -198,7 +210,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Visible == o.Visible &&
 		l.Collapse == o.Collapse &&
 		l.PointerNone == o.PointerNone &&
-		l.AppDrag == o.AppDrag &&
+		l.AppRegion == o.AppRegion &&
 		l.Cursor == o.Cursor &&
 		l.UserSelect == o.UserSelect &&
 		sameSlice(l.Transform, o.Transform) &&
@@ -212,7 +224,7 @@ func (l *Look) equal(o *Look) bool {
 }
 
 func (i *Image) equal(o *Image) bool {
-	return i.Source == o.Source && i.Slice == o.Slice && i.Gradient.equal(o.Gradient)
+	return i.Source == o.Source && i.Slice == o.Slice && i.Fill == o.Fill && i.Gradient.equal(o.Gradient)
 }
 
 func (g *Gradient) equal(o *Gradient) bool {

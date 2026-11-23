@@ -90,7 +90,8 @@ func (r *Recording) Ok() bool { return r.ok }
 
 // Record copies what c drew since m into r, reusing r's room, and reports
 // whether it can be replayed. It can't when c's state moved from m's, or
-// when the range has lit vertices, a masked batch or one drawn alone (a
+// when the range has lit vertices, a masked batch, one cut by a pass's
+// picture (drawn only in the frame that made it) or one drawn alone (a
 // pass's picture, a render texture): r then replays nothing.
 func (c *List) Record(m Mark, r *Recording) bool {
 	r.ok = false
@@ -109,7 +110,7 @@ func (c *List) Record(m Mark, r *Recording) bool {
 		if end <= m.indices {
 			continue
 		}
-		if b.Mask != nil || b.alone {
+		if b.Mask != nil || b.alone || b.Cut.Mask != nil && b.Cut.Mask.Image == nil {
 			return false
 		}
 		start := max(b.First, m.indices)

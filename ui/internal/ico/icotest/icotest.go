@@ -23,6 +23,8 @@ const (
 // rows hold it (a palette index, or the pixel's bits), Hole the pixels
 // an icon's AND mask cuts. Header is the header's length, 40 when zero;
 // Masks are written in a header of 52 bytes or more, after it otherwise.
+// Runs, when set, are written in place of the rows: a run-length encoded
+// bitmap's (Comp 1 or 2), which At then plays no part in.
 type Bitmap struct {
 	W, H, BPP int
 	Header    int
@@ -33,6 +35,7 @@ type Bitmap struct {
 	TopDown   bool
 	At        func(x, y int) uint32
 	Hole      func(x, y int) bool
+	Runs      []byte
 }
 
 // DIB is the bitmap's bytes without a file header, and where its rows
@@ -73,8 +76,14 @@ func (b Bitmap) DIB(icon bool) ([]byte, int) {
 		after = append(after, make([]byte, 4*(1<<b.BPP-len(b.Palette)))...)
 	}
 	pix := size + len(after)
+	rows := b.Runs
+	if rows == nil {
+		rows = b.rows(b.BPP, b.At)
+	} else {
+		binary.LittleEndian.PutUint32(head[20:], uint32(len(rows))) //nolint:gosec // a test file's length
+	}
 	if !icon {
-		return slices.Concat(head, after, b.rows(b.BPP, b.At)), pix
+		return slices.Concat(head, after, rows), pix
 	}
 	mask := b.rows(1, func(x, y int) uint32 {
 		if b.Hole != nil && b.Hole(x, y) {
@@ -82,7 +91,7 @@ func (b Bitmap) DIB(icon bool) ([]byte, int) {
 		}
 		return 0
 	})
-	return slices.Concat(head, after, b.rows(b.BPP, b.At), mask), pix
+	return slices.Concat(head, after, rows, mask), pix
 }
 
 func (b Bitmap) rows(bpp int, at func(x, y int) uint32) []byte {
@@ -135,9 +144,24 @@ func (b Bitmap) Entry() Entry {
 }
 
 // ICO is an ICO file of entries, in their order.
-func ICO(entries ...Entry) []byte {
+func ICO(entries ...Entry) []byte { return file(1, entries) }
+
+// CUR is a cursor file of entries, in their order: an ICO file of kind
+// 2, each entry's hotspot at 1,2 where an icon's says its planes and its
+// bits a pixel.
+func CUR(entries ...Entry) []byte {
+	data := file(2, entries)
+	for i := range entries {
+		at := data[dirHeader+dirEntry*i:]
+		binary.LittleEndian.PutUint16(at[4:], 1)
+		binary.LittleEndian.PutUint16(at[6:], 2)
+	}
+	return data
+}
+
+func file(kind uint16, entries []Entry) []byte {
 	dir := make([]byte, dirHeader+dirEntry*len(entries))
-	binary.LittleEndian.PutUint16(dir[2:], 1)
+	binary.LittleEndian.PutUint16(dir[2:], kind)
 	binary.LittleEndian.PutUint16(dir[4:], uint16(len(entries))) //nolint:gosec // a few
 	var pics []byte
 	for i, e := range entries {

@@ -224,4 +224,9 @@ dialog::backdrop { background-color: rgba(0, 0, 0, 0.1); }
 dialog:not([open]) { display: none; }
 [role="menu"]:not([open]) { display: none; }
 :focus-visible { outline: 2px solid #0075ff; outline-offset: 1px; }
+.ember-title-tip {
+  position: fixed; z-index: 2147483647; pointer-events: none; width: max-content; max-width: 400px; padding: 3px 6px;
+  border: 1px solid #c8c8c8; border-radius: 4px; background-color: #fff; color: #222; font: 12px sans-serif;
+  white-space: pre-line; overflow-wrap: break-word; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); user-select: none;
+}
 `

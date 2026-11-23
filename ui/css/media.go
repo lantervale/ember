@@ -9,22 +9,34 @@ import (
 )
 
 // Media is what @media rules are answered for: the viewport's size in
-// CSS pixels and the device pixels per CSS pixel, 1 when 0, and what the
-// user prefers and points with. ui knows no screen, so the device-*
-// features are the viewport's, and the rest is fixed: a colour screen,
-// no preference for more contrast, no forced colours.
+// CSS pixels and the device pixels per CSS pixel, 1 when 0, what the
+// user prefers and points with, and the initial font. ui knows no
+// screen, so the device-* features are the viewport's, and it is a
+// colour screen.
 type Media struct {
 	Width, Height float32
 	Resolution    float32
 	// ReducedMotion answers prefers-reduced-motion: reduce, Dark
-	// prefers-color-scheme: dark.
+	// prefers-color-scheme: dark, and ForcedColors forced-colors: active.
 	ReducedMotion bool
 	Dark          bool
+	ForcedColors  bool
+	// Contrast is the word prefers-contrast answers, more, less or
+	// custom; "" for no-preference.
+	Contrast string
 	// Touch is a pointer that is a finger on the screen: pointer is
 	// coarse and hover none. Else it is a mouse, fine and hovering, which
-	// any-pointer and any-hover always find, any-pointer a coarse one
-	// beside it under Touch.
-	Touch bool
+	// any-pointer and any-hover find, any-pointer a coarse one beside it
+	// under Touch. TouchOnly is a finger and no mouse at all: any-pointer
+	// finds only the coarse one, and any-hover none.
+	Touch, TouchOnly bool
+	// Font is what the font units of a media query's lengths (ex, ch,
+	// cap, ic, lh and their root ones) stand for: the initial font's, at
+	// 16 pixels; zero for CSS's fallbacks.
+	Font FontUnits
+	// Inactive is the Document's window not being the active one, which
+	// no media feature asks: ::selection:window-inactive holds then.
+	Inactive bool
 }
 
 func (m Media) dppx() float64 {
@@ -144,7 +156,6 @@ type mediaSpec struct {
 }
 
 func fixedNumber(n float64) func(Media) float64 { return func(Media) float64 { return n } }
-func fixedWord(w string) func(Media) string     { return func(Media) string { return w } }
 
 // wordIf is a feature's word: yes where on holds for m, else no.
 func wordIf(on func(Media) bool, yes, no string) func(Media) string {
@@ -158,7 +169,16 @@ func wordIf(on func(Media) bool, yes, no string) func(Media) string {
 
 func (m Media) reduced() bool { return m.ReducedMotion }
 func (m Media) dark() bool    { return m.Dark }
-func (m Media) touch() bool   { return m.Touch }
+func (m Media) touch() bool   { return m.Touch || m.TouchOnly }
+func (m Media) mouse() bool   { return !m.TouchOnly }
+func (m Media) forced() bool  { return m.ForcedColors }
+
+func (m Media) contrast() string {
+	if m.Contrast == "" {
+		return mediaNoPreference
+	}
+	return m.Contrast
+}
 
 func viewportRatio(m Media) float64 {
 	if m.Height <= 0 {
@@ -196,15 +216,16 @@ var mediaSpecs = map[string]*mediaSpec{
 	"prefers-reduced-motion": {kind: mediaWord, words: []string{mediaNoPreference, "reduce"},
 		word: wordIf(Media.reduced, "reduce", mediaNoPreference), off: mediaNoPreference},
 	"prefers-contrast": {kind: mediaWord, words: []string{mediaNoPreference, "more", "less", "custom"},
-		word: fixedWord(mediaNoPreference), off: mediaNoPreference},
-	"forced-colors": {kind: mediaWord, words: []string{mediaNone, "active"}, word: fixedWord(mediaNone),
-		off: mediaNone},
+		word: Media.contrast, off: mediaNoPreference},
+	"forced-colors": {kind: mediaWord, words: []string{mediaNone, "active"},
+		word: wordIf(Media.forced, "active", mediaNone), off: mediaNone},
 	"hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: wordIf(Media.touch, mediaNone, "hover"),
 		off: mediaNone},
-	"any-hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: fixedWord("hover"), off: mediaNone},
+	"any-hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: wordIf(Media.mouse, "hover", mediaNone),
+		off: mediaNone},
 	"pointer": {kind: mediaWord, words: []string{mediaNone, "coarse", "fine"},
 		word: wordIf(Media.touch, "coarse", "fine"), off: mediaNone},
-	"any-pointer": {kind: mediaWord, words: []string{mediaNone, "coarse", "fine"}, word: fixedWord("fine"),
+	"any-pointer": {kind: mediaWord, words: []string{mediaNone, "coarse", "fine"}, word: wordIf(Media.mouse, "fine", ""),
 		also: wordIf(Media.touch, "coarse", ""), off: mediaNone},
 }
 
@@ -324,7 +345,11 @@ type mediaParser struct {
 	browser   bool
 	container bool
 	inStyle   bool
-	warn      func(pos Pos, format string, args ...any)
+	// standardStyle is set once a style() query names a standard
+	// property: Chrome holds no condition that has one, whatever its other
+	// queries answer.
+	standardStyle bool
+	warn          func(pos Pos, format string, args ...any)
 }
 
 // rule is the at-rule the queries stand in, as warnings name it, and
@@ -656,10 +681,9 @@ func mediaValueOf(kind mediaValueKind, v []Component, bare bool) (mediaValue, bo
 }
 
 // mediaLengthOf reads a length feature's value: a zero, or a length in
-// absolute units, em and rem of 16 pixels, and the viewport's units, the
-// small, large and dynamic viewports being the one, alone or in a
-// calc(), min(), max() or clamp(). The font's other units are refused:
-// the initial font's ex and ch are its own, not CSS's fallbacks.
+// absolute units, em and rem of 16 pixels, the initial font's other
+// units, and the viewport's, the small, large and dynamic viewports being
+// the one, alone or in a calc(), min(), max() or clamp().
 func mediaLengthOf(v []Component) (mediaValue, bool) {
 	switch {
 	case len(v) != 1:
@@ -667,7 +691,7 @@ func mediaLengthOf(v []Component) (mediaValue, bool) {
 		return mediaValue{}, true
 	case v[0].Kind == Dimension || v[0].Kind == Function:
 		d, err := parseDim(v[0])
-		if err != nil || d.typ != typeLength || d.pct || d.rel&fontUnits != 0 {
+		if err != nil || d.typ != typeLength || d.pct {
 			break
 		}
 		if d.rel == 0 && len(d.terms) == 0 {

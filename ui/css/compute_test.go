@@ -21,7 +21,7 @@ func sheet(t *testing.T, src string) *Sheet {
 
 func styleOf(n *dom.Node) *style.Computed { return dom.Data(n).Style }
 
-func hex(s string) color.Color { return linear(value2(s)) }
+func hex(s string) color.Color { return linear(value2(s), color.Color{}) }
 
 func value2(src string) Component { return items(componentsOf(src))[0] }
 
@@ -129,8 +129,8 @@ html { font-size: 10px; }
 	if s.Margin.Top != (style.Length{Kind: style.Fixed, Px: 26, Percent: 50, IsPercent: true}) {
 		t.Errorf("calc: %v", s.Margin.Top)
 	}
-	if s.LetterSpacing != 3 {
-		t.Errorf("letter-spacing: %v", s.LetterSpacing)
+	if s.LetterGap() != 3 {
+		t.Errorf("letter-spacing: %v", s.LetterGap())
 	}
 }
 
