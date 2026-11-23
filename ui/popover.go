@@ -199,3 +199,7 @@ func (d *Document) OpenPopovers() []*Node {
 // PopoverSource is the element that showed the popover n, its implicit
 // anchor, nil for none or when n is not shown.
 func (d *Document) PopoverSource(n *Node) *Node { return d.implicitAnchor(n) }
+
+// backFromTop hides the newest popover, else closes the newest modal
+// dialog, on Escape, reporting whether one took it.
+func (d *Document) backFromTop() bool { return d.backFromPopover() || d.backFromModal() }

@@ -55,7 +55,7 @@ func oofAlignmentOf(a style.Align) oofAlignment {
 		return oofNormal
 	case style.AlignStretch:
 		return oofStretch
-	case style.AlignCenter:
+	case style.AlignCenter, style.AlignAnchorCenter:
 		return oofCenter
 	case style.AlignEnd, style.AlignFlexEnd:
 		return oofEnd
@@ -299,16 +299,13 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 		cbSize: area.w, inset: span{inset.l, inset.r}, margin: span{margin.l, margin.r},
 		static:    staticPosition{area: span{c.x.area.start - offset.x, c.x.area.end - offset.x}, align: c.x.align},
 		alignment: oofAlignmentOf(justifySelf), isInline: true,
-		scrollAxis: scrollContainer(containerOverflow.Width),
+		scrollAxis: scrollContainer(containerOverflow.Width), outer: p.outerSpan(true),
 	}
 	v := oofAxis{
 		cbSize: area.h, inset: span{inset.t, inset.b}, margin: span{margin.t, margin.b},
 		static:     staticPosition{area: span{c.y.area.start - offset.y, c.y.area.end - offset.y}, align: c.y.align},
 		alignment:  oofAlignmentOf(alignSelf),
-		scrollAxis: scrollContainer(containerOverflow.Height),
-	}
-	if p != nil {
-		h.outer, v.outer = span{p.outer.l, p.outer.r}, span{p.outer.t, p.outer.b}
+		scrollAxis: scrollContainer(containerOverflow.Height), outer: p.outerSpan(false),
 	}
 	stretchFit := size{h.stretchFitSize(), v.stretchFitSize()}
 	avail := stretchFit.mClamp(minSize, maxSize)
@@ -366,15 +363,7 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 		margin:    rect{l: hm.start, r: hm.end, t: vm.start, b: vm.end},
 	}
 	n.unrounded = layout
-	fits := true
-	if p != nil {
-		imcb := p.imcb
-		const slack = 0.01
-		l, t := layout.location.x-offset.x-hm.start, layout.location.y-offset.y-vm.start
-		r, b := l+hm.start+final.w+hm.end, t+vm.start+final.h+vm.end
-		fits = l >= imcb.l-slack && r <= imcb.r+slack && t >= imcb.t-slack && b <= imcb.b+slack
-	}
-	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}, fits
+	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}, p.fits(layout, offset)
 }
 
 // performOOF lays out the candidates this containing block claims, and the ones they

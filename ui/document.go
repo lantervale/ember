@@ -402,11 +402,7 @@ func (d *Document) Layout(size geom.Vec2) {
 		dom.Data(d.html).Dirty&(dom.DirtyLayout|dom.DirtyDescendant) == 0 {
 		moved := layout.Refresh(d.tree, d.html) || d.scrolled
 		d.scrolled = false
-		if !moved {
-			return
-		}
-		if len(d.tree.Anchored) > 0 {
-			d.reanchor(size)
+		if !moved || d.reanchored(size) {
 			return
 		}
 		d.replay.repaint = true
@@ -862,10 +858,13 @@ func (d *Document) warn(err error) {
 	}
 }
 
-// reanchor lays out again, after a scroll, the elements anchors place,
+// reanchored lays out again, after a scroll, the elements anchors place,
 // which follow their anchors and try their fallbacks again where the
-// scroll left them, as Chrome's do.
-func (d *Document) reanchor(size geom.Vec2) {
+// scroll left them, as Chrome's do, and reports whether there were any.
+func (d *Document) reanchored(size geom.Vec2) bool {
+	if len(d.tree.Anchored) == 0 {
+		return false
+	}
 	for _, e := range d.tree.Anchored {
 		if !d.inDocument(e) {
 			continue
@@ -878,4 +877,5 @@ func (d *Document) reanchor(size geom.Vec2) {
 	d.replay.repaint = true
 	d.lay(size)
 	d.requery(size)
+	return true
 }

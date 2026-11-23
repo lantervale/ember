@@ -16,7 +16,7 @@ type PositionTry struct {
 	Pos   Pos
 }
 
-//nolint:gochecknoglobals // the longhands an @position-try rule may set
+//nolint:gochecknoglobals,goconst // the longhands an @position-try rule may set
 var tryLonghands = map[string]bool{
 	"top": true, "right": true, "bottom": true, "left": true,
 	"margin-top": true, "margin-right": true, "margin-bottom": true, "margin-left": true,
@@ -196,26 +196,29 @@ func (x *ctx) turned(from, to string, d *Declaration, flip style.Flip) *Declarat
 func turnWords(v []Component, words map[string]string, flip style.Flip) []Component {
 	out := make([]Component, len(v))
 	for i, c := range v {
-		switch {
-		case c.Kind == Ident:
-			if w, ok := words[strings.ToLower(c.Text)]; ok {
-				c.Text = w
-			}
-		case c.Kind == Function:
-			anchor := strings.EqualFold(c.Text, "anchor")
+		if w, ok := words[strings.ToLower(c.Text)]; ok && c.Kind == Ident {
+			c.Text = w
+		}
+		if c.Kind == Function {
 			c.Args = turnWords(c.Args, words, flip)
-			if anchor && flip != style.FlipStart {
-				for j, a := range c.Args {
-					if a.Kind == Comma {
-						break
-					}
-					if a.Kind == Percentage {
-						c.Args[j].Num = 100 - a.Num
-					}
-				}
+			if strings.EqualFold(c.Text, "anchor") && flip != style.FlipStart {
+				fromOtherEnd(c.Args)
 			}
 		}
 		out[i] = c
 	}
 	return out
+}
+
+// fromOtherEnd turns the percentage side of an anchor()'s arguments args
+// to the same place from the other end.
+func fromOtherEnd(args []Component) {
+	for j, a := range args {
+		if a.Kind == Comma {
+			return
+		}
+		if a.Kind == Percentage {
+			args[j].Num = 100 - a.Num
+		}
+	}
 }

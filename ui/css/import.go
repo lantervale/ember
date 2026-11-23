@@ -68,9 +68,9 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), nests: len(out.nests), as: as})
 		out.faces, out.Keyframes, out.nests = append(out.faces, in.faces...),
 			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...), append(out.nests, in.nests...)
-		out.PositionTries = append(out.PositionTries, in.PositionTries...)
-		out.CounterStyles, out.media = append(out.CounterStyles,
-			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...)
+		out.CounterStyles, out.media, out.PositionTries = append(out.CounterStyles,
+			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...),
+			append(out.PositionTries, in.PositionTries...)
 	}
 	nameOwn(len(s.layers))
 	ownRule := func(r Rule) Rule {
@@ -107,9 +107,9 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 	for ; read < len(s.Rules); read++ {
 		out.Rules = append(out.Rules, ownRule(s.Rules[read]))
 	}
-	out.faces, out.Keyframes, out.CounterStyles = append(out.faces, s.faces...), append(out.Keyframes, s.Keyframes...),
-		append(out.CounterStyles, s.CounterStyles...)
-	out.PositionTries = append(out.PositionTries, s.PositionTries...)
+	out.faces, out.Keyframes, out.CounterStyles, out.PositionTries = append(out.faces, s.faces...),
+		append(out.Keyframes, s.Keyframes...), append(out.CounterStyles, s.CounterStyles...),
+		append(out.PositionTries, s.PositionTries...)
 	return out
 }
 

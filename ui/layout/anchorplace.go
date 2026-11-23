@@ -62,9 +62,13 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 	}
 	switch base.Anchoring.Order {
 	case style.TryMostWidth:
-		slices.SortStableFunc(order, func(a, b int) int { return cmpDesc(placed[a].imcb.horizontalSpan(), placed[b].imcb.horizontalSpan()) })
+		slices.SortStableFunc(order, func(a, b int) int {
+			return cmpDesc(placed[a].imcb.horizontalSpan(), placed[b].imcb.horizontalSpan())
+		})
 	case style.TryMostHeight:
-		slices.SortStableFunc(order, func(a, b int) int { return cmpDesc(placed[a].imcb.verticalSpan(), placed[b].imcb.verticalSpan()) })
+		slices.SortStableFunc(order, func(a, b int) int {
+			return cmpDesc(placed[a].imcb.verticalSpan(), placed[b].imcb.verticalSpan())
+		})
 	case style.TryNormal:
 	}
 	try := func(i int) (oofBoxLayout, bool) {
@@ -131,29 +135,7 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 	def, hasDef := a.defaultFor(st)
 	var outer rect
 	if s.Anchoring.Area.Set && hasDef {
-		at := rect{l: def.l - offset.x, r: def.r - offset.x, t: def.t - offset.y, b: def.b - offset.y}
-		xs := [4]float32{min(0, at.l), at.l, at.r, max(area.w, at.r)}
-		ys := [4]float32{min(0, at.t), at.t, at.b, max(area.h, at.b)}
-		ar := s.Anchoring.Area
-		x0, x1 := xs[ar.X.From], xs[ar.X.To+1]
-		y0, y1 := ys[ar.Y.From], ys[ar.Y.To+1]
-		outer = rect{l: -x0, r: area.w - x0, t: -y0, b: area.h - y0}
-		offset = point{offset.x + x0, offset.y + y0}
-		area = size{max(x1-x0, 0), max(y1-y0, 0)}
-		normal := func(a style.Align) bool { return a == style.AlignNormal || a == style.AlignAuto }
-		// One auto inset aligns the box to the other, as anywhere else.
-		if normal(s.JustifySelf) && (s.Inset.Left.Kind == style.Auto) == (s.Inset.Right.Kind == style.Auto) {
-			s.JustifySelf = areaAlign(ar.X)
-		}
-		if normal(s.AlignSelf) && (s.Inset.Top.Kind == style.Auto) == (s.Inset.Bottom.Kind == style.Auto) {
-			s.AlignSelf = areaAlign(ar.Y)
-		}
-		for _, l := range []*style.Length{&s.Inset.Top, &s.Inset.Right, &s.Inset.Bottom, &s.Inset.Left,
-			&s.Margin.Top, &s.Margin.Right, &s.Margin.Bottom, &s.Margin.Left} {
-			if l.Kind == style.Auto {
-				*l = style.Px(0)
-			}
-		}
+		area, offset, outer = cutArea(&s, def, area, offset)
 	}
 	rel := rect{l: def.l - offset.x, r: def.r - offset.x, t: def.t - offset.y, b: def.b - offset.y}
 	lookup := func(fn style.AnchorFn) (rect, bool) {
@@ -199,19 +181,7 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 	work(&s.Margin.Right, alongX, area.w, style.Px(0))
 	work(&s.Margin.Top, alongY, area.w, style.Px(0))
 	work(&s.Margin.Bottom, alongY, area.w, style.Px(0))
-	imcb := rect{l: 0, r: area.w, t: 0, b: area.h}
-	if v := resolve(s.Inset.Left, area.w); some(v) {
-		imcb.l = v
-	}
-	if v := resolve(s.Inset.Right, area.w); some(v) {
-		imcb.r = area.w - v
-	}
-	if v := resolve(s.Inset.Top, area.h); some(v) {
-		imcb.t = v
-	}
-	if v := resolve(s.Inset.Bottom, area.h); some(v) {
-		imcb.b = area.h - v
-	}
+	imcb := insetBox(&s, area)
 	if hasDef {
 		if s.JustifySelf == style.AlignAnchorCenter {
 			s.Inset.Left, s.Inset.Right, s.JustifySelf = anchorCenter(imcb.l, imcb.r, (rel.l+rel.r)/2, area.w)
@@ -227,6 +197,35 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 		s.AlignSelf = style.AlignCenter
 	}
 	return placedStyle{st: &s, area: area, offset: offset, imcb: imcb, outer: outer}
+}
+
+// cutArea is the cell of s's position-area in the grid an anchor at def
+// cuts a containing block of padding box area at offset into, with the
+// containing block in its space; s's auto insets and margins become 0,
+// and its normal self-alignment the area's.
+func cutArea(s *style.Computed, def rect, area size, offset point) (size, point, rect) {
+	at := rect{l: def.l - offset.x, r: def.r - offset.x, t: def.t - offset.y, b: def.b - offset.y}
+	xs := [4]float32{min(0, at.l), at.l, at.r, max(area.w, at.r)}
+	ys := [4]float32{min(0, at.t), at.t, at.b, max(area.h, at.b)}
+	ar := s.Anchoring.Area
+	x0, x1 := xs[ar.X.From], xs[ar.X.To+1]
+	y0, y1 := ys[ar.Y.From], ys[ar.Y.To+1]
+	outer := rect{l: -x0, r: area.w - x0, t: -y0, b: area.h - y0}
+	normal := func(a style.Align) bool { return a == style.AlignNormal || a == style.AlignAuto }
+	// One auto inset aligns the box to the other, as anywhere else.
+	if normal(s.JustifySelf) && (s.Inset.Left.Kind == style.Auto) == (s.Inset.Right.Kind == style.Auto) {
+		s.JustifySelf = areaAlign(ar.X)
+	}
+	if normal(s.AlignSelf) && (s.Inset.Top.Kind == style.Auto) == (s.Inset.Bottom.Kind == style.Auto) {
+		s.AlignSelf = areaAlign(ar.Y)
+	}
+	for _, l := range []*style.Length{&s.Inset.Top, &s.Inset.Right, &s.Inset.Bottom, &s.Inset.Left,
+		&s.Margin.Top, &s.Margin.Right, &s.Margin.Bottom, &s.Margin.Left} {
+		if l.Kind == style.Auto {
+			*l = style.Px(0)
+		}
+	}
+	return size{max(x1-x0, 0), max(y1-y0, 0)}, point{offset.x + x0, offset.y + y0}, outer
 }
 
 // areaAlign is how a box aligns in a position-area's span of tracks when
@@ -257,22 +256,49 @@ func anchorCenter(start, end, c, length float32) (style.Length, style.Length, st
 func anchorValue(fn style.AnchorFn, r rect, kind lengthKind, cb size, rtl bool) (float32, bool) {
 	alongXAxis := kind == insetLeft || kind == insetRight || kind == alongX
 	if fn.Size {
-		switch fn.Side {
-		case style.AnchorWidth, style.AnchorInline, style.AnchorSelfInline:
-			return r.r - r.l, true
-		case style.AnchorHeight, style.AnchorBlock, style.AnchorSelfBlock:
-			return r.b - r.t, true
-		case style.AnchorAxis:
-			if alongXAxis {
-				return r.r - r.l, true
-			}
-			return r.b - r.t, true
-		}
-		return 0, false
+		return anchorSize(fn.Side, r, alongXAxis)
 	}
 	if kind == alongX || kind == alongY {
 		return 0, false
 	}
+	at, ok := anchorEdge(fn, r, kind, rtl)
+	if !ok {
+		return 0, false
+	}
+	switch kind {
+	case insetBottom:
+		return cb.h - at, true
+	case insetRight:
+		return cb.w - at, true
+	case insetTop, insetLeft, alongX, alongY:
+	}
+	return at, true
+}
+
+// anchorSize is the size of an anchor at r an anchor-size() reads, along
+// the x axis or not for one that names none.
+func anchorSize(side style.AnchorSide, r rect, alongXAxis bool) (float32, bool) {
+	switch side {
+	case style.AnchorWidth, style.AnchorInline, style.AnchorSelfInline:
+		return r.r - r.l, true
+	case style.AnchorHeight, style.AnchorBlock, style.AnchorSelfBlock:
+		return r.b - r.t, true
+	case style.AnchorAxis:
+		if alongXAxis {
+			return r.r - r.l, true
+		}
+		return r.b - r.t, true
+	case style.AnchorTop, style.AnchorRight, style.AnchorBottom, style.AnchorLeft, style.AnchorStart, style.AnchorEnd,
+		style.AnchorSelfStart, style.AnchorSelfEnd, style.AnchorInside, style.AnchorOutside, style.AnchorCenter,
+		style.AnchorPercent:
+	}
+	return 0, false
+}
+
+// anchorEdge is where along its axis the side of an anchor at r an
+// anchor() in the inset kind reads stands.
+func anchorEdge(fn style.AnchorFn, r rect, kind lengthKind, rtl bool) (float32, bool) {
+	alongXAxis := kind == insetLeft || kind == insetRight
 	lo, hi := r.t, r.b
 	if alongXAxis {
 		lo, hi = r.l, r.r
@@ -313,15 +339,9 @@ func anchorValue(fn style.AnchorFn, r rect, kind lengthKind, cb size, rtl bool) 
 		} else {
 			at = lo + fn.Percent/100*(hi-lo)
 		}
-	default:
+	case style.AnchorAxis, style.AnchorWidth, style.AnchorHeight, style.AnchorBlock, style.AnchorInline,
+		style.AnchorSelfBlock, style.AnchorSelfInline:
 		return 0, false
-	}
-	switch kind {
-	case insetBottom:
-		return cb.h - at, true
-	case insetRight:
-		return cb.w - at, true
-	case insetTop, insetLeft, alongX, alongY:
 	}
 	return at, true
 }
@@ -331,4 +351,47 @@ func pick(first bool, a, b float32) float32 {
 		return a
 	}
 	return b
+}
+
+// insetBox is the inset-modified containing block s's insets cut from a
+// containing block of padding box area, an auto inset at its edge.
+func insetBox(s *style.Computed, area size) rect {
+	imcb := rect{l: 0, r: area.w, t: 0, b: area.h}
+	if v := resolve(s.Inset.Left, area.w); some(v) {
+		imcb.l = v
+	}
+	if v := resolve(s.Inset.Right, area.w); some(v) {
+		imcb.r = area.w - v
+	}
+	if v := resolve(s.Inset.Top, area.h); some(v) {
+		imcb.t = v
+	}
+	if v := resolve(s.Inset.Bottom, area.h); some(v) {
+		imcb.b = area.h - v
+	}
+	return imcb
+}
+
+// fits reports whether the margin box of a box laid out at l, in a
+// containing block whose padding box is at offset, is in p's
+// inset-modified containing block; always without p.
+func (p *placedStyle) fits(l placed, offset point) bool {
+	if p == nil {
+		return true
+	}
+	const slack = 0.01
+	left, top := l.location.x-offset.x-l.margin.l, l.location.y-offset.y-l.margin.t
+	right, bottom := left+l.margin.l+l.size.w+l.margin.r, top+l.margin.t+l.size.h+l.margin.b
+	return left >= p.imcb.l-slack && right <= p.imcb.r+slack && top >= p.imcb.t-slack && bottom <= p.imcb.b+slack
+}
+
+// outerSpan is p's outer containing block along x or y, none without p.
+func (p *placedStyle) outerSpan(x bool) span {
+	switch {
+	case p == nil:
+		return span{}
+	case x:
+		return span{p.outer.l, p.outer.r}
+	}
+	return span{p.outer.t, p.outer.b}
 }

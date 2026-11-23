@@ -363,7 +363,8 @@ func (d Dim) Resolve(basis float64) float64 {
 func isAnchor(op style.CalcOp) bool { return op == style.CalcAnchor || op == style.CalcAnchorSize }
 
 // anchors reports whether d holds an anchor() and an anchor-size().
-func (d Dim) anchors() (anchor, size bool) {
+func (d Dim) anchors() (bool, bool) {
+	anchor, size := false, false
 	for _, t := range d.terms {
 		anchor = anchor || t.op == style.CalcAnchor
 		size = size || t.op == style.CalcAnchorSize

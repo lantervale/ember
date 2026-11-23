@@ -1414,7 +1414,7 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent,
 	if n != nil && d.menuIntent(n, i) {
 		return d.focused(), true
 	}
-	if i == control.Back && (d.backFromPopover() || d.backFromModal()) {
+	if i == control.Back && d.backFromTop() {
 		return n, true
 	}
 	if n == nil {
@@ -1593,7 +1593,7 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 	if f.RawPressed(int(input.KeyEscape)) && !prevented.has(input.KeyEscape) {
 		if t.Handles(control.Back) {
 			d.fire(n, t.Do(control.Back))
-		} else if !d.backFromPopover() && !d.backFromModal() {
+		} else if !d.backFromTop() {
 			d.moveFocus(func() bool { d.focus.Blur(); return true })
 		}
 		return

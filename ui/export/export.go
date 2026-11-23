@@ -104,8 +104,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		b.WriteString(states(inline(d, s.String(), s.URL)))
 	}
 	b.WriteString("</style>\n")
-	b.WriteString(showModals)
-	b.WriteString(showPopovers)
+	b.WriteString(showModals + showPopovers)
 	b.WriteString(scrollTo)
 	b.WriteString(selectText)
 	b.WriteString(drawSnapshots)
@@ -249,14 +248,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	if modal {
 		write("data-ember-modal", strconv.FormatUint(layer, 10))
 	}
-	for i, p := range d.OpenPopovers() {
-		if p == n {
-			write("data-ember-popover", strconv.Itoa(i))
-		}
-		if d.PopoverSource(p) == n {
-			write("data-ember-popover-source", strconv.Itoa(i))
-		}
-	}
+	popoverAttrs(d, n, write)
 	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
 		write("data-ember-bars", "")
 	}
@@ -287,6 +279,19 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	}
 	if name, value, ok := controlState(d, n, typ); ok {
 		write(name, value)
+	}
+}
+
+// popoverAttrs marks n when it is a popover the Document shows, and when
+// it showed one, with that popover's place in the top layer.
+func popoverAttrs(d *ui.Document, n *dom.Node, write func(name, value string)) {
+	for i, p := range d.OpenPopovers() {
+		if p == n {
+			write("data-ember-popover", strconv.Itoa(i))
+		}
+		if d.PopoverSource(p) == n {
+			write("data-ember-popover-source", strconv.Itoa(i))
+		}
 	}
 }
 

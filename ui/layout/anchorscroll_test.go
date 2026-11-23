@@ -66,7 +66,7 @@ func TestPositionVisibilityHidesTheBox(t *testing.T) {
 	d.Body().Append(sc, visible, always, overflowing, fits)
 	size := geom.V2(800, 600)
 	d.Layout(size)
-	hidden := func(n *ui.Node) bool { return dom.Data(n).Placed.(*box.Box).Discarded }
+	hidden := func(n *ui.Node) bool { b, _ := dom.Data(n).Placed.(*box.Box); return b.Discarded }
 	assert.False(t, hidden(visible), "its anchor in view")
 	assert.True(t, hidden(overflowing), "wider than the page")
 	assert.False(t, hidden(fits))

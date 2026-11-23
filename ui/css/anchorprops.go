@@ -88,8 +88,10 @@ func expandPositionTry(v []Component, out map[string][]Component) error {
 	return nil
 }
 
+const propPositionTry = "position-try"
+
 //nolint:gochecknoglobals // position-try-order's keywords
-var tryOrders = []string{"normal", "most-width", "most-height", "most-block-size", "most-inline-size"}
+var tryOrders = []string{kwNormal, "most-width", "most-height", "most-block-size", "most-inline-size"}
 
 // areaWord is one keyword of a position-area: the span it gives its axis
 // and which axis that is.
@@ -122,6 +124,8 @@ func mirror(s style.AreaSpan) style.AreaSpan { return style.AreaSpan{From: 2 - s
 
 // areaWordOf is the keyword w of a position-area, for an element of
 // direction rtl, where x-start and inline-start are its right.
+//
+//nolint:goconst // the area keywords
 func areaWordOf(w string, rtl bool) (areaWord, bool) {
 	w = strings.ToLower(w)
 	switch w {
@@ -146,7 +150,8 @@ func areaWordOf(w string, rtl bool) (areaWord, bool) {
 	case "span-bottom":
 		return areaWord{spanEnd, yAxis}, true
 	}
-	span, rest := startTrack, ""
+	span := startTrack
+	var rest string
 	plain, spans := strings.CutPrefix(w, "span-")
 	plain = strings.TrimPrefix(plain, "self-")
 	switch {
@@ -290,6 +295,7 @@ func anchorProp(set func(x *ctx, v []Component), copyOf func(dst, src *style.Anc
 	}
 }
 
+//nolint:goconst // the anchor properties' table
 func anchorProps() map[string]prop {
 	return map[string]prop{
 		"anchor-name": anchorProp(func(x *ctx, v []Component) { x.c.Anchoring.Names = dashedNames(v) },

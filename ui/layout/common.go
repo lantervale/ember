@@ -41,7 +41,7 @@ func applyAlignmentFallback(free float32, items int, a alignment) style.Align {
 		case style.AlignSpaceAround, style.AlignSpaceEvenly:
 			k, safe = style.AlignCenter, true
 		case style.AlignNormal, style.AlignAuto, style.AlignStart, style.AlignEnd, style.AlignFlexStart, style.AlignFlexEnd,
-			style.AlignCenter, style.AlignBaseline: // no fallback needed
+			style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline: // no fallback needed
 		}
 	}
 	if free <= 0 && safe {
@@ -67,7 +67,7 @@ func computeAlignmentOffset(free float32, items int, gap float32, k style.Align,
 				return 0
 			}
 			return free
-		case style.AlignCenter:
+		case style.AlignCenter, style.AlignAnchorCenter:
 			return free / 2
 		case style.AlignSpaceAround:
 			if free >= 0 {
@@ -92,7 +92,7 @@ func computeAlignmentOffset(free float32, items int, gap float32, k style.Align,
 	case style.AlignSpaceEvenly:
 		return gap + free/float32(items+1)
 	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignEnd, style.AlignFlexStart,
-		style.AlignFlexEnd, style.AlignCenter, style.AlignBaseline: // only the gap
+		style.AlignFlexEnd, style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline: // only the gap
 	}
 	return gap
 }

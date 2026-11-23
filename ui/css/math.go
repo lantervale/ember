@@ -46,8 +46,8 @@ func parseMath(name string, args []Component) (Dim, error) {
 	switch name {
 	case fnCalc:
 		return parseCalc(args)
-	case "anchor", "anchor-size":
-		return parseAnchor(name == "anchor-size", args)
+	case "anchor", fnAnchorSize:
+		return parseAnchor(name == fnAnchorSize, args)
 	}
 	parts := splitOn(args, func(c Component) bool { return c.Kind == Comma })
 	op, ok := mathOps[name]
@@ -119,7 +119,8 @@ func typed(name string, op style.CalcOp, typ dimType, ds []Dim) (Dim, error) {
 			return Dim{}, fmt.Errorf("%s() takes numbers, found %s", name, typ)
 		}
 	case style.CalcPush, style.CalcScale, style.CalcSum, style.CalcMul, style.CalcDiv, style.CalcMin, style.CalcMax,
-		style.CalcMod, style.CalcRem, style.CalcAbs, style.CalcHypot:
+		style.CalcMod, style.CalcRem, style.CalcAbs, style.CalcHypot,
+		style.CalcAnchor, style.CalcAnchorSize:
 	}
 	return node(op, typ, ds...), nil
 }
@@ -177,7 +178,7 @@ func mathArity(op style.CalcOp) (int, int) {
 		return 2, 2
 	case style.CalcPush, style.CalcScale, style.CalcSum, style.CalcMul, style.CalcDiv, style.CalcAbs,
 		style.CalcSign, style.CalcSin, style.CalcCos, style.CalcTan, style.CalcAsin, style.CalcAcos, style.CalcAtan,
-		style.CalcSqrt, style.CalcExp:
+		style.CalcSqrt, style.CalcExp, style.CalcAnchor, style.CalcAnchorSize:
 	}
 	return 1, 1
 }

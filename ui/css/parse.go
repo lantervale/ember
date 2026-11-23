@@ -735,7 +735,7 @@ func (p *parser) atRule(t Token, in scope) {
 		p.scope(t, in)
 	case name == "counter-style":
 		p.counterStyle(t, in)
-	case name == "position-try":
+	case name == propPositionTry:
 		p.positionTry(t)
 	case name == "supports" && p.browser:
 		p.supports(t, in)

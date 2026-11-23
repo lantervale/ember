@@ -146,7 +146,7 @@ func (c *Calc) AtAnchors(ref float32, anchor func(AnchorFn) (float32, bool)) (fl
 // Anchored reports whether c holds an anchor() or an anchor-size().
 func (c *Calc) Anchored() bool {
 	found := false
-	c.walk(func(op CalcOp, fn AnchorFn) { found = found || op.anchored() })
+	c.walk(func(op CalcOp, _ AnchorFn) { found = found || op.anchored() })
 	return found
 }
 
@@ -165,12 +165,7 @@ func (c *Calc) Mapped(f func(AnchorFn) AnchorFn) Calc {
 	code := c.code
 	for len(code) > 0 {
 		op := CalcOp(code[0])
-		size := 1 + 4
-		if op == CalcPush {
-			size = 1 + 16
-		} else if op == CalcScale {
-			size = 1 + 8
-		}
+		size := op.head()
 		b = append(b, code[:size]...)
 		code = code[size:]
 		if op.anchored() {
@@ -186,21 +181,27 @@ func (c *Calc) walk(f func(CalcOp, AnchorFn)) {
 	code := c.code
 	for len(code) > 0 {
 		op := CalcOp(code[0])
-		switch op {
-		case CalcPush:
-			code = code[1+16:]
-			continue
-		case CalcScale:
-			code = code[1+8:]
+		code = code[op.head():]
+		if op == CalcPush || op == CalcScale {
 			continue
 		}
-		code = code[1+4:]
 		var fn AnchorFn
 		if op.anchored() {
 			fn, code = readAnchor(code)
 		}
 		f(op, fn)
 	}
+}
+
+// head is how many bytes a step of op takes before an anchor function's.
+func (op CalcOp) head() int {
+	if op == CalcPush {
+		return 1 + 16
+	}
+	if op == CalcScale {
+		return 1 + 8
+	}
+	return 1 + 4
 }
 
 func (op CalcOp) anchored() bool { return op == CalcAnchor || op == CalcAnchorSize }

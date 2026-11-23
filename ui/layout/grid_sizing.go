@@ -46,7 +46,8 @@ func alignmentGutterAdjustment(a alignment, inner float32, estimate trackEstimat
 	}
 	outer, innerWeight := 0, 0
 	switch a.keyword {
-	case style.AlignStart, style.AlignFlexStart, style.AlignEnd, style.AlignFlexEnd, style.AlignCenter:
+	case style.AlignStart, style.AlignFlexStart, style.AlignEnd, style.AlignFlexEnd, style.AlignCenter,
+		style.AlignAnchorCenter:
 		outer = 1
 	case style.AlignSpaceBetween:
 		innerWeight = 1
