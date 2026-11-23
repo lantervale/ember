@@ -247,6 +247,7 @@ func NewWindow(opts ...Option) *Window {
 		framebuffer: size,
 		position:    geom.V2(float32(o.x), float32(o.y)),
 		input:       &input.State{},
+		focused:     true,
 	}
 }
 
@@ -485,7 +486,13 @@ func (w *Window) Aspect() float32 {
 	return w.framebuffer.X / w.framebuffer.Y
 }
 
+// Focused reports whether the window is the one the system gives the
+// keys: true until its system says otherwise.
 func (w *Window) Focused() bool { return w.focused }
+
+// SetFocused has the window focused or not, as its system would, for a
+// test or a capture; a backend's next Sync says again what it is.
+func (w *Window) SetFocused(on bool) { w.focused = on }
 
 func (w *Window) Title() string { return w.opts.title }
 

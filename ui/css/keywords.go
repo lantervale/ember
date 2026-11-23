@@ -38,6 +38,7 @@ const (
 	kwDecimal       = "decimal"
 	kwFixed         = "fixed"
 	kwMarker        = "marker"
+	kwSelection     = "selection"
 	kwBorderBox     = "border-box"
 	kwContentBox    = "content-box"
 	kwPaddingBox    = "padding-box"
@@ -65,6 +66,7 @@ const (
 	propFontFamily           = "font-family"
 	propFontWeight           = "font-weight"
 	propFontStyle            = "font-style"
+	propFontStretch          = "font-stretch"
 	propBreakInside          = "break-inside"
 	propWidth                = "width"
 	propHeight               = "height"
@@ -93,6 +95,7 @@ const (
 	propTextDecorationThickness = "text-decoration-thickness"
 
 	shortBackground  = "background"
+	shortDecoration  = "text-decoration"
 	shortMask        = "mask"
 	shortGrid        = "grid"
 	shortBorderImage = "border-image"

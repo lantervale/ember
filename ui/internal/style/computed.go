@@ -42,7 +42,7 @@ func Initial() Computed {
 			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto,
 		},
 		Text: Text{
-			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400},
+			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400, Stretch: 100},
 			LineHeight: LineHeight{Normal: true},
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
@@ -81,6 +81,19 @@ const (
 	SelectNone
 	// SelectAll is taken whole or not at all.
 	SelectAll
+)
+
+// AppRegion is app-region: what a press there does to the system's window.
+type AppRegion uint8
+
+const (
+	// AppRegionNone is none set on the box or above it: the page's own.
+	AppRegionNone AppRegion = iota
+	// AppRegionDrag moves the window.
+	AppRegionDrag
+	// AppRegionNoDrag takes the box out of a drag region, as Chrome computes
+	// none once set too.
+	AppRegionNoDrag
 )
 
 type BoxSizing uint8
@@ -364,7 +377,24 @@ type Font struct {
 	Size   float32
 	Weight float32
 	Italic bool
+	// Stretch is font-stretch as a percentage of the normal width, 0
+	// standing for 100.
+	Stretch float32
+	// Synthesis is what font-synthesis forbids making up.
+	Synthesis FontSynthesis
 }
+
+// FontSynthesis is the faces font-synthesis forbids making up from
+// another of the family, none forbidden at zero.
+type FontSynthesis uint8
+
+const (
+	// NoSyntheticBold leaves a bold the family lacks drawn in its
+	// lighter face.
+	NoSyntheticBold FontSynthesis = 1 << iota
+	// NoSyntheticItalic leaves an italic the family lacks upright.
+	NoSyntheticItalic
+)
 
 // LineHeight is normal, a factor of the font size, or points.
 type LineHeight struct {
@@ -549,6 +579,15 @@ type Text struct {
 	HasSelection     bool
 	SelectionText    color.Color
 	HasSelectionText bool
+	// SelectionShadows is the ::selection's text-shadow, set when
+	// HasSelectionShadows is: the selected text's shadows in place of its
+	// own. SelectionDecoration is its text-decoration, set when
+	// HasSelectionDecoration is, drawn on the selected text over the
+	// text's own.
+	SelectionShadows       []Shadow
+	HasSelectionShadows    bool
+	SelectionDecoration    TextDecoration
+	HasSelectionDecoration bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations
@@ -828,9 +867,9 @@ type Look struct {
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool
-	// AppDrag is app-region: drag, its own or the one of the box it is
-	// in: a press there moves the system's window.
-	AppDrag bool
+	// AppRegion is app-region, inherited: drag, its own or the one of the
+	// box it is in, has a press there move the system's window.
+	AppRegion AppRegion
 	// Cursor is the cursor keyword, "" for auto.
 	Cursor string
 	// UserSelect is user-select as used: auto is its parent's, text on the

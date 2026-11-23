@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 func TestRefreshFollowsANewScrollOffset(t *testing.T) {
@@ -35,6 +36,30 @@ func TestRefreshFollowsANewScrollOffset(t *testing.T) {
 	dom.Data(sc).Scroll = geom.V2(0, 0)
 	Refresh(tr, root)
 	assert.Equal(t, float32(20), tr.Of[header].Pos.Y, "back in the flow")
+}
+
+func TestBoxesPlacedFromAboveAScrollerStayPutAsItScrolls(t *testing.T) {
+	placed := func(p style.Position) func(*style.Computed) {
+		return func(st *style.Computed) {
+			st.Position = p
+			st.Inset.Top, st.Inset.Left = style.Px(5), style.Px(5)
+			st.Size.Width = style.Px(10)
+		}
+	}
+	fixed, abs := blockOf(10, placed(style.FixedPosition)), blockOf(10, placed(style.Absolute))
+	inner := blockOf(10, placed(style.Absolute))
+	sc := scrollBox(0, blockOf(20, nil), fixed, abs, blockOf(10, func(st *style.Computed) {
+		st.Position = style.Relative
+	}, inner), blockOf(500, nil))
+	root := el(dom.Div, func(st *style.Computed) { st.Display, st.Position = style.Block, style.Relative }, sc)
+	tr := lay(root, 400)
+	at := func(n *dom.Node) float32 { return tr.Of[n].Rect().Y }
+	assert.Equal(t, [3]float32{5, 5, 25}, [3]float32{at(fixed), at(abs), at(inner)})
+
+	dom.Data(sc).Scroll = geom.V2(0, 50)
+	assert.True(t, Refresh(tr, root))
+	assert.Equal(t, [3]float32{5, 5, -25}, [3]float32{at(fixed), at(abs), at(inner)},
+		"a fixed box and one whose containing block is above the scroller stay, one inside scrolls")
 }
 
 func TestRefreshMatchesALayout(t *testing.T) {

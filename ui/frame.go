@@ -355,7 +355,8 @@ func (d *Document) shielded() bool {
 	if f == nil {
 		return false
 	}
-	if len(d.pressed) > 0 || d.dragging != nil || d.drag != nil || d.held != nil || d.sel.held || d.sel.rightArmed {
+	if len(d.pressed) > 0 || d.capture != nil || d.dragging != nil || d.drag != nil || d.held != nil || d.sel.held ||
+		d.sel.rightArmed {
 		return false
 	}
 	return f.host.shield || firstOf(f.host.hovered) != f.n

@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lantervale/ember/input"
@@ -33,8 +34,8 @@ func (p *framePage) tabIntoFrame(t *testing.T) {
 
 func TestAKeyInAnIframeGoesOnToThePageRoundIt(t *testing.T) {
 	p := newFramePage(t)
-	host, child := hearKeys(p.host), hearKeys(p.child)
 	p.tabIntoFrame(t)
+	host, child := hearKeys(p.host), hearKeys(p.child)
 
 	p.key(input.KeyK)
 	if len(child.keys) != 1 || child.keys[0] != p.first {
@@ -54,8 +55,8 @@ func TestAKeyInAnIframeGoesOnToThePageRoundIt(t *testing.T) {
 
 func TestBackInAnIframeGoesOnToThePageRoundIt(t *testing.T) {
 	p := newFramePage(t)
-	host, child := hearKeys(p.host), hearKeys(p.child)
 	p.tabIntoFrame(t)
+	host, child := hearKeys(p.host), hearKeys(p.child)
 
 	p.key(input.KeyEscape)
 	if len(child.backs) != 1 || child.backs[0] != p.first {
@@ -112,5 +113,85 @@ func TestAModalDialogInAnIframeHoldsOnlyItsDocument(t *testing.T) {
 	p.click(p.inFrame(5, 5))
 	if p.clicks["first"] != 0 {
 		t.Fatal("a click in the frame under its modal dialog reached the button behind it")
+	}
+}
+
+// typeKey presses k, typing r, then lets it go.
+func (p *framePage) typeKey(k input.Key, r rune) {
+	p.in.SetKey(k, true)
+	p.in.AddText(r)
+	p.frames(1)
+	p.in.SetKey(k, false)
+	p.frames(1)
+}
+
+func TestAKeyInAFieldOfAnIframeReachesTheFieldThenThePage(t *testing.T) {
+	p := newFramePage(t)
+	host, child := hearKeys(p.host), hearKeys(p.child)
+	var order []string
+	ui.OnKey(func(e ui.Event) {
+		order = append(order, "field")
+		if e.Key == input.KeyX {
+			e.PreventDefault()
+		}
+	}).Apply(p.field)
+	ui.OnKey(func(ui.Event) { order = append(order, "page") }).Apply(p.host.Body())
+	field, _ := p.child.BoxOf(p.field)
+	p.click(p.inFrame(field.X+5, field.Y+5))
+	if !p.child.Focused(p.field) {
+		t.Fatal("a click on the frame's field doesn't focus it")
+	}
+
+	p.typeKey(input.KeyX, 'x')
+	p.typeKey(input.KeyY, 'y')
+	if got := p.child.Value(p.field); got != "y" {
+		t.Fatalf("the frame's field holds %q, want the y its OnKey let through", got)
+	}
+	if want := []string{"field", "page", "field", "page"}; fmt.Sprint(order) != fmt.Sprint(want) {
+		t.Fatalf("the keys were heard by %v, want the field's OnKey, then the page's, for each", order)
+	}
+	if len(child.keys) != 2 || child.keys[0] != p.field || len(host.keys) != 2 || host.keys[1] != p.slot {
+		t.Fatalf("the frame's body heard %v and the page's %v, want the field, then the iframe", child.keys, host.keys)
+	}
+
+	ui.OnKey(func(e ui.Event) { e.StopPropagation() }).Apply(p.field)
+	p.typeKey(input.KeyZ, 'z')
+	if len(host.keys) != 2 || p.child.Value(p.field) != "yz" {
+		t.Fatalf("a key the field stopped reached the page (%d more) or wasn't typed (%q)", len(host.keys)-2,
+			p.child.Value(p.field))
+	}
+}
+
+func TestAPointerCapturedInAnIframeFollowsItOverThePage(t *testing.T) {
+	p := newFramePage(t)
+	var moves int
+	var ups []*ui.Node
+	ui.OnPointerDown(func(e ui.Event) { p.child.SetPointerCapture(e.Node) }).Apply(p.first)
+	ui.OnPointerMove(func(ui.Event) {
+		if p.child.PointerCapture() == p.first {
+			moves++
+		}
+	}).Apply(p.first)
+	ui.OnPointerUp(func(e ui.Event) { ups = append(ups, e.Node) }).Apply(p.first)
+
+	button, _ := p.child.BoxOf(p.first)
+	p.in.SetMouse(p.inFrame(button.X+5, button.Y+5))
+	p.frames(1)
+	p.in.SetMouseButton(input.MouseLeft, true)
+	p.frames(1)
+	if p.child.PointerCapture() != p.first {
+		t.Fatal("a press in the frame doesn't let its button take the pointer")
+	}
+	p.in.SetMouse(centre(t, p.host, p.after))
+	p.frames(1)
+	p.in.SetMouse(centre(t, p.host, p.before))
+	p.frames(1)
+	p.in.SetMouseButton(input.MouseLeft, false)
+	p.frames(2)
+	if moves < 2 || len(ups) != 1 || ups[0] != p.first {
+		t.Fatalf("held over the page, the frame's button heard %d moves and its release on %v", moves, ups)
+	}
+	if p.clicks["after"] != 0 || p.clicks["before"] != 0 {
+		t.Fatal("a release over the page after a press captured in the frame clicked the page's button")
 	}
 }

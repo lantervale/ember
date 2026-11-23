@@ -25,11 +25,12 @@ type Dim struct {
 }
 
 // dimType is the type of a value as CSS Values 4 types math: the powers
-// of its length, angle and percentage, all 0 for a number, or a flex
-// value. A percentage added to a length or an angle takes its type.
+// of its length, angle, time and percentage, all 0 for a number, or a
+// flex value. A percentage added to a length or an angle takes its type.
+// Times are in seconds, in Num.
 type dimType struct {
-	length, angle, percent int8
-	flex                   bool
+	length, angle, time, percent int8
+	flex                         bool
 }
 
 //nolint:gochecknoglobals // the types of the values a Dim may end as
@@ -37,12 +38,13 @@ var (
 	typeNumber  = dimType{}
 	typeLength  = dimType{length: 1}
 	typeAngle   = dimType{angle: 1}
+	typeTime    = dimType{time: 1}
 	typePercent = dimType{percent: 1}
 	typeFlex    = dimType{flex: true}
 )
 
 func (t dimType) times(o dimType, sign int8) dimType {
-	return dimType{length: t.length + sign*o.length, angle: t.angle + sign*o.angle,
+	return dimType{length: t.length + sign*o.length, angle: t.angle + sign*o.angle, time: t.time + sign*o.time,
 		percent: t.percent + sign*o.percent}
 }
 
@@ -69,6 +71,8 @@ func (t dimType) String() string {
 		return "a length"
 	case typeAngle:
 		return "an angle"
+	case typeTime:
+		return "a time"
 	case typePercent:
 		return "a percentage"
 	case typeFlex:
@@ -384,6 +388,10 @@ func dimOf(c Component) (Dim, error) {
 			return Dim{Deg: c.Num * deg, typ: typeAngle}, nil
 		}
 		switch unit {
+		case "s":
+			return Dim{Num: c.Num, typ: typeTime}, nil
+		case "ms":
+			return Dim{Num: c.Num / 1000, typ: typeTime}, nil
 		case "em":
 			return Dim{Em: c.Num, typ: typeLength}, nil
 		case unitRem:
@@ -529,11 +537,17 @@ func trimFloat(v float64) string {
 	return strings.TrimSuffix(s, ".")
 }
 
-// parseColor reads a colour: hex, rgb(), rgba(), oklch(), a named colour,
-// transparent, or a system colour or light-dark(), both as in the light
-// scheme: the cascade resolves them in the element's first (inScheme).
-// currentcolor is the caller's to handle.
-func parseColor(c Component) (Color, error) {
+// parseColor reads a colour: hex, a named colour, transparent, a colour
+// function of any space (rgb(), hsl(), hwb(), lab(), lch(), oklab(),
+// oklch(), color()), relative to another colour or not, color-mix(), or
+// a system colour or light-dark(), both as in the light scheme: the
+// cascade resolves them in the element's first (inScheme). currentcolor
+// alone is the caller's to handle; inside a function it is black here,
+// the element's colour where the cascade reads it (colorIn).
+func parseColor(c Component) (Color, error) { return colorIn(c, nil) }
+
+// plainColor reads a colour that is no function.
+func plainColor(c Component) (Color, error) {
 	switch c.Kind {
 	case Hash:
 		return parseHex(c.Text)
@@ -549,15 +563,7 @@ func parseColor(c Component) (Color, error) {
 		}
 		return Color{}, fmt.Errorf("unknown colour %q", c.Text)
 	case Function:
-		switch strings.ToLower(c.Text) {
-		case "rgb", "rgba":
-			return parseRGB(c.Args)
-		case "oklch":
-			return parseOKLCH(c.Args)
-		case "light-dark":
-			return parseLightDark(c.Args)
-		}
-		return Color{}, fmt.Errorf("%s() colours are not supported; use hex, rgb(), oklch() or a name", c.Text)
+		return Color{}, fmt.Errorf("%s() colours are not supported", c.Text)
 	case EOF, AtKeyword, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension, Whitespace, CDO, CDC,
 		Colon, Semicolon, Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
 		// nothing special for these tokens
@@ -589,181 +595,6 @@ func parseHex(s string) (Color, error) {
 	return Color{v[0], v[1], v[2], v[3]}, nil
 }
 
-// colorArgs splits a colour function's arguments into its channels and
-// alpha, in the modern (space and slash) or legacy (comma) form.
-func colorArgs(args []Component, legacyOK bool) ([3]Component, *Component, bool, error) {
-	var ch [3]Component
-	var alpha *Component
-	legacy := false
-	var buf [16]*Component
-	parts := buf[:0]
-	for i := range args {
-		if args[i].Kind == Whitespace {
-			continue
-		}
-		if len(parts) == len(buf) {
-			return ch, nil, false, fmt.Errorf("expected three channels, found more")
-		}
-		parts = append(parts, &args[i])
-		if args[i].Kind == Comma {
-			legacy = true
-		}
-	}
-	n := 0
-	take := func(c *Component) {
-		if n < len(ch) {
-			ch[n] = *c
-		}
-		n++
-	}
-	switch {
-	case legacy && !legacyOK:
-		return ch, nil, false, fmt.Errorf("commas are not allowed here")
-	case legacy:
-		if !commasBetween(parts) {
-			return ch, nil, false, fmt.Errorf("bad commas in colour")
-		}
-		for i := 0; i < len(parts); i += 2 {
-			if n == 3 && i == len(parts)-1 {
-				alpha = parts[i]
-				break
-			}
-			take(parts[i])
-		}
-	default:
-		i, err := slash(parts)
-		if err != nil {
-			return ch, nil, false, err
-		}
-		if i < len(parts) {
-			alpha = parts[i+1]
-		}
-		for _, p := range parts[:i] {
-			take(p)
-		}
-	}
-	if n != 3 {
-		return ch, nil, false, fmt.Errorf("expected three channels, found %d", n)
-	}
-	return ch, alpha, legacy, nil
-}
-
-// commasBetween reports whether parts alternate values and commas.
-func commasBetween(parts []*Component) bool {
-	for i, p := range parts {
-		if (i%2 == 1) != (p.Kind == Comma) {
-			return false
-		}
-	}
-	return true
-}
-
-// slash is where the modern form's '/' stands in parts, before its one
-// alpha; len(parts) without one.
-func slash(parts []*Component) (int, error) {
-	for i, p := range parts {
-		if p.Kind == Delim && p.Text == "/" {
-			if i != len(parts)-2 {
-				return 0, fmt.Errorf("expected one alpha after '/'")
-			}
-			return i, nil
-		}
-	}
-	return len(parts), nil
-}
-
-func channel(c Component, pct float64, numScale float64) (float64, error) {
-	switch c.Kind {
-	case Number:
-		return c.Num * numScale, nil
-	case Percentage:
-		return c.Num / 100 * pct, nil
-	case Ident:
-		if strings.EqualFold(c.Text, kwNone) {
-			return 0, nil
-		}
-	case EOF, Function, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Dimension, Whitespace, CDO, CDC, Colon,
-		Semicolon, Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
-		// nothing special for these tokens
-	}
-	return 0, fmt.Errorf("bad colour channel %q", c.String())
-}
-
-func parseAlpha(a *Component) (float64, error) {
-	if a == nil {
-		return 1, nil
-	}
-	v, err := channel(*a, 1, 1)
-	return clamp01(v), err
-}
-
-func parseRGB(args []Component) (Color, error) {
-	ch, alpha, legacy, err := colorArgs(args, true)
-	if err != nil {
-		return Color{}, fmt.Errorf("rgb(): %w", err)
-	}
-	var v [3]float64
-	for i, c := range ch {
-		if legacy && (c.Kind != ch[0].Kind || c.Kind == Ident) {
-			return Color{}, fmt.Errorf("rgb(): legacy channels must all be numbers or all percentages")
-		}
-		if v[i], err = channel(c, 1, 1.0/255); err != nil {
-			return Color{}, fmt.Errorf("rgb(): %w", err)
-		}
-		v[i] = clamp01(v[i])
-	}
-	a, err := parseAlpha(alpha)
-	if err != nil {
-		return Color{}, fmt.Errorf("rgb(): %w", err)
-	}
-	return Color{v[0], v[1], v[2], a}, nil
-}
-
-func parseOKLCH(args []Component) (Color, error) {
-	ch, alpha, _, err := colorArgs(args, false)
-	if err != nil {
-		return Color{}, fmt.Errorf("oklch(): %w", err)
-	}
-	l, err := channel(ch[0], 1, 1)
-	if err != nil {
-		return Color{}, fmt.Errorf("oklch(): %w", err)
-	}
-	c, err := channel(ch[1], 0.4, 1)
-	if err != nil {
-		return Color{}, fmt.Errorf("oklch(): %w", err)
-	}
-	h, err := hue(ch[2])
-	if err != nil {
-		return Color{}, fmt.Errorf("oklch(): %w", err)
-	}
-	a, err := parseAlpha(alpha)
-	if err != nil {
-		return Color{}, fmt.Errorf("oklch(): %w", err)
-	}
-	col := oklchToSRGB(clamp01(l), max(c, 0), h)
-	col.A = a
-	return col, nil
-}
-
-func hue(c Component) (float64, error) {
-	switch c.Kind {
-	case Number:
-		return c.Num, nil
-	case Ident:
-		if strings.EqualFold(c.Text, kwNone) {
-			return 0, nil
-		}
-	case Dimension:
-		if a, err := angle(c); err == nil {
-			return a, nil
-		}
-	case EOF, Function, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Percentage, Whitespace, CDO, CDC, Colon,
-		Semicolon, Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
-		// nothing special for these tokens
-	}
-	return 0, fmt.Errorf("bad hue %q", c.String())
-}
-
 // angle reads an angle in degrees: 0, an angle or a math function of
 // angles, its relative units, if any, of nothing.
 func angle(c Component) (float64, error) {
@@ -777,38 +608,17 @@ func angle(c Component) (float64, error) {
 	return float64(style.Finite(d.Absolute(&Units{}).Resolve(0), math.MaxFloat32)), nil
 }
 
-// duration reads a time in seconds.
+// duration reads a time in seconds: a time in s or ms, or a math
+// function of times.
 func duration(c Component) (float64, error) {
-	if c.Kind == Dimension {
-		switch strings.ToLower(c.Unit) {
-		case "s":
-			return c.Num, nil
-		case "ms":
-			return c.Num / 1000, nil
+	if c.Kind == Dimension || c.Kind == Function {
+		if d, err := dimOf(c); err == nil && d.typ == typeTime && !d.pct {
+			if v, ok := d.constant(); ok {
+				return v, nil
+			}
 		}
 	}
 	return 0, fmt.Errorf("expected a time in s or ms, found %q", c.String())
-}
-
-func oklchToSRGB(l, c, h float64) Color {
-	hr := h * math.Pi / 180
-	a, b := c*math.Cos(hr), c*math.Sin(hr)
-	lr := l + 0.3963377774*a + 0.2158037573*b
-	mr := l - 0.1055613458*a - 0.0638541728*b
-	sr := l - 0.0894841775*a - 1.2914855480*b
-	l3, m3, s3 := lr*lr*lr, mr*mr*mr, sr*sr*sr
-	r := 4.0767416621*l3 - 3.3077115913*m3 + 0.2309699292*s3
-	g := -1.2684380046*l3 + 2.6097574011*m3 - 0.3413193965*s3
-	bl := -0.0041960863*l3 - 0.7034186147*m3 + 1.7076147010*s3
-	return Color{R: encodeSRGB(r), G: encodeSRGB(g), B: encodeSRGB(bl), A: 1}
-}
-
-func encodeSRGB(v float64) float64 {
-	v = clamp01(v)
-	if v <= 0.0031308 {
-		return 12.92 * v
-	}
-	return 1.055*math.Pow(v, 1/2.4) - 0.055
 }
 
 func clamp01(v float64) float64 { return min(max(v, 0), 1) }

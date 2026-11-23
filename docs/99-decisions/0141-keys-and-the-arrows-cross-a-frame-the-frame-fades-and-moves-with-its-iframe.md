@@ -11,7 +11,7 @@ Decision 0103 left a framed Document an island for the keys: an Escape pressed i
 
 ## Decision
 
-- A key or a Back no callback of the framed Document stopped goes on from the iframe in the Document round it, `e.Node` there the iframe, as an event retargeted at a shadow root. The World event is emitted once, by the framed Document. A key or a Back with nothing focused in the frame is its body's, then the iframe's.
+- A key or a Back no callback of the framed Document stopped goes on from the iframe in the Document round it, `e.Node` there the iframe, as an event retargeted at a shadow root. The World event is emitted once, by the framed Document. A key or a Back with nothing focused in the frame is its body's, then the iframe's. A key in a focused field of the frame (decision 0142) goes the same way, the field's `OnKey` first: `PreventDefault` keeps the field from it wherever it is called, `StopPropagation` keeps it in the frame. An element of the frame holding the pointer (`SetPointerCapture`) keeps it over the page round the frame.
 - An arrow or a stick that finds nothing of the frame that way moves the page's focus from the iframe's box; landing on an iframe, it goes on into its Document, to the element nearest the side it came in by (`control.Focus.MoveFrom`). Tab is as it was.
 - A modal dialog of a framed Document holds that Document alone, as Chrome's.
 - An element that is or holds a canvas or an iframe and has an `opacity` below 1 is drawn as one picture faded as a whole (`box.Box.Canvas`); a live part inside a group picture counts as covered, so it is painted in its place.

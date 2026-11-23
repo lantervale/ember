@@ -15,7 +15,8 @@ var hintedBelow = map[string]bool{"[cellpadding": true, "[valign": true}
 
 // hints are the declarations an element's presentational attributes
 // stand for, as HTML maps them and Chrome reads them: the width and
-// height of a picture, a table or a cell, bgcolor, align, a cell's
+// height of a picture (those of the source it chose by, when it has
+// them), a table or a cell, bgcolor, align, a cell's
 // valign and nowrap, a table's cellspacing and its cellpadding on its
 // cells, body's text, the type of a list and a list item. What an attribute says that the subset has no
 // declaration for hints nothing.
@@ -34,8 +35,11 @@ func hints(n *dom.Node) []Declaration {
 	}
 	switch n.Tag() {
 	case dom.Img:
-		add(propWidth, hintedSize(attr("width"), true))
-		add(propHeight, hintedSize(attr("height"), true))
+		dims := dom.DimensionSource(n)
+		width, _ := dims.Attr("width")
+		height, _ := dims.Attr("height")
+		add(propWidth, hintedSize(width, true))
+		add(propHeight, hintedSize(height, true))
 	case dom.Iframe:
 		add(propWidth, hintedSize(attr("width"), true))
 		add(propHeight, hintedSize(attr("height"), true))

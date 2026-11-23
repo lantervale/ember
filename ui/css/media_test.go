@@ -56,7 +56,8 @@ var machineQueries = []string{
 	"(pointer: fine)", "(pointer: coarse)", "(pointer: none)", "(pointer)",
 	"(any-pointer: fine)", "(any-pointer: coarse)", "(any-pointer: none)", "(any-pointer)",
 	"(prefers-reduced-motion: reduce)", "(prefers-reduced-motion: no-preference)", "(prefers-reduced-motion)",
-	"(prefers-contrast: no-preference)", "(prefers-contrast: more)", "(prefers-contrast)",
+	"(prefers-contrast: no-preference)", "(prefers-contrast: more)", "(prefers-contrast: less)",
+	"(prefers-contrast: custom)", "(prefers-contrast)",
 	"(forced-colors: none)", "(forced-colors: active)", "(forced-colors)",
 	"(prefers-color-scheme: light)", "(prefers-color-scheme: dark)", "(prefers-color-scheme)",
 	"not (prefers-color-scheme: dark)", "(prefers-color-scheme: dark) and (prefers-reduced-motion)",
@@ -87,6 +88,23 @@ var machineMedia = []struct {
 		"(any-pointer: fine)", "(any-pointer: coarse)", "(any-pointer)", "(prefers-reduced-motion: no-preference)",
 		"(prefers-contrast: no-preference)", "(forced-colors: none)", "(prefers-color-scheme: light)",
 		"(prefers-color-scheme)", "not (prefers-color-scheme: dark)",
+	}},
+	{Media{TouchOnly: true, Contrast: "more"}, []string{
+		"(hover: none)", "(any-hover: none)", "(pointer: coarse)", "(pointer)", "(any-pointer: coarse)",
+		"(any-pointer)", "(prefers-reduced-motion: no-preference)", "(prefers-contrast: more)", "(prefers-contrast)",
+		"(forced-colors: none)", "(prefers-color-scheme: light)", "(prefers-color-scheme)",
+		"not (prefers-color-scheme: dark)",
+	}},
+	{Media{Contrast: "less", ForcedColors: true}, []string{
+		"(hover: hover)", "(hover)", "(any-hover: hover)", "(any-hover)", "(pointer: fine)", "(pointer)",
+		"(any-pointer: fine)", "(any-pointer)", "(prefers-reduced-motion: no-preference)", "(prefers-contrast: less)",
+		"(prefers-contrast)", "(forced-colors: active)", "(forced-colors)", "(prefers-color-scheme: light)",
+		"(prefers-color-scheme)", "not (prefers-color-scheme: dark)",
+	}},
+	{Media{Contrast: "custom", Dark: true}, []string{
+		"(hover: hover)", "(hover)", "(any-hover: hover)", "(any-hover)", "(pointer: fine)", "(pointer)",
+		"(any-pointer: fine)", "(any-pointer)", "(prefers-reduced-motion: no-preference)", "(prefers-contrast: custom)",
+		"(prefers-contrast)", "(forced-colors: none)", "(prefers-color-scheme: dark)", "(prefers-color-scheme)",
 	}},
 }
 
@@ -140,11 +158,20 @@ var mediaCases = []struct {
 	{"screen and not (grid)", true}, {"not screen and not (grid)", false},
 	{"(min-width:800px)and (color)", true}, {"(color)and(grid)", false}, {"screen and(color)", false},
 	{"(min-width: 12.5em) and (max-width: 99999px)", true},
+	// The initial font's units, far enough from the bounds that Chrome's
+	// default font, ui's and CSS's fallbacks answer alike; 水 is 1em in
+	// each.
+	{"(min-width: 50ex)", true}, {"(min-width: 120ex)", false}, {"(min-width: 60ch)", true},
+	{"(min-width: 120ch)", false}, {"(min-width: 40cap)", true}, {"(min-width: 80cap)", false},
+	{"(min-width: 40lh)", true}, {"(min-width: 50lh)", false}, {"(min-width: 50ic)", true},
+	{"(min-width: 50.1ic)", false}, {"(max-width: calc(10rex + 700px))", false}, {"(width < 120rch)", true},
+	{"(min-width: calc(50ex + 10vw))", true},
 	// ui knows no screen: the device is the viewport, as in a headless Chrome.
 	{"(device-width: 800px)", true}, {"(min-device-width: 100px)", true}, {"(max-device-width: 480px)", false},
 }
 
 func TestAMediaQueryFollowsTheViewport(t *testing.T) {
+	font := FontUnits{Ex: 8, Ch: 10, Cap: 11, Ic: 16, Line: 20}
 	for _, c := range []struct {
 		query string
 		m     Media
@@ -166,6 +193,18 @@ func TestAMediaQueryFollowsTheViewport(t *testing.T) {
 		{"(prefers-reduced-motion: reduce)", Media{ReducedMotion: true}, true},
 		{"(prefers-reduced-motion)", Media{ReducedMotion: true}, true},
 		{"(prefers-reduced-motion: no-preference)", Media{ReducedMotion: true}, false},
+		{"(min-width: 50ex)", Media{Width: 400, Font: font}, true},
+		{"(min-width: 50.1ex)", Media{Width: 400, Font: font}, false},
+		{"(min-width: 40ch)", Media{Width: 400, Font: font}, true},
+		{"(min-width: 41rch)", Media{Width: 400, Font: font}, false},
+		{"(min-width: 20lh)", Media{Width: 400, Font: font}, true},
+		{"(min-width: 36cap)", Media{Width: 400, Font: font}, true},
+		{"(min-width: 37cap)", Media{Width: 400, Font: font}, false},
+		{"(min-width: calc(25rex + 50vw))", Media{Width: 400, Font: font}, true},
+		{"(min-width: 25.1ic)", Media{Width: 400, Font: font}, false},
+		// Without a font, CSS's fallbacks: half an em for ex.
+		{"(min-width: 50ex)", Media{Width: 400}, true},
+		{"(min-width: 50.1ex)", Media{Width: 400}, false},
 	} {
 		if got, warns := holds(c.query, c.m); got != c.want || warns != "" {
 			t.Errorf("@media %s at %+v: %v, want %v %s", c.query, c.m, got, c.want, warns)
@@ -175,8 +214,7 @@ func TestAMediaQueryFollowsTheViewport(t *testing.T) {
 
 func TestWhatAMediaQueryCannotAnswerIsAWarning(t *testing.T) {
 	for query, want := range map[string]string{
-		"(unknown-thing)":   "t.css:1:8: @media: the unknown-thing feature is not supported; its query never holds",
-		"(min-width: 40ch)": "t.css:1:20: @media: min-width can't take 40ch; its query never holds",
+		"(unknown-thing)": "t.css:1:8: @media: the unknown-thing feature is not supported; its query never holds",
 		"(min-width: calc(1px + 2%))": "t.css:1:20: @media: min-width can't take calc(1px + 2%); its query never " +
 			"holds",
 		"(hover: sometimes)": "t.css:1:16: @media: hover takes none, hover; its query never holds",

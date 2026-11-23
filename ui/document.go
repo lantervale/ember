@@ -36,7 +36,10 @@ type Document struct {
 	// typing is the text field the player has typed in since it last
 	// changed or was submitted: SetValue leaves it be while it has the
 	// focus, and sets it again once its text is committed.
-	typing     *Node
+	typing *Node
+	// answering is the element whose callbacks are running, whose value a
+	// SetValue sets though it is typed in.
+	answering  *Node
 	drawnOnce  bool
 	fresh      bool
 	html, body *Node
@@ -67,6 +70,8 @@ type Document struct {
 	fetch    ImageFetcher
 	fetching fetches
 	choices  choices
+	// playing are the animated pictures, by url.
+	playing map[string]*playing
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -83,11 +88,19 @@ type Document struct {
 	rightDragSelects bool
 	// prefs are the system's preferences the Document follows, scheme and
 	// motion the program's answers over them, unknown for none, and touch
-	// whether the pointer last used is a finger on the screen (media.go).
-	prefs  *platform.Preferences
-	scheme platform.Appearance
-	motion platform.Motion
-	touch  bool
+	// whether the pointer last used is a finger on the screen (media.go);
+	// contrast, forced and touchOnly are the program's answers to the
+	// features no system says.
+	prefs     *platform.Preferences
+	scheme    platform.Appearance
+	motion    platform.Motion
+	touch     bool
+	contrast  Contrast
+	forced    bool
+	touchOnly bool
+	// inactive is the window the Document shows in not being focused, as
+	// last drawn.
+	inactive bool
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool
@@ -361,8 +374,13 @@ func (d *Document) Layout(size geom.Vec2) {
 	if d.trans.SetMedia(media) {
 		dom.Data(d.html).Dirty |= dom.DirtyStyle
 	}
+	if d.trans.SetTitleBarArea(d.titleBarArea(size)) {
+		dom.Data(d.html).Dirty |= dom.DirtyStyle
+	}
 	d.style()
-	d.choosePictures(media, false)
+	if d.choosePictures(media, false) {
+		d.style()
+	}
 	if d.relayout {
 		d.kept, d.relayout = layout.Retained{}, false
 	} else if d.tree != nil && size == d.laidAt && d.fonts.Scale() == d.laidScale &&
@@ -379,12 +397,15 @@ func (d *Document) Layout(size geom.Vec2) {
 	d.scrolled = false
 	d.lay(size)
 	d.requery(size)
-	if tips, lists := d.placeTips(), d.placeSuggestions(); tips || lists {
+	if tips, lists, title := d.placeTips(), d.placeSuggestions(), d.placeTitle(); tips || lists || title {
 		d.style()
 		d.lay(size)
 		d.requery(size)
 	}
-	d.choosePictures(media, true)
+	if d.choosePictures(media, true) {
+		d.style()
+		d.lay(size)
+	}
 }
 
 // lay lays the tree out at size, points each node at its box, a node the
@@ -486,13 +507,7 @@ func (d *Document) style() {
 			if n.Tag() == dom.Form || n.Tag() == dom.Fieldset {
 				d.forms = append(d.forms, n)
 			}
-			switch {
-			case n.Tag() != dom.Img:
-			case choosesPicture(n):
-				d.choices.imgs = append(d.choices.imgs, n)
-			default:
-				dom.Unchoose(n)
-			}
+			d.noteImg(n)
 			return !n.IsText()
 		})
 	}
@@ -508,6 +523,22 @@ func (d *Document) style() {
 		if sh := dom.Data(n).Shadow; sh != nil {
 			dom.Data(sh).Style = dom.Data(n).Style
 		}
+	}
+}
+
+// noteImg keeps an img n among those that choose their picture, styled
+// again when the source it chose by changed, or has it show its src.
+func (d *Document) noteImg(n *Node) {
+	if n.Tag() != dom.Img {
+		return
+	}
+	if !choosesPicture(n) {
+		dom.Unchoose(n)
+		return
+	}
+	d.choices.imgs = append(d.choices.imgs, n)
+	if s := dom.ChosenSource(n); s != nil && dom.Data(s).Dirty&dom.DirtyStyle != 0 {
+		dom.Data(n).Dirty |= dom.DirtyStyle | dom.DirtyLayout
 	}
 }
 
@@ -564,6 +595,9 @@ func init() {
 func (d *Document) Draw(c *twod.Canvas) {
 	if win := c.Window(); win != nil {
 		d.fonts.SetScale(win.ContentScale() * d.Zoom() * d.outerZoom())
+		if d.inactive != !win.Focused() {
+			d.inactive, d.replay.repaint = !win.Focused(), true
+		}
 	}
 	animating := d.tick(c)
 	if (animating || d.replay.animating) && d.tree != nil {
@@ -610,7 +644,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.painted++
 	d.unsettled = false
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
-		Selection: d.selectionPaint()}
+		Selection: d.selectionPaint(), Inactive: d.medium().Inactive}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
 	d.replay.recorded = c.Keep(m, &d.replay.last)
 	d.paintApart(c, apart)
@@ -629,6 +663,7 @@ func (d *Document) tick(c *twod.Canvas) bool {
 			animating = d.trans.Step(now - d.clock)
 		}
 		d.clock = now
+		d.animate()
 		d.drawnIn(w.Time().Frame)
 	}
 	return animating

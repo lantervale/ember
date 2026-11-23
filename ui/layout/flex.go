@@ -587,6 +587,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 			if keywordAvail.kind != 255 {
 				mainAvail = keywordAvail
 			}
+			if room, ok := fillRoom(c, it); ok {
+				mainAvail = room
+			}
 			childAvail := maxContentSpaces.with(d.main(), mainAvail).with(d.cross(), crossAvail)
 			return t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
 		}()
@@ -599,6 +602,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 			it.resolvedMinimumMainSize = styleMinMain
 		} else {
 			childAvail := spaces{minContentSpace, minContentSpace}.with(d.cross(), crossAvail)
+			if room, ok := fillRoom(c, it); ok {
+				childAvail = childAvail.with(d.main(), room)
+			}
 			minContentMain := t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
 			clampedMin := mMin(mMin(minContentMain, it.size.get(d.main())), tMax.get(d.main()))
 			it.resolvedMinimumMainSize = mMax(clampedMin, pbSums.get(d.main()))
@@ -608,6 +614,16 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 		it.hypotheticalInnerSize.set(d.main(), hypInner)
 		it.hypotheticalOuterSize.set(d.main(), hypInner+d.mainSum(it.margin))
 	}
+}
+
+// fillRoom is the room a picture with proportions and no size of its own takes in a row:
+// the container's width, its flex basis and its minimum both, as Chrome sizes it.
+func fillRoom(c *flexConstants, it *flexItem) (space, bool) {
+	w := c.nodeInnerSize.w
+	if !c.dir.isRow() || !it.node.fills() || !some(w) {
+		return space{}, false
+	}
+	return def(fmax(w-c.dir.mainSum(it.margin), 0)), true
 }
 
 func collectFlexLines(c *flexConstants, avail spaces, items []*flexItem) []*flexLine {

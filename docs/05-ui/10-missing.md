@@ -6,16 +6,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a selected empty line | not drawn, where Chrome draws a space-wide mark at its start |
-| a double click on a word cut by an element (`wo<b>rd</b>`) | takes the part in the text node pressed |
-| the selection of an unfocused window | drawn as a focused one's, where Chrome greys it; `::selection:window-inactive` is refused |
-| `::selection` with `text-decoration`, `text-shadow`, `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning; Chrome reads them |
-| `::selection`'s `color` in a text field | the field's text keeps its colour; only `background-color` applies |
-| the default selection colour on Windows and Linux | macOS's blue everywhere |
+| `::selection` with `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning, as ui draws neither on any text; Chrome reads them |
+| the default selection colour on Windows and Linux, focused or not | macOS's blue everywhere, and its grey in an inactive window: the machines here run Chrome on macOS only, which can't say what the others draw |
+| a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a tab or a carriage return in `white-space: pre` text | no tab stops: measured with no width and drawn as the face has it (often `?`), so a selection stands left of its text; replace tabs by spaces before showing it |
-| a drag's scroll sideways | a drag past an edge scrolls up and down only |
 | a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
 | `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
@@ -66,21 +62,14 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a float of direction `rtl` beside a block that avoids floats, a block's own `text-align` of `-webkit-left` under rtl | not compared with Chrome |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
-| a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
-| a picture with a ratio and no size (an SVG with only a `viewBox`) as an unsized flex item or absolutely positioned | no width, where Chrome gives it one: give it a width |
-| a replaced grid item | stretched to its cell |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
 | the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone | measured without the subgrid's rows: a percentage height or an aspect ratio there counts as on no row |
-| the `width` and `height` attributes of an `img` as its proportions, when a rule takes one of the two back (`height: auto`, as responsive sheets do) | the box has its broken picture's proportions until the picture lands, then is laid out again, where Chrome keeps the room the attributes give (`aspect-ratio: auto 250 / 167`) |
-| a picture made a block (`display: block`) with a percentage `width` or `max-width`, in a box as wide as its content (a float, a flex item, a grid track) | counts for its own width at the box's narrowest, where Chrome counts it for none, so the box is wider, and a float round one is 3 points taller; one left inline counts for none |
-| a `position: fixed` box in an element that scrolls on its own | moves with that element |
-| an absolutely positioned box placed by a block above an element that scrolls | not cut by that element, as in Chrome, but moves with its scroll |
-| a part with no text of an inline element cut by a block inside it, when it has a border or a padding | no line and no box, where Chrome keeps a line for it |
-| `position: relative`, `opacity` on an inline element holding blocks | its lines move and fade, the blocks inside it do not |
-| an empty inline element after a `br` that ends its block | its box of no size stands on the `br`'s line, where Chrome puts it a line lower |
-| a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
+| `opacity` on an inline element holding blocks | its lines fade, the blocks inside it do not |
+| an absolutely positioned box inside an inline element `position: relative` moves | placed where the element stood before it moved |
+| an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's |
+| a `summary`'s marker in a font without ▸ | measured with ui's fallback face for the triangle, where Chrome on macOS takes 1.06em whatever the font: about 3 points narrower at 16px |
 | a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
 | an absolutely positioned element right in a block after its text (`<div>text<span style="position: absolute">`) | at the start of the line, where Chrome puts it after the text; inside an inline element it stands after the text |
@@ -110,14 +99,20 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an element's own transition of a property it inherits, while a transition above its parent moves it | follows the moving value, where Chrome runs it on to the end value |
 | `animation-composition: add` or `accumulate` on a property other than lengths, numbers, colours, `transform`, `box-shadow`, `filter` and `font-weight` (positions, sizes, grid tracks, `clip-path`…) | replaces, where Chrome adds |
 | `animation-timeline`, `animation-range`, animations of `::marker` and `::placeholder`, the animation objects of a page's script | not read |
-| `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)); what is left: `font-display` is always `swap`; `font-stretch`, `size-adjust`, `ascent-override`, `descent-override`, `line-gap-override`, `font-feature-settings` and `font-variation-settings` are read and do nothing; a variable font draws its default instance; no bold or italic is made up from a regular face; colour fonts, collections and `CFF2` are not read; a rule inserted alone (`InsertRule`) is not read, and a face stays when its sheet is removed |
+| `@font-face` | fetched with `ui.FetchFonts` ([decision 0099](../99-decisions/0099-a-pages-fonts-are-fetched-and-woff2-is-read-in-pure-go.md)), its widths, size, metrics and kerning read ([decision 0143](../99-decisions/0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md)); what is left: `font-display` is always `swap` (no block period, a font landing late still swaps in); of `font-feature-settings` only `"kern" 0` does something (`liga`, `tnum`… need a GSUB reader); `font-variation-settings`, `font-named-instance` and a variable font's instances are read and do nothing (x/image's sfnt reads no `fvar`/`gvar`), a variable font drawing its default instance; colour fonts, collections and `CFF2` are not read |
+| made-up faces | a bold or italic is made up from an `@font-face` family's face as Chrome does, but not from ember's faces nor the machine's (`ui.SystemFonts()`), which draw their closest face as it is; `font-synthesis: small-caps` and `position` are read and do nothing |
+| `font-stretch` | chooses among a family's `@font-face` faces; the machine's families are not chosen among by width, and no face is stretched |
 | `prefers-color-scheme` and `prefers-reduced-motion` on Linux and the web | no preference: neither says its scheme or its reduced motion yet, so a Document given `ui.Preferences` answers light and no preference there ([decision 0121](../99-decisions/0121-a-document-answers-media-features-from-the-preferences-it-is-given.md)) |
 | `<meta name="color-scheme">` | not read: ui reads no page's `head`; a program reading a page puts `:where(:root) { color-scheme: … }` in a sheet of its own ([decision 0126](../99-decisions/0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md)) |
 | the system's own system colours | Chrome's on macOS on every system, where Chrome on Windows and Linux takes `Highlight`, `SelectedItem` and their texts, and on Windows its light buttons, links and grays, from the system |
 | a dark control's hover and press, a dark select's chevron, meter's dark fills, the scrollbars, an iframe whose scheme isn't its host's | a hovered or pressed button keeps its dark face, the chevron stays dark, a meter fills in its light colours, the bars keep ember's own look in either scheme, and an iframe's canvas is never made opaque, where Chrome draws its own dark ones and backs an iframe of the other scheme |
-| `prefers-contrast`, `forced-colors`, `any-hover: none` on a touch-only device | fixed: no preference, none, and a mouse that hovers is always there |
-| `ex`, `ch` and the font's other units in a media query's length | refused: Chrome measures them in the initial font, ui would take CSS's fallbacks |
-| `-webkit-linear-gradient()` and the other prefixed gradients, `display: -webkit-box`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
+| `prefers-contrast`, `forced-colors`, a touch-only device from the system | the program's answers alone (`ui.PrefersContrast`, `ui.ForcedColors`, `ui.TouchOnly`): no system is read for them ([decision 0139](../99-decisions/0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md)) |
+| `forced-colors: active` | answers the query, where Chrome also forces the system's colours on the page |
+| `ex`, `ch` and the font's other units in a media query's length | measured in ui's initial font (Go, 16px), where Chrome measures in its default font (Times on macOS): a bound between the two is answered otherwise |
+| a corner or a centre in `-webkit-linear-gradient()`, `-webkit-gradient()`, the prefixed repeating gradients, `display: -webkit-box` and `-webkit-line-clamp`, `-webkit-fill-available` | keep their warning under `ui.BrowserSheets()`: Chrome reads them and ui cannot |
+| a colour out of sRGB (`color(display-p3 1 0 0)`, a far `lab()`) | clipped to sRGB, as Chrome draws it on an sRGB display; ui draws no wider gamut |
+| a `line-height` adding a percentage to a `sign()` of one (`calc(20px * sign(50% - 49px) + 150%)`) | the sum, the percentage outside `sign()` of the font size, where Chrome computes `0px` |
+| `currentColor` in `color-mix()` or a relative colour, inherited | worked out on the element that declares it, where Chrome keeps the function and works it out again on each child that inherits it |
 | a `url()` filter, in `filter` or `backdrop-filter`; `mix-blend-mode: plus-lighter`, `plus-darker` | refused |
 | a backdrop filter inside an isolated group that is no backdrop root (`isolation: isolate`, a `z-index` holding a mixed element) | reads the group only, where Chrome reads on to the backdrop root ([decision 0130](../99-decisions/0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md)) |
 | a mixed element or a backdrop filter reaching the page | mixes with the Document's canvas, not with what the game drew under the Document |
@@ -142,28 +137,21 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
 | a radio group by its form | grouped by name across the Document, where Chrome groups by name within each form |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
-| `scroll-state()` container queries and `container-type: scroll-state`; `style()` on a standard property | refused, with a warning: the condition never holds |
+| `scroll-state()` container queries and `container-type: scroll-state` | refused, with a warning: the condition never holds |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |
-| `@keyframes` inside `@container` | applies whatever the container |
 | container queries nested more than eight containers deep, each answer moving the next | answered as far as the eighth in one layout, the rest the next frame |
-| math functions in a colour's channels and in times (`calc(1s + 100ms)`) | refused |
-| a percentage inside `sign()` in a `line-height` | of the font size, where Chrome measures it against something else |
 | `word-break`, `font-variant`, `revert` | refused |
 
 ## Windows
 
 | Missing | Today |
 |---|---|
-| `env(titlebar-area-x)` and the other window-controls-overlay values | not read: a header pads itself in Go from `win.TitleBarArea()` |
-| `app-region` as Chrome computes it | inherited here, where Chrome's is not: a child of a drag box computes `drag`, not `none`; the regions are the same |
 | a header merged with the title bar on Windows and Linux | `platform.OwnTitleBar()` keeps the system's title bar there, and `app-region: drag` does nothing |
-| leaving a text field from code | no `doc.Blur()`: the web explorer's address field keeps the focus after Enter |
-| a key pressed in a focused text field, told to a callback | `OnKey` hears none, where a page's `keydown` hears every key and may prevent what it does: light's console walks its history by Alt+Up and Alt+Down (menu shortcuts), not the arrows alone, and has no Shift+Enter for a new line |
-| setting a focused text field's value while it is typed in | `doc.SetValue` waits for a change or a submit: light's console moves the focus away and back to show a line of its history |
-| a context click by Control and the main button on macOS | only the secondary button raises `OnContextMenu` |
-| the place of a context click | the event carries none: read `win.Input().Mouse()` in the callback |
-| a press on an element and the pointer's moves while it is held (`pointerdown`, `pointermove`, pointer capture) | no callback hears them: light's developer tools read `win.Input().Mouse()` and `Down` each frame to drag their edge, and find what was pressed with `doc.ElementAt` |
-| the tooltip of a `title` attribute | not shown: light's Network rows name their address in its status bubble instead |
+| `env(titlebar-area-*)` in an `iframe`, and the overlay's `geometrychange` | undefined in a framed Document; a change restyles, with no event |
+| `env(viewport-segment-*)` and its indices, `env(preferred-text-scale)`, `safe-area-max-inset-*` | not defined: a fallback is taken, none with indices |
+| the pointer's events for a pen or a finger, `pointerId`, `pointercancel`, `pointerover`/`out`, and `preventDefault` on a press | the mouse's buttons only, and a press always goes on to focus, click and select |
+| a key's repeats told apart, and `keyup` | `OnKey` hears repeats as presses in a text field, and no release |
+| the title tooltip's own delay and look per system | Chrome's on Windows and Linux everywhere (half a second, 10 and 15 points from the pointer); macOS's native tip shows later |
 | a `role="menu"` shown without an opener closing on a choice | stays open: its item's callback removes `open` |
 
 ## Frames
@@ -182,13 +170,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| an animated WebP | no picture, and a warning (`webp: invalid format`); an animated GIF shows its first frame |
-| AVIF | no picture, and a warning; `web.Images` does not ask for it |
-| a run-length encoded BMP (or such a bitmap in an ICO), a `.cur` cursor file | no picture, and a warning |
-| the picture of an ICO nearest the size it shows at | the largest of the file is shown, scaled, then the one of the most bits a pixel |
+| an animated picture off-screen, or in no element shown | plays on, where Chrome pauses it; it begins when it lands, where Chrome begins it when first painted ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
+| an animation of more than 2^25 pixels in all its frames | plays the frames before that, where Chrome decodes them as they show |
+| a GIF frame reaching past the picture's size | no picture, and a warning (`gif: frame bounds larger than image bounds`), where Chrome cuts the frame |
+| AVIF | no picture, and a warning; `web.Images` does not ask for it: no reader in pure Go ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
 | a `source` of AVIF (`type="image/avif"`) | passed over, where Chrome takes it: the next source, or the `img`'s own pictures |
-| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where Chrome waits for it to near the viewport |
-| the `width` and `height` attributes of a `source` | not read, where Chrome sizes the `img` by those of the source it chose |
+| `loading="lazy"` | read only to let `sizes` say `auto`: every picture is asked for when it is laid out, where a desktop Chrome waits for it to near the viewport; headless Chrome, the reference, asks for them all before the load event, so no margin can be checked ([decision 0138](../99-decisions/0138-animated-pictures-play-as-one-texture-per-address.md)) |
 | the shapes inside an `svg` element | not elements of the tree: no rule of the Document reaches a `path` or a `g` (`svg path { fill: … }` matches nothing), and `fill` or `stroke` set on the `svg` by a rule is not read; presentation attributes and the element's own `style` are |
 | an `svg` element with neither a size nor a `viewBox` as a flex item | keeps its 300 points where Chrome shrinks it |
 | an `svg` element whose markup changes every frame | each state is one more picture the Document keeps |
@@ -212,9 +199,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 Things built and tested, with a part no test against Chrome covers yet.
 
 - `background-size: cover` and `contain` under a Document `Zoom`.
-- Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press, a double click and Shift with a key reach are tested in ember alone; the copied text, the rectangles and the picture are compared with Chrome's.
+- Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press and Shift with a key reach are tested in ember alone, a double click's word against the one Chrome's `Selection.modify` reaches; the copied text, the rectangles and the picture are compared with Chrome's.
+- A selection in an inactive window: headless Chrome's page is neither focused nor not, its `::selection:window-inactive` holding in one run and not in the next, so the grey and the rules are tested in ember alone, with Chrome asked only which selectors it reads.
+- The Linux and Windows thresholds of the `selection-marks` and `field-selection` pages: measured on macOS only.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
-- `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone.
+- `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone; the computed values are compared with Chrome's.
+- Pointer and key callbacks, `doc.Blur()`, the title tooltip and `env(titlebar-area-*)` with a title bar: headless Chrome is not driven by input and has no window controls overlay, so they are tested in ember alone; `env()` without an overlay is compared with Chrome.
 - `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so they are tested in ember alone; Chrome is asked only that nothing matches them before.
 - The picture `sizes="auto"` chooses: Chrome chooses it once the page is laid out, and takes a denser one already in its cache, so what it shows changes from run to run; the box is compared with Chrome's, the choice is tested in ember alone.
 - Choosing a picture again as the viewport or the pixels a point change, the one shown kept until the one chosen lands: headless Chrome is neither resized nor moved to another screen, so it is tested in ember alone.
