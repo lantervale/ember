@@ -136,7 +136,7 @@ func isIntrinsic(l style.Length) bool {
 	switch l.Kind {
 	case style.Auto, style.MinContent, style.MaxContent, style.FitContent:
 		return true
-	case style.Fixed, style.Fr, style.None:
+	case style.Fixed, style.Fr, style.None, style.Stretch:
 	}
 	return false
 }

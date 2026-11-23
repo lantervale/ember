@@ -1352,6 +1352,8 @@ func (x *ctx) length(c Component) style.Length {
 			return style.Length{Kind: style.MaxContent}
 		case kwFitContent:
 			return style.Length{Kind: style.FitContent}
+		case "stretch":
+			return style.Length{Kind: style.Stretch}
 		case kwNone:
 			return style.Length{Kind: style.None}
 		}

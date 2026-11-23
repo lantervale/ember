@@ -168,13 +168,14 @@ var webkit = vendor{
 	properties: dropped,
 
 	// Chrome lays these out as the plain word. Its other -webkit- values
-	// are its own (-webkit-box, -webkit-fill-available,
-	// -webkit-linear-gradient() with its angles turned the other way…),
-	// and ui can't tell those from the ones Chrome refuses; text-align's
-	// (-webkit-center…) are in its grammar.
+	// are its own (-webkit-zoom-in, -webkit-gradient()…), and ui can't
+	// tell those from the ones Chrome refuses; text-align's
+	// (-webkit-center…) and display's (-webkit-box) are in its grammar,
+	// the legacy gradients rewritten as plain ones.
 	values: map[string]string{
 		"calc": "calc", "min-content": "min-content", "max-content": "max-content",
-		"fit-content": "fit-content", "flex": "flex", "inline-flex": "inline-flex", "grab": "grab",
+		"fit-content": "fit-content", "fill-available": "stretch", "flex": "flex", "inline-flex": "inline-flex",
+		"grab": "grab",
 		"grabbing": "grabbing",
 	},
 	otherValues: warned,

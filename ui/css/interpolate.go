@@ -241,7 +241,7 @@ func lerpLength(a, b style.Length, t float32, nonNegative bool) (style.Length, b
 	case style.Fixed:
 	case style.Fr:
 		return style.Length{Kind: style.Fr, Px: max(lerpf(a.Px, b.Px, t), 0)}, true
-	case style.Auto, style.MinContent, style.MaxContent, style.FitContent, style.None:
+	case style.Auto, style.MinContent, style.MaxContent, style.FitContent, style.None, style.Stretch:
 		return a, a == b
 	}
 	var none unique.Handle[style.Calc]

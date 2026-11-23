@@ -124,6 +124,7 @@ var (
 	sizeLP        = dimTerm(allowPercent | nonNegative)
 	number        = dimTerm(allowNumber | nonNegative | noLength)
 	intrinsic     = words("min-content", "max-content", "fit-content")
+	boxSizes      = words("min-content", "max-content", "fit-content", "stretch")
 	colorTerm     = term(func(c Component) error {
 		if isWord(c, "currentcolor") {
 			return nil
@@ -267,12 +268,12 @@ var checks = map[string]check{
 		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption",
 		"-webkit-box", "-webkit-inline-box")),
 	"box-sizing": single(words("content-box", "border-box")),
-	"width":      single(either(sizeLP, words("auto"), intrinsic)),
-	"height":     single(either(sizeLP, words("auto"), intrinsic)),
-	"min-width":  single(either(sizeLP, words("auto"), intrinsic)),
-	"min-height": single(either(sizeLP, words("auto"), intrinsic)),
-	"max-width":  single(either(sizeLP, words("none"), intrinsic)),
-	"max-height": single(either(sizeLP, words("none"), intrinsic)),
+	"width":      single(either(sizeLP, words("auto"), boxSizes)),
+	"height":     single(either(sizeLP, words("auto"), boxSizes)),
+	"min-width":  single(either(sizeLP, words("auto"), boxSizes)),
+	"min-height": single(either(sizeLP, words("auto"), boxSizes)),
+	"max-width":  single(either(sizeLP, words("none"), boxSizes)),
+	"max-height": single(either(sizeLP, words("none"), boxSizes)),
 
 	"margin-top":     single(either(lengthPercent, words("auto"))),
 	"margin-right":   single(either(lengthPercent, words("auto"))),

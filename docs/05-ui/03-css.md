@@ -536,7 +536,7 @@ One table for each vendor, as `ui/css/vendors.go` has them. `-webkit-`'s lists a
 | Chrome's own properties read as the plain one (2) | `-webkit-mask` as `mask`, a shorthand of Chrome's own longhands, which take three-value positions and refuse no-clip; `-webkit-mask-position` as `mask-position`, a shorthand of -webkit-mask-position-x and -y, which take three-value positions |
 | words read as the plain property's | `-webkit-mask-composite`: `source-in` as `intersect`, `source-out` as `subtract`, `source-over` as `add`, `xor` as `exclude`; its other words keep their warning |
 | any other property | goes without a word, as Chrome drops it |
-| values read as the plain one | `-webkit-calc` as `calc`, `-webkit-fit-content` as `fit-content`, `-webkit-flex` as `flex`, `-webkit-grab` as `grab`, `-webkit-grabbing` as `grabbing`, `-webkit-inline-flex` as `inline-flex`, `-webkit-max-content` as `max-content`, `-webkit-min-content` as `min-content`, and the properties above in `transition` |
+| values read as the plain one | `-webkit-calc` as `calc`, `-webkit-fill-available` as `stretch`, `-webkit-fit-content` as `fit-content`, `-webkit-flex` as `flex`, `-webkit-grab` as `grab`, `-webkit-grabbing` as `grabbing`, `-webkit-inline-flex` as `inline-flex`, `-webkit-max-content` as `max-content`, `-webkit-min-content` as `min-content`, and the properties above in `transition` |
 | any other value | keeps its warning, the declaration dropped |
 | pseudo-elements read as the plain one | `::-webkit-input-placeholder` as `::placeholder` |
 | any other pseudo-element | matches nothing: its selector alone goes, without a word |

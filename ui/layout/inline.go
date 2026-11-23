@@ -813,10 +813,15 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		st := a.node.st
 		a.margin = edges(st.Margin, parent.w)
 		inner := avail.mSub(a.margin.horizontal()).mMax(0)
-		if k, sp := resolveSizingKeyword(st.Size.Width, inner.value(), parent.w); k == keywordMeasure {
+		known := noSize
+		switch k, sp := resolveSizingKeyword(st.Size.Width, inner.value(), parent.w); k {
+		case keywordMeasure:
 			inner = sp
+		case keywordExact:
+			known.w = sp.v
+		case keywordNone:
 		}
-		a.width = t.measureChildSize(a.node, noSize, parent,
+		a.width = t.measureChildSize(a.node, known, parent,
 			spaces{inner, maxContentSpace}, inherentSize, horizontal, [2]bool{})
 		out := t.performChildLayout(a.node, size{a.width, none}, parent,
 			spaces{def(a.width), maxContentSpace}, inherentSize)

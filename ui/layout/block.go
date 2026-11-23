@@ -518,15 +518,19 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			// A float with an auto width shrinks to fit: the room left, between its
 			// min-content and max-content widths.
 			availW := fmax(innerW-nonAuto.horizontal(), 0)
-			itemAvail := def(availW)
-			if k, s := resolveSizingKeyword(it.sizeStyle.Width, availW, innerW); k == keywordMeasure {
+			itemAvail, floatKnown := def(availW), noSize
+			switch k, s := resolveSizingKeyword(it.sizeStyle.Width, availW, innerW); k {
+			case keywordMeasure:
 				itemAvail = s
+			case keywordExact:
+				floatKnown.w = mClamp(s.v, it.minSize.w, it.maxSize.w)
+			case keywordNone:
 			}
 			lo := t.computeChild(it.node, input{
 				run:             run,
 				sizing:          inherentSize,
 				axis:            axisBoth,
-				known:           noSize,
+				known:           floatKnown,
 				knownIsDefinite: bools{true, true},
 				parent:          parent,
 				avail:           spaces{itemAvail, maxContentSpace},
@@ -592,11 +596,18 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			widthStyle = style.Length{Kind: style.FitContent}
 		}
 		keywordW := none
-		if k, s := resolveSizingKeyword(widthStyle, stretchW, innerW); k == keywordMeasure {
+		switch k, s := resolveSizingKeyword(widthStyle, stretchW, innerW); k {
+		case keywordMeasure:
 			keywordW = t.measureChildSize(it.node, noSize, parent, spaces{s, maxContentSpace},
 				inherentSize, horizontal, collapsibleIf(it.inSameBFC))
+		case keywordExact:
+			keywordW = s.v
+		case keywordNone:
 		}
 		known := it.size
+		if it.sizeStyle.Height.Kind == style.Stretch && some(percentH) {
+			known.h = fmax(percentH-nonAuto.vertical(), 0)
+		}
 		known.w = mClamp(or(or(known.w, keywordW), stretchW), it.minSize.w, it.maxSize.w)
 		known = known.mClamp(it.minSize, it.maxSize)
 		in := input{

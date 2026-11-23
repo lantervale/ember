@@ -121,6 +121,7 @@ func TestWebkitValues(t *testing.T) {
 	for decl, want := range map[string]string{
 		"width: -webkit-calc(1px + 2px)":   "width: calc(1px + 2px) | ",
 		"width: -webkit-min-content":       "width: min-content | ",
+		"width: -webkit-fill-available":    "width: stretch | ",
 		"height: -webkit-max-content":      "height: max-content | ",
 		"max-width: -webkit-fit-content":   "max-width: fit-content | ",
 		"display: -webkit-flex":            "display: flex | ",
@@ -150,7 +151,7 @@ func TestWebkitValues(t *testing.T) {
 		}
 	}
 	// Chrome's own values keep their warning.
-	for _, decl := range []string{"cursor: -webkit-zoom-in", "width: -webkit-fill-available",
+	for _, decl := range []string{"cursor: -webkit-zoom-in",
 		"background-image: -webkit-linear-gradient(left top, #fff, #000)",
 		"background-image: -webkit-linear-gradient(center top, #fff, #000)"} {
 		got, strict := read(decl, Browser()), read(decl)
