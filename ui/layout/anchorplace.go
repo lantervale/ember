@@ -15,6 +15,9 @@ type placedStyle struct {
 	area   size
 	offset point
 	imcb   rect
+	// outer is the containing block in area's space, when a position-area
+	// cut area from it.
+	outer rect
 }
 
 // lengthKind is the property a length is of, for an anchor function in
@@ -68,7 +71,7 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 		p := placed[i]
 		n.st = p.st
 		n.cache.clear()
-		return t.placeOOFBox(c, p.area, p.offset, containerOverflow, gridOwner, &p.imcb)
+		return t.placeOOFBox(c, p.area, p.offset, containerOverflow, gridOwner, &p)
 	}
 	var lb oofBoxLayout
 	fits := false
@@ -124,6 +127,7 @@ func (a *anchorsOf) defaultFor(st *style.Computed) (rect, bool) {
 func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedStyle {
 	s := *st
 	def, hasDef := a.defaultFor(st)
+	var outer rect
 	if s.Anchoring.Area.Set && hasDef {
 		at := rect{l: def.l - offset.x, r: def.r - offset.x, t: def.t - offset.y, b: def.b - offset.y}
 		xs := [4]float32{min(0, at.l), at.l, at.r, max(area.w, at.r)}
@@ -131,18 +135,20 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 		ar := s.Anchoring.Area
 		x0, x1 := xs[ar.X.From], xs[ar.X.To+1]
 		y0, y1 := ys[ar.Y.From], ys[ar.Y.To+1]
+		outer = rect{l: -x0, r: area.w - x0, t: -y0, b: area.h - y0}
 		offset = point{offset.x + x0, offset.y + y0}
 		area = size{max(x1-x0, 0), max(y1-y0, 0)}
+		normal := func(a style.Align) bool { return a == style.AlignNormal || a == style.AlignAuto }
+		if normal(s.JustifySelf) && s.Inset.Left.Kind == style.Auto && s.Inset.Right.Kind == style.Auto {
+			s.JustifySelf = areaAlign(ar.X)
+		}
+		if normal(s.AlignSelf) && s.Inset.Top.Kind == style.Auto && s.Inset.Bottom.Kind == style.Auto {
+			s.AlignSelf = areaAlign(ar.Y)
+		}
 		for _, l := range []*style.Length{&s.Inset.Top, &s.Inset.Right, &s.Inset.Bottom, &s.Inset.Left} {
 			if l.Kind == style.Auto {
 				*l = style.Px(0)
 			}
-		}
-		if s.JustifySelf == style.AlignNormal || s.JustifySelf == style.AlignAuto {
-			s.JustifySelf = areaAlign(ar.X)
-		}
-		if s.AlignSelf == style.AlignNormal || s.AlignSelf == style.AlignAuto {
-			s.AlignSelf = areaAlign(ar.Y)
 		}
 	}
 	rel := rect{l: def.l - offset.x, r: def.r - offset.x, t: def.t - offset.y, b: def.b - offset.y}
@@ -216,7 +222,7 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 	if s.AlignSelf == style.AlignAnchorCenter {
 		s.AlignSelf = style.AlignCenter
 	}
-	return placedStyle{st: &s, area: area, offset: offset, imcb: imcb}
+	return placedStyle{st: &s, area: area, offset: offset, imcb: imcb, outer: outer}
 }
 
 // areaAlign is how a box aligns in a position-area's span of tracks when

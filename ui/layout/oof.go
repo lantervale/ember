@@ -87,6 +87,10 @@ type oofAxis struct {
 	isInline   bool
 	reversed   bool
 	scrollAxis bool
+	// outer is the containing block a position-area cut its cell from,
+	// in the cell's space, which an overflowing box is kept in; zero for
+	// the containing block itself.
+	outer span
 }
 
 func (a *oofAxis) startEdge() staticEdge {
@@ -218,6 +222,9 @@ func (a *oofAxis) position(s float32, margin span) float32 {
 			break
 		}
 		limit := span{fmin(r.start, 0), fmax(r.end, a.cbSize)}
+		if a.outer != (span{}) {
+			limit = span{fmin(r.start, a.outer.start), fmax(r.end, a.outer.end)}
+		}
 		if a.scrollAxis {
 			if a.reversed {
 				limit.start = float32(math.Inf(-1))
@@ -261,10 +268,10 @@ type oofBoxLayout struct {
 }
 
 // placeOOFBox sizes and places one absolutely positioned box in its containing block, and
-// reports whether its margin box fits in imcb, an inset-modified containing block in the
-// padding box at offset, when given.
+// reports whether its margin box fits in the inset-modified containing block of p, a
+// position option of an element its anchors place, when given.
 func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
-	containerOverflow style.Size[style.Overflow], gridOwner *node, imcb *rect) (oofBoxLayout, bool) {
+	containerOverflow style.Size[style.Overflow], gridOwner *node, p *placedStyle) (oofBoxLayout, bool) {
 	n := c.node
 	st := n.st
 	if gridOwner != nil && gridOwner.grid != nil {
@@ -299,6 +306,9 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 		static:     staticPosition{area: span{c.y.area.start - offset.y, c.y.area.end - offset.y}, align: c.y.align},
 		alignment:  oofAlignmentOf(alignSelf),
 		scrollAxis: scrollContainer(containerOverflow.Height),
+	}
+	if p != nil {
+		h.outer, v.outer = span{p.outer.l, p.outer.r}, span{p.outer.t, p.outer.b}
 	}
 	stretchFit := size{h.stretchFitSize(), v.stretchFitSize()}
 	avail := stretchFit.mClamp(minSize, maxSize)
@@ -357,7 +367,8 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 	}
 	n.unrounded = layout
 	fits := true
-	if imcb != nil {
+	if p != nil {
+		imcb := p.imcb
 		const slack = 0.01
 		l, t := layout.location.x-offset.x-hm.start, layout.location.y-offset.y-vm.start
 		r, b := l+hm.start+final.w+hm.end, t+vm.start+final.h+vm.end
