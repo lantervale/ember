@@ -19,6 +19,12 @@ const maxShaped = 1 << 13
 // smallCapitals are the features of small capitals drawn from both cases.
 const smallCapitals = "smcp,c2sc"
 
+// Features of capitals, as Caps tells them apart.
+const (
+	tagSmcp = "smcp"
+	tagUnic = "unic"
+)
+
 // featureSettings is features, HarfBuzz's, as font-feature-settings
 // writes them.
 func featureSettings(features string) string {
@@ -137,32 +143,32 @@ func capsFeatures(c *Face, f style.Font, script shape.Tag) string {
 	}
 	switch f.Caps {
 	case style.SmallCaps:
-		if has("smcp") {
-			return "smcp"
+		if has(tagSmcp) {
+			return tagSmcp
 		}
 	case style.AllSmallCaps:
-		if has("smcp", "c2sc") {
+		if has(tagSmcp, "c2sc") {
 			return smallCapitals
 		}
 	case style.PetiteCaps:
 		if has("pcap") {
 			return "pcap"
 		}
-		if has("smcp") {
-			return "smcp"
+		if has(tagSmcp) {
+			return tagSmcp
 		}
 	case style.AllPetiteCaps:
 		if has("pcap", "c2pc") {
 			return "pcap,c2pc"
 		}
-		if has("smcp", "c2sc") {
+		if has(tagSmcp, "c2sc") {
 			return smallCapitals
 		}
 	case style.Unicase:
-		if has("unic") {
-			return "unic"
+		if has(tagUnic) {
+			return tagUnic
 		}
-		if has("smcp", "c2sc") {
+		if has(tagSmcp, "c2sc") {
 			return smallCapitals
 		}
 	case style.TitlingCaps:
@@ -189,11 +195,11 @@ func (s *Set) Caps(f style.Font, text string) style.Font {
 	switch {
 	case feats == "":
 		return f
-	case f.Caps == style.Unicase && feats != "unic" && f.Synthesis&style.NoSyntheticSmallCaps != 0:
+	case f.Caps == style.Unicase && feats != tagUnic && f.Synthesis&style.NoSyntheticSmallCaps != 0:
 		// Nothing made up: the lowercase takes the face's small capitals,
 		// as Chrome draws it.
-		feats = "smcp"
-	case f.Caps == style.Unicase && feats != "unic":
+		feats = tagSmcp
+	case f.Caps == style.Unicase && feats != tagUnic:
 		// What is not lowercase takes them, the rest as it is (SmallCaps).
 		f.Caps = style.UnicaseFeatures
 		return f

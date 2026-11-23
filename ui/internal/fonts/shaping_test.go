@@ -26,7 +26,7 @@ func TestAVariableFaceIsShapedAtItsInstance(t *testing.T) {
 	// office is o, ffi, c, e shaped: four glyphs, each grown on either side.
 	grown := float32(2 * varfonttest.Bolder * 20.0 / 2048)
 	assert.InDelta(t, s.Advance(plain, "office")+4*grown, s.Advance(bold, "office"), 1e-3)
-	assert.InDelta(t, s.Advance(unshaped, "office")-units(569+569+505-1383, 20)-2*grown, s.Advance(bold, "office"),
+	assert.InDelta(t, s.Advance(unshaped, "office")-units(569+569+505-1383)-2*grown, s.Advance(bold, "office"),
 		1e-3, "the ligature, at the instance")
 }
 
@@ -41,8 +41,8 @@ func featured(t *testing.T) (*Set, []byte) {
 	return s, ttf
 }
 
-// units is n units of the 2048 of Go's em at size.
-func units(n, size float32) float32 { return n * size / 2048 }
+// units is n units of the 2048 of Go's em at 20 points.
+func units(n float32) float32 { return n * 20 / 2048 }
 
 func TestTextIsMeasuredShaped(t *testing.T) {
 	s, _ := featured(t)
@@ -50,11 +50,11 @@ func TestTextIsMeasuredShaped(t *testing.T) {
 	plain := f
 	plain.Features = "-liga,-kern"
 	// f_f_i is 1383 units where f, f and i are 569, 569 and 505.
-	assert.InDelta(t, s.Advance(plain, "office")-units(569+569+505-1383, 20), s.Advance(f, "office"), 1e-3)
-	assert.InDelta(t, s.Advance(plain, "AV")-units(160, 20), s.Advance(f, "AV"), 1e-3, "class kerning")
+	assert.InDelta(t, s.Advance(plain, "office")-units(569+569+505-1383), s.Advance(f, "office"), 1e-3)
+	assert.InDelta(t, s.Advance(plain, "AV")-units(160), s.Advance(f, "AV"), 1e-3, "class kerning")
 	tab := f
 	tab.Features = "tnum"
-	assert.InDelta(t, units(4*1339, 20), s.Advance(tab, "0123"), 1e-3)
+	assert.InDelta(t, units(4*1339), s.Advance(tab, "0123"), 1e-3)
 	goFont := style.Font{Family: []string{"Go"}, Size: 20, Weight: 400}
 	goPlain := goFont
 	goPlain.Features = "smcp,tnum"
