@@ -226,17 +226,15 @@ func collapsedBlanks(text string, ws style.WhiteSpace) string {
 		return text
 	}
 	text = blanks.Replace(text)
-	if ws != style.PreLine {
+	if !ws.KeepsBreaks() {
 		text = strings.ReplaceAll(text, "\n", " ")
 	}
 	return text
 }
 
-func collapses(ws style.WhiteSpace) bool {
-	return ws == style.Normal || ws == style.NoWrapSpace || ws == style.PreLine
-}
+func collapses(ws style.WhiteSpace) bool { return ws.Collapse() != style.Preserve }
 
-func wraps(ws style.WhiteSpace) bool { return ws != style.NoWrapSpace && ws != style.Pre }
+func wraps(ws style.WhiteSpace) bool { return ws.Wraps() }
 
 func isAtomicDisplay(d style.Display) bool {
 	return d == style.InlineBlock || d == style.InlineFlex || d == style.InlineGrid

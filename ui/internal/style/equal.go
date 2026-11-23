@@ -183,7 +183,15 @@ func (t *Text) equal(o *Text) bool {
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
 		t.TabSize == o.TabSize &&
-		t.InkThrough == o.InkThrough
+		t.InkThrough == o.InkThrough &&
+		t.WrapStyle == o.WrapStyle &&
+		t.Hyphens == o.Hyphens &&
+		t.HyphenChar == o.HyphenChar &&
+		t.TextBoxTrim == o.TextBoxTrim &&
+		t.TextBoxEdge == o.TextBoxEdge &&
+		t.SpacingTrim == o.SpacingTrim &&
+		t.Autospace == o.Autospace &&
+		t.KeywordSizes == o.KeywordSizes
 }
 
 func (d *Decoration) equal(o *Decoration) bool {

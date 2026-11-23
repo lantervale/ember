@@ -88,6 +88,12 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandAnyOrder(long, v, out)
 	case "columns":
 		err = expandColumns(v, out)
+	case "white-space":
+		err = expandWhiteSpace(v, out)
+	case "text-wrap":
+		err = expandAnyOrder(long, v, out)
+	case "text-box":
+		err = expandTextBox(v, out)
 	case kwContainer:
 		err = expandContainer(v, out)
 	case shortBackground:

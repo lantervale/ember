@@ -2251,9 +2251,6 @@ var props = func() map[string]prop {
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "collapse") }, flips[bool]()),
 		"table-layout": keyword(func(c *style.Computed) *style.TableLayout { return &c.TableLayout },
 			map[string]style.TableLayout{"auto": style.TableAuto, "fixed": style.TableFixed}),
-		"white-space": keyword(func(c *style.Computed) *style.WhiteSpace { return &c.WhiteSpace },
-			map[string]style.WhiteSpace{"normal": style.Normal, "nowrap": style.NoWrapSpace, "pre": style.Pre,
-				"pre-wrap": style.PreWrap, "pre-line": style.PreLine}),
 		"border-spacing": {
 			set: func(x *ctx, v []Component) {
 				v = items(v)
@@ -2524,6 +2521,7 @@ var props = func() map[string]prop {
 	maps.Copy(m, contentProps())
 	maps.Copy(m, anchorProps())
 	maps.Copy(m, snapProps())
+	maps.Copy(m, textWrapProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{
 			set:     func(x *ctx, v []Component) { x.trans[i] = v },
