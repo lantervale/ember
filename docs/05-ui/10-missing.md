@@ -154,16 +154,12 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| `env(titlebar-area-x)` and the other window-controls-overlay values | not read: a header pads itself in Go from `win.TitleBarArea()` |
-| `app-region` as Chrome computes it | inherited here, where Chrome's is not: a child of a drag box computes `drag`, not `none`; the regions are the same |
 | a header merged with the title bar on Windows and Linux | `platform.OwnTitleBar()` keeps the system's title bar there, and `app-region: drag` does nothing |
-| leaving a text field from code | no `doc.Blur()`: the web explorer's address field keeps the focus after Enter |
-| a key pressed in a focused text field, told to a callback | `OnKey` hears none, where a page's `keydown` hears every key and may prevent what it does: light's console walks its history by Alt+Up and Alt+Down (menu shortcuts), not the arrows alone, and has no Shift+Enter for a new line |
-| setting a focused text field's value while it is typed in | `doc.SetValue` waits for a change or a submit: light's console moves the focus away and back to show a line of its history |
-| a context click by Control and the main button on macOS | only the secondary button raises `OnContextMenu` |
-| the place of a context click | the event carries none: read `win.Input().Mouse()` in the callback |
-| a press on an element and the pointer's moves while it is held (`pointerdown`, `pointermove`, pointer capture) | no callback hears them: light's developer tools read `win.Input().Mouse()` and `Down` each frame to drag their edge, and find what was pressed with `doc.ElementAt` |
-| the tooltip of a `title` attribute | not shown: light's Network rows name their address in its status bubble instead |
+| `env(titlebar-area-*)` in an `iframe`, and the overlay's `geometrychange` | undefined in a framed Document; a change restyles, with no event |
+| `env(viewport-segment-*)` and its indices, `env(preferred-text-scale)`, `safe-area-max-inset-*` | not defined: a fallback is taken, none with indices |
+| the pointer's events for a pen or a finger, `pointerId`, `pointercancel`, `pointerover`/`out`, and `preventDefault` on a press | the mouse's buttons only, and a press always goes on to focus, click and select |
+| a key's repeats told apart, and `keyup` | `OnKey` hears repeats as presses in a text field, and no release |
+| the title tooltip's own delay and look per system | Chrome's on Windows and Linux everywhere (half a second, 10 and 15 points from the pointer); macOS's native tip shows later |
 | a `role="menu"` shown without an opener closing on a choice | stays open: its item's callback removes `open` |
 
 ## Frames
@@ -221,7 +217,8 @@ Things built and tested, with a part no test against Chrome covers yet.
 - `background-size: cover` and `contain` under a Document `Zoom`.
 - Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press, a double click and Shift with a key reach are tested in ember alone; the copied text, the rectangles and the picture are compared with Chrome's.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
-- `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone.
+- `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone; the computed values are compared with Chrome's.
+- Pointer and key callbacks, `doc.Blur()`, the title tooltip and `env(titlebar-area-*)` with a title bar: headless Chrome is not driven by input and has no window controls overlay, so they are tested in ember alone; `env()` without an overlay is compared with Chrome.
 - `:user-valid` and `:user-invalid`: no player changes a field in headless Chrome, so they are tested in ember alone; Chrome is asked only that nothing matches them before.
 - The picture `sizes="auto"` chooses: Chrome chooses it once the page is laid out, and takes a denser one already in its cache, so what it shows changes from run to run; the box is compared with Chrome's, the choice is tested in ember alone.
 - Choosing a picture again as the viewport or the pixels a point change, the one shown kept until the one chosen lands: headless Chrome is neither resized nor moved to another screen, so it is tested in ember alone.

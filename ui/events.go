@@ -48,8 +48,37 @@ type KeyPressed struct {
 type BackPressed struct{ Node *Node }
 
 // ContextClicked is the right button pressed and released on Node, the
-// innermost element under the pointer (decision 0062).
-type ContextClicked struct{ Node *Node }
+// innermost element under the pointer (decision 0062), or on macOS the
+// left one with Control held; At is where the pointer was, in the
+// Document's points (decision 0142).
+type ContextClicked struct {
+	Node *Node
+	At   geom.Vec2
+}
+
+// PointerPressed is Button pressed over Node, the innermost element under
+// the pointer, at At in the Document's points (decision 0142).
+type PointerPressed struct {
+	Node   *Node
+	At     geom.Vec2
+	Button input.MouseButton
+}
+
+// PointerMoved is the pointer moved to At over Node, the innermost
+// element under it, or the element holding the pointer
+// (Document.SetPointerCapture) wherever it is.
+type PointerMoved struct {
+	Node *Node
+	At   geom.Vec2
+}
+
+// PointerReleased is Button released over Node, or by the element holding
+// the pointer wherever it is, which then lets go of it.
+type PointerReleased struct {
+	Node   *Node
+	At     geom.Vec2
+	Button input.MouseButton
+}
 
 // Dropped is Dragged, a draggable element, let go over Target, the drop
 // target under the pointer (decision 0062).

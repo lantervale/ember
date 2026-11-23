@@ -83,6 +83,19 @@ const (
 	SelectAll
 )
 
+// AppRegion is app-region: what a press there does to the system's window.
+type AppRegion uint8
+
+const (
+	// AppRegionNone is none set on the box or above it: the page's own.
+	AppRegionNone AppRegion = iota
+	// AppRegionDrag moves the window.
+	AppRegionDrag
+	// AppRegionNoDrag takes the box out of a drag region, as Chrome computes
+	// none once set too.
+	AppRegionNoDrag
+)
+
 type BoxSizing uint8
 
 const (
@@ -828,9 +841,9 @@ type Look struct {
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool
-	// AppDrag is app-region: drag, its own or the one of the box it is
-	// in: a press there moves the system's window.
-	AppDrag bool
+	// AppRegion is app-region, inherited: drag, its own or the one of the
+	// box it is in, has a press there move the system's window.
+	AppRegion AppRegion
 	// Cursor is the cursor keyword, "" for auto.
 	Cursor string
 	// UserSelect is user-select as used: auto is its parent's, text on the

@@ -138,6 +138,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0133 | [A masked element is a picture cut by the picture of its mask](0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md) | rendering |
 | 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
 | 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
+| 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 
 ## Writing one
 

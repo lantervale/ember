@@ -2,6 +2,8 @@ package css
 
 import (
 	"math"
+	"strconv"
+	"strings"
 	"unique"
 
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -33,6 +35,62 @@ type measures struct {
 	// restyles (Transitions.Requery).
 	containers, read, requery map[*dom.Node]bool
 	sizes                     map[*dom.Node][2]float32
+	// titleBar is the env(titlebar-area-*) values, and titleBarRead
+	// whether one was read since the tree was last styled whole.
+	titleBar     TitleBarArea
+	titleBarRead bool
+}
+
+// TitleBarArea is the part of a window's title bar a Document drawn under
+// it has for its own, beside the system's buttons, in its points: Chrome's
+// window controls overlay, read by env(titlebar-area-x), -y, -width and
+// -height. Its zero value is none, where the system keeps its title bar
+// above the page and those are undefined, as in Chrome without the
+// overlay.
+type TitleBarArea struct {
+	X, Y, Width, Height float32
+}
+
+// zeroEnv are the environment variables Chrome defines as 0px on a
+// desktop: no notch and no virtual keyboard.
+//
+//nolint:gochecknoglobals // a read-only table
+var zeroEnv = map[string]bool{
+	"safe-area-inset-top": true, "safe-area-inset-right": true, "safe-area-inset-bottom": true,
+	"safe-area-inset-left": true, "keyboard-inset-top": true, "keyboard-inset-right": true,
+	"keyboard-inset-bottom": true, "keyboard-inset-left": true, "keyboard-inset-width": true,
+	"keyboard-inset-height": true,
+}
+
+// variable is the value of env(name), false when it is undefined: names
+// are case-sensitive, as custom properties.
+func (m *measures) variable(name string) ([]Component, bool) {
+	if zeroEnv[name] {
+		return parsedVar("0px"), true
+	}
+	at, ok := strings.CutPrefix(name, "titlebar-area-")
+	if !ok || m == nil {
+		return nil, false
+	}
+	m.titleBarRead = true
+	a := m.titleBar
+	if a.Height <= 0 {
+		return nil, false
+	}
+	var v float32
+	switch at {
+	case "x":
+		v = a.X
+	case "y":
+		v = a.Y
+	case propWidth:
+		v = a.Width
+	case propHeight:
+		v = a.Height
+	default:
+		return nil, false
+	}
+	return parsedVar(strconv.FormatFloat(float64(v), 'f', -1, 32) + "px"), true
 }
 
 // fontUnits are f's, or what CSS has for a font that says nothing: half

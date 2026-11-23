@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui/css"
@@ -105,4 +106,22 @@ func (d *Document) notePointer(in *input.State) {
 	if in.LastDevice() == input.MouseDevice {
 		d.touch = false
 	}
+}
+
+// titleBarArea is what env(titlebar-area-*) reads in a viewport of size
+// points: the part of its window's title bar the system leaves the
+// Document, between its buttons, in the Document's points; none for a
+// Document in an iframe, or in a window whose system keeps its title bar
+// above the content (decision 0142).
+func (d *Document) titleBarArea(size geom.Vec2) css.TitleBarArea {
+	win := d.owner.win
+	if d.framed != nil || win == nil {
+		return css.TitleBarArea{}
+	}
+	a := win.TitleBarArea()
+	if a.Height <= 0 {
+		return css.TitleBarArea{}
+	}
+	z := d.Zoom()
+	return css.TitleBarArea{X: a.Left / z, Width: max(size.X-(a.Left+a.Right)/z, 0), Height: a.Height / z}
 }

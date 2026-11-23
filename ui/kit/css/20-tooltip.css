@@ -17,3 +17,8 @@
 .kit-tooltip[data-side="right"] { left: 100%; right: auto; margin-left: 8px; margin-right: 0; }
 .kit-tooltip[data-side="above"] { top: auto; bottom: 100%; margin-top: 0; margin-bottom: 8px; }
 .kit-tooltip[data-clamp] { left: var(--tip-x); top: var(--tip-y); right: auto; bottom: auto; margin: 0; }
+/* The tooltip ui shows for a title attribute, in a tip's look. */
+.ember-title-tip {
+  background-color: var(--panel-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px;
+  color: var(--light-text); font-family: inherit; font-size: var(--font-size); box-shadow: none;
+}

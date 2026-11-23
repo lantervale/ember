@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 func TestAppRegionDragHoldsWhatIsInItUntilNoDragTakesItBack(t *testing.T) {
@@ -14,11 +15,14 @@ func TestAppRegionDragHoldsWhatIsInItUntilNoDragTakesItBack(t *testing.T) {
 	plain := el(dom.Div, "plain")
 	root := page(bar, plain)
 	Compute(root, []*Sheet{sheet(t, `#bar { app-region: drag } #back { app-region: no-drag }`)})
-	if !styleOf(bar).AppDrag || !styleOf(inner).AppDrag {
+	if styleOf(bar).AppRegion != style.AppRegionDrag || styleOf(inner).AppRegion != style.AppRegionDrag {
 		t.Error("drag, and what is in it with it")
 	}
-	if styleOf(back).AppDrag || styleOf(deep).AppDrag || styleOf(plain).AppDrag {
-		t.Error("no-drag takes its box out, and none is the initial value")
+	if styleOf(back).AppRegion != style.AppRegionNoDrag || styleOf(deep).AppRegion != style.AppRegionNoDrag {
+		t.Error("no-drag takes its box out, and what is in it")
+	}
+	if styleOf(plain).AppRegion != style.AppRegionNone {
+		t.Error("none is the initial value")
 	}
 }
 
