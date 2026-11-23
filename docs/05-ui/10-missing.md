@@ -43,10 +43,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a variable font's GPOS values at an instance (their device and variation deltas) and its GSUB feature variations (`rvrn` by axis) | the default instance's kerning and substitutions, the glyphs' advances the instance's |
 | ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole (joined forms do join across the edge, the text round a run shaping it); a pre-base matra after a letter of another element takes `init` as at a word's start; a space's pair kerning with the words beside it is Chrome's |
 | selecting text of vertical lines: a drag, a double click, a caret placed by the pointer, the selection drawn | the characters found and the selection drawn as if the lines ran across, the selection not drawn on them |
-| a face's vertical metrics (`vhea`, `vmtx`, `VORG`) and its vertical alternates (`vert`, `vrt2`): the CJK brackets and punctuation turned or moved for vertical lines | a standing character takes its font's ascent and descent, drawn as in a horizontal line; the faces ui ships have none |
-| UTR #50's orientation of each character under `text-orientation: mixed` | the CJK scripts, fullwidth forms and CJK symbols stand, all else turns: the symbols and the pictographs UTR #50 stands (emoji, ©, §) are turned |
-| inline elements of several font sizes on a vertical line | aligned on their alphabetic baseline, where Chrome aligns vertical text on its central baseline |
-| the vertical alignment of an inline-block in a `vertical-lr` line taller than it | placed as in `vertical-rl`, from the line's right, where Chrome places it from its left |
+| a character standing in a vertical line that a fallback face draws (an emoji of the system's colour font, a symbol of Go Mono) | it takes the first face's ascent and descent, or its vertical advance, where Chrome takes the fallback face's |
 
 ## Generated content
 
