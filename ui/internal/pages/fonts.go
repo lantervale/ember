@@ -80,6 +80,31 @@ func checksum(b []byte) uint32 {
 	return sum
 }
 
+// Tall is ttf, a TrueType font, of ascent and descent, in its units, in hhea's and OS/2's
+// typographic and Windows metrics alike.
+func Tall(ttf []byte, ascent, descent int16) []byte {
+	be := binary.BigEndian
+	tables := map[string][]byte{}
+	for i := range int(be.Uint16(ttf[4:])) {
+		rec := ttf[12+16*i:]
+		if tag := string(rec[:4]); tag == "hhea" || tag == "OS/2" {
+			off, size := be.Uint32(rec[8:]), be.Uint32(rec[12:])
+			tables[tag] = slices.Clone(ttf[off : off+size])
+		}
+	}
+	hhea, os2 := tables["hhea"], tables["OS/2"]
+	if len(hhea) < 8 || len(os2) < 78 {
+		return ttf
+	}
+	be.PutUint16(hhea[4:], uint16(ascent))   //nolint:gosec // a metric in font units
+	be.PutUint16(hhea[6:], uint16(-descent)) //nolint:gosec // a metric in font units
+	be.PutUint16(os2[68:], uint16(ascent))   //nolint:gosec // a metric in font units
+	be.PutUint16(os2[70:], uint16(-descent)) //nolint:gosec // a metric in font units
+	be.PutUint16(os2[74:], uint16(ascent))   //nolint:gosec // a metric in font units
+	be.PutUint16(os2[76:], uint16(descent))  //nolint:gosec // a metric in font units
+	return WithTables(ttf, tables)
+}
+
 // VerticalAdvance is glyph g's advance down a vertical line in a VerticalFont, in its
 // units: 1,500 to 2,199, unlike a Go face's ascent and descent, 2,288 of its 2,048 an em.
 func VerticalAdvance(g uint16) uint16 { return 1500 + g*37%700 }

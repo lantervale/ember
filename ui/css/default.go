@@ -218,6 +218,15 @@ select:-ember-listbox option:checked:disabled, select:-ember-listbox:disabled op
 select:-ember-listbox:focus option:checked:disabled {
   background-color: light-dark(#dcdcdc, rgba(59, 59, 59, 0.3)); color: light-dark(black, #3b3b3b);
 }
+@media (forced-colors: active) {
+  select:-ember-listbox option:checked, select:-ember-listbox:focus option:checked {
+    background-color: Highlight; color: HighlightText;
+  }
+  select:-ember-listbox option:checked:disabled, select:-ember-listbox:disabled option:checked,
+  select:-ember-listbox:focus option:checked:disabled {
+    background-color: GrayText; color: Canvas;
+  }
+}
 input[type="checkbox"], input[type="radio"] { padding: 0; }
 input[type="checkbox"]:-ember-native { width: 13px; height: 13px; border-radius: 2px; }
 input[type="checkbox"]:checked:-ember-native {
