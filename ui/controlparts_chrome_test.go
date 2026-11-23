@@ -80,3 +80,20 @@ progress, meter { width: 80px; height: 14px; } input[type="range"] { width: 120p
 	r := chrome.Match(t, d, geom.V2(400, 600))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
+
+// A vertical range lays its ::before, its slider container and its
+// ::after down it, up it in sideways-lr and slider-vertical, as Chrome's.
+func TestGeneratedContentDownVerticalRangesAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`body { margin: 8px; font: 16px "Go"; display: flex; gap: 10px; align-items: flex-start; }
+input::before { content: "ab"; background: #f00; } input::after { content: "C"; background: #00f; }
+.b::before { display: block; width: 10px; height: 6px; }
+.a::after { display: block; inline-size: 7px; block-size: 4px; }
+.rl { writing-mode: vertical-rl; } .lr { writing-mode: vertical-lr; } .sl { writing-mode: sideways-lr; }
+.sv { appearance: slider-vertical; width: 20px; height: 100px; } .none { appearance: none; }`))
+	for _, c := range [][]string{{"rl"}, {"lr"}, {"sl"}, {"sv"}, {"rl", "b", "a"}, {"lr", "b"}, {"sl", "a"},
+		{"sv", "b", "a"}, {"rl", "none", "b"}} {
+		d.Body().Append(ui.Input(ui.Type("range"), ui.Class(c...)))
+	}
+	r := chrome.Match(t, d, geom.V2(600, 400))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
