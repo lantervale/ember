@@ -91,10 +91,60 @@ func TestARangesColoursFollowTheConvention(t *testing.T) {
 	require.Len(t, rounds, 2)
 	assert.Equal(t, blue, rounds[0].Color, "background-color: the track")
 	assert.Equal(t, red, rounds[1].Color, "accent-color: the fill")
-	assert.Equal(t, white, r.of("circle")[0].Color, "color: the idle thumb")
+	assert.Equal(t, red, r.of("circle")[0].Color, "accent-color: the thumb")
 
-	b.Node.SetState(dom.Hover, true)
-	assert.Equal(t, red, paintOne(b).of("circle")[0].Color, "accent-color: the hovered thumb")
+	b.Style.AccentAuto = true
+	assert.Equal(t, white, paintOne(b).of("circle")[0].Color, "color: the thumb without an accent")
+}
+
+// A hovered range darkens its fill, and its thumb while the pointer is on
+// it, as Chrome shades its accent; a press lightens them, the thumb only
+// where the press began on it.
+func TestARangesAccentIsShadedAsChromes(t *testing.T) {
+	accent := color.Hex("#ee0044")
+	hovered := style.AccentShade(accent, style.ShadeHovered, false)
+	pressed := style.AccentShade(accent, style.ShadePressed, false)
+	b := ctl(dom.Input, 100, 20, "type", "range", "value", "50")
+	b.Style.AccentColor, b.Style.AccentAuto = accent, false
+	for _, c := range []struct {
+		name        string
+		state       dom.State
+		fill, thumb color.Color
+	}{
+		{"at rest", 0, accent, accent},
+		{"over the track", dom.Hover | dom.ContainerHover | dom.TrackHover, hovered, accent},
+		{"over the thumb", dom.Hover | dom.PartHover, hovered, hovered},
+		{"a press on the track", dom.Hover | dom.Active | dom.PartHover | dom.ContainerActive | dom.TrackActive,
+			pressed, hovered},
+		{"a press on the thumb", dom.Hover | dom.Active | dom.PartHover | dom.PartActive, pressed, pressed},
+	} {
+		b.Node.SetState(^dom.State(0), false)
+		b.Node.SetState(c.state, true)
+		r := paintOne(b)
+		assert.Equal(t, c.fill, r.of("round")[1].Color, "%s: the fill", c.name)
+		assert.Equal(t, c.thumb, r.of("circle")[0].Color, "%s: the thumb", c.name)
+	}
+}
+
+// A vertical range runs down its box, up it in rtl, and a range of
+// appearance slider-vertical up it.
+func TestAVerticalRangeRunsDownItsBox(t *testing.T) {
+	b := ctl(dom.Input, 20, 100, "type", "range", "value", "25")
+	b.Style.Mode = style.VerticalLR
+	r := paintOne(b)
+	rounds := r.of("round")
+	require.Len(t, rounds, 2)
+	assert.Equal(t, geom.Rect{X: 17, Y: 10, W: 6, H: 100}, rounds[0].Rect, "the track down the middle")
+	assert.Equal(t, geom.Rect{X: 17, Y: 10, W: 6, H: 25}, rounds[1].Rect, "filled from the top")
+	assert.Equal(t, geom.V2(20, 35), r.of("circle")[0].At)
+
+	b.Style.Dir = style.RTL
+	r = paintOne(b)
+	assert.Equal(t, geom.Rect{X: 17, Y: 85, W: 6, H: 25}, r.of("round")[1].Rect, "rtl: filled from the bottom")
+	assert.Equal(t, geom.V2(20, 85), r.of("circle")[0].At)
+
+	b.Style.Dir, b.Style.Mode, b.Style.Appearance = style.LTR, style.HorizontalTB, style.AppearanceSliderVertical
+	assert.Equal(t, geom.V2(20, 85), paintOne(b).of("circle")[0].At, "slider-vertical: from the bottom")
 }
 
 func TestAProgressBarsTrackIsItsBackgroundAndItsFillTheAccent(t *testing.T) {

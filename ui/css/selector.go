@@ -1449,7 +1449,7 @@ func (c Compound) keys(add func(string)) {
 func (p *pseudo) attrs() []string {
 	switch p.kind {
 	case pseudoLang:
-		return []string{"[lang"}
+		return []string{langChanged}
 	case pseudoReadOnly, pseudoReadWrite:
 		return []string{"[readonly", "[disabled", "[type", "[contenteditable"}
 	case pseudoIndeterminate:

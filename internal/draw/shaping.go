@@ -95,13 +95,9 @@ type round struct{ before, after, lead, trail string }
 // its letters join with those beside it; lead and trail are shaped as
 // one with s, and only the glyphs whose clusters start in s given.
 func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
-	if ctx.lead != "" || ctx.trail != "" {
-		f.amid(s, features, rtl, ctx, fn)
-		return
-	}
-	before, after := ctx.before, ctx.after
 	if rtl {
 		line := f.line[:0]
+		ctx.lead, ctx.trail = mirrored(ctx.lead), mirrored(ctx.trail)
 		f.items(mirrored(s), features, false, ctx, func(it item) {
 			if !it.newline {
 				line = append(line, it)
@@ -119,6 +115,11 @@ func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 		f.line = line[:0]
 		return
 	}
+	if ctx.lead != "" || ctx.trail != "" {
+		f.amid(s, features, ctx, fn)
+		return
+	}
+	before, after := ctx.before, ctx.after
 	run := f.pending[:0]
 	face := -1
 	var clusters int32
@@ -177,12 +178,8 @@ func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 }
 
 // amid is items for s shaped as one with ctx's lead and trail: the items
-// whose clusters start in s. Text right to left reads them as context.
-func (f *Font) amid(s, features string, rtl bool, ctx round, fn func(item)) {
-	if rtl {
-		f.items(s, features, rtl, round{before: ctx.before + ctx.lead, after: ctx.trail + ctx.after}, fn)
-		return
-	}
+// whose clusters start in s.
+func (f *Font) amid(s, features string, ctx round, fn func(item)) {
 	from, to := len(ctx.lead), len(ctx.lead)+len(s)
 	f.items(ctx.lead+s+ctx.trail, features, false, round{before: ctx.before, after: ctx.after}, func(it item) {
 		if it.at >= from && it.at < to {

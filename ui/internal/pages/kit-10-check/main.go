@@ -47,7 +47,9 @@ func main() {
 			// States this page pins on the check itself.
 			case dom.Focus, dom.FocusVisible, dom.Active, dom.Disabled, dom.Checked, dom.Open, dom.Modal, dom.FocusWithin,
 				dom.Target, dom.Empty, dom.Indeterminate, dom.PlaceholderShown, dom.Default, dom.Valid, dom.Invalid,
-				dom.UserValid, dom.UserInvalid, dom.InRange, dom.OutOfRange, dom.PopoverOpen:
+				dom.UserValid, dom.UserInvalid, dom.InRange, dom.OutOfRange, dom.PopoverOpen, dom.ContainerHover,
+				dom.TrackHover, dom.ThumbHover, dom.ContainerActive, dom.TrackActive, dom.ThumbActive, dom.PartHover,
+				dom.PartActive:
 			}
 		}
 	}

@@ -35,6 +35,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/scrollbar-gutter", 560, 210, 0.0015},
 		{"./internal/pages/control-parts", 440, 280, 0.001},
 		{"./internal/pages/control-generated", 420, 280, 0.003},
+		{"./internal/pages/control-states", 440, 240, 0.001},
 		{"./internal/pages/viewport-top", 320, 260, 0.0055},
 		{"./internal/pages/viewport-end", 320, 260, 0.006},
 		{"./internal/pages/top-layer", 320, 240, 0.002},
@@ -131,10 +132,14 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/syllables", 420, 400, 0.0058},
 		{"./internal/pages/scripts", 420, 400, 0.0045},
 		{"./internal/pages/han-spacing", 560, 300, 0.0055},
+		{"./internal/pages/line-break", 480, 420, 0.0075},
+		{"./internal/pages/ascii-breaks", 520, 440, 0.01},
 		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
+		{"./internal/pages/shaped-whole-rtl", 460, 480, 0.0078},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
 		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
+		{"./internal/pages/vertical-selection", 420, 240, 0.011},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)

@@ -462,7 +462,7 @@ func accentLook(d *ui.Document, n *dom.Node) string {
 	if st == nil || st.AccentAuto || !st.Appearance.Native() || n.Tag() != dom.Input || !d.Checked(n) {
 		return ""
 	}
-	a := st.AccentColor.Hex()
+	a := style.AccentShade(st.AccentColor, n.State().Shade(dom.Hover, dom.Active), style.LightCheck(st.AccentColor)).Hex()
 	switch strings.ToLower(typ) {
 	case checkboxType:
 		return "background-color: " + a + " !important; border-color: " + a + " !important"
@@ -488,12 +488,10 @@ const bareBars = `:where(input[type="range"]:not([data-ember-bare])) { appearanc
 
 // barLook is the declarations that draw a range or a progress bar in
 // Chrome as ember's convention has paint draw them: its background-color
-// the track, its accent-color the fill to the value, and a range's thumb,
-// 14 across on the value, in its color, the accent while hovered. A
-// range's is an SVG border image outset each side by the thumb's
-// overhang, in place of any border; a progress bar's an SVG background
-// in its content box, inside its border. Its size is the laid-out Rect,
-// so a document exported before any layout shows Chrome's bare bars.
+// the track, its accent-color the fill to the value, and a range's thumb
+// (rangeLook). A progress bar's is an SVG background in its content box,
+// inside its border. Its size is the laid-out Rect, so a document
+// exported before any layout shows Chrome's bare bars.
 func barLook(d *ui.Document, n *dom.Node) string {
 	st := dom.Data(n).Style
 	if st == nil || bare(n) {
@@ -513,9 +511,6 @@ func barLook(d *ui.Document, n *dom.Node) string {
 	if w <= 0 || h <= 0 {
 		return ""
 	}
-	fill := func(c color.Color) string {
-		return fmt.Sprintf(`fill="%s" fill-opacity="%g"`, c.Hex(), c.A)
-	}
 	track := st.Background
 	if track.A <= 0 {
 		track = st.Color
@@ -525,40 +520,89 @@ func barLook(d *ui.Document, n *dom.Node) string {
 	if st.AccentAuto {
 		accent = st.Color
 	}
-	var svg strings.Builder
-	var out float32
 	if isRange {
-		f := rangeFraction(d, n)
-		th, thumb := min(6, h), min(14, h)
-		out = thumb / 2
-		ink := st.Color
-		if n.State().Has(dom.Hover) {
-			ink = accent
-		}
-		fmt.Fprintf(&svg, `<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g">`, w+2*out, h)
-		fmt.Fprintf(&svg, `<rect x="%g" y="%g" width="%g" height="%g" rx="%g" %s/>`, out, (h-th)/2, w, th, th/2, fill(track))
-		if f > 0 {
-			fmt.Fprintf(&svg, `<rect x="%g" y="%g" width="%g" height="%g" rx="%g" %s/>`,
-				out, (h-th)/2, w*f, th, th/2, fill(accent))
-		}
-		fmt.Fprintf(&svg, `<circle cx="%g" cy="%g" r="%g" %s/>`, out+w*f, h/2, out, fill(ink))
-	} else {
-		fmt.Fprintf(&svg, `<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g">`, w, h)
-		fmt.Fprintf(&svg, `<rect x="0" y="0" width="%g" height="%g" %s/>`, w, h, fill(track))
-		if f, ok := progressFraction(n); ok && f > 0 {
-			fmt.Fprintf(&svg, `<rect x="0" y="0" width="%g" height="%g" %s/>`, w*f, h, fill(accent))
-		}
+		return rangeLook(n, st, rangeFraction(d, n), w, h, track, accent)
+	}
+	var svg strings.Builder
+	fmt.Fprintf(&svg, `<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g">`, w, h)
+	fmt.Fprintf(&svg, `<rect x="0" y="0" width="%g" height="%g" %s/>`, w, h, svgFill(track))
+	if f, ok := progressFraction(n); ok && f > 0 {
+		fmt.Fprintf(&svg, `<rect x="0" y="0" width="%g" height="%g" %s/>`, w*f, h, svgFill(accent))
 	}
 	svg.WriteString("</svg>")
-	url := "url(data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg.String())) + ")"
-	if !isRange {
-		return "background: " + url + " no-repeat content-box"
+	return "background: " + svgURL(svg.String()) + " no-repeat content-box"
+}
+
+// rangeLook draws the range n, of style st and a content box w×h, at
+// value f as paint does: the track, filled from its start, and the thumb,
+// 14 across on the value, in its accent, both in the accent's shade for
+// n's states; down the box where it runs vertically, from the end where
+// reversed. It is an SVG border image outset by the thumb's overhang at
+// either end, in place of any border.
+func rangeLook(n *dom.Node, st *style.Computed, f, w, h float32, track, accent color.Color) string {
+	vertical, reversed := rangeRuns(st)
+	along, across := w, h
+	if vertical {
+		along, across = h, w
+	}
+	th, out := min(6, across), min(14, across)/2
+	at, from := f, float32(0)
+	if reversed {
+		at, from = 1-f, along*(1-f)
+	}
+	// x and y along and across the track, turned for a vertical range
+	xy := func(x, y, w, h float32) (float32, float32, float32, float32) {
+		if vertical {
+			return y, x, h, w
+		}
+		return x, y, w, h
+	}
+	var svg strings.Builder
+	sw, sh, _, _ := xy(along+2*out, across, 0, 0)
+	fmt.Fprintf(&svg, `<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g">`, sw, sh)
+	rect := func(x, y, w, h float32, c color.Color) {
+		x, y, w, h = xy(x, y, w, h)
+		fmt.Fprintf(&svg, `<rect x="%g" y="%g" width="%g" height="%g" rx="%g" %s/>`, x, y, w, h, th/2, svgFill(c))
+	}
+	rect(out, (across-th)/2, along, th, track)
+	light, s := style.LightRange(accent), n.State()
+	if f > 0 {
+		rect(out+from, (across-th)/2, along*f, th, style.AccentShade(accent, s.Shade(dom.Hover, dom.Active), light))
+	}
+	cx, cy, _, _ := xy(out+along*at, across/2, 0, 0)
+	fmt.Fprintf(&svg, `<circle cx="%g" cy="%g" r="%g" %s/>`, cx, cy, out,
+		svgFill(style.AccentShade(accent, s.Shade(dom.ThumbHover, dom.ThumbActive), light)))
+	svg.WriteString("</svg>")
+	outset := fmt.Sprintf("0 %gpx", out)
+	if vertical {
+		outset = fmt.Sprintf("%gpx 0", out)
 	}
 	// A range keeps its background-color, as the cascade computed it,
 	// but clipped to its text, of which it has none, so only the
 	// border-image draws.
 	return fmt.Sprintf("-webkit-background-clip: text; background-clip: text; border-image-source: %s; "+
-		"border-image-slice: 0 fill; border-image-width: 0; border-image-outset: 0 %gpx", url, out)
+		"border-image-slice: 0 fill; border-image-width: 0; border-image-outset: %s", svgURL(svg.String()), outset)
+}
+
+// svgFill is the fill attributes of c.
+func svgFill(c color.Color) string { return fmt.Sprintf(`fill="%s" fill-opacity="%g"`, c.Hex(), c.A) }
+
+// svgURL is the data URL of the SVG picture svg.
+func svgURL(svg string) string {
+	return "url(data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg)) + ")"
+}
+
+// rangeRuns is the way a range of its own look and style st runs, as
+// paint draws it: down its box where it is vertical, from the end where
+// reversed.
+func rangeRuns(st *style.Computed) (bool, bool) {
+	switch {
+	case st.Mode.Vertical():
+		return true, (st.Dir == style.RTL) != st.Mode.Upward()
+	case st.Appearance == style.AppearanceSliderVertical:
+		return true, true
+	}
+	return false, st.Dir == style.RTL
 }
 
 // rangeFraction is where a range's value lies between its min and max,

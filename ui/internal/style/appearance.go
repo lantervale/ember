@@ -52,8 +52,10 @@ type ControlParts struct {
 	// optimum, suboptimum and even less good.
 	Value   *Computed
 	Regions [3]*Computed
-	// Track and Thumb are a range's.
-	Track, Thumb *Computed
+	// Container, Track and Thumb are a range's: its slider container,
+	// filling its content box, the track across it and the thumb on the
+	// track.
+	Container, Track, Thumb *Computed
 }
 
 // Equal reports whether p and o style the same parts the same way.
@@ -66,5 +68,5 @@ func (p *ControlParts) Equal(o *ControlParts) bool {
 	}
 	return p.Inner.Equal(o.Inner) && p.Bar.Equal(o.Bar) && p.Value.Equal(o.Value) &&
 		p.Regions[0].Equal(o.Regions[0]) && p.Regions[1].Equal(o.Regions[1]) && p.Regions[2].Equal(o.Regions[2]) &&
-		p.Track.Equal(o.Track) && p.Thumb.Equal(o.Thumb)
+		p.Container.Equal(o.Container) && p.Track.Equal(o.Track) && p.Thumb.Equal(o.Thumb)
 }

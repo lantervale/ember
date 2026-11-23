@@ -105,3 +105,93 @@ func TestARangeOfAppearanceNoneDrawsItsTrackAndThumb(t *testing.T) {
 	require.Len(t, r.of("circle"), 1, "Chrome's own thumb")
 	assert.Equal(t, geom.V2(10+184*0.25+8, 10+8), r.of("circle")[0].At)
 }
+
+// A range's slider container fills its content box, the track centred in
+// the container's content box.
+func TestARangesContainerHoldsItsTrack(t *testing.T) {
+	b := ctl(dom.Input, 200, 14, "type", "range", "value", "0")
+	b.Style.Appearance = style.AppearanceNone
+	b.Style.Parts = &style.ControlParts{
+		Container: styledPart(green, func(s *style.Computed) { s.Padding = style.All(style.Px(3)) }),
+		Track:     styledPart(red, func(s *style.Computed) { s.Size.Height = style.Px(8) }),
+		Thumb: styledPart(blue, func(s *style.Computed) {
+			s.Size = style.Size[style.Length]{Width: style.Px(20), Height: style.Px(20)}
+		}),
+	}
+	rects := paintOne(b).of("rect")
+	require.Len(t, rects, 3)
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 200, H: 14}, rects[0].Rect, "the container")
+	assert.Equal(t, geom.Rect{X: 13, Y: 13, W: 194, H: 8}, rects[1].Rect, "the track in its content box")
+	assert.Equal(t, geom.Rect{X: 13, Y: 13, W: 20, H: 20}, rects[2].Rect, "the thumb at its start")
+}
+
+// A vertical range of appearance none lays its parts down its box: the
+// track as wide as its thumb, the thumb from the top, from the bottom in
+// rtl, its margin-left moving it across.
+func TestAVerticalRangeLaysItsPartsDown(t *testing.T) {
+	b := ctl(dom.Input, 8, 150, "type", "range", "value", "20")
+	b.Style.Appearance, b.Style.Mode = style.AppearanceNone, style.VerticalLR
+	b.Style.Parts = &style.ControlParts{
+		Track: styledPart(red, func(s *style.Computed) { s.Size.Width = style.Px(8) }),
+		Thumb: styledPart(blue, func(s *style.Computed) {
+			s.Size = style.Size[style.Length]{Width: style.Px(20), Height: style.Px(10)}
+			s.Margin.Left = style.Px(-6)
+		}),
+	}
+	rects := paintOne(b).of("rect")
+	require.Len(t, rects, 2)
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 8, H: 150}, rects[0].Rect, "the track")
+	assert.Equal(t, geom.Rect{X: 4, Y: 10 + 140*0.2, W: 20, H: 10}, rects[1].Rect, "the thumb a fifth down")
+
+	b.Style.Dir = style.RTL
+	assert.Equal(t, geom.Rect{X: 4, Y: 10 + 140*0.8, W: 20, H: 10}, paintOne(b).of("rect")[1].Rect, "up in rtl")
+}
+
+// The pointer over a range's thumb is over its track and container too,
+// as over the elements of Chrome's shadow tree; over a progress's value,
+// its bar and inner element.
+func TestThePartsUnderThePointer(t *testing.T) {
+	b := ctl(dom.Input, 200, 14, "type", "range", "value", "50")
+	b.Style.Appearance = style.AppearanceNone
+	b.Style.Parts = &style.ControlParts{
+		Container: styledPart(green, func(s *style.Computed) { s.Padding = style.All(style.Px(3)) }),
+		Track:     styledPart(red, func(s *style.Computed) { s.Size.Height = style.Px(8) }),
+		Thumb: styledPart(blue, func(s *style.Computed) {
+			s.Size = style.Size[style.Length]{Width: style.Px(20), Height: style.Px(20)}
+			s.Margin.Top = style.Px(-6)
+		}),
+	}
+	o := geom.V2(10, 10)
+	for at, want := range map[geom.Vec2]dom.State{
+		{X: 110, Y: 17}: dom.PartHover,
+		{X: 110, Y: 26}: dom.PartHover,
+		{X: 40, Y: 17}:  dom.ContainerHover | dom.TrackHover,
+		{X: 40, Y: 11}:  dom.ContainerHover,
+		{X: 40, Y: 40}:  0,
+	} {
+		assert.Equal(t, want, ControlPartsAt(b, o, at), "at %v", at)
+	}
+	assert.InDelta(t, 0.5, RangeAlong(b, o, geom.V2(110, 17)), 1e-6, "the thumb's middle on the value")
+	assert.InDelta(t, 0, RangeAlong(b, o, geom.V2(20, 17)), 1e-6)
+
+	own := ctl(dom.Input, 100, 16, "type", "range", "value", "50")
+	assert.Equal(t, dom.PartHover, ControlPartsAt(own, o, geom.V2(60, 18)), "its own look's thumb")
+	assert.Equal(t, dom.ContainerHover|dom.TrackHover, ControlPartsAt(own, o, geom.V2(20, 18)))
+
+	bar := ctl(dom.Progress, 100, 10, "value", "0.5")
+	bar.Style.Appearance = style.AppearanceNone
+	assert.Equal(t, dom.PartHover, ControlPartsAt(bar, o, geom.V2(30, 15)), "its value")
+	assert.Equal(t, dom.ContainerHover|dom.TrackHover, ControlPartsAt(bar, o, geom.V2(90, 15)), "its bar")
+}
+
+// An indeterminate progress of appearance none draws its value at no
+// width but its own padding, borders and min-width, as Chrome's.
+func TestAnIndeterminateValueKeepsItsOwnWidth(t *testing.T) {
+	b := ctl(dom.Progress, 150, 14)
+	b.Style.Appearance = style.AppearanceNone
+	b.Style.Parts = &style.ControlParts{Bar: styledPart(blue, nil),
+		Value: styledPart(red, func(s *style.Computed) { s.MinSize.Width = style.Px(30) })}
+	rects := paintOne(b).of("rect")
+	require.Len(t, rects, 2)
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 30, H: 14}, rects[1].Rect)
+}

@@ -9,11 +9,13 @@ import (
 )
 
 // hintedBelow are the attributes that hint an element's descendants, a
-// table's cells and groups, keyed as dom.Pipeline.Changed.
+// table's cells and groups, and lang, whose language picks how their
+// lines break and where they are underlined, keyed as
+// dom.Pipeline.Changed.
 //
 //nolint:gochecknoglobals // lookup table
 var hintedBelow = map[string]bool{
-	"[cellpadding": true, "[valign": true, "[border": true, "[bordercolor": true, "[rules": true,
+	"[cellpadding": true, "[valign": true, "[border": true, "[bordercolor": true, "[rules": true, langChanged: true,
 }
 
 // hints are the declarations an element's presentational attributes
