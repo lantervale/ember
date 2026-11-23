@@ -1483,7 +1483,8 @@ func (p *painter) bevel(r geom.Rect, w [4]float32, c [4]color.Color, st style.Si
 // shades are the colours Chromium gives an inset or outset side of colour
 // c, its Color::Dark and Color::Light worked in encoded sRGB: scaled by
 // (v - 0.33) / v and by min(1, v + 0.33) / v, v its brightest channel;
-// black's are #545454 and #a8a8a8.
+// black's are #545454 and #a8a8a8. A colour nearer white than #ebebeb is
+// its own light shade, as the #eeeeee of an iframe's default border.
 func shades(c color.Color) (color.Color, color.Color) {
 	s := c.SRGB()
 	v := max(s[0], s[1], s[2])
@@ -1494,7 +1495,12 @@ func shades(c color.Color) (color.Color, color.Color) {
 	scaled := func(k float32) color.Color {
 		return color.FromSRGB([3]float32{s[0] * k, s[1] * k, s[2] * k}).Alpha(c.A)
 	}
-	return scaled(max(0, (v-0.33)/v)), scaled(min(1, v+0.33) / v)
+	light := scaled(min(1, v+0.33) / v)
+	const lightest = 3 * (1 - 235.0/255) * (1 - 235.0/255)
+	if d := (1-s[0])*(1-s[0]) + (1-s[1])*(1-s[1]) + (1-s[2])*(1-s[2]); d <= lightest {
+		light = c
+	}
+	return scaled(max(0, (v-0.33)/v)), light
 }
 
 // dashes draws a dashed or dotted side over r, along X when across, else

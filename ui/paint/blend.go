@@ -53,7 +53,7 @@ func (p *painter) beginGroup(e entry, st *style.Computed, alpha *float32) *group
 	mixes := st.BlendMode != style.BlendNormal && p.pictures > 0
 	filters := len(st.BackdropFilters) > 0 && p.pictures > 0
 	whole := mixes || e.b.Group && len(st.Filters) == 0 ||
-		*alpha < 1 && (len(st.Filters) > 0 || e.b.Group || filters)
+		*alpha < 1 && (len(st.Filters) > 0 || e.b.Group || filters || e.b.Canvas)
 	if !whole && !filters {
 		return nil
 	}
