@@ -317,6 +317,10 @@ func (p *painter) marker(e entry, alpha float32) {
 		}
 		return
 	}
+	if e.b.Gradient != nil {
+		p.gradient(r, radii{}, e.b.Gradient, alpha)
+		return
+	}
 	ink := fade(st.Color, alpha)
 	if ink.A <= 0 {
 		return

@@ -98,6 +98,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/outline-styles", 520, 160, 0.001},
 		{"./internal/pages/direction", 400, 400, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
+		{"./internal/pages/list-inside", 520, 360, 0.0072},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/background-text", 640, 300, 0.0031},

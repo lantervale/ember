@@ -33,12 +33,12 @@ func checkListStyle(v []Component) error {
 		join(v))
 }
 
-// checkListImage checks list-style-image: none or a url().
+// checkListImage checks list-style-image: none, a url() or a gradient.
 func checkListImage(v []Component) error {
-	if len(v) == 1 && (isWord(v[0], kwNone) || urlTerm(v[0]) == nil) {
+	if len(v) == 1 && (isWord(v[0], kwNone) || imageTerm(v[0]) == nil) {
 		return nil
 	}
-	return fmt.Errorf("expected none or url(), found %q; ui draws no gradient for a marker", join(v))
+	return fmt.Errorf("expected none, url() or a gradient, found %q", join(v))
 }
 
 // listStyle computes list-style-type.

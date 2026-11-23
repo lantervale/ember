@@ -1981,13 +1981,22 @@ var props = func() map[string]prop {
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
-		"list-style-image": field(func(c *style.Computed) *string { return &c.ListImage },
-			func(x *ctx, v []Component) string {
-				if isWord(v[0], kwNone) {
-					return ""
+		"list-style-image": {
+			set: func(x *ctx, v []Component) {
+				x.c.ListImage, x.c.ListGradient = "", nil
+				switch {
+				case isWord(v[0], kwNone):
+				case gradientTerm(v[0]) == nil:
+					x.c.ListGradient = x.gradient(v[0])
+				default:
+					x.c.ListImage = imageSource(x, v)
 				}
-				return imageSource(x, v)
-			}, flips[string]()),
+			},
+			inherit: func(dst, src *style.Computed) { dst.ListImage, dst.ListGradient = src.ListImage, src.ListGradient },
+			anim:    anim{kind: discrete},
+		},
+		"list-style-position": field(func(c *style.Computed) *bool { return &c.ListInside },
+			func(_ *ctx, v []Component) bool { return isWord(v[0], "inside") }, flips[bool]()),
 		"list-style-type": {
 			set:     listStyle,
 			inherit: func(dst, src *style.Computed) { dst.ListStyle, dst.ListName = src.ListStyle, src.ListName },

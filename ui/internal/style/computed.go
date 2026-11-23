@@ -678,8 +678,13 @@ type Text struct {
 	ListStyle ListStyle
 	ListName  string
 	// ListImage is list-style-image: the address of the picture a list
-	// item's marker shows in place of its list-style-type, "" for none.
-	ListImage string
+	// item's marker shows in place of its list-style-type, "" for none;
+	// ListGradient the gradient it shows in its place.
+	ListImage    string
+	ListGradient *Gradient
+	// ListInside is list-style-position: inside, the marker the first
+	// inline box of the item's first line.
+	ListInside bool
 	// BorderSpacing is a table's border-spacing, across and down, in points.
 	BorderSpacing [2]float32
 	// BorderCollapse is border-collapse: collapse: a table's cells share

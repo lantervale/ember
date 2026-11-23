@@ -140,6 +140,8 @@ func (t *Text) equal(o *Text) bool {
 		t.ListStyle == o.ListStyle &&
 		t.ListName == o.ListName &&
 		t.ListImage == o.ListImage &&
+		t.ListGradient.equal(o.ListGradient) &&
+		t.ListInside == o.ListInside &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
 		t.EmptyCellsHide == o.EmptyCellsHide &&
