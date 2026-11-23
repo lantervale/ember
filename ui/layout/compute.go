@@ -403,6 +403,22 @@ func (n *node) ownGutter() point {
 	return point{g.x + n.gutter.w, g.y + n.gutter.h}
 }
 
+// barRoom is the room n's bars take in its parent's frame: placed, what
+// its parent's layout gave them, and the gutter it chose, or for a node
+// in a frame of its own, its own style's and the gutter it chose there,
+// turned.
+func (n *node) barRoom(placed size) size {
+	if n.inner == nil {
+		return placed.add(n.gutter)
+	}
+	g := scrollbarGutter(n.inner)
+	room := size{g.x + n.gutter.w, g.y + n.gutter.h}
+	if n.across {
+		return room.across()
+	}
+	return room
+}
+
 // regutterOf notes n's element, or its nearest one, for layoutIn to build
 // again with its new gutter, in a retained layout.
 func (t *tree) regutterOf(n *node) {
@@ -571,7 +587,8 @@ func roundIn(n *node, cumulative point, hidden bool) {
 	l := u
 	l.location = point{round(x) - round(cumulative.x), round(y) - round(cumulative.y)}
 	l.size = size{round(x+u.size.w) - round(x), round(y+u.size.h) - round(y)}
-	l.scrollbar = size{round(u.scrollbar.w + n.gutter.w), round(u.scrollbar.h + n.gutter.h)}
+	g := n.barRoom(u.scrollbar)
+	l.scrollbar = size{round(g.w), round(g.h)}
 	l.border = roundEdges(u.border, x, y, u.size)
 	l.padding = roundEdges(u.padding, x, y, u.size)
 	r := u.overflow.rect

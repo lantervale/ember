@@ -333,3 +333,91 @@ func TestASelectionOfVerticalLinesIsDrawnInChromesRects(t *testing.T) {
 		}
 	}
 }
+
+// TestTheMarksOfVerticalLinesAreChromes selects the room of kept tabs,
+// the empty lines of preformatted text and a br alone on its line, in
+// each vertical writing mode, and compares each line's part with
+// Chrome's range rects there: on the same line, from the same place,
+// a tab's room as long as Chrome's.
+func TestTheMarksOfVerticalLinesAreChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`body { margin: 8px; user-select: text; font-size: 16px; line-height: 20px; display: flex;
+	gap: 10px; align-items: flex-start; }
+pre, p { margin: 0; font: inherit; block-size: 120px; } .wrap { white-space: pre-wrap; }
+.rl { writing-mode: vertical-rl; } .lr { writing-mode: vertical-lr; } .slr { writing-mode: sideways-lr; }`))
+	d.Body().Append(
+		ui.Pre(ui.Class("rl"), ui.Text("a\tb")),
+		ui.Pre(ui.Class("lr", "wrap"), ui.Text("one\t\ttwo")),
+		ui.Pre(ui.Class("slr"), ui.Text("x\ty")),
+		ui.Pre(ui.Class("rl"), ui.Text("ab\n\ncd\n\n\nef")),
+		ui.Pre(ui.Class("lr"), ui.Text("ab\n\ncd")),
+		ui.Pre(ui.Class("slr"), ui.Text("ab\n\n\ncd")),
+		ui.P(ui.Class("rl"), ui.Text("ab"), ui.Br(), ui.Br(), ui.Text("cd")),
+		ui.P(ui.Class("lr"), ui.Text("ab"), ui.Br(), ui.Br(), ui.Br(), ui.Text("cd")),
+		ui.P(ui.Class("slr"), ui.Text("ab"), ui.Br(), ui.Br(), ui.Text("cd")),
+	)
+	size := geom.V2(400, 300)
+	d.Layout(size)
+	texts := verticalTexts(d)
+	spans := map[string][4]int{
+		"a tab whole":                   {0, 0, 0, 3},
+		"the tab alone":                 {0, 1, 0, 2},
+		"from the tab":                  {0, 1, 0, 3},
+		"two tabs":                      {1, 2, 1, 6},
+		"the second tab":                {1, 4, 1, 5},
+		"a tab up the line":             {2, 1, 2, 2},
+		"empty lines, vertical-rl":      {3, 1, 3, 11},
+		"empty lines, vertical-lr":      {4, 0, 4, 5},
+		"empty lines, sideways-lr":      {5, 1, 5, 6},
+		"a br alone, vertical-rl":       {6, 1, 7, 1},
+		"brs alone, vertical-lr":        {8, 1, 9, 1},
+		"a br alone, sideways-lr":       {10, 1, 11, 1},
+		"from the start of a br's line": {6, 0, 7, 1},
+	}
+	for name, span := range spans {
+		d.Select(ui.Position{Node: texts[span[0]], Offset: span[1]}, ui.Position{Node: texts[span[2]], Offset: span[3]})
+		out, err := chrome.Eval(d, size, `
+			return [...getSelection().getRangeAt(0).getClientRects()].map(r => [r.x, r.y, r.width, r.height])`)
+		require.NoError(t, err)
+		var all [][4]float32
+		require.NoError(t, json.Unmarshal(out, &all))
+		var want []geom.Rect
+		for _, r := range all {
+			want = append(want, geom.Rect{X: r[0], Y: r[1], W: r[2], H: r[3]})
+		}
+		g, w := verticalLines(d.SelectionRects()), verticalLines(want)
+		if !assert.Len(t, g, len(w), "%s: ember %v, Chrome %v", name, g, w) {
+			continue
+		}
+		upward := span[0] == 2 || span[0] == 5 || span[0] == 10
+		for i := range w {
+			assert.InDelta(t, w[i].X+w[i].W/2, g[i].X+g[i].W/2, 1.01, "%s: line %d is Chrome's: %v %v", name, i, g[i], w[i])
+			if upward {
+				assert.InDelta(t, w[i].Y+w[i].H, g[i].Y+g[i].H, 0.51, "%s: line %d starts where Chrome's does: %v %v",
+					name, i, g[i], w[i])
+			} else {
+				assert.InDelta(t, w[i].Y, g[i].Y, 0.51, "%s: line %d starts where Chrome's does: %v %v", name, i, g[i], w[i])
+			}
+			if span[0] < 3 {
+				assert.InDelta(t, w[i].H, g[i].H, 0.51, "%s: line %d as long as Chrome's: %v %v", name, i, g[i], w[i])
+			}
+		}
+	}
+}
+
+// verticalLines joins the rectangles of each vertical line into one, by
+// their middle across the line, from right to left.
+func verticalLines(rs []geom.Rect) []geom.Rect {
+	var out []geom.Rect
+	for _, r := range rs {
+		i := slices.IndexFunc(out, func(o geom.Rect) bool { return abs32(o.X+o.W/2-r.X-r.W/2) < 3 })
+		if i < 0 {
+			out = append(out, r)
+			continue
+		}
+		o := out[i]
+		y0, y1 := min(o.Y, r.Y), max(o.Y+o.H, r.Y+r.H)
+		out[i] = geom.Rect{X: o.X, Y: y0, W: o.W, H: y1 - y0}
+	}
+	slices.SortFunc(out, func(a, b geom.Rect) int { return int(b.X - a.X) })
+	return out
+}

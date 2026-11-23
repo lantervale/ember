@@ -2902,7 +2902,7 @@ func (c *inlineContent) settle(p *pendingAlign, e *extent, shift float32) {
 // baseline where st's are (metricsOf).
 func (t *tree) fallbackMetrics(c *inlineContent, p piece, st *style.Computed) (box.Metrics, bool) {
 	ff, ok := t.fonts.(box.FallbackFonts)
-	if !ok || p.kind != word || !st.LineHeight.Normal || isASCII(p.text) {
+	if !ok || p.kind != word || !st.LineHeight.Normal {
 		return box.Metrics{}, false
 	}
 	m, ok := ff.FallbackMetrics(st.Font, p.text)
@@ -2910,15 +2910,6 @@ func (t *tree) fallbackMetrics(c *inlineContent, p piece, st *style.Computed) (b
 		m = central(m, c.unit)
 	}
 	return m, ok
-}
-
-func isASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] >= utf8.RuneSelf {
-			return false
-		}
-	}
-	return true
 }
 
 // measure is the inline content's size and baselines, Taffy's measure function for text.

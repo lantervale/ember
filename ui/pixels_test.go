@@ -35,6 +35,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/scrollbar-gutter", 560, 210, 0.0015},
 		{"./internal/pages/scrollbar-buttons", 560, 250, 0.0004},
 		{"./internal/pages/scrollbar-viewport", 320, 260, 0.0004},
+		{"./internal/pages/scrollbar-resizer", 480, 160, 0.0006},
 		{"./internal/pages/scrollbar-fields", 480, 230, 0.003},
 		{"./internal/pages/control-parts", 440, 280, 0.001},
 		{"./internal/pages/control-generated", 420, 280, 0.003},
@@ -144,6 +145,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
 		{"./internal/pages/vertical-selection", 420, 240, 0.011},
+		{"./internal/pages/vertical-selection-marks", 520, 240, 0.008},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)

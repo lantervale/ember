@@ -1674,7 +1674,7 @@ func keepFlow(n, m *node, cs *columnSet, flow, moved point) {
 	cs, lc := cs.lane(n)
 	stretched := lc.end
 	n.final = n.laid()
-	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
+	n.final.scrollbar = n.barRoom(n.final.scrollbar)
 	rel := relativeShift(n)
 	moved = point{moved.x + rel.x, moved.y + rel.y}
 	at := point{flow.x + n.unrounded.location.x - rel.x, flow.y + n.unrounded.location.y - rel.y}

@@ -6,6 +6,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,38 @@ func TestASelectsListSpacesAndSmoothsItsOptionsAsTheSelect(t *testing.T) {
 	for _, o := range texts {
 		assert.True(t, o.Exact, "-webkit-font-smoothing: antialiased")
 	}
+}
+
+// hanAhem is Ahem with a halt feature: full-width brackets set half an
+// em wide, an opening one moved half an em back.
+type hanAhem struct{ ahem }
+
+func (hanAhem) HanGlyph(f style.Font, r rune, _ bool) box.HanGlyph {
+	g := box.HanGlyph{Halt: true, Full: true}
+	switch r {
+	case '「':
+		g.Shift, g.Narrow = -f.Size/2, -f.Size/2
+	case '」':
+		g.Narrow, g.Ink = -f.Size/2, box.InkLeft
+	}
+	return g
+}
+
+func TestASelectsListTrimsAndAutospacesItsOptionsAsTheSelect(t *testing.T) {
+	tr, sel, m, find := selectPage(20, 50, control.Option{Label: "漢」「漢A"})
+	sel.Style.Font.Size, sel.Style.Autospace = 10, true
+	m.Do(control.Activate)
+	r := newRecorder()
+	Paint(r, tr, find, Fonts(hanAhem{}))
+	bg := listBg(r)
+	// this Ahem draws a character as wide as its bytes: an ideograph or a bracket 30
+	assert.InDelta(t, 130-5+1.25+2*optionPad+2, bg.Rect.W, 1e-3,
+		"as wide as its option, the opening bracket half wide and an eighth of an em before the letter")
+	require.Equal(t, []string{"漢」", "「", "漢", "A"}, textsOf(r))
+	at := r.of("text")
+	assert.InDelta(t, at[0].At.X+60-5, at[1].At.X, 1e-3, "the bracket moved back")
+	assert.InDelta(t, at[0].At.X+85, at[2].At.X, 1e-3)
+	assert.InDelta(t, at[0].At.X+116.25, at[3].At.X, 1e-3, "an eighth of an em before the letter")
 }
 
 func TestAltTextSpacesAndSmoothsAsItsImage(t *testing.T) {

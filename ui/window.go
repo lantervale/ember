@@ -266,17 +266,24 @@ func (d *Document) place(w *Node, x, y float32) {
 
 func px(v float32) string { return strconv.FormatFloat(float64(v), 'f', -1, 32) + "px" }
 
-// setDeclaration sets property to value in n's style attribute, keeping the rest.
+// setDeclaration sets property to value in n's style attribute, keeping the rest, as a
+// script's style.setProperty: in place of its first declaration, else at the end.
 func setDeclaration(n *Node, property, value string) {
 	var kept []string
-	for _, decl := range strings.Split(n.Style(), ";") {
+	set := false
+	for _, decl := range splitDeclarations(n.Style()) {
 		k, _, ok := strings.Cut(decl, ":")
-		if !ok || strings.TrimSpace(k) == property {
-			continue
+		switch {
+		case !ok:
+		case !strings.EqualFold(strings.TrimSpace(k), property):
+			kept = append(kept, strings.TrimSpace(decl))
+		case !set:
+			kept, set = append(kept, property+": "+value), true
 		}
-		kept = append(kept, strings.TrimSpace(decl))
 	}
-	kept = append(kept, property+": "+value)
+	if !set {
+		kept = append(kept, property+": "+value)
+	}
 	if s := strings.Join(kept, "; "); s != n.Style() {
 		n.SetStyle(s)
 	}

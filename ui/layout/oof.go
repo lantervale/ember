@@ -261,6 +261,30 @@ func (t *tree) oofLayout(n *node, out *output) {
 	out.overflow = finalizeOverflow(out.overflow.rect.union(r), area.size, out.overflow.reversed, scroll)
 }
 
+// layoutOOFBoxIn is layoutOOFBox for c placed by cb: a box whose parent's content is
+// in another frame than cb's is laid out and written in cb's, as Chrome places it in
+// its containing block's writing mode.
+func (t *tree) layoutOOFBoxIn(cb *node, c oofCandidate, area size, offset point,
+	containerOverflow style.Size[style.Overflow], gridOwner *node) oofBoxLayout {
+	n := c.node
+	mode := frameOf(cb)
+	if n.placer == nil && mode == frameOf(n.parent) {
+		return t.layoutOOFBox(c, area, offset, containerOverflow, gridOwner)
+	}
+	st, inner, acrossed := n.st, n.inner, n.across
+	n.placer = cb
+	if mode == frameOf(n.parent) {
+		n.placer = nil
+	}
+	t.frame(n, n.box.Style, mode)
+	n.cache.clear()
+	defer func() {
+		n.st, n.inner, n.across = st, inner, acrossed
+		n.cache.clear()
+	}()
+	return t.layoutOOFBox(c, area, offset, containerOverflow, gridOwner)
+}
+
 type oofBoxLayout struct {
 	layout   placed
 	surfaced []oofCandidate
@@ -404,7 +428,7 @@ func (t *tree) performOOF(n *node, candidates []oofCandidate, area size, offset 
 		if c.area != nil {
 			cbSize, cbAt, owner = c.area.size, c.area.offset, nil
 		}
-		lb := t.layoutOOFBox(c, cbSize, cbAt, containerOverflow, owner)
+		lb := t.layoutOOFBoxIn(n, c, cbSize, cbAt, containerOverflow, owner)
 		for _, s := range translateCandidates(lb.surfaced, lb.layout.location) {
 			if cl.take(s.position) {
 				work = append(work, s)

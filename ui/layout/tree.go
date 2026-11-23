@@ -272,7 +272,10 @@ type node struct {
 	absolute  point
 	hoisted   []*node
 	parent    *node
-	grid      *gridInfo
+	// placer is the containing block that placed n, an out-of-flow box, when its frame
+	// isn't the one of n's parent's content: n is laid out and written in placer's.
+	placer *node
+	grid   *gridInfo
 	// subgrid is what its grid hands it in each axis it is a subgrid in.
 	subgrid [2]*subgridAxis
 	// row is a table row's cells' widths and heights, kept with the row;
@@ -1118,6 +1121,9 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	} else if outer = frameOf(n); outer.Vertical() {
 		in = t.icb.across()
 	}
+	if n.placer != nil {
+		outer = frameOf(n.placer)
+	}
 	f := turnPlaced(n.final, outer, style.HorizontalTB)
 	rewrite := t.keep == nil || n.fresh || n.performed == t.gen
 	n.fresh = false
@@ -1131,7 +1137,9 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		at := n.absolute
 		b.Pos = geom.Vec2{X: at.x - origin.x, Y: at.y - origin.y}
 		framed = b.Pos
-		if outer.Vertical() {
+		if p := n.placer; p != nil {
+			b.Pos = placedPos(n, p)
+		} else if outer.Vertical() {
 			r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: n.final.size.w, H: n.final.size.h}, in, outer)
 			b.Pos = geom.Vec2{X: r.X, Y: r.Y}
 		}
@@ -1141,7 +1149,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Border = box.Edges{Top: f.border.t, Right: f.border.r, Bottom: f.border.b, Left: f.border.l}
 	b.Padding = box.Edges{Top: f.padding.t, Right: f.padding.r, Bottom: f.padding.b, Left: f.padding.l}
 	b.Content, b.ScrollStart = scrollRange(n.st, f)
-	b.Scrollbar = geom.Vec2{X: f.scrollbar.w - fmin(startGutter(n.st), f.scrollbar.w), Y: f.scrollbar.h}
+	b.Scrollbar = endBars(b.Style, f.scrollbar)
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
 	b.Discarded = n.discarded
@@ -1178,12 +1186,31 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 // overflows that way: as long as the content less the padding box but
 // the vertical bar that stands, whatever gutter is empty, a right-to-left
 // box starting scrolled by its empty gutters (decision 0198).
+// placedPos is where n, an out-of-flow box p placed in its own frame, stands in its
+// parent's box on the page: its place in p turned onto the page, less the place of its
+// parent there, its ancestors up to p being written already.
+func placedPos(n, p *node) geom.Vec2 {
+	at := geom.Rect{X: n.absolute.x - p.absolute.x, Y: n.absolute.y - p.absolute.y, W: n.final.size.w,
+		H: n.final.size.h}
+	if mode := frameOf(p); mode.Vertical() {
+		at = turnRect(at, p.final.size, mode)
+	}
+	pos := geom.Vec2{X: at.X, Y: at.Y}
+	for a := n.parent; a != nil && a != p; a = a.parent {
+		pos = pos.Sub(a.box.Pos)
+	}
+	return pos
+}
+
 func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 	o := f.overflow.rect
 	content := geom.Vec2{X: o.r - o.l, Y: o.b - o.t}
 	start := geom.Vec2{X: fmin(o.l, 0), Y: fmin(o.t, 0)}
 	if !st.GutterStable || !scrollContainer(st.Overflow.Height) || st.Overflow.Width == style.Hidden {
 		return content, start
+	}
+	if st.Mode.Vertical() {
+		return verticalScrollRange(st, f, content, start)
 	}
 	g := gutterEdges(st, point{x: f.scrollbar.w, y: f.scrollbar.h})
 	w := f.size.w - f.border.l - f.border.r
@@ -1198,15 +1225,34 @@ func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 		return content, start
 	}
 	lo, hi := float32(0), over
-	switch {
-	case st.Mode.BlockFromRight():
-		lo, hi = -over, 0
-	case st.Mode.Vertical():
-	case st.Dir == style.RTL:
+	if st.Dir == style.RTL {
 		shift := g.l + g.r - bar
 		lo, hi = -(shift + over), -shift
 	}
 	return geom.Vec2{X: hi - lo + port, Y: content.Y}, geom.Vec2{X: lo, Y: start.Y}
+}
+
+// verticalScrollRange is scrollRange for a box of a vertical writing mode:
+// along its lines, the content less the padding box but the horizontal
+// bar that stands, whatever gutter is empty; a box whose blocks start on
+// the right starts scrolled to its end.
+func verticalScrollRange(st *style.Computed, f placed, content, start geom.Vec2) (geom.Vec2, geom.Vec2) {
+	w, h := f.size.w-f.border.l-f.border.r, f.size.h-f.border.t-f.border.b
+	bars := endBars(st, f.scrollbar)
+	port := geom.Vec2{X: w - bars.X, Y: h - bars.Y}
+	if content.X > port.X && st.Mode.BlockFromRight() {
+		// the overflow, from the right, takes in the vertical bar's room
+		over := fmax(content.X-w, 0)
+		content.X, start.X = over+port.X, -over
+	}
+	bar := float32(0)
+	if o := st.Overflow.Width; o == style.Scroll || o == style.OverflowAuto && content.X > port.X {
+		bar = st.ScrollbarHeight
+	}
+	if content.Y > port.Y {
+		content.Y = fmax(content.Y-(h-bar), 0) + port.Y
+	}
+	return content, start
 }
 
 // markerGap is how far a bullet stands from its item's content, past its own offset, as
@@ -1414,7 +1460,7 @@ func keepLayout(n *node, cumulative point) { keepIn(n, cumulative, false) }
 // boxes take their parent's place too, as no containing block places them.
 func keepIn(n *node, cumulative point, hidden bool) {
 	n.final = n.laid()
-	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
+	n.final.scrollbar = n.barRoom(n.final.scrollbar)
 	n.absolute = point{cumulative.x + n.unrounded.location.x, cumulative.y + n.unrounded.location.y}
 	if n.frag != nil {
 		n.frag = nil
