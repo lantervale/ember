@@ -180,6 +180,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0175 | [Relative snaps keep their unsnapped axes, and a held track pages on](0175-relative-snaps-keep-their-unsnapped-axes-and-a-held-track-pages-on.md) | api |
 | 0176 | [Vertical writing modes are laid out turned into their own frame](0176-vertical-writing-modes-are-laid-out-turned-into-their-own-frame.md) | rendering |
 | 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
+| 0178 | [Spaces break-spaces keeps are units of a line, and break-all reads letters as ideographs](0178-spaces-break-spaces-keeps-are-units-of-a-line-and-break-all-reads-letters-as-ideographs.md) | api |
 | 0179 | [A collapsed column narrows a stretched table, but a flex row's](0179-a-collapsed-column-narrows-a-stretched-table-but-a-flex-rows.md) | api |
 | 0180 | [Characters stand by UAX #50, in their faces' vertical metrics](0180-characters-stand-by-uax-50-in-their-faces-vertical-metrics.md) | rendering |
 | 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
@@ -194,6 +195,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0190 | [Line ends are shaped again and carets share a ligature](0190-line-ends-are-shaped-again-and-carets-share-a-ligature.md) | api |
 | 0191 | [Markers are numbered apart from the list-item counter](0191-markers-are-numbered-apart-from-the-list-item-counter.md) | rendering |
 | 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
+| 0194 | [A float after text is placed as its lines are broken](0194-a-float-after-text-is-placed-as-its-lines-are-broken.md) | rendering |
 | 0197 | [Text right to left and sideways is shaped as one, and a reshaped end keeps its joins](0197-text-right-to-left-and-sideways-is-shaped-as-one-and-a-reshaped-end-keeps-its-joins.md) | api |
 
 ## Writing one

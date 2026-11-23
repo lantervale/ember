@@ -137,9 +137,15 @@ func dataURL(d *ui.Document, url string) string {
 	return url
 }
 
+// escape is s escaped for a page, a carriage return as a reference, which a
+// parser keeps where it turns one it reads into a newline.
+func escape(s string) string {
+	return strings.ReplaceAll(html.EscapeString(s), "\r", "&#13;")
+}
+
 func node(b *strings.Builder, p *page, d *ui.Document, n *dom.Node) {
 	if n.IsText() {
-		b.WriteString(html.EscapeString(layout.Translated(n, tr(d))))
+		b.WriteString(escape(layout.Translated(n, tr(d))))
 		return
 	}
 	b.WriteByte('<')
@@ -211,7 +217,7 @@ func contentLanguage(d *ui.Document) string {
 // a ui extension, becomes the hidden first option Chrome shows instead.
 func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	write := func(name, value string) {
-		fmt.Fprintf(b, " %s=\"%s\"", name, html.EscapeString(value))
+		fmt.Fprintf(b, " %s=\"%s\"", name, escape(value))
 	}
 	for _, name := range []string{"id", "class"} {
 		if v, ok := n.Attr(name); ok {

@@ -628,6 +628,11 @@ const (
 	// PreLineNoWrap keeps newlines and collapses spaces, on lines that
 	// don't wrap: white-space: preserve-breaks nowrap.
 	PreLineNoWrap
+	// BreakSpaces keeps spaces and newlines, each space taking room at a
+	// line's end and a line breaking after any of them.
+	BreakSpaces
+	// BreakSpacesNoWrap is white-space: break-spaces nowrap, laid out as pre.
+	BreakSpacesNoWrap
 )
 
 // Collapse is white-space-collapse.
@@ -637,6 +642,7 @@ const (
 	CollapseSpaces Collapse = iota
 	Preserve
 	PreserveBreaks
+	CollapseBreakSpaces
 )
 
 // Collapse is w's white-space-collapse.
@@ -646,13 +652,23 @@ func (w WhiteSpace) Collapse() Collapse {
 		return Preserve
 	case PreLine, PreLineNoWrap:
 		return PreserveBreaks
+	case BreakSpaces, BreakSpacesNoWrap:
+		return CollapseBreakSpaces
 	case Normal, NoWrapSpace:
 	}
 	return CollapseSpaces
 }
 
 // Wraps is w's text-wrap-mode: whether its lines wrap.
-func (w WhiteSpace) Wraps() bool { return w != NoWrapSpace && w != Pre && w != PreLineNoWrap }
+func (w WhiteSpace) Wraps() bool {
+	return w != NoWrapSpace && w != Pre && w != PreLineNoWrap && w != BreakSpacesNoWrap
+}
+
+// KeepsSpaces reports whether w keeps the spaces and tabs of its text.
+func (w WhiteSpace) KeepsSpaces() bool {
+	c := w.Collapse()
+	return c == Preserve || c == CollapseBreakSpaces
+}
 
 // KeepsBreaks reports whether w keeps the newlines of its text.
 func (w WhiteSpace) KeepsBreaks() bool { return w.Collapse() != CollapseSpaces }
@@ -669,6 +685,10 @@ func WhiteSpaceOf(c Collapse, wraps bool) WhiteSpace {
 		return PreLine
 	case c == PreserveBreaks:
 		return PreLineNoWrap
+	case c == CollapseBreakSpaces && wraps:
+		return BreakSpaces
+	case c == CollapseBreakSpaces:
+		return BreakSpacesNoWrap
 	case wraps:
 		return Normal
 	}

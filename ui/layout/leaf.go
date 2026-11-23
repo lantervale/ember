@@ -5,7 +5,7 @@ import "github.com/lantervale/ember/ui/internal/style"
 // flowAmong has the lines of n take the room the floats of ctx leave them, at the width
 // the block has, and reports whether there are such floats.
 func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, inset rect) bool {
-	flows := ctx != nil && n.control == noControl && some(width) && ctx.hasFloats()
+	flows := ctx != nil && n.control == noControl && some(width) && (ctx.hasFloats() || c.pendingFloats())
 	if flows || c.flowed {
 		c.broken = nil
 	}

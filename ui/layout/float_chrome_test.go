@@ -176,6 +176,84 @@ func TestFloatsMatchChrome(t *testing.T) {
 	}
 }
 
+func TestFloatsInLinesMatchChrome(t *testing.T) {
+	const boxes = `.l { float: left; } .r { float: right; }
+.box { width: 60px; height: 30px; background: #888; }
+.wide { width: 240px; margin: 0; } .rtl { direction: rtl; }`
+	box := func(class, style string) *ui.Node { return ui.Span(ui.Class(class, "box"), ui.Style(style)) }
+	cases := map[string]*ui.Document{
+		"a left float after text, on the line it falls on": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("Some words "), box("l", ""), ui.Text(" then "+sentence)),
+		),
+		"a right float after text, on the line it falls on": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("Some words "), box("r", ""), ui.Text(" then "+sentence)),
+		),
+		"a float too wide for the rest of its line goes below it": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("The quick brown fox jumps "), box("l", "width: 120px"),
+				ui.Text(" over "+sentence)),
+			ui.P(ui.Class("wide"), ui.Text("The quick brown fox jumps "), box("r", "width: 120px"),
+				ui.Text(" over "+sentence)),
+		),
+		"a float on a later line": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text(sentence+" Here "), box("l", ""), ui.Text(" "+sentence)),
+		),
+		"several floats on one line": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("One "), box("l", "width: 40px"), ui.Text(" two "),
+				box("l", "width: 30px; height: 20px"), ui.Text(" three "), box("r", "width: 50px"),
+				ui.Text(" "+sentence)),
+		),
+		"floats after text, one fitting and the next not": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("The quick brown fox "), box("l", "width: 50px"),
+				box("r", "width: 90px"), ui.Text(" "+sentence)),
+		),
+		"a float in a block among text and an inline element": styled(boxes,
+			ui.Div(ui.Class("wide"), ui.Text("Words before "), ui.Div(ui.Class("l", "box")),
+				ui.Text(" and after "), ui.Span(ui.Text("in a span "), box("r", "height: 20px"), ui.Text(" more")),
+				ui.Text(" "+sentence)),
+		),
+		"a float at the end of the text": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("A short line "), box("r", "")),
+			ui.P(ui.Class("wide"), ui.Text(sentence+" "), box("l", "width: 200px")),
+		),
+		"a float after a line break": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Text("First line"), ui.Br(), box("l", ""), ui.Text("second line "+sentence)),
+		),
+		"a float after text beside an earlier float": styled(boxes,
+			ui.Div(ui.Class("wide"), ui.Div(ui.Class("l", "box"), ui.Style("height: 50px")),
+				ui.P(ui.Style("margin: 0"), ui.Text("Beside it "), box("r", "width: 40px"), ui.Text(" "+sentence))),
+		),
+		"right to left, floats after text": styled(boxes,
+			ui.P(ui.Class("wide", "rtl"), ui.Text("Some words "), box("l", ""), ui.Text(" then "+sentence)),
+			ui.P(ui.Class("wide", "rtl"), ui.Text("Some words "), box("r", ""), ui.Text(" then "+sentence)),
+			ui.P(ui.Class("wide", "rtl"), ui.Text("The quick brown fox jumps "), box("r", "width: 120px"),
+				ui.Text(" over "+sentence)),
+		),
+		"floats after text in columns": styled(boxes,
+			ui.Div(ui.Style("columns: 2; column-gap: 12px; width: 300px"),
+				ui.P(ui.Style("margin: 0"), ui.Text("Some words "), box("l", "width: 40px"),
+					ui.Text(" then "+sentence+" More "), box("r", "width: 50px; height: 40px"),
+					ui.Text(" "+sentence+" "+sentence))),
+		),
+		"floats after text on a trimmed first line": styled(boxes,
+			ui.P(ui.Class("wide"), ui.Style("text-box: trim-both cap alphabetic; line-height: 24px"),
+				ui.Text("Some words "), box("l", ""), ui.Text(" then "+sentence)),
+			ui.P(ui.Class("wide"), ui.Style("text-box: trim-both cap alphabetic; line-height: 24px"),
+				ui.Text("The quick brown fox jumps "), box("r", "width: 120px"), ui.Text(" over "+sentence)),
+		),
+		"every word round a float after text": styled(boxes,
+			ui.Div(ui.Class("wide"), words("margin: 0", "The quick brown"),
+				ui.P(ui.Style("margin: 0"), ui.Span(ui.Text("fox jumps ")), box("l", "width: 70px; height: 40px"),
+					ui.Span(ui.Text("over the lazy dog, then naps in the warm afternoon sun.")))),
+		),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}
+
 func TestTextIndentMatchesChrome(t *testing.T) {
 	cases := map[string]*ui.Document{
 		"the first line starts in": styled(`p { width: 180px; text-indent: 24px; }`,
