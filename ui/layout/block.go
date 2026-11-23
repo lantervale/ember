@@ -797,7 +797,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			}
 			loc.x = start + nonAuto.l + insetOffset.x + off
 		}
-		if !some(firstBaseline) {
+		if !some(firstBaseline) && !it.legend {
 			if b := childFirstBaseline(lo.firstBaseline, finalSize.h, it.overflow.Height); some(b) {
 				firstBaseline = loc.y - insetOffset.y + b
 			}
