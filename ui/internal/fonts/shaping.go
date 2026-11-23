@@ -2,6 +2,7 @@ package fonts
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -49,36 +50,100 @@ func (c *Face) layout() *shape.Font {
 func (c *Face) joined(features string) string { return shape.Splice(features, c.Look.Features) }
 
 // shapedRun is a run shaped: its width in its face's units at the
-// default instance, and the glyphs it is drawn with.
+// default instance, and the glyphs it is drawn with, each with its
+// advance and the glyph of the run its cluster starts at.
 type shapedRun struct {
-	width  int32
-	glyphs []uint16
+	width    int32
+	glyphs   []uint16
+	advances []int32
+	starts   []int32
 }
 
-// shaped is the advance of run, glyphs of c, in c's units at instance
-// at of a variable font (nil for its default): shaped with the
-// features, in script, when its layout does anything to them, else the
-// sum of their advances. GPOS's values stay the default instance's.
+// part is the bytes [from, to) of a text measured whose glyphs its width
+// counts, a glyph a part's where its cluster starts: all of them where to
+// is negative.
+type part struct{ from, to int }
+
+// all is the part that is the whole text.
+var all = part{0, -1} //nolint:gochecknoglobals // a constant of a struct type
+
+func (p part) has(i int) bool { return p.to < 0 || i >= p.from && i < p.to }
+
+// in is p in the text from byte at of the one it is a part of.
+func (p part) in(at int) part {
+	if p.to < 0 {
+		return p
+	}
+	return part{p.from - at, p.to - at}
+}
+
+// covers reports whether every glyph of run, clustered by bytes, is p's.
+func (p part) covers(run []shape.Glyph) bool {
+	return p.to < 0 || len(run) == 0 || p.has(int(run[0].Cluster)) && p.has(int(run[len(run)-1].Cluster))
+}
+
+// shaped is the advance of the glyphs own has of run, glyphs of c, in
+// c's units at instance at of a variable font (nil for its default):
+// shaped with the features, in script, when its layout does anything to
+// them, else the sum of their advances. GPOS's values stay the default
+// instance's.
 func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Glyph, at varfont.Coords,
-	ctx context) float32 {
+	ctx context, own part) float32 {
 	p := c.layout().Plan(script, c.joined(features))
 	if !p.Touches(run) {
+		return s.unshaped(c, run, at, own)
+	}
+	r := s.shapedRun(p, run, ctx)
+	if own.covers(run) {
+		w := float32(r.width)
 		if at != nil {
-			var w float32
-			for _, g := range run {
+			for _, g := range r.glyphs {
+				w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
+			}
+		}
+		return w
+	}
+	var w float32
+	for k, g := range r.glyphs {
+		if !own.has(int(run[r.starts[k]].Cluster)) {
+			continue
+		}
+		w += float32(r.advances[k])
+		if at != nil {
+			w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
+		}
+	}
+	return w
+}
+
+// unshaped is the sum of the advances of the glyphs own has of run, in
+// c's units at instance at.
+func (s *Set) unshaped(c *Face, run []shape.Glyph, at varfont.Coords, own part) float32 {
+	if at != nil {
+		var w float32
+		for _, g := range run {
+			if own.has(int(g.Cluster)) {
 				w += c.web.vf.Advance(g.ID, at)
 			}
-			return w
 		}
-		ppem := fixed.I(int(c.upem))
-		var w fixed.Int26_6
-		for _, g := range run {
-			if a, err := c.font.GlyphAdvance(&s.buf, sfnt.GlyphIndex(g.ID), ppem, font.HintingNone); err == nil {
-				w += a
-			}
-		}
-		return float32(w >> 6)
+		return w
 	}
+	ppem := fixed.I(int(c.upem))
+	var w fixed.Int26_6
+	for _, g := range run {
+		if !own.has(int(g.Cluster)) {
+			continue
+		}
+		if a, err := c.font.GlyphAdvance(&s.buf, sfnt.GlyphIndex(g.ID), ppem, font.HintingNone); err == nil {
+			w += a
+		}
+	}
+	return float32(w >> 6)
+}
+
+// shapedRun is run shaped by p between ctx, kept for the next time the
+// same glyphs are.
+func (s *Set) shapedRun(p *shape.Plan, run []shape.Glyph, ctx context) shapedRun {
 	ids := s.ids[:0]
 	for _, g := range run {
 		ids = append(ids, byte(g.ID>>8), byte(g.ID&0xff))
@@ -89,27 +154,31 @@ func (s *Set) shaped(c *Face, script shape.Tag, features string, run []shape.Gly
 	ids = append(append(append(append(ids, 0xff), ctx.before...), 0xff), ctx.after...)
 	s.ids = ids
 	r, ok := s.shapedRuns[p][string(ids)]
-	if !ok {
-		for _, g := range p.ShapeIn(run, ctx.before, ctx.after) {
-			r.width += g.Advance
-			r.glyphs = append(r.glyphs, g.ID)
-		}
-		if s.shapedRuns == nil || s.shapedCount >= maxShaped {
-			s.shapedRuns, s.shapedCount = map[*shape.Plan]map[string]shapedRun{}, 0
-		}
-		if s.shapedRuns[p] == nil {
-			s.shapedRuns[p] = map[string]shapedRun{}
-		}
-		s.shapedRuns[p][string(ids)] = r
-		s.shapedCount++
+	if ok {
+		return r
 	}
-	w := float32(r.width)
-	if at != nil {
-		for _, g := range r.glyphs {
-			w += c.web.vf.Advance(g, at) - c.web.vf.Advance(g, nil)
+	k := 0
+	for _, g := range p.ShapeIn(slices.Clone(run), ctx.before, ctx.after) {
+		r.width += g.Advance
+		r.glyphs = append(r.glyphs, g.ID)
+		r.advances = append(r.advances, g.Advance)
+		for k > 0 && run[k].Cluster > g.Cluster {
+			k--
 		}
+		for k+1 < len(run) && run[k+1].Cluster <= g.Cluster {
+			k++
+		}
+		r.starts = append(r.starts, int32(k))
 	}
-	return w
+	if s.shapedRuns == nil || s.shapedCount >= maxShaped {
+		s.shapedRuns, s.shapedCount = map[*shape.Plan]map[string]shapedRun{}, 0
+	}
+	if s.shapedRuns[p] == nil {
+		s.shapedRuns[p] = map[string]shapedRun{}
+	}
+	s.shapedRuns[p][string(ids)] = r
+	s.shapedCount++
+	return r
 }
 
 // context is the text before a run of glyphs and after it, as much as

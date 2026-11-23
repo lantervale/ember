@@ -97,6 +97,25 @@ func TestASpaceTiesItsWordsWhereTheFaceKernsIt(t *testing.T) {
 	assert.False(t, s.SpaceTies(style.Font{Family: []string{"Go"}, Size: 20, Weight: 400}))
 }
 
+func TestTextShapedAmidItsNeighboursTakesTheGlyphsItsClustersStart(t *testing.T) {
+	s, _ := featured(t)
+	f := style.Font{Family: []string{"Featured"}, Size: 20, Weight: 400}
+	plain := f
+	plain.Features = "-liga,-kern"
+	assert.InDelta(t, s.Advance(plain, "A")-units(160), s.AdvanceAmid(f, "A", "", "V", "", ""), 1e-3,
+		"the pair's kerning is its first glyph's")
+	assert.InDelta(t, s.Advance(plain, "V"), s.AdvanceAmid(f, "V", "A", "", "", ""), 1e-3)
+	assert.InDelta(t, units(1383), s.AdvanceAmid(f, "f", "o", "fice", "", ""), 1e-3,
+		"the ligature is the part its first character is in")
+	assert.InDelta(t, 0, s.AdvanceAmid(f, "fi", "of", "ce", "", ""), 1e-3)
+	assert.InDelta(t, s.Advance(f, "ce"), s.AdvanceAmid(f, "ce", "offi", "", "", ""), 1e-3)
+	assert.InDelta(t, s.Advance(f, "office"), s.AdvanceAmid(f, "o", "", "ffice", "", "")+
+		s.AdvanceAmid(f, "ffi", "o", "ce", "", "")+s.AdvanceAmid(f, "ce", "offi", "", "", ""), 1e-3,
+		"the parts add up to the whole")
+	assert.InDelta(t, s.Advance(f, "To"), s.AdvanceAmid(f, "T", "", "o", "", "")+
+		s.AdvanceAmid(f, "o", "T", "", "", ""), 1e-3)
+}
+
 func TestLayoutAndDrawingShapeAlike(t *testing.T) {
 	s, ttf := featured(t)
 	face, err := draw.ParseFace("Featured", ttf)

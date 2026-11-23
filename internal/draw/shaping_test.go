@@ -33,6 +33,29 @@ func TestALigatureIsDrawnAsOneGlyph(t *testing.T) {
 	assert.Greater(t, j[1].W, a[1].W*1.5, "the ligature is wider than its f")
 }
 
+func TestTextShapedAsOneWithItsNeighboursDrawsTheGlyphsItsClustersStart(t *testing.T) {
+	face := featuredFace(t)
+	st := Style{Face: face, Size: 24}
+	amid := func(_, lead, trail string) Style {
+		o := st
+		o.Lead, o.Trail = lead, trail
+		return o
+	}
+	var first, rest List
+	first.Text(geom.Vec2{}, "of", amid("of", "", "fice"))
+	rest.Text(geom.Vec2{}, "fi", amid("fi", "of", "ce"))
+	f, _ := quads(&first)
+	r, _ := quads(&rest)
+	assert.Len(t, f, 2, "o and the ligature ffi")
+	assert.Empty(t, r, "its characters are in the ligature before")
+	assert.InDelta(t, st.Measure("office").X, amid("of", "", "fice").Measure("of").X+
+		amid("fi", "of", "ce").Measure("fi").X+amid("ce", "offi", "").Measure("ce").X, 1e-3, "the parts add up")
+	assert.Zero(t, amid("fi", "of", "ce").Measure("fi").X)
+	assert.InDelta(t, st.Measure("AV").X-st.Measure("V").X, amid("A", "", "V").Measure("A").X, 1e-3,
+		"the pair's kerning is its first glyph's")
+	assert.Less(t, amid("A", "", "V").Measure("A").X, st.Measure("A").X)
+}
+
 func TestAPairKernedByPlacementMovesItsSecondGlyph(t *testing.T) {
 	face := featuredFace(t)
 	var kerned, plain List
@@ -57,8 +80,8 @@ func arabicFace(t *testing.T) *Face {
 func TestTextRightToLeftIsJoinedInItsOrderAndDrawnFromItsEnd(t *testing.T) {
 	f := arabicFace(t).Size(24)
 	var ltr, rtl []item
-	f.items("بتب", "", false, "", "", func(it item) { ltr = append(ltr, it) })
-	f.items("بتب", "", true, "", "", func(it item) { rtl = append(rtl, it) })
+	f.items("بتب", "", false, round{}, func(it item) { ltr = append(ltr, it) })
+	f.items("بتب", "", true, round{}, func(it item) { rtl = append(rtl, it) })
 	require.Len(t, rtl, 3)
 	require.Len(t, ltr, 3)
 	for i := range rtl {
@@ -66,10 +89,10 @@ func TestTextRightToLeftIsJoinedInItsOrderAndDrawnFromItsEnd(t *testing.T) {
 	}
 	// hb-shape: beh.fina, teh.medi, beh.init, from the left.
 	assert.Equal(t, []sfnt.GlyphIndex{99, 102, 97}, []sfnt.GlyphIndex{rtl[0].idx, rtl[1].idx, rtl[2].idx})
-	assert.InDelta(t, (1399+1099+1399)/2048.0*24, f.measure("بتب", "", 0, "", "").X, 0.01)
+	assert.InDelta(t, (1399+1099+1399)/2048.0*24, f.measure("بتب", "", 0, round{}).X, 0.01)
 
 	var brackets []item
-	f.items("(ب)", "", true, "", "", func(it item) { brackets = append(brackets, it) })
+	f.items("(ب)", "", true, round{}, func(it item) { brackets = append(brackets, it) })
 	require.Len(t, brackets, 3)
 	assert.Equal(t, '(', brackets[0].r, "the closing bracket drawn first, turned round")
 }
@@ -78,7 +101,7 @@ func TestALetterJoinsWithTheTextRoundIt(t *testing.T) {
 	f := arabicFace(t).Size(24)
 	glyphs := func(s, before, after string) []sfnt.GlyphIndex {
 		var out []sfnt.GlyphIndex
-		f.items(s, "", false, before, after, func(it item) { out = append(out, it.idx) })
+		f.items(s, "", false, round{before: before, after: after}, func(it item) { out = append(out, it.idx) })
 		return out
 	}
 	whole := glyphs("ببب", "", "")
@@ -88,7 +111,7 @@ func TestALetterJoinsWithTheTextRoundIt(t *testing.T) {
 	assert.Equal(t, whole[2:], glyphs("ب", "بب", ""), "after them, the final form")
 	assert.Equal(t, glyphs("ب", "", ""), glyphs("ب", "a", " ب"), "a letter that does not join, or a space, joins nothing")
 	var middle float32
-	f.items("ببب", "", false, "", "", func(it item) {
+	f.items("ببب", "", false, round{}, func(it item) {
 		if it.idx == whole[1] {
 			middle = it.advance
 		}
@@ -104,7 +127,7 @@ func TestAVariationSequenceIsDrawnWithItsGlyph(t *testing.T) {
 	require.NoError(t, err)
 	f := face.Size(24)
 	var its []item
-	f.items("a︀b︁a", "", false, "", "", func(it item) { its = append(its, it) })
+	f.items("a︀b︁a", "", false, round{}, func(it item) { its = append(its, it) })
 	require.Len(t, its, 3, "a cluster each, the selectors in them")
 	assert.Equal(t, f.glyph('A').idx, its[0].idx, "a with VS1 is the face's A")
 	assert.Equal(t, f.glyph('b').idx, its[1].idx, "b with VS2 is its own glyph")
@@ -114,7 +137,7 @@ func TestAVariationSequenceIsDrawnWithItsGlyph(t *testing.T) {
 func TestAMarkIsDrawnOnItsBase(t *testing.T) {
 	f := arabicFace(t).Size(24)
 	var its []item
-	f.items("é", "", false, "", "", func(it item) { its = append(its, it) })
+	f.items("é", "", false, round{}, func(it item) { its = append(its, it) })
 	require.Len(t, its, 2, "the mark is drawn, not left out with its cluster")
 	assert.Zero(t, its[1].advance)
 	assert.Equal(t, 1, its[0].clusters+its[1].clusters)
@@ -124,9 +147,9 @@ func TestAMarkIsDrawnOnItsBase(t *testing.T) {
 
 func TestShapedRunsAreKept(t *testing.T) {
 	f := featuredFace(t).Size(24)
-	f.measure("office office", "", 0, "", "")
+	f.measure("office office", "", 0, round{})
 	n := len(f.shapedRuns)
-	f.measure("office office", "", 0, "", "")
+	f.measure("office office", "", 0, round{})
 	assert.Len(t, f.shapedRuns, n, "the same run is shaped once")
 	assert.Positive(t, n)
 }
