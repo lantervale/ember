@@ -86,3 +86,17 @@ func TestReorder(t *testing.T) {
 		}
 	}
 }
+
+func TestMirror(t *testing.T) {
+	for _, c := range []struct {
+		r, want rune
+		ok      bool
+	}{
+		{'(', ')', true}, {'<', '>', true}, {'«', '»', true}, {'≤', '≥', true}, {'∈', '∋', true},
+		{'⁅', '⁆', true}, {'｢', '｣', true}, {'a', 'a', false}, {'∑', '∑', false},
+	} {
+		if got, ok := bidi.Mirror(c.r); got != c.want || ok != c.ok {
+			t.Errorf("Mirror(%q) = %q, %v, want %q, %v", c.r, got, ok, c.want, c.ok)
+		}
+	}
+}

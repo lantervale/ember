@@ -165,12 +165,12 @@ func finalizeOverflow(r rect, s size, reversed [2]bool, scroll bool) overflowRec
 		return newOverflowRect(r, [2]bool{})
 	}
 	if reversed[0] {
-		r.r = fmin(r.r, s.w)
+		r.r = s.w
 	} else {
 		r.l = 0
 	}
 	if reversed[1] {
-		r.b = fmin(r.b, s.h)
+		r.b = s.h
 	} else {
 		r.t = 0
 	}

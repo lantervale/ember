@@ -62,6 +62,8 @@ type Declaration struct {
 	// inline is set on a logical declaration of an inline side, written
 	// as its left one: an element of direction rtl takes it as the right.
 	inline bool
+	// logical is the name a logical declaration was written with.
+	logical string
 }
 
 // origin is where a sheet is: its directory in its file system, or the
@@ -90,7 +92,11 @@ func (o *origin) resolve(src string) string {
 }
 
 func (d Declaration) String() string {
-	s := d.Name + ": " + join(d.Value)
+	name := d.Name
+	if d.logical != "" {
+		name = d.logical
+	}
+	s := name + ": " + join(d.Value)
 	if d.Important {
 		s += " !important"
 	}
@@ -944,6 +950,7 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 		return Declaration{}, false
 	}
 	if as, ok := logical[d.Name]; ok {
+		d.logical = d.Name
 		d.Name, d.inline = as, horizontal(as)
 	} else if inlineShorthands[d.Name] {
 		d.inline = true

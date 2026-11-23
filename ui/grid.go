@@ -335,8 +335,6 @@ func (d *Document) revealRow(grid, row *Node) {
 		off := bars.Scroll
 		off.X += nearest(r.X, r.W, v.X, v.W)
 		off.Y += nearest(r.Y, r.H, v.Y, v.H)
-		off.X = min(max(off.X, 0), max(bars.Content.X-bars.View.W, 0))
-		off.Y = min(max(off.Y, 0), max(bars.Content.Y-bars.View.H, 0))
-		d.setScroll(s, off)
+		d.setScroll(s, bars.Clamp(off))
 	}
 }

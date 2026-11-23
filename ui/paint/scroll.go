@@ -31,10 +31,16 @@ type Bars struct {
 	VTrack, VThumb, HTrack, HThumb geom.Rect
 	V, H                           bool
 	Content                        geom.Vec2
-	// Scroll is the offset the thumbs show.
-	Scroll geom.Vec2
+	// Scroll is the offset the thumbs show, from Start, the least one: below
+	// zero for a box that scrolls from its end.
+	Scroll, Start geom.Vec2
 	// Overlay bars lie over the content, not in a gutter beside it.
 	Overlay bool
+}
+
+// Clamp is off kept within what the bars scroll.
+func (l Bars) Clamp(off geom.Vec2) geom.Vec2 {
+	return box.ClampScroll(off, l.Start, l.Content, geom.V2(l.View.W, l.View.H))
 }
 
 // A thumb is sized and placed on the whole bar, as Chrome sizes the box of
@@ -55,7 +61,7 @@ const (
 func BarsOf(b *box.Box, at geom.Vec2) Bars {
 	view := padding(b, at)
 	st := shown(b)
-	l := Bars{View: view, Content: b.Content, Scroll: b.Scroll, Overlay: st.ScrollbarOverlay}
+	l := Bars{View: view, Content: b.Content, Scroll: b.Scroll, Start: b.ScrollStart, Overlay: st.ScrollbarOverlay}
 	o := st.Overflow
 	l.V = !st.ScrollbarNone && (o.Height == style.Scroll || o.Height == style.OverflowAuto && b.Content.Y > view.H)
 	l.H = !st.ScrollbarNone && (o.Width == style.Scroll || o.Width == style.OverflowAuto && b.Content.X > view.W)
@@ -74,7 +80,7 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		if b.Content.Y > view.H {
 			bar := view.H - corner(l.H)
 			h := max(bar*view.H/b.Content.Y, minThumb)
-			y := view.Y + (bar-h)*b.Scroll.Y/(b.Content.Y-view.H)
+			y := view.Y + (bar-h)*(b.Scroll.Y-b.ScrollStart.Y)/(b.Content.Y-view.H)
 			l.VThumb = geom.Rect{X: l.VTrack.X, Y: y + thumbInset, W: barWidth, H: h - 2*thumbInset}
 		}
 	}
@@ -86,7 +92,7 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		if b.Content.X > view.W {
 			bar := view.W - corner(l.V)
 			w := max(bar*view.W/b.Content.X, minThumb)
-			x := l.HTrack.X - 4 + (bar-w)*b.Scroll.X/(b.Content.X-view.W)
+			x := l.HTrack.X - 4 + (bar-w)*(b.Scroll.X-b.ScrollStart.X)/(b.Content.X-view.W)
 			l.HThumb = geom.Rect{X: x + thumbInset, Y: l.HTrack.Y, W: w - 2*thumbInset, H: barWidth}
 		}
 	}
@@ -170,18 +176,16 @@ func (s *Scrolling) Input(l Bars, p Pointer, step float32) (geom.Vec2, bool) {
 		s.dragV, s.dragH = false, false
 	case s.dragV:
 		if travel := l.VTrack.H - l.VThumb.H; travel > 0 {
-			offset.Y = (p.At.Y - s.grab - l.VTrack.Y) / travel * (l.Content.Y - l.View.H)
+			offset.Y = l.Start.Y + (p.At.Y-s.grab-l.VTrack.Y)/travel*(l.Content.Y-l.View.H)
 		}
 		took = true
 	case s.dragH:
 		if travel := l.HTrack.W - l.HThumb.W; travel > 0 {
-			offset.X = (p.At.X - s.grab - l.HTrack.X) / travel * (l.Content.X - l.View.W)
+			offset.X = l.Start.X + (p.At.X-s.grab-l.HTrack.X)/travel*(l.Content.X-l.View.W)
 		}
 		took = true
 	}
-	offset.X = min(max(offset.X, 0), max(l.Content.X-l.View.W, 0))
-	offset.Y = min(max(offset.Y, 0), max(l.Content.Y-l.View.H, 0))
-	return offset, took
+	return l.Clamp(offset), took
 }
 
 // Dragging reports whether a thumb is being dragged.

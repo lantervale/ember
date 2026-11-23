@@ -141,8 +141,8 @@ func resolved(candidates ...shared) shared {
 	return won
 }
 
-// borderGrid is the borders of a table where they collapse: v the edge left of each
-// column of each row, and one more right of the last; h the edge above each column of
+// borderGrid is the borders of a table where they collapse: v the edge at the start of
+// each column of each row, and one more at the end of the last; h the edge above each column of
 // each row, and one more row below the last.
 type borderGrid struct {
 	rows, cols int
@@ -269,6 +269,14 @@ func (t *tree) collapse(n *node, rows []*node, tracks []track) {
 		return at[r][k]
 	}
 	rowAt, colAt := rowLines(n), columnLines(tracks, cols)
+	// The grid is the table's columns from its start: the start side of a cell, a row or
+	// a column is its left, its right under direction rtl. The table itself is its mirror
+	// image there, its start its left either way, as are the outer borders resolved.
+	start, end := sideLeft, sideRight
+	rtl := n.st.Dir == style.RTL
+	if rtl {
+		start, end = end, start
+	}
 	o := ordersOf(n, cells, rows, tracks)
 	line := func(lines []gridLine, i int) gridLine {
 		if i < 0 || i >= len(lines) {
@@ -284,15 +292,15 @@ func (t *tree) collapse(n *node, rows []*node, tracks []track) {
 				continue
 			}
 			left, right := line(colAt, k-1), line(colAt, k)
-			cands := []shared{o.of(before, sideRight), o.of(after, sideLeft)}
+			cands := []shared{o.of(before, end), o.of(after, start)}
 			if k == 0 {
-				cands = append(cands, o.of(rowAt[r].own, sideLeft), rowAt[r].groupSide(o, sideLeft, true))
+				cands = append(cands, o.of(rowAt[r].own, start), rowAt[r].groupSide(o, start, true))
 			}
 			if k == cols {
-				cands = append(cands, o.of(rowAt[r].own, sideRight), rowAt[r].groupSide(o, sideRight, true))
+				cands = append(cands, o.of(rowAt[r].own, end), rowAt[r].groupSide(o, end, true))
 			}
-			cands = append(cands, o.of(left.own, sideRight), o.of(right.own, sideLeft),
-				left.groupSide(o, sideRight, left.last), right.groupSide(o, sideLeft, right.first))
+			cands = append(cands, o.of(left.own, end), o.of(right.own, start),
+				left.groupSide(o, end, left.last), right.groupSide(o, start, right.first))
 			if k == 0 {
 				cands = append(cands, o.of(n, sideLeft))
 			}
@@ -344,6 +352,9 @@ func (t *tree) collapse(n *node, rows []*node, tracks []track) {
 		}
 		for k := c.col; k < c.col+c.cs; k++ {
 			half.t, half.b = max(half.t, g.h[c.row][k].width/2), max(half.b, g.h[c.row+c.rs][k].width/2)
+		}
+		if rtl {
+			half.l, half.r = half.r, half.l
 		}
 		c.cell.setCollapsed(half)
 	}
