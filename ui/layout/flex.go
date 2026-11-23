@@ -177,8 +177,12 @@ type flexConstants struct {
 	hasDefiniteMainSize     bool
 	hasDefiniteCrossSize    bool
 	crossAvailIsDefinite    bool
-	containerSize           size
-	innerContainerSize      size
+	// webkitBox is display: -webkit-box: its items flex by -webkit-box-flex, stand in
+	// -webkit-box-ordinal-group's order, align as the box says, shrink to nothing at
+	// least, and a row's are no wider than it.
+	webkitBox          bool
+	containerSize      size
+	innerContainerSize size
 }
 
 func (c *flexConstants) scrollOriginReversed() [2]bool {
@@ -204,8 +208,8 @@ func (t *tree) flex(n *node, in input) output {
 	border := n.borders()
 	pbSum := padding.sum().add(border.sum())
 	adj := boxSizingAdjustment(st, pbSum)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	clamped := noSize
 	if in.sizing == inherentSize {
 		clamped = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)
@@ -415,6 +419,7 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 		hasDefiniteMainSize:     hasMain,
 		hasDefiniteCrossSize:    hasCross,
 		crossAvailIsDefinite:    hasCross || avail.get(d.cross()).definite(),
+		webkitBox:               st.WebkitBox,
 	}
 }
 
@@ -455,12 +460,13 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 		adj := boxSizingAdjustment(st, padding.add(border).sum())
 		it := &all[i]
 		*it = flexItem{
-			node:           k,
-			order:          uint32(i),
-			size:           resolveSize(st.Size, percentBasis).withAspectRatio(ratio).mAdd(adj),
+			node:  k,
+			order: uint32(i),
+			size: stretched(resolveSize(st.Size, percentBasis).withAspectRatio(ratio).mAdd(adj), st.Size, st,
+				percentBasis),
 			sizeStyle:      st.Size,
-			minSize:        resolveSize(st.MinSize, percentBasis).mAdd(adj),
-			maxSize:        resolveMax(st.MaxSize, percentBasis).mAdd(adj),
+			minSize:        stretched(resolveSize(st.MinSize, percentBasis).mAdd(adj), st.MinSize, st, percentBasis),
+			maxSize:        stretched(resolveMax(st.MaxSize, percentBasis).mAdd(adj), st.MaxSize, st, percentBasis),
 			aspectRatio:    ratio,
 			margin:         edges(st.Margin, c.nodeInnerSize.w),
 			marginIsAuto:   autoMargins(st),
@@ -472,6 +478,9 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 			shrink:         st.Shrink,
 		}
 		self := st.AlignSelf
+		if c.webkitBox {
+			it.grow, it.shrink, self = st.BoxFlex, st.BoxFlex, style.AlignAuto
+		}
 		if self == style.AlignAuto {
 			self = c.alignItems
 		}
@@ -485,7 +494,11 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 		}
 		items = append(items, it)
 	}
-	slices.SortStableFunc(items, func(a, b *flexItem) int { return cmp.Compare(a.node.st.Order, b.node.st.Order) })
+	order := func(it *flexItem) int { return it.node.st.Order }
+	if c.webkitBox {
+		order = func(it *flexItem) int { return it.node.st.BoxOrdinal }
+	}
+	slices.SortStableFunc(items, func(a, b *flexItem) int { return cmp.Compare(order(a), order(b)) })
 	return items
 }
 
@@ -512,7 +525,7 @@ func automaticMinSize(o style.Size[style.Overflow]) size {
 	return s
 }
 
-//nolint:gocognit,nestif // Taffy's determine_flex_base_size, kept in its shape
+//nolint:cyclop,funlen,gocognit,gocyclo,nestif // Taffy's determine_flex_base_size, kept in its shape
 func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) {
 	d := c.dir
 	for _, it := range items {
@@ -562,6 +575,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 				if !some(b) && basisStyle.Kind == style.Auto {
 					b = mainSize
 				}
+				if basisStyle.Kind == style.Stretch {
+					b = stretch
+				}
 				if some(b) {
 					it.basisIsDefinite = true
 					return b
@@ -586,6 +602,10 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 			if room, ok := fillRoom(c, it); ok {
 				mainAvail = room
 			}
+			if c.webkitBox && d.isRow() && some(stretch) && mainAvail.kind == maxContent {
+				// A -webkit-box's item is no wider than the box: fit-content, not max-content.
+				mainAvail = def(stretch)
+			}
 			childAvail := maxContentSpaces.with(d.main(), mainAvail).with(d.cross(), crossAvail)
 			return t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
 		}()
@@ -594,6 +614,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 		it.innerFlexBasis = it.flexBasis - pbMain
 		pbSums := it.padding.add(it.border).sum()
 		styleMinMain := it.minSize.or(automaticMinSize(it.overflow)).get(d.main())
+		if c.webkitBox && !some(styleMinMain) {
+			styleMinMain = 0
+		}
 		if some(styleMinMain) {
 			it.resolvedMinimumMainSize = styleMinMain
 		} else {

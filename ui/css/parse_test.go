@@ -66,8 +66,8 @@ func TestParseWarnings(t *testing.T) {
 			`inline-flex, grid, inline-grid, none, contents, list-item, flow-root, table, inline-table, table-row, ` +
 			`table-cell, table-row-group, table-header-group, table-footer-group, table-column, ` +
 			`table-column-group, table-caption, -webkit-box, -webkit-inline-box, found "-webkit-flex"`},
-		{"p::-webkit-slider-thumb { color: #f00 }",
-			`t.css:1:4: the vendor-prefixed pseudo-element ::-webkit-slider-thumb is not supported; rule dropped`},
+		{"p::-webkit-inner-spin-button { color: #f00 }",
+			`t.css:1:4: the vendor-prefixed pseudo-element ::-webkit-inner-spin-button is not supported; rule dropped`},
 		{"a:-webkit-any-link { color: #f00 }",
 			`t.css:1:3: the :-webkit-any-link pseudo-class is not supported; rule dropped`},
 		{"p { color red }", `t.css:1:5: expected ':' after "color"`},

@@ -843,6 +843,9 @@ func easing(src string) ease.Func {
 	return easeCurve
 }
 
+// CubicBezier is CSS's cubic-bezier(x1, y1, x2, y2) as an easing.
+func CubicBezier(x1, y1, x2, y2 float64) ease.Func { return cubicBezier(x1, y1, x2, y2) }
+
 // cubicBezier is CSS's cubic-bezier(x1, y1, x2, y2): y for the curve's
 // point at x = t.
 func cubicBezier(x1, y1, x2, y2 float64) ease.Func {

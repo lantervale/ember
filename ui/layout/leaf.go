@@ -39,8 +39,8 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	} else {
 		ratio := aspectRatio(st)
 		styleSize := resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
-		minSize = resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
+		minSize = stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+		maxSize = stretched(resolveMax(st.MaxSize, in.parent).mAdd(adj), st.MaxSize, st, in.parent)
 		if !some(ratio) {
 			// A natural ratio holds between content boxes, whatever box-sizing.
 			ratio = n.naturalRatio()

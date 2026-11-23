@@ -537,7 +537,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	container := n.st.Display
 	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
 		container == style.GridDisplay || container == style.InlineGrid
-	items := t.lift(n, t.flatten(n, children))
+	items := spaced(n, inFlexOrGrid, t.lift(n, t.flatten(n, children)))
 	if !inFlexOrGrid && !hasBlockChild(items) {
 		t.buildInline(n, items)
 		return
@@ -589,7 +589,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.kids = append(n.kids, t.build(it.element, n))
 			continue
 		}
-		if !inFlexOrGrid && !elementBlockLevel(it.element) {
+		if (!inFlexOrGrid || n.st.WebkitBox) && !elementBlockLevel(it.element) {
 			run = append(run, it)
 			continue
 		}
@@ -603,6 +603,17 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.holdsFloats = true
 		}
 	}
+}
+
+// spaced is items less, in a -webkit-box laid out as flex, the white space between its
+// children: Chrome drops it between inline ones too.
+func spaced(n *node, inFlexOrGrid bool, items []item) []item {
+	if !n.st.WebkitBox || !inFlexOrGrid {
+		return items
+	}
+	return slices.DeleteFunc(items, func(it item) bool {
+		return it.text != nil && onlyCollapsibleSpace([]item{it})
+	})
 }
 
 // tableParts lists the table parts that follow one another from items[i], with the white
@@ -789,6 +800,7 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 			if b := of[e]; b != nil && b.Parent == n.box && !moved[b] {
 				moved[b] = true
 				b.Pos = b.Pos.Add(movedBy(e, nil))
+				b.Dim = dimOf(e, n.box.Node)
 			}
 		}
 	}
@@ -824,6 +836,17 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 		c.box.Parent = n.box
 		c.box.Pos, c.box.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
 	}
+}
+
+// dimOf is the Dim of e's box, its inline ancestors' up to upTo fading it.
+func dimOf(e, upTo *dom.Node) float32 {
+	shown := float32(1)
+	for p := e.Parent(); p != nil && p != upTo; p = p.Parent() {
+		if isInline(p) {
+			shown *= styleOf(p).Opacity
+		}
+	}
+	return 1 - shown
 }
 
 // inFlowBlock reports an element that is a block in the flow of its container.

@@ -362,6 +362,49 @@ func rectPath(x, y, w, h, rx, ry float64) Path {
 	return p
 }
 
+// roundedRectPath is a rectangle whose corners, top-left first, are
+// quarters of ellipses of radii r, scaled down together where two would
+// overlap along a side, as CSS's border-radius.
+func roundedRectPath(x, y, w, h float64, r [4]Point) Path {
+	if !(w > 0 && h > 0) {
+		return Path{}
+	}
+	f := 1.0
+	for _, s := range [...]struct{ sum, side float64 }{
+		{r[0].X + r[1].X, w}, {r[3].X + r[2].X, w}, {r[0].Y + r[3].Y, h}, {r[1].Y + r[2].Y, h},
+	} {
+		if s.sum > s.side {
+			f = math.Min(f, s.side/s.sum)
+		}
+	}
+	for i := range r {
+		if r[i] = r[i].mul(f); !(r[i].X > 0 && r[i].Y > 0) {
+			r[i] = Point{}
+		}
+	}
+	q := math.Pi / 2
+	var p Path
+	p.moveTo(Point{x + r[0].X, y})
+	p.lineTo(Point{x + w - r[1].X, y})
+	if r[1].X > 0 {
+		p.arc(Point{x + w - r[1].X, y + r[1].Y}, r[1].X, r[1].Y, 0, -q, q)
+	}
+	p.lineTo(Point{x + w, y + h - r[2].Y})
+	if r[2].X > 0 {
+		p.arc(Point{x + w - r[2].X, y + h - r[2].Y}, r[2].X, r[2].Y, 0, 0, q)
+	}
+	p.lineTo(Point{x + r[3].X, y + h})
+	if r[3].X > 0 {
+		p.arc(Point{x + r[3].X, y + h - r[3].Y}, r[3].X, r[3].Y, 0, q, q)
+	}
+	p.lineTo(Point{x, y + r[0].Y})
+	if r[0].X > 0 {
+		p.arc(Point{x + r[0].X, y + r[0].Y}, r[0].X, r[0].Y, 0, 2*q, q)
+	}
+	p.close()
+	return p
+}
+
 func ellipsePath(c Point, rx, ry float64) Path {
 	var p Path
 	if !(rx > 0 && ry > 0) {

@@ -99,6 +99,19 @@ var pseudoElements = map[string]pseudoElement{
 	"-webkit-scrollbar-button": {status: pseudoUnmatched},
 	"-webkit-resizer":          {status: pseudoUnmatched},
 
+	// The parts of a range, a progress and a meter, as Chrome lays them
+	// out once the control's appearance is none (decision 0160).
+	sliderTrack:       {},
+	sliderThumb:       {},
+	progressBar:       {},
+	progressValue:     {},
+	meterBar:          {},
+	meterOptimum:      {},
+	meterSuboptimum:   {},
+	meterEvenLessGood: {},
+	progressInner:     {},
+	meterInner:        {},
+
 	"part":                           {status: pseudoUnmatched, form: formFunction},
 	"slotted":                        {status: pseudoUnmatched, form: formFunction},
 	"highlight":                      {status: pseudoUnmatched, form: formFunction},
@@ -154,6 +167,20 @@ const (
 	scrollbarTrackPiece = "-webkit-scrollbar-track-piece"
 	scrollbarThumb      = "-webkit-scrollbar-thumb"
 	scrollbarCorner     = "-webkit-scrollbar-corner"
+)
+
+// The parts of the controls drawn from their CSS.
+const (
+	progressInner     = "-webkit-progress-inner-element"
+	meterInner        = "-webkit-meter-inner-element"
+	sliderTrack       = "-webkit-slider-runnable-track"
+	sliderThumb       = "-webkit-slider-thumb"
+	progressBar       = "-webkit-progress-bar"
+	progressValue     = "-webkit-progress-value"
+	meterBar          = "-webkit-meter-bar"
+	meterOptimum      = "-webkit-meter-optimum-value"
+	meterSuboptimum   = "-webkit-meter-suboptimum-value"
+	meterEvenLessGood = "-webkit-meter-even-less-good-value"
 )
 
 // partState is the states of a scrollbar's part that its pseudo-classes
@@ -236,6 +263,22 @@ func partStatesOf(cs []Component) ([]Component, partState) {
 		return cs, 0
 	}
 	return cs[:n], want
+}
+
+// nativeClass is the user agent's pseudo-class of the rules that draw a
+// control's own look, which hold while its appearance isn't none: Export
+// writes it as an attribute only the controls of appearance: none lack.
+const nativeClass = "-ember-native"
+
+// nativeOf is cs without its :-ember-native, and whether it had one.
+func nativeOf(cs []Component) ([]Component, bool) {
+	for i := 1; i < len(cs); i++ {
+		if cs[i].Kind == Ident && cs[i-1].Kind == Colon && (i < 2 || cs[i-2].Kind != Colon) &&
+			strings.EqualFold(cs[i].Text, nativeClass) {
+			return append(slices.Clip(cs[:i-1]), cs[i+1:]...), true
+		}
+	}
+	return cs, false
 }
 
 // beforeMarker and afterMarker name the ::marker of a ::before or an
