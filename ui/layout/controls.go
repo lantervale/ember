@@ -70,7 +70,7 @@ func (t *tree) buildControl(n *node, kind controlKind) {
 	}
 	b := &box.Box{Kind: box.TextRun, Node: shadow, Style: styleOf(shadow)}
 	c := &inlineContent{owner: n, runs: []*textRun{{box: b, parent: n.box, st: &st, span: -1, text: text}},
-		unit: unitsPerPoint(t.fonts)}
+		unit: unitsPerPoint(t.fonts), height: none}
 	c.cut(t.fonts)
 	n.inline = c
 	n.control = kind

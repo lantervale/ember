@@ -98,6 +98,9 @@ type Document struct {
 	contrast  Contrast
 	forced    bool
 	touchOnly bool
+	// inactive is the window the Document shows in not being focused, as
+	// last drawn.
+	inactive bool
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool
@@ -162,6 +165,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 		wheel: 1,
 	}
 	d.html.Append(d.body)
+	dom.Data(d.html).Root = true
 	d.trans.MeasureFonts(d.fontUnits)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
@@ -591,6 +595,9 @@ func init() {
 func (d *Document) Draw(c *twod.Canvas) {
 	if win := c.Window(); win != nil {
 		d.fonts.SetScale(win.ContentScale() * d.Zoom() * d.outerZoom())
+		if d.inactive != !win.Focused() {
+			d.inactive, d.replay.repaint = !win.Focused(), true
+		}
 	}
 	animating := d.tick(c)
 	if (animating || d.replay.animating) && d.tree != nil {
@@ -637,7 +644,7 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.painted++
 	d.unsettled = false
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
-		Selection: d.selectionPaint()}
+		Selection: d.selectionPaint(), Inactive: d.medium().Inactive}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
 	d.replay.recorded = c.Keep(m, &d.replay.last)
 	d.paintApart(c, apart)

@@ -244,6 +244,13 @@ func round(v float32) float32 { return float32(int(v + 0.5)) }
 // Advance is the width of text in f, kerning included; a character f's
 // face lacks takes the Fallback face's advance.
 func (s *Set) Advance(f style.Font, text string) float32 {
+	if runs := f.SmallCaps(text); runs != nil {
+		var w float32
+		for _, r := range runs {
+			w += s.Advance(r.Font, r.Text)
+		}
+		return w
+	}
 	if s.emoji == nil || isASCII(text) {
 		return s.advance(f, text)
 	}

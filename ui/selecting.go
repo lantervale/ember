@@ -205,8 +205,8 @@ const (
 )
 
 // scrollSelection scrolls the innermost container round the selection's
-// anchor that the pointer is above or below, and that can still scroll
-// that way.
+// anchor that the pointer is past an edge of, and that can still scroll
+// that way: up and down, and sideways.
 func (d *Document) scrollSelection(at geom.Vec2) {
 	s := &d.sel
 	dt := min(max(d.clock-s.scrolledAt, 0), 0.05)
@@ -216,29 +216,45 @@ func (d *Document) scrollSelection(at geom.Vec2) {
 	}
 	for _, b := range scrollContainers(d.tree.Of[s.anchor.Node]) {
 		bars := paint.BarsOf(b, origin(b))
-		var past float32
-		switch {
-		case at.Y < bars.View.Y:
-			past = at.Y - bars.View.Y
-		case at.Y > bars.View.Y+bars.View.H:
-			past = at.Y - bars.View.Y - bars.View.H
-		default:
-			continue
+		past := geom.V2(pastEdge(at.X, bars.View.X, bars.View.W), pastEdge(at.Y, bars.View.Y, bars.View.H))
+		if !canScroll(bars, geom.V2(past.X, 0)) {
+			past.X = 0
 		}
-		if !canScroll(bars, geom.V2(0, past)) {
-			continue
+		if !canScroll(bars, geom.V2(0, past.Y)) {
+			past.Y = 0
 		}
-		speed := past * selectionScroll
-		if past > 0 {
-			speed = max(speed, selectionScrollMin)
-		} else {
-			speed = min(speed, -selectionScrollMin)
+		if past == (geom.Vec2{}) {
+			continue
 		}
 		off := bars.Scroll
-		off.Y = min(max(off.Y+speed*dt, 0), max(bars.Content.Y-bars.View.H, 0))
+		off.X = min(max(off.X+dragSpeed(past.X)*dt, 0), max(bars.Content.X-bars.View.W, 0))
+		off.Y = min(max(off.Y+dragSpeed(past.Y)*dt, 0), max(bars.Content.Y-bars.View.H, 0))
 		d.setScroll(b, off)
 		return
 	}
+}
+
+// pastEdge is how far v lies before at or past at+size, negative before.
+func pastEdge(v, at, size float32) float32 {
+	switch {
+	case v < at:
+		return v - at
+	case v > at+size:
+		return v - at - size
+	}
+	return 0
+}
+
+// dragSpeed is how fast a drag past points beyond an edge scrolls, in
+// points a second.
+func dragSpeed(past float32) float32 {
+	switch {
+	case past > 0:
+		return max(past*selectionScroll, selectionScrollMin)
+	case past < 0:
+		return min(past*selectionScroll, -selectionScrollMin)
+	}
+	return 0
 }
 
 // overText reports whether at is on the text of hit, the box under the
@@ -431,7 +447,7 @@ func (d *Document) stepWord(p Position, forward bool) Position {
 		if !forward {
 			from, to = d.wordAt(Position{q.Node, max(q.Offset, 0)})
 		}
-		src := d.mapOf(q.Node).src
+		src := d.mapOf(from.Node).src
 		blank := from.Offset < len(src) && isBlank(src[from.Offset])
 		p = to
 		if !forward {

@@ -44,6 +44,8 @@ func TestPseudoElementSelectors(t *testing.T) {
 		"p::part(label)":              {"part", Specificity{0, 0, 2}, "p::part(label)"},
 		"video::cue":                  {"cue", Specificity{0, 0, 1}, "*::cue"},
 		"p::highlight(x)":             {"highlight", Specificity{0, 0, 2}, "p::highlight(x)"},
+		"p::selection:window-inactive": {"selection", Specificity{0, 1, 2},
+			"p::selection:window-inactive"},
 	} {
 		if src == "video::cue" {
 			continue // ui has no video element

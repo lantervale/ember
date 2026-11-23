@@ -24,7 +24,7 @@ A Document shown in another: the element holds a `*ui.Document` the program buil
 
 | Attribute | |
 |---|---|
-| `width`, `height` | its size, pixels or a percentage, under every rule; 300 × 150 without them. Neither side follows the other: a frame has no ratio of its own, `aspect-ratio` gives it one |
+| `width`, `height` | its size, pixels or a percentage, under every rule; 300 × 150 without them. Neither side follows the other: a frame has no ratio of its own. With `aspect-ratio` and no size it fills its line, as Chrome's, the ratio holding between the boxes `box-sizing` names |
 | `frameborder` | `0` or `no` takes the border off |
 
 | | |
@@ -33,7 +33,10 @@ A Document shown in another: the element holds a `*ui.Document` the program buil
 | zoom | the page's zoom scales the frame and what it shows; the framed Document's own `SetZoom` goes on top |
 | the pointer | the framed Document's where the frame is what the page finds under it: an element of the page lying over the frame keeps the pointer. A press begun in the frame stays its own until released |
 | the wheel | scrolls the framed Document while it can scroll that way, then the page |
-| the focus | a click in the frame, or `Focus` on an element in it, gives the frame the page's focus; the keys then go to the framed Document alone. Tab walks from the page into the frame, through it and out the other side, backwards too |
+| the focus | a click in the frame, or `Focus` on an element in it, gives the frame the page's focus; the keys then go to the framed Document. Tab walks from the page into the frame, through it and out the other side, backwards too; the arrows and a pad's stick walk out of the frame where nothing of it lies that way, and into a frame they reach, to its element nearest the side they came in by |
+| keys and Back | a key or a Back no callback of the framed Document stopped goes on to the page round it, its `OnKey` and `OnBack` hearing it on the iframe, as an event retargeted ([decision 0141](../../99-decisions/0141-keys-and-the-arrows-cross-a-frame-the-frame-fades-and-moves-with-its-iframe.md)): one `OnBack` on a screen's root hears an Escape pressed in a frame on it. The World event is the framed Document's alone |
+| a modal dialog | of the framed Document holds that Document's input, as Chrome's; the page round it still takes the pointer and the keys |
+| `opacity` | below 1 on the iframe or round it fades the frame with what it shows, drawn as one picture |
 | the selection | each Document selects its own text; selecting in one clears the others |
 | automation | the framed elements are recorded under the frame's id: `help/got-it` |
 | drawing | a frame out of view is not drawn; one nothing changed in replays, and a change inside it paints the frame, not the page |
@@ -41,7 +44,7 @@ A Document shown in another: the element holds a `*ui.Document` the program buil
 
 Frames nest: a framed Document holds iframes of its own.
 
-An iframe taken out of its Document, itself or with an element round it, lets go of the Document it showed at the page's next frame, as `SetFrame(n, nil)` does: its focus and selection go, and nothing holds it any more. Put back in the same Document within the frame, as an element moved does, it keeps it; put back later, or in another Document, it shows nothing until `SetFrame`.
+An iframe taken out of its Document, itself or with an element round it, lets go of the Document it showed at the page's next frame, as `SetFrame(n, nil)` does: its focus and selection go, and nothing holds it any more. Put back within the frame, in the same Document or moved to another, as an element moved does, it keeps it: Chrome loads a moved frame again, and here what the program gave it is shown there. Put back later, it shows nothing until `SetFrame`.
 
 | Default CSS | |
 |---|---|
@@ -50,7 +53,7 @@ An iframe taken out of its Document, itself or with an element round it, lets go
 
 Automation: recorded by its `role` like any other element; what it shows is under it.
 
-Sized as Chrome sizes it in `TestAnIframesBoxMatchesChromes`, drawn as Chrome draws it in the `iframe` page of `TestPagesLookLikeChrome`.
+Sized as Chrome sizes it in `TestAnIframesBoxMatchesChromes` and `TestAnIframeWithOnlyARatioFillsItsLineAsInChrome`, drawn as Chrome draws it in the `iframe`, `iframe-borders` and `iframe-faded` pages of `TestPagesLookLikeChrome`.
 
 ```
 go run ./examples/93-html-elements -element iframe

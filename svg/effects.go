@@ -210,7 +210,7 @@ func (d *drawer) pattern(dst *image.RGBA, pat *Pattern, m Matrix, opacity float3
 		return
 	}
 	tile := image.NewRGBA(image.Rect(0, 0, tw, th))
-	sub := &drawer{view: tileView}
+	sub := &drawer{view: tileView, unit: d.unit}
 	sub.items(tile, tile.Rect, pat.Items, 1, 0)
 	toTile := tileView.Mul(inv)
 	d.cover.fill(evenOdd, func(y, x0 int, cover []float32) {

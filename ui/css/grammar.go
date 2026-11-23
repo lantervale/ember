@@ -37,11 +37,19 @@ func isWord(c Component, words ...string) bool {
 
 func isSlash(c Component) bool { return c.Kind == Delim && c.Text == "/" }
 
-// globalKeyword returns inherit, initial or unset when v is one alone.
+// globalKeyword returns inherit, initial or unset when v is one alone;
+// revert and revert-layer, which the cascade rolls back where they win,
+// are unset wherever they are left (a keyframe, a var()).
 func globalKeyword(v []Component) string {
 	v = items(v)
-	if len(v) == 1 && isWord(v[0], "inherit", "initial", kwUnset) {
+	if len(v) != 1 {
+		return ""
+	}
+	switch {
+	case isWord(v[0], "inherit", "initial", kwUnset):
 		return strings.ToLower(v[0].Text)
+	case isWord(v[0], kwRevert, kwRevertLayer):
+		return kwUnset
 	}
 	return ""
 }
@@ -372,10 +380,17 @@ var checks = map[string]check{
 	"font-synthesis": checkFontSynthesis,
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "smaller", "larger"))),
-	"font-style":      single(words("normal", "italic", "oblique")),
-	"font-weight":     single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
-	"line-height":     single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
-	"letter-spacing":  single(either(length, words("normal"))),
+	"font-style":     single(words("normal", "italic", "oblique")),
+	"font-weight":    single(either(fontWeightNumber, words("normal", "bold", "bolder", "lighter"))),
+	"line-height":    single(either(dimTerm(allowPercent|allowNumber|nonNegative), words("normal"))),
+	"letter-spacing": single(either(lengthPercent, words("normal"))),
+	propCaps: single(words("normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps",
+		"unicase", "titling-caps")),
+	propLigatures:     checkVariant(propLigatures),
+	propNumeric:       checkVariant(propNumeric),
+	propEastAsian:     checkVariant(propEastAsian),
+	propAlternates:    checkVariant(propAlternates),
+	propPosition:      checkVariant(propPosition),
 	"word-spacing":    single(either(lengthPercent, words("normal"))),
 	"border-spacing":  repeated(length, 2),
 	"border-collapse": single(words("separate", "collapse")),
@@ -386,13 +401,18 @@ var checks = map[string]check{
 	"direction":       single(words("ltr", "rtl")),
 	"unicode-bidi": single(words("normal", "embed", "isolate", "bidi-override", "isolate-override",
 		"plaintext")),
-	"text-indent":            single(lengthPercent),
-	"text-transform":         single(words("none", "uppercase", "lowercase", "capitalize")),
-	"-webkit-font-smoothing": single(words("auto", "none", "antialiased", "subpixel-antialiased")),
-	"white-space":            single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
-	"overflow-wrap":          single(words("normal", "break-word", "anywhere")),
-	"color":                  single(colorTerm),
-	"color-scheme":           checkColorScheme,
+	"text-indent":              single(lengthPercent),
+	"text-transform":           single(words("none", "uppercase", "lowercase", "capitalize")),
+	"-webkit-font-smoothing":   single(words("auto", "none", "antialiased", "subpixel-antialiased")),
+	"-webkit-text-fill-color":  single(colorTerm),
+	"white-space":              single(words("normal", "nowrap", "pre", "pre-wrap", "pre-line")),
+	"overflow-wrap":            single(words("normal", "break-word", "anywhere")),
+	"word-break":               single(words("normal", "break-all", "keep-all", "break-word")),
+	"line-break":               single(words("auto", "loose", "normal", "strict", "anywhere")),
+	"tab-size":                 single(either(number, dimTerm(nonNegative))),
+	"text-decoration-skip-ink": single(words("auto", "none", "all")),
+	"color":                    single(colorTerm),
+	"color-scheme":             checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
 	"text-overflow":     single(words("clip", "ellipsis")),
@@ -414,7 +434,7 @@ var checks = map[string]check{
 	"background-repeat":     commaList(checkTiling),
 	"background-attachment": commaList(single(words("scroll", "fixed", "local"))),
 	"background-origin":     commaList(single(backgroundBox)),
-	"background-clip":       commaList(single(backgroundBox)),
+	"background-clip":       commaList(single(either(words("text"), backgroundBox))),
 	"background-size":       commaList(checkBackgroundSize),
 	"background-position":   commaList(checkPosition),
 	"mask-image":            commaList(single(either(words("none"), imageTerm))),

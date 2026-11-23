@@ -513,12 +513,25 @@ var lineHeights = interp[style.LineHeight]{
 	equal: same[style.LineHeight],
 }
 
+// tabSizes interpolate numbers with numbers and lengths with lengths.
+//
 //nolint:gochecknoglobals // an interpolation, fixed
-var wordSpacings = interp[style.WordSpacing]{
-	lerp: func(a, b style.WordSpacing, t float32) (style.WordSpacing, bool) {
-		return style.WordSpacing{Px: lerpf(a.Px, b.Px, t), Percent: lerpf(a.Percent, b.Percent, t)}, true
+var tabSizes = interp[style.TabSize]{
+	lerp: func(a, b style.TabSize, t float32) (style.TabSize, bool) {
+		if a.Length != b.Length {
+			return a, false
+		}
+		return style.TabSize{Spaces: lerpf(a.Spaces, b.Spaces, t), Px: lerpf(a.Px, b.Px, t), Length: a.Length}, true
 	},
-	equal: same[style.WordSpacing],
+	equal: same[style.TabSize],
+}
+
+//nolint:gochecknoglobals // an interpolation, fixed
+var textSpacings = interp[style.Spacing]{
+	lerp: func(a, b style.Spacing, t float32) (style.Spacing, bool) {
+		return style.Spacing{Px: lerpf(a.Px, b.Px, t), Percent: lerpf(a.Percent, b.Percent, t)}, true
+	},
+	equal: same[style.Spacing],
 }
 
 // ratios interpolates aspect-ratio by its logarithm, as Chrome does; auto

@@ -20,7 +20,7 @@ func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, ins
 // leaf lays out a node without child boxes: empty, or holding inline content, Taffy's
 // compute_leaf_layout with text as its measure function.
 //
-//nolint:cyclop,funlen,gocognit,gocyclo // Taffy's compute_leaf_layout, kept in its shape
+//nolint:cyclop,funlen,gocyclo,gocognit,nestif // Taffy's compute_leaf_layout, kept in its shape
 func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	st := n.st
 	padding := edges(st.Padding, in.parent.w)
@@ -29,9 +29,13 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	pbSum := pb.sum()
 	adj := boxSizingAdjustment(st, pbSum)
 
+	room := n.room(in)
 	var nodeSize, minSize, maxSize size
 	if in.sizing == contentSize {
 		nodeSize, minSize, maxSize = in.known, noSize, noSize
+		if n.framed() && !some(nodeSize.w) && !some(nodeSize.h) {
+			nodeSize = n.naturalIn(room, pbSum).add(pbSum)
+		}
 	} else {
 		ratio := aspectRatio(st)
 		styleSize := resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -45,9 +49,12 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 			minSize = minSize.mSub(pbSum).withAspectRatio(ratio).mAdd(pbSum)
 		}
 		nodeSize = in.known.or(styleSize)
+		if n.framed() {
+			nodeSize = nodeSize.mSub(adj).withAspectRatio(ratio).mAdd(adj)
+		}
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
 			n.intrinsic = true
-			nodeSize = replacedSize(n.naturalIn(in.avail.w, pbSum.w).add(pbSum), ratio, minSize, maxSize)
+			nodeSize = replacedSize(n.naturalIn(room, pbSum).add(pbSum), ratio, minSize, maxSize)
 		}
 	}
 
@@ -92,6 +99,12 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	if c := n.inline; c != nil && c.flowAmong(ctx, n, in.known.w, inset) {
 		defer func() { c.flow = nil }()
 		known.w = in.known.w - inset.horizontal()
+	}
+	if c := n.inline; c != nil {
+		c.height = none
+		if some(nodeSize.h) {
+			c.height = max(mClamp(nodeSize.h, minSize.h, maxSize.h)-inset.vertical(), 0)
+		}
 	}
 	// A box that takes its content's width gives its content's percentages that width.
 	basis := avail.w.value()
@@ -184,6 +197,15 @@ func (t *tree) leafChildren(n *node, out *output, pb, border rect, gutter point)
 	}
 	inset := border.add(rect{r: gutter.x, b: gutter.y})
 	out.area = &oofArea{size: out.size.sub(inset.sum()), offset: point{inset.l, inset.t}}
+}
+
+// room is the width a replaced box that fills takes: the room it is given, or with no
+// natural width its containing block's at any content size.
+func (n *node) room(in input) space {
+	if in.avail.w.kind != definite && n.framed() && some(in.parent.w) {
+		return def(in.parent.w)
+	}
+	return in.avail.w
 }
 
 func ratioHeight(w, ratio float32) float32 {

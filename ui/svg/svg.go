@@ -42,6 +42,7 @@ const sniffed = 4096
 // order mark, white space, an XML declaration, processing instructions,
 // comments and a doctype, its internal subset included.
 func sniff(data []byte) bool {
+	data = narrow(data[:min(len(data), 2*sniffed)])
 	data = bytes.TrimPrefix(data[:min(len(data), sniffed)], []byte("\xef\xbb\xbf"))
 	for {
 		data = bytes.TrimLeft(data, " \t\r\n")
@@ -72,6 +73,30 @@ func sniff(data []byte) bool {
 			data = data[i+1:]
 		}
 	}
+}
+
+// narrow is UTF-16 data, known by its byte order mark or its first '<',
+// a byte a character, those past ASCII as 0xff; other data as it is.
+func narrow(data []byte) []byte {
+	low := 1
+	switch {
+	case bytes.HasPrefix(data, []byte{0xfe, 0xff}), bytes.HasPrefix(data, []byte{0, '<'}):
+	case bytes.HasPrefix(data, []byte{0xff, 0xfe}), bytes.HasPrefix(data, []byte{'<', 0}):
+		low = 0
+	default:
+		return data
+	}
+	if data[0] > 0x7f {
+		data = data[2:]
+	}
+	out := make([]byte, len(data)/2)
+	for i := range out {
+		out[i] = data[2*i+low]
+		if data[2*i+1-low] != 0 || out[i] > 0x7f {
+			out[i] = 0xff
+		}
+	}
+	return out
 }
 
 func parse(data []byte) (ui.VectorImage, error) {
