@@ -88,9 +88,13 @@ type inlineOOF struct {
 	span       int
 }
 
+// anchorAt is an out-of-flow element before run i, in the box parent: the owner's, top,
+// or an inline element's.
 type anchorAt struct {
-	node *node
-	run  int
+	node   *node
+	run    int
+	parent *box.Box
+	top    bool
 }
 
 // oofOf is k's place in c's lines when k is out of flow inside it, nil otherwise.
@@ -284,16 +288,14 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			continue
 		}
 		if outOfFlow(st.Position) {
-			if parent == c.owner.box {
-				continue
-			}
 			n := t.build(it.element, c.owner)
 			c.owner.kids = append(c.owner.kids, n)
 			if c.oofs == nil {
 				c.oofs = map[*node]*inlineOOF{}
 			}
 			c.oofs[n] = &inlineOOF{span: -1}
-			c.anchors = append(c.anchors, anchorAt{node: n, run: len(c.runs)})
+			c.anchors = append(c.anchors, anchorAt{node: n, run: len(c.runs), parent: parent,
+				top: parent == c.owner.box})
 			continue
 		}
 		if it.element.Tag() == dom.Br {
@@ -618,7 +620,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 }
 
 // anchorsAt adds the anchors of the out-of-flow elements before run i, and notes the
-// innermost open span each sits in.
+// inline element each sits in.
 func (c *inlineContent) anchorsAt(i int) {
 	for k, a := range c.anchors {
 		if a.run != i {
@@ -627,10 +629,8 @@ func (c *inlineContent) anchorsAt(i int) {
 		o := c.oofs[a.node]
 		o.span = -1
 		for si, sp := range c.spans {
-			if sp.first <= i && i < sp.end || sp.first == i && sp.end == i {
-				if o.span < 0 || c.spans[o.span].first < sp.first || c.spans[o.span].end > sp.end {
-					o.span = si
-				}
+			if sp.box == a.parent {
+				o.span = si
 			}
 		}
 		c.pieces = append(c.pieces, piece{kind: anchor, run: min(i, max(len(c.runs)-1, 0)), span: k})
@@ -1797,7 +1797,15 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 		for _, p := range shown {
 			x := at.step(p, perGap)
 			if p.kind == anchor {
-				c.oofs[c.anchors[p.span].node].static = point{x, y}
+				k := c.anchors[p.span].node
+				c.oofs[k].static = point{x, y}
+				if c.anchors[p.span].top && !k.st.StaticInline && isBlockDisplay(k.st.Display) {
+					// a block-level one starts a line: below this one when text is before it
+					c.oofs[k].static = point{inset.l, y}
+					if x > start {
+						c.oofs[k].static.y += lh
+					}
+				}
 			}
 			if p.kind == atomic {
 				a := c.runs[p.run].atomic
@@ -1817,15 +1825,21 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 		y += lh
 	}
 	for _, o := range c.oofs {
-		c.containingSpan(o, spanLines)
+		c.containingSpan(o, spanLines, size{content, none})
 	}
 }
 
 // containingSpan makes the nearest positioned span holding o its containing block: the
 // box from the start of its first fragment's padding box to the end of its last one's,
-// as CSS defines it for an inline element.
-func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect) {
+// as CSS defines it for an inline element, moved with the spans position: relative moves
+// round it. o's static place moves with the spans holding it; cb is what their offsets'
+// percentages are of.
+func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect, cb size) {
 	o.positioned = false
+	for k := o.span; k >= 0; k = c.spans[k].up {
+		moved := inlineOffset(c.spans[k].st, cb)
+		o.static = point{o.static.x + moved.X, o.static.y + moved.Y}
+	}
 	for k := o.span; k >= 0; k = c.spans[k].up {
 		sp := c.spans[k]
 		if sp.st.Position == style.Static {
@@ -1840,7 +1854,11 @@ func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.R
 		x1 := last.X + last.W - sp.border.r
 		y0 := first.Y + sp.border.t
 		y1 := last.Y + last.H - sp.border.b
-		o.areaAt = point{x0, y0}
+		moved := geom.Vec2{}
+		for j := k; j >= 0; j = c.spans[j].up {
+			moved = moved.Add(inlineOffset(c.spans[j].st, cb))
+		}
+		o.areaAt = point{x0 + moved.X, y0 + moved.Y}
 		o.areaSize = size{max(x1-x0, 0), max(y1-y0, 0)}
 		o.positioned = true
 		return

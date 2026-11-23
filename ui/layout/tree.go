@@ -621,14 +621,11 @@ func tableParts(items []item, i int) ([]*dom.Node, int) {
 	return parts[:kept], end
 }
 
-// buildInline gives n inline content alone: its items as its own lines, and nodes for
-// those out of the flow or not shown.
+// buildInline gives n inline content alone: its items as its own lines, nodes for those
+// not shown, and, as its lines are gathered, for those out of the flow.
 func (t *tree) buildInline(n *node, items []item) {
 	for _, it := range items {
-		if it.element == nil {
-			continue
-		}
-		if st := styleOf(it.element); outOfFlow(st.Position) || st.Display == style.DisplayNone {
+		if it.element != nil && styleOf(it.element).Display == style.DisplayNone {
 			n.kids = append(n.kids, t.build(it.element, n))
 		}
 	}

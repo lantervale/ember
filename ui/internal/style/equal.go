@@ -37,6 +37,7 @@ func (b *Box) equal(o *Box) bool {
 		b.TablePart == o.TablePart &&
 		b.BoxSizing == o.BoxSizing &&
 		b.Position == o.Position &&
+		b.StaticInline == o.StaticInline &&
 		b.Float == o.Float &&
 		b.Clear == o.Clear &&
 		b.VerticalAlign == o.VerticalAlign &&

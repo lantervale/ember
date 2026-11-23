@@ -1090,6 +1090,8 @@ func (x *ctx) finish(root bool) {
 	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
 		// not a flex or grid container
 	}
+	c.StaticInline = !root && (c.Position == style.Absolute || c.Position == style.FixedPosition) &&
+		blockified(c.Display) != c.Display
 	if root || c.Position == style.Absolute || c.Position == style.FixedPosition {
 		c.Display, c.TablePart = blockified(c.Display), style.NoTablePart
 		c.Float = style.FloatNone

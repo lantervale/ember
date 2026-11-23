@@ -160,6 +160,10 @@ type Box struct {
 	TablePart TablePart
 	BoxSizing BoxSizing
 	Position  Position
+	// StaticInline is set on an absolutely or fixed positioned box that was
+	// inline-level before it left the flow: its static position is where
+	// it would stand on its line, not below it.
+	StaticInline bool
 	// Float and Clear are float and clear; a float applies to a box in the
 	// flow of a block container, not to a flex or grid item or a box
 	// position takes out of the flow.
