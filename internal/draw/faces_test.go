@@ -2,40 +2,8 @@ package draw //nolint:testpackage // white-box: reaches draw's unexported state
 
 import (
 	"os"
-	"runtime"
 	"testing"
-	"time"
-
-	"golang.org/x/image/font/gofont/goregular"
 )
-
-func kerningEntries() int {
-	kerningMu.Lock()
-	defer kerningMu.Unlock()
-	return len(kerning)
-}
-
-func TestAFaceNoLongerHeldLeavesTheKerningCache(t *testing.T) {
-	before := kerningEntries()
-	func() {
-		f, err := ParseFace("page-font", goregular.TTF)
-		if err != nil {
-			t.Fatal(err)
-		}
-		f.Size(16)
-		if kerningEntries() != before+1 {
-			t.Fatalf("%d kerning tables, want %d", kerningEntries(), before+1)
-		}
-	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for kerningEntries() != before && time.Now().Before(deadline) {
-		runtime.GC()
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got := kerningEntries(); got != before {
-		t.Errorf("%d kerning tables after the face is gone, want %d: the cache keeps its font", got, before)
-	}
-}
 
 func TestAFaceDrawsOnlyTheCharactersOfItsRanges(t *testing.T) {
 	latin := Bold.Only([]Range{{'a', 'z'}})

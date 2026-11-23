@@ -3,7 +3,13 @@ package draw //nolint:testpackage // white-box: reaches a glyph's coverage in th
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/varfont"
+	"github.com/lantervale/ember/internal/varfont/varfonttest"
 )
 
 // row is the coverage across g's middle row, as runs: [covered, clear,
@@ -75,5 +81,36 @@ func TestAStrokesSharpCornersAreMitred(t *testing.T) {
 	}
 	if up := top(plain, plain.glyph('o')) - top(stroked, stroked.glyph('o')); up < 1.5 || up > 2.5 {
 		t.Errorf("the stroked o's top is %v above the filled one's, want the stroke's half, 2", up)
+	}
+}
+
+func TestAVariableInstanceIsStrokedFromItsOwnOutlines(t *testing.T) {
+	ttf := varfonttest.Weighty()
+	face, err := ParseFace("weighty", ttf)
+	require.NoError(t, err)
+	vf, err := varfont.Parse(ttf)
+	require.NoError(t, err)
+	bold := face.Styled(Look{Variation: &Variation{Font: vf, Coords: vf.Normalize([]float32{900, 100})}})
+	plain := Style{Face: face, Size: 24, Stroke: 1}.Font()
+	heavy := Style{Face: bold, Size: 24, Stroke: 1}.Font()
+	p, h := plain.glyph('l'), heavy.glyph('l')
+	assert.Greater(t, h.advance, p.advance, "the instance's advance")
+	filled, outline := row(plain, p), row(heavy, h)
+	require.Len(t, filled, 3, "an l of the default instance stroked round a hole")
+	require.Len(t, outline, 3, "an l at 900 stroked round a hole")
+	assert.Greater(t, outline[1], filled[1], "the bolder stem's hole is wider")
+}
+
+func TestAStrokedTextIsShapedAsItsFill(t *testing.T) {
+	face := featuredFace(t)
+	var filled, stroked List
+	filled.Text(geom.Vec2{}, "office", Style{Face: face, Size: 24})
+	stroked.Text(geom.Vec2{}, "office", Style{Face: face, Size: 24, Stroke: 2})
+	f, _ := quads(&filled)
+	s, _ := quads(&stroked)
+	require.Len(t, s, len(f), "the ligature stroked as one glyph")
+	for i := range f {
+		assert.InDelta(t, f[i].X+f[i].W/2, s[i].X+s[i].W/2, 0.6, "glyph %d stroked where it is filled", i)
+		assert.Greater(t, s[i].W, f[i].W, "glyph %d's stroke reaches past its fill", i)
 	}
 }

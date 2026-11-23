@@ -38,7 +38,9 @@ type Text struct {
 	exactCoverage bool `node:"prop"`
 	// stroke is how wide the glyphs' outlines are drawn (TextStroke).
 	stroke float32 `node:"prop"`
-	face   *Face
+	// features are the OpenType features it is shaped with (Features).
+	features string `node:"prop"`
+	face     *Face
 	// expanded is text with its shortcodes replaced, for expandedFrom.
 	expanded, expandedFrom string
 }
@@ -128,8 +130,24 @@ func (t *Text) style() draw.Style {
 		Pixelated: t.pixelated,
 		Exact:     t.exactCoverage,
 		Stroke:    t.stroke,
+		Features:  t.features,
 	}
 }
+
+// Features shapes a text with its face's OpenType features, written as
+// HarfBuzz writes them: "smcp" turns small capitals on, "-liga" the
+// ligatures every text has off, "salt=2" takes a feature's second
+// alternate. Kerning, ligatures and contextual alternates are on unless
+// turned off; a feature the face lacks does nothing.
+func Features(features ...string) TextOption {
+	return textOption(func(t *Text) { t.features = strings.Join(features, ",") })
+}
+
+// Features are the OpenType features t is shaped with, comma separated.
+func (t *Text) Features() string { return t.features }
+
+// SetFeatures sets the OpenType features t is shaped with.
+func (t *Text) SetFeatures(features ...string) { t.features = strings.Join(features, ",") }
 
 // Pixelated reports whether t's glyphs are drawn unsmoothed.
 func (t *Text) Pixelated() bool { return t.pixelated }

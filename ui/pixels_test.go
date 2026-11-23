@@ -102,6 +102,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/text-stroke", 480, 420, 0.0095},
 		{"./internal/pages/marker-properties", 420, 360, 0.0065},
+		{"./internal/pages/opentype", 440, 360, 0.0095},
 		{"./internal/pages/background-text", 640, 300, 0.0031},
 		{"./internal/pages/font-variations", 520, 320, 0.0065},
 	} {

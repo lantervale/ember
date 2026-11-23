@@ -1907,9 +1907,13 @@ func (p *painter) selectionDecorations(e entry, st *style.Computed, parts []Sele
 // by st's word-spacing: whole without one, else word by word, each where
 // layout measured it.
 func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
-	runs := st.Font.SmallCaps(text)
+	f := st.Font
+	if c, ok := p.fonts.(capsFonts); ok {
+		f = c.Caps(f, text)
+	}
+	runs := f.SmallCaps(text)
 	if runs == nil {
-		p.wordsIn(at, text, st, st.Font, opts)
+		p.wordsIn(at, text, st, f, withFeatures(opts, f))
 		return
 	}
 	for _, r := range runs {
@@ -1917,8 +1921,22 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 		if r.Font.Size != st.Font.Size {
 			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
 		}
-		at.X = p.wordsIn(at, r.Text, st, r.Font, o)
+		at.X = p.wordsIn(at, r.Text, st, r.Font, withFeatures(o, r.Font))
 	}
+}
+
+// capsFonts are fonts that know which capitals a face draws itself
+// (fonts.Set.Caps).
+type capsFonts interface {
+	Caps(f style.Font, text string) style.Font
+}
+
+// withFeatures is opts drawing text shaped with f's OpenType features.
+func withFeatures(opts []twod.TextOption, f style.Font) []twod.TextOption {
+	if f.Features == "" {
+		return opts
+	}
+	return append(slices.Clip(opts), twod.Features(f.Features))
 }
 
 // wordsIn is words in font f, a part of st's text small capitals cut, and
