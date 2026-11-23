@@ -3,8 +3,11 @@ package shape_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,9 +17,11 @@ import (
 	"github.com/lantervale/ember/internal/shape"
 )
 
-func features(t *testing.T) (*sfnt.Font, []byte) {
+func features(t *testing.T) (*sfnt.Font, []byte) { return testFont(t, "go-features.ttf") }
+
+func testFont(t *testing.T, name string) (*sfnt.Font, []byte) {
 	t.Helper()
-	ttf, err := os.ReadFile("testdata/go-features.ttf")
+	ttf, err := os.ReadFile("testdata/" + name)
 	require.NoError(t, err)
 	f, err := sfnt.Parse(ttf)
 	require.NoError(t, err)
@@ -24,7 +29,7 @@ func features(t *testing.T) (*sfnt.Font, []byte) {
 }
 
 // run is text's glyphs as the font's cmap has them, each of its rune's
-// cluster.
+// cluster, a mark of its base's.
 func run(t *testing.T, f *sfnt.Font, text string) []shape.Glyph {
 	t.Helper()
 	var buf sfnt.Buffer
@@ -32,13 +37,21 @@ func run(t *testing.T, f *sfnt.Font, text string) []shape.Glyph {
 	for i, r := range []rune(text) {
 		g, err := f.GlyphIndex(&buf, r)
 		require.NoError(t, err)
-		out = append(out, shape.Glyph{ID: uint16(g), Cluster: int32(i)})
+		cluster := int32(i)
+		if len(out) > 0 && unicode.Is(unicode.Mn, r) {
+			cluster = out[len(out)-1].Cluster
+		}
+		out = append(out, shape.Glyph{ID: uint16(g), Cluster: cluster, Char: r})
 	}
 	return out
 }
 
-// hb writes glyphs as hb-shape does.
-func hb(glyphs []shape.Glyph) string {
+// hb writes glyphs as hb-shape does, a right-to-left run from its last.
+func hb(glyphs []shape.Glyph, rtl ...bool) string {
+	if len(rtl) > 0 && rtl[0] {
+		glyphs = slices.Clone(glyphs)
+		slices.Reverse(glyphs)
+	}
 	parts := make([]string, len(glyphs))
 	for i, g := range glyphs {
 		at := ""
@@ -122,14 +135,122 @@ func TestAFacesFeaturesGoBetweenAVariantsAndTheSettings(t *testing.T) {
 }
 
 func TestAFontThatLiesShapesWithoutPanicking(t *testing.T) {
-	src, ttf := features(t)
-	broken := append([]byte(nil), ttf...)
-	for i := 200; i < len(broken); i += 7 {
-		broken[i] ^= 0x5a
+	for _, c := range []struct{ font, text string }{
+		{"go-features.ttf", "office AVATAR 1/2 Small"},
+		{"go-arabic.ttf", "بَّسسس لاِ هههه e\u0301\u0301 23"},
+	} {
+		src, ttf := testFont(t, c.font)
+		for step := 3; step <= 11; step += 4 {
+			broken := append([]byte(nil), ttf...)
+			for i := 200; i < len(broken); i += step {
+				broken[i] ^= 0x5a
+			}
+			f := shape.Parse(src, broken)
+			for _, feats := range []string{"", "smcp,c2sc,tnum,frac,dlig,sups"} {
+				p := f.Plan(shape.Script(c.text), feats)
+				assert.NotPanics(t, func() { p.Shape(run(t, src, c.text)) })
+			}
+		}
 	}
-	f := shape.Parse(src, broken)
-	for _, feats := range []string{"", "smcp,c2sc,tnum,frac,dlig"} {
-		p := f.Plan(shape.MakeTag("latn"), feats)
-		assert.NotPanics(t, func() { p.Shape(run(t, src, "office AVATAR 1/2 Small")) })
+}
+
+func TestArabicIsJoinedAndItsMarksPlacedAsHarfBuzzDoes(t *testing.T) {
+	src, ttf := testFont(t, "go-arabic.ttf")
+	f := shape.Parse(src, ttf)
+	// What hb-shape --font-size=2048 --features=… testdata/go-arabic.ttf prints.
+	for _, c := range []struct{ features, text, want string }{
+		{"", "بتب", "[gid99=2+1399|gid102=1+1099|gid97=0+1399]"},
+		{"", "بسم", "[gid115=2+1966|gid106=1+1544|gid97=0+1399]"},
+		{"", "دار", "[gid132=2+682|gid128=1+817|gid130=0+1139]"},
+		{"", "اب", "[gid96=1+1139|gid128=0+817]"},
+		{"", "ه ه", "[gid120=2+1139|gid1=1+569|gid120=0+1139]"},
+		{"", "ـبـ", "[gid136=2+520|gid98=1+1659|gid136=0+520]"},
+		{"", "مممم", "[gid115=3+1966|gid114=2+2226|gid114=1+2226|gid113=0+1966]"},
+		{"", "لا", "[gid138=0+1445]"},
+		{"", "يلا", "[gid139=1+1705|gid125=0+1284]"},
+		{"", "ـلا", "[gid139=1+1705|gid136=0+520]"},
+		{"", "بم", "[gid115=1+1966|gid137=0+1539]"},
+		{"", "ببم", "[gid115=2+1966|gid98=1+1659|gid97=0+1399]"},
+		{"", "بمب", "[gid99=2+1399|gid114=1+2226|gid137=0+1539]"},
+		{"", "سسس", "[gid107=2+1284|gid106=1@0,-200+1544|gid105=0@0,-260+1284]"},
+		{"", "هههه", "[gid123=3+1399|gid122=2@0,-80+1659|gid122=1@0,-120+1659|gid121=0@0,-120+1399]"},
+		{"", "سهس", "[gid107=2+1284|gid122=1@0,-80+1659|gid105=0@0,-140+1284]"},
+		{"", "بَ", "[gid140=0@449,1200+0|gid96=0+1139]"},
+		{"", "بِ", "[gid141=0@449,-300+0|gid96=0+1139]"},
+		{"", "بَّ", "[gid140=0@489,1640+0|gid142=0@449,1200+0|gid96=0+1139]"},
+		{"", "بَّ", "[gid140=0@489,1640+0|gid142=0@449,1200+0|gid96=0+1139]"},
+		{"", "سِّ", "[gid141=0@392,-300+0|gid142=0@392,1200+0|gid104=0+1024]"},
+		{"", "لَا", "[gid140=0@180,1300+0|gid138=0+1445]"},
+		{"", "لاِ", "[gid141=0@780,-300+0|gid138=0+1445]"},
+		{"", "بلَا", "[gid140=1@180,1300+0|gid139=1+1705|gid97=0+1399]"},
+		{"", "لِاَ", "[gid140=0@780,1300+0|gid141=0@180,-300+0|gid138=0+1445]"},
+		{"", "بلاَ", "[gid140=1@780,1300+0|gid139=1+1705|gid97=0+1399]"},
+		{"-curs", "سسس", "[gid107=2+1284|gid106=1+1544|gid105=0+1284]"},
+		{"-init,-medi", "بتب", "[gid99=2+1399|gid100=1+579|gid96=0+1139]"},
+		{"-mark", "بَ", "[gid140=0+0|gid96=0+1139]"},
+		{"-mkmk", "بَّ", "[gid140=0@449,1200+0|gid142=0@449,1200+0|gid96=0+1139]"},
+		{"-rlig", "بلا", "[gid129=2+1077|gid110=1+1068|gid97=0+1399]"},
+		{"-calt", "بم", "[gid115=1+1966|gid97=0+1399]"},
+		{"isol", "بتب", "[gid99=2+1399|gid102=1+1099|gid97=0+1399]"},
+		{"subs", "H2O", "[gid41=0+1479|gid149=1+683|gid48=2+1593]"},
+		{"sups", "x2 3", "[gid89=0+1024|gid148=1+683|gid1=2+569|gid150=3+683]"},
+		{"", "a e\u0301", "[gid66=0+1139|gid1=1+569|gid70=2+1139|gid143=2@-690,1200+0]"},
+		{"", "e\u0301\u0301", "[gid70=0+1139|gid143=0@-690,1200+0|gid143=0@-690,1200+0]"},
+	} {
+		p := f.Plan(shape.Script(c.text), c.features)
+		assert.Equal(t, c.want, hb(p.Shape(run(t, src, c.text)), p.RightToLeft()), "%q in %q", c.text, c.features)
+	}
+}
+
+// TestTheMachinesRightToLeftFacesShapeAsHarfBuzzShapesThem compares,
+// where hb-shape and the faces are, the shaping of sentences in Arabic,
+// Syriac, Hebrew, N'Ko, Adlam and Thaana faces of the machine with
+// HarfBuzz's, each in the faces that have all its characters.
+func TestTheMachinesRightToLeftFacesShapeAsHarfBuzzShapesThem(t *testing.T) {
+	hbShape, err := exec.LookPath("hb-shape")
+	if err != nil {
+		t.Skip("no hb-shape")
+	}
+	texts := []string{
+		"بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
+		"السلام عليكم ورحمة الله وبركاته",
+		"لا إله إلا الله، كتب الطالب الدرس.",
+		"ـبـ ممم لالا",
+		"ܫܠܡܐ ܥܠܘܟܘܢ",
+		"בְּרֵאשִׁית בָּרָא אֱלֹהִים",
+		"ߒߞߏ ߞߊ߲ߜߍ",
+		"𞤀𞤣𞤤𞤢𞤥 𞤆𞤵𞤤𞤢𞤪",
+		"ދިވެހި",
+		"Été, naïve café",
+	}
+	for _, path := range []string{
+		"/System/Library/Fonts/SFArabic.ttf",
+		"/System/Library/Fonts/Supplemental/NotoSansSyriac-Regular.ttf",
+		"/System/Library/Fonts/SFHebrew.ttf",
+		"/System/Library/Fonts/Supplemental/NotoSansNKo-Regular.ttf",
+		"/System/Library/Fonts/Supplemental/NotoSansAdlam-Regular.ttf",
+		"/System/Library/Fonts/Supplemental/NotoSansThaana-Regular.ttf",
+		"/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+		"/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+	} {
+		ttf, rerr := os.ReadFile(path)
+		if rerr != nil {
+			continue
+		}
+		src, perr := sfnt.Parse(ttf)
+		require.NoError(t, perr)
+		f := shape.Parse(src, ttf)
+		for _, text := range texts {
+			glyphs := run(t, src, text)
+			if slices.ContainsFunc(glyphs, func(g shape.Glyph) bool { return g.ID == 0 }) {
+				continue
+			}
+			out, herr := exec.Command(hbShape, "--font-size="+fmt.Sprint(src.UnitsPerEm()), "--no-glyph-names",
+				path, text).Output()
+			require.NoError(t, herr)
+			want := strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(string(out)), "|", "|gid"), "[", "[gid")
+			p := f.Plan(shape.Script(text), "")
+			assert.Equal(t, want, hb(p.Shape(glyphs), p.RightToLeft()), "%q in %s", text, path)
+		}
 	}
 }

@@ -1,6 +1,8 @@
 package paint
 
 import (
+	"math"
+
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
@@ -36,6 +38,14 @@ type Bars struct {
 	Scroll, Start geom.Vec2
 	// Overlay bars lie over the content, not in a gutter beside it.
 	Overlay bool
+	// Parts are the parts its sheets style, drawn in VBar, HBar and Corner
+	// in place of ui's own look; nil for that look.
+	Parts              *style.ScrollbarParts
+	VBar, HBar, Corner geom.Rect
+	// Thumb and Track are scrollbar-color's, Thumb nil for auto: the
+	// thumbs drawn in it, the gutters filled with Track.
+	Thumb *color.Color
+	Track color.Color
 }
 
 // Clamp is off kept within what the bars scroll.
@@ -65,6 +75,20 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 	o := st.Overflow
 	l.V = !st.ScrollbarNone && (o.Height == style.Scroll || o.Height == style.OverflowAuto && b.Content.Y > view.H)
 	l.H = !st.ScrollbarNone && (o.Width == style.Scroll || o.Width == style.OverflowAuto && b.Content.X > view.W)
+	if st.Scrollbar != nil && !l.Overlay {
+		return l.styled(b, st)
+	}
+	if st.ScrollbarColored {
+		l.Thumb, l.Track = &st.ScrollbarThumb, st.ScrollbarTrack
+		if !l.Overlay {
+			l.VBar = geom.Rect{X: view.X + view.W - b.Scrollbar.X, Y: view.Y, W: b.Scrollbar.X, H: view.H - b.Scrollbar.Y}
+			l.HBar = geom.Rect{X: view.X, Y: view.Y + view.H - b.Scrollbar.Y, W: view.W - b.Scrollbar.X, H: b.Scrollbar.Y}
+			l.Corner = geom.Rect{X: l.VBar.X, Y: l.HBar.Y, W: b.Scrollbar.X, H: b.Scrollbar.Y}
+			if st.Dir == style.RTL {
+				l.VBar.X, l.Corner.X, l.HBar.X = view.X, view.X, view.X+b.Scrollbar.X
+			}
+		}
+	}
 	corner := func(on bool) float32 {
 		if on {
 			return barSize
@@ -99,13 +123,171 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 	return l
 }
 
+// minStyledThumb is the shortest a styled thumb draws whose min-height
+// (min-width on a horizontal bar) is auto, measured from Chrome 157.
+const minStyledThumb = 26
+
+// styled lays l out as Chrome lays out a scrollbar its sheets style: each
+// bar as thick as its ::-webkit-scrollbar, along the padding box's edge
+// less the corner, its track that less the track's margins along it, and
+// the thumb sized by the share of the content in view, no shorter than
+// its min-height, placed along the track by the offset; none where it
+// doesn't fit the track.
+func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
+	parts, view := st.Scrollbar, l.View
+	w, h := st.ScrollbarWidth, st.ScrollbarHeight
+	l.Parts = parts
+	l.V, l.H = l.V && w > 0, l.H && h > 0
+	port := geom.V2(view.W-b.Scrollbar.X, view.H-b.Scrollbar.Y)
+	rtl := st.Dir == style.RTL
+	margin := func(m style.Length) float32 { v, _ := m.Resolve(0); return v }
+	if l.V {
+		l.VBar = geom.Rect{X: view.X + view.W - w, Y: view.Y, W: w, H: view.H}
+		if rtl {
+			l.VBar.X = view.X
+		}
+		if l.H {
+			l.VBar.H -= h
+		}
+		l.VTrack = l.VBar
+		if t := parts.V.Track; t != nil {
+			top, bottom := margin(t.Margin.Top), margin(t.Margin.Bottom)
+			l.VTrack.Y, l.VTrack.H = l.VTrack.Y+top, max(l.VTrack.H-top-bottom, 0)
+		}
+		if at, n, ok := thumbAlong(l.VTrack.Y, l.VTrack.H, port.Y, b.Content.Y, b.Scroll.Y,
+			minThumbOf(parts.V.Thumb, parts.V.Thumb != nil && parts.V.Thumb.MinSize.Height.Kind != style.Auto,
+				func(t *style.Computed) style.Length { return t.MinSize.Height })); ok {
+			l.VThumb = geom.Rect{X: l.VBar.X, Y: at, W: w, H: n}
+		}
+	}
+	if l.H {
+		l.HBar = geom.Rect{X: view.X, Y: view.Y + view.H - h, W: view.W, H: h}
+		if l.V {
+			l.HBar.W -= w
+		}
+		if l.V && rtl {
+			l.HBar.X += w
+		}
+		l.HTrack = l.HBar
+		if t := parts.H.Track; t != nil {
+			left, right := margin(t.Margin.Left), margin(t.Margin.Right)
+			l.HTrack.X, l.HTrack.W = l.HTrack.X+left, max(l.HTrack.W-left-right, 0)
+		}
+		if at, n, ok := thumbAlong(l.HTrack.X, l.HTrack.W, port.X, b.Content.X, b.Scroll.X,
+			minThumbOf(parts.H.Thumb, parts.H.Thumb != nil && parts.H.Thumb.MinSize.Width.Kind != style.Auto,
+				func(t *style.Computed) style.Length { return t.MinSize.Width })); ok {
+			l.HThumb = geom.Rect{X: at, Y: l.HBar.Y, W: n, H: h}
+		}
+	}
+	if l.V && l.H {
+		l.Corner = geom.Rect{X: l.VBar.X, Y: l.HBar.Y, W: w, H: h}
+	}
+	return l
+}
+
+// minThumbOf is a styled thumb's least length: its min-height or
+// min-width when set, else minStyledThumb.
+func minThumbOf(t *style.Computed, set bool, get func(*style.Computed) style.Length) float32 {
+	if !set {
+		return minStyledThumb
+	}
+	v, _ := get(t).Resolve(0)
+	return max(v, 0)
+}
+
+// thumbAlong is where a styled thumb starts along a track from start, of
+// length track, and its length, rounded to whole points as Chrome's; not
+// ok when the content fits the port or the thumb the track.
+func thumbAlong(start, track, port, content, scroll, least float32) (float32, float32, bool) {
+	if content <= port || track <= 0 {
+		return 0, 0, false
+	}
+	n := max(round(track*port/content), least)
+	if n > track {
+		return 0, 0, false
+	}
+	return start + round((track-n)*min(max(scroll, 0), content-port)/(content-port)), n, true
+}
+
+func round(v float32) float32 { return float32(math.Round(float64(v))) }
+
+// bars paints l: its styled parts, else ui's own look.
+func (p *painter) bars(l Bars, alpha float32) {
+	if l.Parts != nil {
+		p.styledBars(l, alpha)
+		return
+	}
+	l.paint(p.s, alpha)
+}
+
+// styledBars paints l's parts as boxes of their styles: each bar's own
+// box, its track, the track's pieces before and after the thumb, the
+// thumb, then the corner, white where no rule styles it, as Chrome's.
+func (p *painter) styledBars(l Bars, alpha float32) {
+	if p.probing {
+		return
+	}
+	bar := func(on bool, parts style.BarParts, whole, track, thumb geom.Rect, vertical bool) {
+		if !on {
+			return
+		}
+		p.part(parts.Bar, whole, alpha)
+		p.part(parts.Track, track, alpha)
+		before, after := track, track
+		switch {
+		case thumb.W <= 0 || thumb.H <= 0:
+			before = geom.Rect{}
+		case vertical:
+			before.H = thumb.Y - track.Y
+			after.Y, after.H = thumb.Y+thumb.H, track.Y+track.H-(thumb.Y+thumb.H)
+		default:
+			before.W = thumb.X - track.X
+			after.X, after.W = thumb.X+thumb.W, track.X+track.W-(thumb.X+thumb.W)
+		}
+		p.part(parts.Start, before, alpha)
+		p.part(parts.End, after, alpha)
+		p.part(parts.Thumb, thumb, alpha)
+	}
+	bar(l.V, l.Parts.V, l.VBar, l.VTrack, l.VThumb, true)
+	bar(l.H, l.Parts.H, l.HBar, l.HTrack, l.HThumb, false)
+	if l.Parts.Corner == nil && l.Corner.W > 0 && l.Corner.H > 0 {
+		p.s.Rect(l.Corner, fade(color.White, alpha))
+		return
+	}
+	p.part(l.Parts.Corner, l.Corner, alpha)
+}
+
+// part paints a scrollbar's part of style st in r, as an element's box:
+// its shadows, backgrounds and borders.
+func (p *painter) part(st *style.Computed, r geom.Rect, alpha float32) {
+	if st == nil || r.W <= 0 || r.H <= 0 || st.Display == style.DisplayNone {
+		return
+	}
+	b := &box.Box{Kind: box.Element, Style: st, Size: geom.V2(r.W, r.H),
+		Border: box.Edges{Top: st.Border.Top, Right: st.Border.Right, Bottom: st.Border.Bottom, Left: st.Border.Left}}
+	p.decorate(entry{b: b, at: geom.V2(r.X, r.Y)}, alpha)
+}
+
 func (l Bars) paint(s Surface, alpha float32) {
+	ink := thumbColor
+	if l.Thumb != nil {
+		ink = *l.Thumb
+		for _, r := range []geom.Rect{l.VBar, l.HBar, l.Corner} {
+			if r.W > 0 && r.H > 0 {
+				s.Rect(r, fade(l.Track, alpha))
+			}
+		}
+	}
 	thumb := func(r geom.Rect) {
 		if !l.Overlay {
-			s.RoundRect(r, 3, fade(thumbColor, alpha))
+			s.RoundRect(r, 3, fade(ink, alpha))
 			return
 		}
 		s.RoundRect(r.Inset(-1), 4, fade(overlayEdge, alpha))
+		if l.Thumb != nil {
+			s.RoundRect(r, 3, fade(ink, alpha))
+			return
+		}
 		s.RoundRect(r, 3, fade(overlayThumb, alpha))
 	}
 	if l.VThumb.H > 0 {

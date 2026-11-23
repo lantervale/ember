@@ -21,7 +21,6 @@ type blockItem struct {
 	sizeStyle              style.Size[style.Length]
 	size, minSize, maxSize size
 	overflow               style.Size[style.Overflow]
-	scrollbarWidth         float32
 	position               style.Position
 	alignSelf              style.Align
 	justifySelf            style.Align
@@ -325,23 +324,22 @@ func (t *tree) blockItems(n *node, inner size) []*blockItem {
 		same := st.Display == style.Block && !outOfFlow(st.Position) && st.Float == style.FloatNone &&
 			!blockEstablishesBFC(st) && !standsBesideFloats(k)
 		items = append(items, &blockItem{
-			node:           k,
-			order:          order,
-			inSameBFC:      same,
-			float:          st.Float,
-			clear:          st.Clear,
-			sizeStyle:      st.Size,
-			size:           resolveSize(st.Size, inner).withAspectRatio(ratio).mAdd(adj),
-			minSize:        stretched(resolveSize(st.MinSize, inner).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, inner),
-			maxSize:        stretched(resolveMax(st.MaxSize, inner).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, inner),
-			overflow:       st.Overflow,
-			scrollbarWidth: st.ScrollbarWidth,
-			position:       st.Position,
-			alignSelf:      st.AlignSelf,
-			justifySelf:    st.JustifySelf,
-			padding:        padding,
-			border:         border,
-			pbSum:          pbSum,
+			node:        k,
+			order:       order,
+			inSameBFC:   same,
+			float:       st.Float,
+			clear:       st.Clear,
+			sizeStyle:   st.Size,
+			size:        resolveSize(st.Size, inner).withAspectRatio(ratio).mAdd(adj),
+			minSize:     stretched(resolveSize(st.MinSize, inner).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, inner),
+			maxSize:     stretched(resolveMax(st.MaxSize, inner).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, inner),
+			overflow:    st.Overflow,
+			position:    st.Position,
+			alignSelf:   st.AlignSelf,
+			justifySelf: st.JustifySelf,
+			padding:     padding,
+			border:      border,
+			pbSum:       pbSum,
 		})
 		order++
 	}
@@ -507,13 +505,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		cst := it.node.st
 		margin := optionalEdges(cst.Margin, innerW)
 		nonAuto := rect{or(margin.l, 0), or(margin.r, 0), or(margin.t, 0), or(margin.b, 0)}
-		var gutter size
-		if it.overflow.Height == style.Scroll {
-			gutter.w = it.scrollbarWidth
-		}
-		if it.overflow.Width == style.Scroll {
-			gutter.h = it.scrollbarWidth
-		}
+		g := scrollbarGutter(cst)
+		gutter := size{g.x, g.y}
 
 		if it.float != style.FloatNone {
 			hasActive = true

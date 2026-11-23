@@ -296,25 +296,43 @@ func accentInk(st *style.Computed, alpha float32) color.Color {
 	return fade(st.AccentColor, alpha)
 }
 
+// markerShown is the style the marker box b draws in: a ::marker a rule
+// styles in its own, as its transitions show it, else its item's.
+func markerShown(b *box.Box) *style.Computed {
+	n := b.Node
+	if n == nil || dom.Data(n).Marker == nil || b.Style != dom.Data(n).Marker {
+		return shown(b)
+	}
+	if g := dom.Data(n).MarkerNode; g != nil && dom.Data(g).Shown != nil {
+		return dom.Data(g).Shown
+	}
+	return b.Style
+}
+
 // marker draws a list item's bullet or number in its box, or a summary's
 // disclosure triangle as Chrome paints its
 // ::marker: Blink's canonical triangle in a square 0.657em wide whose
 // top is 0.670em above the baseline, from the marker's start, pointing
 // right while closed and down while open, in the summary's colour.
 func (p *painter) marker(e entry, alpha float32) {
-	st := shown(e.b)
-	if n := e.b.Node; n != nil && dom.Data(n).Marker != nil && e.b.Style == dom.Data(n).Marker {
-		// a ::marker a rule styles draws in its own style
-		st = e.b.Style
-	}
+	st := markerShown(e.b)
 	if !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
 	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	if p.probing {
+		// the marker is its item's to the pointer, with its own cursor
+		p.probed(e.b, p.snap(r))
+		return
+	}
 	if e.b.Picture != "" {
 		if tex := p.find(style.Image{Source: e.b.Picture}, st); tex != nil {
 			p.s.Image(p.snap(r), tex, texels(tex), fade(color.White, alpha))
 		}
+		return
+	}
+	if e.b.Gradient != nil {
+		p.gradient(r, radii{}, e.b.Gradient, alpha)
 		return
 	}
 	ink := fade(st.Color, alpha)
@@ -329,7 +347,7 @@ func (p *painter) marker(e entry, alpha float32) {
 		for _, f := range e.b.Lines {
 			p.shadows(e, st, p.faceOf(st.Font), f, st.TextShadows, st.Color, alpha)
 			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), ink, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 		return
 	case st.ListStyle == style.ListDisc:

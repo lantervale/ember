@@ -32,7 +32,7 @@ func read(decl string, opts ...ParseOption) string {
 }
 
 func TestWebkitPropertiesAreReadAsTheirPlainOnes(t *testing.T) {
-	if len(webkit.same) != 74 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 2 {
+	if len(webkit.same) != 73 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 3 {
 		t.Errorf("-webkit-: %d of the same name, %d renamed, %d its own, %d its own read as plain ones",
 			len(webkit.same), len(webkit.renamed), len(webkit.own), len(webkit.legacy))
 	}
@@ -166,14 +166,16 @@ func TestWebkitValues(t *testing.T) {
 
 func TestWebkitSelectors(t *testing.T) {
 	for src, want := range map[string]string{
-		"input::-webkit-input-placeholder { color: #f00 }":         "input::placeholder { color: #f00; }\n",
-		"a:-webkit-any-link { color: #f00 }":                       "a:any-link { color: #f00; }\n",
-		"::-webkit-scrollbar { width: 8px }":                       "",
-		"p, ::-webkit-scrollbar-thumb:vertical, a { color: #f00 }": "p, a { color: #f00; }\n",
-		"::-webkit-search-decoration, p { color: #f00 }":           "p { color: #f00; }\n",
-		"input:-webkit-autofill, p { color: #f00 }":                "p { color: #f00; }\n",
-		"p:-webkit-full-screen { color: #f00 }":                    "",
-		"p:-webkit-read-only, a { color: #f00 }":                   "",
+		"input::-webkit-input-placeholder { color: #f00 }": "input::placeholder { color: #f00; }\n",
+		"a:-webkit-any-link { color: #f00 }":               "a:any-link { color: #f00; }\n",
+		"::-webkit-scrollbar { width: 8px }":               "*::-webkit-scrollbar { width: 8px; }\n",
+		"p, ::-webkit-scrollbar-thumb:vertical, a { color: #f00 }": "p, *::-webkit-scrollbar-thumb:vertical, " +
+			"a { color: #f00; }\n",
+		"::-webkit-scrollbar-button, p { color: #f00 }":  "p { color: #f00; }\n",
+		"::-webkit-search-decoration, p { color: #f00 }": "p { color: #f00; }\n",
+		"input:-webkit-autofill, p { color: #f00 }":      "p { color: #f00; }\n",
+		"p:-webkit-full-screen { color: #f00 }":          "",
+		"p:-webkit-read-only, a { color: #f00 }":         "",
 	} {
 		s, warns := asBrowser(src)
 		if got := plainRules(s); got != want || warns != "" {

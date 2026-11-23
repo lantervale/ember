@@ -25,7 +25,7 @@ func (s *Settings) Update(f world.Frame) {
 | `ui.OnClick` | `ui.Clicked{Node, Clicks}` | a button, a summary, a canvas or an element with a tabindex pressed: by the pointer, a key, a pad or automation; `Clicks` 2 or 3 for a double or triple click |
 | `ui.OnInput` | `ui.Edited{Node}` | a value changing while edited: each keystroke, each step of a range, a checkbox toggled |
 | `ui.OnChange` | `ui.Changed{Node}` | a value committed: a checkbox toggled, an option chosen, a text field left or submitted after an edit |
-| `ui.OnSubmit` | `ui.Submitted{Node}` | Enter in a one-line text field, or a textarea's submit shortcut |
+| `ui.OnSubmit` | `ui.Submitted{Node}` | Enter in a one-line text field, or a textarea's submit shortcut; on a `form`, the form submitted and valid: by its submit button, by Enter in its field (its first submit button clicked, or the form submitted when it has no button and that field is its only text field), or by `doc.RequestSubmit(form)`. An invalid form is not submitted: its first invalid field takes the focus, unless the form has `novalidate` or the button `formnovalidate`; either way its fields match `:user-valid` or `:user-invalid` from then on. ui sends nothing anywhere ([decision 0159](../99-decisions/0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md)) |
 | `ui.OnToggle` | `ui.Toggled{Node}` | a details element opened or closed |
 | `ui.OnClose` | `ui.Closed{Node, Value}` | a dialog closed, with its return value, "" for Escape |
 | `ui.OnSort` | `ui.Sorted{Node, Column, Descending}` | a table's column header pressed |

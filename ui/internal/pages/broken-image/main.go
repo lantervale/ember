@@ -1,6 +1,7 @@
 // Images that don't load, as Chrome draws them: the icon and alt text,
 // cut to a sized box; a silver frame round the icon without alt text;
-// nothing for an empty alt; unsized ones as wide as their icon and text.
+// nothing for an empty alt; unsized ones as wide as their icon and text;
+// alt text spaced and smoothed as its image says.
 package main
 
 import (
@@ -36,6 +37,14 @@ func main() {
 			img("", "alt", "no size given"),
 			img(""),
 		),
+		ui.Div(ui.Class("row"),
+			img("width: 150px; height: 60px; letter-spacing: 1px; word-spacing: 6px", "alt", "Spaced out words"),
+			img("letter-spacing: 2px; word-spacing: 4px", "alt", "two words"),
+		),
+		ui.Div(ui.Class("row"),
+			img("width: 150px; height: 40px; -webkit-font-smoothing: antialiased", "alt", "Thin alt text"),
+			img("-webkit-font-smoothing: antialiased", "alt", "unsized"),
+		),
 	)
-	pages.Run(d, 420, 160)
+	pages.Run(d, 420, 280)
 }

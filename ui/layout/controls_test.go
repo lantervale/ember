@@ -23,7 +23,7 @@ func control(tag dom.Tag, shown string, edit func(*style.Computed), children ...
 		} else {
 			st.WhiteSpace = style.PreWrap
 			st.Overflow = style.Size[style.Overflow]{Width: style.OverflowAuto, Height: style.OverflowAuto}
-			st.ScrollbarWidth = 15
+			st.ScrollbarWidth, st.ScrollbarHeight = 15, 15
 		}
 		if edit != nil {
 			edit(st)

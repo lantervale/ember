@@ -57,8 +57,8 @@ func TestContainerTypeAndNameAreLonghandsOfContainer(t *testing.T) {
 }
 
 func TestWhatContainerCannotTakeIsDropped(t *testing.T) {
-	for _, decl := range []string{"container-type: size inline-size", "container-type: scroll-state",
-		"container-type: inline-size scroll-state", "container-name: a none", "container-name: and",
+	for _, decl := range []string{"container-type: size inline-size", "container-type: scroll-state scroll-state",
+		"container-type: normal scroll-state", "container-name: a none", "container-name: and",
 		"container-name: not", "container-name: or", "container-name: default", "container-name: 1px",
 		"container: / size", "container: a / size / size", "container: a / block"} {
 		if _, warns := Parse("t.css", "p { "+decl+" }"); len(warns) != 1 {
@@ -162,7 +162,7 @@ p { width: 1px; }
 func TestWhatAContainerQueryCannotAnswerIsAWarning(t *testing.T) {
 	for prelude, want := range map[string]string{
 		"(unknown-thing > 1px)":        "@container: the unknown-thing feature is not supported in a range",
-		"scroll-state(stuck: top)":     "@container: scroll-state() is not supported",
+		"scroll-state(scrolled: top)":  "@container: scrolled:top is no scroll-state feature ui answers",
 		"style(color: red)":            "@container: style() reads custom properties alone",
 		"(width > 10%)":                "@container: width can't take 10%",
 		"(prefers-color-scheme: dark)": "@container: the prefers-color-scheme feature is not supported",

@@ -2,6 +2,7 @@ package css
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -215,6 +216,30 @@ func checkLineClamp(v []Component) error {
 	return single(positiveInteger)(v)
 }
 
+// checkScrollbarColor takes auto, or the thumb's colour then the track's.
+func checkScrollbarColor(v []Component) error {
+	if len(v) == 1 && isWord(v[0], "auto") {
+		return nil
+	}
+	if len(v) != 2 {
+		return errors.New("expected auto, or two colours: the thumb's then the track's")
+	}
+	return repeated(colorTerm, 2)(v)
+}
+
+// checkScrollbarGutter takes auto, or stable with both-edges in either
+// order.
+func checkScrollbarGutter(v []Component) error {
+	switch {
+	case len(v) == 1 && isWord(v[0], "auto", "stable"):
+		return nil
+	case len(v) == 2 && (isWord(v[0], "stable") && isWord(v[1], "both-edges") ||
+		isWord(v[0], "both-edges") && isWord(v[1], "stable")):
+		return nil
+	}
+	return errors.New("expected auto, or stable with both-edges")
+}
+
 // checkBackgroundSize takes cover or contain alone, or a width then a
 // height, each a length, a percentage or auto.
 func checkBackgroundSize(v []Component) error {
@@ -233,13 +258,25 @@ func checkMaskPosition(v []Component) error {
 	return checkPosition(v)
 }
 
-// checkContainerType takes normal, size or inline-size: a container of
-// its scroll state is not supported.
+// checkContainerType takes normal, or size or inline-size and
+// scroll-state, either or both in any order. anchored, which Chrome
+// reads too, is not supported.
 func checkContainerType(v []Component) error {
-	if slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "scroll-state") }) {
-		return fmt.Errorf("container-type: scroll-state is not supported")
+	if len(v) == 1 && isWord(v[0], "normal") {
+		return nil
 	}
-	return single(words("normal", "size", "inline-size"))(v)
+	sized, scrolled := false, false
+	for _, c := range v {
+		switch {
+		case isWord(c, "size", "inline-size") && !sized:
+			sized = true
+		case isWord(c, kwScrollState) && !scrolled:
+			scrolled = true
+		default:
+			return fmt.Errorf("expected normal, or size or inline-size and scroll-state, found %q", join(v))
+		}
+	}
+	return nil
 }
 
 // checkContainerName takes none, or names none of which is a word a
@@ -448,19 +485,22 @@ var checks = map[string]check{
 	"color-scheme":              checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
-	"text-overflow":     single(words("clip", "ellipsis")),
-	"scrollbar-width":   single(words("auto", "thin", "none")),
-	"list-style-type":   checkListStyle,
-	"list-style-image":  checkListImage,
-	"content":           checkContent,
-	"counter-reset":     checkCounters,
-	"counter-increment": checkCounters,
-	"counter-set":       checkCounters,
-	"quotes":            checkQuotes,
-	"visibility":        single(words("visible", "hidden", "collapse")),
-	"pointer-events":    single(words("auto", "none")),
-	"app-region":        single(words("none", "drag", "no-drag")),
-	"user-select":       single(words("auto", "text", "none", "all")),
+	"text-overflow":       single(words("clip", "ellipsis")),
+	"scrollbar-width":     single(words("auto", "thin", "none")),
+	"scrollbar-color":     checkScrollbarColor,
+	"scrollbar-gutter":    checkScrollbarGutter,
+	"list-style-type":     checkListStyle,
+	"list-style-image":    checkListImage,
+	"content":             checkContent,
+	"counter-reset":       checkCounters,
+	"counter-increment":   checkCounters,
+	"counter-set":         checkCounters,
+	"quotes":              checkQuotes,
+	"visibility":          single(words("visible", "hidden", "collapse")),
+	"pointer-events":      single(words("auto", "none")),
+	"app-region":          single(words("none", "drag", "no-drag")),
+	"user-select":         single(words("auto", "text", "none", "all")),
+	"list-style-position": single(words("inside", "outside")),
 
 	"background-color":      single(colorTerm),
 	"background-image":      commaList(single(either(words("none"), imageTerm))),
@@ -477,7 +517,7 @@ var checks = map[string]check{
 	"mask-origin":           commaList(single(maskBox)),
 	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
 	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
-	"mask-composite":        commaList(single(words("add", "subtract", "intersect", "exclude"))),
+	"mask-composite":        commaList(single(checkMaskComposite)),
 	"clip-path":             checkClipPath,
 	"text-shadow":           checkTextShadow,
 	"image-rendering":       single(words("auto", "pixelated")),
@@ -494,7 +534,7 @@ var checks = map[string]check{
 	"transform":             checkTransform,
 	"filter":                checkFilter,
 	"backdrop-filter":       checkFilter,
-	"mix-blend-mode":        single(blendMode),
+	"mix-blend-mode":        single(either(blendMode, words("plus-lighter"))),
 	"isolation":             single(words("auto", "isolate")),
 	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,

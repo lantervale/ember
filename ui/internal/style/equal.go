@@ -52,6 +52,8 @@ func (b *Box) equal(o *Box) bool {
 		b.Border == o.Border &&
 		b.Overflow == o.Overflow &&
 		b.ScrollbarWidth == o.ScrollbarWidth &&
+		b.ScrollbarHeight == o.ScrollbarHeight &&
+		b.GutterStable == o.GutterStable &&
 		b.ScrollbarNone == o.ScrollbarNone &&
 		b.ScrollbarOverlay == o.ScrollbarOverlay &&
 		b.Viewport.Equal(o.Viewport) &&
@@ -66,6 +68,7 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
+		b.ContainerScrollState == o.ContainerScrollState &&
 		sameSlice(b.ContainerNames, o.ContainerNames) &&
 		b.LineClamp == o.LineClamp &&
 		b.NoEllipsis == o.NoEllipsis &&
@@ -156,6 +159,8 @@ func (t *Text) equal(o *Text) bool {
 		t.ListStyle == o.ListStyle &&
 		t.ListName == o.ListName &&
 		t.ListImage == o.ListImage &&
+		t.ListGradient.equal(o.ListGradient) &&
+		t.ListInside == o.ListInside &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
 		t.EmptyCellsHide == o.EmptyCellsHide &&
@@ -187,6 +192,9 @@ func (c *Content) equal(o *Content) bool {
 //nolint:cyclop,gocyclo // one comparison a field
 func (l *Look) equal(o *Look) bool {
 	return l.Background == o.Background &&
+		l.Scrollbar.Equal(o.Scrollbar) &&
+		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
+		l.ScrollbarColored == o.ScrollbarColored &&
 		sameSliceFunc(l.BackgroundImages, o.BackgroundImages, (*Image).equal) &&
 		sameSlice(l.BackgroundSizes, o.BackgroundSizes) &&
 		sameSlice(l.BackgroundRepeats, o.BackgroundRepeats) &&

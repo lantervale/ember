@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -171,6 +172,8 @@ type Selector struct {
 	// inactive is a ::selection's :window-inactive: it matches only while
 	// the Document's window is not the active one.
 	inactive bool
+	// part is the states a scrollbar part's pseudo-classes ask for.
+	part partState
 }
 
 func (s Selector) String() string {
@@ -190,6 +193,7 @@ func (s Selector) String() string {
 	if s.inactive {
 		b.WriteString(":window-inactive")
 	}
+	b.WriteString(s.part.String())
 	return b.String()
 }
 
@@ -442,15 +446,25 @@ const (
 func directionOf(e *dom.Node) string {
 	for p := e; p != nil; p = p.Parent() {
 		v, _ := p.Attr("dir")
-		switch v = strings.ToLower(v); {
-		case v == dirLTR || v == dirRTL:
+		if v = strings.ToLower(v); v == dirLTR || v == dirRTL {
 			return v
-		case v == kwAuto || p.Tag() == dom.Bdi:
-			if dir := textDirection(p); dir != "" {
-				return dir
-			}
-			return dirLTR
 		}
+		if dir := autoDirection(p); dir != "" {
+			return dir
+		}
+	}
+	return dirLTR
+}
+
+// autoDirection is the direction of e read from its text when it is of
+// dir="auto" or a bdi without a valid dir, "" for another element.
+func autoDirection(e *dom.Node) string {
+	v, _ := e.Attr("dir")
+	if v = strings.ToLower(v); v != kwAuto && (e.Tag() != dom.Bdi || v == dirLTR || v == dirRTL) {
+		return ""
+	}
+	if dir := textDirection(e); dir != "" {
+		return dir
 	}
 	return dirLTR
 }
@@ -787,6 +801,7 @@ func matched(cs []Component) []Component {
 
 func parseComplex(cs []Component) (Selector, *SelectorError) {
 	var s Selector
+	cs, s.part = partStatesOf(cs)
 	cs, s.inactive = windowInactive(cs)
 	name, n, err := pseudoElementAt(cs)
 	if err != nil {
@@ -860,6 +875,7 @@ func (s *Selector) specificity() Specificity {
 	if s.inactive {
 		sp[1]++
 	}
+	sp[1] += bits.OnesCount16(uint16(s.part))
 	if s.PseudoElement == beforeMarker || s.PseudoElement == afterMarker {
 		sp[2]++
 	}
@@ -1423,6 +1439,32 @@ func (s Selector) walk(fn func(c *Compound)) {
 		for _, p := range c.pseudos {
 			for _, n := range p.sels {
 				n.walk(fn)
+			}
+		}
+	}
+}
+
+// awayReads calls key and state for what s, a selector a pseudo-class
+// holds, reads on an element other than its subject (its compounds before
+// the last, and what they hold), and for what the selectors its subject's
+// pseudo-classes hold read so: in a :has(), those may be elements above
+// or beside the one the :has() is on.
+func (s Selector) awayReads(key func(string), state func(dom.State)) {
+	last := len(s.Compounds) - 1
+	for i := range s.Compounds {
+		c := &s.Compounds[i]
+		if i < last {
+			Selector{Compounds: s.Compounds[i : i+1]}.walk(func(c *Compound) {
+				c.keys(key)
+				for j := range c.pseudos {
+					state(c.pseudos[j].reads())
+				}
+			})
+			continue
+		}
+		for j := range c.pseudos {
+			for _, n := range c.pseudos[j].nested() {
+				n.awayReads(key, state)
 			}
 		}
 	}

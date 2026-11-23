@@ -27,6 +27,11 @@ const (
 	// CounterAdditive adds up weighted symbols, the heaviest first, as
 	// roman numerals do.
 	CounterAdditive
+	// CounterLonghand writes a value in Chinese, Japanese or Korean
+	// words, its digits each followed by the marker of its place.
+	CounterLonghand
+	// CounterEthiopic writes a value in Ethiopic numerals.
+	CounterEthiopic
 )
 
 // Infinite is a range's bound written infinite.
@@ -48,6 +53,8 @@ type CounterStyle struct {
 	First    int
 	Symbols  []string
 	Additive []AdditiveSymbol
+	// Longhand is how a CounterLonghand style writes its words.
+	Longhand *Longhand
 	// Negative is the sign around a value below zero; Pad and PadSymbol
 	// pad a shorter representation to Pad graphemes.
 	Negative       [2]string
@@ -68,6 +75,10 @@ func (cs *CounterStyle) InRange(n int) bool {
 			return n >= 1
 		case CounterAdditive:
 			return n >= 0
+		case CounterLonghand:
+			return cs.Longhand == nil || cs.Longhand.inRange(n)
+		case CounterEthiopic:
+			return n >= 1
 		case CounterCyclic, CounterFixed, CounterNumeric:
 		}
 		return true
@@ -163,6 +174,13 @@ func (cs *CounterStyle) algorithm(n int) (string, bool) {
 		return reversed(out), true
 	case CounterAdditive:
 		return cs.additive(n)
+	case CounterLonghand:
+		if cs.Longhand == nil {
+			return "", false
+		}
+		return cs.Longhand.write(n), true
+	case CounterEthiopic:
+		return ethiopic(n), n >= 1
 	}
 	return "", false
 }

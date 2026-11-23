@@ -89,6 +89,12 @@ type index struct {
 	has       []hasRead
 	hasKeys   map[string]bool
 	hasStates dom.State
+	// hasAway and hasAwayStates are those of them read through an :is(),
+	// a :not() or a :where() on an element other than that selector's
+	// subject, which may stand above or beside the element the :has() is
+	// on: a change of one may turn the :has() of any element round it.
+	hasAway       map[string]bool
+	hasAwayStates dom.State
 	// empty is set once a selector reads :empty.
 	empty bool
 }
@@ -133,6 +139,13 @@ func (x *index) indexHas(sel Selector, ri int) {
 					x.hasStates |= c.pseudos[i].reads()
 				}
 			})
+			for i := range r.Compounds {
+				for _, p := range r.Compounds[i].pseudos {
+					for _, n := range p.nested() {
+						n.awayReads(func(k string) { x.hasAway[k] = true }, func(s dom.State) { x.hasAwayStates |= s })
+					}
+				}
+			}
 		}
 	})
 	sel.walk(func(c *Compound) {
@@ -155,7 +168,7 @@ type entry struct {
 func (s *Sheet) indexed() *index {
 	s.once.Do(func() {
 		x := &index{pseudos: map[string]*buckets{}, above: map[string]bool{}, beside: map[string]bool{},
-			hasKeys: map[string]bool{}}
+			hasKeys: map[string]bool{}, hasAway: map[string]bool{}}
 		for ri, r := range s.Rules {
 			for si, sel := range r.Selectors {
 				e := entry{ri, si}
@@ -268,6 +281,9 @@ type matcher struct {
 	// an img's width and height: the author's, under every rule of the
 	// sheets.
 	hints []Declaration
+	// part is the state of the scrollbar part being matched: a selector
+	// asking for states it is not in holds nothing.
+	part partState
 }
 
 // matched lists the declarations that apply to e, least important first.
@@ -369,6 +385,9 @@ func (m *matcher) try(s *Sheet, es []entry, e *dom.Node, off []bool) {
 // active reports whether sel holds as the window stands: one with
 // :window-inactive only while it is inactive, which the cascade then reads.
 func (m *matcher) active(sel Selector) bool {
+	if sel.part&^m.part != 0 {
+		return false
+	}
 	if !sel.inactive {
 		return true
 	}

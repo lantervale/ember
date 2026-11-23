@@ -155,8 +155,13 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
 | 0151 | [Stroked text is a font of its own, its glyphs' outlines stroked on the CPU](0151-stroked-text-is-a-font-of-its-own-glyphs-outlines.md) | rendering |
 | 0152 | [The old attributes of tables, rules and fonts are hints as Chrome's](0152-the-old-attributes-of-tables-rules-and-fonts-are-hints-as-chromes.md) | api |
+| 0153 | [Text is rasterized at its own size, and dashes are laid out in device pixels](0153-text-is-rasterized-at-its-own-size-and-dashes-are-laid-in-device-pixels.md) | rendering |
+| 0154 | [Complex counter styles, inside markers and scroll state follow Chrome's algorithms](0154-complex-counter-styles-inside-markers-and-scroll-state-follow-chromes-algorithms.md) | rendering |
 | 0155 | [The system says its contrast, forced colours and selection colours, read-only](0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md) | api |
 | 0156 | [Columns cut what they hold through one flow of units](0156-columns-cut-what-they-hold-through-one-flow-of-units.md) | rendering |
+| 0157 | [Arabic is joined, and marks attached, by HarfBuzz's stages and masks](0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) | rendering |
+| 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
+| 0159 | [A pattern is read as JavaScript, and a form is submitted by its button](0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md) | api |
 
 ## Writing one
 

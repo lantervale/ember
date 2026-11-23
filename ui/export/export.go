@@ -248,6 +248,9 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	if modal {
 		write("data-ember-modal", strconv.FormatUint(layer, 10))
 	}
+	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
+		write("data-ember-bars", "")
+	}
 	live := map[string]bool{
 		"open": modal, "style": true, "checked": n.Tag() == dom.Input, "value": n.Tag() == dom.Input && typ != "checkbox",
 		"placeholder": n.Tag() == dom.Select, "selected": n.Tag() == dom.Option,
@@ -628,7 +631,7 @@ const truncateStart = ".truncate-start { direction: rtl; text-align: left; }\n"
 
 // classicScrollbars has Chrome reserve the 15-point gutter css gives
 // scrolling boxes (style.Box.ScrollbarWidth), not overlay scrollbars.
-const classicScrollbars = "::-webkit-scrollbar { width: 15px; height: 15px; }\n" + thumbs
+const classicScrollbars = ownBars + "::-webkit-scrollbar { width: 15px; height: 15px; }\n" + thumbs
 
 // stillViewport has the page itself show no bar, as the Document of a
 // window does unless its viewport scrolls (ui.ScrollingViewport).
@@ -649,8 +652,14 @@ const overlayScrollbars = "::-webkit-scrollbar { width: 0; height: 0; }\n"
 // thumbs draws Chrome's scrollbar thumbs as paint draws ember's: 6 points
 // wide, 2 from the far edge and 4 from the track's ends, rounded by 3, in
 // white at a quarter; the transparent borders place it in the gutter.
-const thumbs = "::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.25); " +
+const thumbs = ownBars + "::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.25); " +
 	"background-clip: padding-box; border: solid transparent; }\n" +
-	"::-webkit-scrollbar-thumb:vertical { border-width: 4px 2px 4px 7px; border-radius: 10px 5px 5px 10px / 7px; }\n" +
-	"::-webkit-scrollbar-thumb:horizontal { border-width: 7px 4px 2px 4px; border-radius: 7px / 10px 10px 5px 5px; }\n" +
-	"::-webkit-scrollbar-corner { background: transparent; }\n"
+	ownBars + "::-webkit-scrollbar-thumb:vertical { border-width: 4px 2px 4px 7px; " +
+	"border-radius: 10px 5px 5px 10px / 7px; }\n" +
+	ownBars + "::-webkit-scrollbar-thumb:horizontal { border-width: 7px 4px 2px 4px; " +
+	"border-radius: 7px / 10px 10px 5px 5px; }\n" +
+	ownBars + "::-webkit-scrollbar-corner { background: transparent; }\n"
+
+// ownBars keeps ui's look off the bars an element's sheets style
+// (data-ember-bars), which Chrome draws from those sheets alone, as paint does.
+const ownBars = ":not([data-ember-bars])"
