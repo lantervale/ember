@@ -200,6 +200,9 @@ func TestTheViewportSnapsAsChromes(t *testing.T) {
 		{0, "to", geom.V2(0, 1290), 0}, {0, "start", geom.Vec2{}, 4}, {0, "start", geom.Vec2{}, 1},
 		{0, "by", geom.V2(0, 30), 0}, {0, "near", geom.Vec2{}, 5}, {0, "by", geom.V2(0, -30), 0}}
 	script := `const html = document.documentElement, ss = [...document.querySelectorAll("section")];
+for (let i = 0; i < 20 && !ss.some(s => s.firstChild.getBoundingClientRect().width === 2); i++) {
+  await new Promise(r => setTimeout(r, 50));
+}
 const out = [[html.scrollTop, ss.map(s => s.firstChild.getBoundingClientRect().width)]];
 const wait = () => new Promise(r => setTimeout(r, 150));
 `
