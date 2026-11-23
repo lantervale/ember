@@ -31,9 +31,9 @@ func legacyGradient(c *Component, rest string) bool {
 	default:
 		return false
 	}
-	var args []Component
+	args := head
 	if len(head) > 0 {
-		args = append(head, Component{Token: Token{Kind: Comma}})
+		args = append(args, Component{Token: Token{Kind: Comma}})
 	}
 	for i, p := range parts[dropped:] {
 		if i > 0 {
@@ -60,7 +60,7 @@ func spaced(cs ...Component) []Component {
 }
 
 //nolint:gochecknoglobals // lookup table
-var oppositeSides = map[string]string{"top": "bottom", "bottom": "top", "left": "right", "right": "left"}
+var oppositeSides = map[string]string{kwTop: kwBottom, kwBottom: kwTop, kwLeft: kwRight, kwRight: kwLeft}
 
 // legacyLinear is the plain first part of a legacy linear gradient's
 // first part toks, and how many parts it stands for: none when the

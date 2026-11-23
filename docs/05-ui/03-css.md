@@ -503,6 +503,8 @@ A sheet written for browsers holds what a game's sheet never does: prefixes of f
 | an element ui has none of in a selector (`applet`, `object`, a custom element) | the selector matches nothing and goes without a word, its rule keeping the others: a reset that lists every element of HTML still applies. Inside `:not()` it keeps its warning and drops the rule |
 | vendor prefixes | read as the plain name where Chrome does, dropped without a word where Chrome drops them: the tables below |
 
+Chrome's legacy gradients are read as the plain ones it draws: `-webkit-linear-gradient()` gives where it starts, not where it goes, so `top` is `to bottom`, and its angle turns the other way (`30deg` is `60deg`); `-webkit-radial-gradient(<position>, <shape> <size>, …)` is `radial-gradient(<shape> <size> at <position>, …)`, `contain` and `cover` being `closest-side` and `farthest-corner`. A corner or a centre in a linear one keeps its warning, as Chrome draws it corner to corner of the box (`TestChromeDrawsTheLegacyGradientsAsTheirPlainOnes`).
+
 A prefixed name read as a plain one keeps its place in the cascade, so `-webkit-transform: rotate(3deg); transform: none` ends as `none` and the other order as the rotation. A warning about one names it as it was written.
 
 What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `-webkit-line-clamp`, `display: -webkit-box`, `-webkit-fill-available`, a `-webkit-gradient()`), `@font-face` in a sheet given as text without `ui.FetchFonts`, `@import` without `ui.FetchSheets`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
@@ -522,7 +524,6 @@ One table for each vendor, as `ui/css/vendors.go` has them. `-webkit-`'s lists a
 | words read as the plain property's | `-webkit-mask-composite`: `source-in` as `intersect`, `source-out` as `subtract`, `source-over` as `add`, `xor` as `exclude`; its other words keep their warning |
 | any other property | goes without a word, as Chrome drops it |
 | values read as the plain one | `-webkit-calc` as `calc`, `-webkit-fit-content` as `fit-content`, `-webkit-flex` as `flex`, `-webkit-grab` as `grab`, `-webkit-grabbing` as `grabbing`, `-webkit-inline-flex` as `inline-flex`, `-webkit-max-content` as `max-content`, `-webkit-min-content` as `min-content`, and the properties above in `transition` |
-| legacy gradients | `-webkit-linear-gradient()` as the `linear-gradient()` Chrome draws: a side is where it starts (`top` is `to bottom`), an angle turns the other way (`30deg` is `60deg`); `-webkit-radial-gradient(<position>, <shape> <size>, …)` with `contain` and `cover` as `closest-side` and `farthest-corner`. A corner or a centre in a linear one keeps its warning: Chrome draws it corner to corner of the box (`TestChromeDrawsTheLegacyGradientsAsTheirPlainOnes`) |
 | any other value | keeps its warning, the declaration dropped |
 | pseudo-elements read as the plain one | `::-webkit-input-placeholder` as `::placeholder` |
 | any other pseudo-element | matches nothing: its selector alone goes, without a word |

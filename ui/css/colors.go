@@ -86,6 +86,8 @@ var (
 	}
 )
 
+const fnColor = "color"
+
 // rgb() and rgba() write their channels from 0 to 255, where color()'s
 // sRGB is 0 to 1.
 const rgbScale = 255
@@ -105,6 +107,8 @@ func (c colour) polar() int {
 		return 2
 	case spaceHSL, spaceHWB:
 		return 0
+	case spaceSRGB, spaceSRGBLinear, spaceDisplayP3, spaceA98, spaceProPhoto, spaceRec2020, spaceXYZD50, spaceXYZD65,
+		spaceLab, spaceOklab:
 	}
 	return -1
 }
@@ -139,7 +143,7 @@ func (p colourParser) read(c Component, inner bool) (colour, error) {
 			return p.function(name, sp, c.Args)
 		}
 		switch name {
-		case "color":
+		case fnColor:
 			return p.colorFunction(c.Args)
 		case "color-mix":
 			return p.mix(c.Args)
@@ -425,15 +429,11 @@ func (p colourParser) legacy(sp space, toks []Component) (colour, error) {
 		}
 		col.ch[i] = v / channelScale(sp)
 	}
-	switch sp {
-	case spaceSRGB:
-		if kinds[1] != kinds[0] || kinds[2] != kinds[0] {
-			return colour{}, fmt.Errorf("legacy channels must all be numbers or all percentages")
-		}
-	default:
-		if kinds[1] != typePercent || kinds[2] != typePercent {
-			return colour{}, fmt.Errorf("legacy saturation and lightness are percentages")
-		}
+	if sp == spaceSRGB && (kinds[1] != kinds[0] || kinds[2] != kinds[0]) {
+		return colour{}, fmt.Errorf("legacy channels must all be numbers or all percentages")
+	}
+	if sp == spaceHSL && (kinds[1] != typePercent || kinds[2] != typePercent) {
+		return colour{}, fmt.Errorf("legacy saturation and lightness are percentages")
 	}
 	if len(toks) == 7 {
 		v, none, err := channelValue(toks[6], 1, nil)

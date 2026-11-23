@@ -47,7 +47,8 @@ var colourFunctions = []string{
 	"rgb(from hsl(120 50% 50%) r g b / calc(alpha / 2))", "hsl(from white h s l)",
 	"color-mix(in srgb, red, blue)", "color-mix(in srgb, red 30%, blue)", "color-mix(in oklch, red, blue)",
 	"color-mix(in oklch longer hue, red, blue)", "color-mix(in hsl, red 20%, blue 20%)", "color-mix(in lab, white, black)",
-	"color-mix(in srgb-linear, red, lime)", "color-mix(in xyz, #369 25%, #fc0)", "color-mix(in oklab, red 40%, transparent)",
+	"color-mix(in srgb-linear, red, lime)", "color-mix(in xyz, #369 25%, #fc0)",
+	"color-mix(in oklab, red 40%, transparent)",
 	"color-mix(in hsl shorter hue, hsl(350 50% 50%), hsl(10 50% 50%))", "color-mix(in lch decreasing hue, red, blue)",
 	"color-mix(in lch increasing hue, red, blue)", "color-mix(in oklch, white, blue)", "color-mix(in hwb, red, blue)",
 	"color-mix(in display-p3, red 75%, blue)", "color-mix(in srgb, red 10%, blue 30%)",
@@ -95,8 +96,8 @@ return {
 		t.Fatal(err)
 	}
 	var got struct {
-		Colours [][4]float64
-		Refused []bool
+		Colours [][4]float64 `json:"Colours"`
+		Refused []bool       `json:"Refused"`
 	}
 	if err = json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)

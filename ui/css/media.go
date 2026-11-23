@@ -153,7 +153,6 @@ type mediaSpec struct {
 }
 
 func fixedNumber(n float64) func(Media) float64 { return func(Media) float64 { return n } }
-func fixedWord(w string) func(Media) string     { return func(Media) string { return w } }
 
 // wordIf is a feature's word: yes where on holds for m, else no.
 func wordIf(on func(Media) bool, yes, no string) func(Media) string {
@@ -215,8 +214,8 @@ var mediaSpecs = map[string]*mediaSpec{
 		word: wordIf(Media.reduced, "reduce", mediaNoPreference), off: mediaNoPreference},
 	"prefers-contrast": {kind: mediaWord, words: []string{mediaNoPreference, "more", "less", "custom"},
 		word: Media.contrast, off: mediaNoPreference},
-	"forced-colors": {kind: mediaWord, words: []string{mediaNone, "active"}, word: wordIf(Media.forced, "active", mediaNone),
-		off: mediaNone},
+	"forced-colors": {kind: mediaWord, words: []string{mediaNone, "active"},
+		word: wordIf(Media.forced, "active", mediaNone), off: mediaNone},
 	"hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: wordIf(Media.touch, mediaNone, "hover"),
 		off: mediaNone},
 	"any-hover": {kind: mediaWord, words: []string{mediaNone, "hover"}, word: wordIf(Media.mouse, "hover", mediaNone),
