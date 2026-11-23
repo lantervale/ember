@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <circle id="dot" cx="10" cy="10" r="8" fill="#36c"/>
+    <filter id="at" x="0" y="0" width="1" height="1"><feImage href="#dot"/></filter>
+    <filter id="moved" x="0" y="0" width="1" height="1" primitiveUnits="objectBoundingBox"><feImage href="#dot" x=".25" y=".25" width=".5" height=".5"/></filter>
+    <filter id="cut"><feImage href="#dot" result="d"/><feComposite in="SourceGraphic" in2="d" operator="in"/></filter>
+    <filter id="png" x="0" y="0" width="1" height="1"><feImage preserveAspectRatio="none" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4nGM4Y2z83zjtzH8GpVXl//+fYfgPAFCwCaL4rhNzAAAAAElFTkSuQmCC"/></filter>
+  </defs>
+  <rect x="0" y="0" width="36" height="36" fill="#eee" filter="url(#at)"/>
+  <rect x="80" y="0" width="36" height="36" fill="#eee" filter="url(#moved)"/>
+  <rect x="0" y="84" width="36" height="36" fill="#c33" filter="url(#cut)"/>
+  <g transform="translate(60 84)"><rect width="36" height="36" fill="#eee" filter="url(#at)"/></g>
+  <rect x="40" y="40" width="40" height="30" filter="url(#png)"/>
+</svg>

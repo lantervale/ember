@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <filter id="c1"><feConvolveMatrix order="3" kernelMatrix="1 1 1 1 1 1 1 1 1"/></filter>
+    <filter id="c2"><feConvolveMatrix order="3" kernelMatrix="-1 -1 -1 -1 8 -1 -1 -1 -1" preserveAlpha="true"/></filter>
+    <filter id="c3"><feConvolveMatrix order="3 1" kernelMatrix="1 0 0" targetX="0" edgeMode="none"/></filter>
+    <filter id="c4"><feConvolveMatrix order="3" kernelMatrix="1 0 0 0 0 0 0 0 -1" bias=".5"/></filter>
+    <filter id="c5" x="0" y="0" width="1" height="1"><feConvolveMatrix order="5" kernelMatrix="1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1" edgeMode="wrap"/></filter>
+    <filter id="c6" x="0" y="0" width="1" height="1"><feConvolveMatrix order="5" kernelMatrix="1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"/></filter>
+  </defs>
+  <circle cx="20" cy="20" r="14" fill="#c33" filter="url(#c1)"/>
+  <circle cx="60" cy="20" r="14" fill="#c33" stroke="#36c" stroke-width="4" filter="url(#c2)"/>
+  <circle cx="100" cy="20" r="14" fill="#2a7" filter="url(#c3)"/>
+  <circle cx="20" cy="60" r="14" fill="#93c" filter="url(#c4)"/>
+  <g filter="url(#c5)"><rect x="44" y="44" width="32" height="32" fill="#36c"/><rect x="44" y="44" width="10" height="32" fill="#c33"/></g>
+  <g filter="url(#c6)"><rect x="84" y="44" width="32" height="32" fill="#36c"/><rect x="84" y="44" width="10" height="32" fill="#c33"/></g>
+</svg>

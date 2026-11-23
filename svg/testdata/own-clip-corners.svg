@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <rect x="4" y="4" width="50" height="50" fill="#c33" style="clip-path: inset(0 round 2px 16px)"/>
+  <rect x="64" y="4" width="50" height="50" fill="#36c" style="clip-path: inset(4px round 4px 8px 16px 24px / 24px 4px)"/>
+  <rect x="4" y="64" width="50" height="50" fill="#2a7" style="clip-path: xywh(0 0 100% 100% round 40px 10px)"/>
+  <rect x="64" y="64" width="50" height="50" fill="#93c" style="clip-path: rect(0 auto auto 0 round 0 50% 0 50%)"/>
+</svg>
