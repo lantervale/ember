@@ -1543,40 +1543,119 @@ func shades(c color.Color) (color.Color, color.Color) {
 }
 
 // dashes draws a dashed or dotted side over r, along X when across, else
-// along Y, as Chrome lays them: dashes 2 widths long (3 when 1 wide) with
-// gaps near a width (2 when 1 wide), dots a width round with gaps near a
-// width, square when 1 wide; as many as fit with one flush at each end,
-// the gaps spread evenly. Sides run corner to corner, so corners join.
+// along Y, as Chrome strokes it, in device pixels: dashes 2 widths long
+// with gaps of a width (3 and 2 below 3 pixels wide), as many as leave a
+// gap nearest that, one flush at each end, at fractions of a pixel and
+// smoothed there; two shortened alike on a side too short for more, and a
+// solid side when even those don't fit. Dots up to 3 pixels wide are
+// squares, one at each end and those between a width apart, centred;
+// wider ones round, spread as dashes are. Sides run corner to corner, so
+// corners join.
 func (p *painter) dashes(r geom.Rect, across, dotted bool, c color.Color) {
 	length, w := r.H, r.W
 	if across {
 		length, w = r.W, r.H
 	}
-	dash, gap := 2*w, w
-	switch {
-	case dotted:
-		dash = w
-	case w < 2:
-		dash, gap = 3*w, 2*w
-	}
-	n := int(math.Round(float64((length + gap) / (dash + gap))))
-	if n < 2 {
+	k := p.maskScale()
+	pieces, round, ok := dashPattern(float32(math.Round(float64(length*k))), float32(math.Round(float64(w*k))), dotted)
+	if !ok {
 		p.s.Rect(r, c)
 		return
 	}
-	step := (length - dash) / float32(n-1)
-	for i := range n {
-		at := float32(i) * step
-		piece := geom.Rect{X: r.X, Y: r.Y + at, W: w, H: dash}
-		if across {
-			piece = geom.Rect{X: r.X + at, Y: r.Y, W: dash, H: w}
+	for _, d := range pieces {
+		if !across && !round {
+			// Skia smooths a fill's edges across the scanlines at four
+			// samples a pixel: a dash down a side starts and ends at a
+			// quarter of one.
+			end := quarter(d[0] + d[1])
+			d[0] = quarter(d[0])
+			d[1] = end - d[0]
 		}
-		if dotted && w >= 2 {
-			p.s.Circle(piece.Center(), w/2, c)
+		at, n := d[0]/k, d[1]/k
+		if round {
+			centre := geom.V2(r.X+w/2, r.Y+at)
+			if across {
+				centre = geom.V2(r.X+at, r.Y+w/2)
+			}
+			p.s.Circle(centre, w/2, c)
 			continue
 		}
-		p.s.Rect(piece, c)
+		piece := geom.Rect{X: r.X, Y: r.Y + at, W: w, H: n}
+		if across {
+			piece = geom.Rect{X: r.X + at, Y: r.Y, W: n, H: w}
+		}
+		p.s.RoundRect(piece, 0, c)
 	}
+}
+
+// dashPattern is the dashes Chrome strokes along a side length long and
+// w wide, both in whole device pixels: each one's start and length, or
+// for round dots their centres; false for a solid side.
+func dashPattern(length, w float32, dotted bool) (pieces [][2]float32, round, ok bool) {
+	if dotted && w > 3 {
+		if length < 2*w {
+			return [][2]float32{{w / 2, 0}}, true, true
+		}
+		const epsilon = 0.01
+		step := bestDashGap(length, w, w) + w - epsilon
+		for at := w / 2; at <= length-w/2+epsilon; at += step {
+			pieces = append(pieces, [2]float32{at, 0})
+		}
+		return pieces, true, true
+	}
+	dash, gap := w, w
+	if !dotted {
+		dash, gap = 3*w, 2*w
+		if w >= 3 {
+			dash, gap = 2*w, w
+		}
+	}
+	if length <= 2*dash {
+		return nil, false, false
+	}
+	if dotted {
+		// A square at each end, and between them a width apart as many as
+		// leave a width at least beside the end ones, as Chrome lays them:
+		// a whole pattern of dot and gap from where the remainder of the
+		// room after the first square ends, half a width in when there is
+		// none.
+		inner := length - 2*w
+		pieces = append(pieces, [2]float32{0, w})
+		first := float32(math.Mod(float64(inner), float64(2*w)))
+		if first == 0 {
+			first = w / 2
+		}
+		for at := w + first; at+w <= length-w-w/2; at += 2 * w {
+			pieces = append(pieces, [2]float32{at, w})
+		}
+		return append(pieces, [2]float32{length - w, w}), false, true
+	}
+	if two := 2*dash + gap; length <= two {
+		d := dash * length / two
+		return [][2]float32{{0, d}, {length - d, d}}, false, true
+	}
+	gap = bestDashGap(length, dash, gap)
+	for at := float32(0); at < length; at += dash + gap {
+		pieces = append(pieces, [2]float32{at, min(dash, length-at)})
+	}
+	return pieces, false, true
+}
+
+// quarter is the edge at v, in device pixels, as four samples a pixel
+// at the centres of its quarters see it.
+func quarter(v float32) float32 { return float32(math.Ceil(float64(4*v-0.5))) / 4 }
+
+// bestDashGap is the gap between dashes of length dash along an open side
+// length long, as Chrome picks it: of the whole numbers of dashes on
+// either side of what gap would fit, the one whose gap comes nearer it.
+func bestDashGap(length, dash, gap float32) float32 {
+	fewer := float32(math.Floor(float64((length + gap) / (dash + gap))))
+	more := fewer + 1
+	few, many := (length-fewer*dash)/(fewer-1), (length-more*dash)/(more-1)
+	if many <= 0 || abs(few-gap) < abs(many-gap) {
+		return few
+	}
+	return many
 }
 
 // outline paints an element's outline outside its border box: a solid or
