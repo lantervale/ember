@@ -218,8 +218,11 @@ type Box struct {
 	BreakBefore, BreakAfter Break
 	// ContainerType is container-type, and ContainerNames container-name,
 	// nil for none: the names an @container rule picks the element by.
-	ContainerType  ContainerType
-	ContainerNames []string
+	// ContainerScrollState is container-type's scroll-state: the element
+	// answers scroll-state() queries.
+	ContainerType        ContainerType
+	ContainerNames       []string
+	ContainerScrollState bool
 }
 
 // ContainerType is container-type: whether an element is a query

@@ -216,13 +216,25 @@ func checkMaskPosition(v []Component) error {
 	return checkPosition(v)
 }
 
-// checkContainerType takes normal, size or inline-size: a container of
-// its scroll state is not supported.
+// checkContainerType takes normal, or size or inline-size and
+// scroll-state, either or both in any order. anchored, which Chrome
+// reads too, is not supported.
 func checkContainerType(v []Component) error {
-	if slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "scroll-state") }) {
-		return fmt.Errorf("container-type: scroll-state is not supported")
+	if len(v) == 1 && isWord(v[0], "normal") {
+		return nil
 	}
-	return single(words("normal", "size", "inline-size"))(v)
+	sized, scrolled := false, false
+	for _, c := range v {
+		switch {
+		case isWord(c, "size", "inline-size") && !sized:
+			sized = true
+		case isWord(c, kwScrollState) && !scrolled:
+			scrolled = true
+		default:
+			return fmt.Errorf("expected normal, or size or inline-size and scroll-state, found %q", join(v))
+		}
+	}
+	return nil
 }
 
 // checkContainerName takes none, or names none of which is a word a

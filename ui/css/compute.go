@@ -288,7 +288,7 @@ func (r *restyler) children(n *dom.Node, parent *style.Computed, rem float32, fo
 func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Computed, rem float32) bool {
 	s := r.compute(n, parent, rem)
 	*r.computed++
-	if s.ContainerType != style.ContainerNormal {
+	if s.ContainerType != style.ContainerNormal || s.ContainerScrollState {
 		r.env.contain(n)
 	}
 	old := data.Style
@@ -1676,9 +1676,25 @@ var props = func() map[string]prop {
 				return sided(x, v[0], map[string]style.Clear{"none": style.ClearNone, "left": style.ClearLeft,
 					"right": style.ClearRight, "both": style.ClearBoth}, style.ClearLeft, style.ClearRight)
 			}, flips[style.Clear]()),
-		"container-type": keyword(func(c *style.Computed) *style.ContainerType { return &c.ContainerType },
-			map[string]style.ContainerType{"normal": style.ContainerNormal, "size": style.ContainerSize,
-				"inline-size": style.ContainerInlineSize}),
+		"container-type": {
+			set: func(x *ctx, v []Component) {
+				x.c.ContainerType, x.c.ContainerScrollState = style.ContainerNormal, false
+				for _, c := range v {
+					switch {
+					case isWord(c, "size"):
+						x.c.ContainerType = style.ContainerSize
+					case isWord(c, "inline-size"):
+						x.c.ContainerType = style.ContainerInlineSize
+					case isWord(c, kwScrollState):
+						x.c.ContainerScrollState = true
+					}
+				}
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.ContainerType, dst.ContainerScrollState = src.ContainerType, src.ContainerScrollState
+			},
+			anim: anim{kind: discrete},
+		},
 		"container-name": field(func(c *style.Computed) *[]string { return &c.ContainerNames },
 			func(_ *ctx, v []Component) []string {
 				if isWord(v[0], kwNone) {

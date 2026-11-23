@@ -65,6 +65,7 @@ func (b *Box) equal(o *Box) bool {
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
 		b.ContainerType == o.ContainerType &&
+		b.ContainerScrollState == o.ContainerScrollState &&
 		sameSlice(b.ContainerNames, o.ContainerNames)
 }
 
