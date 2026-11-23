@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -250,6 +251,74 @@ p { margin: 0 0 10px; }
 		para("big", hebrew), para("drop", hebrew+" "+hebrew), para("line", hebrew+" 123 abc"),
 	)
 	size := geom.V2(400, 900)
+	landed(t, doc, size)
+	r := chrome.Match(t, doc, size)
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// TestChromeScrollsRightToLeft has scrollers of direction rtl start at
+// their right end and scroll left by negative offsets, as Chrome's
+// scrollLeft, each compared box by box at its start and scrolled.
+func TestChromeScrollsRightToLeft(t *testing.T) {
+	scrollers := func() (*ui.Document, []*ui.Node) {
+		rtl := ui.Attr("dir", "rtl")
+		box := func(style string) *ui.Node { return ui.Div(ui.Style("height: 20px; " + style)) }
+		s := []*ui.Node{
+			ui.Div(rtl, ui.Style("overflow-x: auto; width: 200px; height: 60px"), box("width: 350px"), box("width: 50px")),
+			ui.Div(rtl, ui.Style("overflow: scroll; width: 200px; height: 60px; padding: 4px 10px 6px 7px; border: 3px solid"),
+				box("width: 300px; margin-left: 15px"), box("height: 90px")),
+			ui.Div(rtl, ui.Style("overflow-x: auto; width: 150px; white-space: nowrap; padding: 0 5px"),
+				ui.Span(ui.Text("a line of text far too long for its box")), ui.Text(" and more")),
+			ui.Div(rtl, ui.Style("overflow-x: auto; width: 200px; display: flex; gap: 10px"),
+				box("flex: none; width: 120px"), box("flex: none; width: 140px")),
+			ui.Div(rtl, ui.Style("overflow-x: auto; width: 200px; display: grid; grid-template-columns: 130px 130px"),
+				box(""), box("")),
+			ui.Div(rtl, ui.Style("overflow: auto; width: 200px; height: 50px; position: relative"),
+				box("width: 100px"), box("position: absolute; top: 0; left: -120px; width: 30px")),
+			ui.Div(rtl, ui.Style("overflow-x: auto; width: 200px"), box("width: 100px")),
+		}
+		d := ui.NewDocument()
+		d.Body().Append(s...)
+		return d, s
+	}
+	for _, by := range []float32{0, -40, -1000, 30} {
+		t.Run(fmt.Sprint(by), func(t *testing.T) {
+			d, s := scrollers()
+			d.Layout(geom.V2(800, 600))
+			for _, n := range s {
+				d.SetScroll(n, geom.V2(by, 0))
+			}
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}
+
+// TestChromeLaysOutControlsRightToLeft has text fields, a textarea,
+// selects and buttons of direction rtl hold their text from the right,
+// a select its arrow on its left, compared box by box with Chrome's in a
+// font both draw alike.
+func TestChromeLaysOutControlsRightToLeft(t *testing.T) {
+	font := hebrewFont(t)
+	doc := ui.NewDocument(ui.FetchFonts(func(_, _ string) ([]byte, error) { return font, nil }),
+		ui.CSS(`@font-face { font-family: Hebrew; src: url(hebrew.ttf); }
+body { font-family: Hebrew; } input, select, textarea, button { width: 160px; display: block; margin-bottom: 4px; }`))
+	rtl := ui.Attr("dir", "rtl")
+	doc.Body().Append(
+		ui.Input(rtl, ui.Attr("value", "שלום abc")),
+		ui.Input(rtl, ui.Attr("placeholder", "abc שלום")),
+		ui.Input(rtl, ui.Attr("value", "a value far too long for the width of its field")),
+		ui.Input(ui.Attr("value", "שלום עולם"), ui.Style("direction: rtl; text-align: left")),
+		ui.Textarea(rtl, ui.Text("שלום\nabc def")),
+		ui.Select(rtl, ui.Option(ui.Text("שלום"))),
+		ui.Select(rtl, ui.Style("width: auto"), ui.Option(ui.Text("abc")), ui.Option(ui.Text("a longer option"))),
+		ui.Button(rtl, ui.Text("שלום abc")),
+		ui.Button(rtl, ui.Style("width: auto; padding-left: 20px"), ui.Text("abc")),
+		ui.Input(rtl, ui.Attr("type", "button"), ui.Attr("value", "abc שלום"), ui.Style("width: auto")),
+		ui.Div(rtl, ui.Input(ui.Attr("type", "checkbox")), ui.Input(ui.Attr("type", "radio")),
+			ui.Input(ui.Style("display: inline-block; width: 50px"))),
+	)
+	size := geom.V2(400, 500)
 	landed(t, doc, size)
 	r := chrome.Match(t, doc, size)
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)

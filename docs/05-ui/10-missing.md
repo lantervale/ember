@@ -35,9 +35,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
 | an em space or a thin space (U+2003, U+2009) | a few points wider than Chrome's in the Go faces |
 | shaping right-to-left scripts: Arabic's joined forms, ligatures | each letter drawn in its own form, where Chrome joins them |
-| selecting, the caret and `text-overflow` in text shown right to left | a selection and the caret measure a right-to-left run from its left, and the ellipsis cuts a line's right end |
-| mirroring the characters of right-to-left text but brackets (`<`, `>`, `«`…) | drawn as they are, where Chrome mirrors every Bidi_Mirrored character |
-| the text and the arrow of a text field, a `select` or a button of direction `rtl` | laid out as left-to-right controls |
+| the caret and the selection of a `textarea` in text shown right to left; a field's selection over text of both directions | measured from the left; one rectangle from the first selected character's edge to the last's, where Chrome draws one per run |
 
 ## Generated content
 
@@ -58,12 +56,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `column-span: all` on a block deeper in the container than its children | laid out in its column, where Chrome spans it when the blocks round it start no formatting context |
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
-| columns right to left | left to right only, their content laid out right to left in each |
+| a multi-column scroller of direction `rtl` whose columns overflow | its columns past its left are not reached by scrolling |
 | a table's background round a collapsed column | drawn over the table's box, where Chrome draws it as wide as before the column was taken out |
-| a scroller of direction `rtl` | scrolls from its left, where Chrome starts it at its right end; its bar is on its left, as Chrome's |
-| collapsed borders of a table of direction `rtl` | each cell's left border still wins its left edge, where Chrome resolves its start edge first |
-| logical properties in `@keyframes` and `transition-property` under `direction: rtl` | the left side's |
-| a float of direction `rtl` beside a block that avoids floats, a block's own `text-align` of `-webkit-left` under rtl | not compared with Chrome |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |

@@ -143,6 +143,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0139 | [Colours in any space are worked out in sRGB as the cascade reads them](0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md) | api |
 | 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
+| 0146 | [A right-to-left scroller scrolls from zero to below it](0146-a-right-to-left-scroller-scrolls-from-zero-to-below-it.md) | api |
 
 ## Writing one
 

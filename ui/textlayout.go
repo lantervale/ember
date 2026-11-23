@@ -6,6 +6,7 @@ import (
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/control"
+	"github.com/lantervale/ember/ui/internal/bidi"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -46,7 +47,51 @@ func newLine(text []rune, st *style.Computed, fonts box.Fonts) *line {
 		room += l.spacing.after(r)
 		l.xs[i+1] = fonts.Advance(st.Font, string(text[:i+1])) + room
 	}
+	if st.Dir == style.RTL || slices.ContainsFunc(text, func(r rune) bool { return r >= firstRTL }) {
+		l.xs = visualEdges(text, l.xs, st.Dir == style.RTL)
+	}
 	return l
+}
+
+// firstRTL is where the characters of a right-to-left script begin: text below it is
+// left to right throughout.
+const firstRTL = 0x0590
+
+// visualEdges is where the caret stands for each place in text, laid out in a paragraph
+// of direction rtl or not, from the line's left, xs being the edges of its characters
+// in the text's order: before a character on the side its text comes from (the right
+// of one shown right to left), at the end after the last one.
+func visualEdges(text []rune, xs []float32, rtl bool) []float32 {
+	var base bidi.Level
+	if rtl {
+		base = 1
+	}
+	p := bidi.Levels(text, base)
+	levels := make([]bidi.Level, len(text))
+	for i := range text {
+		levels[i] = p.Level(i)
+	}
+	left := make([]float32, len(text))
+	var x float32
+	for _, k := range bidi.Reorder(levels) {
+		left[k] = x
+		x += xs[k+1] - xs[k]
+	}
+	out := make([]float32, len(text)+1)
+	for i := range text {
+		out[i] = left[i]
+		if levels[i]%2 == 1 {
+			out[i] += xs[i+1] - xs[i]
+		}
+	}
+	switch n := len(text); {
+	case n == 0:
+	case levels[n-1]%2 == 1:
+		out[n] = left[n-1]
+	default:
+		out[n] = left[n-1] + xs[n] - xs[n-1]
+	}
+	return out
 }
 
 func (l *line) Lines() int          { return 1 }

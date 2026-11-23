@@ -111,6 +111,10 @@ func flipEdge(e staticEdge) staticEdge {
 	return e
 }
 
+// fromEnd is whether a block container of style st scrolls from the end of each axis:
+// its right under direction rtl.
+func fromEnd(st *style.Computed) [2]bool { return [2]bool{st.Dir == style.RTL, false} }
+
 // startOf is p under a container of style st: its start and end on the right and the
 // left under direction rtl.
 func startOf(p staticPosition, st *style.Computed) staticPosition {

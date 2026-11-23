@@ -954,6 +954,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Border = box.Edges{Top: f.border.t, Right: f.border.r, Bottom: f.border.b, Left: f.border.l}
 	b.Padding = box.Edges{Top: f.padding.t, Right: f.padding.r, Bottom: f.padding.b, Left: f.padding.l}
 	b.Content = geom.Vec2{X: f.overflow.rect.r - f.overflow.rect.l, Y: f.overflow.rect.b - f.overflow.rect.t}
+	b.ScrollStart = geom.Vec2{X: fmin(f.overflow.rect.l, 0), Y: fmin(f.overflow.rect.t, 0)}
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w, Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut

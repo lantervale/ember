@@ -182,9 +182,10 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		if anyInFlow {
 			res.overflow = rect{}
 			container := overflowContainer{
-				scroll:  isScrollContainer(st),
-				size:    final.sub(rBorder.sum()).sub(gutter.sum()),
-				padding: rPadding,
+				scroll:   isScrollContainer(st),
+				size:     final.sub(rBorder.sum()).sub(gutter.sum()),
+				padding:  rPadding,
+				reversed: fromEnd(st),
 			}
 			for _, it := range items {
 				if it.final == nil {
@@ -258,7 +259,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		res.overflow = res.overflow.union(rect{r: rPadding.r, b: rPadding.b})
 	}
 	out.overflow = finalizeOverflow(res.overflow,
-		final.sub(rBorder.sum()).sub(gutter.sum()), [2]bool{}, isScrollContainer(st))
+		final.sub(rBorder.sum()).sub(gutter.sum()), fromEnd(st), isScrollContainer(st))
 	for i, k := range n.kids {
 		if k.st.Display == style.DisplayNone {
 			k.unrounded = placed{order: uint32(i)}
@@ -463,7 +464,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	rInset, rBorder, rPadding rect, st *style.Computed, ownCollapse [2]bool, scroll bool,
 	ctx *blockContext) blockResult {
 	innerW := fmax(outerW-rInset.horizontal(), 0)
-	container := overflowContainer{scroll: scroll, size: size{innerW + rPadding.horizontal(), 0}, padding: rPadding}
+	container := overflowContainer{scroll: scroll, size: size{innerW + rPadding.horizontal(), 0}, padding: rPadding,
+		reversed: fromEnd(st)}
 	percentH = mSub(percentH, rInset.vertical())
 	parent := size{innerW, percentH}
 	if ctx.root {
@@ -636,6 +638,10 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		resolved := rect{l: or(margin.l, autoSize), r: or(margin.r, autoSize), t: or(margin.t, 0), b: or(margin.b, 0)}
 		if autoCount == 0 {
 			resolved.l += blockAlignOffset(st, freeX)
+		}
+		if over := stretchW - finalSize.w; over < 0 && st.Dir == style.RTL {
+			// over-constrained, the left margin gives way: the box overflows its left
+			resolved.l += over
 		}
 		insetOffset := relativeOffset(it, parent)
 		if it.inSameBFC && (!collapsingWithFirst || !ownCollapse[0]) {

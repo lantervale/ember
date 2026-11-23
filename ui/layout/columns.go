@@ -35,7 +35,8 @@ type columnSet struct {
 }
 
 // columnPlace is where a column shows in the container's border box: x from the content
-// box's left (the first column's right edge is the content box's under rtl), top and bottom down it. A spanner shows as a column at x 0.
+// box's left (the first column's right edge is the content box's under rtl), top and
+// bottom down it. A spanner shows as a column at x 0.
 type columnPlace struct{ x, top, bottom float32 }
 
 // columnRow is a row of count columns from the first, top down from the first column's
@@ -86,6 +87,32 @@ func (f *flowFrag) lineShift(y float32) (float32, float32) {
 	k := f.cols.at(f.y + y)
 	by := f.cols.shift(k)
 	return by.x - f.cols.places[f.col].x - f.ox, by.y + f.y - f.oy
+}
+
+// cut gives f a piece in each column from first to last of a box of size w by h at at in
+// the flow, each from the origin it returns: origin moved to the pieces' top-left.
+func (f *flowFrag) cut(at point, w, h float32, first, last int, origin point) point {
+	cs := f.cols
+	for k := first; k <= last; k++ {
+		shift := cs.shift(k)
+		top := fmax(at.y, cs.starts[k]) + shift.y
+		bottom := at.y + h + shift.y
+		if k < last {
+			// A box that goes on in the next column fills this one to its end.
+			bottom = cs.places[k].bottom
+		}
+		f.pieces = append(f.pieces, geom.Rect{X: at.x + shift.x, Y: top, W: w, H: fmax(bottom-top, 0)})
+	}
+	left := origin.x
+	for _, p := range f.pieces {
+		origin.x, origin.y = fmin(origin.x, p.X), fmin(origin.y, p.Y)
+	}
+	f.ox = origin.x - left
+	for i := range f.pieces {
+		f.pieces[i].X -= origin.x
+		f.pieces[i].Y -= origin.y
+	}
+	return origin
 }
 
 // columnar reports a node laid out as a multi-column container: a block container with
@@ -763,26 +790,7 @@ func keepFlow(n, m *node, flow, moved point) {
 	origin := point{at.x + by.x, at.y + by.y}
 	*f = flowFrag{cols: cs, y: at.y, col: first, pieces: f.pieces[:0]}
 	if last > first {
-		for k := first; k <= last; k++ {
-			shift := cs.shift(k)
-			top := fmax(at.y, cs.starts[k]) + shift.y
-			bottom := at.y + h + shift.y
-			if k < last {
-				// A box that goes on in the next column fills this one to its end.
-				bottom = cs.places[k].bottom
-			}
-			f.pieces = append(f.pieces,
-				geom.Rect{X: at.x + shift.x, Y: top, W: n.unrounded.size.w, H: fmax(bottom-top, 0)})
-		}
-		left := origin.x
-		for _, p := range f.pieces {
-			origin.x, origin.y = fmin(origin.x, p.X), fmin(origin.y, p.Y)
-		}
-		f.ox = origin.x - left
-		for i := range f.pieces {
-			f.pieces[i].X -= origin.x
-			f.pieces[i].Y -= origin.y
-		}
+		origin = f.cut(at, n.unrounded.size.w, h, first, last, origin)
 	}
 	f.oy = origin.y
 	n.absolute = point{m.absolute.x + origin.x + moved.x, m.absolute.y + origin.y + moved.y}

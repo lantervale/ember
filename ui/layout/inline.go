@@ -2093,10 +2093,10 @@ func (c *inlineContent) placeMarker(r geom.Rect, lb float32) {
 }
 
 // ellipsizeLine cuts a line too wide for content and puts the ellipsis at its end, or at
-// its start, then flush with the content's end.
+// its left, then flush with the content's right: the end of a line of direction rtl.
 func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left, content float32) ([]piece, float32,
 	bool, bool) {
-	if !n.st.EllipsisStart {
+	if !n.st.EllipsisStart && n.st.Dir != style.RTL {
 		kept, cut := t.ellipsize(c, pieces, content)
 		return kept, x, cut, false
 	}
@@ -2236,6 +2236,10 @@ func (c *inlineContent) align(st *style.Computed, l line, last bool, free float3
 		if c.base%2 == 1 {
 			dir = style.RTL
 		}
+	}
+	if free < 0 && dir == style.RTL {
+		// a line too long for its box is start aligned, and overflows its end
+		return free, 0
 	}
 	start := alignOffset(style.Start.Resolve(dir), free)
 	if a := st.TextAlign; a != style.Justify {

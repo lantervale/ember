@@ -275,7 +275,8 @@ func (d *Document) mapOf(n *Node) *runMap {
 }
 
 // edges is how far each character of fragment k of b stands from the
-// fragment's start, and its end.
+// fragment's left, and its end: from its right edge for a fragment
+// shown right to left, the first character rightmost.
 func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	f := &m.frags[k]
 	if f.xs != nil {
@@ -298,6 +299,12 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	}
 	if len(text) > 0 {
 		f.xs = append(f.xs, max(b.Lines[k].Rect.W, f.xs[len(f.xs)-1]))
+	}
+	if b.Lines[k].RTL {
+		w := f.xs[len(f.xs)-1]
+		for i, x := range f.xs {
+			f.xs[i] = w - x
+		}
 	}
 	return f.xs
 }
@@ -718,10 +725,14 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 				continue
 			}
 			xs := d.edges(m, b, k)
-			x0, x1 = xs[j0], xs[j1]
+			x0, x1 = min(xs[j0], xs[j1]), max(xs[j0], xs[j1])
 			goesOn = j1 == len(offs)-1 && (on || int(offs[j1]) < to)
 		}
-		if goesOn {
+		switch {
+		case !goesOn:
+		case f.RTL:
+			x0 -= d.tail(b, k, next)
+		default:
 			x1 += d.tail(b, k, next)
 		}
 		top := min(f.Rect.Y, f.Baseline-metrics.Ascent)
@@ -733,7 +744,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 
 // tail is how far past its end fragment k of b is selected when the
 // selection goes on: up to the next fragment on its line, or a space
-// past the line's end.
+// past the line's end, on its left for a fragment shown right to left.
 func (d *Document) tail(b *box.Box, k int, next *box.Box) float32 {
 	f := b.Lines[k]
 	at := b.Rect()
@@ -746,6 +757,9 @@ func (d *Document) tail(b *box.Box, k int, next *box.Box) float32 {
 		after, origin = &next.Lines[0], next.Rect()
 	}
 	if after != nil && abs(origin.Y+after.Rect.Y-(at.Y+f.Rect.Y)) < 0.5 {
+		if f.RTL {
+			return max(at.X+f.Rect.X-(origin.X+after.Rect.X+after.Rect.W), 0)
+		}
 		return max(origin.X+after.Rect.X-(at.X+f.Rect.X+f.Rect.W), 0)
 	}
 	return d.fonts.Advance(b.Style.Font, " ")

@@ -981,7 +981,8 @@ div { width: 100px; height: 10px; position: relative; color: #000; background-co
 // their right side under rtl.
 func TestLogicalAnimationsMatchChrome(t *testing.T) {
 	src := `
-@keyframes in { from { margin-inline-start: 40px; padding-inline-end: 0 } to { margin-inline-start: 0; padding-inline-end: 20px } }
+@keyframes in { from { margin-inline-start: 40px; padding-inline-end: 0 }
+  to { margin-inline-start: 0; padding-inline-end: 20px } }
 @keyframes ink { to { border-inline-start-color: #f00; inset-inline-end: 30px } }
 @keyframes both { to { margin-inline: 10px 50px } }
 div { width: 100px; height: 10px; position: relative; left: 0; right: 0; border: 2px solid #000; margin: 0;

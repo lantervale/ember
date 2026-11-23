@@ -99,7 +99,8 @@ func TestFloatsMatchChrome(t *testing.T) {
 				ui.Div(ui.Class("own"), ui.Style("width: 200px"), ui.Text("Too wide to stand beside.")),
 			),
 		),
-		"right to left, blocks with their own context beside floats": styled(boxes+` .own { overflow: hidden; background: #ccc; }
+		"right to left, blocks with their own context beside floats": styled(boxes+`
+.own { overflow: hidden; background: #ccc; }
 .rtl { direction: rtl; } .s { float: inline-start; } .e { float: inline-end; }`,
 			ui.Div(ui.Class("wide", "rtl"),
 				ui.Div(ui.Class("r", "box"), ui.Style("margin-left: 8px")),

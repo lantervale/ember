@@ -246,9 +246,9 @@ func (t *tree) oofLayout(n *node, out *output) {
 	}
 	area := *out.area
 	hoisted, unclaimed, r := t.performOOF(n, out.oof, area.size,
-		area.offset, containingBlockClaims(n.st), n.st.Overflow, [2]bool{})
+		area.offset, containingBlockClaims(n.st), n.st.Overflow, fromEnd(n.st))
 	scroll := isScrollContainer(n.st)
-	r = finalizeOverflow(r, area.size, [2]bool{}, scroll).rect
+	r = finalizeOverflow(r, area.size, fromEnd(n.st), scroll).rect
 	n.hoisted = hoisted
 	out.oof = unclaimed
 	out.overflow = finalizeOverflow(out.overflow.rect.union(r), area.size, out.overflow.reversed, scroll)

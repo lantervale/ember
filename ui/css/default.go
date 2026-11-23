@@ -168,6 +168,7 @@ select {
   padding-right: 20px; background-image: url(ember:select-arrow); background-repeat: no-repeat;
   background-position: right 6px center;
 }
+select:dir(rtl) { padding-right: 2px; padding-left: 20px; background-position: left 6px center; }
 input[type="checkbox"] { width: 13px; height: 13px; padding: 0; border-radius: 2px; }
 input[type="checkbox"]:checked {
   background-color: light-dark(#0075ff, #99c8ff); border-color: light-dark(#0075ff, #99c8ff);
