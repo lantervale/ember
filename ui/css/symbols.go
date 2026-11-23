@@ -18,7 +18,9 @@ var anonymousStyles sync.Map
 const kwSymbols = "symbols"
 
 // isSymbolsFunction reports whether c is symbols().
-func isSymbolsFunction(c Component) bool { return c.Kind == Function && strings.EqualFold(c.Text, kwSymbols) }
+func isSymbolsFunction(c Component) bool {
+	return c.Kind == Function && strings.EqualFold(c.Text, kwSymbols)
+}
 
 // checkCounterStyleRef checks a counter style where a value names one: a
 // name or symbols().

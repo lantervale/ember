@@ -949,6 +949,13 @@ func (p *parser) declaration(part []Component) (Declaration, bool) {
 			d.Name = as
 			v.plainWords(plain, d.Value)
 		}
+		if v == &webkit {
+			var err error
+			if d.Value, err = webkitMask(plain, d.Value); err != nil {
+				p.warnf(name.Pos, "%s: %v", written, err)
+				return Declaration{}, false
+			}
+		}
 	}
 	if as, ok := logical[d.Name]; ok {
 		d.Name, d.inline = as, horizontal(as)

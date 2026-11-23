@@ -446,7 +446,7 @@ var checks = map[string]check{
 	"mask-origin":           commaList(single(maskBox)),
 	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
 	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
-	"mask-composite":        commaList(single(words("add", "subtract", "intersect", "exclude"))),
+	"mask-composite":        commaList(single(checkMaskComposite)),
 	"clip-path":             checkClipPath,
 	"text-shadow":           checkTextShadow,
 	"image-rendering":       single(words("auto", "pixelated")),

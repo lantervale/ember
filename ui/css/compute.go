@@ -2075,10 +2075,7 @@ var props = func() map[string]prop {
 				"match-source": style.MaskMatchSource, "alpha": style.MaskAlpha, "luminance": style.MaskLuminance,
 			}), flips[[]style.MaskMode]()),
 		"mask-composite": layered(func(c *style.Computed) *[]style.MaskComposite { return &c.MaskComposites },
-			wordOf(map[string]style.MaskComposite{
-				"add": style.CompositeAdd, "subtract": style.CompositeSubtract, "intersect": style.CompositeIntersect,
-				"exclude": style.CompositeExclude,
-			}), flips[[]style.MaskComposite]()),
+			wordOf(maskComposites), flips[[]style.MaskComposite]()),
 		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
 			clipPaths).painted(),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),

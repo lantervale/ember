@@ -1234,7 +1234,53 @@ const (
 	CompositeIntersect
 	// CompositeExclude keeps it and them where the other is clear.
 	CompositeExclude
+	// The compositing operators of -webkit-mask-composite, which Chrome
+	// keeps as written: the first four join as add, intersect, subtract
+	// and exclude.
+	CompositeSourceOver
+	CompositeSourceIn
+	CompositeSourceOut
+	CompositeXor
+	// CompositeClear leaves nothing, CompositeCopy the layer alone.
+	CompositeClear
+	CompositeCopy
+	// CompositeSourceAtop lays it over them where they are opaque.
+	CompositeSourceAtop
+	// The destination operators are the source ones, the layer and those
+	// under it swapped.
+	CompositeDestinationOver
+	CompositeDestinationIn
+	CompositeDestinationOut
+	CompositeDestinationAtop
+	// CompositePlusLighter adds it to them.
+	CompositePlusLighter
 )
+
+// MaskCompositeWords are mask-composite's words, by MaskComposite.
+//
+//nolint:gochecknoglobals // a fixed list
+var MaskCompositeWords = [...]string{"add", "subtract", "intersect", "exclude", "source-over", "source-in",
+	"source-out", "xor", "clear", "copy", "source-atop", "destination-over", "destination-in", "destination-out",
+	"destination-atop", "plus-lighter"}
+
+// Plain is the composite of mask-composite's own four that c joins as,
+// c itself for the others.
+func (c MaskComposite) Plain() MaskComposite {
+	switch c {
+	case CompositeSourceOver:
+		return CompositeAdd
+	case CompositeSourceIn:
+		return CompositeIntersect
+	case CompositeSourceOut:
+		return CompositeSubtract
+	case CompositeXor:
+		return CompositeExclude
+	case CompositeAdd, CompositeSubtract, CompositeIntersect, CompositeExclude, CompositeClear, CompositeCopy,
+		CompositeSourceAtop, CompositeDestinationOver, CompositeDestinationIn, CompositeDestinationOut,
+		CompositeDestinationAtop, CompositePlusLighter:
+	}
+	return c
+}
 
 // BackgroundPosition is background-position: X from the left edge, or from
 // the right one when FromRight, and Y from the top, or the bottom when

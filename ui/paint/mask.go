@@ -136,15 +136,31 @@ func (p *painter) maskFrom(on Pictures, e entry, st *style.Computed, i int) {
 		p.maskFrom(on, e, st, i+1)
 		return
 	}
-	if l.Composite == style.CompositeAdd {
+	composite := l.Composite.Plain()
+	switch composite {
+	case style.CompositeAdd:
 		p.maskFrom(on, e, st, i+1)
 		p.maskLayer(on, e, st, &l)
+		return
+	case style.CompositeDestinationOver:
+		p.maskLayer(on, e, st, &l)
+		p.maskFrom(on, e, st, i+1)
+		return
+	case style.CompositeCopy:
+		p.maskLayer(on, e, st, &l)
+		return
+	case style.CompositeClear:
 		return
 	}
 	on.BeginPicture()
 	p.maskFrom(on, e, st, i+1)
 	under := on.EndPicture(0)
-	switch l.Composite {
+	layer := func() *twod.Picture {
+		on.BeginPicture()
+		p.maskLayer(on, e, st, &l)
+		return on.EndPicture(0)
+	}
+	switch composite {
 	case style.CompositeIntersect:
 		on.PushClipPicture(under)
 		p.maskLayer(on, e, st, &l)
@@ -163,7 +179,36 @@ func (p *painter) maskFrom(on Pictures, e entry, st *style.Computed, i int) {
 		on.PushClipPicture(over, twod.Inverted())
 		on.SumPicture(under)
 		p.s.PopClip()
-	case style.CompositeAdd:
+	case style.CompositeSourceAtop:
+		over := layer()
+		on.PushClipPicture(over, twod.Inverted())
+		on.DrawPicture(under)
+		p.s.PopClip()
+		on.PushClipPicture(under)
+		on.SumPicture(over)
+		p.s.PopClip()
+	case style.CompositeDestinationIn, style.CompositeDestinationOut:
+		over := layer()
+		if composite == style.CompositeDestinationIn {
+			on.PushClipPicture(over)
+		} else {
+			on.PushClipPicture(over, twod.Inverted())
+		}
+		on.DrawPicture(under)
+		p.s.PopClip()
+	case style.CompositeDestinationAtop:
+		over := layer()
+		on.PushClipPicture(over)
+		on.DrawPicture(under)
+		p.s.PopClip()
+		on.PushClipPicture(under, twod.Inverted())
+		on.SumPicture(over)
+		p.s.PopClip()
+	case style.CompositePlusLighter:
+		on.DrawPicture(layer())
+		on.SumPicture(under)
+	case style.CompositeAdd, style.CompositeSourceOver, style.CompositeSourceIn, style.CompositeSourceOut,
+		style.CompositeXor, style.CompositeClear, style.CompositeCopy, style.CompositeDestinationOver:
 	}
 }
 

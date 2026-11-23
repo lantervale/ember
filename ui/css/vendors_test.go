@@ -32,7 +32,7 @@ func read(decl string, opts ...ParseOption) string {
 }
 
 func TestWebkitPropertiesAreReadAsTheirPlainOnes(t *testing.T) {
-	if len(webkit.same) != 74 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 2 {
+	if len(webkit.same) != 73 || len(webkit.renamed) != 30 || len(webkit.own) != 45 || len(webkit.legacy) != 3 {
 		t.Errorf("-webkit-: %d of the same name, %d renamed, %d its own, %d its own read as plain ones",
 			len(webkit.same), len(webkit.renamed), len(webkit.own), len(webkit.legacy))
 	}

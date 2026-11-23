@@ -55,6 +55,7 @@
   "lists": 0.007,
   "m0": 0.0003,
   "markers": 0.0066,
+  "mask-composite": 0.0008,
   "mocka": 0.0025,
   "multicol": 0.0139,
   "outline-styles": 0.002,
