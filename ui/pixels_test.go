@@ -67,6 +67,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-boxes", 640, 330, 0.0065},
 		{"./internal/pages/debug-grid", 640, 180, 0.004},
 		{"./internal/pages/decorations", 420, 560, 0.007},
+		{"./internal/pages/decoration-caps", 440, 420, 0.0095},
 		{"./internal/pages/word-spacing", 420, 440, 0.0065},
 		{"./internal/pages/text-properties", 420, 490, 0.0086},
 		{"./internal/pages/vertical-align", 420, 620, 0.0092},

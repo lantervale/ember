@@ -67,7 +67,7 @@ func (p *painter) altText(e entry, box geom.Rect, alt string, alpha float32) {
 	lh := m.Ascent + m.Descent + m.LineGap
 	row := max(lh, BrokenIcon)
 	x, y, line := float32(BrokenIcon), float32(0), ""
-	draw := func() { p.wordsIn(geom.V2(box.X+x, box.Y+y), line, st, st.Font, opts) }
+	draw := func() { p.words(geom.V2(box.X+x, box.Y+y), line, st, opts) }
 	for _, w := range strings.Fields(alt) {
 		next := w
 		if line != "" {

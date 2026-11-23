@@ -40,6 +40,7 @@ var decorationProps = map[string]func(s *style.Computed) string{
 			return px(t.Px)
 		}
 	},
+	"text-decoration-skip-ink": func(s *style.Computed) string { return [...]string{"auto", "none", "all"}[s.SkipInk] },
 }
 
 func TestTextDecorationMatchesChrome(t *testing.T) {
@@ -57,6 +58,8 @@ body { color: #2b2722; font-size: 20px; }
 .none { text-decoration: none; }
 .float { float: left; }
 .red { color: #c8473d; }
+.skip-all { text-decoration-skip-ink: all; }
+.skip-none { text-decoration-skip-ink: NONE; }
 `)}}
 	d := ui.NewDocument(ui.Stylesheet(fsys, "decoration.css"))
 	d.Body().Append(
@@ -69,6 +72,8 @@ body { color: #2b2722; font-size: 20px; }
 		ui.P(ui.Class("longhands"), ui.Span(ui.Class("red"), ui.Text("currentcolor is each element's own"))),
 		ui.P(ui.Class("reset"), ui.Text("the shorthand resets the rest")),
 		ui.P(ui.Style("text-decoration: overline #00f"), ui.Text("a style attribute")),
+		ui.P(ui.Class("under", "skip-all"), ui.Text("skips all ink "), ui.Span(ui.Text("inherited")),
+			ui.Span(ui.Class("skip-none"), ui.Text("or none"))),
 	)
 	matchChromeProps(t, d, decorationProps, 0)
 }

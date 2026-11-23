@@ -25,9 +25,8 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
 | a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
 | a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
-| `text-decoration-skip-ink: all` | as `auto`: line-throughs go through the ink, where `all` skips it there too |
-| small capitals in a text field, a select's list and a broken picture's alt text | drawn as `normal` there |
-| a face with its own small capitals (`smcp`) | synthesised from its capitals all the same, where Chrome draws the face's own ([decision 0135](../99-decisions/0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md)) |
+| `text-underline-offset` and `text-underline-position` | not read: an underline lies half its thickness below the baseline, Chrome's `auto` |
+| the characters whose ink `text-decoration-skip-ink: auto` leaves whole, outside the blocks measured (CJK, symbols, pictographs, Hangul, Linear B) | skipped as a Latin letter's, where Chrome's table may name more ([decision 0182](../99-decisions/0182-skipped-ink-follows-the-glyphs-drawn-and-chromes-table-of-characters.md)) |
 | text on a display of one pixel to the point | a glyph's darkened edge shows on its left and top and, as rounding has it, not always on its right and bottom: the last half pixel of its quad has its centre on the quad's edge. Drawn every time (each quad a texel longer right and below), 27 of the 44 pixel pages with text measured further from Chrome at that scale and 2 nearer, none changed at two pixels a point, so it stays; `-webkit-font-smoothing: antialiased` has no such edge |
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
 | some installed fonts | `ui.SystemFonts()` skips a file it cannot read; nothing waits for the scan in the public API |

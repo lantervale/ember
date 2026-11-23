@@ -2285,8 +2285,8 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
-		"text-decoration-skip-ink": keyword(func(c *style.Computed) *bool { return &c.InkThrough },
-			map[string]bool{"auto": false, "all": false, "none": true}),
+		"text-decoration-skip-ink": keyword(func(c *style.Computed) *style.SkipInk { return &c.SkipInk },
+			map[string]style.SkipInk{"auto": style.SkipInkAuto, "all": style.SkipInkAll, "none": style.SkipInkNone}),
 		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
 			func(x *ctx, v []Component) style.TabSize {
 				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
