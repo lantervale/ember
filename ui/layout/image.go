@@ -133,7 +133,7 @@ func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts
 			continue
 		}
 		natural, shape, sized := pictureOf(e, n.st, images, fonts)
-		natural, shape = turnPicture(natural, shape, outerFrame(n.parent, n.box.Style))
+		natural, shape = turnPicture(natural, shape, n.box.Style.Mode)
 		switch {
 		case natural == n.natural && shape == n.shape && sized == n.sized:
 		case n.intrinsic || n.fills() || sized && fillsRoom(shape):
@@ -242,6 +242,21 @@ func (n *node) filled(avail space, pb size) size {
 	return size{w, w / n.shape.Ratio}
 }
 
+// preferredIn is the size a replaced node of style st takes in the room avail with
+// neither side set, padding and border pb included: its natural size, its block size
+// through its aspect-ratio where one is set, as Chrome's.
+func (n *node) preferredIn(avail space, pb size, st *style.Computed) size {
+	s := n.naturalIn(avail, pb)
+	r := aspectRatio(st)
+	if !some(r) || s.w <= 0 || n.framed() {
+		return s.add(pb)
+	}
+	if contentBox(st) {
+		return size{s.w + pb.w, s.w/r + pb.h}
+	}
+	return size{s.w + pb.w, (s.w + pb.w) / r}
+}
+
 // replacedSize is a replaced box's size with neither side set: its natural size, scaled
 // through its ratio to meet the min and max sizes.
 func replacedSize(natural size, ratio float32, minSize, maxSize size) size {
@@ -264,13 +279,18 @@ func replacedSize(natural size, ratio float32, minSize, maxSize size) size {
 }
 
 // measureReplaced is a replaced box's content size: its natural size, or the side it is
-// given and the other through its ratio. A picture that fills is as wide as room.
+// given and the other through its aspect-ratio, else its natural ratio. A picture that
+// fills is as wide as room.
 func measureReplaced(n *node, known size, room space) size {
 	s := n.natural
 	if n.fills() {
 		s = n.filled(room, size{})
 	}
-	if r := n.naturalRatio(); some(r) {
+	r := aspectRatio(n.st)
+	if !some(r) {
+		r = n.naturalRatio()
+	}
+	if some(r) {
 		switch {
 		case some(known.w) && !some(known.h):
 			s = size{known.w, known.w / r}

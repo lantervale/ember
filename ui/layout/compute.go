@@ -284,8 +284,7 @@ func (t *tree) measureChildSize(n *node, known, parent size,
 	return out.size.get(a)
 }
 
-func (t *tree) measureChildSizeBoth(n *node, known, parent size,
-	avail spaces, mode sizingMode, collapsible [2]bool) size {
+func (t *tree) measureChildSizeBoth(n *node, known, parent size, avail spaces, mode sizingMode) size {
 	return t.computeChild(n, input{
 		run:             computeSize,
 		sizing:          mode,
@@ -294,7 +293,6 @@ func (t *tree) measureChildSizeBoth(n *node, known, parent size,
 		knownIsDefinite: bools{true, true},
 		parent:          parent,
 		avail:           avail,
-		collapsible:     collapsible,
 	}).size
 }
 

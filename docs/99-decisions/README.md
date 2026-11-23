@@ -207,6 +207,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0202 | [A select with multiple or a size is a listbox of rows in the page](0202-a-select-with-multiple-or-a-size-is-a-listbox-of-rows-in-the-page.md) | api |
 | 0204 | [A positioned box is laid out in its containing block's frame](0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md) | rendering |
 | 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
+| 0212 | [A picture takes its natural size in its own writing mode](0212-a-picture-takes-its-natural-size-in-its-own-writing-mode.md) | rendering |
 
 ## Writing one
 

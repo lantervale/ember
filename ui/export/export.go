@@ -301,6 +301,9 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 	if accent := accentLook(d, n); accent != "" {
 		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+accent), "; ")
 	}
+	if sized := controlSized(n); sized != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+sized), "; ")
+	}
 	if bar := barLook(d, n); bar != "" {
 		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
 	}
@@ -309,6 +312,34 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 		style = strings.TrimPrefix(style, "; ")
 	}
 	return style
+}
+
+// controlSized is the sizes of a range of ui's own look its sheets leave auto, its
+// natural ones: Chrome's range of no look of its own has none.
+func controlSized(n *dom.Node) string {
+	st := dom.Data(n).Style
+	if t, _ := n.Attr("type"); st == nil || bare(n) || n.Tag() != dom.Input || !strings.EqualFold(t, "range") {
+		return ""
+	}
+	s := layout.RangeNatural(st)
+	if st.BoxSizing == style.BorderBox {
+		pad := func(l style.Length) float32 { v, _ := l.Resolve(0); return v }
+		s.X += st.Border.Left + st.Border.Right + pad(st.Padding.Left) + pad(st.Padding.Right)
+		s.Y += st.Border.Top + st.Border.Bottom + pad(st.Padding.Top) + pad(st.Padding.Bottom)
+	}
+	// generated content makes a range taller than its track, Chrome's as ui's
+	least := ""
+	if d := dom.Data(n); d.Before != nil || d.After != nil {
+		least = "min-"
+	}
+	var sized []string
+	if st.Size.Width.Kind == style.Auto {
+		sized = append(sized, fmt.Sprintf("%swidth: %gpx", least, s.X))
+	}
+	if st.Size.Height.Kind == style.Auto {
+		sized = append(sized, fmt.Sprintf("%sheight: %gpx", least, s.Y))
+	}
+	return strings.Join(sized, "; ")
 }
 
 // controlState is the attribute that says a control's state now: a

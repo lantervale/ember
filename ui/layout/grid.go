@@ -421,7 +421,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	keywordMeasured := noSize
 	if kw == keywordMeasure && kh == keywordMeasure && !outOfFlow(pos) {
-		keywordMeasured = t.measureChildSizeBoth(n, noSize, cb, spaces{kwSpace, khSpace}, inherentSize, [2]bool{})
+		keywordMeasured = t.measureChildSizeBoth(n, noSize, cb, spaces{kwSpace, khSpace}, inherentSize)
 	}
 	w := inherent.w
 	if !some(w) {
@@ -466,7 +466,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	s = s.withAspectRatio(ratio).mClamp(minSize, maxSize)
 	innerSpaces := spaces{def(inner.w), def(inner.h)}
 	if outOfFlow(pos) && !s.both() {
-		s = t.measureChildSizeBoth(n, s, cb, innerSpaces, inherentSize, [2]bool{})
+		s = t.measureChildSizeBoth(n, s, cb, innerSpaces, inherentSize)
 	}
 	out := t.performChildLayout(n, s, cb, innerSpaces, inherentSize)
 	final := s.or(out.size).mClamp(minSize, maxSize)

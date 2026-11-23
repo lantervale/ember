@@ -10,6 +10,30 @@ import (
 	"github.com/lantervale/ember/ui/internal/chrome"
 )
 
+// Pictures and svg elements positioned out of a vertical box into the
+// page's horizontal one, or standing across their vertical line, take their
+// natural size in their own writing mode, as in Chrome.
+func TestPicturesAcrossWritingModesAreSizedAsChromeSizesThem(t *testing.T) {
+	const markup = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="12"><rect width="44" height="12"/></svg>`
+	for name, sheet := range map[string]string{
+		"positioned":            `.a { position: absolute; }`,
+		"positioned of a width": `.a { position: absolute; width: 22px; }`,
+		"horizontal":            `.a { writing-mode: horizontal-tb; }`,
+		"positioned in vertical-lr": `.v { writing-mode: vertical-lr; } .a { position: absolute;
+			max-height: 20px; }`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := ui.NewDocument(ui.Stylesheet(samples(t, `.v { writing-mode: vertical-rl; width: 120px;
+				height: 100px; border: 1px solid; margin: 10px; } .v > p { margin: 0; inline-size: 20px;
+				block-size: 14px; }`+sheet), "page.css"))
+			d.Body().Append(ui.Div(ui.Class("v"), ui.P(), ui.Img(ui.Class("a"), ui.Attr("src", "sized.svg")),
+				ui.Svg(markup, ui.Class("a")), ui.P()))
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
+}
+
 // A picture with a view box alone has a ratio and no size: an unsized
 // flex item and an absolutely positioned one take the width their
 // container offers, as in Chrome.

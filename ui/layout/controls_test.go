@@ -163,3 +163,39 @@ func TestATallControlsBaselineIsItsCentredTexts(t *testing.T) {
 	tr := lay(el(dom.Div, block, row), 400)
 	assert.Equal(t, float32(10), tr.Of[label].Pos.Y, "the label's baseline on the input's text, 10 down in its 30")
 }
+
+func TestARangeTakesChromesNaturalSize(t *testing.T) {
+	rng := func(edit func(*style.Computed)) *dom.Node {
+		n := el(dom.Input, func(st *style.Computed) {
+			inlineBlock(st)
+			st.Appearance = style.AppearanceAuto
+			if edit != nil {
+				edit(st)
+			}
+		})
+		n.SetAttr("type", "range")
+		return n
+	}
+	plain := rng(nil)
+	upright := rng(func(st *style.Computed) { st.Appearance = style.AppearanceSliderVertical })
+	vertical := rng(func(st *style.Computed) { st.Mode = style.VerticalRL })
+	bare := rng(func(st *style.Computed) { st.Appearance = style.AppearanceNone })
+	padded := rng(func(st *style.Computed) {
+		st.Appearance, st.BoxSizing = style.AppearanceSliderVertical, style.BorderBox
+		st.Padding = style.Sides[style.Length]{Top: style.Px(4), Right: style.Px(4), Bottom: style.Px(4), Left: style.Px(4)}
+	})
+	stretched, blockRange := rng(nil), rng(func(st *style.Computed) { st.Display = style.Block })
+	grid := el(dom.Div, func(st *style.Computed) { st.Display = style.GridDisplay }, stretched)
+	tr := lay(el(dom.Div, block, el(dom.P, block, plain, upright, vertical, bare, padded), grid, blockRange), 400)
+	for name, c := range map[string]struct {
+		n    *dom.Node
+		want geom.Vec2
+	}{
+		"a range": {plain, geom.V2(129, 16)}, "slider-vertical": {upright, geom.V2(129, 129)},
+		"vertical-rl": {vertical, geom.V2(16, 129)}, "appearance none": {bare, geom.V2(129, 0)},
+		"padded border-box": {padded, geom.V2(137, 137)}, "stretched by its grid": {stretched, geom.V2(400, 16)},
+		"a block": {blockRange, geom.V2(129, 16)},
+	} {
+		assert.Equal(t, c.want, tr.Of[c.n].Size, name)
+	}
+}
