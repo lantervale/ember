@@ -530,3 +530,18 @@ func TestAFirstLetterIsSelectedWithItsText(t *testing.T) {
 	assert.Equal(t, "ant", l.doc.Selection().Text)
 	assert.Len(t, l.doc.SelectionRects(), 1, "the letter left out")
 }
+
+func TestATextOfItsFirstLetterAloneIsPressedAndSelected(t *testing.T) {
+	p := ui.P(ui.Class("big"), ui.Text("A"), ui.B(ui.Text("lone")))
+	l := selectableDoc(t, ".big::first-letter { font-size: 40px; }", p)
+	n := textOf(p)
+	l.doc.Select(ui.Position{Node: n, Offset: 0}, ui.Position{Node: n, Offset: 1})
+	assert.Equal(t, "A", l.doc.Selection().Text)
+	require.Len(t, l.doc.SelectionRects(), 1)
+	r := l.doc.SelectionRects()[0]
+	l.doc.ClearSelection()
+	l.frames(30)
+	l.down(geom.V2(r.X+r.W*0.8, r.Y+r.H/2))
+	l.up()
+	assert.Equal(t, ui.Position{Node: n, Offset: 1}, l.doc.Selection().Focus, "a press on the letter's right half")
+}

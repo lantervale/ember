@@ -7,13 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // inky is ahem whose first glyph's ink crosses every band from 3 to 5.
 type inky struct{ ahem }
 
-func (inky) Intercepts(style.Font, string, float32, float32, float32, float32) [][2]float32 {
+func (inky) Intercepts(style.Font, string, float32, float32, float32, float32, bool) [][2]float32 {
 	return [][2]float32{{3, 5}}
 }
 
@@ -36,7 +37,7 @@ func TestSkipInkNoneDrawsTheLineThrough(t *testing.T) {
 	r := newRecorder()
 	p := el(0, 0, 100, 20, func(s *style.Computed) {
 		s.Color = white
-		s.InkThrough = true
+		s.SkipInk = style.SkipInkNone
 		s.Decorations = []style.Decoration{decoration(style.Underline|style.LineThrough, red)}
 	})
 	p.Append(text(0, 0, "hi", p.Style))
@@ -65,4 +66,35 @@ func TestADecorationCastsTheTextsShadow(t *testing.T) {
 	assert.Equal(t, geom.Rect{X: 2, Y: 19, W: 16, H: 1}, ops[0].Rect)
 	assert.Equal(t, red, ops[1].Color)
 	assert.Equal(t, blue, ops[2].Color)
+}
+
+// inkyAll is inky that records whether each call asks for every glyph's ink.
+type inkyAll struct {
+	inky
+	all *[]bool
+}
+
+func (i inkyAll) Intercepts(f style.Font, s string, letter, word, top, bottom float32, all bool) [][2]float32 {
+	*i.all = append(*i.all, all)
+	return i.inky.Intercepts(f, s, letter, word, top, bottom, all)
+}
+
+func TestSkipInkAllAsksForEveryGlyphsInkAndLeavesLinesThroughWhole(t *testing.T) {
+	defer cull.Set(cull.On, nil)()
+	for _, c := range []struct {
+		skip style.SkipInk
+		all  bool
+	}{{style.SkipInkAuto, false}, {style.SkipInkAll, true}} {
+		r := newRecorder()
+		p := el(0, 0, 100, 20, func(s *style.Computed) {
+			s.Color = white
+			s.SkipInk = c.skip
+			s.Decorations = []style.Decoration{decoration(style.Underline|style.Overline|style.LineThrough, red)}
+		})
+		p.Append(text(0, 0, "hi", p.Style))
+		var asked []bool
+		Paint(r, tree(p), Fonts(inkyAll{all: &asked}))
+		assert.Equal(t, []bool{c.all, c.all}, asked, "the underline and the overline")
+		assert.Len(t, r.of("push"), 4, "each cut round the glyph; the line through whole")
+	}
 }

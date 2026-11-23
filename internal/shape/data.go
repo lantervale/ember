@@ -86,6 +86,29 @@ func (d data) class(g uint16) uint16 {
 	return 0
 }
 
+// eachClassed calls fn with every glyph class table d gives a class
+// other than 0.
+func (d data) eachClassed(fn func(g uint16)) {
+	switch d.u16(0) {
+	case 1:
+		start := d.u16(2)
+		for i := range int(d.u16(4)) {
+			if d.u16(6+2*i) != 0 {
+				fn(start + uint16(i))
+			}
+		}
+	case 2:
+		for i := range int(d.u16(2)) {
+			if d.u16(4+6*i+4) == 0 {
+				continue
+			}
+			for g := int(d.u16(4 + 6*i)); g <= int(d.u16(4+6*i+2)); g++ {
+				fn(uint16(g)) //nolint:gosec // a glyph of a 16-bit range
+			}
+		}
+	}
+}
+
 // glyphSet is a set of glyphs, one bit each.
 type glyphSet []uint64
 

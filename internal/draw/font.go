@@ -472,14 +472,14 @@ func (f *Font) LineHeight() float32 { return f.lineHeight }
 func (f *Font) Ascent() float32 { return f.ascent }
 
 // Measure returns the size of a single- or multi-line string.
-func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0, "", "") }
+func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0, round{}) }
 
 // measure is the size of s shaped with features between before and
 // after, with tracking after each cluster.
-func (f *Font) measure(s, features string, tracking float32, before, after string) geom.Vec2 {
+func (f *Font) measure(s, features string, tracking float32, ctx round) geom.Vec2 {
 	var w, line float32
 	lines := 1
-	f.items(s, features, false, before, after, func(it item) {
+	f.items(s, features, false, ctx, func(it item) {
 		if it.newline {
 			w = max(w, line)
 			line = 0

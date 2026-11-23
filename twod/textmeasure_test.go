@@ -96,3 +96,21 @@ func TestATextBetweenOthersJoinsWithThem(t *testing.T) {
 	assert.InDelta(t, 1099, medial.X, 0.5, "teh.medi, as in بتب")
 	assert.NotEqual(t, alone.X, medial.X)
 }
+
+func TestATextAmidOthersTakesTheGlyphsItsClustersStart(t *testing.T) {
+	face, err := LoadFace(os.DirFS("../internal/shape/testdata"), "go-features.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := NewText("fi", Typeface(face), Amid("of", "ce"))
+	lead, trail := text.Amid()
+	assert.Equal(t, [2]string{"of", "ce"}, [2]string{lead, trail})
+	text.SetAmid("", "")
+	lead, trail = text.Amid()
+	assert.Empty(t, lead+trail)
+	assert.Zero(t, Measure("fi", Typeface(face), FontSize(2048), Amid("of", "ce")).X, "in the ligature before")
+	assert.InDelta(t, 1139+1383, Measure("of", Typeface(face), FontSize(2048), Amid("", "fice")).X, 0.5,
+		"o and the ligature ffi")
+	assert.InDelta(t, 1366-160, Measure("A", Typeface(face), FontSize(2048), Amid("", "V")).X, 0.5,
+		"kerned with the V after it")
+}

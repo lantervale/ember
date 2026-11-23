@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/lantervale/ember/internal/varfont"
 )
 
 // Feature is an OpenType feature a run turns on (1, or the alternate to
@@ -100,20 +102,34 @@ type Plan struct {
 	indic                   *indicPlan
 	khmer                   *khmerPlan
 	use                     *usePlan
+
+	// vf and coords are the variable font and the instance its runs are
+	// shaped at, coords nil for the default instance.
+	vf     *varfont.Font
+	coords varfont.Coords
 }
 
 type planKey struct {
 	script   Tag
 	features string
+	coords   string
 }
 
 // Plan is the plan for runs in script with features, HarfBuzz's written
 // comma separated (ParseFeatures) after those the script's shaper has
 // on, a feature written again overriding it.
-func (f *Font) Plan(script Tag, features string) *Plan {
+func (f *Font) Plan(script Tag, features string) *Plan { return f.PlanAt(script, features, nil, nil) }
+
+// PlanAt is Plan for runs drawn at instance at of variable font vf, the
+// font's file: the features its feature variations choose there, GPOS's
+// values moved by their deltas and the glyphs' advances the instance's.
+func (f *Font) PlanAt(script Tag, features string, vf *varfont.Font, at varfont.Coords) *Plan {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	key := planKey{script, features}
+	if vf == nil {
+		at = nil
+	}
+	key := planKey{script, features, coordsKey(at)}
 	if p, ok := f.plans[key]; ok {
 		return p
 	}
@@ -127,10 +143,11 @@ func (f *Font) Plan(script Tag, features string) *Plan {
 	if !positions {
 		gposLS = nil
 	}
-	p := &Plan{font: f, gsub: f.gsub.plan(gsubLS, asked, m), gpos: f.gpos.plan(gposLS, asked, m),
-		rtl: RightToLeft(script), kerns: m[kern] != 0, script: script, shaper: sh, chosen: chosen,
+	p := &Plan{font: f, gsub: f.gsub.plan(gsubLS, f.gsub.substitution(at), asked, m),
+		gpos: f.gpos.plan(gposLS, f.gpos.substitution(at), asked, m),
+		rtl:  RightToLeft(script), kerns: m[kern] != 0, script: script, shaper: sh, chosen: chosen,
 		requests: asked, masks: m, pauses: pauses, positions: positions, marks: marks,
-		found: slices.Contains(candidates(script), chosen)}
+		found: slices.Contains(candidates(script), chosen), vf: vf, coords: at}
 	if s := scriptByTag(script); sh == arabicShaper || sh == useShaper && s != nil && s.joins {
 		p.joins = true
 		for i, t := range formTags {
@@ -179,8 +196,9 @@ func (p *Plan) stageLookups(t Tag) []*lookup {
 }
 
 // Mentions reports whether one of p's lookups may start at glyph g,
-// follow a glyph it starts at in a pair it adjusts, or join it into a
-// ligature: whether g, a space, ties the words on either side of it.
+// follow a glyph it starts at in a pair it adjusts, join it into a
+// ligature or read it round the glyph it starts at in a context: whether
+// g, a space, ties the words on either side of it.
 func (p *Plan) Mentions(g uint16) bool {
 	if p.first.has(g) || p.KernTable() {
 		return true
@@ -199,9 +217,13 @@ func (p *Plan) Mentions(g uint16) bool {
 }
 
 // seconds adds the glyphs after the first that subtable s of lk may
-// take, as the second of a pair or a ligature's component, to set.
+// take, as the second of a pair or a ligature's component, to set, and
+// those a context reads besides the glyph it starts at; of a context by
+// classes, the glyphs its classes name.
 func (lk *lookup) seconds(s data, set *glyphSet) {
 	switch {
+	case lk.kind == context || lk.kind == chain:
+		contextGlyphs(lk.kind == chain, s, set)
 	case lk.kind == ligature && s.u16(0) == 1:
 		for k := range int(s.u16(4)) {
 			ls := s.sub(6 + 2*k)
@@ -243,6 +265,67 @@ func (lk *lookup) seconds(s data, set *glyphSet) {
 	}
 }
 
+// contextGlyphs adds to set the glyphs context subtable s, chained or
+// not, reads besides the first of its input.
+func contextGlyphs(chained bool, s data, set *glyphSet) {
+	switch format := s.u16(0); {
+	case format == 2 && chained:
+		for _, at := range []int{4, 6, 8} {
+			s.sub(at).eachClassed(set.add)
+		}
+	case format == 2:
+		s.sub(4).eachClassed(set.add)
+	case format == 1:
+		for k := range int(s.u16(4)) {
+			rules := s.sub(6 + 2*k)
+			for n := range int(rules.u16(0)) {
+				ruleGlyphs(chained, rules.sub(2+2*n), set)
+			}
+		}
+	case format == 3 && chained:
+		back := int(s.u16(2))
+		in := 4 + 2*back
+		count := int(s.u16(in))
+		ahead := in + 2 + 2*count
+		for c := range back {
+			s.sub(4 + 2*c).eachCovered(set.add)
+		}
+		for c := 1; c < count; c++ {
+			s.sub(in + 2 + 2*c).eachCovered(set.add)
+		}
+		for c := range int(s.u16(ahead)) {
+			s.sub(ahead + 2 + 2*c).eachCovered(set.add)
+		}
+	case format == 3:
+		for c := 1; c < int(s.u16(2)); c++ {
+			s.sub(6 + 2*c).eachCovered(set.add)
+		}
+	}
+}
+
+// ruleGlyphs adds to set the glyphs a rule of a context by glyphs reads:
+// its input's after the first, and a chained one's backtrack and
+// lookahead.
+func ruleGlyphs(chained bool, rule data, set *glyphSet) {
+	if !chained {
+		for c := 1; c < int(rule.u16(0)); c++ {
+			set.add(rule.u16(4 + 2*(c-1)))
+		}
+		return
+	}
+	at := 0
+	for part := range 3 {
+		count, from := int(rule.u16(at)), 0
+		if part == 1 {
+			from = 1
+		}
+		for c := from; c < count; c++ {
+			set.add(rule.u16(at + 2 + 2*(c-from)))
+		}
+		at += 2 + 2*(count-from)
+	}
+}
+
 // Has reports whether the font has feature t for runs in script.
 func (f *Font) Has(script Tag, t Tag) bool {
 	f.mu.Lock()
@@ -267,8 +350,9 @@ func (l *layout) langSys(script Tag) (Tag, data) {
 }
 
 // features calls fn with each feature language system ls has in l, its
-// required one included, and its lookups' list.
-func (l *layout) features(ls data, fn func(tag Tag, f data, required bool)) {
+// required one included, and its lookups' list, that of the feature
+// subst puts in its place where it does.
+func (l *layout) features(ls, subst data, fn func(tag Tag, f data, required bool)) {
 	if ls == nil {
 		return
 	}
@@ -276,7 +360,7 @@ func (l *layout) features(ls data, fn func(tag Tag, f data, required bool)) {
 		if i >= int(l.feats.u16(0)) {
 			return
 		}
-		fn(Tag(l.feats.u32(2+6*i)), l.feats.sub(2+6*i+4), required)
+		fn(Tag(l.feats.u32(2+6*i)), l.feature(i, subst), required)
 	}
 	if req := ls.u16(2); req != 0xFFFF {
 		each(int(req), true)
@@ -294,6 +378,6 @@ func (l *layout) has(script Tag, t Tag) bool {
 // inLangSys reports whether language system ls of l has feature t.
 func (l *layout) inLangSys(ls data, t Tag) bool {
 	found := false
-	l.features(ls, func(tag Tag, _ data, _ bool) { found = found || tag == t })
+	l.features(ls, nil, func(tag Tag, _ data, _ bool) { found = found || tag == t })
 	return found
 }

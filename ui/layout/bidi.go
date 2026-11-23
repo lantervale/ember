@@ -345,12 +345,12 @@ func visualText(s string, base bidi.Level) string {
 	return string(out)
 }
 
-// startSides are the margin, border and padding a span of style st has at its start,
-// then at its end: its left then its right, the other way round under rtl.
-func startSides(sp *inlineSpan) (float32, float32) {
-	l := sp.margin.l + sp.border.l + sp.padding.l
-	r := sp.margin.r + sp.border.r + sp.padding.r
-	if sp.st.Dir == style.RTL {
+// startSides are the margin m, border b and padding p a span of style st has at its
+// start, then at its end: its left then its right, the other way round under rtl.
+func startSides(st *style.Computed, m, b, p rect) (float32, float32) {
+	l := m.l + b.l + p.l
+	r := m.r + b.r + p.r
+	if st.Dir == style.RTL {
 		return r, l
 	}
 	return l, r

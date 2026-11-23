@@ -187,7 +187,9 @@ func (t *Text) equal(o *Text) bool {
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
 		t.TabSize == o.TabSize &&
-		t.InkThrough == o.InkThrough &&
+		t.SkipInk == o.SkipInk &&
+		t.UnderlineOffset == o.UnderlineOffset &&
+		t.UnderlinePosition == o.UnderlinePosition &&
 		t.WrapStyle == o.WrapStyle &&
 		t.Hyphens == o.Hyphens &&
 		t.HyphenChar == o.HyphenChar &&
@@ -200,7 +202,8 @@ func (t *Text) equal(o *Text) bool {
 }
 
 func (d *Decoration) equal(o *Decoration) bool {
-	return d.TextDecoration == o.TextDecoration && d.Font.Equal(o.Font)
+	return d.TextDecoration == o.TextDecoration && d.Font.Equal(o.Font) && d.Offset == o.Offset &&
+		d.Position == o.Position && d.RightInVertical == o.RightInVertical
 }
 
 func (c *Content) equal(o *Content) bool {

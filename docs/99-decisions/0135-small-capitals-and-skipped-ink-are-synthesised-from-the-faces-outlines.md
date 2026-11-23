@@ -1,6 +1,6 @@
 # 0135. Small capitals and skipped ink are synthesised from the face's outlines
 
-- Status: Accepted
+- Status: Superseded by [0182](0182-skipped-ink-follows-the-glyphs-drawn-and-chromes-table-of-characters.md)
 - Date: 2026-11-23
 - Area: rendering
 - Owner: engine

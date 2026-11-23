@@ -1001,7 +1001,7 @@ func hasBlockChild(items []item) bool {
 
 // floatedLetter reports a text node whose first letter a floated ::first-letter takes.
 func floatedLetter(text *dom.Node) bool {
-	g, _ := letterOf(text)
+	g := letterNode(text)
 	return g != nil && styleOf(g).Float != style.FloatNone
 }
 
