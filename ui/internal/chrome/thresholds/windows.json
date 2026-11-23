@@ -37,6 +37,7 @@
   "collapsed-joins": 0.0005,
   "collapsed-styles": 0.0015,
   "column-cuts": 0.005,
+  "inline-opacity": 0.0045,
   "column-span": 0.0099,
   "debug-grid": 0.0052,
   "decorations": 0.017,

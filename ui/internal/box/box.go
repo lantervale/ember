@@ -145,6 +145,10 @@ type Box struct {
 	// Discarded marks a box after the last line a line-clamp shows: laid
 	// out, never drawn.
 	Discarded bool
+	// Dim is how much the inline elements holding this block fade it, 1
+	// less the product of their opacities: Chrome fades a block in a
+	// faded span with the span.
+	Dim float32
 	// Collapsed is the borders of a table that collapses them, which it
 	// draws over its cells: nil for any other box.
 	Collapsed []Edge

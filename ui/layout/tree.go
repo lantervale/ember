@@ -768,6 +768,7 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 			if b := of[e]; b != nil && b.Parent == n.box && !moved[b] {
 				moved[b] = true
 				b.Pos = b.Pos.Add(movedBy(e, nil))
+				b.Dim = dimOf(e, n.box.Node)
 			}
 		}
 	}
@@ -803,6 +804,17 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 		c.box.Parent = n.box
 		c.box.Pos, c.box.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
 	}
+}
+
+// dimOf is the Dim of e's box, its inline ancestors' up to upTo fading it.
+func dimOf(e, upTo *dom.Node) float32 {
+	shown := float32(1)
+	for p := e.Parent(); p != nil && p != upTo; p = p.Parent() {
+		if isInline(p) {
+			shown *= styleOf(p).Opacity
+		}
+	}
+	return 1 - shown
 }
 
 // inFlowBlock reports an element that is a block in the flow of its container.
