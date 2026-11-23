@@ -40,7 +40,7 @@ func checkPositionArea(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
 	}
-	_, err := positionArea(v, false)
+	_, err := positionArea(v, flow{})
 	return err
 }
 
@@ -55,7 +55,7 @@ func checkTryFallbacks(v []Component) error {
 	if len(v) == 1 && isWord(v[0], kwNone) {
 		return nil
 	}
-	_, err := tryFallbacks(v, false)
+	_, err := tryFallbacks(v, flow{})
 	return err
 }
 
@@ -93,11 +93,13 @@ const propPositionTry = "position-try"
 //nolint:gochecknoglobals // position-try-order's keywords
 var tryOrders = []string{kwNormal, "most-width", "most-height", "most-block-size", "most-inline-size"}
 
-// areaWord is one keyword of a position-area: the span it gives its axis
-// and which axis that is.
+// areaWord is one keyword of a position-area: the span it gives its axis,
+// which axis that is, and whether it counts from the start of that axis in
+// the element's writing mode and direction rather than from its left or top.
 type areaWord struct {
-	span style.AreaSpan
-	axis areaAxis
+	span    style.AreaSpan
+	axis    areaAxis
+	logical bool
 }
 
 type areaAxis uint8
@@ -108,6 +110,8 @@ const (
 	anyAxis areaAxis = iota
 	xAxis
 	yAxis
+	inlineArea
+	blockArea
 )
 
 //nolint:gochecknoglobals // the span each track keyword stands for
@@ -122,33 +126,32 @@ var (
 
 func mirror(s style.AreaSpan) style.AreaSpan { return style.AreaSpan{From: 2 - s.To, To: 2 - s.From} }
 
-// areaWordOf is the keyword w of a position-area, for an element of
-// direction rtl, where x-start and inline-start are its right.
+// areaWordOf is the keyword w of a position-area.
 //
 //nolint:goconst // the area keywords
-func areaWordOf(w string, rtl bool) (areaWord, bool) {
+func areaWordOf(w string) (areaWord, bool) {
 	w = strings.ToLower(w)
 	switch w {
 	case "center":
-		return areaWord{centerTrack, anyAxis}, true
+		return areaWord{span: centerTrack, axis: anyAxis}, true
 	case "span-all":
-		return areaWord{spanAll, anyAxis}, true
+		return areaWord{span: spanAll, axis: anyAxis}, true
 	case "left":
-		return areaWord{startTrack, xAxis}, true
+		return areaWord{span: startTrack, axis: xAxis}, true
 	case "right":
-		return areaWord{endTrack, xAxis}, true
+		return areaWord{span: endTrack, axis: xAxis}, true
 	case "span-left":
-		return areaWord{spanStart, xAxis}, true
+		return areaWord{span: spanStart, axis: xAxis}, true
 	case "span-right":
-		return areaWord{spanEnd, xAxis}, true
+		return areaWord{span: spanEnd, axis: xAxis}, true
 	case "top":
-		return areaWord{startTrack, yAxis}, true
+		return areaWord{span: startTrack, axis: yAxis}, true
 	case "bottom":
-		return areaWord{endTrack, yAxis}, true
+		return areaWord{span: endTrack, axis: yAxis}, true
 	case "span-top":
-		return areaWord{spanStart, yAxis}, true
+		return areaWord{span: spanStart, axis: yAxis}, true
 	case "span-bottom":
-		return areaWord{spanEnd, yAxis}, true
+		return areaWord{span: spanEnd, axis: yAxis}, true
 	}
 	span := startTrack
 	var rest string
@@ -170,23 +173,57 @@ func areaWordOf(w string, rtl bool) (areaWord, bool) {
 	}
 	switch rest {
 	case "":
-		return areaWord{span, anyAxis}, true
-	case "x-", "inline-", "self-x-", "self-inline-":
-		if rtl {
-			span = mirror(span)
-		}
-		return areaWord{span, xAxis}, true
-	case "y-", "block-", "self-y-", "self-block-":
-		return areaWord{span, yAxis}, true
+		return areaWord{span: span, axis: anyAxis, logical: true}, true
+	case "x-", "self-x-":
+		return areaWord{span: span, axis: xAxis, logical: true}, true
+	case "y-", "self-y-":
+		return areaWord{span: span, axis: yAxis, logical: true}, true
+	case "inline-", "self-inline-":
+		return areaWord{span: span, axis: inlineArea, logical: true}, true
+	case "block-", "self-block-":
+		return areaWord{span: span, axis: blockArea, logical: true}, true
 	}
 	return areaWord{}, false
 }
 
-// positionArea reads a position-area of one or two keywords: one of an
-// axis alone spans the whole other axis, one of either axis stands for
-// both, and two of either axis are the block axis's then the inline
-// axis's.
-func positionArea(v []Component, rtl bool) (style.PositionArea, error) {
+// onPage is w with its inline or block axis the physical one f gives it.
+func (w areaWord) onPage(f flow) areaWord {
+	switch {
+	case w.axis == inlineArea && !f.mode.Vertical(), w.axis == blockArea && f.mode.Vertical():
+		w.axis = xAxis
+	case w.axis == inlineArea, w.axis == blockArea:
+		w.axis = yAxis
+	}
+	return w
+}
+
+// placed is the span w gives physical axis a, counted from a's start in f
+// when w is logical: the right under rtl or in vertical-rl, the bottom in
+// sideways-lr or under rtl in vertical lines.
+func (w areaWord) placed(a areaAxis, f flow) style.AreaSpan {
+	if !w.logical {
+		return w.span
+	}
+	reversed := f.rtl
+	switch {
+	case a == xAxis && f.mode.Vertical():
+		reversed = f.mode.BlockFromRight()
+	case a == yAxis && !f.mode.Vertical():
+		reversed = false
+	case a == yAxis:
+		reversed = f.rtl != f.mode.Upward()
+	}
+	if reversed {
+		return mirror(w.span)
+	}
+	return w.span
+}
+
+// positionArea reads a position-area of one or two keywords for an element
+// of flow f: one of an axis alone spans the whole other axis, one of either
+// axis stands for both, and two of either axis are the block axis's then the
+// inline axis's.
+func positionArea(v []Component, f flow) (style.PositionArea, error) {
 	bad := fmt.Errorf("position-area takes none or one or two area keywords, found %q", join(v))
 	if len(v) < 1 || len(v) > 2 {
 		return style.PositionArea{}, bad
@@ -196,51 +233,65 @@ func positionArea(v []Component, rtl bool) (style.PositionArea, error) {
 		if c.Kind != Ident {
 			return style.PositionArea{}, bad
 		}
-		w, ok := areaWordOf(c.Text, rtl)
+		w, ok := areaWordOf(c.Text)
 		if !ok {
 			return style.PositionArea{}, bad
 		}
-		ws = append(ws, w)
+		ws = append(ws, w.onPage(f))
 	}
-	inline := func(s style.AreaSpan) style.AreaSpan {
-		if rtl {
-			return mirror(s)
-		}
-		return s
-	}
+	inlineX := !f.mode.Vertical()
 	a := style.PositionArea{Set: true}
-	if len(ws) == 1 {
-		switch ws[0].axis {
-		case xAxis:
-			a.X, a.Y = ws[0].span, spanAll
-		case yAxis:
-			a.X, a.Y = spanAll, ws[0].span
-		case anyAxis:
-			a.X, a.Y = inline(ws[0].span), ws[0].span
+	set := func(axis areaAxis, w areaWord) {
+		if axis == xAxis {
+			a.X = w.placed(xAxis, f)
+		} else {
+			a.Y = w.placed(yAxis, f)
 		}
+	}
+	other := func(axis areaAxis) areaAxis {
+		if axis == xAxis {
+			return yAxis
+		}
+		return xAxis
+	}
+	block, inline := yAxis, xAxis
+	if !inlineX {
+		block, inline = xAxis, yAxis
+	}
+	if len(ws) == 1 {
+		w := ws[0]
+		if w.axis == anyAxis {
+			set(xAxis, w)
+			set(yAxis, w)
+			return a, nil
+		}
+		set(w.axis, w)
+		set(other(w.axis), areaWord{span: spanAll})
 		return a, nil
 	}
 	first, second := ws[0], ws[1]
 	switch {
-	case first.axis == xAxis && second.axis != xAxis:
-		a.X, a.Y = first.span, second.span
-	case second.axis == xAxis && first.axis != xAxis:
-		a.X, a.Y = second.span, first.span
-	case first.axis == yAxis && second.axis == anyAxis:
-		a.Y, a.X = first.span, inline(second.span)
-	case first.axis == anyAxis && second.axis == yAxis:
-		a.Y, a.X = second.span, inline(first.span)
-	case first.axis == anyAxis && second.axis == anyAxis:
-		a.Y, a.X = first.span, inline(second.span)
-	default:
+	case first.axis != anyAxis && second.axis != anyAxis && first.axis == second.axis:
 		return style.PositionArea{}, bad
+	case first.axis == anyAxis && second.axis == anyAxis:
+		set(block, first)
+		set(inline, second)
+	case first.axis == anyAxis:
+		set(second.axis, second)
+		set(other(second.axis), first)
+	case second.axis == anyAxis:
+		set(first.axis, first)
+		set(other(first.axis), second)
+	default:
+		set(first.axis, first)
+		set(second.axis, second)
 	}
 	return a, nil
 }
 
 // tryFallbacks reads position-try-fallbacks: between commas, an
 // @position-try name and flips in any order, or a position-area.
-func tryFallbacks(v []Component, rtl bool) ([]style.PositionTry, error) {
+func tryFallbacks(v []Component, f flow) ([]style.PositionTry, error) {
 	var out []style.PositionTry
 	for _, part := range splitOn(v, func(c Component) bool { return c.Kind == Comma }) {
 		if len(part) == 0 {
@@ -260,7 +311,7 @@ func tryFallbacks(v []Component, rtl bool) ([]style.PositionTry, error) {
 			}
 		}
 		if !tactics {
-			a, err := positionArea(part, rtl)
+			a, err := positionArea(part, f)
 			if err != nil {
 				return nil, fmt.Errorf("position-try-fallbacks: %q is no fallback", join(part))
 			}
@@ -325,13 +376,13 @@ func anchorProps() map[string]prop {
 		"position-area": anchorProp(func(x *ctx, v []Component) {
 			x.c.Anchoring.Area = style.PositionArea{}
 			if !isWord(v[0], kwNone) {
-				x.c.Anchoring.Area, _ = positionArea(v, x.flow.rtl)
+				x.c.Anchoring.Area, _ = positionArea(v, x.flow)
 			}
 		}, func(dst, src *style.Anchoring) { dst.Area = src.Area }),
 		"position-try-fallbacks": anchorProp(func(x *ctx, v []Component) {
 			x.c.Anchoring.Fallbacks = nil
 			if !isWord(v[0], kwNone) {
-				x.c.Anchoring.Fallbacks, _ = tryFallbacks(v, x.flow.rtl)
+				x.c.Anchoring.Fallbacks, _ = tryFallbacks(v, x.flow)
 			}
 		}, func(dst, src *style.Anchoring) { dst.Fallbacks = src.Fallbacks }),
 		"position-try-order": anchorProp(func(x *ctx, v []Component) {

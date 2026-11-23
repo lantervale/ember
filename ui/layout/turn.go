@@ -60,7 +60,60 @@ func turnStyle(st *style.Computed, mode style.WritingMode) *style.Computed {
 	if st.AspectRatio > 0 {
 		c.AspectRatio = 1 / st.AspectRatio
 	}
+	c.Anchoring.Area = turnArea(st.Anchoring.Area, mode)
+	if len(st.Anchoring.Tries) > 0 {
+		c.Anchoring.Tries = make([]*style.Computed, len(st.Anchoring.Tries))
+		for i, try := range st.Anchoring.Tries {
+			c.Anchoring.Tries[i] = turnStyle(try, mode)
+		}
+	}
 	return &c
+}
+
+// frameSide is the page's side or size s an anchor function names in the frame of mode.
+func frameSide(s style.AnchorSide, mode style.WritingMode) style.AnchorSide {
+	if !mode.Vertical() {
+		return s
+	}
+	switch s {
+	case style.AnchorWidth:
+		return style.AnchorHeight
+	case style.AnchorHeight:
+		return style.AnchorWidth
+	case style.AnchorTop, style.AnchorRight, style.AnchorBottom, style.AnchorLeft:
+	default:
+		return s
+	}
+	page := style.Sides[style.AnchorSide]{Top: style.AnchorTop, Right: style.AnchorRight, Bottom: style.AnchorBottom,
+		Left: style.AnchorLeft}
+	framed := turnSides(page, mode)
+	switch s {
+	case framed.Top:
+		return style.AnchorTop
+	case framed.Right:
+		return style.AnchorRight
+	case framed.Bottom:
+		return style.AnchorBottom
+	}
+	return style.AnchorLeft
+}
+
+// turnArea is the page's position-area a in the frame of mode.
+func turnArea(a style.PositionArea, mode style.WritingMode) style.PositionArea {
+	if !a.Set {
+		return a
+	}
+	flip := func(s style.AreaSpan) style.AreaSpan { return style.AreaSpan{From: 2 - s.To, To: 2 - s.From} }
+	switch mode {
+	case style.VerticalRL, style.SidewaysRL:
+		a.X, a.Y = a.Y, flip(a.X)
+	case style.VerticalLR:
+		a.X, a.Y = a.Y, a.X
+	case style.SidewaysLR:
+		a.X, a.Y = flip(a.Y), a.X
+	case style.HorizontalTB:
+	}
+	return a
 }
 
 // turnSides is the page's sides s in the frame of mode.

@@ -158,6 +158,7 @@ func (a *anchorsOf) place(st *style.Computed, area size, offset point) placedSty
 			if !found {
 				return 0, false
 			}
+			fn.Side = frameSide(fn.Side, st.Mode)
 			return anchorValue(fn, r, kind, area, rtl)
 		})
 		if ok {
