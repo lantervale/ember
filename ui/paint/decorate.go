@@ -1776,7 +1776,7 @@ func (r radii) grown(d float32) radii {
 // styles in its style, the others in the run's.
 func (p *painter) text(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) {
+	if b.Kind != box.TextRun || len(b.Lines) == 0 || p.culled(e, textInk(e, st)) || p.probing {
 		return
 	}
 	if st.Mode.Vertical() {
