@@ -59,6 +59,10 @@ type inlineContent struct {
 	flow              *blockContext
 	flowTop, flowLeft float32
 	flowed            bool
+	// lineFloats are the floats after content in the lines, in order, and floatsFrom
+	// the context they are placed from while pending.
+	lineFloats []*lineFloat
+	floatsFrom *floatsFrom
 	// unindented is set where the first line is not its block container's: an anonymous
 	// block after other content.
 	unindented bool
@@ -316,6 +320,17 @@ func (t *tree) inlineOf(owner *node, items []item, listItem *node) *inlineConten
 	return c
 }
 
+// shows reports runs gathered that show something: an atomic inline or text that is not
+// collapsible space alone.
+func (c *inlineContent) shows() bool {
+	for _, r := range c.runs {
+		if r.atomic != nil || r.text != "" && (!collapses(r.st.WhiteSpace) || !isCollapsibleSpace(r.text)) {
+			return true
+		}
+	}
+	return false
+}
+
 // framedCut reports a part of an inline element blocks cut among items, or inside one,
 // with a margin, a border or a padding on its edge: Chrome keeps a line for it, text or
 // none.
@@ -348,8 +363,15 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 		}
 		if st.Float != style.FloatNone {
 			// A float inside an inline element: its block container takes it from the
-			// owner's kids and places it before this content.
-			c.owner.kids = append(c.owner.kids, t.build(it.element, c.owner))
+			// owner's kids and places it before this content, among the lines when
+			// content stands before it.
+			n := t.build(it.element, c.owner)
+			c.owner.kids = append(c.owner.kids, n)
+			n.inLines = nil
+			if c.shows() {
+				n.inLines = &lineFloat{node: n, run: len(c.runs)}
+				c.lineFloats = append(c.lineFloats, n.inLines)
+			}
 			continue
 		}
 		if outOfFlow(st.Position) {
@@ -2258,6 +2280,7 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 	strut, _ := t.lineHeight(c, c.owner.st)
 	indent := c.indent(width)
 	y, bottom := c.flowTop, c.flowTop
+	floats := c.restartFloats()
 	for i := 0; i < len(c.pieces); {
 		kept := len(b.out)
 		if kept > 0 {
@@ -2288,6 +2311,11 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 				h = lh
 				continue
 			}
+			on := c.floatsOn(floats, l, after, ended)
+			if len(on) > 0 && c.besideLine(on[0], l, y, room, kept == 0) {
+				floats = floats[1:]
+				continue
+			}
 			i = after
 			y += lh
 			if kept == 0 {
@@ -2296,6 +2324,10 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 				top, _ := t.trims(c, []line{l})
 				y -= top
 			}
+			for _, f := range on {
+				f.at, f.placed = c.flow.place(f.box, y, f.side, f.clearing, false), true
+			}
+			floats = floats[len(on):]
 			bottom = y
 			if side := c.brClear(after - 1); side != style.ClearNone {
 				if below := c.flow.clearedThreshold(side); some(below) && below > y {
@@ -2306,6 +2338,48 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 		}
 	}
 	return c.reshaped(b.close())
+}
+
+// restartFloats has the floats of c's context be those before its lines, and returns the
+// floats the lines place, none when they place none.
+func (c *inlineContent) restartFloats() []*lineFloat {
+	from := c.floatsFrom
+	if from == nil || !c.pendingFloats() {
+		return nil
+	}
+	*c.flow.bfc.floats = *from.floats.clone()
+	c.flow.floatHeight = from.floatHeight
+	for _, f := range c.lineFloats {
+		f.placed, f.first = false, false
+	}
+	return c.lineFloats
+}
+
+// floatsOn are the first of floats that stand on line l, which ends before piece after,
+// ended set when a break ended it: those before after, or at it where the line takes what
+// follows it, as only a forced break does not.
+func (c *inlineContent) floatsOn(floats []*lineFloat, l line, after int, ended bool) []*lineFloat {
+	n := 0
+	for _, f := range floats {
+		k := c.pieceOf(f.run)
+		if k > after || k == after && ended && l.forced {
+			break
+		}
+		n++
+	}
+	return floats[:n]
+}
+
+// besideLine places f on line l, at y in room wide, when it fits beside what stands
+// before it there, or nothing does, and reports whether it did: the line is then broken
+// again round it. A float that doesn't goes below the line, and the floats after it too.
+func (c *inlineContent) besideLine(f *lineFloat, l line, y, room float32, first bool) bool {
+	used := c.widthBefore(l, c.pieceOf(f.run))
+	if used > 0 && used+f.box.w > room+fitTolerance {
+		return false
+	}
+	f.at, f.placed, f.first = c.flow.place(f.box, y, f.side, f.clearing, false), true, first
+	return true
 }
 
 // brClear is the clear of the br whose break is piece i, none for any other piece: the

@@ -72,13 +72,31 @@ func TestAWordTooWideBesideAFloatGoesBelowIt(t *testing.T) {
 	assert.Equal(t, float32(35), tr.Of[p].Size.Y)
 }
 
-func TestAFloatAmongTextStandsAtTheTopOfItsParagraph(t *testing.T) {
+func TestAFloatAmongTextStandsOnTheLineItFallsOn(t *testing.T) {
+	f := el(dom.Span, float(style.FloatRight, 20, 10))
+	p := el(dom.P, block, text("HH "), f, text("HH HH HH"))
+	tr := lay(el(dom.Div, width(60), p), 200)
+	assert.Equal(t, geom.Rect{X: 40, W: 20, H: 10}, tr.Of[f].Rect())
+	assert.Equal(t, []fragmentAt{{"HH", 0, 0}, {"HH HH", 0, 10}, {"HH", 0, 20}}, fragments(tr.Of[p]),
+		"its line narrows round it, the text after it going on below")
+}
+
+func TestAFloatAmongTextGoesBelowTheLineItDoesNotFitOn(t *testing.T) {
 	f := el(dom.Span, float(style.FloatRight, 20, 10))
 	p := el(dom.P, block, text("HH HH "), f, text("HH HH"))
 	tr := lay(el(dom.Div, width(60), p), 200)
-	assert.Equal(t, geom.Rect{X: 40, W: 20, H: 10}, tr.Of[f].Rect())
-	assert.Equal(t, []fragmentAt{{"HH", 0, 0}, {"HH ", 0, 10}, {"HH", 30, 10}, {"HH", 0, 20}}, fragments(tr.Of[p]),
-		"one word fits beside the float, and the text after it follows the text before on one line")
+	assert.Equal(t, geom.Rect{X: 40, Y: 10, W: 20, H: 10}, tr.Of[f].Rect())
+	assert.Equal(t, []fragmentAt{{"HH HH", 0, 0}, {"HH", 0, 10}, {"HH", 0, 20}}, fragments(tr.Of[p]),
+		"the line keeps its room, and the lines after go round the float")
+}
+
+func TestFloatsAmongTextAfterOneThatDoesNotFitGoBelowItsLineToo(t *testing.T) {
+	wide := el(dom.Span, float(style.FloatLeft, 40, 10))
+	narrow := el(dom.Span, float(style.FloatRight, 10, 10))
+	p := el(dom.P, block, text("HH HH "), wide, narrow, text("HH"))
+	tr := lay(el(dom.Div, width(60), p), 200)
+	assert.Equal(t, geom.Rect{Y: 10, W: 40, H: 10}, tr.Of[wide].Rect())
+	assert.Equal(t, geom.Rect{X: 50, Y: 10, W: 10, H: 10}, tr.Of[narrow].Rect())
 }
 
 func TestClearPutsABlockBelowTheFloatsOfItsSide(t *testing.T) {
