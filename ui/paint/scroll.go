@@ -29,7 +29,9 @@ var (
 // view they scroll, the tracks and thumbs of those showing, and the
 // content's size.
 type Bars struct {
-	View                           geom.Rect
+	View geom.Rect
+	// Port is the size of the view less the gutters its bars take.
+	Port                           geom.Vec2
 	VTrack, VThumb, HTrack, HThumb geom.Rect
 	V, H                           bool
 	Content                        geom.Vec2
@@ -50,7 +52,7 @@ type Bars struct {
 
 // Clamp is off kept within what the bars scroll.
 func (l Bars) Clamp(off geom.Vec2) geom.Vec2 {
-	return box.ClampScroll(off, l.Start, l.Content, geom.V2(l.View.W, l.View.H))
+	return box.ClampScroll(off, l.Start, l.Content, l.Port)
 }
 
 // A thumb is sized and placed on the whole bar, as Chrome sizes the box of
@@ -71,7 +73,8 @@ const (
 func BarsOf(b *box.Box, at geom.Vec2) Bars {
 	view := padding(b, at)
 	st := shown(b)
-	l := Bars{View: view, Content: b.Content, Scroll: b.Scroll, Start: b.ScrollStart, Overlay: st.ScrollbarOverlay}
+	l := Bars{View: view, Port: geom.V2(view.W-b.Scrollbar.X, view.H-b.Scrollbar.Y), Content: b.Content, Scroll: b.Scroll,
+		Start: b.ScrollStart, Overlay: st.ScrollbarOverlay}
 	o := st.Overflow
 	l.V = !st.ScrollbarNone && (o.Height == style.Scroll || o.Height == style.OverflowAuto && b.Content.Y > view.H)
 	l.H = !st.ScrollbarNone && (o.Width == style.Scroll || o.Width == style.OverflowAuto && b.Content.X > view.W)
@@ -104,7 +107,7 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		if b.Content.Y > view.H {
 			bar := view.H - corner(l.H)
 			h := max(bar*view.H/b.Content.Y, minThumb)
-			y := view.Y + (bar-h)*(b.Scroll.Y-b.ScrollStart.Y)/(b.Content.Y-view.H)
+			y := view.Y + (bar-h)*(b.Scroll.Y-b.ScrollStart.Y)/(b.Content.Y-l.Port.Y)
 			l.VThumb = geom.Rect{X: l.VTrack.X, Y: y + thumbInset, W: barWidth, H: h - 2*thumbInset}
 		}
 	}
@@ -116,7 +119,7 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		if b.Content.X > view.W {
 			bar := view.W - corner(l.V)
 			w := max(bar*view.W/b.Content.X, minThumb)
-			x := l.HTrack.X - 4 + (bar-w)*(b.Scroll.X-b.ScrollStart.X)/(b.Content.X-view.W)
+			x := l.HTrack.X - 4 + (bar-w)*(b.Scroll.X-b.ScrollStart.X)/(b.Content.X-l.Port.X)
 			l.HThumb = geom.Rect{X: x + thumbInset, Y: l.HTrack.Y, W: w - 2*thumbInset, H: barWidth}
 		}
 	}
