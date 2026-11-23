@@ -187,6 +187,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0183 | [Text is shaped as one across elements of one font and spacing](0183-text-is-shaped-as-one-across-elements-of-one-font-and-spacing.md) | api |
 | 0185 | [Boxes side by side are lanes, and a framed block round a spanner is laid out per part](0185-boxes-side-by-side-are-lanes-and-a-framed-wrapper-is-laid-out-per-part.md) | rendering |
 | 0186 | [A variable font's layout is shaped at its instance](0186-a-variable-fonts-layout-is-shaped-at-its-instance.md) | rendering |
+| 0188 | [A styled first line measures its whole block](0188-a-styled-first-line-measures-its-whole-block.md) | api |
 | 0189 | [An underline is placed by its decorating box, as Chrome places it](0189-an-underline-is-placed-by-its-decorating-box-as-chrome-places-it.md) | rendering |
 
 ## Writing one

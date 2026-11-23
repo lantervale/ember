@@ -140,6 +140,9 @@ type restyler struct {
 	// browser reads style attributes as a browser does
 	// (Transitions.BrowserSheets).
 	browser bool
+	// shown, when set, is a text node's text as layout shows it, which
+	// its first letter is taken from (Transitions.ShowText).
+	shown func(text *dom.Node) string
 	// before, after, marker, firstLine and firstLetter are set when some
 	// sheet has a rule for the pseudo-element: only then is one looked for.
 	before, after, marker, firstLine, firstLetter bool
