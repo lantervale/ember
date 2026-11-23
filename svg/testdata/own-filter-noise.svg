@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <filter id="t1" x="0" y="0" width="1" height="1"><feTurbulence baseFrequency=".05" numOctaves="2" seed="3"/></filter>
+    <filter id="t2" x="0" y="0" width="1" height="1"><feTurbulence type="fractalNoise" baseFrequency=".1 .03" numOctaves="3"/></filter>
+    <filter id="t3" x="0" y="0" width="1" height="1"><feTurbulence type="fractalNoise" baseFrequency=".07" stitchTiles="stitch" seed="7"/></filter>
+    <filter id="t4" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB"><feTurbulence baseFrequency=".2" numOctaves="1"/></filter>
+  </defs>
+  <rect x="0" y="0" width="56" height="56" filter="url(#t1)"/>
+  <rect x="64" y="0" width="56" height="56" filter="url(#t2)"/>
+  <rect x="0" y="64" width="56" height="56" filter="url(#t3)"/>
+  <rect x="64" y="64" width="56" height="56" filter="url(#t4)"/>
+</svg>

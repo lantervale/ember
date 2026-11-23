@@ -1,9 +1,10 @@
 // Package shape applies a font's OpenType layout to a run of its glyphs,
 // as HarfBuzz does for Chrome: GSUB's substitutions (ligatures, small
-// capitals, figures…) and GPOS's kerning, for the features a run asks
-// for and those every run has. It is pure Go and reads the tables
-// itself; marks placed on their bases, cursive attachment and the
-// shaping of complex scripts are left out.
+// capitals, figures, the joined forms of Arabic letters…) and GPOS's
+// kerning, marks placed on their bases and cursive attachment, for the
+// features a run asks for and those its script's shaper has on. It is
+// pure Go and reads the tables itself; the reordering of Indic and other
+// complex scripts is left out.
 package shape
 
 import (
@@ -118,6 +119,7 @@ const (
 
 // Lookup flags.
 const (
+	rightToLeft     = 0x1
 	ignoreBase      = 0x2
 	ignoreLigatures = 0x4
 	ignoreMarks     = 0x8
@@ -138,12 +140,16 @@ const (
 	gsubExt   = 7
 	reverse   = 8
 
-	adjust      = 101
-	pair        = 102
-	gposContext = 7
-	gposChain   = 8
-	gposExt     = 9
-	gposShift   = 100
+	adjust       = 101
+	pair         = 102
+	cursive      = 103
+	markBase     = 104
+	markLigature = 105
+	markMark     = 106
+	gposContext  = 7
+	gposChain    = 8
+	gposExt      = 9
+	gposShift    = 100
 )
 
 // lookup is a lookup of a GSUB or GPOS table, its extension subtables
@@ -227,28 +233,35 @@ func (lk *lookup) firstGlyphs(s data) {
 }
 
 // ignores reports whether lk passes over glyph g, as its flag says.
-func (f *Font) ignores(lk *lookup, g uint16) bool {
-	if lk.flag&(ignoreBase|ignoreLigatures|ignoreMarks|useMarkSet|markAttachType) == 0 {
+func (f *Font) ignores(lk *lookup, g uint16) bool { return f.skips(lk.flag, lk.markSet, g) }
+
+// skips reports whether a lookup of flag, and markSet where the flag
+// says to use one, passes over glyph g.
+func (f *Font) skips(flag, markSet uint16, g uint16) bool {
+	if flag&(ignoreBase|ignoreLigatures|ignoreMarks|useMarkSet|markAttachType) == 0 {
 		return false
 	}
 	switch f.glyphClasses.class(g) {
 	case baseGlyph:
-		return lk.flag&ignoreBase != 0
+		return flag&ignoreBase != 0
 	case ligatureGlyph:
-		return lk.flag&ignoreLigatures != 0
+		return flag&ignoreLigatures != 0
 	case markGlyph:
-		if lk.flag&ignoreMarks != 0 {
+		if flag&ignoreMarks != 0 {
 			return true
 		}
-		if lk.flag&useMarkSet != 0 {
-			if int(lk.markSet) >= int(f.markSets.u16(2)) {
+		if flag&useMarkSet != 0 {
+			if int(markSet) >= int(f.markSets.u16(2)) {
 				return true
 			}
-			return f.markSets.at(int(f.markSets.u32(4+4*int(lk.markSet)))).coverage(g) < 0
+			return f.markSets.at(int(f.markSets.u32(4+4*int(markSet)))).coverage(g) < 0
 		}
-		if t := lk.flag & markAttachType >> 8; t != 0 {
+		if t := flag & markAttachType >> 8; t != 0 {
 			return f.markClasses.class(g) != t
 		}
 	}
 	return false
 }
+
+// isMark reports whether GDEF classes glyph g as a mark.
+func (f *Font) isMark(g uint16) bool { return f.glyphClasses.class(g) == markGlyph }

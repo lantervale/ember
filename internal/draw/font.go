@@ -241,9 +241,21 @@ const oversample = 2
 // glyph, keeping its advance.
 const MaxAtlasSide = 8192
 
+// sizeSteps is how many sizes a point a face keeps fonts at: text of any
+// size is rasterized at the nearest, its glyphs scaled by at most
+// 1/(2·sizeSteps) of a point to its own, so a size between two whole ones
+// (13.44, 13.33) is drawn from glyphs of its size, not the nearest whole
+// one's scaled, and an animated size makes a bounded number of fonts.
+const sizeSteps = 16
+
+// quantized is px to the nearest of the sizes a face keeps fonts at.
+func quantized(px float32) float32 {
+	return float32(math.Round(float64(px)*sizeSteps)) / sizeSteps
+}
+
 // Size returns the font rasterized at px logical pixels.
 func (f *Face) Size(px float32) *Font {
-	px = float32(math.Round(float64(px)))
+	px = quantized(px)
 	if fnt, ok := f.sizes[px]; ok {
 		return fnt
 	}
@@ -260,7 +272,7 @@ func (f *Face) Size(px float32) *Font {
 // and nothing beside them, as Chrome draws
 // -webkit-font-smoothing: antialiased.
 func (f *Face) ExactSize(px float32) *Font {
-	px = float32(math.Round(float64(px)))
+	px = quantized(px)
 	if fnt, ok := f.exactSizes[px]; ok {
 		return fnt
 	}
@@ -279,7 +291,7 @@ func (f *Face) ExactSize(px float32) *Font {
 // smoothing: each glyph pixel covered or not, at half its coverage, as
 // Chrome draws -webkit-font-smoothing: none, for pixel fonts.
 func (f *Face) PixelSize(px float32) *Font {
-	px = float32(math.Round(float64(px)))
+	px = quantized(px)
 	if fnt, ok := f.pixelSizes[px]; ok {
 		return fnt
 	}
@@ -362,6 +374,8 @@ type Font struct {
 	shapedRuns  map[*shape.Plan]map[string][]shape.Glyph
 	shapedCount int
 	pending     []pending
+	starts      []int
+	line        []item
 	run         []shape.Glyph
 	ids         []byte
 	// only are the characters each source draws, and blank those drawn
@@ -454,7 +468,7 @@ func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0) }
 func (f *Font) measure(s, features string, tracking float32) geom.Vec2 {
 	var w, line float32
 	lines := 1
-	f.items(s, features, func(it item) {
+	f.items(s, features, false, func(it item) {
 		if it.newline {
 			w = max(w, line)
 			line = 0
@@ -487,6 +501,16 @@ func (f *Font) advance(face int, idx sfnt.GlyphIndex) float32 {
 		return 0
 	}
 	return float32(a) / 64 * f.size * f.looks[face].scale() / float32(upem)
+}
+
+// ownAdvance is r's advance in the font's first face, false where it
+// lacks r.
+func (f *Font) ownAdvance(r rune) (float32, bool) {
+	idx, err := f.sources[0].GlyphIndex(&f.buf, r)
+	if err != nil || idx == 0 {
+		return 0, false
+	}
+	return f.advance(0, idx), true
 }
 
 // glyph is r's glyph at phase 0: its advance and face.
@@ -529,6 +553,9 @@ func (f *Font) raster(r rune, phase int) glyph {
 	if face < 0 {
 		if r == '?' || (len(f.blank) > 0 && Covers(f.blank, r)) {
 			return glyph{}
+		}
+		if a, ok := SpaceAdvance(r, f.size*f.looks[0].scale(), f.ownAdvance); ok {
+			return glyph{advance: a, face: -1, r: r}
 		}
 		return f.glyphAt('?', phase)
 	}

@@ -283,7 +283,7 @@ func (d *Document) overText(hit *box.Box, at geom.Vec2) bool {
 
 // selectionCursor shows the text cursor over text a press would select.
 func (d *Document) selectionCursor(c *twod.Canvas, hit *box.Box, at geom.Vec2) {
-	if n := firstOf(d.hovered); n != nil && d.overText(hit, at) && dom.Data(n).Style.Cursor == "" {
+	if n := firstOf(d.hovered); n != nil && d.overText(hit, at) && d.cursorAt(hit) == "" {
 		c.ShowCursor(platform.CursorText)
 	}
 }
@@ -316,7 +316,7 @@ func (d *Document) selectionKeys(c *twod.Canvas, in *input.State, taken *keySet)
 			if s := d.Selection(); !s.Empty() && s.Text != "" {
 				if w := c.Window(); w != nil {
 					// the clipboard takes plain spaces for the no-break ones, as Chrome's
-					w.SetClipboard(strings.ReplaceAll(s.Text, "\u00a0", " "))
+					w.SetClipboardHTML(d.SelectionHTML(), strings.ReplaceAll(s.Text, "\u00a0", " "))
 				}
 				took = true
 			}

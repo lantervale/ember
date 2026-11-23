@@ -8,19 +8,26 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
+
+	"golang.org/x/net/idna"
 
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/pattern"
 )
 
 // fieldUse is what the player did to a field: edited is set once they
 // typed in it since the program last set its value, which minlength and
-// maxlength wait for, and changed once they changed it (:user-valid).
+// maxlength wait for, and changed once they changed it or submitted its
+// form (:user-valid). set is the program's SetValue, until the player
+// types: an email's domain is then read as it is, not in punycode.
 type fieldUse uint8
 
 const (
 	edited fieldUse = 1 << iota
 	changed
+	set
 )
 
 // formStates are the states validate keeps, all of them ui's own.
@@ -49,9 +56,10 @@ type validity struct {
 	// in tree order.
 	forms []*Node
 	uses  map[*Node]fieldUse
-	// patterns are the pattern attributes compiled, nil for one Go cannot
-	// read, which then constrains nothing.
-	patterns map[string]*regexp.Regexp
+	// patterns are the pattern attributes compiled, nil for one
+	// JavaScript refuses or package pattern does not read, which then
+	// constrains nothing.
+	patterns map[string]*pattern.Regexp
 	groups   map[radioKey]radioSet
 	invalid  map[*Node]bool
 	defaults map[*Node]bool
@@ -259,11 +267,16 @@ func (d *Document) textMismatch(n *Node, t *control.Text, kind string) bool {
 				values[i] = strings.TrimSpace(values[i])
 			}
 		}
+		if d.uses[n]&set == 0 {
+			for i, v := range values {
+				values[i] = asciiEmail(v)
+			}
+		}
 	}
 	re := d.pattern(p)
 	for _, v := range values {
 		if kind == typeEmail && !emailAddress.MatchString(v) || kind == typeURL && !validURL(v) ||
-			pat && re != nil && !re.MatchString(v) {
+			pat && re != nil && !re.Match(v) {
 			return true
 		}
 	}
@@ -300,20 +313,36 @@ func (d *Document) numberMismatch(n *Node, v string) bool {
 	return math.Abs(k-math.Round(k)) > 1e-9*max(1, math.Abs(k))
 }
 
-// pattern is the pattern attribute p compiled to match a whole value.
-func (d *Document) pattern(p string) *regexp.Regexp {
+// pattern is the pattern attribute p compiled as JavaScript's v flag
+// reads it, to match a whole value.
+func (d *Document) pattern(p string) *pattern.Regexp {
 	if re, ok := d.patterns[p]; ok {
 		return re
 	}
 	if d.patterns == nil {
-		d.patterns = map[string]*regexp.Regexp{}
+		d.patterns = map[string]*pattern.Regexp{}
 	}
-	re, err := regexp.Compile("^(?:" + p + ")$")
+	re, err := pattern.Compile(p)
 	if err != nil {
 		re = nil
 	}
 	d.patterns[p] = re
 	return re
+}
+
+// asciiEmail is the address v with its domain in punycode, as Chrome
+// turns a typed address or a value attribute's: v as it is when it is
+// all ASCII, has no @, or its domain is no name IDNA takes.
+func asciiEmail(v string) string {
+	at := strings.IndexByte(v, '@')
+	if at < 0 || strings.IndexFunc(v, func(r rune) bool { return r >= utf8.RuneSelf }) < 0 {
+		return v
+	}
+	host, err := chromeIDNA.ToASCII(v[at+1:])
+	if err != nil {
+		return v
+	}
+	return v[:at+1] + host
 }
 
 // Valid reports whether n meets its constraints, as the DOM's
@@ -501,6 +530,14 @@ var (
 	emailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?" +
 		`(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$`)
 )
+
+// chromeIDNA turns a domain to ASCII as Chrome's ICU does: UTS 46
+// nontransitional, with its bidi rule, without the joiners' context
+// rules or STD3's letters, which the email grammar checks after.
+//
+//nolint:gochecknoglobals // a fixed profile
+var chromeIDNA = idna.New(idna.MapForLookup(), idna.BidiRule(), idna.Transitional(false), idna.CheckJoiners(false),
+	idna.StrictDomainName(false))
 
 // validURL reports whether s is an absolute URL, as type=url asks.
 func validURL(s string) bool {

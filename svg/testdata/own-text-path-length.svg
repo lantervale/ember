@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <path id="p" d="M10 30 Q60 0 110 30" fill="none" stroke="#ccc"/>
+  <path id="q" d="M10 70 Q60 40 110 70" fill="none" stroke="#ccc" pathLength="10"/>
+  <path id="r" d="M10 110 Q60 80 110 110" fill="none" stroke="#ccc"/>
+  <text font-size="12" font-family="sans-serif"><textPath href="#p" method="stretch" spacing="auto" side="right">Stretch me along</textPath></text>
+  <text font-size="12" font-family="sans-serif"><textPath href="#q" startOffset="3">Path length</textPath></text>
+  <text font-size="12" font-family="sans-serif"><textPath href="#r" side="right">Right side</textPath></text>
+</svg>

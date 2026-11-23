@@ -38,6 +38,9 @@ func foundry(t *testing.T) ui.FontFetcher {
 	require.NoError(t, err)
 	files["features.ttf"] = featured
 	files["features-variable.ttf"] = varfonttest.Build(varfonttest.Options{Source: featured})
+	arabic, err := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", "go-arabic.ttf"))
+	require.NoError(t, err)
+	files["arabic.ttf"] = arabic
 	return func(url, _ string) ([]byte, error) {
 		if b, ok := files[url]; ok {
 			return b, nil

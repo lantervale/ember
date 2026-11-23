@@ -461,6 +461,7 @@ func applyFixtureStyle(st *style.Computed, k, v string) error {
 		overflow(&st.Overflow.Height)
 	case "scrollbar-width":
 		number(&st.ScrollbarWidth)
+		st.ScrollbarHeight = st.ScrollbarWidth
 	case "grid-template-columns":
 		st.Columns, err = parseTrackList(v)
 	case "grid-template-rows":

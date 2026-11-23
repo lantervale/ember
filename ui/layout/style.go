@@ -111,16 +111,30 @@ func isScrollContainer(s *style.Computed) bool {
 // vertically reserves a gutter's width.
 func scrollbarGutter(s *style.Computed) point {
 	var g point
-	if s.Overflow.Height == style.Scroll {
+	if s.Overflow.Height == style.Scroll || s.GutterStable && scrollContainer(s.Overflow.Height) {
 		g.x = s.ScrollbarWidth
 	}
 	if s.Overflow.Width == style.Scroll {
-		g.y = s.ScrollbarWidth
+		g.y = s.ScrollbarHeight
 	}
 	return g
 }
 
 func outOfFlow(p style.Position) bool { return p == style.Absolute || p == style.FixedPosition }
+
+// stretched is sz with each axis whose length in s is stretch the room cb leaves less
+// st's margins, a border-box size whatever box-sizing says: none where cb's is unknown.
+func stretched(sz size, s style.Size[style.Length], st *style.Computed, cb size) size {
+	if s.Width.Kind == style.Stretch {
+		m := resolveOrZero(st.Margin.Left, cb.w) + resolveOrZero(st.Margin.Right, cb.w)
+		sz.w = mMax(mSub(cb.w, m), 0)
+	}
+	if s.Height.Kind == style.Stretch {
+		m := resolveOrZero(st.Margin.Top, cb.w) + resolveOrZero(st.Margin.Bottom, cb.w)
+		sz.h = mMax(mSub(cb.h, m), 0)
+	}
+	return sz
+}
 
 // stretches reports a size of stretch on either axis.
 func stretches(s style.Size[style.Length]) bool {

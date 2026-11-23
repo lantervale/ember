@@ -187,6 +187,40 @@ func TestTheCursorAndClipboardReachTheWindow(t *testing.T) {
 	}
 }
 
+// rich is a backend whose clipboard takes HTML.
+type rich struct {
+	fake
+	html string
+}
+
+func (r *rich) ClipboardHTML() string              { return r.html }
+func (r *rich) SetClipboardHTML(html, text string) { r.html = html; r.recordf("clipboard %s", text) }
+
+func TestARichCopyReachesAClipboardThatTakesHTML(t *testing.T) {
+	w := NewWindow()
+	w.SetClipboardHTML("<b>hi</b>", "hi")
+	if w.Clipboard() != "hi" || w.ClipboardHTML() != "<b>hi</b>" {
+		t.Fatal("a closed window keeps both")
+	}
+	w.SetClipboard("plain")
+	if w.ClipboardHTML() != "" {
+		t.Fatal("plain text replaces the HTML")
+	}
+	f := &fake{}
+	w.Attach(f)
+	w.SetClipboardHTML("<b>hi</b>", "hi")
+	if w.ClipboardHTML() != "" || fmt.Sprint(f.calls) != "[clipboard hi]" {
+		t.Fatalf("a clipboard without HTML gets the text alone: %v", f.calls)
+	}
+	r := &rich{}
+	w = NewWindow()
+	w.Attach(r)
+	w.SetClipboardHTML("<b>hi</b>", "hi")
+	if w.ClipboardHTML() != "<b>hi</b>" || fmt.Sprint(r.calls) != "[clipboard hi]" {
+		t.Fatalf("both: %q %v", w.ClipboardHTML(), r.calls)
+	}
+}
+
 func TestAWindowWithItsOwnTitleBarSaysWhatToKeepClear(t *testing.T) {
 	if w := NewWindow(); w.OwnTitleBar() || w.TitleBarArea() != (TitleBarArea{}) {
 		t.Fatal("the system's title bar, and nothing to keep clear, by default")

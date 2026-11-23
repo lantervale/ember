@@ -45,8 +45,13 @@ func featureSettings(_ *ctx, v []Component) string {
 	return strings.Join(parts, ", ")
 }
 
-// kwRuby is font-variant-east-asian's ruby, whose feature is ruby too.
-const kwRuby = "ruby"
+// kwRuby is font-variant-east-asian's ruby, whose feature is ruby too;
+// kwSub and kwSuper are vertical-align's and font-variant-position's.
+const (
+	kwRuby  = "ruby"
+	kwSub   = "sub"
+	kwSuper = "super"
+)
 
 // variantFeatures are the OpenType features each keyword of
 // font-variant's longhands turns on, or off for the features after a
@@ -81,14 +86,17 @@ var variantFeatures = map[string]string{
 	"proportional-width":         "pwid",
 	kwRuby:                       kwRuby,
 	"historical-forms":           "hist",
+	kwSuper:                      "sups",
+	kwSub:                        "subs",
 }
 
 // shapingFeatures are the features t's text is shaped with, HarfBuzz's
-// way: font-variant's longhands but its capitals and position, then
+// way: font-variant's longhands but its capitals, then
 // font-kerning, then the optional ligatures letter-spacing turns off,
 // then, after a '|' where a face's @font-face features go
 // (shape.Splice), font-feature-settings, a later one overriding an
-// earlier.
+// earlier, and font-variant-position last, which Chrome's settings do not
+// turn off.
 func shapingFeatures(t *style.Text) string {
 	var out, settings []string
 	for _, v := range []string{t.FontVariant.Ligatures, t.FontVariant.Numeric, t.FontVariant.EastAsian,
@@ -121,6 +129,9 @@ func shapingFeatures(t *style.Text) string {
 		default:
 			settings = append(settings, tag+"="+value)
 		}
+	}
+	if f := variantFeatures[t.FontVariant.Position]; f != "" {
+		settings = append(settings, f)
 	}
 	if len(out) == 0 {
 		return strings.Join(settings, ",")

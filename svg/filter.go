@@ -1,8 +1,11 @@
 package svg
 
 import (
+	"image"
 	"image/color"
 	"math"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -67,6 +70,10 @@ func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, b
 	v = strings.TrimSpace(v)
 	var out []*Filter
 	var fns *Filter
+	// linear is the colour space of the last primitive: functions after a
+	// filter element work in it, as Chrome runs them, a shadow's colour
+	// taken as it is in that space.
+	linear := false
 	for v != "" {
 		open := strings.IndexByte(v, '(')
 		end := closing(v, open)
@@ -87,12 +94,16 @@ func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, b
 				return nil, false
 			}
 			out = append(out, f)
+			linear = f.Primitives[len(f.Primitives)-1].LinearRGB
 			continue
 		}
 		p, ok := cssFunction(name, args, st)
 		if !ok {
 			b.unsupported("filter")
 			return nil, true
+		}
+		if p.LinearRGB = linear; linear {
+			p.Color = encoded(p.Color)
 		}
 		if fns == nil {
 			fns = &Filter{Transform: m}
@@ -107,6 +118,13 @@ func (b *builder) filters(v string, st *style, m Matrix, bbox Box) ([]*Filter, b
 		}
 	}
 	return out, true
+}
+
+// encoded is the colour that is c in linear light: what a primitive in
+// linear light paints when it takes c's values as they are.
+func encoded(c color.NRGBA) color.NRGBA {
+	at := func(v uint8) uint8 { return round8(255 * float64(toSRGB(float32(v)/255))) }
+	return color.NRGBA{at(c.R), at(c.G), at(c.B), c.A}
 }
 
 // closing is the index of the bracket closing the one at open in s, -1
@@ -328,16 +346,16 @@ func (b *builder) filterElement(n *node, m Matrix, bbox Box) (*Filter, bool) {
 }
 
 // input is what a primitive's in or in2 names: a standard input, an
-// earlier result, or, unnamed or unknown, the result before it.
+// earlier result, or, unnamed or unknown, the result before it. Chrome
+// draws neither the background nor the fill and stroke paints, and
+// reads BackgroundImage, BackgroundAlpha, FillPaint and StrokePaint so
+// too.
 func (b *builder) input(v string, f *Filter, results map[string]Input) Input {
 	switch v = strings.TrimSpace(v); v {
 	case "SourceGraphic":
 		return SourceGraphic
 	case "SourceAlpha":
 		return SourceAlpha
-	case "BackgroundImage", "BackgroundAlpha", "FillPaint", "StrokePaint":
-		b.unsupported(v)
-		return Transparent
 	}
 	if in, ok := results[v]; ok && v != "" {
 		return in
@@ -430,6 +448,9 @@ func (b *builder) primitive(n *node, f *Filter, c filterContext, results map[str
 	if p.Region.Empty() {
 		p.Kind = Clear
 	}
+	if p.Kind == FeImage {
+		p.Items = b.feImage(props, &st, f.Transform, p.Region)
+	}
 	if name := strings.TrimSpace(props["result"]); name != "" {
 		results[name] = Input(len(f.Primitives))
 	}
@@ -456,9 +477,6 @@ func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, 
 		dev, ok := pair(props["stdDeviation"], c, 0)
 		if ok && dev.X >= 0 && dev.Y >= 0 {
 			p.StdDev = dev
-		}
-		if mode := strings.TrimSpace(props["edgeMode"]); mode != "" && mode != none {
-			b.unsupported("edgeMode")
 		}
 	case "feOffset":
 		p.Kind = Offset
@@ -493,8 +511,42 @@ func (b *builder) primitiveKind(p *Primitive, n *node, props map[string]string, 
 	case "feTile":
 		p.Kind = Tile
 	default:
+		b.morePrimitive(p, n, props, st, f, c, results)
+	}
+}
+
+// morePrimitive sets what the primitives that make their picture anew
+// from noise, neighbours, light or another picture do; one this package
+// does not draw makes nothing.
+func (b *builder) morePrimitive(p *Primitive, n *node, props map[string]string, st *style, f *Filter,
+	c filterContext, results map[string]Input,
+) {
+	ok := true
+	switch n.name {
+	case "feTurbulence":
+		p.Kind, p.In = Turbulence, nil
+		p.Noise, ok = noise(props, c)
+	case "feConvolveMatrix":
+		p.Kind = ConvolveMatrix
+		p.Convolve, ok = convolve(props)
+	case "feDisplacementMap":
+		p.Kind = DisplacementMap
+		p.In = append(p.In, b.input(props["in2"], f, results))
+		p.Scale, _ = number(props["scale"])
+		if c.boxed {
+			p.Scale *= c.bbox.W
+		}
+		p.Channels = [2]uint8{channel(props["xChannelSelector"]), channel(props["yChannelSelector"])}
+	case "feDiffuseLighting", "feSpecularLighting":
+		b.lighting(p, n, props, st, c)
+	case "feImage":
+		p.Kind, p.In = FeImage, nil
+	default:
 		p.Kind, p.In = Clear, nil
 		b.unsupported(n.name)
+	}
+	if !ok {
+		p.Kind = Clear
 	}
 }
 
@@ -528,6 +580,56 @@ func (b *builder) combining(p *Primitive, n *node, props map[string]string, f *F
 		return false
 	}
 	return true
+}
+
+// feImage is what an feImage draws in its region r of the filter's
+// space, which m takes to the picture's: an element of the file, drawn
+// as a use would, moved to the region's corner, or a picture of a data:
+// URL fitted into r. Nothing is fetched.
+func (b *builder) feImage(props map[string]string, st *style, m Matrix, r Box) []Item {
+	href := strings.TrimSpace(props["href"])
+	var items []Item
+	if !strings.HasPrefix(href, "#") {
+		num := func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+		_ = b.image(map[string]string{
+			"href": href, "x": num(r.X), "y": num(r.Y), "width": num(r.W), "height": num(r.H),
+			"preserveAspectRatio": props["preserveAspectRatio"],
+		}, st, m, &items)
+		if data, ok := dataURL(href); ok && isSVG(data) {
+			return unitRaster(items, m, r)
+		}
+		return items
+	}
+	ref := b.target(href)
+	if ref == nil || slices.Contains(b.using, ref) {
+		return nil
+	}
+	inherited := b.base
+	if ref.parent != nil {
+		inherited = b.inherited(ref.parent)
+	}
+	b.using = append(b.using, ref)
+	if err := b.walk(ref, inherited, m.Mul(translate(r.X, r.Y)), &items, 0); err != nil {
+		items = nil
+	}
+	b.using = b.using[:len(b.using)-1]
+	return items
+}
+
+// unitRaster is items, drawn in the region r of the space m takes to the
+// picture's, as an image of a pixel a unit of that space: Chrome draws
+// an SVG picture in an feImage so, and scales it to the pixels it shows
+// at.
+func unitRaster(items []Item, m Matrix, r Box) []Item {
+	inv, ok := m.Inverse()
+	w, h := int(math.Ceil(r.W)), int(math.Ceil(r.H))
+	if !ok || len(items) == 0 || w <= 0 || h <= 0 || w > maxTileSide || h > maxTileSide || w*h > maxTilePixels {
+		return items
+	}
+	pix := image.NewRGBA(image.Rect(0, 0, w, h))
+	sub := &drawer{view: translate(-r.X, -r.Y).Mul(inv), unit: 1}
+	sub.items(pix, pix.Rect, items, 1, 0)
+	return []Item{{Image: &Image{Pix: pix, Transform: m.Mul(translate(r.X, r.Y)), Opacity: 1}}}
 }
 
 // colorMatrix is an feColorMatrix's matrix: its type's, from its values.

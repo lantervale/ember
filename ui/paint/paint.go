@@ -525,7 +525,7 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 	b, st := e.b, shown(e.b)
 	if b.Kind == box.Element {
-		alpha *= st.Opacity
+		alpha *= st.Opacity * (1 - b.Dim)
 	}
 	if alpha <= 0 && !p.probing {
 		return
@@ -588,7 +588,7 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 			continue
 		}
 		p.use(c.clip)
-		BarsOf(c.b, c.at).paint(p.s, alpha)
+		p.bars(BarsOf(c.b, c.at), alpha)
 	}
 	p.endFilters(filters, e.clip)
 	p.endMask(mask, e, st)
@@ -636,6 +636,9 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		case c.Kind != box.Element:
 			own.flow = append(own.flow, ce)
 			p.collect(ce, own, outer)
+		case c.Dim > 0 && !startsContext(st):
+			// A block a faded inline element holds stacks with it, as that element does.
+			outer.positioned = append(outer.positioned, ce)
 		case startsContext(st) && st.ZIndex < 0 && !st.ZAuto:
 			outer.negative = append(outer.negative, ce)
 		case startsContext(st) && st.ZIndex > 0 && !st.ZAuto:

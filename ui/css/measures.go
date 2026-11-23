@@ -39,6 +39,9 @@ type measures struct {
 	// restyles (Transitions.Requery).
 	containers, read, requery map[*dom.Node]bool
 	sizes                     map[*dom.Node][2]float32
+	// scroll is the state of the scroll-state containers
+	// (Transitions.RequeryScroll).
+	scroll map[*dom.Node]ScrollState
 	// titleBar is the env(titlebar-area-*) values, and titleBarRead
 	// whether one was read since the tree was last styled whole.
 	titleBar     TitleBarArea

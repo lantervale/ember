@@ -1052,6 +1052,10 @@ type Style struct {
 	// those every text has, HarfBuzz's way, comma separated ("smcp,-liga");
 	// a face's own go where a '|' stands, else first (shape.Splice).
 	Features string
+	// RightToLeft draws each line from its end: the text, in the order
+	// it is read, is shaped so and laid out from the right, its brackets
+	// turned round.
+	RightToLeft bool
 }
 
 type Align int
@@ -1088,8 +1092,9 @@ func (s Style) Font() *Font {
 }
 
 // over is how many times the size text is drawn at in s the font f is: a
-// font is rasterized at a whole size, and a text of a size between two is
-// drawn from the nearest, its glyphs and advances scaled to its own.
+// font is rasterized at one of the sizes a face keeps (sizeSteps a
+// point), and a text of a size between two is drawn from the nearest, its
+// glyphs and advances scaled to its own.
 func (s Style) over(f *Font) float32 {
 	if s.Size <= 0 || f.size <= 0 {
 		return 1
@@ -1154,9 +1159,9 @@ func (c *List) textScale() float32 {
 // cluster. The baseline lies on a whole pixel of a grid of oversample*grid
 // to the point and each glyph's quad too, the glyph rasterized at the
 // phase of its exact position, so text keeps the font's advances. grid is
-// k for a text of a whole size, whose grid is the atlas's pixels: it is
-// drawn 1:1, never blurred. A size between two keeps the grid of the whole
-// sizes, its glyphs scaled onto it.
+// k for a text of a size a face keeps, whose grid is the atlas's pixels:
+// it is drawn 1:1, never blurred. A size between two keeps the grid of
+// the screen, its glyphs scaled onto it by a hair.
 func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col color.Color, pictures bool, s Style) {
 	px := oversample * grid
 	top := p.Y
@@ -1166,7 +1171,7 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 	y := float32(math.Round(float64((top+f.ascent/k)*px))) / px
 	x := p.X
 	shape := geom.Vec4{X: KindText}
-	f.items(text, s.Features, func(it item) {
+	f.items(text, s.Features, s.RightToLeft, func(it item) {
 		if it.newline {
 			x = p.X
 			y += f.lineHeight / k

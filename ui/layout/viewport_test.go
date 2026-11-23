@@ -18,7 +18,7 @@ func scrollingRoot(gutter, scroll float32, children ...*dom.Node) *dom.Node {
 	port := style.Initial()
 	port.Display = style.Block
 	port.Overflow = style.Size[style.Overflow]{Width: style.OverflowAuto, Height: style.OverflowAuto}
-	port.ScrollbarWidth = gutter
+	port.ScrollbarWidth, port.ScrollbarHeight = gutter, gutter
 	root := el(dom.HTML, func(st *style.Computed) {
 		st.Display = style.Block
 		st.Viewport = &port

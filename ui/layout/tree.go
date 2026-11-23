@@ -537,7 +537,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	container := n.st.Display
 	inFlexOrGrid := container == style.FlexDisplay || container == style.InlineFlex ||
 		container == style.GridDisplay || container == style.InlineGrid
-	items := t.lift(n, t.flatten(n, children))
+	items := spaced(n, inFlexOrGrid, t.lift(n, t.flatten(n, children)))
 	if !inFlexOrGrid && !hasBlockChild(items) {
 		t.buildInline(n, items)
 		return
@@ -546,13 +546,17 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	// inFlow is set once the container holds content in the flow: the anonymous blocks
 	// after it don't start with the container's first line.
 	inFlow := false
+	// marked is the item whose marker stands inside it until a line takes the marker:
+	// the first, or one of its own before a first block.
+	marked := insideMarked(n, inFlexOrGrid)
 	flush := func() {
-		if onlyCollapsibleSpace(run) {
+		if onlyCollapsibleSpace(run) && marked == nil {
 			run = nil
 			return
 		}
 		anon := t.anonymous(n)
-		content := t.inlineOf(anon, run)
+		content := t.inlineOf(anon, run, marked)
+		marked = nil
 		n.liftFloats(anon)
 		if content != nil {
 			content.unindented = inFlow
@@ -585,7 +589,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.kids = append(n.kids, t.build(it.element, n))
 			continue
 		}
-		if !inFlexOrGrid && !elementBlockLevel(it.element) {
+		if (!inFlexOrGrid || n.st.WebkitBox) && !elementBlockLevel(it.element) {
 			run = append(run, it)
 			continue
 		}
@@ -599,6 +603,17 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 			n.holdsFloats = true
 		}
 	}
+}
+
+// spaced is items less, in a -webkit-box laid out as flex, the white space between its
+// children: Chrome drops it between inline ones too.
+func spaced(n *node, inFlexOrGrid bool, items []item) []item {
+	if !n.st.WebkitBox || !inFlexOrGrid {
+		return items
+	}
+	return slices.DeleteFunc(items, func(it item) bool {
+		return it.text != nil && onlyCollapsibleSpace([]item{it})
+	})
 }
 
 // tableParts lists the table parts that follow one another from items[i], with the white
@@ -629,7 +644,16 @@ func (t *tree) buildInline(n *node, items []item) {
 			n.kids = append(n.kids, t.build(it.element, n))
 		}
 	}
-	n.inline = t.inlineOf(n, items)
+	n.inline = t.inlineOf(n, items, insideMarked(n, false))
+}
+
+// insideMarked is n where it is a list item whose marker stands inside it, nil
+// otherwise or when it lays its children out as a flex or grid container.
+func insideMarked(n *node, flexOrGrid bool) *node {
+	if n.st.ListItem && n.st.ListInside && n.box.Kind == box.Element && !flexOrGrid {
+		return n
+	}
+	return nil
 }
 
 // liftFloats moves the floats inside an anonymous block's inline elements to n, where
@@ -765,6 +789,7 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 			if b := of[e]; b != nil && b.Parent == n.box && !moved[b] {
 				moved[b] = true
 				b.Pos = b.Pos.Add(movedBy(e, nil))
+				b.Dim = dimOf(e, n.box.Node)
 			}
 		}
 	}
@@ -800,6 +825,17 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 		c.box.Parent = n.box
 		c.box.Pos, c.box.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
 	}
+}
+
+// dimOf is the Dim of e's box, its inline ancestors' up to upTo fading it.
+func dimOf(e, upTo *dom.Node) float32 {
+	shown := float32(1)
+	for p := e.Parent(); p != nil && p != upTo; p = p.Parent() {
+		if isInline(p) {
+			shown *= styleOf(p).Opacity
+		}
+	}
+	return 1 - shown
 }
 
 // inFlowBlock reports an element that is a block in the flow of its container.
@@ -994,85 +1030,156 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 }
 
 // markerGap is how far a bullet stands from its item's content, past its own offset, as
-// Chrome's.
+// Chrome's; a picture inside its item stands as far from the content after it.
 const markerGap = 7
 
 // rtlMarkerPull is how much nearer its content Chrome draws the bullet or the picture of
 // a right-to-left item than the mirror of a left-to-right one's.
 const rtlMarkerPull = 3.5
 
-// listMarker gives a list item its ::marker box, outside the item beside its first line:
-// the marker string css worked out, its ::marker's content or its counter style's,
-// ending where the item's content starts, a bullet or the list-style-image Chrome's
-// distance before it, the picture on the line's baseline. An item without a line has
-// none. The box's style is the ::marker's where a rule styles it, the item's otherwise.
-func (t *tree) listMarker(n *node) {
+// markerContent is what a list item's ::marker shows, in the style it draws in: its
+// text, or a picture of its size (list-style-image's, or its gradient's), or its bullet.
+type markerContent struct {
+	st       *style.Computed
+	text     string
+	picture  geom.Vec2
+	source   string
+	gradient *style.Gradient
+	bullet   bool
+	// ascent is the marker font's, rounded as Chrome places a bullet by it.
+	ascent float32
+}
+
+// markerOf is what n's ::marker shows: the marker string css worked out, its ::marker's
+// content or its counter style's, or the list-style-image in their place, false when it
+// shows nothing. The style is the ::marker's where a rule styles it, the item's
+// otherwise.
+func (t *tree) markerOf(n *node) (markerContent, bool) {
 	e := n.box.Node
-	if e == nil || n.box.Kind != box.Element || !n.st.ListItem || e.Tag() == dom.Summary ||
-		n.st.Display == style.DisplayNone {
+	if e == nil || !n.st.ListItem || e.Tag() == dom.Summary || n.st.Display == style.DisplayNone {
+		return markerContent{}, false
+	}
+	data := dom.Data(e)
+	m := markerContent{st: n.st}
+	if data.Marker != nil {
+		m.st = data.Marker
+	}
+	m.ascent = float32(math.Round(float64(t.fonts.Metrics(m.st.Font).Ascent)))
+	if data.HasMarkerText {
+		inWord := false
+		m.text = shownText(data.MarkerText, m.st, nil, &inWord)
+	}
+	if data.Marker == nil || data.Marker.Content.Kind == style.ContentNormal {
+		switch {
+		case n.st.ListGradient != nil:
+			// a picture of no size of its own: Chrome's is half the font's ascent square
+			side := float32(math.Floor(float64(m.ascent))) / 2
+			m.picture, m.gradient = geom.Vec2{X: side, Y: side}, n.st.ListGradient
+			return m, true
+		case n.st.ListImage != "" && t.images != nil:
+			if s, ok := t.images.ImageSize(n.st.ListImage); ok && s.X > 0 && s.Y > 0 {
+				m.picture, m.source = s, n.st.ListImage
+				return m, true
+			}
+		}
+	}
+	switch {
+	case m.text != "":
+		return m, true
+	case data.HasMarkerText:
+		return m, false
+	case m.st.ListStyle == style.ListDisc || m.st.ListStyle == style.ListCircle || m.st.ListStyle == style.ListSquare:
+		m.bullet = true
+		return m, true
+	}
+	return m, false
+}
+
+// bullet is the side of a bullet's square and how far below the font's top it starts,
+// as Chrome sizes it from the ascent.
+func (m markerContent) bulletRect() (float32, float32) {
+	offset := float32(math.Floor(float64(m.ascent * 2 / 3)))
+	return float32(math.Floor(float64((offset + 1) / 2))), float32(math.Floor(float64(3 * (m.ascent - offset) / 2)))
+}
+
+// insideWidth is how far the marker inside its item puts the content after it, as
+// Chrome's: its text; its picture and markerGap; its bullet, two more points and its
+// margins, one point before and the font's size after.
+func (m markerContent) insideWidth(fonts box.Fonts) float32 {
+	switch {
+	case m.picture.X > 0:
+		return m.picture.X + markerGap
+	case m.bullet:
+		side, _ := m.bulletRect()
+		return side + 2 - 1 + m.st.Font.Size
+	}
+	return fonts.Advance(m.st.Font, m.text) + m.st.Spacing(m.text)
+}
+
+// place puts the marker's box b in the rectangle r its piece takes on a line, on
+// baseline lb below r's top.
+func (m markerContent) place(b *box.Box, r geom.Rect, lb float32) {
+	b.Style = m.st
+	switch {
+	case m.picture.X > 0:
+		b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y + lb - m.picture.Y}, m.picture
+		b.Picture, b.Gradient = m.source, m.gradient
+	case m.bullet:
+		side, top := m.bulletRect()
+		b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y + lb - m.ascent + top}, geom.Vec2{X: side, Y: side}
+	default:
+		b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
+		b.Lines = []box.Fragment{{Text: m.text, Rect: geom.Rect{W: r.W, H: r.H}, Baseline: lb}}
+	}
+}
+
+// listMarker gives a list item its ::marker box, outside the item beside its first line,
+// ending where the item's content starts, a bullet or a picture Chrome's distance before
+// it, the picture on the line's baseline. An item without a line has none, and one whose
+// marker stands inside it has it among its lines.
+func (t *tree) listMarker(n *node) {
+	if n.box.Kind != box.Element || n.st.ListInside {
+		return
+	}
+	mark, ok := t.markerOf(n)
+	if !ok {
 		return
 	}
 	line, at, ok := firstLine(n.box, geom.Vec2{})
 	if !ok {
 		return
 	}
-	data := dom.Data(e)
-	st := n.st
-	if data.Marker != nil {
-		st = data.Marker
-	}
-	m := &box.Box{Kind: box.Marker, Node: e, Style: st}
+	m := &box.Box{Kind: box.Marker, Node: n.box.Node, Style: mark.st}
 	left := n.final.border.l + n.final.padding.l
 	rtl := n.st.Dir == style.RTL
 	right := n.final.size.w - n.final.border.r - n.final.padding.r
-	ascent := float32(math.Round(float64(t.fonts.Metrics(st.Font).Ascent)))
 	baseline := at.Y + line.Baseline
-	text := ""
-	if data.HasMarkerText {
-		inWord := false
-		text = shownText(data.MarkerText, st, nil, &inWord)
-	}
-	picture, pictured := t.markerPicture(n.st, data)
 	switch {
-	case pictured:
-		m.Pos = geom.Vec2{X: left - picture.X - markerGap, Y: baseline - picture.Y}
+	case mark.picture.X > 0:
+		m.Pos = geom.Vec2{X: left - mark.picture.X - markerGap, Y: baseline - mark.picture.Y}
 		if rtl {
 			m.Pos.X = right + markerGap - rtlMarkerPull
 		}
-		m.Size, m.Picture = picture, n.st.ListImage
-	case text != "":
-		w := t.fonts.Advance(st.Font, text) + st.Spacing(text)
+		m.Size, m.Picture, m.Gradient = mark.picture, mark.source, mark.gradient
+	case mark.bullet:
+		side, top := mark.bulletRect()
+		offset := float32(math.Floor(float64(mark.ascent * 2 / 3)))
+		m.Pos = geom.Vec2{X: left - offset - markerGap, Y: baseline - mark.ascent + top}
+		if rtl {
+			m.Pos.X = right + offset + markerGap - rtlMarkerPull - side
+		}
+		m.Size = geom.Vec2{X: side, Y: side}
+	default:
+		text := mark.text
+		w := t.fonts.Advance(mark.st.Font, text) + mark.st.Spacing(text)
 		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
 		if rtl {
 			m.Pos.X, text = right, visualText(text, 1)
 		}
 		m.Size = geom.Vec2{X: w, Y: line.Rect.H}
 		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}
-	case data.HasMarkerText:
-		return
-	case st.ListStyle == style.ListDisc || st.ListStyle == style.ListCircle || st.ListStyle == style.ListSquare:
-		offset := float32(math.Floor(float64(ascent * 2 / 3)))
-		side := float32(math.Floor(float64((offset + 1) / 2)))
-		top := float32(math.Floor(float64(3 * (ascent - offset) / 2)))
-		m.Pos = geom.Vec2{X: left - offset - markerGap, Y: baseline - ascent + top}
-		if rtl {
-			m.Pos.X = right + offset + markerGap - rtlMarkerPull - side
-		}
-		m.Size = geom.Vec2{X: side, Y: side}
-	default:
-		return
 	}
 	n.box.Append(m)
-}
-
-// markerPicture is the size of the list-style-image st gives a list item's marker, false
-// when it has none, or none found, or the ::marker's content stands in its place.
-func (t *tree) markerPicture(st *style.Computed, data *dom.Pipeline) (geom.Vec2, bool) {
-	if st.ListImage == "" || t.images == nil || data.Marker != nil && data.Marker.Content.Kind != style.ContentNormal {
-		return geom.Vec2{}, false
-	}
-	s, ok := t.images.ImageSize(st.ListImage)
-	return s, ok && s.X > 0 && s.Y > 0
 }
 
 // firstLine is the first line fragment under b, with its box's place in b.

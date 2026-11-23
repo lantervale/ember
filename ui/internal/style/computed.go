@@ -30,12 +30,13 @@ type Computed struct {
 func Initial() Computed {
 	return Computed{
 		Box: Box{
-			Display:   Inline,
-			BoxSizing: BorderBox,
-			MaxSize:   Size[Length]{Length{Kind: None}, Length{Kind: None}},
-			Margin:    All(Px(0)),
-			Padding:   All(Px(0)),
-			ZAuto:     true,
+			Display:    Inline,
+			BoxSizing:  BorderBox,
+			MaxSize:    Size[Length]{Length{Kind: None}, Length{Kind: None}},
+			Margin:     All(Px(0)),
+			Padding:    All(Px(0)),
+			ZAuto:      true,
+			BoxOrdinal: 1,
 		},
 		Flex: Flex{
 			Shrink: 1, AlignItems: AlignNormal, AlignContent: AlignNormal, JustifyContent: AlignNormal,
@@ -190,6 +191,12 @@ type Box struct {
 	// ScrollbarWidth is the gutter, in points, that overflow: scroll reserves
 	// across the scrolling axis (scrollbar-width: none is 0).
 	ScrollbarWidth float32
+	// ScrollbarHeight is the gutter overflow-x: scroll reserves along the
+	// bottom: ScrollbarWidth but where ::-webkit-scrollbar's height differs.
+	ScrollbarHeight float32
+	// GutterStable is scrollbar-gutter: stable: the vertical bar's room is
+	// kept whenever the box clips, whether its content overflows or not.
+	GutterStable bool
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
@@ -222,12 +229,20 @@ type Box struct {
 	BreakBefore, BreakAfter Break
 	// ContainerType is container-type, and ContainerNames container-name,
 	// nil for none: the names an @container rule picks the element by.
-	ContainerType  ContainerType
-	ContainerNames []string
+	// ContainerScrollState is container-type's scroll-state: the element
+	// answers scroll-state() queries.
+	ContainerType        ContainerType
+	ContainerNames       []string
+	ContainerScrollState bool
+	// Snap is the scroll-snap properties, scroll-padding, scroll-margin,
+	// scroll-behavior and overscroll-behavior.
+	Snap Snap
 	// LineClamp is line-clamp: the lines a block container shows, 0 for
 	// none, an ellipsis ending the last when more follows, the content
-	// after it not drawn.
-	LineClamp int
+	// after it not drawn; NoEllipsis is its no-ellipsis, which leaves the
+	// ellipsis out.
+	LineClamp  int
+	NoEllipsis bool
 	// WebkitBox is display: -webkit-box or -webkit-inline-box, laid out
 	// as flex, or as flow-root clamped to WebkitLineClamp lines when
 	// BoxVertical (-webkit-box-orient: vertical) and that is set: Chrome's
@@ -235,6 +250,15 @@ type Box struct {
 	WebkitBox       bool
 	BoxVertical     bool
 	WebkitLineClamp int
+	// BoxPack, BoxAlign and BoxReverse are -webkit-box-pack, -webkit-box-align and
+	// -webkit-box-direction: reverse, which a -webkit-box laid out as flex takes in place
+	// of justify-content, align-items and a reversed flex-direction; BoxFlex and
+	// BoxOrdinal are -webkit-box-flex and -webkit-box-ordinal-group, its items' flex-grow
+	// and flex-shrink both, and their order.
+	BoxPack, BoxAlign Align
+	BoxReverse        bool
+	BoxFlex           float32
+	BoxOrdinal        int
 }
 
 // Clamp is how many lines the box shows, 0 for all, and whether the
@@ -736,8 +760,13 @@ type Text struct {
 	ListStyle ListStyle
 	ListName  string
 	// ListImage is list-style-image: the address of the picture a list
-	// item's marker shows in place of its list-style-type, "" for none.
-	ListImage string
+	// item's marker shows in place of its list-style-type, "" for none;
+	// ListGradient the gradient it shows in its place.
+	ListImage    string
+	ListGradient *Gradient
+	// ListInside is list-style-position: inside, the marker the first
+	// inline box of the item's first line.
+	ListInside bool
 	// BorderSpacing is a table's border-spacing, across and down, in points.
 	BorderSpacing [2]float32
 	// BorderCollapse is border-collapse: collapse: a table's cells share
@@ -974,6 +1003,13 @@ const (
 )
 
 type Look struct {
+	// Scrollbar is the parts of a scroll container's bars its sheets style,
+	// nil where they keep ui's own look.
+	Scrollbar *ScrollbarParts
+	// ScrollbarThumb and ScrollbarTrack are scrollbar-color's, set where
+	// ScrollbarColored.
+	ScrollbarThumb, ScrollbarTrack color.Color
+	ScrollbarColored               bool
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
 	Background color.Color
@@ -1110,6 +1146,9 @@ const (
 	BlendSaturation
 	BlendColor
 	BlendLuminosity
+	// BlendPlusLighter adds the colours and alphas, premultiplied, up to
+	// white and opaque: mix-blend-mode only.
+	BlendPlusLighter
 )
 
 // Filtered reports whether the element filters itself or its backdrop,
@@ -1288,7 +1327,53 @@ const (
 	CompositeIntersect
 	// CompositeExclude keeps it and them where the other is clear.
 	CompositeExclude
+	// The compositing operators of -webkit-mask-composite, which Chrome
+	// keeps as written: the first four join as add, intersect, subtract
+	// and exclude.
+	CompositeSourceOver
+	CompositeSourceIn
+	CompositeSourceOut
+	CompositeXor
+	// CompositeClear leaves nothing, CompositeCopy the layer alone.
+	CompositeClear
+	CompositeCopy
+	// CompositeSourceAtop lays it over them where they are opaque.
+	CompositeSourceAtop
+	// The destination operators are the source ones, the layer and those
+	// under it swapped.
+	CompositeDestinationOver
+	CompositeDestinationIn
+	CompositeDestinationOut
+	CompositeDestinationAtop
+	// CompositePlusLighter adds it to them.
+	CompositePlusLighter
 )
+
+// MaskCompositeWords are mask-composite's words, by MaskComposite.
+//
+//nolint:gochecknoglobals // a fixed list
+var MaskCompositeWords = [...]string{"add", "subtract", "intersect", "exclude", "source-over", "source-in",
+	"source-out", "xor", "clear", "copy", "source-atop", "destination-over", "destination-in", "destination-out",
+	"destination-atop", "plus-lighter"}
+
+// Plain is the composite of mask-composite's own four that c joins as,
+// c itself for the others.
+func (c MaskComposite) Plain() MaskComposite {
+	switch c {
+	case CompositeSourceOver:
+		return CompositeAdd
+	case CompositeSourceIn:
+		return CompositeIntersect
+	case CompositeSourceOut:
+		return CompositeSubtract
+	case CompositeXor:
+		return CompositeExclude
+	case CompositeAdd, CompositeSubtract, CompositeIntersect, CompositeExclude, CompositeClear, CompositeCopy,
+		CompositeSourceAtop, CompositeDestinationOver, CompositeDestinationIn, CompositeDestinationOut,
+		CompositeDestinationAtop, CompositePlusLighter:
+	}
+	return c
+}
 
 // BackgroundPosition is background-position: X from the left edge, or from
 // the right one when FromRight, and Y from the top, or the bottom when

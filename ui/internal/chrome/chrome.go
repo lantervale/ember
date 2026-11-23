@@ -730,19 +730,20 @@ addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` 
 // EvalPage loads the page at url, served from this machine, in Chrome in
 // a viewport of size points, and returns the value of its EvalScript as
 // JSON: what it fetches comes as the server sends it, timed as Chrome
-// times it.
+// times it. A Chrome that exits printing no page, as Windows' sometimes
+// does, is run again.
 func EvalPage(url string, size geom.Vec2) ([]byte, error) {
 	unlock, err := lockChrome()
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	dir, err := os.MkdirTemp("", "ember-chrome-")
-	if err != nil {
-		return nil, err
+	var out []byte
+	for range 3 {
+		if out, err = evalPageOnce(url, size); err != nil || done(dumpDOM, out) {
+			break
+		}
 	}
-	defer os.RemoveAll(dir)
-	out, err := runAt(dir, url, size, dumpDOM, css.Media{})
 	if err != nil {
 		return nil, err
 	}
@@ -751,6 +752,15 @@ func EvalPage(url string, size geom.Vec2) ([]byte, error) {
 		return nil, fmt.Errorf("chrome: no result in the page:\n%s", out)
 	}
 	return res[1], nil
+}
+
+func evalPageOnce(url string, size geom.Vec2) ([]byte, error) {
+	dir, err := os.MkdirTemp("", "ember-chrome-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	return runAt(dir, url, size, dumpDOM, css.Media{})
 }
 
 // Eval lays d out in Chrome in a viewport of size points, evaluates the

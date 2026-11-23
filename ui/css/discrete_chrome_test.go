@@ -27,6 +27,7 @@ func matchMovedAt(t *testing.T, src string, build func(body *dom.Node), props ma
 	tr.SetMedia(css.Media{Width: 800, Height: 600, Resolution: scale})
 	tr.Compute(d.HTML(), d.Sheets())
 	script := fmt.Sprintf(`els.forEach(e => getComputedStyle(e).fontSize);
+document.getAnimations().forEach(a => { a.pause(); a.currentTime = 0; });
 document.querySelectorAll("[class^=t]").forEach(e => e.classList.add("on"));
 els.forEach(e => getComputedStyle(e).fontSize);
 document.getAnimations().forEach(a => { a.pause(); a.currentTime = %v; });`, at*1000)
@@ -159,6 +160,22 @@ func TestStartingStyleMatchesChrome(t *testing.T) {
 	for _, at := range []float32{0.1, 0.35, 0.65, 0.9} {
 		t.Run(fmt.Sprint(at), func(t *testing.T) {
 			matchMovedAt(t, src, divs("t0", "t1", "s0", "t2"), props, at, 1)
+		})
+	}
+}
+
+// TestNestedStartingStyleMatchesChrome nests @starting-style in the
+// style rules it starts, declarations after it still the rule's.
+func TestNestedStartingStyleMatchesChrome(t *testing.T) {
+	src := `.t0 { display: none; opacity: 1; transition: opacity 1s linear, display 1s linear allow-discrete;
+  @starting-style { opacity: 0 } }
+.t0.on { display: block }
+.s0 { transition: opacity 1s linear; @starting-style { opacity: 0.2 } opacity: 0.8 }
+.t2 { opacity: 1; transition: opacity 1s linear; @starting-style { opacity: 0; @starting-style { opacity: 0.4 } } }`
+	props := map[string]func(*style.Computed) string{"display": compared["display"], "opacity": compared["opacity"]}
+	for _, at := range []float32{0.1, 0.65} {
+		t.Run(fmt.Sprint(at), func(t *testing.T) {
+			matchMovedAt(t, src, divs("t0", "s0", "t2"), props, at, 1)
 		})
 	}
 }
