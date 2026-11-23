@@ -2010,6 +2010,7 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 		p.wordsIn(at, text, st, f, withFeatures(opts, f))
 		return
 	}
+	p.around = [2]string{}
 	for _, r := range runs {
 		o := opts
 		if r.Font.Size != st.Font.Size {
@@ -2024,6 +2025,8 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 // right, each piece small capitals or a word gap cut placed from where
 // the fragment ends.
 func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
+	p.around = [2]string{f.Before, f.After}
+	defer func() { p.around = [2]string{} }()
 	if !f.RTL {
 		if f.Unspaced {
 			// The space starting its block's text takes no word-spacing.
@@ -2040,6 +2043,8 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 	runs := font.SmallCaps(f.Text)
 	if runs == nil {
 		runs = []style.CapsRun{{Text: f.Text, Font: font}}
+	} else {
+		p.around = [2]string{}
 	}
 	type piece struct {
 		text   string
@@ -2055,16 +2060,18 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
 		}
 		o = withFeatures(o, r.Font)
-		for text := r.Text; len(text) > 0; {
+		for at := 0; at < len(r.Text); {
+			text := r.Text[at:]
 			i, after := len(text), float32(0)
 			if k := strings.IndexFunc(text, style.WordSeparator); gap != 0 && k >= 0 {
 				_, n := utf8.DecodeRuneInString(text[k:])
 				i, after = k+n, gap
 			}
-			pc := piece{text[:i], o, p.advance(st, r.Font, text[:i], o) + after, after}
+			oi, ctx := p.between(o, r.Text, at, at+i)
+			pc := piece{text[:i], oi, p.advance(st, r.Font, text[:i], oi, ctx) + after, after}
 			pieces = append(pieces, pc)
 			width += pc.w
-			text = text[i:]
+			at += i
 		}
 	}
 	x := at.X + width
@@ -2093,33 +2100,53 @@ func withFeatures(opts []twod.TextOption, f style.Font) []twod.TextOption {
 func (p *painter) wordsIn(at geom.Vec2, text string, st *style.Computed, f style.Font, opts []twod.TextOption) float32 {
 	gap := st.WordGap()
 	if gap == 0 {
-		p.s.Text(at, text, opts...)
-		return at.X + p.advance(st, f, text, opts)
+		o, ctx := p.between(opts, text, 0, len(text))
+		p.s.Text(at, text, o...)
+		return at.X + p.advance(st, f, text, o, ctx)
 	}
-	for len(text) > 0 {
-		i := strings.IndexFunc(text, style.WordSeparator)
+	for from := 0; from < len(text); {
+		rest := text[from:]
+		i := strings.IndexFunc(rest, style.WordSeparator)
 		if i < 0 {
-			p.s.Text(at, text, opts...)
-			return at.X + p.advance(st, f, text, opts)
+			o, ctx := p.between(opts, text, from, len(text))
+			p.s.Text(at, rest, o...)
+			return at.X + p.advance(st, f, rest, o, ctx)
 		}
 		if i > 0 {
-			p.s.Text(at, text[:i], opts...)
-			at.X += p.advance(st, f, text[:i], opts)
+			o, ctx := p.between(opts, text, from, from+i)
+			p.s.Text(at, rest[:i], o...)
+			at.X += p.advance(st, f, rest[:i], o, ctx)
 		}
-		_, n := utf8.DecodeRuneInString(text[i:])
-		at.X += p.advance(st, f, text[i:i+n], opts) + gap
-		text = text[i+n:]
+		_, n := utf8.DecodeRuneInString(rest[i:])
+		at.X += p.advance(st, f, rest[i:i+n], opts, [2]string{}) + gap
+		from += i + n
 	}
 	return at.X
 }
 
-// advance is how far s in f takes the text after it, its letters spaced:
-// by layout's fonts, or without them by the face opts draw it in.
-func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []twod.TextOption) float32 {
+// between is opts shaping text[a:b] between the rest of text and the
+// text round the fragment drawn, where the fragment has any, and that
+// text before and after it.
+func (p *painter) between(opts []twod.TextOption, text string, a, b int) ([]twod.TextOption, [2]string) {
+	if p.around == [2]string{} {
+		return opts, [2]string{}
+	}
+	ctx := [2]string{p.around[0] + text[:a], text[b:] + p.around[1]}
+	return append(slices.Clip(opts), twod.Between(ctx[0], ctx[1])), ctx
+}
+
+// advance is how far s in f, between the text ctx holds, takes the text
+// after it, its letters spaced: by layout's fonts, or without them by the
+// face opts draw it in.
+func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []twod.TextOption, ctx [2]string) float32 {
 	if p.fonts == nil {
 		return twod.Measure(s, opts...).X
 	}
-	return p.fonts.Advance(f, s) + st.LetterGap()*float32(utf8.RuneCountInString(s))
+	w := p.fonts.Advance(f, s)
+	if cf, ok := p.fonts.(box.ContextFonts); ok && ctx != [2]string{} {
+		w = cf.AdvanceIn(f, s, ctx[0], ctx[1])
+	}
+	return w + st.LetterGap()*float32(utf8.RuneCountInString(s))
 }
 
 // selectionColors are the ::selection of the element st styles: its

@@ -92,11 +92,14 @@ type Plan struct {
 	requests []request
 	masks    map[Tag]uint32
 	pauses   map[int]pause
-	// positions is whether the font has a GPOS table.
-	positions bool
-	indic     *indicPlan
-	khmer     *khmerPlan
-	use       *usePlan
+	// positions is whether the font's GPOS positions the run (Hebrew's
+	// only when GPOS has the Hebrew script), found whether GSUB has the
+	// run's script, and marks whether the language systems have a mark
+	// feature.
+	positions, found, marks bool
+	indic                   *indicPlan
+	khmer                   *khmerPlan
+	use                     *usePlan
 }
 
 type planKey struct {
@@ -115,14 +118,20 @@ func (f *Font) Plan(script Tag, features string) *Plan {
 		return p
 	}
 	chosen, gsubLS := f.gsub.langSys(script)
-	_, gposLS := f.gpos.langSys(script)
+	gposChosen, gposLS := f.gpos.langSys(script)
 	sh := shaperFor(script, chosen)
 	asked, pauses := requests(script, sh, ParseFeatures(features))
 	m := masks(asked)
+	marks := f.gsub.inLangSys(gsubLS, mark) || f.gpos.inLangSys(gposLS, mark)
+	positions := f.gpos.scripts != nil && (sh != hebrewShaper || gposChosen == hebr)
+	if !positions {
+		gposLS = nil
+	}
 	p := &Plan{font: f, gsub: f.gsub.plan(gsubLS, asked, m), gpos: f.gpos.plan(gposLS, asked, m),
 		rtl: RightToLeft(script), kerns: m[kern] != 0, script: script, shaper: sh, chosen: chosen,
-		requests: asked, masks: m, pauses: pauses, positions: f.gpos.scripts != nil}
-	if sh == arabicShaper {
+		requests: asked, masks: m, pauses: pauses, positions: positions, marks: marks,
+		found: slices.Contains(candidates(script), chosen)}
+	if s := scriptByTag(script); sh == arabicShaper || sh == useShaper && s != nil && s.joins {
 		p.joins = true
 		for i, t := range formTags {
 			p.forms[i] = m[t]
@@ -278,8 +287,13 @@ func (l *layout) features(ls data, fn func(tag Tag, f data, required bool)) {
 }
 
 func (l *layout) has(script Tag, t Tag) bool {
-	found := false
 	_, ls := l.langSys(script)
+	return l.inLangSys(ls, t)
+}
+
+// inLangSys reports whether language system ls of l has feature t.
+func (l *layout) inLangSys(ls data, t Tag) bool {
+	found := false
 	l.features(ls, func(tag Tag, _ data, _ bool) { found = found || tag == t })
 	return found
 }

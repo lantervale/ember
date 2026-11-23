@@ -43,6 +43,7 @@ func (b *Box) equal(o *Box) bool {
 		b.VerticalAlign == o.VerticalAlign &&
 		b.VerticalShift == o.VerticalShift &&
 		b.Inset == o.Inset &&
+		b.Anchoring.equal(&o.Anchoring) &&
 		b.Size == o.Size &&
 		b.MinSize == o.MinSize &&
 		b.MaxSize == o.MaxSize &&
@@ -110,7 +111,8 @@ func (f Font) Equal(o Font) bool {
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
-		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations)
+		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations) &&
+		f.Palette == o.Palette
 }
 
 //nolint:cyclop,gocyclo // one comparison a field

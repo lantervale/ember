@@ -5,6 +5,7 @@ package export
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -104,7 +105,7 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		b.WriteString(states(inline(d, s.String(), s.URL)))
 	}
 	b.WriteString("</style>\n")
-	b.WriteString(showModals)
+	b.WriteString(registered(d) + showModals + showPopovers)
 	b.WriteString(scrollTo)
 	b.WriteString(selectText)
 	b.WriteString(drawSnapshots)
@@ -248,6 +249,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	if modal {
 		write("data-ember-modal", strconv.FormatUint(layer, 10))
 	}
+	popoverAttrs(d, n, write)
 	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
 		write("data-ember-bars", "")
 	}
@@ -278,6 +280,19 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 	}
 	if name, value, ok := controlState(d, n, typ); ok {
 		write(name, value)
+	}
+}
+
+// popoverAttrs marks n when it is a popover the Document shows, and when
+// it showed one, with that popover's place in the top layer.
+func popoverAttrs(d *ui.Document, n *dom.Node, write func(name, value string)) {
+	for i, p := range d.OpenPopovers() {
+		if p == n {
+			write("data-ember-popover", strconv.Itoa(i))
+		}
+		if d.PopoverSource(p) == n {
+			write("data-ember-popover-source", strconv.Itoa(i))
+		}
 	}
 }
 
@@ -608,6 +623,13 @@ const (
 	showModals = `<script>addEventListener("DOMContentLoaded", () => ` +
 		`[...document.querySelectorAll("dialog[data-ember-modal]")]` +
 		`.sort((a, b) => a.dataset.emberModal - b.dataset.emberModal).forEach(d => d.showModal()));</script>` + "\n"
+	// showPopovers shows the popovers the Document has shown, in their
+	// order, each with the element that showed it as its source.
+	showPopovers = `<script>addEventListener("DOMContentLoaded", () => ` +
+		`[...document.querySelectorAll("[data-ember-popover]")]` +
+		`.sort((a, b) => a.dataset.emberPopover - b.dataset.emberPopover).forEach(p => p.showPopover({source: ` +
+		`document.querySelector('[data-ember-popover-source="' + p.dataset.emberPopover + '"]') || undefined})));` +
+		`</script>` + "\n"
 )
 
 // place is where p stands for Chrome: the index of its text node among
@@ -718,3 +740,24 @@ const thumbs = ownBars + "::-webkit-scrollbar-thumb { background-color: rgba(255
 // ownBars keeps ui's look off the bars an element's sheets style
 // (data-ember-bars), which Chrome draws from those sheets alone, as paint does.
 const ownBars = ":not([data-ember-bars])"
+
+// registered is a script registering the custom properties d's
+// RegisterProperty registered, as CSS.registerProperty.
+func registered(d *ui.Document) string {
+	defs := d.RegisteredProperties()
+	if len(defs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("<script>\n")
+	for _, def := range defs {
+		o := map[string]any{"name": def.Name, "syntax": def.Syntax, "inherits": def.Inherits}
+		if def.Initial != "" {
+			o["initialValue"] = def.Initial
+		}
+		js, _ := json.Marshal(o)
+		b.WriteString("CSS.registerProperty(" + string(js) + ");\n")
+	}
+	b.WriteString("</script>\n")
+	return b.String()
+}

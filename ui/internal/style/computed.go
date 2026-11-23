@@ -34,6 +34,7 @@ func Initial() Computed {
 			BoxSizing:  BorderBox,
 			MaxSize:    Size[Length]{Length{Kind: None}, Length{Kind: None}},
 			Margin:     All(Px(0)),
+			Anchoring:  Anchoring{Visibility: AnchorsVisible},
 			Padding:    All(Px(0)),
 			ZAuto:      true,
 			BoxOrdinal: 1,
@@ -187,10 +188,12 @@ type Box struct {
 	VerticalAlign VerticalAlign
 	VerticalShift Length
 	// Inset is top, right, bottom, left; Auto where unset.
-	Inset   Sides[Length]
-	Size    Size[Length]
-	MinSize Size[Length]
-	MaxSize Size[Length]
+	Inset Sides[Length]
+	// Anchoring is the anchor positioning properties.
+	Anchoring Anchoring
+	Size      Size[Length]
+	MinSize   Size[Length]
+	MaxSize   Size[Length]
 	// AspectRatio is width over height, 0 for auto.
 	AspectRatio float32
 	Margin      Sides[Length]
@@ -357,6 +360,9 @@ const (
 	AlignSpaceBetween
 	AlignSpaceAround
 	AlignSpaceEvenly
+	// AlignAnchorCenter centres an absolutely positioned box on its
+	// default anchor.
+	AlignAnchorCenter
 )
 
 // Flex holds the flex and box-alignment properties.
@@ -472,6 +478,9 @@ type Font struct {
 	// Variations are font-variation-settings' axes, in order, a later
 	// one of a tag winning; none for normal.
 	Variations []FontVariation
+	// Palette is font-palette's: "" for normal, "light", "dark" or an
+	// @font-palette-values' --name.
+	Palette string
 }
 
 // FontVariation is a place on one axis of a variable font: a tag, such

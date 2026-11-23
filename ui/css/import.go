@@ -66,10 +66,12 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 			as[k] = out.declared(prefix + strings.ReplaceAll(full, anonymous, fmt.Sprint(anonymous, "import", i, "-")))
 		}
 		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), nests: len(out.nests), as: as})
-		out.faces, out.Keyframes, out.nests = append(out.faces, in.faces...),
+		out.faces, out.palettes, out.Keyframes, out.nests = append(out.faces, in.faces...),
+			append(out.palettes, in.palettes...),
 			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...), append(out.nests, in.nests...)
-		out.CounterStyles, out.media = append(out.CounterStyles,
-			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...)
+		out.CounterStyles, out.media, out.PositionTries = append(out.CounterStyles,
+			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...),
+			append(out.PositionTries, in.PositionTries...)
 	}
 	nameOwn(len(s.layers))
 	ownRule := func(r Rule) Rule {
@@ -106,8 +108,9 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 	for ; read < len(s.Rules); read++ {
 		out.Rules = append(out.Rules, ownRule(s.Rules[read]))
 	}
-	out.faces, out.Keyframes, out.CounterStyles = append(out.faces, s.faces...), append(out.Keyframes, s.Keyframes...),
-		append(out.CounterStyles, s.CounterStyles...)
+	out.faces, out.palettes, out.Keyframes, out.CounterStyles, out.PositionTries = append(out.faces, s.faces...),
+		append(out.palettes, s.palettes...), append(out.Keyframes, s.Keyframes...),
+		append(out.CounterStyles, s.CounterStyles...), append(out.PositionTries, s.PositionTries...)
 	return out
 }
 
@@ -199,7 +202,7 @@ func (p *parser) importRule(t Token) {
 		}
 		rest = trim(rest[1:])
 	}
-	if len(rest) > 0 && rest[0].Kind == Function && strings.EqualFold(rest[0].Text, "supports") {
+	if len(rest) > 0 && rest[0].Kind == Function && strings.EqualFold(rest[0].Text, atSupports) {
 		if !p.browser {
 			p.warnf(t.Pos, "@import: supports() is read only as a browser reads a sheet")
 			return

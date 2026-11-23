@@ -208,6 +208,9 @@ type painter struct {
 	graph   func(id string, size geom.Vec2) *fx.Graph
 	control func(*dom.Node) any
 	sel     Selection
+	// around is the text round the fragment drawn, which its words are
+	// shaped between (box.Fragment's Before and After).
+	around [2]string
 	// inactive and system are Frame's Inactive and Highlight.
 	inactive bool
 	system   Highlight
@@ -586,6 +589,9 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		} else if st.Backdrop.A > 0 {
 			p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 		}
+	} else if p.topLayer(b) && st.Backdrop.A > 0 && !p.probing {
+		p.use(nil)
+		p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 	}
 	saved, around := p.s.Transform(), e.clip
 	if b.Kind == box.Element && len(st.Transform) > 0 {
@@ -684,7 +690,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 			continue
 		}
 		switch {
-		case p.modal(c):
+		case p.topLayer(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
 		case c.Kind != box.Element:
 			own.flow = append(own.flow, ce)

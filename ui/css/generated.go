@@ -42,7 +42,7 @@ func (r *restyler) generated(n *dom.Node, parent *style.Computed, rem float32, n
 	if casc.longhands[orderIndex["content"]] == nil {
 		return nil
 	}
-	r.overKeyframe(casc)
+	r.overKeyframe(&casc)
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, overlay: r.overlay, node: n,
 		self: true}

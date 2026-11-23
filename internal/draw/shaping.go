@@ -77,11 +77,13 @@ func (f *Font) plan(face int, script shape.Tag, features string) *shape.Plan {
 // each face's own: each run of clusters one face draws shaped together,
 // a picture or a character no face has breaking the run. Text right to
 // left is shaped in its order and each line given from its end, its
-// characters that have mirror images drawn as them.
-func (f *Font) items(s, features string, rtl bool, fn func(item)) {
+// characters that have mirror images drawn as them. before and after are
+// the text round s, which each run is shaped between with the rest of
+// s, so that its letters join with those beside it.
+func (f *Font) items(s, features string, rtl bool, before, after string, fn func(item)) {
 	if rtl {
 		line := f.line[:0]
-		f.items(mirrored(s), features, false, func(it item) {
+		f.items(mirrored(s), features, false, before, after, func(it item) {
 			if !it.newline {
 				line = append(line, it)
 				return
@@ -102,13 +104,16 @@ func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 	face := -1
 	var clusters int32
 	script := shape.Script(s)
+	at, start, end := 0, 0, 0
 	flush := func() {
 		if len(run) > 0 {
-			f.shapeRun(face, run, clusters, script, features, fn)
+			f.shapeRun(face, run, clusters, script, features, around{tail(before + s[:start]), head(s[end:] + after)}, fn)
 		}
 		run, clusters = run[:0], 0
 	}
 	eachCluster(s, func(c string, first rune) {
+		from := at
+		at += len(c)
 		if first == '\n' || first == '\r' {
 			flush()
 			fn(item{newline: true})
@@ -140,23 +145,69 @@ func (f *Font) items(s, features string, rtl bool, fn func(item)) {
 			flush()
 			face = g.face
 		}
-		run = append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true})
-		for _, r := range c[utf8.RuneLen(first):] {
-			if idx, err := f.sources[face].GlyphIndex(&f.buf, r); err == nil && (idx != 0 || r == zwj || r == zwnj) {
-				run = append(run, pending{r: r, g: g, idx: idx, cluster: clusters})
-			}
+		if len(run) == 0 {
+			start = from
 		}
+		end = at
+		run = f.cluster(append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true}), face,
+			c[utf8.RuneLen(first):], clusters)
 		clusters++
 	})
 	flush()
 	f.pending = run
 }
 
-// The joiners a run keeps when its face lacks them, for its shaping.
+// cluster appends to run the characters after the first of cluster n,
+// rest, that face draws, and those its shaping reads though it lacks
+// them.
+func (f *Font) cluster(run []pending, face int, rest string, n int32) []pending {
+	g := run[len(run)-1].g
+	for _, r := range rest {
+		idx, err := f.sources[face].GlyphIndex(&f.buf, r)
+		if err == nil && (idx != 0 || r == zwj || r == zwnj || shape.VariationSelector(r)) {
+			run = append(run, pending{r: r, g: g, idx: idx, cluster: n})
+		}
+	}
+	return run
+}
+
+// The joiners a run keeps when its face lacks them, for its shaping, as
+// it keeps variation selectors, which the face may draw with their base.
 const (
 	zwnj = 0x200C
 	zwj  = 0x200D
 )
+
+// around is the text before a run and after it, as much as its
+// shaping reads.
+type around struct{ before, after string }
+
+// contextBytes is more than the characters of context shaping reads.
+const contextBytes = 32
+
+// tail is the end of s shaping reads before a run.
+func tail(s string) string {
+	if len(s) <= contextBytes {
+		return s
+	}
+	s = s[len(s)-contextBytes:]
+	for len(s) > 0 && !utf8.RuneStart(s[0]) {
+		s = s[1:]
+	}
+	return s
+}
+
+// head is the start of s shaping reads after a run.
+func head(s string) string {
+	if len(s) <= contextBytes {
+		return s
+	}
+	s = s[:contextBytes]
+	for len(s) > 0 && !utf8.ValidString(s) {
+		s = s[:len(s)-1]
+	}
+	return s
+}
 
 // mirrored is s with each character that has a mirror image drawn as
 // it, as text right to left draws it (UAX #9, L4).
@@ -173,7 +224,8 @@ func mirrored(s string) string {
 // shapeRun calls fn with the glyphs run, characters face draws of n
 // clusters, is drawn as: each cluster its first character's glyph where
 // the face's layout changes nothing.
-func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, features string, fn func(item)) {
+func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, features string, ctx around,
+	fn func(item)) {
 	p := f.plan(face, script, features)
 	glyphs := f.run[:0]
 	starts := f.starts[:0]
@@ -192,7 +244,7 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 		}
 		return
 	}
-	shaped := f.shaped(p, glyphs)
+	shaped := f.shaped(p, glyphs, ctx)
 	scale := f.size * f.looks[face].scale() / float32(f.sources[face].UnitsPerEm())
 	v := f.looks[face].varied()
 	for i, sg := range shaped {
@@ -217,7 +269,7 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 
 // shaped is glyphs shaped by p, kept for the next time the same run, of
 // the same glyphs in the same clusters, is.
-func (f *Font) shaped(p *shape.Plan, glyphs []shape.Glyph) []shape.Glyph {
+func (f *Font) shaped(p *shape.Plan, glyphs []shape.Glyph, ctx around) []shape.Glyph {
 	ids := f.ids[:0]
 	for i, g := range glyphs {
 		ids = append(ids, byte(g.ID>>8), byte(g.ID&0xff))
@@ -225,12 +277,16 @@ func (f *Font) shaped(p *shape.Plan, glyphs []shape.Glyph) []shape.Glyph {
 			ids = append(ids, 0)
 		}
 	}
+	if !p.Joins() {
+		ctx = around{}
+	}
+	ids = append(append(append(append(ids, 0xff), ctx.before...), 0xff), ctx.after...)
 	f.ids = ids
 	runs := f.shapedRuns[p]
 	if out, ok := runs[string(ids)]; ok {
 		return out
 	}
-	out := p.Shape(slices.Clone(glyphs))
+	out := p.ShapeIn(slices.Clone(glyphs), ctx.before, ctx.after)
 	if f.shapedRuns == nil || f.shapedCount >= maxShapedRuns {
 		f.shapedRuns, f.shapedCount = map[*shape.Plan]map[string][]shape.Glyph{}, 0
 	}

@@ -76,7 +76,7 @@ func browserAgent() *Sheet {
 // answered for its own, through Transitions.
 func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
-	env := &measures{}
+	env := &measures{props: newRegistry(all, nil)}
 	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all), env: env}
 	pm := &matcher{off: m.off, ranks: m.ranks, env: env}
 	r := restyler{sheets: all, m: m, pm: pm, computed: new(int), env: env}
@@ -185,6 +185,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	r.env.root = root
 	if stale {
 		r.env.used, r.env.prefersRead, r.env.titleBarRead, r.env.inactiveRead = 0, false, false, false
+		r.env.mediaRead = false
 	} else if r.anchors && dom.Data(root).Style != nil {
 		r.anchor(root)
 	}
@@ -410,12 +411,22 @@ type ctx struct {
 	// line-height are known: until then the units of the font and lh read
 	// the parent's. root is set for the root, whose root units are its own.
 	sized, lined, root bool
-	vars               map[string][]Component
-	resolving          map[string]bool
-	raw                map[string]*Declaration
-	trans              [5][]Component
-	anims              [8][]Component
-	composite          []Component
+	// fontRead is set once a registered custom property read a unit of
+	// the element's font.
+	fontRead bool
+	vars     map[string][]Component
+	// frames are the custom functions being called, the innermost last.
+	frames []*frame
+	// inContent is set while content's value is substituted, whose attr()
+	// of a name alone content reads itself.
+	inContent bool
+	// inherited are the custom properties the element starts from.
+	inherited map[string]string
+	resolving map[string]bool
+	raw       map[string]*Declaration
+	trans     [5][]Component
+	anims     [8][]Component
+	composite []Component
 	// over is what the element's animations set on its style; transit is
 	// the restyler's, for moving, which runs transitions when transits is
 	// set.
@@ -540,12 +551,13 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		casc = r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
 		r.m.bare = false
 	}
-	r.overKeyframe(casc)
+	r.overKeyframe(&casc)
 	if r.over != nil {
 		x.over = r.over(n)
 	}
 	r.transitOf(x, n)
 	x.cascaded(casc, root)
+	r.tries(x, &c, casc, root)
 	if closedSlot(n) {
 		c.Display = style.DisplayNone
 	}
@@ -565,7 +577,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	if r.may(n, "selection") {
 		r.selection(x, n)
 	}
-	if n.Tag() == dom.Dialog && r.may(n, "backdrop") {
+	if _, popover := n.Attr("popover"); (n.Tag() == dom.Dialog || popover) && r.may(n, "backdrop") {
 		if bd, ok := x.pseudo(r.pm, n, r.sheets, "backdrop"); ok {
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
@@ -603,9 +615,15 @@ func (r *restyler) transitOf(x *ctx, n *dom.Node) {
 
 // overKeyframe puts the keyframe's declarations in casc where no
 // !important one won, as animations stand in the cascade.
-func (r *restyler) overKeyframe(casc cascaded) {
+func (r *restyler) overKeyframe(casc *cascaded) {
 	for i := range r.keyframe {
 		d := &r.keyframe[i]
+		if strings.HasPrefix(d.Name, "--") {
+			if !slices.ContainsFunc(casc.custom, func(c *Declaration) bool { return c.Name == d.Name && c.Important }) {
+				casc.custom = append(casc.custom, d)
+			}
+			continue
+		}
 		for _, name := range longhandsOf(d.Name) {
 			if casc.rtl && d.inline {
 				name = mirrored(name)
@@ -654,6 +672,7 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 func (x *ctx) cascaded(casc cascaded, root bool) {
 	x.rtl = casc.rtl
 	x.customs(casc.custom)
+	x.fontFirst(casc, root)
 	if !x.transitioning(casc) {
 		x.longhands(casc, root, x.over)
 		x.finish(root)
@@ -673,8 +692,39 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 	}
 	if over := x.transit(x.moving, next); len(over) > 0 {
 		*x, *x.c = start, c
-		x.longhands(casc, root, append(slices.Clip(x.over), over...))
+		all := append(slices.Clip(x.over), over...)
+		if slices.ContainsFunc(over, func(o override) bool { return o.custom != "" }) {
+			x.over = all
+			x.customs(casc.custom)
+		}
+		x.longhands(casc, root, all)
 		x.finish(root)
+	}
+}
+
+// fontFirst works the element's font out before its custom properties
+// again when a registered one read a unit of it, so that unit is the
+// element's own, as in Chrome.
+func (x *ctx) fontFirst(casc cascaded, root bool) {
+	if !x.fontRead || x.sized {
+		return
+	}
+	y, c := *x, *x.c
+	y.c = &c
+	for i := range longhands[:orderIndex[propFontSize]+1] {
+		y.apply(&longhands[i], casc.longhands[i])
+	}
+	x.em, x.sized = c.Font.Size, true
+	if root {
+		x.rem = c.Font.Size
+	}
+	saved := x.c.Font
+	x.c.Font = c.Font
+	x.customs(casc.custom)
+	x.c.Font = saved
+	x.em, x.sized, x.fontRead = x.parent.Font.Size, false, false
+	if root {
+		x.rem = initial.Font.Size
 	}
 }
 
@@ -811,32 +861,57 @@ var (
 	varsParsed = map[string][]Component{}
 )
 
-// customs sets the element's custom properties: the parent's, then its
-// own, each with its var() references substituted. A cycle or a missing
-// reference without fallback leaves the property unset.
+// customs sets the element's custom properties: the parent's, the
+// registered ones that don't inherit at their initial values, then its
+// own, each with its var() references substituted, and over them what
+// its animations and transitions set. A cycle or a missing reference
+// without fallback leaves an unregistered property unset; a registered
+// one computes as its syntax says.
 func (x *ctx) customs(decls []*Declaration) {
-	x.c.Vars = x.parent.Vars
-	if len(decls) == 0 {
-		return
+	x.inherited = x.env.props.inherited(x.parent.Vars, x.root)
+	x.c.Vars = x.inherited
+	if len(decls) > 0 {
+		x.raw = map[string]*Declaration{}
+		for _, d := range decls {
+			x.raw[d.Name] = d
+		}
+		x.vars = map[string][]Component{}
+		x.resolving = map[string]bool{}
+		vars := make(map[string]string, len(x.inherited)+len(decls))
+		for k, v := range x.inherited {
+			vars[k] = v
+		}
+		for name := range x.raw {
+			if v, ok := x.lookup(name); ok {
+				vars[name] = join(v)
+			} else {
+				delete(vars, name)
+			}
+		}
+		x.c.Vars = vars
 	}
-	x.raw = map[string]*Declaration{}
-	for _, d := range decls {
-		x.raw[d.Name] = d
-	}
-	x.vars = map[string][]Component{}
-	x.resolving = map[string]bool{}
-	vars := make(map[string]string, len(x.parent.Vars)+len(decls))
-	for k, v := range x.parent.Vars {
-		vars[k] = v
-	}
-	for name := range x.raw {
-		if v, ok := x.lookup(name); ok {
-			vars[name] = join(v)
+	copied := len(decls) > 0
+	for _, o := range x.over {
+		if o.custom == "" {
+			continue
+		}
+		if !copied {
+			copied = true
+			vars := make(map[string]string, len(x.c.Vars)+1)
+			for k, v := range x.c.Vars {
+				vars[k] = v
+			}
+			x.c.Vars = vars
+		}
+		if o.unset {
+			delete(x.c.Vars, o.custom)
 		} else {
-			delete(vars, name)
+			x.c.Vars[o.custom] = o.text
+		}
+		if x.vars != nil {
+			delete(x.vars, o.custom)
 		}
 	}
-	x.c.Vars = vars
 }
 
 func (x *ctx) lookup(name string) ([]Component, bool) {
@@ -845,7 +920,7 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 	}
 	d, own := x.raw[name]
 	if !own {
-		if text, ok := x.parent.Vars[name]; ok {
+		if text, ok := x.c.Vars[name]; ok {
 			return parsedVar(text), true
 		}
 		return nil, false
@@ -856,7 +931,14 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 	x.resolving[name] = true
 	v, ok := x.substitute(d.Value)
 	x.resolving[name] = false
-	if !ok || globalKeyword(v) != "" {
+	if r := x.env.props.get(name); r != nil {
+		var text string
+		text, ok = x.registered(r, v, ok)
+		v = nil
+		if ok {
+			v = parsedVar(text)
+		}
+	} else if !ok || globalKeyword(v) != "" {
 		v, ok = x.customKeyword(name, v, ok)
 	}
 	x.vars[name] = v
@@ -865,7 +947,7 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 
 // customKeyword handles inherit, initial and unset on a custom property.
 func (x *ctx) customKeyword(name string, v []Component, ok bool) ([]Component, bool) {
-	if ok && globalKeyword(v) == "initial" {
+	if ok && globalKeyword(v) == kwInitial {
 		return nil, false
 	}
 	if text, has := x.parent.Vars[name]; has {
@@ -874,38 +956,22 @@ func (x *ctx) customKeyword(name string, v []Component, ok bool) ([]Component, b
 	return nil, false
 }
 
-// substitute replaces every var() in v.
+// substitute replaces every var() in v, and the other functions the
+// cascade replaces as it does (substitutes).
 func (x *ctx) substitute(v []Component) ([]Component, bool) {
 	if !hasVar(v) {
 		return v, true
 	}
 	out := make([]Component, 0, len(v))
 	for _, c := range v {
-		switch {
-		case c.Kind == Function && strings.EqualFold(c.Text, "var"):
-			args := trim(c.Args)
-			if len(args) == 0 || args[0].Kind != Ident || !strings.HasPrefix(args[0].Text, "--") {
-				return nil, false
-			}
-			if val, ok := x.lookup(args[0].Text); ok {
-				out = append(out, val...)
-				continue
-			}
-			rest := trim(args[1:])
-			if len(rest) == 0 || rest[0].Kind != Comma {
-				return nil, false
-			}
-			fb, ok := x.substitute(trim(rest[1:]))
-			if !ok {
-				return nil, false
-			}
-			out = append(out, fb...)
-		case c.Kind == Function && strings.EqualFold(c.Text, "env"):
-			val, ok := x.envValue(c)
+		if val, ok, replaced := x.replaced(c); replaced {
 			if !ok {
 				return nil, false
 			}
 			out = append(out, val...)
+			continue
+		}
+		switch {
 		case len(c.Args) > 0:
 			args, ok := x.substitute(c.Args)
 			if !ok {
@@ -918,6 +984,53 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 		}
 	}
 	return out, true
+}
+
+// replaced is what c stands for when it is a function substitute
+// replaces here: var(), env(), if(), attr() and a custom function's
+// call; replaced is false for any other component.
+func (x *ctx) replaced(c Component) ([]Component, bool, bool) {
+	if c.Kind != Function {
+		return nil, false, false
+	}
+	var val []Component
+	var ok bool
+	switch {
+	case strings.EqualFold(c.Text, "var"):
+		val, ok = x.varValue(c)
+	case strings.EqualFold(c.Text, "env"):
+		val, ok = x.envValue(c)
+	case strings.EqualFold(c.Text, "if"):
+		val, ok = x.ifValue(c)
+	case strings.EqualFold(c.Text, "attr") && (!x.inContent || len(trim(c.Args)) != 1):
+		val, ok = x.attrValue(c)
+	case strings.HasPrefix(c.Text, "--"):
+		val, ok = x.call(c)
+	default:
+		return nil, false, false
+	}
+	return val, ok, true
+}
+
+// varValue is what var() c stands for: the custom property of the
+// custom functions being called or of the element, else its fallback.
+func (x *ctx) varValue(c Component) ([]Component, bool) {
+	args := trim(c.Args)
+	if len(args) == 0 || args[0].Kind != Ident || !strings.HasPrefix(args[0].Text, "--") {
+		return nil, false
+	}
+	val, ok, found := x.frameVar(args[0].Text)
+	if !found {
+		val, ok = x.lookup(args[0].Text)
+	}
+	if ok {
+		return val, true
+	}
+	rest := trim(args[1:])
+	if len(rest) == 0 || rest[0].Kind != Comma {
+		return nil, false
+	}
+	return x.substitute(trim(rest[1:]))
 }
 
 // envValue is what env() c stands for: its variable, else its fallback,
@@ -977,7 +1090,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	switch kw {
 	case kwInherit:
 		x.inherit(l)
-	case "initial":
+	case kwInitial:
 		x.reset(l)
 	case kwUnset:
 		if l.inherited {
@@ -1004,7 +1117,7 @@ func (x *ctx) valueOf(name string, d *Declaration) ([]Component, bool) {
 		long, done := x.expanded[d]
 		if !done {
 			if sub, subOK := x.substitute(d.Value); subOK {
-				long, _ = expand(d.Name, items(sub))
+				long, _ = expand(d.Name, items(x.elementMath(sub, d.Name)))
 			}
 			if x.expanded == nil {
 				x.expanded = map[*Declaration]map[string][]Component{}
@@ -1015,7 +1128,10 @@ func (x *ctx) valueOf(name string, d *Declaration) ([]Component, bool) {
 	case d.vals != nil:
 		return d.vals, true
 	default:
-		return x.substitute(d.Value)
+		x.inContent = name == kwContent
+		v, ok := x.substitute(d.Value)
+		x.inContent = false
+		return x.elementMath(v, name), ok
 	}
 }
 
@@ -1341,7 +1457,10 @@ func transitionList(trans [5][]Component) []style.Transition {
 	}
 	var out []style.Transition
 	for i, p := range props {
-		t := style.Transition{Property: strings.ToLower(p[0].Text)}
+		t := style.Transition{Property: p[0].Text}
+		if !strings.HasPrefix(t.Property, "--") {
+			t.Property = strings.ToLower(t.Property)
+		}
 		dur, _ := duration(lists[1][i%len(lists[1])][0])
 		t.Duration = float32(max(dur, 0))
 		t.Easing = lists[2][i%len(lists[2])][0].String()
@@ -1472,6 +1591,15 @@ func (x *ctx) number(c Component, basis float64) float32 {
 }
 
 func (x *ctx) num(c Component) float32 { return x.number(c, 1) }
+
+// whole is c, an integer or a math function of numbers, rounded to the
+// nearest integer, halves up.
+func (x *ctx) whole(c Component) int {
+	if c.Kind == Number {
+		return int(c.Num)
+	}
+	return int(math.Floor(float64(x.num(c)) + 0.5))
+}
 
 // angle is c in degrees on the element.
 func (x *ctx) angle(c Component) float64 {
@@ -1626,6 +1754,7 @@ var (
 		"space-between": style.AlignSpaceBetween, "space-around": style.AlignSpaceAround,
 		"space-evenly": style.AlignSpaceEvenly, "self-start": style.AlignStart, "self-end": style.AlignEnd,
 		"left": style.AlignStart, "right": style.AlignEnd, "legacy": style.AlignNormal,
+		"anchor-center": style.AlignAnchorCenter,
 	}
 	borderStyles = map[string]style.BorderStyle{
 		"none": style.BorderNone, "hidden": style.BorderNone, "solid": style.BorderSolid,
@@ -1858,7 +1987,7 @@ var props = func() map[string]prop {
 				x.c.ZAuto = isWord(v[0], "auto")
 				x.c.ZIndex = 0
 				if !x.c.ZAuto {
-					x.c.ZIndex = int(v[0].Num)
+					x.c.ZIndex = x.whole(v[0])
 				}
 			},
 			inherit: func(dst, src *style.Computed) { dst.ZIndex, dst.ZAuto = src.ZIndex, src.ZAuto },
@@ -1895,7 +2024,7 @@ var props = func() map[string]prop {
 		"justify-items":   keyword(func(c *style.Computed) *style.Align { return &c.JustifyItems }, alignWords4),
 		"justify-self":    keyword(func(c *style.Computed) *style.Align { return &c.JustifySelf }, alignWords4),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(math.MinInt)),
+			func(x *ctx, v []Component) int { return x.whole(v[0]) }, integers(math.MinInt)),
 
 		"column-count": field(func(c *style.Computed) *int { return &c.ColumnCount },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }, counts),
@@ -2011,6 +2140,16 @@ var props = func() map[string]prop {
 		"font-style": field(func(c *style.Computed) *bool { return &c.Font.Italic }, func(_ *ctx, v []Component) bool {
 			return !isWord(v[0], "normal")
 		}, flips[bool]()),
+		"font-palette": field(func(c *style.Computed) *string { return &c.Font.Palette },
+			func(_ *ctx, v []Component) string {
+				if isWord(v[0], "normal") {
+					return ""
+				}
+				if strings.HasPrefix(v[0].Text, "--") {
+					return v[0].Text
+				}
+				return strings.ToLower(v[0].Text)
+			}, flips[string]()),
 		"font-stretch": field(func(c *style.Computed) *float32 { return &c.Font.Stretch },
 			func(_ *ctx, v []Component) float32 {
 				if w, ok := fontStretch(v[0]); ok {
@@ -2025,7 +2164,7 @@ var props = func() map[string]prop {
 					switch {
 					case isWord(c, "weight"):
 						no &^= style.NoSyntheticBold
-					case isWord(c, "style"):
+					case isWord(c, fnStyle):
 						no &^= style.NoSyntheticItalic
 					case isWord(c, "small-caps"):
 						no &^= style.NoSyntheticSmallCaps
@@ -2383,6 +2522,7 @@ var props = func() map[string]prop {
 	noop := prop{set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}}
 	m["border-image-outset"] = noop
 	maps.Copy(m, contentProps())
+	maps.Copy(m, anchorProps())
 	maps.Copy(m, snapProps())
 	for i, n := range shorthands["transition"] {
 		m[n] = prop{

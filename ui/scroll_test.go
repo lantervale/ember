@@ -232,6 +232,33 @@ func TestAClickOnTheTrackPagesBySevenEighthsOfTheView(t *testing.T) {
 	assert.InDelta(t, 87, s.scrolled(), 1e-3, "seven eighths of the view, as Chrome's")
 }
 
+func TestAClickHeldOnTheTrackPagesOnUntilTheThumbReachesThePointer(t *testing.T) {
+	s := newScroller(t)
+	l := s.list.Box()
+	at := geom.V2(l.X+l.W-10+2+3, l.Y+l.H-30)
+	s.in.SetMouse(at)
+	s.w.RunFrames(1)
+	s.in.SetMouseButton(input.MouseLeft, true)
+	s.w.RunFrames(settle)
+	assert.InDelta(t, 87, s.scrolled(), 1e-3, "a page, then nothing for a quarter of a second")
+	s.w.RunFrames(3)
+	on := s.scrolled()
+	assert.Greater(t, on, float32(87), "then it pages on")
+	s.w.RunFrames(1)
+	assert.InDelta(t, on+87*20.0/60, s.scrolled(), 0.5, "at twenty pages a second, as Chromium's autoscroll")
+	s.w.RunFrames(30)
+	stop := s.scrolled()
+	// the 25-point thumb ends past the pointer, 70 points down the track,
+	// once its 75 points of travel have taken it past 45: a scroll of 180
+	assert.Greater(t, stop, float32(180), "the thumb reached the pointer")
+	assert.Less(t, stop, float32(180+87*20.0/60), "no more than one frame past it")
+	s.w.RunFrames(10)
+	assert.InDelta(t, stop, s.scrolled(), 1e-3, "the thumb under the pointer, it stops")
+	s.in.SetMouseButton(input.MouseLeft, false)
+	s.w.RunFrames(settle)
+	assert.InDelta(t, stop, s.scrolled(), 1e-3, "let go, it stays")
+}
+
 func TestPageAndEndKeysScrollTheFocusedElementsScroller(t *testing.T) {
 	s := newScroller(t)
 	s.doc.Focus(s.items[0])

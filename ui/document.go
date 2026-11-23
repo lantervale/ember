@@ -9,6 +9,7 @@ import (
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"
@@ -45,7 +46,7 @@ type Document struct {
 	html, body *Node
 	tree       *box.Tree
 	fonts      *fonts.Set
-	faces      map[*fonts.Face]*twod.Face
+	faces      map[faceKey]*twod.Face
 	// authored are the stylesheets in cascade order, sheets what the
 	// cascade reads of those not disabled, and resheet is set once one
 	// changed: the next frame takes them again (take).
@@ -82,6 +83,8 @@ type Document struct {
 	// pageSheets are the sheets its @import rules name (FetchSheets).
 	pageSheets pageSheets
 	trans      *css.Transitions
+	// registered are the custom properties RegisterProperty registered.
+	registered []css.PropertyDefinition
 	emoji      *twod.EmojiSet
 	// clock is the World's real time at the last Draw, -1 before it.
 	clock float32
@@ -402,7 +405,7 @@ func (d *Document) Layout(size geom.Vec2) {
 		dom.Data(d.html).Dirty&(dom.DirtyLayout|dom.DirtyDescendant) == 0 {
 		moved := layout.Refresh(d.tree, d.html) || d.scrolled
 		d.scrolled = false
-		if !moved {
+		if !moved || d.reanchored(size) {
 			return
 		}
 		d.replay.repaint = true
@@ -440,11 +443,14 @@ func (d *Document) Layout(size geom.Vec2) {
 // layout left out (under display: none) at none, and notes the tooltips
 // showing. A node moved to another Document is that one's to place.
 func (d *Document) lay(size geom.Vec2) {
-	d.tree = layout.Layout(d.html, size, d.fonts, layout.Images(d), layout.Retain(&d.kept), layout.Translate(d.tr()))
+	d.tree = layout.Layout(d.html, size, d.fonts, layout.Images(d), layout.Retain(&d.kept), layout.Translate(d.tr()),
+		layout.ImplicitAnchors(d.implicitAnchor))
 	d.landFonts()
 	for _, n := range d.tree.Dropped {
 		if d.inDocument(n) {
 			dom.Data(n).Placed = nil
+		} else if d.PopoverOpen(n) {
+			d.HidePopover(n)
 		}
 		d.tips, d.followers = dropNode(d.tips, n), dropNode(d.followers, n)
 	}
@@ -822,7 +828,8 @@ func (d *Document) face(f style.Font) *twod.Face {
 		return d.chainFace(ch)
 	}
 	ff := d.fonts.Face(f)
-	if tf, ok := d.faces[ff]; ok {
+	key := faceKey{ff, f.Palette}
+	if tf, ok := d.faces[key]; ok {
 		return tf
 	}
 	var opts []twod.FaceOption
@@ -832,15 +839,23 @@ func (d *Document) face(f style.Font) *twod.Face {
 	if d.emoji != nil {
 		opts = append(opts, twod.Emoji(d.emoji))
 	}
-	tf, err := twod.NewFace(ff.TTF, opts...)
-	if err != nil {
-		tf = twod.Regular()
+	tf := twod.Regular()
+	if df, err := draw.ParseFace(ff.Family, ff.TTF); err == nil {
+		if wrapped, ok := draw.Wrap(df.Styled(d.colourLook(ff.Family, f.Palette))).(*twod.Face); ok {
+			tf = wrapped.With(opts...)
+		}
 	}
 	if d.faces == nil {
-		d.faces = map[*fonts.Face]*twod.Face{}
+		d.faces = map[faceKey]*twod.Face{}
 	}
-	d.faces[ff] = tf
+	d.faces[key] = tf
 	return tf
+}
+
+// faceKey is a face of the Document's fonts drawn in a font-palette.
+type faceKey struct {
+	face    *fonts.Face
+	palette string
 }
 
 // warn keeps a style attribute's warning once, however often its element
@@ -853,4 +868,26 @@ func (d *Document) warn(err error) {
 		d.warned[err.Error()] = true
 		d.warns = append(d.warns, err)
 	}
+}
+
+// reanchored lays out again, after a scroll, the elements anchors place,
+// which follow their anchors and try their fallbacks again where the
+// scroll left them, as Chrome's do, and reports whether there were any.
+func (d *Document) reanchored(size geom.Vec2) bool {
+	if len(d.tree.Anchored) == 0 {
+		return false
+	}
+	for _, e := range d.tree.Anchored {
+		if !d.inDocument(e) {
+			continue
+		}
+		dom.Data(e).Dirty |= dom.DirtyLayout
+		for p := e.Parent(); p != nil; p = p.Parent() {
+			dom.Data(p).Dirty |= dom.DirtyDescendant
+		}
+	}
+	d.replay.repaint = true
+	d.lay(size)
+	d.requery(size)
+	return true
 }

@@ -16,7 +16,11 @@ var layers atomic.Uint64 //nolint:gochecknoglobals // the one count that orders 
 
 func (d *Dialog) Show() { d.Open, d.Modal = true, false }
 
-func (d *Dialog) ShowModal() { d.Open, d.Modal, d.Layer = true, true, layers.Add(1) }
+func (d *Dialog) ShowModal() { d.Open, d.Modal, d.Layer = true, true, NextLayer() }
+
+// NextLayer is the place in the top layer of what joins it now: above
+// every modal dialog and popover there.
+func NextLayer() uint64 { return layers.Add(1) }
 
 // Close closes the dialog with value as its return value: Closed, once.
 func (d *Dialog) Close(value string) Events {

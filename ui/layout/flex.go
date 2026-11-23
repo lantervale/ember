@@ -1279,7 +1279,7 @@ func alignFlexItemCross(it *flexItem, free, maxBaseline, maxBelow float32, c *fl
 			return 0
 		}
 		return free
-	case style.AlignCenter:
+	case style.AlignCenter, style.AlignAnchorCenter:
 		return free / 2
 	case style.AlignBaseline:
 		if c.isRow {
@@ -1464,7 +1464,7 @@ func (t *tree) flexOOFCandidates(n *node, c *flexConstants, lines []*flexLine) [
 				return edgeStart
 			case style.AlignEnd:
 				return edgeEnd
-			case style.AlignCenter:
+			case style.AlignCenter, style.AlignAnchorCenter:
 				return edgeCenter
 			case style.AlignFlexEnd:
 				if crossReversed {

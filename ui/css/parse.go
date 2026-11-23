@@ -169,7 +169,9 @@ type Sheet struct {
 	Rules         []Rule
 	Keyframes     []Keyframes
 	CounterStyles []CounterStyle
+	PositionTries []PositionTry
 	faces         []FontFace
+	palettes      []FontPaletteValues
 	once          sync.Once
 	index         *index
 	// media are its @media rules' queries, in the order they open.
@@ -198,6 +200,10 @@ type Sheet struct {
 	imports []Import
 	base    *Sheet
 	spliced []splice
+	// properties are its @property rules, and functions its @function
+	// rules, in order.
+	properties []*registration
+	functions  []*customFunction
 }
 
 // anonymous begins the name a layer without one goes by.
@@ -240,6 +246,7 @@ func (s *Sheet) String() string {
 		return s.src
 	}
 	var b strings.Builder
+	b.WriteString(paletteRules(s.palettes))
 	written := make([]bool, len(s.nests))
 	for _, r := range s.Rules {
 		if r.nest > 0 {
@@ -264,11 +271,24 @@ func (s *Sheet) String() string {
 		}
 		b.WriteString(" }" + strings.Repeat(" }", len(k.media)) + "\n")
 	}
+	for _, pt := range s.PositionTries {
+		b.WriteString("@position-try " + pt.Name + " {")
+		for _, d := range pt.Decls {
+			b.WriteString(" " + d.String() + ";")
+		}
+		b.WriteString(" }\n")
+	}
 	for _, cs := range s.CounterStyles {
 		for _, m := range cs.media {
 			b.WriteString("@media " + s.media[m].text + " { ")
 		}
 		b.WriteString(cs.String() + strings.Repeat(" }", len(cs.media)) + "\n")
+	}
+	for _, r := range s.properties {
+		b.WriteString(r.written + "\n")
+	}
+	for _, f := range s.functions {
+		b.WriteString(f.written + "\n")
 	}
 	return b.String()
 }
@@ -693,7 +713,7 @@ func (p *parser) nestable(name string) bool {
 	switch name {
 	case atMedia, kwContainer, "starting-style", kwScope:
 		return true
-	case "supports", atLayer:
+	case atSupports, atLayer:
 		return p.browser
 	}
 	return false
@@ -715,6 +735,8 @@ func (p *parser) atRule(t Token, in scope) {
 		if f, ok := p.fontFace(t.Pos); ok {
 			p.sheet.faces = append(p.sheet.faces, f)
 		}
+	case name == "font-palette-values":
+		p.fontPaletteValues(t)
 	case name == atMedia:
 		p.media(t, in)
 	case name == kwContainer:
@@ -727,7 +749,13 @@ func (p *parser) atRule(t Token, in scope) {
 		p.scope(t, in)
 	case name == "counter-style":
 		p.counterStyle(t, in)
-	case name == "supports" && p.browser:
+	case name == propPositionTry:
+		p.positionTry(t)
+	case name == "property":
+		p.propertyRule(t)
+	case name == "function":
+		p.functionRule(t)
+	case name == atSupports && p.browser:
 		p.supports(t, in)
 	case name == atLayer && p.browser:
 		p.layer(t, in)
@@ -901,7 +929,7 @@ func animates(name string) bool {
 		return true
 	}
 	if strings.HasPrefix(name, "--") {
-		return false
+		return true
 	}
 	return slices.ContainsFunc(longhandsOf(name), func(l string) bool {
 		p, ok := props[l]
@@ -961,6 +989,9 @@ func supportedIn(c Component) bool {
 		}
 		_, err := parseSelectors(sels)
 		return err == nil
+	case c.Kind == Function && strings.EqualFold(c.Text, "font-tech"):
+		tech := items(trim(c.Args))
+		return len(tech) == 1 && tech[0].Kind == Ident && colourTech(tech[0].Text)
 	case c.Kind != LParen:
 		return false
 	}

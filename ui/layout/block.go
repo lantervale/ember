@@ -302,7 +302,7 @@ func negativeEdges(r rect) rect {
 func staticFromAlignment(a alignment, area span) staticPosition {
 	edge := func(k style.Align) staticEdge {
 		switch k {
-		case style.AlignCenter:
+		case style.AlignCenter, style.AlignAnchorCenter:
 			return edgeCenter
 		case style.AlignEnd, style.AlignFlexEnd:
 			return edgeEnd
@@ -737,7 +737,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			}
 			off := float32(0)
 			switch justify {
-			case style.AlignCenter:
+			case style.AlignCenter, style.AlignAnchorCenter:
 				off = free / 2
 			case style.AlignEnd, style.AlignFlexEnd:
 				off = free

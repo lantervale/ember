@@ -516,7 +516,7 @@ func alignItemWithinArea(area span, a alignment, s float32,
 	switch resolveSelfAlignmentSafety(a, overflows) {
 	case style.AlignEnd, style.AlignFlexEnd:
 		offset = areaSize - s - resolved.end
-	case style.AlignCenter:
+	case style.AlignCenter, style.AlignAnchorCenter:
 		offset = (areaSize - s + resolved.start - resolved.end) / 2
 	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
 		style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround, style.AlignSpaceEvenly:

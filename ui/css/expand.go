@@ -49,7 +49,7 @@ func validate(name string, value []Component) error {
 // expand splits a shorthand's value, given without whitespace, into its
 // longhands; a longhand the value leaves out gets its initial value.
 //
-//nolint:funlen // one case a shorthand
+//nolint:funlen,cyclop // one case a shorthand
 func expand(name string, v []Component) (map[string][]Component, error) {
 	long := shorthands[name]
 	out := make(map[string][]Component, len(long))
@@ -74,6 +74,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandFlex(v, out)
 	case "flex-flow":
 		err = expandAnyOrder(long, v, out)
+	case propPositionTry:
+		err = expandPositionTry(v, out)
 	case "grid-column", "grid-row":
 		err = expandGridLines(long, v, out)
 	case "grid-area":
@@ -477,7 +479,7 @@ func expandListStyle(v []Component, out map[string][]Component) error {
 		image = none
 	}
 	if position == nil {
-		position = []Component{{Token: Token{Kind: Ident, Text: "outside"}}}
+		position = []Component{{Token: Token{Kind: Ident, Text: kwOutside}}}
 	}
 	out["list-style-type"], out["list-style-image"], out["list-style-position"] = typ, image, position
 	return nil

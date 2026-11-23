@@ -1,6 +1,7 @@
 package fonts
 
 import (
+	"errors"
 	"fmt"
 	"hash/maphash"
 	"slices"
@@ -225,7 +226,7 @@ func Parse(ttf []byte) (*sfnt.Font, error) {
 			continue
 		}
 		idx := sfnt.GlyphIndex(g) //nolint:gosec // under the font's 65535 glyphs
-		if _, err = f.LoadGlyph(&buf, idx, ppem, nil); err != nil {
+		if _, err = f.LoadGlyph(&buf, idx, ppem, nil); err != nil && !errors.Is(err, sfnt.ErrColoredGlyph) {
 			return nil, err
 		}
 		if _, err = f.GlyphAdvance(&buf, idx, ppem, font.HintingNone); err != nil {
@@ -502,6 +503,7 @@ type chainKey struct {
 	italic    bool
 	stretch   float32
 	synthesis style.FontSynthesis
+	palette   string
 }
 
 //nolint:gochecknoglobals // the seed every chain key is hashed with
@@ -520,7 +522,7 @@ func keyOf(f style.Font) chainKey {
 		h.WriteByte(1)
 	}
 	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic,
-		stretch: f.Stretch, synthesis: f.Synthesis}
+		stretch: f.Stretch, synthesis: f.Synthesis, palette: f.Palette}
 }
 
 // Chain is the faces f draws with.
@@ -678,14 +680,15 @@ func (ch *Chain) first() *Face {
 
 // chainAdvance is text's width in f through ch: each character in the
 // first face that draws it, shaped with those beside it of one face.
-func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
+func (s *Set) chainAdvance(ch *Chain, f style.Font, text, before, after string) float32 {
 	var w float32
 	var of *Face
 	script := shape.Script(text)
 	run := s.run[:0]
 	flush := func() {
 		if of != nil && len(run) > 0 {
-			w += s.shaped(of, script, f.Features, run, ch.Instance(of)) * f.Size * of.Look.adjust() / of.upem
+			w += s.shaped(of, script, f.Features, run, ch.Instance(of), around(text, run, before, after)) *
+				f.Size * of.Look.adjust() / of.upem
 		}
 		run = run[:0]
 	}
@@ -695,6 +698,10 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 			script = sc
 		}
 		c, g, waiting := ch.glyph(s, r)
+		if c == nil && of != nil && shape.VariationSelector(r) {
+			// Shaped with its character, whose face may draw the two as one.
+			c = of
+		}
 		if c == nil {
 			if waiting || ch.base == nil {
 				flush()

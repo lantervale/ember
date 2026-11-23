@@ -47,6 +47,9 @@ type Pipeline struct {
 	StyledDir string
 	// Style is the node's computed style; a text node's is its parent's.
 	Style *style.Computed
+	// TopLayer orders an open popover in the top layer, with the modal
+	// dialogs: the one shown last is the highest; 0 when it is not in it.
+	TopLayer uint64
 	// Shown is what paint draws: Style itself, or a copy with running
 	// transitions' values while any run; a text node's is its parent's.
 	Shown *style.Computed

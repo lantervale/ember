@@ -13,8 +13,10 @@ var (
 	kern = MakeTag("kern")
 	mymr = MakeTag("mymr")
 	thai = MakeTag("thai")
-	lao  = MakeTag("lao ")
-	hang = MakeTag("hang")
+	arab = MakeTag("arab")
+	hebr = MakeTag("hebr")
+	mong = MakeTag("mong")
+	mark = MakeTag("mark")
 )
 
 // shaper is the HarfBuzz shaper a run is shaped with.
@@ -23,20 +25,31 @@ type shaper uint8
 const (
 	defaultShaper shaper = iota
 	arabicShaper
+	thaiShaper
+	hangulShaper
+	hebrewShaper
 	indicShaper
 	khmerShaper
 	myanmarShaper
 	useShaper
 )
 
+// fallbackPosition is whether the shaper places marks by their
+// combining classes when the font cannot, and kerns by the old kern
+// table, as HarfBuzz's shapers say.
+func (s shaper) fallbackPosition() bool {
+	return s == defaultShaper || s == arabicShaper || s == hangulShaper || s == hebrewShaper
+}
+
 // script is a script Script tells apart: its characters, its OpenType
-// tag, the newer tag of an Indic script, and the shaper HarfBuzz gives
-// its runs.
+// tag, the newer tag of an Indic script, the shaper HarfBuzz gives its
+// runs, and whether its letters join as Arabic's do.
 type script struct {
 	table  *unicode.RangeTable
 	tag    Tag
 	newer  Tag
 	shaper shaper
+	joins  bool
 }
 
 // scripts are the scripts Script tells apart, by their OpenType tags.
@@ -46,16 +59,12 @@ var scripts = func() []script {
 	out := []script{
 		{table: unicode.Latin, tag: latn}, {table: unicode.Greek, tag: MakeTag("grek")},
 		{table: unicode.Cyrillic, tag: MakeTag("cyrl")},
-		{table: unicode.Hebrew, tag: MakeTag("hebr")}, {table: unicode.Thaana, tag: MakeTag("thaa")},
-		{table: unicode.Samaritan, tag: MakeTag("samr")},
-		{table: unicode.Thai, tag: thai}, {table: unicode.Lao, tag: lao}, {table: unicode.Hangul, tag: hang},
-	}
-	for _, s := range [...]struct{ name, tag string }{
-		{"Arabic", "arab"}, {"Syriac", "syrc"}, {"Nko", "nko "}, {"Mandaic", "mand"}, {"Manichaean", "mani"},
-		{"Psalter_Pahlavi", "phlp"}, {"Adlam", "adlm"}, {"Hanifi_Rohingya", "rohg"}, {"Sogdian", "sogd"},
-		{"Mongolian", "mong"}, {"Phags_Pa", "phag"},
-	} {
-		out = append(out, script{table: unicode.Scripts[s.name], tag: MakeTag(s.tag), shaper: arabicShaper})
+		{table: unicode.Hebrew, tag: MakeTag("hebr"), shaper: hebrewShaper},
+		{table: unicode.Thaana, tag: MakeTag("thaa")}, {table: unicode.Samaritan, tag: MakeTag("samr")},
+		{table: unicode.Thai, tag: thai, shaper: thaiShaper}, {table: unicode.Lao, tag: MakeTag("lao "), shaper: thaiShaper},
+		{table: unicode.Hangul, tag: MakeTag("hang"), shaper: hangulShaper},
+		{table: unicode.Arabic, tag: arab, shaper: arabicShaper, joins: true},
+		{table: unicode.Syriac, tag: MakeTag("syrc"), shaper: arabicShaper, joins: true},
 	}
 	for _, s := range [...]struct{ name, tag, newer string }{
 		{"Devanagari", "deva", "dev2"}, {"Bengali", "beng", "bng2"}, {"Gurmukhi", "guru", "gur2"},
@@ -68,31 +77,42 @@ var scripts = func() []script {
 	out = append(out, script{table: unicode.Khmer, tag: MakeTag("khmr"), shaper: khmerShaper},
 		script{table: unicode.Myanmar, tag: mymr, newer: MakeTag("mym2"), shaper: myanmarShaper})
 	for _, s := range [...]struct{ name, tag string }{
-		{"Tibetan", "tibt"}, {"Sinhala", "sinh"}, {"Buhid", "buhd"}, {"Hanunoo", "hano"}, {"Tagalog", "tglg"},
-		{"Tagbanwa", "tagb"}, {"Limbu", "limb"}, {"Tai_Le", "tale"}, {"Buginese", "bugi"}, {"Kharoshthi", "khar"},
-		{"Syloti_Nagri", "sylo"}, {"Tifinagh", "tfng"}, {"Balinese", "bali"}, {"Cham", "cham"}, {"Kayah_Li", "kali"},
-		{"Lepcha", "lepc"}, {"Rejang", "rjng"}, {"Saurashtra", "saur"}, {"Sundanese", "sund"},
-		{"Egyptian_Hieroglyphs", "egyp"}, {"Javanese", "java"}, {"Kaithi", "kthi"}, {"Meetei_Mayek", "mtei"},
-		{"Tai_Tham", "lana"}, {"Tai_Viet", "tavt"}, {"Batak", "batk"}, {"Brahmi", "brah"}, {"Chakma", "cakm"},
-		{"Miao", "plrd"}, {"Sharada", "shrd"}, {"Takri", "takr"}, {"Duployan", "dupl"}, {"Grantha", "gran"},
-		{"Khojki", "khoj"}, {"Khudawadi", "sind"}, {"Mahajani", "mahj"}, {"Modi", "modi"},
-		{"Pahawh_Hmong", "hmng"}, {"Siddham", "sidd"}, {"Tirhuta", "tirh"}, {"Ahom", "ahom"}, {"Multani", "mult"},
-		{"Bhaiksuki", "bhks"}, {"Marchen", "marc"}, {"Newa", "newa"}, {"Masaram_Gondi", "gonm"},
+		{"Tibetan", "tibt"}, {"Mongolian", "mong"}, {"Sinhala", "sinh"}, {"Buhid", "buhd"}, {"Hanunoo", "hano"},
+		{"Tagalog", "tglg"}, {"Tagbanwa", "tagb"}, {"Limbu", "limb"}, {"Tai_Le", "tale"}, {"Buginese", "bugi"},
+		{"Kharoshthi", "khar"}, {"Syloti_Nagri", "sylo"}, {"Tifinagh", "tfng"}, {"Balinese", "bali"}, {"Nko", "nko "},
+		{"Phags_Pa", "phag"}, {"Cham", "cham"}, {"Kayah_Li", "kali"}, {"Lepcha", "lepc"}, {"Rejang", "rjng"},
+		{"Saurashtra", "saur"}, {"Sundanese", "sund"}, {"Egyptian_Hieroglyphs", "egyp"}, {"Javanese", "java"},
+		{"Kaithi", "kthi"}, {"Meetei_Mayek", "mtei"}, {"Tai_Tham", "lana"}, {"Tai_Viet", "tavt"}, {"Batak", "batk"},
+		{"Brahmi", "brah"}, {"Mandaic", "mand"}, {"Chakma", "cakm"}, {"Miao", "plrd"}, {"Sharada", "shrd"},
+		{"Takri", "takr"}, {"Duployan", "dupl"}, {"Grantha", "gran"}, {"Khojki", "khoj"}, {"Khudawadi", "sind"},
+		{"Mahajani", "mahj"}, {"Manichaean", "mani"}, {"Modi", "modi"}, {"Pahawh_Hmong", "hmng"},
+		{"Psalter_Pahlavi", "phlp"}, {"Siddham", "sidd"}, {"Tirhuta", "tirh"}, {"Ahom", "ahom"}, {"Multani", "mult"},
+		{"Adlam", "adlm"}, {"Bhaiksuki", "bhks"}, {"Marchen", "marc"}, {"Newa", "newa"}, {"Masaram_Gondi", "gonm"},
 		{"Soyombo", "soyo"}, {"Zanabazar_Square", "zanb"}, {"Dogra", "dogr"}, {"Gunjala_Gondi", "gong"},
-		{"Makasar", "maka"}, {"Medefaidrin", "medf"}, {"Old_Sogdian", "sogo"}, {"Elymaic", "elym"},
-		{"Nandinagari", "nand"}, {"Nyiakeng_Puachue_Hmong", "hmnp"}, {"Wancho", "wcho"}, {"Chorasmian", "chrs"},
-		{"Dives_Akuru", "diak"}, {"Khitan_Small_Script", "kits"}, {"Yezidi", "yezi"}, {"Cypro_Minoan", "cpmn"},
-		{"Old_Uyghur", "ougr"}, {"Tangsa", "tnsa"}, {"Toto", "toto"}, {"Vithkuqi", "vith"}, {"Kawi", "kawi"},
-		{"Nag_Mundari", "nagm"}, {"Garay", "gara"}, {"Gurung_Khema", "gukh"}, {"Kirat_Rai", "krai"},
-		{"Ol_Onal", "onao"}, {"Sunuwar", "sunu"}, {"Todhri", "todr"}, {"Tulu_Tigalari", "tutg"},
-		{"Beria_Erfe", "berf"}, {"Sidetic", "sidt"}, {"Tai_Yo", "tayo"}, {"Tolong_Siki", "tols"},
+		{"Hanifi_Rohingya", "rohg"}, {"Makasar", "maka"}, {"Medefaidrin", "medf"}, {"Old_Sogdian", "sogo"},
+		{"Sogdian", "sogd"}, {"Elymaic", "elym"}, {"Nandinagari", "nand"}, {"Nyiakeng_Puachue_Hmong", "hmnp"},
+		{"Wancho", "wcho"}, {"Chorasmian", "chrs"}, {"Dives_Akuru", "diak"}, {"Khitan_Small_Script", "kits"},
+		{"Yezidi", "yezi"}, {"Cypro_Minoan", "cpmn"}, {"Old_Uyghur", "ougr"}, {"Tangsa", "tnsa"}, {"Toto", "toto"},
+		{"Vithkuqi", "vith"}, {"Kawi", "kawi"}, {"Nag_Mundari", "nagm"}, {"Garay", "gara"}, {"Gurung_Khema", "gukh"},
+		{"Kirat_Rai", "krai"}, {"Ol_Onal", "onao"}, {"Sunuwar", "sunu"}, {"Todhri", "todr"},
+		{"Tulu_Tigalari", "tutg"}, {"Beria_Erfe", "berf"}, {"Sidetic", "sidt"}, {"Tai_Yo", "tayo"},
+		{"Tolong_Siki", "tols"},
 	} {
 		if t := unicode.Scripts[s.name]; t != nil {
-			out = append(out, script{table: t, tag: MakeTag(s.tag), shaper: useShaper})
+			out = append(out, script{table: t, tag: MakeTag(s.tag), shaper: useShaper, joins: joiningScripts[s.name]})
 		}
 	}
 	return out
 }()
+
+// joiningScripts are the scripts the Universal Shaping Engine shapes
+// whose letters join as Arabic's do (HarfBuzz's has_arabic_joining).
+//
+//nolint:gochecknoglobals // a fixed set
+var joiningScripts = map[string]bool{
+	"Adlam": true, "Chorasmian": true, "Hanifi_Rohingya": true, "Mandaic": true, "Manichaean": true,
+	"Mongolian": true, "Nko": true, "Old_Uyghur": true, "Phags_Pa": true, "Psalter_Pahlavi": true, "Sogdian": true,
+}
 
 // rtlScripts are the scripts written right to left.
 //
@@ -174,8 +194,8 @@ func candidates(script Tag) []Tag {
 // shaperFor is the shaper of runs in script for a font whose GSUB's
 // language system is chosen's (0 for none), as HarfBuzz categorizes it:
 // a font that has only DFLT or Latin features for an Indic, Myanmar or
-// USE script is shaped as Latin, and an Indic font of third version
-// tags by the USE.
+// USE script is shaped as Latin, one with only DFLT features for Syriac
+// too, and an Indic font of third version tags by the USE.
 func shaperFor(script Tag, chosen Tag) shaper {
 	s := scriptByTag(script)
 	if s == nil {
@@ -183,6 +203,10 @@ func shaperFor(script Tag, chosen Tag) shaper {
 	}
 	generic := chosen == dflt || chosen == latn
 	switch s.shaper { //nolint:exhaustive // the shapers that do something here
+	case arabicShaper:
+		if chosen == dflt && script != arab {
+			return defaultShaper
+		}
 	case indicShaper:
 		switch {
 		case generic:
@@ -283,6 +307,8 @@ func requests(script Tag, sh shaper, features []Feature) ([]request, map[int]pau
 		c.add(true, manualZWJ, "rclt", "calt")
 		c.pause(nil)
 		c.on("mset")
+	case hangulShaper:
+		c.add(false, 0, "ljmo", "vjmo", "tjmo")
 	case indicShaper:
 		collectIndic(c)
 	case khmerShaper:
@@ -299,6 +325,11 @@ func requests(script Tag, sh shaper, features []Feature) ([]request, map[int]pau
 		c.out = append(c.out, request{f.Tag, f.Value, c.stage, true, 0})
 	}
 	switch sh { //nolint:exhaustive // the shapers that do something here
+	case hangulShaper:
+		// Uniscribe applies no calt to Hangul, and some fonts put all of
+		// their jamo lookups there.
+		c.add(true, 0, "calt")
+		c.out[len(c.out)-1].value = 0
 	case indicShaper:
 		c.add(true, 0, "liga")
 		c.out[len(c.out)-1].value = 0

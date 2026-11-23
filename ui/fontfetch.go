@@ -172,7 +172,7 @@ func (d *Document) readFontFace(f css.FontFace, fsys fs.FS) (*fonts.Face, bool) 
 		if s.URL == "" {
 			continue
 		}
-		data, err := fs.ReadFile(fsys, s.URL)
+		data, err := fs.ReadFile(fsys, unfragmented(s.URL))
 		if err != nil {
 			continue
 		}
@@ -226,6 +226,15 @@ func (d *Document) fetchable(sources []css.FontSource) bool {
 		}
 	}
 	return false
+}
+
+// unfragmented is url without its fragment, which a browser never asks
+// for: one naming a font of a collection draws its first, as in Chrome.
+func unfragmented(url string) string {
+	if i := strings.IndexByte(url, '#'); i >= 0 {
+		return url[:i]
+	}
+	return url
 }
 
 func fontRanges(ranges []css.UnicodeRange) []fonts.Range {
@@ -303,7 +312,7 @@ func (d *Document) fontSources(file *fonts.File) []fontSource {
 			out = append(out, fontSource{"data:…", func() ([]byte, error) { return data, nil }})
 		case p.fetch != nil:
 			fetch, url, sheet := p.fetch, s.URL, p.asked[file].From
-			out = append(out, fontSource{url, func() ([]byte, error) { return fetch(url, sheet) }})
+			out = append(out, fontSource{url, func() ([]byte, error) { return fetch(unfragmented(url), sheet) }})
 		}
 	}
 	return out
@@ -411,9 +420,10 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 		if df == nil {
 			continue
 		}
-		if look := drawLook(c, ch); look != (draw.Look{}) {
-			df = df.Styled(look)
-		}
+		look := drawLook(c, ch)
+		colour := d.colourLook(c.Family, ch.Font().Palette)
+		look.NoSVG, look.Palette = colour.NoSVG, colour.Palette
+		df = df.Styled(look)
 		if i == 0 {
 			df = df.Blank(ch.Loading()).Hidden(ch.Hidden(d.fonts))
 		}

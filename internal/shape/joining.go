@@ -3,6 +3,7 @@ package shape
 import (
 	"sort"
 	"unicode"
+	"unicode/utf8"
 )
 
 // joining is a character's joining type, Syriac's Alaph and Dalath
@@ -37,6 +38,28 @@ func joiningOf(r rune) joining {
 		return joinT
 	}
 	return joinU
+}
+
+// JoinsAcross reports whether a letter between before and after may join
+// with them: the character nearest it on either side, marks passed over,
+// joins as Arabic letters do.
+func JoinsAcross(before, after string) bool {
+	for i := len(before); i > 0; {
+		r, n := utf8.DecodeLastRuneInString(before[:i])
+		i -= n
+		if t := joiningOf(r); t != joinT {
+			if t != joinU {
+				return true
+			}
+			break
+		}
+	}
+	for _, r := range after {
+		if t := joiningOf(r); t != joinT {
+			return t != joinU
+		}
+	}
+	return false
 }
 
 // form is the joined form a letter takes, the feature that draws it.
@@ -91,10 +114,18 @@ var joinStates = [7][6]joinStep{
 }
 
 // join gives each glyph of the run the mask of the form its character
-// takes among those beside it, transparent ones passed over.
+// takes among those beside it, transparent ones passed over, the text
+// round the run included; Mongolian's free variation selectors take
+// their letter's.
 func (b *buffer) join(masks *[len(formTags)]uint32) {
 	forms := make([]form, len(b.glyphs))
 	prev, state := -1, uint8(0)
+	for _, r := range b.before {
+		if t := joiningOf(r); t != joinT {
+			state = joinStates[state][t].next
+			break
+		}
+	}
 	for i := range b.glyphs {
 		forms[i] = none
 		t := joiningOf(b.glyphs[i].Char)
@@ -107,6 +138,21 @@ func (b *buffer) join(masks *[len(formTags)]uint32) {
 		}
 		forms[i] = step.cur
 		prev, state = i, step.next
+	}
+	for _, r := range b.after {
+		if t := joiningOf(r); t != joinT {
+			if step := joinStates[state][t]; step.prev != none && prev >= 0 {
+				forms[prev] = step.prev
+			}
+			break
+		}
+	}
+	if b.plan.script == mong {
+		for i := 1; i < len(forms); i++ {
+			if c := b.glyphs[i].Char; c >= 0x180B && c <= 0x180D || c == 0x180F {
+				forms[i] = forms[i-1]
+			}
+		}
 	}
 	for i, f := range forms {
 		if f != none {

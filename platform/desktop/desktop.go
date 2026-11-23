@@ -1008,12 +1008,12 @@ func (d *driver) listen(h *glfw.Window, win *platform.Window) {
 		in.SetMouseButton(input.MouseButton(b), action == glfw.Press)
 	})
 	h.SetCursorPosCallback(func(_ *glfw.Window, x, y float64) { in.SetMouse(geom.V2(float32(x), float32(y))) })
-	wheelPrecise(h)
+	watchWheels()
 	h.SetScrollCallback(func(_ *glfw.Window, x, y float64) {
-		if wheelPrecise(h) {
-			in.AddPreciseWheel(geom.V2(float32(x), float32(y)))
+		if v, precise := wheelTurn(h, x, y); precise {
+			in.AddPreciseWheel(v)
 		} else {
-			in.AddWheel(geom.V2(float32(x), float32(y)))
+			in.AddWheel(v)
 		}
 	})
 	listenTouches(h, in)

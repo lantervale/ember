@@ -167,7 +167,8 @@ func contentShare(n *node) float32 {
 		return 0
 	case style.AlignEnd, style.AlignFlexEnd:
 		return 1
-	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignCenter, style.AlignSpaceBetween,
+	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignCenter, style.AlignAnchorCenter,
+		style.AlignSpaceBetween,
 		style.AlignSpaceAround, style.AlignSpaceEvenly:
 	}
 	return 0.5

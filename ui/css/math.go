@@ -19,7 +19,7 @@ var mathConstants = map[string]float64{
 // angleUnits are the angles in degrees.
 //
 //nolint:gochecknoglobals // lookup table
-var angleUnits = map[string]float64{"deg": 1, "rad": 180 / math.Pi, "grad": 0.9, "turn": 360}
+var angleUnits = map[string]float64{unitDeg: 1, "rad": 180 / math.Pi, "grad": 0.9, "turn": 360}
 
 // roundings are round()'s strategies.
 //
@@ -43,14 +43,21 @@ var mathOps = map[string]style.CalcOp{
 // rem(), the trigonometric sin() to atan2(), the exponential pow() to
 // exp(), and abs() and sign(), typed as CSS Values 4 types them.
 func parseMath(name string, args []Component) (Dim, error) {
-	if name == fnCalc {
+	switch name {
+	case fnCalc:
 		return parseCalc(args)
+	case "anchor", fnAnchorSize:
+		return parseAnchor(name == fnAnchorSize, args)
 	}
 	parts := splitOn(args, func(c Component) bool { return c.Kind == Comma })
 	op, ok := mathOps[name]
 	switch {
 	case name == "clamp":
 		return parseClamp(parts)
+	case name == "progress":
+		return parseProgress(parts)
+	case name == fnRandom:
+		return parseRandom(parts)
 	case name == "round":
 		op = style.CalcRoundNearest
 		if len(parts) > 0 {
@@ -116,7 +123,8 @@ func typed(name string, op style.CalcOp, typ dimType, ds []Dim) (Dim, error) {
 			return Dim{}, fmt.Errorf("%s() takes numbers, found %s", name, typ)
 		}
 	case style.CalcPush, style.CalcScale, style.CalcSum, style.CalcMul, style.CalcDiv, style.CalcMin, style.CalcMax,
-		style.CalcMod, style.CalcRem, style.CalcAbs, style.CalcHypot:
+		style.CalcMod, style.CalcRem, style.CalcAbs, style.CalcHypot,
+		style.CalcAnchor, style.CalcAnchorSize:
 	}
 	return node(op, typ, ds...), nil
 }
@@ -163,6 +171,86 @@ func parseClamp(parts [][]Component) (Dim, error) {
 	return v, nil
 }
 
+// parseProgress reads progress(value, start, end): where value stands
+// from start to end, a number from 0 to 1.
+func parseProgress(parts [][]Component) (Dim, error) {
+	if len(parts) != 3 {
+		return Dim{}, fmt.Errorf("progress() takes a value, a start and an end")
+	}
+	var ds [3]Dim
+	for i, p := range parts {
+		d, err := parseCalc(p)
+		if err != nil {
+			return Dim{}, fmt.Errorf("progress(): %w", err)
+		}
+		ds[i] = d
+	}
+	if _, ok := unify(ds[0].typ, ds[1].typ); !ok {
+		return Dim{}, fmt.Errorf("progress() takes values of one type, found %s and %s", ds[0].typ, ds[1].typ)
+	}
+	if _, ok := unify(ds[0].typ, ds[2].typ); !ok {
+		return Dim{}, fmt.Errorf("progress() takes values of one type, found %s and %s", ds[0].typ, ds[2].typ)
+	}
+	from, err := ds[0].add(ds[1], -1)
+	if err != nil {
+		return Dim{}, err
+	}
+	span, err := ds[2].add(ds[1], -1)
+	if err != nil {
+		return Dim{}, err
+	}
+	p, err := from.multiply(span, true)
+	if err != nil {
+		return Dim{}, err
+	}
+	return node(style.CalcMax, typeNumber, dimValue(typeNumber, 0), node(style.CalcMin, typeNumber, p,
+		dimValue(typeNumber, 1))), nil
+}
+
+// parseRandom reads random(fixed n, min, max, step), the form the
+// cascade gives every random() on an element (randomKey): min, plus n of
+// the way to max, or of the steps that fit there.
+func parseRandom(parts [][]Component) (Dim, error) {
+	if len(parts) < 3 || len(parts) > 4 {
+		return Dim{}, fmt.Errorf("random() takes a key, a minimum, a maximum and a step")
+	}
+	key := items(parts[0])
+	if len(key) != 2 || !isWord(key[0], "fixed") || key[1].Kind != Number {
+		return Dim{}, fmt.Errorf("random() is worked out on the element")
+	}
+	n := min(max(key[1].Num, 0), 1)
+	lo, err := parseCalc(parts[1])
+	if err != nil {
+		return Dim{}, fmt.Errorf("random(): %w", err)
+	}
+	hi, err := parseCalc(parts[2])
+	if err != nil {
+		return Dim{}, fmt.Errorf("random(): %w", err)
+	}
+	typ, ok := unify(lo.typ, hi.typ)
+	if !ok {
+		return Dim{}, fmt.Errorf("random() takes values of one type, found %s and %s", lo.typ, hi.typ)
+	}
+	span, err := hi.add(lo, -1)
+	if err != nil {
+		return Dim{}, err
+	}
+	if len(parts) == 4 {
+		step, stepErr := parseCalc(parts[3])
+		if stepErr != nil {
+			return Dim{}, fmt.Errorf("random(): %w", stepErr)
+		}
+		sv, okS := step.constant()
+		wv, okW := span.constant()
+		if _, same := unify(typ, step.typ); !same || !okS || !okW || sv <= 0 {
+			return Dim{}, fmt.Errorf("random()'s step is a known value of its type")
+		}
+		steps := math.Floor(wv/sv + 1e-9)
+		return lo.add(dimValue(typ, sv*math.Min(math.Floor(n*(steps+1)), steps)), 1)
+	}
+	return lo.add(span.scale(n), 1)
+}
+
 // mathArity is how many arguments op takes, hi 0 for any number.
 func mathArity(op style.CalcOp) (int, int) {
 	switch op {
@@ -174,7 +262,7 @@ func mathArity(op style.CalcOp) (int, int) {
 		return 2, 2
 	case style.CalcPush, style.CalcScale, style.CalcSum, style.CalcMul, style.CalcDiv, style.CalcAbs,
 		style.CalcSign, style.CalcSin, style.CalcCos, style.CalcTan, style.CalcAsin, style.CalcAcos, style.CalcAtan,
-		style.CalcSqrt, style.CalcExp:
+		style.CalcSqrt, style.CalcExp, style.CalcAnchor, style.CalcAnchorSize:
 	}
 	return 1, 1
 }

@@ -55,7 +55,7 @@ func oofAlignmentOf(a style.Align) oofAlignment {
 		return oofNormal
 	case style.AlignStretch:
 		return oofStretch
-	case style.AlignCenter:
+	case style.AlignCenter, style.AlignAnchorCenter:
 		return oofCenter
 	case style.AlignEnd, style.AlignFlexEnd:
 		return oofEnd
@@ -87,6 +87,10 @@ type oofAxis struct {
 	isInline   bool
 	reversed   bool
 	scrollAxis bool
+	// outer is the containing block a position-area cut its cell from,
+	// in the cell's space, which an overflowing box is kept in; zero for
+	// the containing block itself.
+	outer span
 }
 
 func (a *oofAxis) startEdge() staticEdge {
@@ -218,6 +222,9 @@ func (a *oofAxis) position(s float32, margin span) float32 {
 			break
 		}
 		limit := span{fmin(r.start, 0), fmax(r.end, a.cbSize)}
+		if a.outer != (span{}) {
+			limit = span{fmin(r.start, a.outer.start), fmax(r.end, a.outer.end)}
+		}
 		if a.scrollAxis {
 			if a.reversed {
 				limit.start = float32(math.Inf(-1))
@@ -260,9 +267,11 @@ type oofBoxLayout struct {
 	overflow style.Size[style.Overflow]
 }
 
-// layoutOOFBox sizes and places one absolutely positioned box in its containing block.
-func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
-	containerOverflow style.Size[style.Overflow], gridOwner *node) oofBoxLayout {
+// placeOOFBox sizes and places one absolutely positioned box in its containing block, and
+// reports whether its margin box fits in the inset-modified containing block of p, a
+// position option of an element its anchors place, when given.
+func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
+	containerOverflow style.Size[style.Overflow], gridOwner *node, p *placedStyle) (oofBoxLayout, bool) {
 	n := c.node
 	st := n.st
 	if gridOwner != nil && gridOwner.grid != nil {
@@ -290,13 +299,13 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 		cbSize: area.w, inset: span{inset.l, inset.r}, margin: span{margin.l, margin.r},
 		static:    staticPosition{area: span{c.x.area.start - offset.x, c.x.area.end - offset.x}, align: c.x.align},
 		alignment: oofAlignmentOf(justifySelf), isInline: true,
-		scrollAxis: scrollContainer(containerOverflow.Width),
+		scrollAxis: scrollContainer(containerOverflow.Width), outer: p.outerSpan(true),
 	}
 	v := oofAxis{
 		cbSize: area.h, inset: span{inset.t, inset.b}, margin: span{margin.t, margin.b},
 		static:     staticPosition{area: span{c.y.area.start - offset.y, c.y.area.end - offset.y}, align: c.y.align},
 		alignment:  oofAlignmentOf(alignSelf),
-		scrollAxis: scrollContainer(containerOverflow.Height),
+		scrollAxis: scrollContainer(containerOverflow.Height), outer: p.outerSpan(false),
 	}
 	stretchFit := size{h.stretchFitSize(), v.stretchFitSize()}
 	avail := stretchFit.mClamp(minSize, maxSize)
@@ -354,7 +363,7 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 		margin:    rect{l: hm.start, r: hm.end, t: vm.start, b: vm.end},
 	}
 	n.unrounded = layout
-	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}
+	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}, p.fits(layout, offset)
 }
 
 // performOOF lays out the candidates this containing block claims, and the ones they

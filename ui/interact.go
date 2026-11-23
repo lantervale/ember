@@ -97,6 +97,8 @@ type interaction struct {
 	pinned   map[*Node]dom.State
 	scrolls  map[*Node]*paint.Scrolling
 	dragging *Node
+	// trackHeld is a click held on a scrollbar's track (scrollmotion.go).
+	trackHeld *trackHold
 	// scrollers are the scroll containers' snaps, glides and wheel
 	// gestures (snap.go).
 	scrollers map[*Node]*scrollerState
@@ -137,6 +139,10 @@ type interaction struct {
 	// dialog just shown, until its focus (and trap, when modal) is set.
 	modals   []*Node
 	focusing *Node
+	// popovers are the auto and hint popovers open, the newest last, and
+	// openPopovers each open popover's state.
+	popovers     []*Node
+	openPopovers map[*Node]*popover
 	// menuFocus is a menu opened from the keys whose first item (last with
 	// menuFocusLast) takes the focus once it is laid out.
 	menuFocus     *Node
@@ -703,6 +709,7 @@ func (d *Document) click(n *Node) {
 		d.fire(n, e)
 		if e.Has(control.Clicked) {
 			d.dialogClick(n)
+			d.popoverClick(n)
 			d.submitClick(n)
 		}
 	case *control.Checkbox:
@@ -898,6 +905,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		open.ClickOutside()
 	}
 	d.menuPressOutside(d.hovered)
+	d.lightDismiss(d.hovered)
 	d.pressed = d.hovered
 	if src := draggableIn(d.hovered); src != nil {
 		d.drag = &dragState{source: src, from: at}
@@ -1408,7 +1416,7 @@ func (d *Document) keyIntent(f inputfeed.Feed, n *Node, m any, i control.Intent,
 	if n != nil && d.menuIntent(n, i) {
 		return d.focused(), true
 	}
-	if i == control.Back && d.backFromModal() {
+	if i == control.Back && d.backFromTop() {
 		return n, true
 	}
 	if n == nil {
@@ -1537,6 +1545,7 @@ func (d *Document) intent(n *Node, m any, i control.Intent) bool {
 		d.fire(n, e)
 		if _, button := m.(*control.Button); button && e.Has(control.Clicked) {
 			d.dialogClick(n)
+			d.popoverClick(n)
 			d.submitClick(n)
 		}
 		return true
@@ -1586,7 +1595,7 @@ func (d *Document) edit(c *twod.Canvas, in *input.State, n *Node, t *control.Tex
 	if f.RawPressed(int(input.KeyEscape)) && !prevented.has(input.KeyEscape) {
 		if t.Handles(control.Back) {
 			d.fire(n, t.Do(control.Back))
-		} else if !d.backFromModal() {
+		} else if !d.backFromTop() {
 			d.moveFocus(func() bool { d.focus.Blur(); return true })
 		}
 		return
@@ -1772,27 +1781,13 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		}
 		return true
 	}
+	if d.trackHeld != nil {
+		d.holdTrack(in, at)
+		return true
+	}
 	held := scrollContainers(hit)
-	if in.Pressed(input.MouseLeft) {
-		for _, b := range held {
-			bars := paint.BarsOf(b, origin(b))
-			if !bars.Over(at) {
-				continue
-			}
-			s := d.scrolling(b.Node)
-			port := snapportOf(b)
-			page := geom.V2(pageStep(port.X), pageStep(port.Y))
-			off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true, Page: page}, d.lineStep(b))
-			if s.Dragging() {
-				d.scrollerOf(b.Node).glide = nil
-				d.setScroll(b, off)
-				d.dragging = b.Node
-			} else if off != bars.Scroll {
-				from := d.userAim(b)
-				d.userScroll(b, bars.Clamp(d.snap(b, from, bars.Clamp(from.Add(off.Sub(bars.Scroll))), snapPage)), byKeys)
-			}
-			return true
-		}
+	if in.Pressed(input.MouseLeft) && d.pressBars(held, at) {
+		return true
 	}
 	w, precise := in.Wheel(), in.WheelPrecise()
 	if inputfeed.Of(in).RawDown(int(input.KeyShift)) && w.X == 0 {
@@ -1818,6 +1813,33 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		}
 		d.wheelTurned(b, w.Scale(step), precise)
 		break
+	}
+	return false
+}
+
+// pressBars has a press at at on a bar of one of held take the pointer:
+// on a thumb to drag it, on a track to page it and, held, page on. It
+// reports whether a bar took it.
+func (d *Document) pressBars(held []*box.Box, at geom.Vec2) bool {
+	for _, b := range held {
+		bars := paint.BarsOf(b, origin(b))
+		if !bars.Over(at) {
+			continue
+		}
+		s := d.scrolling(b.Node)
+		port := snapportOf(b)
+		page := geom.V2(pageStep(port.X), pageStep(port.Y))
+		off, _ := s.Input(bars, paint.Pointer{At: at, Pressed: true, Down: true, Page: page}, d.lineStep(b))
+		if s.Dragging() {
+			d.scrollerOf(b.Node).glide = nil
+			d.setScroll(b, off)
+			d.dragging = b.Node
+		} else if by := off.Sub(bars.Scroll); by != (geom.Vec2{}) {
+			from := d.userAim(b)
+			d.userScroll(b, bars.Clamp(d.snap(b, from, bars.Clamp(from.Add(by)), snapPage)), byKeys)
+			d.trackHeld = newTrackHold(b.Node, by, page, d.clock)
+		}
+		return true
 	}
 	return false
 }

@@ -43,6 +43,9 @@ type Retained struct {
 	// the room its overflow: auto bars took in the last layout.
 	viewport       *box.Box
 	viewportGutter size
+	// anchors are the anchors of the elements placed by them, where the
+	// last layout placed them.
+	anchors *anchoring
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -51,38 +54,71 @@ func Retain(r *Retained) Option { return func(t *tree) { t.keep = r } }
 // layoutIn lays root out; a retained layout in which a scroll container's
 // gutter came or went lays out once more, the elements whose gutter changed
 // built again with it, so the boxes that shrink to fit around them measure
-// it, as Chrome's layout takes the scrollbar in at once.
+// it, as Chrome's layout takes the scrollbar in at once. So does a layout
+// that moved the anchors of an element positioned by them, that element
+// built again with them where they now stand, up to maxAnchorPasses
+// times for anchors placed by anchors.
 func layoutIn(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, opts ...Option) *box.Tree {
-	out, regutter := layoutOnce(root, avail, fonts, rounding, opts...)
-	if len(regutter) == 0 {
+	var probe tree
+	for _, o := range opts {
+		o(&probe)
+	}
+	anchors := &anchoring{of: map[*dom.Node]*anchorsOf{}}
+	if k := probe.keep; k != nil {
+		if k.anchors == nil {
+			k.anchors = anchors
+		}
+		anchors = k.anchors
+	}
+	var out *box.Tree
+	var written, dropped []*dom.Node
+	for pass := 0; ; pass++ {
+		next, regutter, t := layoutOnce(root, avail, fonts, rounding, anchors, opts...)
+		written, dropped = append(written, next.Written...), append(dropped, next.Dropped...)
+		out = next
+		again := regutter
+		if pass > 0 {
+			again = nil
+		}
+		if len(anchors.of) > 0 && pass < maxAnchorPasses {
+			again = append(again, t.refreshAnchors(out, anchors)...)
+		}
+		if len(again) == 0 {
+			break
+		}
+		for _, e := range again {
+			dom.Data(e).Dirty |= dom.DirtyLayout
+			for p := e.Parent(); p != nil; p = p.Parent() {
+				dom.Data(p).Dirty |= dom.DirtyDescendant
+			}
+		}
+	}
+	out.Anchored = out.Anchored[:0]
+	for e := range anchors.of {
+		out.Anchored = append(out.Anchored, e)
+	}
+	if len(written)+len(dropped) == len(out.Written)+len(out.Dropped) {
 		return out
 	}
-	for _, e := range regutter {
-		dom.Data(e).Dirty |= dom.DirtyLayout
-		for p := e.Parent(); p != nil; p = p.Parent() {
-			dom.Data(p).Dirty |= dom.DirtyDescendant
+	out.Written, out.Dropped = nil, nil
+	for _, k := range written {
+		if _, ok := out.Of[k]; ok && !slices.Contains(out.Written, k) {
+			out.Written = append(out.Written, k)
 		}
 	}
-	again, _ := layoutOnce(root, avail, fonts, rounding, opts...)
-	written, dropped := again.Written, again.Dropped
-	again.Written, again.Dropped = nil, nil
-	for _, k := range slices.Concat(out.Written, written) {
-		if _, ok := again.Of[k]; ok {
-			again.Written = append(again.Written, k)
+	for _, k := range dropped {
+		if _, ok := out.Of[k]; !ok && !slices.Contains(out.Dropped, k) {
+			out.Dropped = append(out.Dropped, k)
 		}
 	}
-	for _, k := range slices.Concat(out.Dropped, dropped) {
-		if _, ok := again.Of[k]; !ok {
-			again.Dropped = append(again.Dropped, k)
-		}
-	}
-	return again
+	return out
 }
 
 // layoutOnce lays root out once, and lists the elements whose scrollbar
 // gutter changed in a retained layout.
-func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, opts ...Option) (*box.Tree, []*dom.Node) {
-	t := &tree{fonts: fonts, out: &box.Tree{Of: map[*dom.Node]*box.Box{}}}
+func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, anchors *anchoring,
+	opts ...Option) (*box.Tree, []*dom.Node, *tree) {
+	t := &tree{fonts: fonts, out: &box.Tree{Of: map[*dom.Node]*box.Box{}}, anchors: anchors}
 	for _, o := range opts {
 		o(t)
 	}
@@ -99,7 +135,7 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, op
 	r := t.build(root, nil)
 	defer t.sweep()
 	if r == nil {
-		return t.out, nil
+		return t.out, nil, t
 	}
 	port := viewportOf(root)
 	if !avail.values().both() {
@@ -126,7 +162,7 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, op
 	collectLive(t.out.Root, t.out)
 	t.markEscapes(r)
 	clean(root)
-	return t.out, t.regutter
+	return t.out, t.regutter, t
 }
 
 // clean clears n's layout flags and those below it, down the paths DirtyDescendant marks.
@@ -180,6 +216,10 @@ type tree struct {
 	lookups *int
 	// translate, when set, is what each text node says, from its own text.
 	translate func(message string) string
+	// implicit gives an element's implicit anchor, and anchors are where
+	// the last layout placed the anchors of the elements that read them.
+	implicit func(*dom.Node) *dom.Node
+	anchors  *anchoring
 }
 
 type context uint8
