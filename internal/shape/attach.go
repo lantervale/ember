@@ -1,7 +1,7 @@
 package shape
 
-// anchor is the point of anchor table a, false for none.
-func anchor(a data) (x, y int32, ok bool) {
+// anchor is the point, x then y, of anchor table a, false for none.
+func anchor(a data) (int32, int32, bool) {
 	if a == nil || a.u16(0) < 1 || a.u16(0) > 3 {
 		return 0, 0, false
 	}

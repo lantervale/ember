@@ -1516,7 +1516,7 @@ func linear(c Component, cur color.Color) color.Color {
 
 //nolint:gochecknoglobals // lookup table
 var verticalAligns = map[string]style.VerticalAlign{
-	kwBaseline: style.AlignBaselineText, "sub": style.AlignSub, "super": style.AlignSuper,
+	kwBaseline: style.AlignBaselineText, kwSub: style.AlignSub, kwSuper: style.AlignSuper,
 	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
 	kwTop: style.AlignTop, kwBottom: style.AlignBottom,
 }

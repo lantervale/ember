@@ -233,21 +233,21 @@ func TestTheMachinesRightToLeftFacesShapeAsHarfBuzzShapesThem(t *testing.T) {
 		"/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
 		"/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
 	} {
-		ttf, err := os.ReadFile(path)
-		if err != nil {
+		ttf, rerr := os.ReadFile(path)
+		if rerr != nil {
 			continue
 		}
-		src, err := sfnt.Parse(ttf)
-		require.NoError(t, err)
+		src, perr := sfnt.Parse(ttf)
+		require.NoError(t, perr)
 		f := shape.Parse(src, ttf)
 		for _, text := range texts {
 			glyphs := run(t, src, text)
 			if slices.ContainsFunc(glyphs, func(g shape.Glyph) bool { return g.ID == 0 }) {
 				continue
 			}
-			out, err := exec.Command(hbShape, "--font-size="+fmt.Sprint(src.UnitsPerEm()), "--no-glyph-names",
+			out, herr := exec.Command(hbShape, "--font-size="+fmt.Sprint(src.UnitsPerEm()), "--no-glyph-names",
 				path, text).Output()
-			require.NoError(t, err)
+			require.NoError(t, herr)
 			want := strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(string(out)), "|", "|gid"), "[", "[gid")
 			p := f.Plan(shape.Script(text), "")
 			assert.Equal(t, want, hb(p.Shape(glyphs), p.RightToLeft()), "%q in %s", text, path)

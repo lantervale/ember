@@ -65,3 +65,17 @@ func TestATextIsShapedWithTheFeaturesItAsksFor(t *testing.T) {
 	text.SetFeatures()
 	assert.Empty(t, text.Features())
 }
+
+func TestArabicIsJoinedWhetherDrawnRightToLeftOrMeasured(t *testing.T) {
+	face, err := LoadFace(os.DirFS("../internal/shape/testdata"), "go-arabic.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := NewText("بتب", Typeface(face), RightToLeft())
+	assert.True(t, text.RightToLeft())
+	text.SetRightToLeft(false)
+	assert.False(t, text.RightToLeft())
+	joined := Measure("بتب", Typeface(face), FontSize(2048))
+	assert.InDelta(t, 1399+1099+1399, joined.X, 0.5, "beh.init, teh.medi, beh.fina")
+	assert.Equal(t, joined, Measure("بتب", Typeface(face), FontSize(2048), RightToLeft()))
+}

@@ -1,7 +1,8 @@
 // Arabic shaping against Chrome's: a face with stand-ins for Arabic
 // letters and marks (go-arabic.ttf, a copy of internal/shape/testdata's)
 // joined, ligated, its marks on their bases and on each other, its
-// letters attached cursively, right to left beside Latin.
+// letters attached cursively, right to left beside Latin, and its
+// superiors and inferiors.
 package main
 
 import (
@@ -12,6 +13,8 @@ import (
 	"github.com/lantervale/ember/ui/internal/pages"
 )
 
+const rtl = "rtl"
+
 //go:embed go-arabic.ttf
 var joined []byte
 
@@ -21,6 +24,8 @@ html { background-color: #fff; }
 body { padding: 8px; font: 24px Joined; color: #000; }
 div { white-space: nowrap; margin-bottom: 6px; }
 .rtl { direction: rtl; }
+.sup { font-variant-position: super; }
+.sub { font-variant-position: sub; }
 `
 
 func main() {
@@ -29,15 +34,17 @@ func main() {
 		"joined.ttf": {Data: joined},
 	}, "page.css"))
 	for _, line := range [][2]string{
-		{"rtl", "بتب بسم سلام دار"},
-		{"rtl", "ـبـ مممم بمب لا يلا"},
-		{"rtl", "سسس هههه سهس"},
-		{"rtl", "بَ بِ بَّ سِّ لَا لاِ"},
-		{"rtl", "بسم ab سلام (بتب) 12"},
+		{rtl, "بتب بسم سلام دار"},
+		{rtl, "ـبـ مممم بمب لا يلا"},
+		{rtl, "سسس هههه سهس"},
+		{rtl, "بَ بِ بَّ سِّ لَا لاِ"},
+		{rtl, "بسم ab سلام (بتب) 12"},
 		{"", "aé é́ office"},
 		{"", "بتب مممم"},
+		{"sup", "x2 E=mc2 10"},
+		{"sub", "H2O CO2"},
 	} {
 		d.Body().Append(ui.Div(ui.Class(line[0]), ui.Text(line[1])))
 	}
-	pages.Run(d, 440, 330)
+	pages.Run(d, 440, 400)
 }

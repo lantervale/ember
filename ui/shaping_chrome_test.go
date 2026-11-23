@@ -59,6 +59,16 @@ func TestMarksSitOnTheirBasesAsInChrome(t *testing.T) {
 	)
 }
 
+func TestSuperiorsAndInferiorsComeFromTheFaceAsInChrome(t *testing.T) {
+	joined(t, ".go { font-family: Go, monospace; }",
+		[2]string{"font-variant-position: super", "x2 23"},
+		[2]string{"font-variant-position: sub", "H2O 10"},
+		[2]string{"font-variant: sub oldstyle-nums", "CO2"},
+		[2]string{"font-variant-position: super; font-family: Go, monospace", "x2 left as it is"},
+		[2]string{`font-variant-position: super; font-feature-settings: "sups" 0`, "x2"},
+	)
+}
+
 func TestTextRightToLeftMixesArabicAndLatinAsInChrome(t *testing.T) {
 	joined(t, "div { direction: rtl; } span { display: inline; }",
 		[2]string{"", "بسم ab سلام"},

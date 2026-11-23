@@ -40,9 +40,9 @@ func main() {
 		if len(fields) < 4 {
 			continue
 		}
-		code, err := strconv.ParseUint(strings.TrimSpace(fields[0]), 16, 32)
-		if err != nil {
-			log.Fatal(err)
+		code, perr := strconv.ParseUint(strings.TrimSpace(fields[0]), 16, 21)
+		if perr != nil {
+			log.Fatal(perr)
 		}
 		kind, ok := kinds[strings.TrimSpace(fields[2])]
 		if !ok {
