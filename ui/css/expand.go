@@ -62,8 +62,8 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	switch name {
 	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius":
 		err = expandBox(long, v, out)
-	case "gap", "overflow", "place-items", "place-content", "place-self", "margin-inline", "margin-block",
-		"padding-inline", "padding-block", "inset-inline", "inset-block", "border-inline-width", "border-inline-style",
+	case "gap", "overflow", "place-items", "place-content", "place-self", shortMarginInline, "margin-block",
+		shortPaddingInline, "padding-block", shortInsetInline, "inset-block", "border-inline-width", "border-inline-style",
 		"border-inline-color", "border-block-width", "border-block-style", "border-block-color":
 		err = expandPair(long, v, out)
 	case kwFlex:
@@ -392,6 +392,8 @@ func expandTransition(v []Component, out map[string][]Component) error {
 				default:
 					return fmt.Errorf("a transition has at most two times")
 				}
+			case isWord(c, kwNormal, kwAllowDiscrete) && one[propTransitionBehavior].Kind == EOF:
+				one[propTransitionBehavior] = c
 			case c.Kind == Ident && one["transition-property"].Kind == EOF:
 				if !isWord(c, kwAll, kwNone) {
 					if err := transitionTarget(c); err != nil {

@@ -90,10 +90,6 @@ func (b *builder) gradientDef(n *node) *gradientDef {
 // path is within bounds; ok is false when n is no gradient, or one that
 // paints nothing.
 func (b *builder) gradient(n *node, opacity float64, bounds Box) (Paint, bool) {
-	if n != nil && n.name == "pattern" {
-		b.unsupported("pattern")
-		return Paint{}, false
-	}
 	if !isGradient(n) || opacity == 0 {
 		return Paint{}, false
 	}

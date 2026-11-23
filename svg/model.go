@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"image"
 	"image/color"
 	"math"
 )
@@ -143,6 +144,8 @@ const (
 	Solid
 	// GradientPaint paints the Paint's Gradient.
 	GradientPaint
+	// PatternPaint paints the Paint's Pattern.
+	PatternPaint
 )
 
 // Paint is what fills a shape or its stroke.
@@ -152,6 +155,8 @@ type Paint struct {
 	Color color.NRGBA
 	// Gradient is a GradientPaint's gradient.
 	Gradient *Gradient
+	// Pattern is a PatternPaint's tile.
+	Pattern *Pattern
 	// Opacity, 0–1, multiplies the paint's alpha: fill-opacity or
 	// stroke-opacity, and the element's own opacity where it needs no
 	// layer.
@@ -218,14 +223,57 @@ type Shape struct {
 	StrokeFirst bool
 }
 
-// Group is items drawn together, then shown through one opacity.
+// Pattern is a tile repeated over a shape: its Items drawn in the
+// pattern's own space, where Tile is, and cut to it.
+type Pattern struct {
+	Items []Item
+	Tile  Box
+	// Transform takes the pattern's space to the shape's Path, units and
+	// patternTransform resolved.
+	Transform Matrix
+}
+
+// Group is items drawn together, cut by its Clip, shown through its Mask,
+// then through one opacity.
 type Group struct {
 	Opacity float64
 	Items   []Item
+	// Clip, when set, keeps only what it covers.
+	Clip *Clip
+	// Mask, when set, shows the items as much as it is bright, or opaque.
+	Mask *Mask
 }
 
-// Item is a Shape or a Group: one of the two is set.
+// Clip is a clipping path: what any of its shapes' fills covers, each
+// under its own FillRule, and of that what Clip covers in turn when set.
+// Only the shapes' Path, Transform and FillRule count.
+type Clip struct {
+	Shapes []*Shape
+	Clip   *Clip
+}
+
+// Mask is items drawn apart, whose luminance (their alpha, for an Alpha
+// mask) shows what it masks, and nothing outside its Region.
+type Mask struct {
+	Items  []Item
+	Alpha  bool
+	Region *Clip
+}
+
+// Image is a picture drawn in a rectangle: Pix, alpha premultiplied, its
+// pixels a unit each in the space Transform takes to user space.
+type Image struct {
+	Pix       *image.RGBA
+	Transform Matrix
+	Opacity   float64
+	// Pixelated draws each pixel as a square, where the default smooths
+	// between them.
+	Pixelated bool
+}
+
+// Item is a Shape, a Group or an Image: one of them is set.
 type Item struct {
 	Shape *Shape
 	Group *Group
+	Image *Image
 }

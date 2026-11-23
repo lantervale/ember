@@ -190,7 +190,7 @@ func (r *restyler) firstStyle(n *dom.Node, parent *style.Computed, rem float32, 
 	if len(matched) == 0 {
 		return nil
 	}
-	casc := r.pm.cascadeFor(matched, name)
+	casc := r.pm.cascadeFor(matched, name, parent.Dir)
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, overlay: r.overlay, node: n,
 		self: true}

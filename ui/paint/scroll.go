@@ -46,7 +46,8 @@ const (
 )
 
 // BarsOf is where b's bars lie, its border box's top-left at at: along its
-// padding box's right and bottom edges, in the gutter layout keeps beside
+// padding box's right and bottom edges, the vertical one along its left
+// under direction rtl, as Chrome's, in the gutter layout keeps beside
 // the scrollport, overflow: scroll always and auto when the content
 // overflows that way; none for scrollbar-width: none, which still scrolls
 // by the wheel. Overlay bars lie in the same place with no gutter under
@@ -64,8 +65,12 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 		}
 		return 0
 	}
+	rtl := st.Dir == style.RTL
 	if l.V {
 		l.VTrack = geom.Rect{X: view.X + view.W - barSize + 2, Y: view.Y + 4, W: barWidth, H: view.H - 8 - corner(l.H)}
+		if rtl {
+			l.VTrack.X = view.X + barSize - 2 - barWidth
+		}
 		if b.Content.Y > view.H {
 			bar := view.H - corner(l.H)
 			h := max(bar*view.H/b.Content.Y, minThumb)
@@ -75,10 +80,13 @@ func BarsOf(b *box.Box, at geom.Vec2) Bars {
 	}
 	if l.H {
 		l.HTrack = geom.Rect{X: view.X + 4, Y: view.Y + view.H - barSize + 2, W: view.W - 8 - corner(l.V), H: barWidth}
+		if rtl {
+			l.HTrack.X += corner(l.V)
+		}
 		if b.Content.X > view.W {
 			bar := view.W - corner(l.V)
 			w := max(bar*view.W/b.Content.X, minThumb)
-			x := view.X + (bar-w)*b.Scroll.X/(b.Content.X-view.W)
+			x := l.HTrack.X - 4 + (bar-w)*b.Scroll.X/(b.Content.X-view.W)
 			l.HThumb = geom.Rect{X: x + thumbInset, Y: l.HTrack.Y, W: w - 2*thumbInset, H: barWidth}
 		}
 	}

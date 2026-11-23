@@ -749,14 +749,21 @@ func (p *painter) use(c *clip) {
 const unbounded = 1e6
 
 // clipRect is the scrollport b clips its content to, if its overflow
-// clips on either axis: its padding box less its scrollbars' gutter.
+// clips on either axis or a collapsed row or column cut it: its padding
+// box less its scrollbars' gutter.
 func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 	o := shown(b).Overflow
+	if b.Cut {
+		o = style.Size[style.Overflow]{Width: style.Clip, Height: style.Clip}
+	}
 	if b.Kind != box.Element && b.Kind != box.Viewport || o.Width == style.Visible && o.Height == style.Visible {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)
 	r.W, r.H = max(r.W-b.Scrollbar.X, 0), max(r.H-b.Scrollbar.Y, 0)
+	if shown(b).Dir == style.RTL {
+		r.X += b.Scrollbar.X
+	}
 	if o.Width == style.Visible {
 		r.X, r.W = -unbounded, 2*unbounded
 	}

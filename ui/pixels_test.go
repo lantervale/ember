@@ -77,6 +77,8 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-blend", 600, 260, 0.0012},
 		{"./internal/pages/svg-pictures", 860, 640, 0.0008},
 		{"./internal/pages/multicol", 640, 440, 0.0046},
+		{"./internal/pages/column-span", 640, 420, 0.004},
+		{"./internal/pages/table-collapse", 520, 200, 0.0022},
 		{"./internal/pages/generated", 640, 440, 0.0025},
 		{"./internal/pages/selection", 560, 560, 0.004},
 		{"./internal/pages/ico-bmp", 492, 264, 0.0002},
@@ -85,6 +87,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/doubles", 560, 230, 0.0003},
 		{"./internal/pages/collapsed-styles", 520, 160, 0.0015},
 		{"./internal/pages/rounded-colours", 480, 90, 0.0008},
+		{"./internal/pages/direction", 400, 400, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 	} {

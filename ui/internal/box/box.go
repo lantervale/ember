@@ -48,10 +48,21 @@ type Fragment struct {
 	Start int32
 	// Ellipsis is set when Text was cut and ends with "…".
 	Ellipsis bool
+	// RTL is set when Text is shown right to left: Shown has it from the left.
+	RTL bool
 	// Style is the text's style on a first line a ::first-line styles,
 	// nil where the run's own draws it. Only a run's first fragments
 	// have one.
 	Style *style.Computed
+}
+
+// Shown is f's text as it is drawn from the left: right to left text reversed, by
+// grapheme, its brackets mirrored.
+func (f *Fragment) Shown() string {
+	if !f.RTL {
+		return f.Text
+	}
+	return shownRTL(f.Text)
 }
 
 // Box is one box. Positions are relative to the parent box's border box,
@@ -123,17 +134,27 @@ type Box struct {
 	// its grid: its background, border and shadows frame the box less it, as
 	// Chrome's table wrapper leaves the captions out.
 	Wrap Edges
+	// Cut marks a table cell a collapsed row or column narrowed: what it
+	// holds is clipped to its padding box, as Chrome clips it.
+	Cut bool
 	// Collapsed is the borders of a table that collapses them, which it
 	// draws over its cells: nil for any other box.
 	Collapsed []Edge
 }
 
 // Columns are a multi-column container's columns, side by side from its
-// content box's start: Count of them hold content, each Width wide and
-// Height high, Gap apart.
+// content box's start, each Width wide and Gap apart, in rows the blocks
+// spanning them cut.
 type Columns struct {
-	Count              int
-	Width, Gap, Height float32
+	Width, Gap float32
+	Rows       []ColumnRow
+}
+
+// ColumnRow is a row of columns: Count of them hold content, each
+// Height high, Top down from the content box's top.
+type ColumnRow struct {
+	Count       int
+	Top, Height float32
 }
 
 // Append adds children to b.
