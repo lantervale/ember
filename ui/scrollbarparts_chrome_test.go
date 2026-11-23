@@ -8,6 +8,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // Bars their sheets style are as thick as their ::-webkit-scrollbar says,
@@ -85,6 +86,37 @@ func TestColouredScrollbarsTakeNoRoomAsChromes(t *testing.T) {
 	}
 	d.Body().Append(ui.Div(ui.Class("inherit"), ui.Div(ui.Class("s"), ui.Div())))
 	r := chrome.Match(t, d, geom.V2(640, 900))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// A box with both gutters scrolls sideways within them, to the content's
+// end and no further; a right-to-left box with a stable gutter that
+// overflows sideways starts where Chrome starts it.
+func TestGuttersBoundTheSidewaysScrollAsChromes(t *testing.T) {
+	const sheet = `.s { width: 120px; height: 80px; overflow: auto; margin: 4px; position: relative; }
+.s > div { height: 20px; width: 300px; }
+.both { scrollbar-gutter: stable both-edges; }
+.stable { scrollbar-gutter: stable; }
+.tall > div:first-child { height: 200px; }
+.rtl { direction: rtl; }
+.styled::-webkit-scrollbar { width: 9px; height: 9px; }`
+	d := ui.NewDocument(ui.CSS(sheet))
+	for _, c := range []struct {
+		classes []string
+		scroll  geom.Vec2
+	}{
+		{[]string{"both"}, geom.V2(1e6, 0)}, {[]string{"both", "tall"}, geom.V2(1e6, 0)},
+		{[]string{"both", "styled"}, geom.V2(1e6, 0)}, {[]string{"both", "rtl"}, geom.V2(-1e6, 0)},
+		{[]string{"stable", "rtl"}, geom.V2(0, 0)}, {[]string{"stable", "rtl", "tall"}, geom.V2(0, 0)},
+		{[]string{"both", "rtl"}, geom.V2(0, 0)}, {[]string{"stable", "rtl", "styled"}, geom.V2(0, 0)},
+		{[]string{"stable", "rtl"}, geom.V2(-1e6, 0)}, {[]string{"stable"}, geom.V2(1e6, 0)},
+		{[]string{"stable", "rtl", "styled"}, geom.V2(-1e6, 0)}, {[]string{"stable", "tall"}, geom.V2(1e6, 0)},
+	} {
+		s := ui.Div(ui.Class(append([]string{"s"}, c.classes...)...), ui.Div(), ui.Div())
+		d.Body().Append(s)
+		dom.Data(s).Scroll = c.scroll
+	}
+	r := chrome.Match(t, d, geom.V2(640, 1300))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
