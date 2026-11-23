@@ -1191,7 +1191,7 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 			last = g
 			from += int32(utf8.RuneCountInString(g)) //nolint:gosec // a text node's length
 			continue
-		case st.LineBreak == style.LineBreakAnywhere || st.WordBreak == style.BreakAll && breaksAll(last, g):
+		case st.LineBreak == style.LineBreakAnywhere || st.WordBreak == style.BreakAll && breaksAll(last, g, st.Strictness):
 			c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
 		case st.WrapsAnywhere():
 			c.pieces = append(c.pieces, piece{kind: emergency, run: i, level: level})
@@ -1237,9 +1237,9 @@ func (c *inlineContent) cutGraphemes(wf box.WholeFonts, st *style.Computed, s st
 }
 
 // breaksAll reports whether word-break: break-all breaks between the graphemes a and b,
-// as Chrome breaks it: by UAX #14 with letters and digits read as ideographs, and before
-// a hyphen-minus after a letter or a digit.
-func breaksAll(a, b string) bool {
+// as Chrome breaks it: by UAX #14 with letters and digits read as ideographs, but those
+// strictness s keeps off a line's start, and before a hyphen-minus after a letter or a digit.
+func breaksAll(a, b string, s style.Strictness) bool {
 	ra, _ := utf8.DecodeLastRuneInString(a)
 	rb, _ := utf8.DecodeRuneInString(b)
 	if !letterLike(ra) && !letterLike(rb) {
@@ -1248,16 +1248,16 @@ func breaksAll(a, b string) bool {
 	if letterLike(ra) && rb == '-' {
 		return true
 	}
-	first := asIdeographs(a)
-	seg, _, _, _ := uniseg.FirstLineSegmentInString(first+asIdeographs(b), -1)
+	first := asIdeographs(a, s)
+	seg, _, _, _ := uniseg.FirstLineSegmentInString(first+asIdeographs(b, s), -1)
 	return len(seg) == len(first)
 }
 
 // asIdeographs is s with its letters and digits turned into an ideograph, which UAX #14
-// breaks before and after.
-func asIdeographs(s string) string {
+// breaks before and after, but those strictness keeps off a line's start.
+func asIdeographs(s string, strictness style.Strictness) string {
 	return strings.Map(func(r rune) rune {
-		if letterLike(r) {
+		if letterLike(r) && !startsNoLine(r, strictness) {
 			return '\u4e00'
 		}
 		return r
@@ -1333,7 +1333,7 @@ func (c *inlineContent) breaksAllBefore(text string) bool {
 		return false
 	}
 	g, _, _, _ := uniseg.FirstGraphemeClusterInString(text, -1)
-	return breaksAll(c.pieces[k].text, g)
+	return breaksAll(c.pieces[k].text, g, st.Strictness)
 }
 
 // openSpans adds the start edges of the spans whose runs begin at run i, outer spans first
@@ -1370,19 +1370,26 @@ func (c *inlineContent) closeSpans(i int) {
 // cut's own. As in Chrome, a path such as a/b doesn't break after its slash, nor a word
 // after a carriage return.
 func (c *inlineContent) softBreaks() []map[int]bool {
-	var all strings.Builder
+	var all, classes strings.Builder
 	starts := make([]int, len(c.runs))
+	classed := false
+	own, first := c.strictnesses()
 	for i, r := range c.runs {
 		starts[i] = all.Len()
 		if r.atomic != nil {
 			all.WriteString("\uFFFC")
+			classes.WriteString("\uFFFC")
 		} else {
 			all.WriteString(r.text)
+			classed = writeStrict(&classes, r.text, own[i], first[i]) || classed
 		}
 	}
 	soft := make([]map[int]bool, len(c.runs))
-	text := all.String()
-	rest, pos, state := text, 0, -1
+	text, classedText := all.String(), all.String()
+	if classed {
+		classedText = classes.String()
+	}
+	rest, pos, state := classedText, 0, -1
 	run := 0
 	for len(rest) > 0 {
 		var seg string
@@ -1411,11 +1418,15 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		}
 		soft[run][pos-starts[run]] = true
 	}
-	quoteBreaks(text, func(pos int) {
+	runAt := func(pos int) int {
 		k := 0
 		for k+1 < len(c.runs) && starts[k+1] <= pos {
 			k++
 		}
+		return k
+	}
+	add := func(pos int) {
+		k := runAt(pos)
 		if c.runs[k].atomic != nil || c.runs[k].st.WordBreak == style.KeepAll {
 			return
 		}
@@ -1423,6 +1434,18 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 			soft[k] = map[int]bool{}
 		}
 		soft[k][pos-starts[k]] = true
+	}
+	quoteBreaks(text, add)
+	c.anywhereEnds(add, starts)
+	looseBreaks(text, classedText, func(pos int) style.Strictness {
+		k := runAt(pos)
+		if pos == starts[k] {
+			return first[k]
+		}
+		return own[k]
+	}, add, func(pos int) {
+		k := runAt(pos)
+		delete(soft[k], pos-starts[k])
 	})
 	return soft
 }

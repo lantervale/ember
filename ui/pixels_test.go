@@ -129,6 +129,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/syllables", 420, 400, 0.0058},
 		{"./internal/pages/scripts", 420, 400, 0.0045},
 		{"./internal/pages/han-spacing", 560, 300, 0.0055},
+		{"./internal/pages/line-break", 480, 420, 0.0075},
 		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
 		{"./internal/pages/break-spaces", 420, 520, 0.0035},

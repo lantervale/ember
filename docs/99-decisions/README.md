@@ -197,6 +197,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
 | 0193 | [Vertical lines are selected in the flow of their lines](0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md) | api |
 | 0194 | [A float after text is placed as its lines are broken](0194-a-float-after-text-is-placed-as-its-lines-are-broken.md) | rendering |
+| 0195 | [line-break strictness reclasses characters before UAX #14](0195-line-break-strictness-reclasses-characters-before-uax-14.md) | rendering |
 
 ## Writing one
 

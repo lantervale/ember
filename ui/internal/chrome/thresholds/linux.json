@@ -67,6 +67,7 @@
   "syllables": 0.011,
   "scripts": 0.0065,
   "shaped-whole": 0.016,
+  "line-break": 0.013,
   "list-counters": 0.0075,
   "list-inside": 0.0135,
   "lists": 0.0065,
