@@ -303,7 +303,7 @@ type VerticalFonts interface {
 // Upright is how cluster, standing in a vertical line in f, is set: by its face's
 // vertical metrics, or else, as Chrome's, in a room of its ascent and descent with its
 // baseline the ascent below its top.
-func Upright(fonts Fonts, f style.Font, cluster string) (advance, baseline float32) {
+func Upright(fonts Fonts, f style.Font, cluster string) (float32, float32) {
 	if v, ok := fonts.(VerticalFonts); ok {
 		if a, b, has := v.Upright(f, cluster); has {
 			return a, b

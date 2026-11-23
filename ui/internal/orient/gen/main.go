@@ -49,13 +49,13 @@ func main() {
 		if hi == "" {
 			hi = lo
 		}
-		first, err := strconv.ParseUint(lo, 16, 32)
-		if err != nil {
-			log.Fatal(err)
+		first, perr := strconv.ParseUint(lo, 16, 32)
+		if perr != nil {
+			log.Fatal(perr)
 		}
-		last, err := strconv.ParseUint(hi, 16, 32)
-		if err != nil {
-			log.Fatal(err)
+		last, perr2 := strconv.ParseUint(hi, 16, 32)
+		if perr2 != nil {
+			log.Fatal(perr2)
 		}
 		for r := first; r <= last; r++ {
 			vo[r] = v

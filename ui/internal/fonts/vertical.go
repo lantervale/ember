@@ -110,7 +110,7 @@ type uprightSet struct{ advance, origin float32 }
 // vertical lines (vert): how far it takes down the line, and how far below the top of
 // that room its glyphs' baseline stands. ok is false when that face has none, where the
 // cluster takes the face's ascent and descent.
-func (s *Set) Upright(f style.Font, text string) (advance, baseline float32, ok bool) {
+func (s *Set) Upright(f style.Font, text string) (float32, float32, bool) {
 	r, _ := utf8.DecodeRuneInString(text)
 	var c *Face
 	if ch := s.chained(f); ch != nil {

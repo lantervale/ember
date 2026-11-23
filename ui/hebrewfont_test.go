@@ -3,11 +3,12 @@ package ui_test
 import (
 	"encoding/binary"
 	"slices"
-	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/sfnt"
+
+	"github.com/lantervale/ember/ui/internal/pages"
 )
 
 // hebrewFont is Go Regular with the Hebrew letters drawn by its Latin ones,
@@ -92,79 +93,7 @@ func cmap4(glyphs map[rune]uint16) []byte {
 // withCmap is the font file ttf with its cmap table replaced by cmap.
 func withCmap(t testing.TB, ttf, cmap []byte) []byte {
 	t.Helper()
-	return withTables(t, ttf, map[string][]byte{"cmap": cmap})
-}
-
-// withTables is the font file ttf with the tables of with in place of its own of their
-// tags, those it lacks added in their tags' order.
-func withTables(t testing.TB, ttf []byte, with map[string][]byte) []byte {
-	t.Helper()
-	be := binary.BigEndian
-	n := int(be.Uint16(ttf[4:]))
-	type table struct {
-		tag  string
-		data []byte
-	}
-	tables := make([]table, n)
-	for i := range n {
-		rec := ttf[12+16*i:]
-		off, size := be.Uint32(rec[8:]), be.Uint32(rec[12:])
-		tables[i] = table{string(rec[:4]), ttf[off : off+size]}
-		if data, ok := with[tables[i].tag]; ok {
-			tables[i].data = data
-		}
-		if tables[i].tag == "head" {
-			head := slices.Clone(tables[i].data)
-			be.PutUint32(head[8:], 0)
-			tables[i].data = head
-		}
-	}
-	for tag, data := range with {
-		if !slices.ContainsFunc(tables, func(tb table) bool { return tb.tag == tag }) {
-			tables = append(tables, table{tag, data})
-		}
-	}
-	slices.SortFunc(tables, func(a, b table) int { return strings.Compare(a.tag, b.tag) })
-	n = len(tables)
-	out := slices.Clone(ttf[:12])
-	be.PutUint16(out[4:], uint16(n))
-	search, selector := 1, 0
-	for search*2 <= n {
-		search *= 2
-		selector++
-	}
-	be.PutUint16(out[6:], uint16(16*search))
-	be.PutUint16(out[8:], uint16(selector))
-	be.PutUint16(out[10:], uint16(16*(n-search)))
-	off := 12 + 16*n
-	var body []byte
-	var headAt int
-	for _, tb := range tables {
-		out = append(out, tb.tag...)
-		out = be.AppendUint32(out, checksum(tb.data))
-		out = be.AppendUint32(out, uint32(off+len(body)))
-		out = be.AppendUint32(out, uint32(len(tb.data)))
-		if tb.tag == "head" {
-			headAt = off + len(body)
-		}
-		body = append(body, tb.data...)
-		for len(body)%4 != 0 {
-			body = append(body, 0)
-		}
-	}
-	out = append(out, body...)
-	be.PutUint32(out[headAt+8:], 0xb1b0afba-checksum(out))
-	return out
-}
-
-func checksum(b []byte) uint32 {
-	var sum uint32
-	for i := 0; i < len(b); i += 4 {
-		var word [4]byte
-		copy(word[:], b[i:])
-		sum += binary.BigEndian.Uint32(word[:])
-	}
-	return sum
+	return pages.WithTables(ttf, map[string][]byte{"cmap": cmap})
 }
 
 func TestTheHebrewFontDrawsHebrewByLatin(t *testing.T) {
