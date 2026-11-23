@@ -397,6 +397,8 @@ var checks = map[string]check{
 	propEastAsian:     checkVariant(propEastAsian),
 	propAlternates:    checkVariant(propAlternates),
 	propPosition:      checkVariant(propPosition),
+	propFeatures:      checkFeatures,
+	propKerning:       single(words("auto", "normal", "none")),
 	"word-spacing":    single(either(lengthPercent, words("normal"))),
 	"border-spacing":  repeated(length, 2),
 	"border-collapse": single(words("separate", "collapse")),

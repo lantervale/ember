@@ -1092,6 +1092,7 @@ func (x *ctx) finish(root bool) {
 	x.display(root)
 	x.transitions()
 	x.animations()
+	c.Font.Features = shapingFeatures(&c.Text)
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
@@ -1946,6 +1947,9 @@ var props = func() map[string]prop {
 			variantField(propAlternates), flips[string]()),
 		propPosition: field(func(c *style.Computed) *string { return &c.FontVariant.Position },
 			variantField(propPosition), flips[string]()),
+		propFeatures: field(func(c *style.Computed) *string { return &c.FeatureSettings }, featureSettings,
+			flips[string]()),
+		propKerning: keyword(func(c *style.Computed) *style.FontKerning { return &c.Kerning }, kerningWords),
 		"letter-spacing": field(func(c *style.Computed) *style.Spacing { return &c.LetterSpacing },
 			(*ctx).spacing, textSpacings),
 		"word-spacing": field(func(c *style.Computed) *style.Spacing { return &c.WordSpacing },

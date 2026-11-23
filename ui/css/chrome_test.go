@@ -79,6 +79,10 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-variant-east-asian": func(s *style.Computed) string { return orNormal(s.FontVariant.EastAsian) },
 	"font-variant-alternates": func(s *style.Computed) string { return orNormal(s.FontVariant.Alternates) },
 	"font-variant-position":   func(s *style.Computed) string { return orNormal(s.FontVariant.Position) },
+	"font-feature-settings":   func(s *style.Computed) string { return orNormal(s.FeatureSettings) },
+	"font-kerning": func(s *style.Computed) string {
+		return [...]string{"auto", "normal", "none"}[s.Kerning]
+	},
 	"line-height": func(s *style.Computed) string {
 		switch {
 		case s.LineHeight.Normal:

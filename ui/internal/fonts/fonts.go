@@ -11,6 +11,7 @@ import (
 	"github.com/rivo/uniseg"
 
 	"github.com/lantervale/ember/internal/draw"
+	"github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 	"golang.org/x/image/font"
@@ -50,6 +51,8 @@ type Face struct {
 	TTF  []byte
 	font *sfnt.Font
 	upem float32
+	// shaper is the face's layout tables, read when it is first shaped.
+	shaper *shape.Font
 	// web is the file of an @font-face's face that is fetched.
 	web *File
 	// file is the installed font the face is read from when it is first
@@ -66,6 +69,13 @@ type Set struct {
 	emoji func(cluster string) bool
 	faces []*Face
 	buf   sfnt.Buffer
+	// shapedRuns are the widths of runs shaped so far, by plan and
+	// glyphs, shapedCount of them; run and ids are the glyphs of the run
+	// being measured.
+	shapedRuns  map[*shape.Plan]map[string]shapedRun
+	shapedCount int
+	run         []shape.Glyph
+	ids         []byte
 	// scale is device pixels per point, 0 for 1.
 	scale float32
 	installing
@@ -253,6 +263,7 @@ func round(v float32) float32 { return float32(int(v + 0.5)) }
 // Advance is the width of text in f, kerning included; a character f's
 // face lacks takes the Fallback face's advance.
 func (s *Set) Advance(f style.Font, text string) float32 {
+	f = s.Caps(f, text)
 	if runs := f.SmallCaps(text); runs != nil {
 		var w float32
 		for _, r := range runs {
@@ -309,17 +320,18 @@ func (s *Set) fallbackAdvance(c *Face, r rune, size float32) (float32, bool) {
 	return float32(a) / 64 * size / fb.upem, true
 }
 
-// advance is text's width in f's face, the fallback's characters in it.
+// advance is text's width in f's face, shaped with f's features, the
+// fallback's characters in it.
 func (s *Set) advance(f style.Font, text string) float32 {
 	if ch := s.chained(f); ch != nil {
-		return s.chainAdvance(ch, f.Size, text)
+		return s.chainAdvance(ch, f, text)
 	}
 	c := s.Face(f)
-	ppem := fixed.I(int(c.upem))
-	var w fixed.Int26_6
+	script := shape.Script(text)
+	var w float32
 	var other float32
-	prev := sfnt.GlyphIndex(0)
-	for _, r := range text {
+	run := s.run[:0]
+	for i, r := range text {
 		g, err := c.font.GlyphIndex(&s.buf, r)
 		if err != nil {
 			continue
@@ -327,22 +339,16 @@ func (s *Set) advance(f style.Font, text string) float32 {
 		if g == 0 {
 			if a, ok := s.fallbackAdvance(c, r, f.Size); ok {
 				other += a
-				prev = 0
+				w += s.shaped(c, script, f.Features, run, nil)
+				run = run[:0]
 				continue
 			}
 		}
-		if prev != 0 {
-			if k, kerr := c.font.Kern(&s.buf, prev, g, ppem, font.HintingNone); kerr == nil {
-				w += k
-			}
-		}
-		a, err := c.font.GlyphAdvance(&s.buf, g, ppem, font.HintingNone)
-		if err == nil {
-			w += a
-		}
-		prev = g
+		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i)}) //nolint:gosec // a glyph index and a text offset
 	}
-	return float32(w)/64*f.Size/c.upem + other
+	w += s.shaped(c, script, f.Features, run, nil)
+	s.run = run
+	return w*f.Size/c.upem + other
 }
 
 // Fallback is the face that draws what a face lacks: Go Mono, whose

@@ -98,7 +98,7 @@ func (f Font) Equal(o Font) bool {
 		f.Size == o.Size &&
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
-		f.Caps == o.Caps && sameSlice(f.Variations, o.Variations)
+		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations)
 }
 
 //nolint:cyclop,gocyclo // one comparison a field
@@ -107,6 +107,8 @@ func (t *Text) equal(o *Text) bool {
 		t.LineHeight == o.LineHeight &&
 		t.LetterSpacing == o.LetterSpacing &&
 		t.FontVariant == o.FontVariant &&
+		t.FeatureSettings == o.FeatureSettings &&
+		t.Kerning == o.Kerning &&
 		t.WordSpacing == o.WordSpacing &&
 		t.Color == o.Color &&
 		t.TextAlign == o.TextAlign &&

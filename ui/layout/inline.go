@@ -564,6 +564,7 @@ func (c *inlineContent) rootStyle() *style.Computed {
 func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]bool, afterSpace bool,
 	levels []bidi.Level) bool {
 	ws := r.st.WhiteSpace
+	defer c.tieSpaces(fonts, r.st, len(c.pieces))
 	var b strings.Builder
 	// n counts the characters read, and from is where the text in b starts; level is the
 	// level of the character read last.
@@ -624,6 +625,37 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	}
 	emit(word)
 	return afterSpace
+}
+
+// spaceTies is fonts that know whether a face shapes a space with the words beside it
+// (fonts.Set.SpaceTies).
+type spaceTies interface {
+	SpaceTies(f style.Font) bool
+}
+
+// tieSpaces gives the pieces of a run from first on the kerning across its spaces where
+// st's face kerns or joins a space with its words, as Chrome shapes the run whole: a
+// word takes its kerning with the space after it, a space its kerning with the word
+// after it.
+func (c *inlineContent) tieSpaces(fonts box.Fonts, st *style.Computed, first int) {
+	if t, ok := fonts.(spaceTies); !ok || !t.SpaceTies(st.Font) {
+		return
+	}
+	space := fonts.Advance(st.Font, " ")
+	ps := c.pieces
+	for k := first; k < len(ps); k++ {
+		if ps[k].kind != gap || ps[k].text != " " {
+			continue
+		}
+		if k > first && ps[k-1].kind == word && ps[k-1].run == ps[k].run {
+			w := ps[k-1].text
+			ps[k-1].width += fonts.Advance(st.Font, w+" ") - fonts.Advance(st.Font, w) - space
+		}
+		if k+1 < len(ps) && ps[k+1].kind == word && ps[k+1].run == ps[k].run {
+			w := ps[k+1].text
+			ps[k].width += fonts.Advance(st.Font, " "+w) - fonts.Advance(st.Font, w) - space
+		}
+	}
 }
 
 // splitsWords reports whether st's text may break inside a word: by overflow-wrap,

@@ -410,9 +410,15 @@ type Font struct {
 	Stretch float32
 	// Synthesis is what font-synthesis forbids making up.
 	Synthesis FontSynthesis
-	// Caps is font-variant-caps, which measuring and drawing synthesise
+	// Caps is font-variant-caps, which measuring and drawing take from
+	// the face's features where it has them, else synthesise
 	// (SmallCaps).
 	Caps FontCaps
+	// Features are the OpenType features the text turns on or off,
+	// HarfBuzz's way, comma separated ("-liga,tnum,salt=2"): those of
+	// font-variant's longhands but its capitals, font-kerning,
+	// letter-spacing and font-feature-settings, in that order.
+	Features string
 	// Variations are font-variation-settings' axes, in order, a later
 	// one of a tag winning; none for normal.
 	Variations []FontVariation
@@ -616,25 +622,41 @@ const (
 	AllPetiteCaps
 	Unicase
 	TitlingCaps
+	// UnicaseFeatures is a unicase whose face draws small capitals but
+	// has no unic: what is not lowercase is drawn by its smcp and c2sc,
+	// as Chrome draws it; no style computes it.
+	UnicaseFeatures
 )
 
 // FontVariant is font-variant's longhands but its capitals (Font.Caps),
 // kept as written, their keywords in the order CSS lists them, "" for
-// normal. They change nothing drawn: ui applies no OpenType feature of a
-// face.
+// normal; Font.Features holds the OpenType features they turn on.
 type FontVariant struct {
 	Ligatures, Numeric, EastAsian, Alternates, Position string
 }
 
+// FontKerning is font-kerning.
+type FontKerning uint8
+
+const (
+	KerningAuto FontKerning = iota
+	KerningNormal
+	KerningNone
+)
+
 type Text struct {
-	Font          Font
-	FontVariant   FontVariant
-	LineHeight    LineHeight
-	LetterSpacing Spacing
-	WordSpacing   Spacing
-	Color         color.Color
-	TextAlign     TextAlign
-	WhiteSpace    WhiteSpace
+	Font        Font
+	FontVariant FontVariant
+	// FeatureSettings is font-feature-settings as Chrome writes it back,
+	// "" for normal.
+	FeatureSettings string
+	Kerning         FontKerning
+	LineHeight      LineHeight
+	LetterSpacing   Spacing
+	WordSpacing     Spacing
+	Color           color.Color
+	TextAlign       TextAlign
+	WhiteSpace      WhiteSpace
 	// Dir is direction: the order of the inline flow, and the side
 	// each start and end stands on. Bidi is unicode-bidi, how the element
 	// takes part in the bidi algorithm of the text round it.
