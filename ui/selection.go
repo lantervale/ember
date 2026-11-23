@@ -801,6 +801,13 @@ func (d *Document) selectedParts() map[*box.Box][]paint.Selected {
 		if i+1 < len(runs) {
 			next = d.tree.Of[runs[i+1]]
 		}
+		if l, ok := d.letterOf(n); ok && from < l.end && to > l.lead {
+			a, z := max(from, l.lead)-l.lead, min(to, l.end)-l.lead
+			if ps := d.partsOf(l.text, l.run, nil, a, z, false); len(ps) > 0 {
+				s.parts[l.run] = ps
+				s.order = append(s.order, l.run)
+			}
+		}
 		if ps := d.partsOf(n, b, next, from, to, n != end.Node); len(ps) > 0 {
 			s.parts[b] = ps
 			s.order = append(s.order, b)
@@ -855,6 +862,32 @@ func (d *Document) breakMark(b *box.Box) paint.Selected {
 	h, base := layout.LineHeight(m, b.Style)
 	top := m.Ascent - base
 	return paint.Selected{Rect: geom.Rect{Y: top, W: d.fonts.Advance(b.Style.Font, " "), H: h}}
+}
+
+// letter is the part of a text node a ::first-letter box shows: the
+// letter's own text node and its run, and where it stands in the node's
+// text, from lead, after the white space it drops, up to end.
+type letter struct {
+	text      *Node
+	run       *box.Box
+	lead, end int
+}
+
+// letterOf is the first letter of n's text, which a ::first-letter box
+// shows apart from n's run: a selection of n's text takes it too.
+func (d *Document) letterOf(n *Node) (letter, bool) {
+	data := dom.Data(n)
+	g := data.Letter
+	if g == nil || dom.Data(g).Letter != n || len(g.Children()) != 1 || data.LetterEnd > len(n.Text()) {
+		return letter{}, false
+	}
+	t := g.Children()[0]
+	b := d.tree.Of[t]
+	if b == nil || b.Kind != box.TextRun || len(b.Lines) == 0 || !strings.HasSuffix(n.Text()[:data.LetterEnd], t.Text()) {
+		return letter{}, false
+	}
+	end := utf8.RuneCountInString(n.Text()[:data.LetterEnd])
+	return letter{text: t, run: b, lead: end - utf8.RuneCountInString(t.Text()), end: end}, true
 }
 
 // partsOf are the rectangles of the characters from to to of n's run b:
@@ -1118,6 +1151,18 @@ func (c *copier) text(n *Node) {
 	}
 	m := c.d.mapOf(n)
 	at := 0
+	if l, ok := c.d.letterOf(n); ok {
+		c.dropped(m.src, from, min(l.lead, to), b.Style.WhiteSpace, false)
+		if a, z := max(from, l.lead), min(to, l.end); z > a {
+			if c.space && c.last != 0 && !isBlank(c.last) {
+				c.put(' ')
+			}
+			for _, r := range m.src[a:z] {
+				c.put(r)
+			}
+		}
+		at = l.end
+	}
 	for k, f := range b.Lines {
 		offs := m.frags[k].offs
 		c.dropped(m.src, max(at, from), min(int(offs[0]), to), b.Style.WhiteSpace, k > 0)

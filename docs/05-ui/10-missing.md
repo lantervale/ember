@@ -16,7 +16,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `word-break: break-all` between two elements (`ab<b>cd</b>`), and between a letter and punctuation other than a hyphen | no break where the element changes; elsewhere ui breaks between two letters or digits and before a hyphen, which Chrome's table may differ from round brackets and marks |
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
+| a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
 | `initial-letter` | refused as an unknown property: float a `::first-letter` for a drop cap |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
 | a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |

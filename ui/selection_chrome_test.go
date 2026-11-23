@@ -321,7 +321,45 @@ func TestASelectedTabsRoomIsChromes(t *testing.T) {
 pre { margin: 0 0 6px; font: inherit; } .wrap { white-space: pre-wrap; } .line { white-space: pre-line; }`))
 	d.Body().Append(ui.Pre(ui.Text("a\tb")), ui.Div(ui.Class("wrap"), ui.Text("one\t\ttwo")),
 		ui.Div(ui.Class("line"), ui.Text("x\ty")))
-	size := geom.V2(400, 300)
+	sameSelections(t, d, geom.V2(400, 300), map[string][3]int{
+		"a tab whole":     {0, 0, 3},
+		"the tab alone":   {0, 1, 2},
+		"from the tab":    {0, 1, 3},
+		"up to the tab":   {0, 0, 2},
+		"two tabs":        {1, 2, 6},
+		"the second tab":  {1, 4, 5},
+		"a collapsed tab": {2, 0, 3},
+	})
+}
+
+// TestAFirstLetterIsSelectedAndCopiedWithItsText selects text whose first
+// letter a ::first-letter box shows, floated, boxed, inline and taking
+// quotes with it, from its start and from inside the letter's part.
+func TestAFirstLetterIsSelectedAndCopiedWithItsText(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`body { margin: 8px; user-select: text; font-size: 16px; line-height: 20px; width: 300px; }
+p { margin: 0 0 8px; }
+.drop::first-letter { float: left; font-size: 40px; line-height: 34px; margin-right: 4px; }
+.boxed::first-letter { font-size: 22px; padding: 1px 5px; margin-right: 3px; border: 2px solid #234; }
+.quoted::first-letter { font-size: 24px; }`))
+	d.Body().Append(ui.P(ui.Class("drop"), ui.Text("Lantern light over the crypt stairs")),
+		ui.P(ui.Class("boxed"), ui.Text("Every step rang hollow")),
+		ui.P(ui.Class("quoted"), ui.Text("  “Well,” said the warden")))
+	sameSelections(t, d, geom.V2(400, 300), map[string][3]int{
+		"a drop cap and its word":   {0, 0, 7},
+		"from inside the word":      {0, 3, 10},
+		"a boxed letter alone":      {1, 0, 1},
+		"a boxed letter and more":   {1, 0, 10},
+		"the quotes and the letter": {2, 2, 6},
+		"inside the quoted letter":  {2, 3, 9},
+	})
+}
+
+// sameSelections selects in d, laid out at size, each span of its text
+// nodes, {node, from, to} in the order a walk meets them, and compares
+// the copied text and the rectangles with Chrome's toString and range
+// rects.
+func sameSelections(t *testing.T, d *ui.Document, size geom.Vec2, spans map[string][3]int) {
+	t.Helper()
 	d.Layout(size)
 	var texts []*ui.Node
 	d.Body().Walk(func(n *ui.Node) bool {
@@ -330,17 +368,9 @@ pre { margin: 0 0 6px; font: inherit; } .wrap { white-space: pre-wrap; } .line {
 		}
 		return true
 	})
-	for name, ends := range map[string][3]int{
-		"a tab whole":     {0, 0, 3},
-		"the tab alone":   {0, 1, 2},
-		"from the tab":    {0, 1, 3},
-		"up to the tab":   {0, 0, 2},
-		"two tabs":        {1, 2, 6},
-		"the second tab":  {1, 4, 5},
-		"a collapsed tab": {2, 0, 3},
-	} {
-		n := texts[ends[0]]
-		d.Select(ui.Position{Node: n, Offset: ends[1]}, ui.Position{Node: n, Offset: ends[2]})
+	for name, span := range spans {
+		n := texts[span[0]]
+		d.Select(ui.Position{Node: n, Offset: span[1]}, ui.Position{Node: n, Offset: span[2]})
 		out, err := chrome.Eval(d, size, `
 			return [getSelection().toString(),
 				[...getSelection().getRangeAt(0).getClientRects()].map(r => [r.x, r.y, r.width, r.height])]`)

@@ -431,3 +431,18 @@ func TestASelectedTabIsCopiedAndDrawnInItsRoom(t *testing.T) {
 	assert.Greater(t, both[0].W, second[0].W, "the first tab's room before it")
 	assert.InDelta(t, both[0].X+both[0].W, second[0].X+second[0].W, 0.01, "both end at the second's stop")
 }
+
+func TestAFirstLetterIsSelectedWithItsText(t *testing.T) {
+	p := ui.P(ui.Class("drop"), ui.Text("Lantern light"))
+	l := selectableDoc(t, ".drop::first-letter { float: left; font-size: 40px; }", p)
+	require.True(t, l.doc.SelectContents(p))
+	assert.Equal(t, "Lantern light", l.doc.Selection().Text)
+	rects := l.doc.SelectionRects()
+	require.Len(t, rects, 2, "the letter's, then the rest's")
+	assert.Greater(t, rects[0].H, rects[1].H, "the letter as high as its own line")
+
+	n := textOf(p)
+	l.doc.Select(ui.Position{Node: n, Offset: 1}, ui.Position{Node: n, Offset: 4})
+	assert.Equal(t, "ant", l.doc.Selection().Text)
+	assert.Len(t, l.doc.SelectionRects(), 1, "the letter left out")
+}
