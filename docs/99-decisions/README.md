@@ -182,6 +182,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
 | 0179 | [A collapsed column narrows a stretched table, but a flex row's](0179-a-collapsed-column-narrows-a-stretched-table-but-a-flex-rows.md) | api |
 | 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
+| 0187 | [Han punctuation is trimmed by halt, and autospace is room after a character](0187-han-punctuation-is-trimmed-by-halt-and-autospace-is-room-after-a-character.md) | rendering |
 
 ## Writing one
 

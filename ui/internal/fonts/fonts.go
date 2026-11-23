@@ -51,8 +51,10 @@ type Face struct {
 	TTF  []byte
 	font *sfnt.Font
 	upem float32
-	// shaper is the face's layout tables, read when it is first shaped.
+	// shaper is the face's layout tables, read when it is first shaped;
+	// han what text-spacing-trim reads of its glyphs, by character.
 	shaper *shape.Font
+	han    map[rune]hanGlyph
 	// web is the file of an @font-face's face that is fetched.
 	web *File
 	// file is the installed font the face is read from when it is first

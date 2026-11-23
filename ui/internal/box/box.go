@@ -64,6 +64,9 @@ type Fragment struct {
 	// is shaped between, where a letter of Text may join theirs; empty
 	// elsewhere.
 	Before, After string
+	// Spacing is the room text-spacing-trim and text-autospace give
+	// characters of Text, in Rect, by their byte, in order; nil for none.
+	Spacing []Spacing
 }
 
 // Shown is f's text as it is drawn from the left: right to left text reversed, by
@@ -290,6 +293,47 @@ type InkFonts interface {
 // line to fit them, not the inline box holding them.
 type FallbackFonts interface {
 	FallbackMetrics(f style.Font, text string) (Metrics, bool)
+}
+
+// HanFonts is Fonts that knows what text-spacing-trim reads of a
+// full-width punctuation mark's glyph: HanGlyph is r's glyph in the face
+// drawing it in f.
+type HanFonts interface {
+	HanGlyph(f style.Font, r rune) HanGlyph
+}
+
+// HanGlyph is what text-spacing-trim reads of a glyph, in points at its
+// size.
+type HanGlyph struct {
+	// Halt is set when the face has the halt feature, which sets
+	// full-width punctuation half its width: Shift is how far it moves
+	// this glyph and Narrow how much it takes off its advance (both
+	// negative, 0 for a glyph it leaves).
+	Halt          bool
+	Shift, Narrow float32
+	// Ink is where the glyph's ink stands in its advance: InkLeft in its
+	// left half, InkCentred in its middle half, else InkElsewhere; Full
+	// is set when the advance is an em.
+	Ink  Ink
+	Full bool
+}
+
+// Ink is where a glyph's ink stands in its advance.
+type Ink uint8
+
+const (
+	InkElsewhere Ink = iota
+	InkLeft
+	InkCentred
+)
+
+// Spacing is the room text-spacing-trim and text-autospace give a
+// character of a Fragment's Text, the one starting at byte At: its glyph
+// is drawn Shift from where the pen stands, and the pen moves Space
+// further than its advance after it.
+type Spacing struct {
+	At           int
+	Shift, Space float32
 }
 
 // Images gives layout the natural size of a replaced element's picture,

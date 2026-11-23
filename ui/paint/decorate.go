@@ -2043,7 +2043,7 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 			// The space starting its block's text takes no word-spacing.
 			at.X -= st.WordGap()
 		}
-		p.words(at, shown, st, opts)
+		p.spaced(at, shown, f.Spacing, st, opts)
 		return
 	}
 	opts = append(slices.Clip(opts), twod.RightToLeft())
@@ -2090,6 +2090,46 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 		x -= pc.w
 		p.s.Text(geom.V2(x+pc.gap, at.Y), pc.text, pc.opts...)
 	}
+}
+
+// spaced draws text from at with words, each character spacing gives
+// room moved and the pen past it as text-spacing-trim and
+// text-autospace have layout measure it.
+func (p *painter) spaced(at geom.Vec2, text string, spacing []box.Spacing, st *style.Computed,
+	opts []twod.TextOption) {
+	from := 0
+	for _, s := range spacing {
+		if s.At >= len(text) {
+			break
+		}
+		_, n := utf8.DecodeRuneInString(text[s.At:])
+		end := s.At + n
+		if s.Shift == 0 {
+			p.words(at, text[from:end], st, opts)
+			at.X += p.textAdvance(st, text[from:end], opts) + s.Space
+			from = end
+			continue
+		}
+		p.words(at, text[from:s.At], st, opts)
+		at.X += p.textAdvance(st, text[from:s.At], opts)
+		p.words(geom.V2(at.X+s.Shift, at.Y), text[s.At:end], st, opts)
+		at.X += p.textAdvance(st, text[s.At:end], opts) + s.Space
+		from = end
+	}
+	if from < len(text) {
+		p.words(at, text[from:], st, opts)
+	}
+}
+
+// textAdvance is how far text takes the pen in st, as layout measures it.
+func (p *painter) textAdvance(st *style.Computed, text string, opts []twod.TextOption) float32 {
+	if text == "" {
+		return 0
+	}
+	if p.fonts == nil {
+		return twod.Measure(text, opts...).X
+	}
+	return p.fonts.Advance(st.Font, text) + st.Spacing(text)
 }
 
 // capsFonts are fonts that know which capitals a face draws itself
