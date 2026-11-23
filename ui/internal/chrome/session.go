@@ -365,7 +365,17 @@ var keyCodes = map[string]struct {
 // types itself unless a modifier other than Shift is held.
 func (s *Session) Key(key string, mods int) {
 	s.t.Helper()
+	s.KeyAt(key, mods, time.Time{})
+}
+
+// KeyAt is Key with the events stamped at, what the page reads as their
+// time where it times keys apart (a select's type-ahead); now when zero.
+func (s *Session) KeyAt(key string, mods int, at time.Time) {
+	s.t.Helper()
 	down := map[string]any{kindField: "rawKeyDown", "key": key, modifiers: mods}
+	if !at.IsZero() {
+		down["timestamp"] = float64(at.UnixMicro()) / 1e6
+	}
 	if k, ok := keyCodes[key]; ok {
 		down["windowsVirtualKeyCode"], down["code"] = k.vk, k.code
 	} else if len(key) == 1 {
@@ -380,7 +390,7 @@ func (s *Session) Key(key string, mods int) {
 	}
 	s.call("Input.dispatchKeyEvent", down, nil)
 	up := map[string]any{kindField: "keyUp", "key": key, modifiers: mods}
-	for _, f := range []string{"windowsVirtualKeyCode", "code"} {
+	for _, f := range []string{"windowsVirtualKeyCode", "code", "timestamp"} {
 		if v, ok := down[f]; ok {
 			up[f] = v
 		}

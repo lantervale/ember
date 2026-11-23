@@ -122,8 +122,9 @@ type interaction struct {
 	// on it.
 	pressOpened *Node
 	// listPressed is the listbox a press on one of its options began on,
-	// until its release.
+	// until its release, and listHeld how the pointer went since.
 	listPressed *Node
+	listHeld    listHold
 	// drag is a press on a Draggable element, a drag once past dragStart;
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
@@ -858,7 +859,7 @@ func (d *Document) heldSelection(in *input.State, at geom.Vec2) {
 }
 
 // leftHeld moves what the held left button drags: the selection of the
-// text field pressed, a slider's thumb.
+// text field pressed, a slider's thumb, a listbox's run.
 func (d *Document) leftHeld(at geom.Vec2) {
 	if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
 		d.dragText(d.pressed[0], t, at)
@@ -867,7 +868,7 @@ func (d *Document) leftHeld(at geom.Vec2) {
 		d.fire(held, r.Drag(d.along(held, at)))
 	}
 	if d.listPressed != nil {
-		d.dragListBox()
+		d.dragListBox(at)
 	}
 }
 
@@ -959,7 +960,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		d.fire(takes, r.Press(d.along(takes, at)))
 	}
 	if d.listBox(takes) != nil {
-		d.pressListBox(in, takes)
+		d.pressListBox(in, takes, at)
 	}
 	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	return false
@@ -1408,14 +1409,14 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	}
 }
 
-// typedIn hands the focused n what was typed: a listbox finds an option
+// typedIn hands the focused n what was typed: a select finds an option
 // by it. It reports a grid with a shortcut held, which leaves the keys.
 func (d *Document) typedIn(n *Node, f inputfeed.Feed, in *input.State) bool {
 	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
 		return true
 	}
-	if s := d.listBox(n); s != nil && !d.commandHeld(f) {
-		d.listBoxType(n, s, in.Text())
+	if s, ok := d.machine(n).(*control.Select); ok && !d.commandHeld(f) {
+		d.selectType(n, s, in.Text())
 	}
 	return false
 }
