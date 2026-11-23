@@ -805,6 +805,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
 	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
+	ps.ColorInherited = true
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, flow: casc.flow}
 	px.customs(casc.custom)
 	for i := range longhands {

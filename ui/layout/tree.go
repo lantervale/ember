@@ -1235,20 +1235,35 @@ func (m markerContent) insideWidth(fonts box.Fonts) float32 {
 }
 
 // place puts the marker's box b in the rectangle r its piece takes on a line, on
-// baseline lb below r's top.
+// baseline lb below r's top: a bullet or a picture at its start, the right end in a
+// right-to-left item, whose marker text is drawn as that direction orders it.
 func (m markerContent) place(b *box.Box, r geom.Rect, lb float32) {
 	b.Style = m.st
+	rtl := m.st.Dir == style.RTL
 	switch {
 	case m.picture.X > 0:
 		b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y + lb - m.picture.Y}, m.picture
+		if rtl {
+			b.Pos.X = r.X + r.W - m.picture.X
+		}
 		b.Picture, b.Gradient = m.source, m.gradient
 	case m.bullet:
 		side, top := m.bulletRect()
 		b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y + lb - m.ascent + top}, geom.Vec2{X: side, Y: side}
+		if rtl {
+			b.Pos.X = r.X + r.W - side
+		}
 	default:
+		text := m.text
+		if rtl {
+			text = visualText(text, 1)
+		}
 		b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
-		b.Lines = []box.Fragment{{Text: m.text, Rect: geom.Rect{W: r.W, H: r.H}, Baseline: lb}}
+		b.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: r.W, H: r.H}, Baseline: lb}}
+		return
 	}
+	// a bullet or a picture takes the pointer over all its piece of the line, as Chrome's
+	b.Area = geom.Rect{X: r.X - b.Pos.X, Y: r.Y - b.Pos.Y, W: r.W, H: r.H}
 }
 
 // listMarker gives a list item its ::marker box, outside the item beside its first line,
@@ -1279,6 +1294,7 @@ func (t *tree) listMarker(n *node) {
 			m.Pos.X = right + markerGap - rtlMarkerPull
 		}
 		m.Size, m.Picture, m.Gradient = mark.picture, mark.source, mark.gradient
+		m.Area = t.markerArea(mark, m, baseline, 0, mark.picture.X, rtl)
 	case mark.bullet:
 		side, top := mark.bulletRect()
 		offset := float32(math.Floor(float64(mark.ascent * 2 / 3)))
@@ -1287,6 +1303,7 @@ func (t *tree) listMarker(n *node) {
 			m.Pos.X = right + offset + markerGap - rtlMarkerPull - side
 		}
 		m.Size = geom.Vec2{X: side, Y: side}
+		m.Area = t.markerArea(mark, m, baseline, -1, side+2, rtl)
 	default:
 		text := mark.text
 		w := t.fonts.Advance(mark.st.Font, text) + mark.st.Spacing(text)
@@ -1298,6 +1315,18 @@ func (t *tree) listMarker(n *node) {
 		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}
 	}
 	n.box.Append(m)
+}
+
+// markerArea is what an outside marker box m of a bullet or a picture takes the pointer
+// over, in m's space, as Chrome's: w wide from x past the bullet's or the picture's left,
+// where a right-to-left item's stands as the mirror of a left-to-right one's, and the
+// height of the marker's line on the baseline.
+func (t *tree) markerArea(mark markerContent, m *box.Box, baseline, x, w float32, rtl bool) geom.Rect {
+	if rtl {
+		x += rtlMarkerPull
+	}
+	h, above := lineHeightOf(t.fonts.Metrics(mark.st.Font), mark.st)
+	return geom.Rect{X: x, Y: baseline - above - m.Pos.Y, W: w, H: h}
 }
 
 // firstLine is the first line fragment under b, with its box's place in b.

@@ -56,12 +56,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `scrollbar-gutter: both-edges` on the viewport, a textarea or in a vertical writing mode, and the sideways scroll of a box with both gutters | the viewport, a textarea and a vertical box keep their end gutter alone, and a box's scrollport takes in its start gutter, so it scrolls sideways one gutter further, where Chrome keeps a gutter at each edge of them all and scrolls within the two |
 | a right-to-left box with a stable gutter that also overflows sideways | shown from its start edge, where Chrome starts it scrolled by its gutters |
 | `scrollbar-color`'s bars at rest, their track, and Chrome's classic system bars | ui draws its overlay thumbs in the first colour whether or not the box scrolls, and no track, where Chrome on macOS shows its overlay bars only while the box scrolls, its track on hover, and Chrome on Linux and Windows (whose overlay bars the comparisons turn on) its classic bars in a gutter |
-| where a `::marker` takes the pointer, its own `cursor` shown | over its bullet's box, where Chrome's is its text's: the bullet and the space after it, the line's height |
-| a list item's colour transition under a `::marker` a rule styles | the marker shows the item's end colour, where Chrome's follows the item's |
-| `counter(list-item)` in a reversed `ol` | the item's number, where Chrome's counter counts down from 0 and its marker alone shows the number |
+| a block `::before` or `::after` in a checkbox or a radio | centred in the box with its other content, where Chrome starts it at the top |
+| `counter(list-item)` in a reversed `ol` with no `start`, or on an item with a `value`, once Chrome counts again | as Chrome first counts: from 1 down, the value numbering the marker alone; Chrome counting again (its comparison harness naming each `::before`, a `@counter-style` in use, at times a font landing) resets the counter to one over the number of items and an item's value as a counter of the item's own, so a page shows either |
+| a list item's inside marker at its min-content width | kept on one line with what follows it, where Chrome breaks after the marker's trailing space (a shrunk flex item of a list) |
 | a counter style's text in a font of its own, and its glyphs a face lacks | the complex predefined styles write their CJK, Korean and Ethiopic characters through the face's fallbacks, which ui has none of unless `ui.SystemFonts()` finds them |
-| a marker inside a right-to-left item | laid out as at the start of a left-to-right line; not compared with Chrome |
-| a `list-style-image` fetched off the frame (`ui.FetchImages`) | the marker is laid out once the picture is found by another layout, not when it lands |
 
 ## Layout
 
