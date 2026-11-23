@@ -6,8 +6,9 @@
 # go-thai.ttf and go-hebrew.ttf, stand-ins for Thai and Hebrew as old
 # fonts have them, with no layout tables (scripts.py), go-spaced.ttf,
 # a ligature and contextual alternates reaching across a space (spaced.py),
-# and go-han.ttf, stand-ins for ideographs and full-width punctuation with
-# halt (han.py):
+# go-han.ttf, stand-ins for ideographs and full-width punctuation with
+# halt (han.py), and go-kana.ttf, stand-ins for the characters line-break
+# breaks around (kana.py):
 #   brew install fonttools
 #   sh make.sh <path to Go-Regular.ttf> <fonttools' python>
 # Go-Regular.ttf is in golang.org/x/image/font/gofont/ttfs; fonttools'
@@ -19,6 +20,7 @@ pyftsubset "$1" --unicodes="U+0020-007E" --output-file=ascii.ttf
 "$2" "$(dirname "$0")/scripts.py" ascii.ttf go-thai.ttf go-hebrew.ttf
 "$2" "$(dirname "$0")/spaced.py" ascii.ttf go-spaced.ttf
 "$2" "$(dirname "$0")/han.py" ascii.ttf go-han.ttf
+"$2" "$(dirname "$0")/kana.py" ascii.ttf go-kana.ttf
 rm ascii.ttf
 # noto-devanagari.ttf is Noto Sans Devanagari (OFL, noto-devanagari-OFL.txt)
 # subset to Basic Latin, Devanagari and its extensions:

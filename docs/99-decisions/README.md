@@ -195,8 +195,13 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0190 | [Line ends are shaped again and carets share a ligature](0190-line-ends-are-shaped-again-and-carets-share-a-ligature.md) | api |
 | 0191 | [Markers are numbered apart from the list-item counter](0191-markers-are-numbered-apart-from-the-list-item-counter.md) | rendering |
 | 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
+| 0193 | [Vertical lines are selected in the flow of their lines](0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md) | api |
 | 0194 | [A float after text is placed as its lines are broken](0194-a-float-after-text-is-placed-as-its-lines-are-broken.md) | rendering |
+| 0195 | [line-break strictness reclasses characters before UAX #14](0195-line-break-strictness-reclasses-characters-before-uax-14.md) | rendering |
+| 0196 | [Two ASCII characters break by Chrome's table, measured in Chrome](0196-two-ascii-characters-break-by-chromes-table-measured-in-chrome.md) | rendering |
+| 0197 | [Text right to left and sideways is shaped as one, and a reshaped end keeps its joins](0197-text-right-to-left-and-sideways-is-shaped-as-one-and-a-reshaped-end-keeps-its-joins.md) | api |
 | 0200 | [Positioned boxes are lanes beside the flow, and forced breaks in lanes start Chrome's runs](0200-positioned-boxes-and-forced-breaks-in-lanes-follow-chromes-runs.md) | rendering |
+| 0201 | [An optgroup is a label row of a select's list](0201-an-optgroup-is-a-label-row-of-a-selects-list.md) | api |
 
 ## Writing one
 

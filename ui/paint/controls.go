@@ -195,7 +195,7 @@ func (p *painter) marks(e entry, alpha float32) {
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source: // only marked controls come here
+		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source, dom.Optgroup: // only marked controls come here
 	}
 }
 
@@ -406,7 +406,7 @@ func tracked(b *box.Box) bool {
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
-		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source:
+		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source, dom.Optgroup:
 	}
 	return false
 }

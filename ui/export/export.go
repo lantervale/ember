@@ -334,22 +334,12 @@ func controlState(d *ui.Document, n *dom.Node, typ string) (string, string, bool
 		return "value", v, v != ""
 	case n.Tag() == dom.Option:
 		p := n.Parent()
-		return "selected", "", p != nil && p.Tag() == dom.Select && optionIndex(p, n) == d.Selected(p)
+		if p != nil && p.Tag() == dom.Optgroup {
+			p = p.Parent()
+		}
+		return "selected", "", p != nil && p.Tag() == dom.Select && slices.Index(dom.Options(p), n) == d.Selected(p)
 	}
 	return "", "", false
-}
-
-func optionIndex(sel, opt *dom.Node) int {
-	i := 0
-	for _, c := range sel.Children() {
-		if c == opt {
-			return i
-		}
-		if c.Tag() == dom.Option {
-			i++
-		}
-	}
-	return -1
 }
 
 var urls = regexp.MustCompile(`url\(\s*(['"]?)([^'")]+)['"]?\s*\)`)

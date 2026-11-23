@@ -113,6 +113,26 @@ func (n *Node) Index() int {
 	return slices.Index(n.parent.children, n)
 }
 
+// Options are the select n's options in order, as the DOM's options:
+// its option children and those of its optgroup children.
+func Options(n *Node) []*Node {
+	var out []*Node
+	for _, c := range n.children {
+		if c.tag == Option {
+			out = append(out, c)
+		}
+		if c.tag != Optgroup {
+			continue
+		}
+		for _, o := range c.children {
+			if o.tag == Option {
+				out = append(out, o)
+			}
+		}
+	}
+	return out
+}
+
 // Walk visits n and its descendants depth first, in document order,
 // skipping a node's subtree when fn returns false.
 func (n *Node) Walk(fn func(*Node) bool) {

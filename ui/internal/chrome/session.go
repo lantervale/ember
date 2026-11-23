@@ -246,6 +246,37 @@ func (s *Session) Media(name, value string) {
 		"features": []map[string]string{{"name": name, "value": value}}}, nil)
 }
 
+// Mouse sends Chrome's input a mouse event of kind (mousePressed,
+// mouseReleased, mouseMoved) at at, in the viewport's points: the left
+// button, a press or a release the clicks'th of a run, a move holding the
+// button where clicks is not 0.
+func (s *Session) Mouse(kind string, at geom.Vec2, clicks int) {
+	s.t.Helper()
+	ev := map[string]any{"type": kind, "x": at.X, "y": at.Y, "button": "left", "clickCount": clicks}
+	if kind == "mouseMoved" {
+		ev["clickCount"] = 0
+		if clicks == 0 {
+			ev["button"] = "none"
+		} else {
+			ev["buttons"] = 1
+		}
+	}
+	s.call("Input.dispatchMouseEvent", ev, nil)
+}
+
+// ShiftArrow presses and lets go the arrow key named key (ArrowDown…)
+// with Shift held, as extending a selection by the keyboard does.
+func (s *Session) ShiftArrow(key string) {
+	s.t.Helper()
+	const shift = 8
+	// the Windows key codes, which Blink's editing commands read
+	code := map[string]int{"ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40}[key]
+	for _, kind := range []string{"rawKeyDown", "keyUp"} {
+		s.call("Input.dispatchKeyEvent", map[string]any{"type": kind, "key": key, "code": key,
+			"windowsVirtualKeyCode": code, "modifiers": shift}, nil)
+	}
+}
+
 // Shot is the viewport as Chrome shows it now, in device pixels.
 func (s *Session) Shot() image.Image {
 	s.t.Helper()

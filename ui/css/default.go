@@ -187,6 +187,8 @@ input:disabled, textarea:disabled {
 select:disabled { color: light-dark(gray, #aaa); border-color: rgba(118, 118, 118, 0.3); opacity: 0.7; }
 option { display: block; padding: 0 2px 1px; }
 option:disabled { color: light-dark(gray, #aaa); }
+optgroup { display: block; font-weight: bolder; }
+optgroup:disabled { color: light-dark(gray, #aaa); }
 input, select { white-space: nowrap; }
 input { overflow: hidden; }
 select { overflow: clip; }

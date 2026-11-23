@@ -486,21 +486,21 @@ func placeholds(n *Node, kind string) bool {
 }
 
 // placeholderOption reports whether the select n's first option is its
-// placeholder, of no value, which a required select may not keep.
+// placeholder, of no value and outside any optgroup, which a required
+// select may not keep.
 func placeholderOption(n *Node) bool {
 	if has(n, "multiple") || number(n, "size", 1) > 1 {
 		return false
 	}
-	for _, c := range n.Children() {
-		if c.Tag() == dom.Option {
-			v, ok := c.Attr("value")
-			if !ok {
-				v = strings.TrimSpace(c.Text())
-			}
-			return v == ""
-		}
+	opts := dom.Options(n)
+	if len(opts) == 0 || opts[0].Parent() != n {
+		return false
 	}
-	return false
+	v, ok := opts[0].Attr("value")
+	if !ok {
+		v = strings.TrimSpace(opts[0].Text())
+	}
+	return v == ""
 }
 
 func floatAttr(n *Node, name string) (float64, bool) {

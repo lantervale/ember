@@ -2,7 +2,10 @@
 // shown right to left, a selection inside it, an ellipsis cutting a line
 // at its left, columns and their rules from the right, a table's collapsed
 // borders resolved from its start, fields, a select and its arrow, and a
-// scroller started at its right end and one scrolled left.
+// scroller started at its right end and one scrolled left. The select's
+// line-height is set: at normal, Chrome on Linux makes a select's line a
+// point shorter than its font's other lines, where on macOS, as in ui, it
+// is the same.
 package main
 
 import (
@@ -25,6 +28,7 @@ table { border-collapse: collapse; margin-bottom: 6px; }
 td { border: 1px solid #2b2722; padding: 2px 6px; }
 .start { border-inline-start: 5px solid #c8473d; }
 input, select { width: 160px; margin: 0 0 6px; display: block; }
+select { line-height: 20px; }
 .scroller { width: 200px; overflow-x: auto; border: 1px solid #2b2722; margin-bottom: 6px; }
 .wide { width: 320px; height: 14px; background: linear-gradient(to right, #3a6fd8, #f0c040); }
 `
