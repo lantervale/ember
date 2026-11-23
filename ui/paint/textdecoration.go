@@ -22,6 +22,9 @@ func (p *painter) decorations(e entry, st *style.Computed, lines style.Decoratio
 	for i := range st.Decorations {
 		d := &st.Decorations[i]
 		c := fade(d.Color, alpha)
+		if p.glyphsOnly {
+			c = color.White
+		}
 		if d.Line&lines == 0 || c.A <= 0 {
 			continue
 		}

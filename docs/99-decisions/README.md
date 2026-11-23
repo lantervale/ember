@@ -139,6 +139,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
 | 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
 | 0138 | [Animated pictures play as one texture per address](0138-animated-pictures-play-as-one-texture-per-address.md) | assets |
+| 0144 | [A background clipped to text shows through a picture of its glyphs](0144-a-background-clipped-to-text-shows-through-a-picture-of-its-glyphs.md) | rendering |
 
 ## Writing one
 

@@ -578,7 +578,7 @@ func expandBackground(v []Component, out map[string][]Component) error {
 }
 
 func backgroundLayer(v []Component, out map[string][]Component) error {
-	var pos, boxes []Component
+	var pos, boxes, text []Component
 	posEnd := -1
 	for i := 0; i < len(v); i++ {
 		c := v[i]
@@ -611,6 +611,8 @@ func backgroundLayer(v []Component, out map[string][]Component) error {
 			out["background-attachment"] = one
 		case len(boxes) < 2 && backgroundBox(c) == nil:
 			boxes = append(boxes, c)
+		case text == nil && isWord(c, "text"):
+			text = one
 		case out["background-size"] != nil && posEnd >= 0:
 			return fmt.Errorf("background: %s after the size", c.String())
 		case posEnd >= 0 && posEnd != i:
@@ -625,7 +627,15 @@ func backgroundLayer(v []Component, out map[string][]Component) error {
 		}
 		out["background-position"] = pos
 	}
-	if len(boxes) > 0 {
+	switch {
+	case text != nil && len(boxes) > 1:
+		return fmt.Errorf("background: text after two boxes")
+	case text != nil:
+		out["background-clip"] = text
+		if len(boxes) > 0 {
+			out["background-origin"] = boxes
+		}
+	case len(boxes) > 0:
 		out["background-origin"], out["background-clip"] = boxes[:1], boxes[len(boxes)-1:]
 	}
 	return nil

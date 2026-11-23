@@ -135,7 +135,7 @@ background-clip: padding-box;
 	assert.Equal(t, style.UnderPadding, st.BackgroundLayer(2).Clip)
 	for prop, bad := range map[string]string{
 		"background-image": "url(a.png),", "background-position": "left, , right", "background-size": "1px, cover 2px",
-		"background-repeat": "space round round", "background-clip": "padding-box, text",
+		"background-repeat": "space round round", "background-clip": "padding-box, margin-box",
 		"background-attachment": "fixed local", "background-color": "red, blue",
 	} {
 		assert.Error(t, validate(prop, componentsOf(bad)), "%s: %s", prop, bad)
