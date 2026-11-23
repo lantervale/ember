@@ -12,7 +12,6 @@ import (
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/chrome"
-	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/fonts"
 	"github.com/lantervale/ember/ui/layout"
 )
@@ -23,7 +22,8 @@ div { margin: 2px 0; background: #ddd; }
 .pad { padding: 5px; border: 2px solid; }
 .bb { box-sizing: border-box; }
 `))
-	for _, h := range []string{"auto", "calc-size(auto, size)", "calc-size(auto, size * 0.5)", "calc-size(auto, size + 20px)",
+	for _, h := range []string{"auto", "calc-size(auto, size)", "calc-size(auto, size * 0.5)",
+		"calc-size(auto, size + 20px)",
 		"calc-size(fit-content, size * 2)", "calc-size(any, 30px)", "calc-size(50px, size * 2)",
 		"calc-size(min-content, size - 4px)", "calc-size(calc-size(auto, size + 10px), size * 0.5)",
 		"calc-size(auto, size * 0.5 + 10%)"} {
@@ -92,7 +92,7 @@ return els.map(e => e.getBoundingClientRect().height);`, at*1000))
 			tr.Compute(d.HTML(), d.Sheets())
 			tree := layout.Layout(d.HTML(), geom.V2(400, 600), fonts.Of(d))
 			for i, n := range nodes {
-				got := tree.Of[(*dom.Node)(n)].Size.Y
+				got := tree.Of[n].Size.Y
 				if abs(got-want[i]) > 0.5 {
 					t.Errorf("%s at %v: ember %v, Chrome %v", classes[i], at, got, want[i])
 				}

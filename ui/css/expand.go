@@ -49,7 +49,7 @@ func validate(name string, value []Component) error {
 // expand splits a shorthand's value, given without whitespace, into its
 // longhands; a longhand the value leaves out gets its initial value.
 //
-//nolint:funlen,cyclop // one case a shorthand
+//nolint:funlen,cyclop,gocyclo // one case a shorthand
 func expand(name string, v []Component) (map[string][]Component, error) {
 	long := shorthands[name]
 	out := make(map[string][]Component, len(long))
@@ -88,7 +88,7 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandAnyOrder(long, v, out)
 	case "columns":
 		err = expandColumns(v, out)
-	case "white-space":
+	case shortWhiteSpace:
 		err = expandWhiteSpace(v, out)
 	case "text-wrap":
 		err = expandAnyOrder(long, v, out)

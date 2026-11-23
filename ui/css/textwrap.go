@@ -7,6 +7,19 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
+const (
+	shortWhiteSpace  = "white-space"
+	propCollapse     = "white-space-collapse"
+	propTextWrapMode = "text-wrap-mode"
+	propBoxTrim      = "text-box-trim"
+	propBoxEdge      = "text-box-edge"
+	kwText           = "text"
+	kwAlphabetic     = "alphabetic"
+	kwWrap           = "wrap"
+	// kwCollapseSpaces is white-space-collapse's collapse.
+	kwCollapseSpaces = "collapse"
+)
+
 // quoted is a string.
 func quoted(c Component) error {
 	if c.Kind == String {
@@ -15,23 +28,23 @@ func quoted(c Component) error {
 	return fmt.Errorf("expected a string, found %q", c.String())
 }
 
-//nolint:gochecknoglobals // lookup tables
+//nolint:gochecknoglobals,goconst // lookup tables
 var (
 	whiteSpaces = map[string]style.WhiteSpace{"normal": style.Normal, "nowrap": style.NoWrapSpace, "pre": style.Pre,
 		"pre-wrap": style.PreWrap, "pre-line": style.PreLine}
-	collapses = map[string]style.Collapse{"collapse": style.CollapseSpaces, "preserve": style.Preserve,
+	collapses = map[string]style.Collapse{kwCollapseSpaces: style.CollapseSpaces, "preserve": style.Preserve,
 		"preserve-breaks": style.PreserveBreaks}
-	overEdges  = map[string]style.TextEdge{"text": style.EdgeText, "cap": style.EdgeCap, "ex": style.EdgeEx}
-	underEdges = map[string]style.TextEdge{"text": style.EdgeText, "alphabetic": style.EdgeAlphabetic}
+	overEdges  = map[string]style.TextEdge{kwText: style.EdgeText, "cap": style.EdgeCap, "ex": style.EdgeEx}
+	underEdges = map[string]style.TextEdge{kwText: style.EdgeText, kwAlphabetic: style.EdgeAlphabetic}
 )
 
 // checkTextBoxEdge takes auto, text, or an edge over the text (text, cap,
 // ex) and one under it (text, alphabetic), as Chrome 157 reads it.
 func checkTextBoxEdge(v []Component) error {
 	switch {
-	case len(v) == 1 && isWord(v[0], "auto", "text"):
+	case len(v) == 1 && isWord(v[0], kwAuto, kwText):
 		return nil
-	case len(v) == 2 && isWord(v[0], "text", "cap", "ex") && isWord(v[1], "text", "alphabetic"):
+	case len(v) == 2 && isWord(v[0], kwText, "cap", "ex") && isWord(v[1], kwText, kwAlphabetic):
 		return nil
 	}
 	return fmt.Errorf("expected auto, text, or an edge over the text and one under it")
@@ -42,12 +55,12 @@ func checkTextBoxEdge(v []Component) error {
 func expandWhiteSpace(v []Component, out map[string][]Component) error {
 	if len(v) == 1 && v[0].Kind == Ident {
 		if ws, ok := whiteSpaces[strings.ToLower(v[0].Text)]; ok {
-			out["white-space-collapse"] = []Component{word(collapseWord(ws.Collapse()))}
-			out["text-wrap-mode"] = []Component{word(map[bool]string{true: "wrap", false: "nowrap"}[ws.Wraps()])}
+			out[propCollapse] = []Component{word(collapseWord(ws.Collapse()))}
+			out[propTextWrapMode] = []Component{word(map[bool]string{true: kwWrap, false: "nowrap"}[ws.Wraps()])}
 			return nil
 		}
 	}
-	return expandAnyOrder(shorthands["white-space"], v, out)
+	return expandAnyOrder(shorthands[shortWhiteSpace], v, out)
 }
 
 func collapseWord(c style.Collapse) string {
@@ -56,7 +69,7 @@ func collapseWord(c style.Collapse) string {
 			return w
 		}
 	}
-	return "collapse"
+	return kwCollapseSpaces
 }
 
 // expandTextBox reads text-box: normal, or a text-box-trim and a
@@ -67,7 +80,7 @@ func expandTextBox(v []Component, out map[string][]Component) error {
 	}
 	trim := -1
 	for i, c := range v {
-		if checks["text-box-trim"]([]Component{c}) == nil {
+		if checks[propBoxTrim]([]Component{c}) == nil {
 			trim = i
 			break
 		}
@@ -76,13 +89,13 @@ func expandTextBox(v []Component, out map[string][]Component) error {
 	switch trim {
 	case -1:
 		edge = v
-		out["text-box-trim"] = []Component{word("trim-both")}
+		out[propBoxTrim] = []Component{word("trim-both")}
 	case 0:
 		edge = v[1:]
-		out["text-box-trim"] = v[:1]
+		out[propBoxTrim] = v[:1]
 	case len(v) - 1:
 		edge = v[:trim]
-		out["text-box-trim"] = v[trim:]
+		out[propBoxTrim] = v[trim:]
 	default:
 		return fmt.Errorf("text-box takes its trim before or after its edges")
 	}
@@ -90,7 +103,7 @@ func expandTextBox(v []Component, out map[string][]Component) error {
 		if err := checkTextBoxEdge(edge); err != nil {
 			return err
 		}
-		out["text-box-edge"] = edge
+		out[propBoxEdge] = edge
 	}
 	return nil
 }
@@ -98,7 +111,7 @@ func expandTextBox(v []Component, out map[string][]Component) error {
 // textEdgeOf is text-box-edge's value.
 func textEdgeOf(_ *ctx, v []Component) style.TextBoxEdge {
 	v = items(v)
-	if isWord(v[0], "auto") {
+	if isWord(v[0], kwAuto) {
 		return style.TextBoxEdge{}
 	}
 	if len(v) == 1 {
@@ -110,10 +123,12 @@ func textEdgeOf(_ *ctx, v []Component) style.TextBoxEdge {
 
 // textWrapProps are the longhands of white-space, text-wrap and text-box,
 // and the text properties beside them.
+//
+//nolint:goconst // the longhands' table
 func textWrapProps() map[string]prop {
-	wraps := map[string]bool{"wrap": true, "nowrap": false}
+	wraps := map[string]bool{kwWrap: true, "nowrap": false}
 	return map[string]prop{
-		"white-space-collapse": {
+		propCollapse: {
 			set: func(x *ctx, v []Component) {
 				x.c.WhiteSpace = style.WhiteSpaceOf(collapses[strings.ToLower(v[0].Text)], x.c.WhiteSpace.Wraps())
 			},
@@ -122,7 +137,7 @@ func textWrapProps() map[string]prop {
 			},
 			anim: anim{kind: discrete},
 		},
-		"text-wrap-mode": {
+		propTextWrapMode: {
 			set: func(x *ctx, v []Component) {
 				x.c.WhiteSpace = style.WhiteSpaceOf(x.c.WhiteSpace.Collapse(), wraps[strings.ToLower(v[0].Text)])
 			},
@@ -148,10 +163,10 @@ func textWrapProps() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.HyphenChar, dst.HyphenChosen = src.HyphenChar, src.HyphenChosen },
 			anim:    anim{kind: discrete},
 		},
-		"text-box-trim": keyword(func(c *style.Computed) *style.TextBoxTrim { return &c.TextBoxTrim },
+		propBoxTrim: keyword(func(c *style.Computed) *style.TextBoxTrim { return &c.TextBoxTrim },
 			map[string]style.TextBoxTrim{"none": style.TrimNone, "trim-start": style.TrimStart,
 				"trim-end": style.TrimEnd, "trim-both": style.TrimBoth}),
-		"text-box-edge": field(func(c *style.Computed) *style.TextBoxEdge { return &c.TextBoxEdge }, textEdgeOf,
+		propBoxEdge: field(func(c *style.Computed) *style.TextBoxEdge { return &c.TextBoxEdge }, textEdgeOf,
 			flips[style.TextBoxEdge]()),
 		"text-spacing-trim": keyword(func(c *style.Computed) *style.SpacingTrim { return &c.SpacingTrim },
 			map[string]style.SpacingTrim{"normal": style.SpacingTrimNormal, "space-all": style.SpaceAll,

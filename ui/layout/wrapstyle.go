@@ -250,7 +250,7 @@ func (c *inlineContent) rebreak(width float32, lines []line, from, end int, stop
 			b.out = append(b.out, b.cur)
 			break
 		}
-		if i != stop && !(k == len(stops)-1 && b.out[len(b.out)-1].forced) {
+		if i != stop && (k != len(stops)-1 || !b.out[len(b.out)-1].forced) {
 			return nil, false
 		}
 		b.open(i, 0, width, 0)

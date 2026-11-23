@@ -178,6 +178,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0173 | [Anchors are read from the last layout and laid out again until they settle](0173-anchors-are-read-from-the-last-layout-and-laid-out-again-until-they-settle.md) | rendering |
 | 0174 | [Registered custom properties and the functions a cascade substitutes](0174-registered-custom-properties-and-the-functions-a-cascade-substitutes.md) | api |
 | 0175 | [Relative snaps keep their unsnapped axes, and a held track pages on](0175-relative-snaps-keep-their-unsnapped-axes-and-a-held-track-pages-on.md) | api |
+| 0177 | [Lines are chosen again after the greedy ones, and calc-size() is a keyword scaled](0177-lines-are-chosen-again-after-the-greedy-ones-and-calc-size-is-a-keyword-scaled.md) | api |
 
 ## Writing one
 

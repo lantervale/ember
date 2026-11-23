@@ -138,7 +138,7 @@ var compared = map[string]func(s *style.Computed) string{
 	"white-space-collapse": func(s *style.Computed) string {
 		return []string{"collapse", "preserve", "preserve-breaks"}[s.WhiteSpace.Collapse()]
 	},
-	"text-wrap-mode": func(s *style.Computed) string { return wrapMode(s) },
+	"text-wrap-mode": wrapMode,
 	"text-wrap-style": func(s *style.Computed) string {
 		return []string{"auto", "balance", "pretty", "stable"}[s.WrapStyle]
 	},
@@ -155,8 +155,8 @@ var compared = map[string]func(s *style.Computed) string{
 		}
 		return strconv.Quote(s.HyphenChar)
 	},
-	"text-box-trim": func(s *style.Computed) string { return boxTrim(s) },
-	"text-box-edge": func(s *style.Computed) string { return boxEdge(s) },
+	"text-box-trim": boxTrim,
+	"text-box-edge": boxEdge,
 	"text-box": func(s *style.Computed) string {
 		switch {
 		case s.TextBoxTrim == style.TrimNone && !s.TextBoxEdge.Named:

@@ -951,8 +951,8 @@ type Text struct {
 	// else it is auto.
 	HyphenChar   string
 	HyphenChosen bool
-	TextBoxTrim TextBoxTrim
-	TextBoxEdge TextBoxEdge
+	TextBoxTrim  TextBoxTrim
+	TextBoxEdge  TextBoxEdge
 	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:
 	// normal; both read and computed, laid out as their initial values.
 	SpacingTrim SpacingTrim

@@ -38,7 +38,8 @@ func TestTextWrapBalanceBreaksAsChrome(t *testing.T) {
 		"aligned": page(
 			ui.P(ui.Style("width: 220px; text-wrap: balance; text-align: center"), ui.Text(middleText)),
 			ui.P(ui.Style("width: 220px; text-wrap: balance; text-align: right"), ui.Text(middleText)),
-			ui.P(ui.Style("width: 220px; text-wrap: balance; text-align: center"), ui.Text("Lanterns everywhere glowing at dusk")),
+			ui.P(ui.Style("width: 220px; text-wrap: balance; text-align: center"),
+				ui.Text("Lanterns everywhere glowing at dusk")),
 			ui.P(ui.Style("width: 220px; text-wrap: balance; text-align: justify"), ui.Text(middleText)),
 		),
 		"indented": page(
@@ -134,8 +135,9 @@ func sweep(wrap string) *ui.Document {
 	return page(ps...)
 }
 
-const soft = "Lan­tern­makers il­lu­mi­nate ex­tra­ordi­nar­ily lu­mi­nous " +
-	"ca­the­drals."
+const soft = "Lan\u00adtern\u00admakers il\u00adlu\u00admi\u00adnate ex\u00adtra\u00adordi\u00adnar\u00adily " +
+	"lu\u00admi\u00adnous " +
+	"ca\u00adthe\u00addrals."
 
 func TestSoftHyphensBreakAsChrome(t *testing.T) {
 	cases := map[string]*ui.Document{
@@ -152,8 +154,8 @@ func TestSoftHyphensBreakAsChrome(t *testing.T) {
 			ui.P(ui.Style("width: 100px; hyphenate-character: ''"), ui.Text(soft)),
 		),
 		"spans": page(
-			ui.P(ui.Style("width: 80px"), ui.Text("Lan­"), ui.Span(ui.Style("font-weight: bold"),
-				ui.Text("tern­makers")), ui.Text(" il­lu­mi­nate")),
+			ui.P(ui.Style("width: 80px"), ui.Text("Lan\u00ad"), ui.Span(ui.Style("font-weight: bold"),
+				ui.Text("tern\u00admakers")), ui.Text(" il\u00adlu\u00admi\u00adnate")),
 		),
 		"aligned and balanced": page(
 			ui.P(ui.Style("width: 120px; text-align: right"), ui.Text(soft)),

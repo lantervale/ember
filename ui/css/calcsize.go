@@ -13,7 +13,9 @@ import (
 // calculations whose size is a sum of a multiple of size and a length-percentage,
 // and lays it out in height.
 
-func isCalcSize(c Component) bool { return c.Kind == Function && strings.EqualFold(c.Text, "calc-size") }
+func isCalcSize(c Component) bool {
+	return c.Kind == Function && strings.EqualFold(c.Text, "calc-size")
+}
 
 // calcSizeArgs is calc-size()'s basis and its calculation, without whitespace.
 func calcSizeArgs(c Component) (Component, []Component, bool) {
@@ -41,7 +43,7 @@ func indexAfterComma(args []Component) int {
 
 // withSize is a calculation as a calc() with size the length px.
 func withSize(calc []Component, px float64) Component {
-	return Component{Token: Token{Kind: Function, Text: "calc"}, Args: substituteSize(calc, px)}
+	return Component{Token: Token{Kind: Function, Text: fnCalc}, Args: substituteSize(calc, px)}
 }
 
 func substituteSize(cs []Component, px float64) []Component {

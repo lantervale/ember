@@ -745,14 +745,9 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			b.WriteRune(' ')
 			emit(gap)
 			afterSpace = true
-		case string(ch) == zeroWidthSpace:
+		case string(ch) == zeroWidthSpace || ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
 			emit(word)
-			c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
-		case ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
-			emit(word)
-			c.pieces = append(c.pieces, piece{kind: softHyphen, run: i, at: n - 1, level: level,
-				hyphen: hyphenWidth(fonts, r.st)})
-			afterSpace = false
+			c.pieces = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level))
 		default:
 			b.WriteRune(ch)
 			afterSpace = false
@@ -760,6 +755,15 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	}
 	emit(word)
 	return afterSpace
+}
+
+// breakAt is the piece a zero-width space or a soft hyphen ch of run i, of style st,
+// at character at, makes.
+func breakAt(fonts box.Fonts, st *style.Computed, ch rune, i int, at int32, level bidi.Level) piece {
+	if ch == softHyphenChar {
+		return piece{kind: softHyphen, run: i, at: at, level: level, hyphen: hyphenWidth(fonts, st)}
+	}
+	return piece{kind: breakHere, run: i, level: level}
 }
 
 // spaceTies is fonts that know whether a face shapes a space with the words beside it
@@ -1536,14 +1540,9 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 				kept.step(c.pieces[k], 0)
 			}
 		}
-		if !b.blank && !hung && b.wrapsBefore(i) {
-			if i == b.stop || next.end()+c.hyphenAt(end) > width || c.joined(next, end).end() > width {
-				b.finish(i)
-				return i, true
-			}
-			if b.seen != nil {
-				b.seen(i)
-			}
+		if !b.blank && !hung && b.wrapsBefore(i) && b.endsBefore(i, end, next, width) {
+			b.finish(i)
+			return i, true
 		}
 		if b.empty && alone.end() > width {
 			if after, ok := b.breakInside(i, end, width); ok {
@@ -1564,6 +1563,20 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 		i = end
 	}
 	return i, false
+}
+
+// endsBefore reports whether the line, which may end before piece i, does: at its stop,
+// or where the unit [i, end), next the pen past it, leaves it wider than width; else
+// seen hears of the place.
+func (b *breaker) endsBefore(i, end int, next pen, width float32) bool {
+	c := b.c
+	if i == b.stop || next.end()+c.hyphenAt(end) > width || c.joined(next, end).end() > width {
+		return true
+	}
+	if b.seen != nil {
+		b.seen(i)
+	}
+	return false
 }
 
 // wrapsBefore reports whether the line may end before piece i: by the white-space of the
@@ -2221,7 +2234,7 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, 
 // trims is how far text-box-trim moves the owner's content edges in, past the half-leading
 // and the room above and below the text-box-edge its first line's and its last line's
 // root inline boxes keep: off the top of the first line and the bottom of the last.
-func (t *tree) trims(c *inlineContent, ls []line) (top, bottom float32) {
+func (t *tree) trims(c *inlineContent, ls []line) (float32, float32) {
 	if c == nil || len(ls) == 0 {
 		return 0, 0
 	}
@@ -2231,6 +2244,7 @@ func (t *tree) trims(c *inlineContent, ls []line) (top, bottom float32) {
 	}
 	st := c.owner.st
 	m := t.metricsOf(c, st)
+	var top, bottom float32
 	if start != nil {
 		_, lb := t.lineBox(c, ls[0])
 		top = lb - overEdge(m, start.st.TextBoxEdge)
@@ -2265,7 +2279,8 @@ func underEdge(m box.Metrics, e style.TextBoxEdge) float32 {
 // one trimming their last, nil for none: n's own, or one round it that n is the first
 // (or the last) block in the flow of, no padding nor border between, as Chrome's first
 // formatted line.
-func trimmed(n *node) (start, end *node) {
+func trimmed(n *node) (*node, *node) {
+	var start, end *node
 	for k, first, last := n, true, true; k != nil && (first || last); k = k.parent {
 		trim := k.st.TextBoxTrim
 		if first && (trim == style.TrimStart || trim == style.TrimBoth) && start == nil {
