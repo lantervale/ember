@@ -222,6 +222,10 @@ type Box struct {
 	// ScrollbarOverlay is a Document's overlay scrollbars on a box that
 	// shows bars: they take no gutter and draw over its content.
 	ScrollbarOverlay bool
+	// ViewportBars are the viewport's bars as the rules of this element,
+	// the root or body, style them; nil where none styles its
+	// ::-webkit-scrollbar.
+	ViewportBars *StyledBars
 	// Viewport is the style of the viewport, in a Document whose viewport
 	// scrolls: on the root always, and on body when the viewport takes
 	// body's overflow. OverflowPropagated is set on the one of them whose

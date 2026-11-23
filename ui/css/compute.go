@@ -586,7 +586,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
-	r.scrollbars(&c, n, rem)
+	r.scrollbars(&c, n, rem, x.toViewport, parent)
 	r.controlParts(&c, n, rem)
 	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
 		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
@@ -1207,10 +1207,10 @@ func (x *ctx) propagateOverflow(root bool) {
 	v := initial
 	v.Display, v.Font = style.Block, c.Font
 	v.Overflow = style.Size[style.Overflow]{Width: of(c.Overflow.Width), Height: of(c.Overflow.Height)}
-	v.ScrollbarNone = c.ScrollbarNone
+	v.ScrollbarNone, v.ScrollbarThin = c.ScrollbarNone, c.ScrollbarThin
 	v.ScrollbarColored, v.ScrollbarThumb, v.ScrollbarTrack = c.ScrollbarColored, c.ScrollbarThumb, c.ScrollbarTrack
 	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
-		if v.ScrollbarOverlay = x.overlay || v.ScrollbarColored; !v.ScrollbarOverlay {
+		if v.ScrollbarOverlay = x.overlay || v.ScrollbarColored || v.ScrollbarThin; !v.ScrollbarOverlay {
 			v.ScrollbarWidth, v.ScrollbarHeight = barGutter, barGutter
 		}
 	}

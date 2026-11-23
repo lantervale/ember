@@ -58,3 +58,34 @@ func (b *BarParts) equal(o *BarParts) bool {
 		b.Thumb.Equal(o.Thumb) && b.Buttons[0].Equal(o.Buttons[0]) && b.Buttons[1].Equal(o.Buttons[1]) &&
 		b.Buttons[2].Equal(o.Buttons[2]) && b.Buttons[3].Equal(o.Buttons[3])
 }
+
+// StyledBars are a scroller's bars as an element's rules style them,
+// and their thicknesses: the viewport's, which Chrome styles from body's
+// rules, else the root's, kept on that element (Computed.ViewportBars).
+type StyledBars struct {
+	Parts         *ScrollbarParts
+	Width, Height float32
+	// on and styled are the last viewport style On was given and its
+	// copy with these bars.
+	on, styled *Computed
+}
+
+// On is base, the viewport's style, with b's bars, the same copy while
+// base is the same.
+func (b *StyledBars) On(base *Computed) *Computed {
+	if b.on != base {
+		c := *base
+		c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = b.Parts, b.Width, b.Height
+		c.ScrollbarNone = b.Parts == nil
+		b.on, b.styled = base, &c
+	}
+	return b.styled
+}
+
+// Equal reports whether b and o are the same bars.
+func (b *StyledBars) Equal(o *StyledBars) bool {
+	if b == nil || o == nil {
+		return b == o
+	}
+	return b.Width == o.Width && b.Height == o.Height && b.Parts.Equal(o.Parts)
+}

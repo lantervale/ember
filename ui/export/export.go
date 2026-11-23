@@ -256,7 +256,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 		write("data-ember-modal", strconv.FormatUint(layer, 10))
 	}
 	popoverAttrs(d, n, write)
-	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
+	if st := dom.Data(n).Style; st != nil && (st.Scrollbar != nil || viewportBars(n)) {
 		write("data-ember-bars", "")
 	}
 	if bare(n) {
@@ -755,6 +755,18 @@ const thumbs = ownBars + "::-webkit-scrollbar-thumb { background-color: rgba(255
 	ownBars + "::-webkit-scrollbar-thumb:horizontal { border-width: 7px 4px 2px 4px; " +
 	"border-radius: 7px / 10px 10px 5px 5px; }\n" +
 	ownBars + "::-webkit-scrollbar-corner { background: transparent; }\n"
+
+// viewportBars reports whether n is the root or body of a Document whose
+// viewport's bars their rules style: both then go without ui's look, so
+// Chrome takes the viewport's from body's rules, else the root's.
+func viewportBars(n *ui.Node) bool {
+	if n.Tag() == dom.Body && n.Parent() != nil {
+		if st := dom.Data(n.Parent()).Style; st != nil && st.ViewportBars != nil {
+			return true
+		}
+	}
+	return dom.Data(n).Style.ViewportBars != nil
+}
 
 // ownBars keeps ui's look off the bars an element's sheets style
 // (data-ember-bars), which Chrome draws from those sheets alone, as paint does.

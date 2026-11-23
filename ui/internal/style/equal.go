@@ -59,7 +59,7 @@ func (b *Box) equal(o *Box) bool {
 		b.ScrollbarNone == o.ScrollbarNone &&
 		b.ScrollbarThin == o.ScrollbarThin &&
 		b.ScrollbarOverlay == o.ScrollbarOverlay &&
-		b.Viewport.Equal(o.Viewport) &&
+		b.Viewport.Equal(o.Viewport) && b.ViewportBars.Equal(o.ViewportBars) &&
 		b.OverflowPropagated == o.OverflowPropagated &&
 		b.ZIndex == o.ZIndex &&
 		b.ZAuto == o.ZAuto &&

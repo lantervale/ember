@@ -16,35 +16,54 @@ const barGutter = 15
 // ::-webkit-scrollbar and neither scrollbar-color nor scrollbar-width
 // asks for the system's bars: their thicknesses are its gutters, and a
 // bar of display: none takes none. It also gives a box the user may
-// resize its ::-webkit-resizer.
-func (r *restyler) scrollbars(c *style.Computed, n *dom.Node, rem float32) {
+// resize its ::-webkit-resizer, and the root and body, of parent's
+// style, the viewport's bars as their rules style them.
+func (r *restyler) scrollbars(c *style.Computed, n *dom.Node, rem float32, viewport bool, parent *style.Computed) {
 	if c.Resizable {
 		c.Resizer = r.part(n, c, rem, webkitResizer, 0)
+	}
+	if viewport {
+		r.viewportBars(c, n, rem, parent)
 	}
 	if c.ScrollbarWidth == 0 || c.ScrollbarColored || c.ScrollbarThin || !r.may(n, webkitScrollbar) {
 		return
 	}
 	data := dom.Data(n)
-	if p := r.barParts(c, n, rem, data.BarHover, data.BarPressed); p != nil {
-		c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = p.parts, p.width, p.height
-		c.ScrollbarNone = p.parts == nil
+	if p := r.barParts(c, c, n, rem, data.BarHover, data.BarPressed); p != nil {
+		c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = p.Parts, p.Width, p.Height
+		c.ScrollbarNone = p.Parts == nil
 	}
 }
 
-// styledBars are the parts of bars a sheet styles and their thicknesses.
-type styledBars struct {
-	parts         *style.ScrollbarParts
-	width, height float32
+// viewportBars gives the root or body n, of style c under parent's, the
+// viewport's bars as n's rules style them, while the viewport shows
+// bars of its own: the hovered and pressed parts are kept on the root,
+// the viewport's node.
+func (r *restyler) viewportBars(c *style.Computed, n *dom.Node, rem float32, parent *style.Computed) {
+	view, root := c.Viewport, n
+	if p := n.Parent(); p != nil {
+		root = p
+		if view == nil {
+			view = parent.Viewport
+		}
+	}
+	if view == nil || view.ScrollbarWidth == 0 || view.ScrollbarColored || view.ScrollbarThin ||
+		!r.may(n, webkitScrollbar) {
+		return
+	}
+	data := dom.Data(root)
+	c.ViewportBars = r.barParts(view, c, n, rem, data.BarHover, data.BarPressed)
 }
 
-// barParts styles the bars of a scroller of style c from the rules for
-// n, the element their parts are of, with hover the part under the
-// pointer and pressed the one held: nil when no rule styles n's
-// ::-webkit-scrollbar, parts nil when both bars take no room.
-func (r *restyler) barParts(c *style.Computed, n *dom.Node, rem float32, hover, pressed style.BarPart) *styledBars {
+// barParts styles the bars of a scroller of style box from the rules for
+// n, of style el, the element their parts are of, with hover the part
+// under the pointer and pressed the one held: nil when no rule styles
+// n's ::-webkit-scrollbar, Parts nil when both bars take no room.
+func (r *restyler) barParts(box, el *style.Computed, n *dom.Node, rem float32,
+	hover, pressed style.BarPart) *style.StyledBars {
 	corner := partState(0)
-	if c.Overflow.Width == style.Scroll && c.Overflow.Height == style.Scroll ||
-		c.Resizable && (c.Overflow.Width == style.Scroll || c.Overflow.Height == style.Scroll) {
+	if box.Overflow.Width == style.Scroll && box.Overflow.Height == style.Scroll ||
+		box.Resizable && (box.Overflow.Width == style.Scroll || box.Overflow.Height == style.Scroll) {
 		corner = partCornerPresent
 	}
 	held := func(horizontal bool, part style.BarPart) partState {
@@ -64,11 +83,11 @@ func (r *restyler) barParts(c *style.Computed, n *dom.Node, rem float32, hover, 
 		}
 		return partVertical | always | corner
 	}
-	v := r.part(n, c, rem, webkitScrollbar, orient(false)|held(false, style.BarBackground))
+	v := r.part(n, el, rem, webkitScrollbar, orient(false)|held(false, style.BarBackground))
 	if v == nil {
 		return nil
 	}
-	h := r.part(n, c, rem, webkitScrollbar, orient(true)|held(true, style.BarBackground))
+	h := r.part(n, el, rem, webkitScrollbar, orient(true)|held(true, style.BarBackground))
 	thickness := func(st *style.Computed, l style.Length) float32 {
 		if st.Display == style.DisplayNone {
 			return 0
@@ -78,14 +97,14 @@ func (r *restyler) barParts(c *style.Computed, n *dom.Node, rem float32, hover, 
 		}
 		return barGutter
 	}
-	out := &styledBars{width: thickness(v, v.Size.Width), height: thickness(h, h.Size.Height)}
-	if out.width == 0 && out.height == 0 {
+	out := &style.StyledBars{Width: thickness(v, v.Size.Width), Height: thickness(h, h.Size.Height)}
+	if out.Width == 0 && out.Height == 0 {
 		return out
 	}
 	bar := func(st *style.Computed, horizontal bool) style.BarParts {
 		s := orient(horizontal)
 		part := func(name string, p style.BarPart, more partState) *style.Computed {
-			return r.part(n, c, rem, name, s|more|held(horizontal, p))
+			return r.part(n, el, rem, name, s|more|held(horizontal, p))
 		}
 		b := style.BarParts{Bar: st,
 			Track: part(scrollbarTrack, barTrack, 0),
@@ -99,8 +118,8 @@ func (r *restyler) barParts(c *style.Computed, n *dom.Node, rem float32, hover, 
 		}
 		return b
 	}
-	out.parts = &style.ScrollbarParts{V: bar(v, false), H: bar(h, true),
-		Corner: r.part(n, c, rem, scrollbarCorner, 0)}
+	out.Parts = &style.ScrollbarParts{V: bar(v, false), H: bar(h, true),
+		Corner: r.part(n, el, rem, scrollbarCorner, 0)}
 	return out
 }
 
