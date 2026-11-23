@@ -2,9 +2,9 @@
 // over HTTP: a fetcher for ui.FetchImages, so a url() background or an
 // img's src can name a picture on the web, one for ui.FetchFonts, so an
 // @font-face can name a font there, and one for ui.FetchSheets, so an
-// @import can name a sheet there. Importing it lets ui read JPEG, GIF, WebP, ICO
-// and BMP pictures beside PNG (a WebP that is an animation is none, an
-// ICO shows its largest picture); an SVG is asked for too and handed
+// @import can name a sheet there. Importing it lets ui read JPEG, GIF, WebP, ICO,
+// CUR and BMP pictures beside PNG (an animated GIF or WebP plays, an ICO
+// shows its largest picture, as Chrome's do); an SVG is asked for too and handed
 // over as it is, for a Document to draw once ui/svg is imported.
 package web
 
@@ -23,12 +23,16 @@ import (
 	_ "golang.org/x/image/webp" // and WebP
 
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/internal/animated"
 	"github.com/lantervale/ember/ui/internal/ico"
 )
 
 //nolint:gochecknoinits // registers the formats on import, as the image packages above do
 func init() {
 	image.RegisterFormat("ico", "\x00\x00\x01\x00", ico.Decode, ico.DecodeConfig)
+	image.RegisterFormat("cur", "\x00\x00\x02\x00", ico.Decode, ico.DecodeConfig)
+	animated.Register("GIF8", decodeGIF)
+	animated.Register(animated.WebPMagic, decodeWebP)
 	image.RegisterFormat("bmp", "BM????\x00\x00\x00\x00", ico.DecodeBMP, ico.DecodeBMPConfig)
 }
 

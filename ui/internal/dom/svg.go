@@ -67,22 +67,49 @@ func ContentPicture(n *Node) (string, bool) {
 }
 
 // Choose has the img n show url in place of its src, "" for no
-// picture, a picture of density device pixels a point: n is laid out
-// again when that changes.
-func Choose(n *Node, url string, density float32) {
+// picture, a picture of density device pixels a point, chosen by the
+// source element source, or nil: n is laid out again when that changes,
+// and styled again when the source does, whose width and height may
+// hint its size (DimensionSource). It reports whether the source did.
+func Choose(n *Node, url string, density float32, source *Node) bool {
 	p := &n.pipe
 	if !p.choosing || p.chosen != url || p.density != density {
 		p.chosen, p.density, p.choosing = url, density, true
 		n.mark(DirtyLayout)
 	}
+	if p.source == source {
+		return false
+	}
+	p.source = source
+	n.mark(DirtyStyle | DirtyLayout)
+	return true
 }
 
 // Unchoose has n show its src again.
 func Unchoose(n *Node) {
 	if n.pipe.choosing {
-		n.pipe.chosen, n.pipe.density, n.pipe.choosing = "", 0, false
-		n.mark(DirtyLayout)
+		n.pipe.chosen, n.pipe.density, n.pipe.choosing, n.pipe.source = "", 0, false, nil
+		n.mark(DirtyStyle | DirtyLayout)
 	}
+}
+
+// ChosenSource is the source element the img n chose its picture by,
+// nil when none.
+func ChosenSource(n *Node) *Node { return n.pipe.source }
+
+// DimensionSource is the element whose width and height attributes size
+// the img n, as Chrome's: the source element it chose its picture by
+// when that has either, else n.
+func DimensionSource(n *Node) *Node {
+	if s := n.pipe.source; s != nil {
+		if _, ok := s.Attr("width"); ok {
+			return s
+		}
+		if _, ok := s.Attr("height"); ok {
+			return s
+		}
+	}
+	return n
 }
 
 // Chosen is the picture Choose last gave n, false while it shows its

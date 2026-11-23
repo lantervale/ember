@@ -127,6 +127,15 @@ func TestWebkitValues(t *testing.T) {
 		"transition: -webkit-transform 1s": "transition: transform 1s | ",
 		"--x: -webkit-flex":                "--x: -webkit-flex | ",
 		"text-align: -webkit-center":       "text-align: -webkit-center | ",
+		"background-image: -webkit-linear-gradient(top, #fff, #000)": "background-image: linear-gradient(to bottom, #fff, " +
+			"#000) | ",
+		"background-image: -webkit-linear-gradient(30deg, #fff, #000)": "background-image: linear-gradient(60deg, #fff, " +
+			"#000) | ",
+		"background-image: -webkit-linear-gradient(#fff, #000)": "background-image: linear-gradient(#fff, #000) | ",
+		"background-image: -webkit-radial-gradient(30% 40%, circle cover, #fff, #000)": "background-image: " +
+			"radial-gradient(circle farthest-corner at 30% 40%, #fff, #000) | ",
+		"background-image: -webkit-radial-gradient(ellipse contain, #fff, #000)": "background-image: " +
+			"radial-gradient(ellipse closest-side, #fff, #000) | ",
 	} {
 		if got := read(decl, Browser()); got != want {
 			t.Errorf("%s\n got %s\nwant %s", decl, got, want)
@@ -139,7 +148,8 @@ func TestWebkitValues(t *testing.T) {
 	}
 	// Chrome's own values keep their warning.
 	for _, decl := range []string{"display: -webkit-box", "width: -webkit-fill-available",
-		"background-image: -webkit-linear-gradient(top, #fff, #000)"} {
+		"background-image: -webkit-linear-gradient(left top, #fff, #000)",
+		"background-image: -webkit-linear-gradient(center top, #fff, #000)"} {
 		got, strict := read(decl, Browser()), read(decl)
 		if got != strict || !strings.Contains(got, "t.css:1:") {
 			t.Errorf("%s\n got %s\nwant %s, as without the option", decl, got, strict)

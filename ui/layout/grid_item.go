@@ -45,10 +45,22 @@ func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *grid
 	if justify == style.AlignAuto {
 		justify = justifyItems
 	}
+	if n.replaced {
+		// A replaced box keeps its own size where it isn't told to stretch, CSS Box
+		// Alignment §6.1.
+		self, justify = normalAsStart(self), normalAsStart(justify)
+	}
 	return &gridItem{
 		node: n, st: st, sourceOrder: order, alignSelf: self, justifySelf: justify,
 		baseline: none, minContentCache: noSize, minimumCache: noSize, maxContentCache: noSize,
 	}
+}
+
+func normalAsStart(a style.Align) style.Align {
+	if a == style.AlignNormal {
+		return style.AlignStart
+	}
+	return a
 }
 
 func (it *gridItem) hasAutoBlockMargin() bool {

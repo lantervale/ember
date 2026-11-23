@@ -16,11 +16,12 @@
 |---|---|
 | `ui.Attr("autofocus", "")` | the first focus, as on a page's load |
 | `doc.Focus(n)`, `doc.Focused(n)` | give or read the focus, shown as from Tab; an element shown this frame gets it at its first layout (a later Focus replaces it, leaving the Document drops it), so a screen is shown and focused in one call |
+| `doc.Blur()` | take the focus away, as an address field after Enter: a text field commits its edit, and the keys are the game's again |
 | a modal dialog | keeps the focus inside until it closes, and owns its window's input: other Documents and twod widgets get no hover, clicks or keys, and the game reads `PointerCaptured` and `KeyboardCaptured` true ([decision 0053](../99-decisions/0053-a-modal-owns-its-windows-input.md)) |
 | `:focus-visible` | matches only focus from keys or a pad |
 | `html[data-input-device="keyboard"]` | follows the last device, keyboard, mouse, gamepad or touch, so CSS shows its glyphs |
 
-A key nothing takes is a `KeyPressed` on the focused element; with nothing focused and no modal dialog, the keys are the game's.
+A key nothing takes is a `KeyPressed` on the focused element; with nothing focused and no modal dialog, the keys are the game's. In a focused text field, `OnKey` hears each key pressed or repeated before the field acts on it, as a page's keydown, and `e.PreventDefault()` keeps the field from it: a console walks its history on Up, or takes Shift+Enter for a new line. A callback of the field's own events sets its value with `doc.SetValue` at once, the caret at the end; the game's other `SetValue`s wait while the player types ([decision 0142](../99-decisions/0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md)).
 
 A window can hold several Documents, a screen and a dialog of its own, for instance. While a modal dialog of another Document is open in the window, a Document's focused element keeps the focus: `doc.Focused(n)` stays true and no event is sent. It matches neither `:focus` nor `:focus-visible`, though, so it doesn't look focused under the dialog; both return when the dialog closes or its Document is hidden ([decision 0073](../99-decisions/0073-a-focused-element-under-anothers-modal-looks-unfocused.md)).
 

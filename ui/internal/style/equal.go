@@ -202,7 +202,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Visible == o.Visible &&
 		l.Collapse == o.Collapse &&
 		l.PointerNone == o.PointerNone &&
-		l.AppDrag == o.AppDrag &&
+		l.AppRegion == o.AppRegion &&
 		l.Cursor == o.Cursor &&
 		l.UserSelect == o.UserSelect &&
 		sameSlice(l.Transform, o.Transform) &&

@@ -39,6 +39,20 @@ func fragments(b *box.Box) []fragmentAt {
 	return out
 }
 
+func TestABoxThatShrinksHoldsAFloatAndTheTextBesideIt(t *testing.T) {
+	shrunk := func(kids ...*dom.Node) *dom.Node {
+		return el(dom.Div, func(st *style.Computed) { st.Display, st.Float = style.Block, style.FloatLeft }, kids...)
+	}
+	beside := shrunk(el(dom.Div, float(style.FloatLeft, 50, 10)), el(dom.Div, float(style.FloatRight, 30, 10)),
+		text("HH"))
+	above := shrunk(el(dom.Div, float(style.FloatLeft, 50, 10)), el(dom.Div, block, text("HH")))
+	tr := lay(el(dom.Div, width(300), beside, el(dom.Div, func(st *style.Computed) {
+		st.Display, st.Clear = style.Block, style.ClearBoth
+	}), above), 400)
+	assert.Equal(t, float32(50+30+20), tr.Of[beside].Size.X, "side by side on its line")
+	assert.Equal(t, float32(50), tr.Of[above].Size.X, "a block of its own goes beside the floats, not past them")
+}
+
 func TestLinesGoRoundAFloatAndBelowIt(t *testing.T) {
 	f := el(dom.Div, float(style.FloatLeft, 20, 15))
 	p := el(dom.P, block, text("HH HH HHHH HHHH"))

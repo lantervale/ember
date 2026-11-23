@@ -203,12 +203,132 @@ func TestABMPsRowsMayStartInItsPalette(t *testing.T) {
 	assert.ErrorIs(t, err, errShort, "the file must hold the sixteen")
 }
 
-func TestARunLengthEncodedBMPIsRefused(t *testing.T) {
-	for _, comp := range []uint32{compRLE8, compRLE4} {
-		b := icotest.Bitmap{W: 6, H: 4, BPP: 8, Comp: comp, Palette: quadrantPalette, At: index}
-		_, err := DecodeBMP(bytes.NewReader(b.File()))
-		assert.ErrorIs(t, err, errRLE)
+// quadrantRuns is quadrants run-length encoded: a run each side of a
+// row, an end of line after each row and an end of bitmap, in bytes
+// for 8 bits a pixel and in nibbles for 4.
+func quadrantRuns(bpp int) []byte {
+	var out []byte
+	for i := range 4 {
+		l, r := byte(index(0, 3-i)), byte(index(5, 3-i))
+		if bpp == 4 {
+			l, r = l<<4|l, r<<4|r
+		}
+		out = append(out, 3, l, 3, r, 0, endOfLine)
 	}
+	return append(out, 0, endOfBitmap)
+}
+
+func coded(comp uint32, runs []byte) icotest.Bitmap {
+	bpp := 8
+	if comp == compRLE4 {
+		bpp = 4
+	}
+	return icotest.Bitmap{W: 6, H: 4, BPP: bpp, Comp: comp, Palette: quadrantPalette, Runs: runs}
+}
+
+func TestARunLengthEncodedBMPDecodesToItsPixels(t *testing.T) {
+	assertQuadrants(t, "8 bits", decodeBMP(t, coded(compRLE8, quadrantRuns(8)).File()))
+	assertQuadrants(t, "4 bits", decodeBMP(t, coded(compRLE4, quadrantRuns(4)).File()))
+	assertQuadrants(t, "an icon", decode(t, icotest.ICO(coded(compRLE8, quadrantRuns(8)).Entry())))
+}
+
+// rows is the colours of a picture's rows, from the top, as letters:
+// r, g, b and w for the quadrants' colours, k for black, . for clear.
+func rows(img image.Image) []string {
+	names := map[color.NRGBA]byte{red: 'r', green: 'g', blue: 'b', white: 'w', {0, 0, 0, 255}: 'k', through: '.'}
+	var out []string
+	for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
+		var row []byte
+		for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
+			nrgba, _ := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			c, ok := names[nrgba]
+			if !ok {
+				c = '?'
+			}
+			row = append(row, c)
+		}
+		out = append(out, string(row))
+	}
+	return out
+}
+
+func TestRunsLeaveBlackWhatTheySkipAndStopWhereTheyLeaveThePicture(t *testing.T) {
+	for name, c := range map[string]struct {
+		comp uint32
+		runs []byte
+		want []string
+	}{
+		"written out, one padded, then an end of line": {compRLE8, []byte{
+			0, 3, 0, 1, 2, 0, 0, endOfLine, 0, endOfLine, 2, 3, 0, endOfBitmap,
+		}, []string{"kkkkkk", "wwkkkk", "kkkkkk", "rgbkkk"}},
+		"a move over pixels and up a row": {compRLE8, []byte{
+			1, 2, 0, delta, 3, 1, 2, 1, 0, endOfBitmap,
+		}, []string{"kkkkkk", "kkkkkk", "kkkkgg", "bkkkkk"}},
+		"a run past its row, cut there": {compRLE8, []byte{9, 3, 1, 0, 0, endOfLine, 1, 1}, []string{
+			"kkkkkk", "kkkkkk", "gkkkkk", "wwwwww",
+		}},
+		"a move past the row, the end": {compRLE8, []byte{6, 3, 0, delta, 1, 0, 1, 1}, []string{
+			"kkkkkk", "kkkkkk", "kkkkkk", "wwwwww",
+		}},
+		"a move to the row's end, then up": {compRLE8, []byte{0, delta, 6, 1, 0, endOfLine, 2, 2}, []string{
+			"kkkkkk", "bbkkkk", "kkkkkk", "kkkkkk",
+		}},
+		"a move above the picture, the end": {compRLE8, []byte{1, 1, 0, delta, 0, 5, 1, 1}, []string{
+			"kkkkkk", "kkkkkk", "kkkkkk", "gkkkkk",
+		}},
+		"pixels written past the row, the end": {compRLE8, []byte{2, 3, 0, 5, 1, 1, 1, 1, 1, 0}, []string{
+			"kkkkkk", "kkkkkk", "kkkkkk", "wwkkkk",
+		}},
+		"pixels written past the file, the end": {compRLE8, []byte{1, 3, 0, 4, 1, 1}, []string{
+			"kkkkkk", "kkkkkk", "kkkkkk", "wkkkkk",
+		}},
+		"rows past the top, never written": {compRLE8, []byte{
+			0, endOfLine, 0, endOfLine, 0, endOfLine, 0, endOfLine, 6, 1,
+		}, []string{"kkkkkk", "kkkkkk", "kkkkkk", "kkkkkk"}},
+		"no end of bitmap": {compRLE8, []byte{2, 2}, []string{"kkkkkk", "kkkkkk", "kkkkkk", "bbkkkk"}},
+		"nibbles, alternating": {compRLE4, []byte{5, 0x13, 0, endOfLine, 0, 3, 0x21, 0x30}, []string{
+			"kkkkkk", "kkkkkk", "bgwkkk", "gwgwgk",
+		}},
+	} {
+		assert.Equal(t, c.want, rows(decodeBMP(t, coded(c.comp, c.runs).File())), name)
+	}
+}
+
+func TestAnICOsRunsAreCutByTheMaskThatFollowsThem(t *testing.T) {
+	b := coded(compRLE8, quadrantRuns(8))
+	b.Hole = func(x, _ int) bool { return x == 0 }
+	assert.Equal(t, []string{".rrggg", ".rrggg", ".bbwww", ".bbwww"}, rows(decode(t, icotest.ICO(b.Entry()))))
+
+	entry := b.Entry()
+	binary.LittleEndian.PutUint32(entry.Data[20:], uint32(len(entry.Data)))
+	assert.Equal(t, []string{"rrrggg", "rrrggg", "bbbwww", "bbbwww"}, rows(decode(t, icotest.ICO(entry))),
+		"runs whose size leaves no room for a mask")
+}
+
+func TestRunsOfTheWrongDepthOrFromTheTopAreRefused(t *testing.T) {
+	b := coded(compRLE8, quadrantRuns(8))
+	b.BPP = 4
+	_, err := DecodeBMP(bytes.NewReader(b.File()))
+	require.ErrorIs(t, err, errHeader)
+	b = coded(compRLE4, quadrantRuns(4))
+	b.BPP = 8
+	_, err = DecodeBMP(bytes.NewReader(b.File()))
+	require.ErrorIs(t, err, errHeader)
+	b = coded(compRLE8, quadrantRuns(8))
+	b.TopDown = true
+	_, err = DecodeBMP(bytes.NewReader(b.File()))
+	require.ErrorIs(t, err, errHeader)
+}
+
+func TestACursorIsReadAsAnIcon(t *testing.T) {
+	bitmap := icotest.Bitmap{W: 6, H: 4, BPP: 8, Palette: quadrantPalette, At: index}
+	assertQuadrants(t, "a cursor", decode(t, icotest.CUR(bitmap.Entry())))
+	small := icotest.Bitmap{W: 6, H: 4, BPP: 4, Palette: []color.NRGBA{blue}, At: func(int, int) uint32 { return 0 }}
+	assertQuadrants(t, "the deepest, by its bitmap: the directory says its hotspot",
+		decode(t, icotest.CUR(bitmap.Entry(), small.Entry())))
+	cfg, err := DecodeConfig(bytes.NewReader(icotest.CUR(bitmap.Entry())))
+	require.NoError(t, err)
+	assert.Equal(t, 6, cfg.Width)
 }
 
 func TestABMPSayingWhatNoReaderKnowsIsRefused(t *testing.T) {
@@ -432,7 +552,7 @@ func TestAnICOSayingWhatItDoesNotHoldIsRefused(t *testing.T) {
 		want error
 	}{
 		"a first word that isn't zero":   {put16(0, 1), errNoICO},
-		"a cursor":                       {put16(2, 2), errNoICO},
+		"a third kind":                   {put16(2, 3), errNoICO},
 		"no entry":                       {put16(4, 0), errEmpty},
 		"more entries than the file has": {put16(4, 2), errEntry},
 		"65535 entries":                  {put16(4, 0xffff), errShort},
@@ -450,7 +570,7 @@ func TestAnICOSayingWhatItDoesNotHoldIsRefused(t *testing.T) {
 		"a width the entry lacks":        {put32(pic+4, 7), errShort},
 		"no width":                       {put32(pic+4, 0), errNoSize},
 		"a header of 12 bytes":           {put32(pic, 12), errHeader},
-		"run-length encoded":             {put32(pic+16, compRLE8), errRLE},
+		"run-length encoded at 24 bits":  {put32(pic+16, compRLE8), errHeader},
 		"a PNG over the cap":             {pngICO(hugePNG(MaxSide+1, 1)), errTooLarge},
 		"a PNG of too many pixels":       {pngICO(hugePNG(8192, 8192)), errTooLarge},
 	}
@@ -509,6 +629,9 @@ func seeds(f *testing.F, file func(b icotest.Bitmap) []byte) {
 	for _, b := range quadrantBitmaps() {
 		f.Add(file(b))
 	}
+	f.Add(file(coded(compRLE8, quadrantRuns(8))))
+	f.Add(file(coded(compRLE4, quadrantRuns(4))))
+	f.Add(file(coded(compRLE8, []byte{0, 3, 0, 1, 2, 0, 0, delta, 3, 1, 2, 1, 0, endOfBitmap})))
 	f.Add(file(icotest.Bitmap{W: 9, H: 2, BPP: 1, Palette: []color.NRGBA{blue, white}, At: func(x, y int) uint32 {
 		return uint32((x + y) % 2)
 	}, Hole: func(x, y int) bool { return x == y }}))

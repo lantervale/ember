@@ -229,7 +229,7 @@ func (t *tree) inlineOf(owner *node, items []item) *inlineContent {
 	if n := owner.box.Node; n != nil && n.Tag() == dom.Summary && owner.st.ListItem && markerOf(owner.st) != "" {
 		c.marker = &box.Box{Kind: box.Marker, Node: n, Style: owner.st}
 	}
-	visible := c.marker != nil
+	visible := c.marker != nil || framedCut(items)
 	for _, r := range c.runs {
 		if r.atomic != nil || !collapses(r.st.WhiteSpace) || !isCollapsibleSpace(r.text) {
 			visible = true
@@ -245,6 +245,26 @@ func (t *tree) inlineOf(owner *node, items []item) *inlineContent {
 	}
 	c.cut(t.fonts)
 	return c
+}
+
+// framedCut reports a part of an inline element blocks cut among items, or inside one,
+// with a margin, a border or a padding on its edge: Chrome keeps a line for it, text or
+// none.
+func framedCut(items []item) bool {
+	room := func(margin, padding style.Length, border float32) bool {
+		return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
+	}
+	for _, it := range items {
+		if it.cut == nil {
+			continue
+		}
+		st := styleOf(it.element)
+		if it.first && room(st.Margin.Left, st.Padding.Left, st.Border.Left) ||
+			it.last && room(st.Margin.Right, st.Padding.Right, st.Border.Right) || framedCut(it.inside) {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
@@ -909,8 +929,10 @@ type line struct {
 	from, to int
 	width    float32
 	// first is set on the block's first line where a ::first-line styles it.
-	first    bool
-	forced   bool
+	first  bool
+	forced bool
+	// phantom is a line holding only inline elements of no size, which has no height.
+	phantom  bool
 	x, avail float32
 	push     float32
 }
@@ -938,6 +960,10 @@ func (c *inlineContent) indent(width float32) float32 {
 }
 
 func (c *inlineContent) wrapsAt(i int) bool {
+	if c.pieces[i].run < 0 {
+		// the edges of the elements of lines holding no text
+		return wraps(c.owner.st.WhiteSpace)
+	}
 	r := c.runs[c.pieces[i].run]
 	if r.atomic != nil {
 		return wraps(c.owner.st.WhiteSpace)
@@ -1243,8 +1269,14 @@ func (b *breaker) breakInside(i, end int, width float32) (int, bool) {
 // close ends the breaking: the line left open joins the lines when it holds something,
 // more than the ends of the spans a forced break ended the line before in.
 func (b *breaker) close() []line {
-	if !b.empty && !b.trails() || len(b.out) == 0 && b.cur.to > b.cur.from {
+	trails := b.trails()
+	if !b.empty && !trails || len(b.out) == 0 && b.cur.to > b.cur.from {
 		b.cur.width = b.kept.end()
+		b.out = append(b.out, b.cur)
+	} else if trails && b.opensSpan() {
+		// An inline element whole after the break stands on a line of its own, as
+		// Chrome's, a line of no height.
+		b.cur.phantom = true
 		b.out = append(b.out, b.cur)
 	}
 	if b.out == nil {
@@ -1265,6 +1297,16 @@ func (b *breaker) trails() bool {
 		}
 	}
 	return true
+}
+
+// opensSpan reports an open line holding the start of a span.
+func (b *breaker) opensSpan() bool {
+	for _, p := range b.c.pieces[b.cur.from:b.cur.to] {
+		if p.kind == edge && p.start {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *breaker) breakAll(width float32) []line {
@@ -1454,6 +1496,9 @@ type pendingAlign struct {
 // shift of each run and span of the line in them: from its parent's baseline as the
 // boxes are sized, inner ones first, then from the line's.
 func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
+	if l.phantom {
+		return 0, 0
+	}
 	was := c.useFirst(l.first)
 	defer c.useFirst(was)
 	h, base := t.lineHeight(c, c.rootStyle())
@@ -1826,17 +1871,17 @@ func (t *tree) writeText(n *node) {
 		}
 		return geom.Vec2{}
 	}
-	placeSpans(c, spanRects, spanLines, origin)
+	placeSpans(c, spanRects, spanLines, origin, size{content, none})
 	t.attachInline(n, c, runRects, origin)
 }
 
 // placeSpans gives each span its box from the rectangles its lines took.
 func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]geom.Rect,
-	origin func(*box.Box) geom.Vec2) {
+	origin func(*box.Box) geom.Vec2, cb size) {
 	for _, s := range c.spans {
 		r := spanRects[s.box]
 		o := origin(s.parent)
-		s.box.Pos = geom.Vec2{X: r.X - o.X, Y: r.Y - o.Y}
+		s.box.Pos = geom.Vec2{X: r.X - o.X, Y: r.Y - o.Y}.Add(inlineOffset(s.st, cb))
 		s.box.Size = geom.Vec2{X: r.W, Y: r.H}
 		s.box.Margin = box.Edges{Top: s.margin.t, Right: s.margin.r, Bottom: s.margin.b, Left: s.margin.l}
 		s.box.Border = box.Edges{Top: s.border.t, Right: s.border.r, Bottom: s.border.b, Left: s.border.l}
@@ -1932,7 +1977,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		}
 		t.spanRects(c, l, pieces, order, x, perGap, y, lb, spanRects, spanSeen, spanLines)
 		cut, cutStart := false, false
-		if ellipsis && l.width > l.avail {
+		if ellipsis && l.width > l.avail && len(c.runs) > 0 {
 			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
 		t.writeRuns(c, pieces, geom.Rect{X: x, Y: y, H: lh}, lb, perGap, [2]bool{cutStart, cut}, runRects, seen)
@@ -2111,6 +2156,9 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, 
 		top := y + lb + sp.shift - m.Ascent - sp.padding.t - sp.border.t
 		bottom := y + lb + sp.shift + m.Descent + sp.padding.b + sp.border.b
 		r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
+		if l.phantom {
+			r = geom.Rect{X: left, Y: y}
+		}
 		rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
 		seen[k] = true
 		lines[sp.box] = append(lines[sp.box], r)

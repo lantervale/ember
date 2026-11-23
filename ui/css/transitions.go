@@ -144,6 +144,20 @@ func (t *Transitions) SetMedia(m Media) bool {
 	return t.stale
 }
 
+// SetTitleBarArea gives env(titlebar-area-*) the window's title bar area,
+// and reports whether the next Compute restyles the tree: one that read
+// them since it was last styled whole, when the area changed.
+func (t *Transitions) SetTitleBarArea(a TitleBarArea) bool {
+	if a == t.env.titleBar {
+		return false
+	}
+	t.env.titleBar = a
+	if t.env.titleBarRead {
+		t.stale = true
+	}
+	return t.stale
+}
+
 // MeasureFonts has the units that read a font (ex, ch, cap, ic, lh and
 // the root's) ask font what they stand for; without it they are CSS's
 // fallbacks off the font size. Set it before the first Compute.

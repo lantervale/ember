@@ -3,6 +3,7 @@ package css
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/style"
@@ -188,4 +189,46 @@ func arity(lo, hi int) string {
 		return fmt.Sprintf("%d arguments", lo)
 	}
 	return fmt.Sprintf("%d or %d arguments", lo, hi)
+}
+
+// signPercents is d with the percentages inside its sign()s read as
+// pixels, a percentage of 100 pixels: Chrome's line-height reads them so,
+// where the rest of its percentages are of the font size.
+func signPercents(d Dim) Dim {
+	if len(d.terms) == 0 {
+		return d
+	}
+	d.terms = slices.Clone(d.terms)
+	d.pct = d.Pct != 0
+	for i, t := range d.terms {
+		args := make([]Dim, len(t.args))
+		for k, a := range t.args {
+			if t.op == style.CalcSign {
+				args[k] = percentsAsPixels(a)
+			} else {
+				args[k] = signPercents(a)
+			}
+			d.pct = d.pct || args[k].pct
+		}
+		d.terms[i].args = args
+	}
+	return d
+}
+
+func percentsAsPixels(d Dim) Dim {
+	d.Px, d.Pct, d.pct = d.Px+d.Pct, 0, false
+	if d.typ == typePercent {
+		d.typ = typeLength
+	}
+	if len(d.terms) > 0 {
+		d.terms = slices.Clone(d.terms)
+		for i, t := range d.terms {
+			args := make([]Dim, len(t.args))
+			for k, a := range t.args {
+				args[k] = percentsAsPixels(a)
+			}
+			d.terms[i].args = args
+		}
+	}
+	return d
 }

@@ -83,7 +83,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/selection", 560, 560, 0.004},
 		{"./internal/pages/selection-marks", 420, 560, 0.0065},
 		{"./internal/pages/field-selection", 320, 60, 0.004},
-		{"./internal/pages/ico-bmp", 492, 204, 0.0002},
+		{"./internal/pages/ico-bmp", 492, 264, 0.0002},
 		{"./internal/pages/math-functions", 520, 330, 0.0006},
 		{"./internal/pages/color-scheme", 560, 160, 0.0018},
 		{"./internal/pages/doubles", 560, 230, 0.0003},
