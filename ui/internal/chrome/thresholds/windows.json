@@ -81,6 +81,7 @@
   "mocka": 0.0025,
   "multicol": 0.0139,
   "opentype": 0.019,
+  "optgroups": 0.03,
   "outline-styles": 0.002,
   "pixel-crisp": 0.0037,
   "plus-lighter": 0.0012,

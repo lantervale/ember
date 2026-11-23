@@ -609,7 +609,7 @@ var uneditable = []string{"checkbox", "radio", "range", "color", "file", "hidden
 // controls are the elements :enabled is about.
 //
 //nolint:gochecknoglobals // lookup table
-var controls = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Option, dom.Fieldset}
+var controls = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Option, dom.Optgroup, dom.Fieldset}
 
 func matchesAny(sels []Selector, e, scope *dom.Node) bool {
 	for _, s := range sels {
