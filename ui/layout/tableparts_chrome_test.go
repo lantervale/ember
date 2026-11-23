@@ -299,6 +299,8 @@ func TestCollapsedRowsAndColumnsMatchChrome(t *testing.T) {
 			grid(ui.Colgroup(ui.Col()), ui.Colgroup(ui.Class("x"), ui.Col(), ui.Col()))),
 		"a column of a sized table":  styled(sheet, grid(ui.Class("w"), cols("", "x", ""))),
 		"a column of a shrunk table": styled(sheet, ui.Div(ui.Style("float: left"), grid(cols("", "x", "")))),
+		"a column of a table in a flex row": styled(sheet, ui.Div(ui.Style("display: flex; align-items: flex-start"),
+			grid(cols("", "x", "")), grid(ui.Col(), ui.Col(ui.Class("x"))))),
 		"rows": styled(sheet,
 			ui.Table(ui.Tbody(ui.Tr(ui.Class("x"), td("one"), td("two")), ui.Tr(td("three"), td("four")),
 				ui.Tr(ui.Class("x"), td("five"), td("six")), ui.Tr(td("seven"), td("eight")),

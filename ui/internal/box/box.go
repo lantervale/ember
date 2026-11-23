@@ -147,6 +147,9 @@ type Box struct {
 	// Cut marks a table cell a collapsed row or column narrowed: what it
 	// holds is clipped to its padding box, as Chrome clips it.
 	Cut bool
+	// Discarded marks a box after the last line a line-clamp shows: laid
+	// out, never drawn.
+	Discarded bool
 	// Collapsed is the borders of a table that collapses them, which it
 	// draws over its cells: nil for any other box.
 	Collapsed []Edge

@@ -2,29 +2,18 @@
 
 package desktop
 
-import (
-	"time"
+import "github.com/lantervale/ember/internal/sysprefs"
 
-	"github.com/lantervale/ember/internal/sysprefs"
-	"github.com/lantervale/ember/platform"
-)
+// systemAsker asks Windows and a Linux desktop, which tell ember no
+// change: Windows' answers are cheap calls, a Linux desktop's are tools
+// ember runs, so both are read before the first frame and when a window
+// gains the focus, never on a timer.
+//
+//nolint:gochecknoglobals // one system per process
+var systemAsker = newAsker(sysprefs.Read)
 
-// repoll is how often the system is asked again where nothing ember
-// listens to tells a change: Windows keeps its appearance in the registry.
-const repoll = 2 * time.Second
+// systemChanged reports whether a read of the system says something new
+// since it was last asked; gained asks it again.
+func systemChanged(gained bool) bool { return systemAsker.changed(gained) }
 
-// systemChanged reports whether the preferences are to read again: at the
-// start, then every repoll since asked.
-func systemChanged(asked *time.Time) bool {
-	if now := time.Now(); now.Sub(*asked) >= repoll {
-		*asked = now
-		return true
-	}
-	return false
-}
-
-func systemAppearance() platform.Appearance { return sysprefs.Appearance() }
-
-func systemMotion() platform.Motion { return sysprefs.Motion() }
-
-func systemLanguages() []string { return sysprefs.Languages() }
+func systemPreferences() sysprefs.System { return systemAsker.system() }

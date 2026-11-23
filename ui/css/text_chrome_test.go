@@ -38,3 +38,19 @@ func TestTextPropertiesMatchChrome(t *testing.T) {
 	)
 	matchChrome(t, d)
 }
+
+func TestFeatureSettingsAndKerningMatchChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+.on { font-feature-settings: "smcp", "liga" 0, "salt" 2, "kern" off, "tnum" on; font-kerning: none; }
+.back { font-feature-settings: normal; font-kerning: normal; }
+.font { font-feature-settings: "smcp"; font-kerning: none; font: 14px Go; }
+.twice { font-feature-settings: "liga" 0, "liga"; }
+`))
+	d.Body().Append(
+		ui.Div(ui.Class("on"), ui.Text("on"), ui.Span(ui.Text("inherited")),
+			ui.Span(ui.Class("back"), ui.Text("back to normal"))),
+		ui.Div(ui.Class("font"), ui.Text("after the font shorthand")),
+		ui.Div(ui.Class("twice"), ui.Text("twice")),
+	)
+	matchChrome(t, d)
+}

@@ -122,11 +122,16 @@ func scrollbarGutter(s *style.Computed) point {
 
 func outOfFlow(p style.Position) bool { return p == style.Absolute || p == style.FixedPosition }
 
+// stretches reports a size of stretch on either axis.
+func stretches(s style.Size[style.Length]) bool {
+	return s.Width.Kind == style.Stretch || s.Height.Kind == style.Stretch
+}
+
 func isSizingKeyword(l style.Length) bool {
 	switch l.Kind {
 	case style.MinContent, style.MaxContent, style.FitContent:
 		return true
-	case style.Auto, style.Fixed, style.Fr, style.None:
+	case style.Auto, style.Fixed, style.Fr, style.None, style.Stretch:
 	}
 	return false
 }

@@ -161,6 +161,10 @@ type Box struct {
 	TablePart TablePart
 	BoxSizing BoxSizing
 	Position  Position
+	// StaticInline is set on an absolutely or fixed positioned box that was
+	// inline-level before it left the flow: its static position is where
+	// it would stand on its line, not below it.
+	StaticInline bool
 	// Float and Clear are float and clear; a float applies to a box in the
 	// flow of a block container, not to a flex or grid item or a box
 	// position takes out of the flow.
@@ -220,6 +224,29 @@ type Box struct {
 	// nil for none: the names an @container rule picks the element by.
 	ContainerType  ContainerType
 	ContainerNames []string
+	// LineClamp is line-clamp: the lines a block container shows, 0 for
+	// none, an ellipsis ending the last when more follows, the content
+	// after it not drawn.
+	LineClamp int
+	// WebkitBox is display: -webkit-box or -webkit-inline-box, laid out
+	// as flex, or as flow-root clamped to WebkitLineClamp lines when
+	// BoxVertical (-webkit-box-orient: vertical) and that is set: Chrome's
+	// line clamp, which draws the content after the clamp.
+	WebkitBox       bool
+	BoxVertical     bool
+	WebkitLineClamp int
+}
+
+// Clamp is how many lines the box shows, 0 for all, and whether the
+// content after them is still drawn.
+func (b *Box) Clamp() (int, bool) {
+	switch {
+	case b.LineClamp > 0:
+		return b.LineClamp, false
+	case b.WebkitBox && b.BoxVertical && b.WebkitLineClamp > 0:
+		return b.WebkitLineClamp, true
+	}
+	return 0, false
 }
 
 // ContainerType is container-type: whether an element is a query
@@ -383,9 +410,25 @@ type Font struct {
 	Stretch float32
 	// Synthesis is what font-synthesis forbids making up.
 	Synthesis FontSynthesis
-	// Caps is font-variant-caps, which measuring and drawing synthesise
+	// Caps is font-variant-caps, which measuring and drawing take from
+	// the face's features where it has them, else synthesise
 	// (SmallCaps).
 	Caps FontCaps
+	// Features are the OpenType features the text turns on or off,
+	// HarfBuzz's way, comma separated ("-liga,tnum,salt=2"): those of
+	// font-variant's longhands but its capitals, font-kerning,
+	// letter-spacing and font-feature-settings, in that order.
+	Features string
+	// Variations are font-variation-settings' axes, in order, a later
+	// one of a tag winning; none for normal.
+	Variations []FontVariation
+}
+
+// FontVariation is a place on one axis of a variable font: a tag, such
+// as "wght", and a value in the axis's units.
+type FontVariation struct {
+	Tag   string
+	Value float32
 }
 
 // FontSynthesis is the faces font-synthesis forbids making up from
@@ -398,6 +441,9 @@ const (
 	NoSyntheticBold FontSynthesis = 1 << iota
 	// NoSyntheticItalic leaves an italic the family lacks upright.
 	NoSyntheticItalic
+	// NoSyntheticSmallCaps leaves the small capitals font-variant-caps
+	// asks for drawn as the letters are.
+	NoSyntheticSmallCaps
 )
 
 // LineHeight is normal, a factor of the font size, or points.
@@ -576,25 +622,41 @@ const (
 	AllPetiteCaps
 	Unicase
 	TitlingCaps
+	// UnicaseFeatures is a unicase whose face draws small capitals but
+	// has no unic: what is not lowercase is drawn by its smcp and c2sc,
+	// as Chrome draws it; no style computes it.
+	UnicaseFeatures
 )
 
 // FontVariant is font-variant's longhands but its capitals (Font.Caps),
 // kept as written, their keywords in the order CSS lists them, "" for
-// normal. They change nothing drawn: ui applies no OpenType feature of a
-// face.
+// normal; Font.Features holds the OpenType features they turn on.
 type FontVariant struct {
 	Ligatures, Numeric, EastAsian, Alternates, Position string
 }
 
+// FontKerning is font-kerning.
+type FontKerning uint8
+
+const (
+	KerningAuto FontKerning = iota
+	KerningNormal
+	KerningNone
+)
+
 type Text struct {
-	Font          Font
-	FontVariant   FontVariant
-	LineHeight    LineHeight
-	LetterSpacing Spacing
-	WordSpacing   Spacing
-	Color         color.Color
-	TextAlign     TextAlign
-	WhiteSpace    WhiteSpace
+	Font        Font
+	FontVariant FontVariant
+	// FeatureSettings is font-feature-settings as Chrome writes it back,
+	// "" for normal.
+	FeatureSettings string
+	Kerning         FontKerning
+	LineHeight      LineHeight
+	LetterSpacing   Spacing
+	WordSpacing     Spacing
+	Color           color.Color
+	TextAlign       TextAlign
+	WhiteSpace      WhiteSpace
 	// Dir is direction: the order of the inline flow, and the side
 	// each start and end stands on. Bidi is unicode-bidi, how the element
 	// takes part in the bidi algorithm of the text round it.
@@ -629,6 +691,15 @@ type Text struct {
 	HasSelectionShadows    bool
 	SelectionDecoration    TextDecoration
 	HasSelectionDecoration bool
+	// SelectionStroke is the ::selection's -webkit-text-stroke, set when
+	// HasSelectionStroke is, the colour or the width undeclared there the
+	// selected text's own. Its -webkit-text-fill-color is read and, as in
+	// Chrome, fills nothing: the selected glyphs take its color.
+	SelectionStroke    TextStroke
+	HasSelectionStroke bool
+	// TextStroke is -webkit-text-stroke: each glyph's outline drawn over
+	// its fill.
+	TextStroke TextStroke
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations
@@ -776,6 +847,9 @@ const (
 	// BorderDouble draws a side as two solid lines, each about a third of
 	// its width, and solid where it is too thin to show the gap.
 	BorderDouble
+	// BorderAuto is outline-style: auto, the focus ring; a border never
+	// takes it.
+	BorderAuto
 )
 
 // Shadow is one box-shadow.
@@ -1078,7 +1152,7 @@ type Filter struct {
 }
 
 // CurrentColorFields is a set of colours given as currentColor.
-type CurrentColorFields uint8
+type CurrentColorFields uint16
 
 const (
 	BorderTopCurrent CurrentColorFields = 1 << iota
@@ -1088,6 +1162,7 @@ const (
 	OutlineCurrent
 	DecorationCurrent
 	ColumnRuleCurrent
+	StrokeCurrent
 )
 
 // FollowColor sets every colour marked currentColor to c, a decoration's
@@ -1097,7 +1172,7 @@ func (s *Computed) FollowColor(c color.Color) {
 		BorderTopCurrent: &s.BorderColor.Top, BorderRightCurrent: &s.BorderColor.Right,
 		BorderBottomCurrent: &s.BorderColor.Bottom, BorderLeftCurrent: &s.BorderColor.Left,
 		OutlineCurrent: &s.OutlineColor, DecorationCurrent: &s.TextDecoration.Color,
-		ColumnRuleCurrent: &s.ColumnRuleColor,
+		ColumnRuleCurrent: &s.ColumnRuleColor, StrokeCurrent: &s.TextStroke.Color,
 	} {
 		if s.CurrentColor&f != 0 {
 			*p = c
@@ -1126,6 +1201,9 @@ const (
 	AlignBottom
 	// AlignLength raises the box by the style's VerticalShift.
 	AlignLength
+	// AlignBaselineMiddle is -webkit-baseline-middle: the box's middle on its parent's
+	// baseline.
+	AlignBaselineMiddle
 )
 
 // ListStyle is a list-style-type: a list item's bullet or marker string,

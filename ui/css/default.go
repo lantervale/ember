@@ -23,7 +23,11 @@ func DefaultImages() map[string][]byte {
 // its case and its text shadow start from none
 // (TestChromeSpacesTheTextOfControlsAsABrowsersSheetDoes). A control's
 // text is its scheme's, as Chrome's, where a game's takes its parent's
-// colour.
+// colour, and its font Chrome's small control font, 13.33px Arial (a
+// textarea's monospace) at a normal line height, where a game's takes
+// its parent's (TestChromeFontsTheControlsAsABrowsersSheetDoes); a
+// text field takes its parent's white-space, a button's or a select's
+// keeps it as written, and an option's on one line.
 const BrowserDefault = `* { box-sizing: content-box; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
@@ -35,6 +39,11 @@ input[type="button"], input[type="submit"], input[type="reset"] { text-align: ce
 button, input, select, textarea {
   letter-spacing: normal; word-spacing: normal; text-transform: none; text-shadow: none;
 }
+button, input, select, textarea { font: 13.333333px Arial; }
+textarea { font-family: monospace; }
+input { white-space: inherit; }
+input[type="button"], input[type="submit"], input[type="reset"], select { white-space: pre; }
+select[multiple], option { white-space: nowrap; }
 `
 
 // Default is the user-agent sheet: what every element looks like before
@@ -98,6 +107,9 @@ th { text-align: center; }
 em, i, cite, var, dfn, address { font-style: italic; }
 small, sub, sup { font-size: smaller; }
 thead, tbody, tfoot, table > tr { vertical-align: middle; }
+thead, tbody, tfoot, tr {
+  border-top-color: inherit; border-right-color: inherit; border-bottom-color: inherit; border-left-color: inherit;
+}
 tr, td, th { vertical-align: inherit; }
 sub { vertical-align: sub; }
 sup { vertical-align: super; }

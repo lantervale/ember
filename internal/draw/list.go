@@ -1044,6 +1044,14 @@ type Style struct {
 	// Exact draws them at their exact coverage, without stem darkening
 	// (Face.ExactSize); Pixelated comes first.
 	Exact bool
+	// Stroke draws each glyph as its outline stroked this many points
+	// wide, half outside it and half inside, in place of the glyph filled:
+	// a path, never darkened, as Chrome strokes one.
+	Stroke float32
+	// Features are the OpenType features the text is shaped with beside
+	// those every text has, HarfBuzz's way, comma separated ("smcp,-liga");
+	// a face's own go where a '|' stands, else first (shape.Splice).
+	Features string
 }
 
 type Align int
@@ -1062,6 +1070,13 @@ func (s Style) Font() *Font {
 	}
 	if size == 0 {
 		size = 16
+	}
+	if s.Stroke > 0 {
+		how := exact
+		if s.Pixelated {
+			how = unsmoothed
+		}
+		return face.stroked(size, s.Stroke*float32(math.Round(float64(size)))/size, how)
 	}
 	if s.Pixelated {
 		return face.PixelSize(size)
@@ -1086,7 +1101,7 @@ func (s Style) over(f *Font) float32 {
 func (s Style) Measure(text string) geom.Vec2 {
 	f := s.Font()
 	k := s.over(f)
-	return f.measure(text, s.Tracking*k).Scale(1 / k)
+	return f.measure(text, s.Features, s.Tracking*k).Scale(1 / k)
 }
 
 // Measure returns the size the text would occupy.
@@ -1151,42 +1166,36 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 	y := float32(math.Round(float64((top+f.ascent/k)*px))) / px
 	x := p.X
 	shape := geom.Vec4{X: KindText}
-	prev := none
-	eachCluster(text, func(cl string, first rune) {
-		if first == '\n' {
+	f.items(text, s.Features, func(it item) {
+		if it.newline {
 			x = p.X
 			y += f.lineHeight / k
-			prev = none
 			return
 		}
-		if tex, ok := f.picture(cl); ok {
+		if it.pic != nil {
 			if pictures {
 				picTop := y - f.ascent/k + (f.lineHeight-f.size)/2/k
 				c.Image(
 					geom.Rect{X: x, Y: picTop, W: f.size / k, H: f.size / k},
-					tex,
+					it.pic,
 					geom.Rect{W: 1, H: 1},
 					color.RGBA(1, 1, 1, col.A),
 				)
 			}
 			x += f.size/k + s.Tracking
-			prev = none
 			return
 		}
-		g := f.glyph(first)
-		x += f.kern(prev, g) / k
-		prev = g
-		at := float64(x * px)
+		at := float64((x + it.offset.X/k) * px)
 		whole := math.Floor(at)
 		phase := int(math.Round((at - whole) * phases))
 		if phase == phases {
 			whole, phase = whole+1, 0
 		}
-		if gp := f.glyphAt(first, phase); gp.size.X > 0 {
+		if gp := f.drawn(it, phase); gp.size.X > 0 {
 			c.quad(
 				geom.Rect{
 					X: float32(whole)/px + gp.offset.X/k,
-					Y: y + gp.offset.Y/k,
+					Y: y + (gp.offset.Y+it.offset.Y)/k,
 					W: gp.size.X / k,
 					H: gp.size.Y / k,
 				},
@@ -1196,7 +1205,7 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 				f,
 			)
 		}
-		x += g.advance/k + s.Tracking
+		x += it.advance/k + s.Tracking*float32(it.clusters)
 	})
 }
 

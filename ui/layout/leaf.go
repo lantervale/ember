@@ -68,7 +68,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		padding.t > 0 || padding.b > 0 || border.t > 0 || border.b > 0 ||
 		(some(nodeSize.h) && nodeSize.h > 0) || (some(minSize.h) && minSize.h > 0)
 
-	if in.run == computeSize && preventsCollapse && nodeSize.both() {
+	if in.run == computeSize && preventsCollapse && nodeSize.both() && in.clamp.lines == 0 {
 		s := nodeSize.mClamp(minSize, maxSize).mMax(pbSum)
 		return sizeOutput(s)
 	}
@@ -111,7 +111,8 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	if !some(in.known.w) && !some(nodeSize.w) {
 		basis = none
 	}
-	measured, first, last := t.measureContent(n, known, avail, basis)
+	clamp := textClamp(n, in.clamp)
+	measured, first, last, lines := t.measureContent(n, known, avail, basis, clamp.lines)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
 	s := clamped
 	if r := aspectRatio(st); in.sizing == inherentSize && some(r) {
@@ -144,6 +145,11 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		firstBaseline:    none,
 		lastBaseline:     none,
 		collapsesThrough: !preventsCollapse && s.h == 0 && measured.h == 0,
+		lines:            lines,
+		clamped:          clamp.ends(lines),
+	}
+	if in.run == performLayout {
+		n.clamp = clamp.out(lines)
 	}
 	if some(first) {
 		shift := fmax(s.h-inset.vertical()-measured.h, 0)*contentShare(n) + n.lowered
@@ -227,16 +233,18 @@ func ratioHeight(w, ratio float32) float32 {
 
 // measureContent is the size of a leaf's content: its text, or nothing. basis is the
 // width its percentages are of, none for the width found here.
-func (t *tree) measureContent(n *node, known size, avail spaces, basis float32) (size, float32, float32) {
+func (t *tree) measureContent(n *node, known size, avail spaces, basis float32, clamp int) (size, float32, float32,
+	int) {
 	if n.replaced {
-		return measureReplaced(n, known, avail.w), none, none
+		return measureReplaced(n, known, avail.w), none, none, 0
 	}
 	if n.inline == nil {
-		return known.or(size{}), none, none
+		return known.or(size{}), none, none, 0
 	}
 	if n.control != noControl {
-		return t.measureControl(n, known)
+		s, first, last := t.measureControl(n, known)
+		return s, first, last, 0
 	}
-	s, first, last := t.measure(n.inline, known, avail, size{basis, none})
-	return size{or(known.w, s.w), or(known.h, s.h)}, first, last
+	s, first, last, lines := t.measure(n.inline, known, avail, size{basis, none}, clamp)
+	return size{or(known.w, s.w), or(known.h, s.h)}, first, last, lines
 }

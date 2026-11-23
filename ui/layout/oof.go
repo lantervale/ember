@@ -301,7 +301,7 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 	avail := stretchFit.mClamp(minSize, maxSize)
 	availSpace := spaces{def(avail.w), def(avail.h)}
 
-	if isSizingKeyword(st.Size.Width) || isSizingKeyword(st.Size.Height) {
+	if isSizingKeyword(st.Size.Width) || isSizingKeyword(st.Size.Height) || stretches(st.Size) {
 		t.resolveAbsoluteSizingKeywords(n, &known, st.Size, area, inset, margin, minSize, maxSize, contentSize)
 		known = known.withAspectRatio(ratio).mClamp(minSize, maxSize)
 	}

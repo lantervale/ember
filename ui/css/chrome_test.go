@@ -45,6 +45,16 @@ var compared = map[string]func(s *style.Computed) string{
 	},
 	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
 	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
+	"font-variation-settings": func(s *style.Computed) string {
+		if len(s.Font.Variations) == 0 {
+			return "normal"
+		}
+		parts := make([]string, len(s.Font.Variations))
+		for i, v := range s.Font.Variations {
+			parts[i] = fmt.Sprintf("%q %s", v.Tag, num(v.Value))
+		}
+		return strings.Join(parts, ", ")
+	},
 	"text-decoration-skip-ink": func(s *style.Computed) string {
 		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
 	},
@@ -69,6 +79,10 @@ var compared = map[string]func(s *style.Computed) string{
 	"font-variant-east-asian": func(s *style.Computed) string { return orNormal(s.FontVariant.EastAsian) },
 	"font-variant-alternates": func(s *style.Computed) string { return orNormal(s.FontVariant.Alternates) },
 	"font-variant-position":   func(s *style.Computed) string { return orNormal(s.FontVariant.Position) },
+	"font-feature-settings":   func(s *style.Computed) string { return orNormal(s.FeatureSettings) },
+	"font-kerning": func(s *style.Computed) string {
+		return [...]string{"auto", "normal", "none"}[s.Kerning]
+	},
 	"line-height": func(s *style.Computed) string {
 		switch {
 		case s.LineHeight.Normal:
@@ -391,6 +405,8 @@ func lengthCSS(l style.Length) string {
 		return "max-content"
 	case style.None:
 		return "none"
+	case style.Stretch:
+		return "stretch"
 	case style.Fr:
 		return num(l.Px) + "fr"
 	case style.FitContent:
@@ -650,6 +666,9 @@ var everything = func() map[string]func(s *style.Computed) string {
 		return rgb(s.AccentColor)
 	}
 	m["caret-color"] = func(s *style.Computed) string { return rgb(s.CaretColor) }
+	m["-webkit-text-stroke-width"] = func(s *style.Computed) string { return px(s.TextStroke.Width) }
+	m["-webkit-text-stroke-color"] = func(s *style.Computed) string { return rgb(s.TextStroke.Color) }
+	m["-webkit-text-fill-color"] = func(s *style.Computed) string { return rgb(s.Fill()) }
 	m["object-fit"] = func(s *style.Computed) string {
 		return []string{"fill", "contain", "cover", "none", "scale-down"}[s.ObjectFit]
 	}
@@ -706,7 +725,7 @@ func image(src string) string {
 }
 
 func borderStyle(b style.BorderStyle) string {
-	return []string{"none", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge", "double"}[b]
+	return []string{"none", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge", "double", "auto"}[b]
 }
 
 // TestTheBordersOfTwoSidesMatchChrome compares border-inline, border-block,
@@ -761,7 +780,7 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   font-family: "Go Mono", monospace; font-size: larger; font-weight: 300; font-style: italic;
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
   white-space: pre-wrap; overflow-wrap: break-word; text-overflow: ellipsis; visibility: hidden; cursor: grab;
-  text-transform: capitalize; font-stretch: semi-condensed;
+  text-transform: capitalize; font-stretch: semi-condensed; font-variation-settings: "wght" 650, 'wdth' 75.5;
 }
 .l {
   background-color: rgb(1 2 3 / 0.25); border: 2px dashed steelblue; border-left: 4px dotted;
@@ -776,7 +795,9 @@ func TestComputedValuesMatchChrome(t *testing.T) {
 .x3 { transform: matrix(1, 0.5, -0.5, 1, 7, 8) rotate(0.25turn); transform-origin: 3px 4px; }
 .ts {
   text-shadow: 1px 2px 3px #000, 0 0 4px; image-rendering: pixelated; accent-color: #ffce76; caret-color: currentColor;
+  -webkit-text-stroke: 2.25px rgb(0 0 200 / 0.5); -webkit-text-fill-color: transparent;
 }
+.ts span { -webkit-text-stroke: currentColor 1.5px; -webkit-text-fill-color: currentColor; }
 .f1 { object-fit: cover; object-position: right 4px bottom 10%; }
 .f2 { object-fit: scale-down; object-position: left; }
 .l2 { border-width: thin medium thick 0; border-style: solid; transition: none; flex: none; margin: 0 auto; }

@@ -3,6 +3,8 @@ package css //nolint:testpackage // uses the package's unexported test helpers (
 import (
 	"reflect"
 	"testing"
+
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 func faceOf(t *testing.T, src string, opts ...ParseOption) (FontFace, string) {
@@ -156,6 +158,40 @@ func TestAFontFaceWeightStyleAndDisplay(t *testing.T) {
 	swapped, _ := faceOf(t, `@font-face { font-family: V; src: url(v.ttf); font-weight: 900 normal }`)
 	if swapped.Weight != 400 || swapped.WeightMax != 900 {
 		t.Errorf("a range written backwards: %+v", swapped)
+	}
+	if f.AutoWeight || one.AutoWeight || !f.AutoStretch {
+		t.Errorf("auto: a face that gives its weight is not, one that gives no width is: %+v, %+v", f, one)
+	}
+	auto, warns := faceOf(t, `@font-face { font-family: V; src: url(v.ttf); font-weight: auto; font-stretch: auto }`)
+	if warns != "" || !auto.AutoWeight || !auto.AutoStretch || auto.Weight != 400 || auto.Stretch != 100 {
+		t.Errorf("auto: %+v, warnings %s", auto, warns)
+	}
+	none, _ := faceOf(t, `@font-face { font-family: V; src: url(v.ttf) }`)
+	if !none.AutoWeight || !none.AutoStretch {
+		t.Errorf("a face that gives neither: %+v", none)
+	}
+}
+
+func TestFontVariationSettingsAreTagsAndNumbers(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want []style.FontVariation
+		ok   bool
+	}{
+		{`normal`, nil, true},
+		{`"wght" 650`, []style.FontVariation{{Tag: "wght", Value: 650}}, true},
+		{`"wght" 650.5, 'wdth' -2`, []style.FontVariation{{Tag: "wdth", Value: -2}, {Tag: "wght", Value: 650.5}}, true},
+		{`"wght" 1, "XXXX" 2, "wght" 3`, []style.FontVariation{{Tag: "XXXX", Value: 2}, {Tag: "wght", Value: 3}}, true},
+		{`"wght"`, nil, false},
+		{`"wghtt" 1`, nil, false},
+		{`wght 1`, nil, false},
+		{`"wght" 1 2`, nil, false},
+		{`"wght" 1,`, nil, false},
+	} {
+		got, ok := fontVariations(componentsOf(c.in))
+		if ok != c.ok || !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: %+v %v, want %+v %v", c.in, got, ok, c.want, c.ok)
+		}
 	}
 }
 

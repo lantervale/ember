@@ -206,6 +206,10 @@ func resolveSizingKeyword(l style.Length, stretch, basis float32) (keywordKind, 
 		if some(basis) {
 			return keywordMeasure, def(l.At(basis))
 		}
+	case style.Stretch:
+		if some(stretch) {
+			return keywordExact, def(stretch)
+		}
 	case style.Auto, style.Fixed, style.Fr, style.None:
 	}
 	return keywordNone, space{}
@@ -226,6 +230,12 @@ func (t *tree) resolveAbsoluteSizingKeywords(n *node, known *size, sizeStyle sty
 	kh, khSpace := keywordNone, space{}
 	if !some(known.h) {
 		kh, khSpace = resolveSizingKeyword(sizeStyle.Height, stretch.h, area.h)
+	}
+	if kw == keywordExact {
+		known.w = mClamp(kwSpace.v, minSize.w, maxSize.w)
+	}
+	if kh == keywordExact {
+		known.h = mClamp(khSpace.v, minSize.h, maxSize.h)
 	}
 	if kw == keywordMeasure {
 		h := def(stretch.h)

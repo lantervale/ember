@@ -29,7 +29,13 @@ func TestChromeLaysOutWhatADocumentPrefersAsIt(t *testing.T) {
 	dark := platform.NewPreferences()
 	dark.SyncAppearance(platform.AppearanceDark)
 	dark.SyncMotion(platform.MotionReduced)
+	contrasted := platform.NewPreferences()
+	contrasted.SyncContrast(platform.ContrastMore)
+	contrasted.SyncForcedColors(platform.ForcedColorsActive)
 	for name, d := range map[string]*ui.Document{
+		"the system's contrast": ui.NewDocument(ui.CSS(sheet), ui.Preferences(contrasted)),
+		"over the system's contrast": ui.NewDocument(ui.CSS(sheet), ui.Preferences(contrasted),
+			ui.PrefersContrast(ui.ContrastLess)),
 		"more contrast": ui.NewDocument(ui.CSS(sheet), ui.PrefersContrast(ui.ContrastMore)),
 		"less contrast, forced colours": ui.NewDocument(ui.CSS(sheet), ui.PrefersContrast(ui.ContrastLess),
 			ui.ForcedColors()),
