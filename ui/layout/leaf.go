@@ -150,6 +150,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	if in.run == performLayout {
 		n.clamp = clamp.out(lines)
 	}
+	if n.altLine > 0 {
+		out.firstBaseline, out.lastBaseline = pb.t+n.altLine, pb.t+n.altLine
+	}
 	if some(first) {
 		shift := fmax(s.h-inset.vertical()-measured.h, 0)*contentShare(n) + n.lowered
 		out.firstBaseline = pb.t + shift + first

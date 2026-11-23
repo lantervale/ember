@@ -241,6 +241,9 @@ type node struct {
 	// it takes the width it is given.
 	shape box.Intrinsic
 	sized bool
+	// altLine is the baseline of a broken img's alt text below its content box's top, 0
+	// for none.
+	altLine float32
 	// intrinsic is set once a layout of the node read its picture's size or
 	// proportions: with a width and a height of its own it never does.
 	intrinsic bool

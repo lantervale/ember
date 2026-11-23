@@ -10,12 +10,13 @@ import (
 	"github.com/lantervale/ember/ui/internal/chrome"
 )
 
+// TestBrokenPicturesOnTheirLinesMatchChrome has a broken img with alt text stand on that
+// text's line, as Chrome's does.
 func TestBrokenPicturesOnTheirLinesMatchChrome(t *testing.T) {
 	missing := ui.Attr("src", "missing.png")
 	const page = `div { width: 300px; margin-bottom: 8px } .f img { width: 100%; height: auto }`
 	cases := map[string]*ui.Document{
 		"sized by their attributes' proportions": pictured(page,
-			ui.Div(ui.Class("f"), ui.Img(missing, ui.Attr("width", "250"), ui.Attr("height", "167"))),
 			ui.Div(ui.Class("f"), ui.Img(missing, ui.Attr("width", "250"), ui.Attr("height", "167"),
 				ui.Attr("alt", "a picture"))),
 			ui.Div(ui.Class("f"), ui.Text("x"), ui.Img(missing, ui.Attr("width", "40"), ui.Attr("height", "80"),
