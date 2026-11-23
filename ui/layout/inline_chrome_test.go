@@ -140,7 +140,8 @@ func matchText(t *testing.T, d *ui.Document, size geom.Vec2, tol float32) {
 		}
 		for j := range w {
 			gt := strings.TrimSuffix(g[j].Text, "…")
-			wt := strings.Join(strings.Fields(w[j].Text), " ")
+			// a tab splits ember's line into fragments joined back with a space
+			wt := strings.Join(strings.FieldsFunc(w[j].Text, func(r rune) bool { return r == '\t' }), " ")
 			if fold := cases.Fold(); fold.String(gt) != fold.String(wt) && !strings.HasPrefix(wt, gt) {
 				t.Errorf("%q line %d: ember %q, Chrome %q", nodes[i].Text(), j, g[j].Text, w[j].Text)
 				continue
