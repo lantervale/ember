@@ -199,7 +199,7 @@ func (p *parser) importRule(t Token) {
 		}
 		rest = trim(rest[1:])
 	}
-	if len(rest) > 0 && rest[0].Kind == Function && strings.EqualFold(rest[0].Text, "supports") {
+	if len(rest) > 0 && rest[0].Kind == Function && strings.EqualFold(rest[0].Text, atSupports) {
 		if !p.browser {
 			p.warnf(t.Pos, "@import: supports() is read only as a browser reads a sheet")
 			return

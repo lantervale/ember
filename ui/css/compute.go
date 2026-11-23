@@ -185,6 +185,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	r.env.root = root
 	if stale {
 		r.env.used, r.env.prefersRead, r.env.titleBarRead, r.env.inactiveRead = 0, false, false, false
+		r.env.mediaRead = false
 	} else if r.anchors && dom.Data(root).Style != nil {
 		r.anchor(root)
 	}
@@ -414,6 +415,11 @@ type ctx struct {
 	// the element's font.
 	fontRead bool
 	vars     map[string][]Component
+	// frames are the custom functions being called, the innermost last.
+	frames []*frame
+	// inContent is set while content's value is substituted, whose attr()
+	// of a name alone content reads itself.
+	inContent bool
 	// inherited are the custom properties the element starts from.
 	inherited map[string]string
 	resolving map[string]bool
@@ -940,7 +946,7 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 
 // customKeyword handles inherit, initial and unset on a custom property.
 func (x *ctx) customKeyword(name string, v []Component, ok bool) ([]Component, bool) {
-	if ok && globalKeyword(v) == "initial" {
+	if ok && globalKeyword(v) == kwInitial {
 		return nil, false
 	}
 	if text, has := x.parent.Vars[name]; has {
@@ -949,38 +955,22 @@ func (x *ctx) customKeyword(name string, v []Component, ok bool) ([]Component, b
 	return nil, false
 }
 
-// substitute replaces every var() in v.
+// substitute replaces every var() in v, and the other functions the
+// cascade replaces as it does (substitutes).
 func (x *ctx) substitute(v []Component) ([]Component, bool) {
 	if !hasVar(v) {
 		return v, true
 	}
 	out := make([]Component, 0, len(v))
 	for _, c := range v {
-		switch {
-		case c.Kind == Function && strings.EqualFold(c.Text, "var"):
-			args := trim(c.Args)
-			if len(args) == 0 || args[0].Kind != Ident || !strings.HasPrefix(args[0].Text, "--") {
-				return nil, false
-			}
-			if val, ok := x.lookup(args[0].Text); ok {
-				out = append(out, val...)
-				continue
-			}
-			rest := trim(args[1:])
-			if len(rest) == 0 || rest[0].Kind != Comma {
-				return nil, false
-			}
-			fb, ok := x.substitute(trim(rest[1:]))
-			if !ok {
-				return nil, false
-			}
-			out = append(out, fb...)
-		case c.Kind == Function && strings.EqualFold(c.Text, "env"):
-			val, ok := x.envValue(c)
+		if val, ok, replaced := x.replaced(c); replaced {
 			if !ok {
 				return nil, false
 			}
 			out = append(out, val...)
+			continue
+		}
+		switch {
 		case len(c.Args) > 0:
 			args, ok := x.substitute(c.Args)
 			if !ok {
@@ -993,6 +983,53 @@ func (x *ctx) substitute(v []Component) ([]Component, bool) {
 		}
 	}
 	return out, true
+}
+
+// replaced is what c stands for when it is a function substitute
+// replaces here: var(), env(), if(), attr() and a custom function's
+// call; replaced is false for any other component.
+func (x *ctx) replaced(c Component) ([]Component, bool, bool) {
+	if c.Kind != Function {
+		return nil, false, false
+	}
+	var val []Component
+	var ok bool
+	switch {
+	case strings.EqualFold(c.Text, "var"):
+		val, ok = x.varValue(c)
+	case strings.EqualFold(c.Text, "env"):
+		val, ok = x.envValue(c)
+	case strings.EqualFold(c.Text, "if"):
+		val, ok = x.ifValue(c)
+	case strings.EqualFold(c.Text, "attr") && (!x.inContent || len(trim(c.Args)) != 1):
+		val, ok = x.attrValue(c)
+	case strings.HasPrefix(c.Text, "--"):
+		val, ok = x.call(c)
+	default:
+		return nil, false, false
+	}
+	return val, ok, true
+}
+
+// varValue is what var() c stands for: the custom property of the
+// custom functions being called or of the element, else its fallback.
+func (x *ctx) varValue(c Component) ([]Component, bool) {
+	args := trim(c.Args)
+	if len(args) == 0 || args[0].Kind != Ident || !strings.HasPrefix(args[0].Text, "--") {
+		return nil, false
+	}
+	val, ok, found := x.frameVar(args[0].Text)
+	if !found {
+		val, ok = x.lookup(args[0].Text)
+	}
+	if ok {
+		return val, true
+	}
+	rest := trim(args[1:])
+	if len(rest) == 0 || rest[0].Kind != Comma {
+		return nil, false
+	}
+	return x.substitute(trim(rest[1:]))
 }
 
 // envValue is what env() c stands for: its variable, else its fallback,
@@ -1052,7 +1089,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	switch kw {
 	case kwInherit:
 		x.inherit(l)
-	case "initial":
+	case kwInitial:
 		x.reset(l)
 	case kwUnset:
 		if l.inherited {
@@ -1079,7 +1116,7 @@ func (x *ctx) valueOf(name string, d *Declaration) ([]Component, bool) {
 		long, done := x.expanded[d]
 		if !done {
 			if sub, subOK := x.substitute(d.Value); subOK {
-				long, _ = expand(d.Name, items(sub))
+				long, _ = expand(d.Name, items(x.elementMath(sub, d.Name)))
 			}
 			if x.expanded == nil {
 				x.expanded = map[*Declaration]map[string][]Component{}
@@ -1090,7 +1127,10 @@ func (x *ctx) valueOf(name string, d *Declaration) ([]Component, bool) {
 	case d.vals != nil:
 		return d.vals, true
 	default:
-		return x.substitute(d.Value)
+		x.inContent = name == kwContent
+		v, ok := x.substitute(d.Value)
+		x.inContent = false
+		return x.elementMath(v, name), ok
 	}
 }
 
@@ -1551,6 +1591,15 @@ func (x *ctx) number(c Component, basis float64) float32 {
 
 func (x *ctx) num(c Component) float32 { return x.number(c, 1) }
 
+// whole is c, an integer or a math function of numbers, rounded to the
+// nearest integer, halves up.
+func (x *ctx) whole(c Component) int {
+	if c.Kind == Number {
+		return int(c.Num)
+	}
+	return int(math.Floor(float64(x.num(c)) + 0.5))
+}
+
 // angle is c in degrees on the element.
 func (x *ctx) angle(c Component) float64 {
 	if c.Kind == Number {
@@ -1936,7 +1985,7 @@ var props = func() map[string]prop {
 				x.c.ZAuto = isWord(v[0], "auto")
 				x.c.ZIndex = 0
 				if !x.c.ZAuto {
-					x.c.ZIndex = int(v[0].Num)
+					x.c.ZIndex = x.whole(v[0])
 				}
 			},
 			inherit: func(dst, src *style.Computed) { dst.ZIndex, dst.ZAuto = src.ZIndex, src.ZAuto },
@@ -1973,7 +2022,7 @@ var props = func() map[string]prop {
 		"justify-items":   keyword(func(c *style.Computed) *style.Align { return &c.JustifyItems }, alignWords4),
 		"justify-self":    keyword(func(c *style.Computed) *style.Align { return &c.JustifySelf }, alignWords4),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
-			func(_ *ctx, v []Component) int { return int(v[0].Num) }, integers(math.MinInt)),
+			func(x *ctx, v []Component) int { return x.whole(v[0]) }, integers(math.MinInt)),
 
 		"column-count": field(func(c *style.Computed) *int { return &c.ColumnCount },
 			func(_ *ctx, v []Component) int { return int(v[0].Num) }, counts),
@@ -2103,7 +2152,7 @@ var props = func() map[string]prop {
 					switch {
 					case isWord(c, "weight"):
 						no &^= style.NoSyntheticBold
-					case isWord(c, "style"):
+					case isWord(c, fnStyle):
 						no &^= style.NoSyntheticItalic
 					case isWord(c, "small-caps"):
 						no &^= style.NoSyntheticSmallCaps

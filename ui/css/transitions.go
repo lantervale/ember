@@ -126,7 +126,7 @@ func (t *Transitions) SetMedia(m Media) bool {
 	if m == t.media {
 		return false
 	}
-	t.media = m
+	t.media, t.env.media = m, m
 	resized := t.env.width != m.Width || t.env.height != m.Height
 	flipped := t.env.dark != m.Dark
 	rescaled := t.env.dppx != m.Resolution
@@ -142,7 +142,7 @@ func (t *Transitions) SetMedia(m Media) bool {
 	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
 		t.off, t.stale, t.rekey = off, true, true
 		t.startOff = rulesOff(t.all, m, true)
-	} else if resized && t.env.used&viewportUnits != 0 || flipped && t.env.prefersRead || rescaled ||
+	} else if t.env.mediaRead || resized && t.env.used&viewportUnits != 0 || flipped && t.env.prefersRead || rescaled ||
 		blurred && t.env.inactiveRead {
 		t.stale = true
 	}

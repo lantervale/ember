@@ -37,9 +37,10 @@ type registration struct {
 // registry is the custom properties registered, by name, and those of
 // them that don't inherit.
 type registry struct {
-	props    map[string]*registration
-	reset    []*registration
-	initials map[string]string
+	props     map[string]*registration
+	reset     []*registration
+	initials  map[string]string
+	functions map[string]*customFunction
 }
 
 // syntaxKind is a data type a syntax names, or a keyword.
@@ -67,8 +68,8 @@ const (
 //nolint:gochecknoglobals // lookup table
 var syntaxTypes = map[string]syntaxKind{
 	"length": synLength, "number": synNumber, "percentage": synPercentage,
-	"length-percentage": synLengthPercentage, "color": synColor, "image": synImage, "url": synURL,
-	"integer": synInteger, "angle": synAngle, "time": synTime, "resolution": synResolution,
+	"length-percentage": synLengthPercentage, fnColor: synColor, "image": synImage, "url": synURL,
+	"integer": synInteger, "angle": synAngle, "time": synTime, nameResolution: synResolution,
 	"transform-function": synTransformFunction, "custom-ident": synCustomIdent,
 	"transform-list": synTransformList, "string": synString,
 }
@@ -137,7 +138,7 @@ func keywordName(s string) bool {
 
 func cssWide(s string) bool {
 	switch strings.ToLower(s) {
-	case "initial", "inherit", kwUnset, kwRevert, kwRevertLayer, "default":
+	case kwInitial, kwInherit, kwUnset, kwRevert, kwRevertLayer, "default":
 		return true
 	}
 	return false
@@ -301,15 +302,22 @@ func (p *parser) propertyRule(t Token) {
 // definition over any rule.
 func newRegistry(sheets []*Sheet, defined []*registration) *registry {
 	var g *registry
-	add := func(r *registration) {
+	made := func() {
 		if g == nil {
-			g = &registry{props: map[string]*registration{}}
+			g = &registry{props: map[string]*registration{}, functions: map[string]*customFunction{}}
 		}
+	}
+	add := func(r *registration) {
+		made()
 		g.props[r.name] = r
 	}
 	for _, s := range sheets {
 		for _, r := range s.properties {
 			add(r)
+		}
+		for _, f := range s.functions {
+			made()
+			g.functions[f.name] = f
 		}
 	}
 	for _, r := range defined {
@@ -448,23 +456,8 @@ func (x *ctx) typedOne(p syntaxPart, kind syntaxKind, c Component) (string, bool
 		return c.Text, c.Kind == Ident && c.Text == p.keyword
 	case synCustomIdent:
 		return c.Text, c.Kind == Ident && !cssWide(c.Text)
-	case synString:
-		return strconv.Quote(c.Text), c.Kind == String
-	case synURL:
-		if c.Kind == URL {
-			return "url(" + strconv.Quote(c.Text) + ")", true
-		}
-		if c.Kind == Function && strings.EqualFold(c.Text, "url") {
-			a := items(c.Args)
-			return "url(" + strconv.Quote(a[0].Text) + ")", len(a) == 1 && a[0].Kind == String
-		}
-		return "", false
-	case synImage:
-		if c.Kind == URL || c.Kind == Function && (strings.HasSuffix(strings.ToLower(c.Text), "gradient") ||
-			strings.EqualFold(c.Text, "url") || strings.EqualFold(c.Text, "image-set")) {
-			return c.String(), true
-		}
-		return "", false
+	case synString, synURL, synImage:
+		return written(kind, c)
 	case synColor:
 		if isWord(c, kwCurrentColor) {
 			return kwCurrentColor, true
@@ -497,12 +490,34 @@ func (x *ctx) typedOne(p syntaxPart, kind syntaxKind, c Component) (string, bool
 	return x.dim(kind, d)
 }
 
+// written is c as a <string>, a <url> or an <image>, which compute as
+// they are written.
+func written(kind syntaxKind, c Component) (string, bool) {
+	isURL := c.Kind == URL || c.Kind == Function && strings.EqualFold(c.Text, "url")
+	switch {
+	case kind == synString:
+		return strconv.Quote(c.Text), c.Kind == String
+	case kind == synImage:
+		return c.String(), isURL || c.Kind == Function && (strings.HasSuffix(strings.ToLower(c.Text), "gradient") ||
+			strings.EqualFold(c.Text, "image-set"))
+	case c.Kind == URL:
+		return "url(" + strconv.Quote(c.Text) + ")", true
+	case isURL:
+		a := items(c.Args)
+		if len(a) != 1 || a[0].Kind != String {
+			return "", false
+		}
+		return "url(" + strconv.Quote(a[0].Text) + ")", true
+	}
+	return "", false
+}
+
 // dim is d computed as kind.
 func (x *ctx) dim(kind syntaxKind, d Dim) (string, bool) {
 	d = d.Absolute(x.units(&d))
 	switch kind {
 	case synLength, synLengthPercentage:
-		if d.typ != typeLength && !(kind == synLengthPercentage && d.typ == typePercent) {
+		if d.typ != typeLength && (kind != synLengthPercentage || d.typ != typePercent) {
 			return "", false
 		}
 		if len(d.terms) > 0 {
@@ -529,7 +544,7 @@ func (x *ctx) dim(kind syntaxKind, d Dim) (string, bool) {
 		return cssNum(v), true
 	case synAngle:
 		v, ok := d.constant()
-		return cssNum(v) + "deg", ok && d.typ == typeAngle
+		return cssNum(v) + unitDeg, ok && d.typ == typeAngle
 	case synTime:
 		v, ok := d.constant()
 		return cssNum(v) + "s", ok && d.typ == typeTime
@@ -587,11 +602,11 @@ func (x *ctx) transformFunction(c Component) (string, bool) {
 			return "", false
 		}
 		d = d.Absolute(x.units(&d))
-		switch {
-		case d.typ == typeAngle:
+		switch d.typ {
+		case typeAngle:
 			v, _ := d.constant()
-			out[i] = cssNum(v) + "deg"
-		case d.typ == typeLength || d.typ == typePercent:
+			out[i] = cssNum(v) + unitDeg
+		case typeLength, typePercent:
 			if len(d.terms) > 0 {
 				return "", false
 			}
@@ -725,7 +740,8 @@ func readOne(kind syntaxKind, c Component) (typedValue, bool) {
 			return tv, false
 		}
 		tv.num, tv.pct, tv.hasPx, tv.hasPct, tv.text = d.Px, d.Pct, d.Px != 0, true, "px"
-	default:
+	case EOF, Ident, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Whitespace, CDO, CDC, Colon, Semicolon,
+		Comma, LBracket, RBracket, LParen, RParen, LBrace, RBrace:
 		return tv, false
 	}
 	return tv, true
@@ -744,17 +760,8 @@ func (r *registration) current(v string, s *style.Computed) string {
 // moves reports whether r interpolates between a and b, two of its
 // computed values, where they would otherwise flip.
 func (r *registration) moves(a, b string) bool {
-	pa, va, okA := readTyped(r.syntax, a)
-	pb, vb, okB := readTyped(r.syntax, b)
-	if !okA || !okB || pa != pb || len(va) != len(vb) {
-		return false
-	}
-	for i := range va {
-		if _, ok := lerpTyped(va[i], vb[i], 0.5); !ok {
-			return false
-		}
-	}
-	return true
+	_, ok := r.lerp(a, b, 0.5)
+	return ok
 }
 
 // interpolate is the value of r t of the way from a to b, two of its
@@ -762,30 +769,37 @@ func (r *registration) moves(a, b string) bool {
 // syntax, of a type that moves, with as many items; flipping halfway
 // otherwise.
 func (r *registration) interpolate(a, b string, t float32) string {
-	if r != nil {
-		pa, va, okA := readTyped(r.syntax, a)
-		pb, vb, okB := readTyped(r.syntax, b)
-		if okA && okB && pa == pb && len(va) == len(vb) {
-			out := make([]string, len(va))
-			ok := true
-			for i := range va {
-				if out[i], ok = lerpTyped(va[i], vb[i], float64(t)); !ok {
-					break
-				}
-			}
-			if ok {
-				sep := " "
-				if r.syntax.parts[pa].mult == '#' {
-					sep = ", "
-				}
-				return strings.Join(out, sep)
-			}
-		}
+	if v, ok := r.lerp(a, b, t); ok {
+		return v
 	}
 	if t < 0.5 {
 		return a
 	}
 	return b
+}
+
+// lerp is interpolate where a and b move, false where they flip.
+func (r *registration) lerp(a, b string, t float32) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	pa, va, okA := readTyped(r.syntax, a)
+	pb, vb, okB := readTyped(r.syntax, b)
+	if !okA || !okB || pa != pb || len(va) != len(vb) {
+		return "", false
+	}
+	out := make([]string, len(va))
+	for i := range va {
+		var ok bool
+		if out[i], ok = lerpTyped(va[i], vb[i], float64(t)); !ok {
+			return "", false
+		}
+	}
+	sep := " "
+	if r.syntax.parts[pa].mult == '#' {
+		sep = ", "
+	}
+	return strings.Join(out, sep), true
 }
 
 func lerpTyped(a, b typedValue, t float64) (string, bool) {
@@ -811,8 +825,8 @@ func lerpTyped(a, b typedValue, t float64) (string, bool) {
 				return "", false
 			}
 			switch {
-			case x.text == "deg" || y.text == "deg":
-				out[i] = cssNum(f(x.num, y.num)) + "deg"
+			case x.text == unitDeg || y.text == unitDeg:
+				out[i] = cssNum(f(x.num, y.num)) + unitDeg
 			case x.hasPx || y.hasPx || x.hasPct || y.hasPct:
 				out[i] = writeLP(f(x.num, y.num), f(x.pct, y.pct), x.hasPx || y.hasPx, x.hasPct || y.hasPct)
 			default:

@@ -73,7 +73,7 @@ func legacyLinear(toks []Component) ([]Component, int, bool) {
 	}
 	if a, err := angle(toks[0]); err == nil && (toks[0].Kind != Number || toks[0].Num == 0) {
 		deg := strconv.FormatFloat(90-a, 'f', -1, 64)
-		return []Component{{Token: Token{Kind: Dimension, Num: 90 - a, Unit: "deg", Text: deg}}}, 1, true
+		return []Component{{Token: Token{Kind: Dimension, Num: 90 - a, Unit: unitDeg, Text: deg}}}, 1, true
 	}
 	if isWord(toks[0], "center") {
 		return nil, 0, false
