@@ -56,7 +56,7 @@ func TestAppearanceComputesAsChromes(t *testing.T) {
 	// The page's own-look sheet keeps Chrome from drawing its controls;
 	// out of the way, Chrome's cascade says what appearance computes to.
 	got, err := chrome.StylesAfter(d, geom.V2(400, 300), []string{"appearance"},
-		`document.getElementById("ember-own-look").remove();`)
+		`document.querySelector("style[data-ember-own-look]").remove();`)
 	if err != nil {
 		t.Fatal(err)
 	}

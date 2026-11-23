@@ -406,7 +406,7 @@ const (
 // in ui's cascade, and a control of appearance: none is marked
 // data-ember-bare. Its style element can be taken out to read Chrome's
 // own appearance.
-const ownLook = "</style>\n<style id=\"ember-own-look\">\n" +
+const ownLook = "</style>\n<style data-ember-own-look>\n" +
 	"button, input, select, textarea, progress { appearance: none !important; }\n" + bareBars + "</style>\n<style>\n"
 
 // bare reports whether n is a control of appearance: none, which draws
