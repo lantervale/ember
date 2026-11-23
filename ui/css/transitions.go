@@ -48,6 +48,11 @@ type Transitions struct {
 	// viewport Requery last answered them in.
 	queries []*containerRule
 	queried [2]float32
+	// styles are the sheets' counter styles, worked out again once the
+	// sheets or which of their @counter-style rules hold (stylesOn)
+	// change.
+	styles   *counterStyles
+	stylesOn []bool
 	// anims are the animations of the elements whose style has an
 	// animation list, events what they did since Events, and frames the
 	// @keyframes rules by name, worked out again once rekey is set.
@@ -124,6 +129,9 @@ func (t *Transitions) SetMedia(m Media) bool {
 	if t.all == nil {
 		return false
 	}
+	if on := counterStylesOn(t.all, m); !slices.Equal(on, t.stylesOn) {
+		t.stylesOn, t.styles, t.stale = on, nil, true
+	}
 	if off := mediaOff(t.all, m); !sameOff(off, t.off) {
 		t.off, t.stale, t.rekey = off, true, true
 		t.startOff = rulesOff(t.all, m, true)
@@ -166,6 +174,7 @@ func (t *Transitions) SetSheets(sheets []*Sheet) {
 		agent = browserAgent()
 	}
 	t.all = append([]*Sheet{agent}, sheets...)
+	t.styles, t.stylesOn = nil, counterStylesOn(t.all, t.media)
 	t.off, t.ranks, t.queries = mediaOff(t.all, t.media), layerRanks(t.all), containerQueries(t.all)
 	t.starts = startingRules(t.all)
 	t.startOff = rulesOff(t.all, t.media, true)
@@ -185,9 +194,12 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	if t.changed == nil {
 		t.changed = t.restyled
 	}
-	r := restyler{sheets: t.all, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides, transit: t.transition,
-		transits: t.Running, afterChange: t.after, computed: &t.computed, overlay: t.overlay, viewport: t.viewport,
-		browser: t.browser, env: &t.env}
+	if t.styles == nil {
+		t.styles = authorStyles(t.all, t.media)
+	}
+	r := restyler{sheets: t.all, styles: t.styles, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides,
+		transit: t.transition, transits: t.Running, afterChange: t.after, computed: &t.computed, overlay: t.overlay,
+		viewport: t.viewport, browser: t.browser, env: &t.env}
 	r.run(root, t.stale)
 	t.stale = false
 	if (len(t.anims) > 0 || t.rekey) && t.animate() {

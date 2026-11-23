@@ -127,6 +127,8 @@ func (t *Text) equal(o *Text) bool {
 		sameSlice(t.Quotes, o.Quotes) &&
 		t.QuotesNone == o.QuotesNone &&
 		t.ListStyle == o.ListStyle &&
+		t.ListName == o.ListName &&
+		t.ListImage == o.ListImage &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
 		t.CaptionSide == o.CaptionSide &&
@@ -161,10 +163,14 @@ func (l *Look) equal(o *Look) bool {
 		sameSlice(l.BackgroundOrigins, o.BackgroundOrigins) &&
 		sameSlice(l.BackgroundClips, o.BackgroundClips) &&
 		sameSlice(l.BackgroundBlends, o.BackgroundBlends) &&
-		l.MaskImage.equal(&o.MaskImage) &&
-		l.MaskSize == o.MaskSize &&
-		l.MaskRepeat == o.MaskRepeat &&
-		l.MaskPosition == o.MaskPosition &&
+		sameSliceFunc(l.MaskImages, o.MaskImages, (*Image).equal) &&
+		sameSlice(l.MaskSizes, o.MaskSizes) &&
+		sameSlice(l.MaskRepeats, o.MaskRepeats) &&
+		sameSlice(l.MaskPositions, o.MaskPositions) &&
+		sameSlice(l.MaskOrigins, o.MaskOrigins) &&
+		sameSlice(l.MaskClips, o.MaskClips) &&
+		sameSlice(l.MaskModes, o.MaskModes) &&
+		sameSlice(l.MaskComposites, o.MaskComposites) &&
 		l.ClipPath.Equal(&o.ClipPath) &&
 		l.ImageRendering == o.ImageRendering &&
 		l.ObjectFit == o.ObjectFit &&

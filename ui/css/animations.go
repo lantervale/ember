@@ -85,14 +85,14 @@ type key struct {
 // keyframe, which is that value itself.
 type end uint8
 
-const implicit = end(style.CompositeAccumulate) + 1
+const implicit = end(style.ComposeAccumulate) + 1
 
 // composite is how the two keyframes of an interval combine.
 type composite [2]end
 
 // replaces reports whether c is the keyframes' values alone.
 func (c composite) replaces() bool {
-	return c[0] == end(style.CompositeReplace) && c[1] == end(style.CompositeReplace)
+	return c[0] == end(style.ComposeReplace) && c[1] == end(style.ComposeReplace)
 }
 
 // composed writes into dst the longhand's value at t between a's and
@@ -109,9 +109,9 @@ func (p *prop) composed(dst, a, b *style.Computed, t float32, c composite) {
 		switch {
 		case op == implicit:
 			ends[i] = &under
-		case op != end(style.CompositeReplace) && p.anim.add != nil:
+		case op != end(style.ComposeReplace) && p.anim.add != nil:
 			sums[i] = *ends[i]
-			if p.anim.add(&sums[i], &under, ends[i], op == end(style.CompositeAccumulate)) {
+			if p.anim.add(&sums[i], &under, ends[i], op == end(style.ComposeAccumulate)) {
 				ends[i] = &sums[i]
 			}
 		}

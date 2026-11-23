@@ -87,10 +87,10 @@ var moved = func() map[string]func(*style.Computed) string {
 		},
 		"background-size": func(s *style.Computed) string { return sizeCSS(s.BackgroundLayer(0).Size) },
 		"mask-position": func(s *style.Computed) string {
-			return positionCSS(s.MaskPosition.X, s.MaskPosition.FromRight) + " " +
-				positionCSS(s.MaskPosition.Y, s.MaskPosition.FromBottom)
+			p := s.MaskLayer(0).Position
+			return positionCSS(p.X, p.FromRight) + " " + positionCSS(p.Y, p.FromBottom)
 		},
-		"mask-size": func(s *style.Computed) string { return sizeCSS(s.MaskSize) },
+		"mask-size": func(s *style.Computed) string { return sizeCSS(s.MaskLayer(0).Size) },
 		"border-spacing": func(s *style.Computed) string {
 			if s.BorderSpacing[0] == s.BorderSpacing[1] {
 				return px(s.BorderSpacing[0])

@@ -42,6 +42,13 @@ type vendor struct {
 	// own are the vendor's properties Chrome reads that are no other name
 	// of a plain one, each with why. They stay as written.
 	own map[string]string
+	// legacy are those of own read as a plain one all the same, each with
+	// why Chrome keeps it apart: what Chrome reads apart is what ui
+	// reads, or refuses.
+	legacy map[string]string
+	// words are the words a property's value reads as its plain one's,
+	// by property.
+	words map[string]map[string]string
 	// properties is what any other property gets.
 	properties treatment
 
@@ -104,7 +111,8 @@ var webkit = vendor{
 		border-top-right-radius box-shadow box-sizing clip-path column-count column-gap column-rule
 		column-rule-color column-rule-style column-rule-width column-span column-width columns filter flex
 		flex-basis flex-direction flex-flow flex-grow flex-shrink flex-wrap font-feature-settings
-		hyphenate-character justify-content mask-clip mask-image mask-origin mask-repeat mask-size opacity order
+		hyphenate-character justify-content mask-clip mask-composite mask-image mask-origin mask-repeat mask-size
+		opacity order
 		perspective perspective-origin print-color-adjust shape-image-threshold shape-margin shape-outside
 		text-emphasis text-emphasis-color text-emphasis-position text-emphasis-style text-size-adjust transform
 		transform-origin transform-style transition transition-delay transition-duration transition-property
@@ -128,15 +136,13 @@ var webkit = vendor{
 	},
 	own: map[string]string{
 		"column-break-after": ownBreak, "column-break-before": ownBreak, "column-break-inside": ownBreak,
-		"mask-composite": "takes source-over and the other compositing words, which mask-composite refuses",
 		"font-smoothing": "a property of ui under this very name",
 		"border-image":   "fills the middle without the fill word, where border-image leaves it empty",
 		"box-align":      ownOldFlex, "box-direction": ownOldFlex, "box-flex": ownOldFlex,
 		"box-ordinal-group": ownOldFlex, "box-orient": ownOldFlex, "box-pack": ownOldFlex,
-		"mask": ownMask, "mask-box-image": ownMask, "mask-box-image-outset": ownMask,
+		"mask-box-image": ownMask, "mask-box-image-outset": ownMask,
 		"mask-box-image-repeat": ownMask, "mask-box-image-slice": ownMask, "mask-box-image-source": ownMask,
-		"mask-box-image-width": ownMask, "mask-position": ownMask, "mask-position-x": ownMask,
-		"mask-position-y":      ownMask,
+		"mask-box-image-width": ownMask, "mask-position-x": ownMask, "mask-position-y": ownMask,
 		"perspective-origin-x": ownAxis, "perspective-origin-y": ownAxis, "transform-origin-x": ownAxis,
 		"transform-origin-y": ownAxis, "transform-origin-z": ownAxis,
 		"border-horizontal-spacing": ownChrome, "border-vertical-spacing": ownChrome,
@@ -146,6 +152,15 @@ var webkit = vendor{
 		"text-fill-color": ownChrome, "text-orientation": ownChrome, "text-security": ownChrome,
 		"text-stroke": ownChrome, "text-stroke-color": ownChrome, "text-stroke-width": ownChrome,
 		"user-drag": ownChrome, "user-modify": ownChrome, "writing-mode": ownChrome,
+	},
+	legacy: map[string]string{
+		"mask":          "a shorthand of Chrome's own longhands, which take three-value positions and refuse no-clip",
+		"mask-position": "a shorthand of -webkit-mask-position-x and -y, which take three-value positions",
+	},
+	// Chrome reads -webkit-mask-composite's compositing words, the four
+	// that are mask-composite's as theirs; the others stay refused.
+	words: map[string]map[string]string{
+		"mask-composite": {"source-over": "add", "source-in": "intersect", "source-out": "subtract", "xor": "exclude"},
 	},
 	// Safari's and old Chrome's (-webkit-touch-callout,
 	// -webkit-overflow-scrolling…): today's Chrome knows none of them.
@@ -229,10 +244,26 @@ func (v *vendor) property(rest string) (string, treatment) {
 	if slices.Contains(v.same, rest) {
 		return rest, warned
 	}
+	if _, ok := v.legacy[rest]; ok {
+		return rest, warned
+	}
 	if _, ok := v.own[rest]; ok {
 		return "", warned
 	}
 	return "", v.properties
+}
+
+// plainWords reads the words of value that rest, a property of the
+// vendor's, reads as its plain one's, in place.
+func (v *vendor) plainWords(rest string, value []Component) {
+	m := v.words[rest]
+	for i := range value {
+		if c := &value[i]; c.Kind == Ident {
+			if as, ok := m[strings.ToLower(c.Text)]; ok {
+				c.Text = as
+			}
+		}
+	}
 }
 
 // vendorValues reads the vendor words and functions of a value as their

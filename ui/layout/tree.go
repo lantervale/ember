@@ -322,7 +322,7 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		t.buildTable(n, e.Flow())
 		return n
 	}
-	if e.Tag() == dom.Img || e.Tag() == dom.Svg {
+	if pictured(e) {
 		t.buildImage(n, e)
 		return n
 	}
@@ -959,9 +959,10 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 const markerGap = 7
 
 // listMarker gives a list item its ::marker box, outside the item beside its first line:
-// a number, or its ::marker's content, ending where the item's content starts, a bullet
-// Chrome's distance before it. An item without a line has none. The box's style is the
-// ::marker's where a rule styles it, the item's otherwise.
+// the marker string css worked out, its ::marker's content or its counter style's,
+// ending where the item's content starts, a bullet or the list-style-image Chrome's
+// distance before it, the picture on the line's baseline. An item without a line has
+// none. The box's style is the ::marker's where a rule styles it, the item's otherwise.
 func (t *tree) listMarker(n *node) {
 	e := n.box.Node
 	if e == nil || n.box.Kind != box.Element || !n.st.ListItem || e.Tag() == dom.Summary ||
@@ -982,14 +983,15 @@ func (t *tree) listMarker(n *node) {
 	ascent := float32(math.Round(float64(t.fonts.Metrics(st.Font).Ascent)))
 	baseline := at.Y + line.Baseline
 	text := ""
-	switch {
-	case data.HasMarkerText:
+	if data.HasMarkerText {
 		inWord := false
 		text = shownText(data.MarkerText, st, nil, &inWord)
-	case st.ListStyle.Numeric():
-		text = st.ListStyle.Format(data.Ordinal) + ". "
 	}
+	picture, pictured := t.markerPicture(n.st, data)
 	switch {
+	case pictured:
+		m.Pos = geom.Vec2{X: left - picture.X - markerGap, Y: baseline - picture.Y}
+		m.Size, m.Picture = picture, n.st.ListImage
 	case text != "":
 		w := t.fonts.Advance(st.Font, text) + st.Spacing(text)
 		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
@@ -1007,6 +1009,16 @@ func (t *tree) listMarker(n *node) {
 		return
 	}
 	n.box.Append(m)
+}
+
+// markerPicture is the size of the list-style-image st gives a list item's marker, false
+// when it has none, or none found, or the ::marker's content stands in its place.
+func (t *tree) markerPicture(st *style.Computed, data *dom.Pipeline) (geom.Vec2, bool) {
+	if st.ListImage == "" || t.images == nil || data.Marker != nil && data.Marker.Content.Kind != style.ContentNormal {
+		return geom.Vec2{}, false
+	}
+	s, ok := t.images.ImageSize(st.ListImage)
+	return s, ok && s.X > 0 && s.Y > 0
 }
 
 // firstLine is the first line fragment under b, with its box's place in b.

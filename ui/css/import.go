@@ -67,7 +67,8 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 		put = append(put, placed{imp: imp, sheet: in, media: len(out.media), as: as})
 		out.faces, out.Keyframes = append(out.faces, in.faces...),
 			append(out.Keyframes, keyframesWithin(in.Keyframes, imp.media, len(out.media))...)
-		out.media = append(out.media, in.media...)
+		out.CounterStyles, out.media = append(out.CounterStyles,
+			counterStylesWithin(in.CounterStyles, imp.media, len(out.media))...), append(out.media, in.media...)
 	}
 	nameOwn(len(s.layers))
 	ownRule := func(r Rule) Rule {
@@ -104,7 +105,8 @@ func (s *Sheet) Imported(sheets []*Sheet) *Sheet {
 	for ; read < len(s.Rules); read++ {
 		out.Rules = append(out.Rules, ownRule(s.Rules[read]))
 	}
-	out.faces, out.Keyframes = append(out.faces, s.faces...), append(out.Keyframes, s.Keyframes...)
+	out.faces, out.Keyframes, out.CounterStyles = append(out.faces, s.faces...), append(out.Keyframes, s.Keyframes...),
+		append(out.CounterStyles, s.CounterStyles...)
 	return out
 }
 

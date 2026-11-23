@@ -1,6 +1,6 @@
 # 0093. A mask image is the shape of the background colour
 
-- Status: Accepted
+- Status: Superseded by [0133](0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md), which masks the whole element and keeps this silhouette for an element that paints its colour alone
 - Date: 2026-11-18
 - Area: rendering
 - Owner: engine

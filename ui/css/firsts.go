@@ -38,7 +38,7 @@ func (r *restyler) firstsOf(n *dom.Node, line *style.Computed, rem float32) {
 		r.dropFirsts(n)
 		return
 	}
-	container := blockContainer(st) && generates(n.Tag())
+	container := blockContainer(st) && laysOutText(n)
 	if !container {
 		line = nil
 	}
@@ -78,7 +78,7 @@ func (r *restyler) lineContent(n, block *dom.Node, line *style.Computed, rem flo
 			r.dropFirsts(k)
 		case st.Float != style.FloatNone || st.Position == style.Absolute || st.Position == style.FixedPosition:
 			r.firstsOf(k, nil, rem)
-		case k.Tag() != dom.Br && !generates(k.Tag()) || st.Display == style.InlineBlock ||
+		case k.Tag() != dom.Br && !laysOutText(k) || st.Display == style.InlineBlock ||
 			st.Display == style.InlineFlex || st.Display == style.InlineGrid:
 			*open = false
 			r.setLine(k, block, nil)
@@ -292,7 +292,7 @@ func letterIn(n *dom.Node) (*dom.Node, int, bool) {
 		case st == nil || st.Display == style.DisplayNone || st.Float != style.FloatNone ||
 			st.Position == style.Absolute || st.Position == style.FixedPosition:
 			continue
-		case !generates(k.Tag()) || st.Display == style.InlineBlock || st.Display == style.InlineFlex ||
+		case !laysOutText(k) || st.Display == style.InlineBlock || st.Display == style.InlineFlex ||
 			st.Display == style.InlineGrid:
 			return nil, 0, true
 		case st.Display == style.Inline || st.Display == style.Contents || blockContainer(st):
@@ -351,3 +351,8 @@ func blockContainer(st *style.Computed) bool {
 	}
 	return false
 }
+
+// laysOutText reports an element whose content is text laid out in lines:
+// one that takes ::before and ::after, but a checkbox and a radio, which
+// are drawn whole however they generate.
+func laysOutText(n *dom.Node) bool { return generates(n) && n.Tag() != dom.Input }

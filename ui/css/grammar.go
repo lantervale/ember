@@ -199,15 +199,6 @@ func checkBackgroundSize(v []Component) error {
 	return repeated(either(sizeLP, words("auto")), 2)(v)
 }
 
-// checkMaskImage takes none or one picture: a mask is the alpha of a
-// picture, and a gradient's is not drawn.
-func checkMaskImage(v []Component) error {
-	if len(v) == 1 && (isWord(v[0], kwNone) || urlTerm(v[0]) == nil) {
-		return nil
-	}
-	return fmt.Errorf("mask-image takes none or one url(): a gradient or several layers are not supported")
-}
-
 // checkMaskPosition takes a position of one, two or four values: the
 // three of a background's ("right 6px center") are not a mask's.
 func checkMaskPosition(v []Component) error {
@@ -402,6 +393,7 @@ var checks = map[string]check{
 	"text-overflow":     single(words("clip", "ellipsis")),
 	"scrollbar-width":   single(words("auto", "thin", "none")),
 	"list-style-type":   checkListStyle,
+	"list-style-image":  checkListImage,
 	"content":           checkContent,
 	"counter-reset":     checkCounters,
 	"counter-increment": checkCounters,
@@ -420,10 +412,14 @@ var checks = map[string]check{
 	"background-clip":       commaList(single(backgroundBox)),
 	"background-size":       commaList(checkBackgroundSize),
 	"background-position":   commaList(checkPosition),
-	"mask-image":            checkMaskImage,
-	"mask-repeat":           single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
-	"mask-size":             checkBackgroundSize,
-	"mask-position":         checkMaskPosition,
+	"mask-image":            commaList(single(either(words("none"), imageTerm))),
+	"mask-repeat":           commaList(checkTiling),
+	"mask-size":             commaList(checkBackgroundSize),
+	"mask-position":         commaList(checkMaskPosition),
+	"mask-origin":           commaList(single(maskBox)),
+	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
+	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
+	"mask-composite":        commaList(single(words("add", "subtract", "intersect", "exclude"))),
 	"clip-path":             checkClipPath,
 	"text-shadow":           checkTextShadow,
 	"image-rendering":       single(words("auto", "pixelated")),
@@ -1200,6 +1196,12 @@ func checkTiling(v []Component) error {
 func repeatAxis(c Component) error { return words("repeat", "no-repeat", "space", "round")(c) }
 
 func backgroundBox(c Component) error { return words("border-box", "padding-box", "content-box")(c) }
+
+// maskBox is a box a mask is placed or shown in: a background's, or an
+// SVG shape's.
+func maskBox(c Component) error {
+	return words("border-box", "padding-box", "content-box", "fill-box", "stroke-box", "view-box")(c)
+}
 
 // pair is v's two components when it has just two.
 func pair(v []Component) (Component, Component, bool) {
