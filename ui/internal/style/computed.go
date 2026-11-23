@@ -34,6 +34,7 @@ func Initial() Computed {
 			BoxSizing:  BorderBox,
 			MaxSize:    Size[Length]{Length{Kind: None}, Length{Kind: None}},
 			Margin:     All(Px(0)),
+			Anchoring:  Anchoring{Visibility: AnchorsVisible},
 			Padding:    All(Px(0)),
 			ZAuto:      true,
 			BoxOrdinal: 1,

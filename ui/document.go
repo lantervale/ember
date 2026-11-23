@@ -394,6 +394,10 @@ func (d *Document) Layout(size geom.Vec2) {
 		if !moved {
 			return
 		}
+		if len(d.tree.Anchored) > 0 {
+			d.reanchor(size)
+			return
+		}
 		d.replay.repaint = true
 		if d.trans.RequeryScroll(d.scrollState) {
 			d.style()
@@ -820,4 +824,22 @@ func (d *Document) warn(err error) {
 		d.warned[err.Error()] = true
 		d.warns = append(d.warns, err)
 	}
+}
+
+// reanchor lays out again, after a scroll, the elements anchors place,
+// which follow their anchors and try their fallbacks again where the
+// scroll left them, as Chrome's do.
+func (d *Document) reanchor(size geom.Vec2) {
+	for _, e := range d.tree.Anchored {
+		if !d.inDocument(e) {
+			continue
+		}
+		dom.Data(e).Dirty |= dom.DirtyLayout
+		for p := e.Parent(); p != nil; p = p.Parent() {
+			dom.Data(p).Dirty |= dom.DirtyDescendant
+		}
+	}
+	d.replay.repaint = true
+	d.lay(size)
+	d.requery(size)
 }
