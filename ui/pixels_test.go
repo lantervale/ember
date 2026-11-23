@@ -111,6 +111,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/direction-more", 400, 420, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/list-inside", 520, 360, 0.0072},
+		{"./internal/pages/list-counters", 440, 300, 0.0042},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/initial-letter", 520, 260, 0.008},
 		{"./internal/pages/first-line-more", 560, 420, 0.0042},
@@ -127,8 +128,9 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/syllables", 420, 400, 0.0058},
 		{"./internal/pages/scripts", 420, 400, 0.0045},
 		{"./internal/pages/han-spacing", 560, 300, 0.0055},
-		{"./internal/pages/shaped-whole", 460, 320, 0.0088},
+		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
+		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
 		{"./internal/pages/vertical-selection", 420, 240, 0.011},
 	} {

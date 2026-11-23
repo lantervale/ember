@@ -48,9 +48,14 @@ func TestATabThatEndsAWrappedLineHangs(t *testing.T) {
 func TestACarriageReturnKeptIsNothing(t *testing.T) {
 	p := el(dom.P, tabbed(style.Pre, 40), text("H\rH"))
 	tr := lay(el(dom.Div, block, p), 300)
-	fs := tr.Of[p].Children[0].Lines
-	assert.Equal(t, float32(10), fs[1].Rect.X)
+	assert.Equal(t, []string{"HH"}, lines(tr.Of[p]), "one line, the carriage return neither shown nor a break")
 	assert.Equal(t, float32(20), tr.Of[p].Children[0].Size.X)
+}
+
+func TestACarriageReturnKeptHoldsItsWordsTogether(t *testing.T) {
+	p := el(dom.P, tabbed(style.PreWrap, 40, width(15)), text("H\rH"))
+	tr := lay(el(dom.Div, block, p), 300)
+	assert.Equal(t, []string{"HH"}, lines(tr.Of[p]))
 }
 
 func TestTabsCollapseWhereSpacesDo(t *testing.T) {

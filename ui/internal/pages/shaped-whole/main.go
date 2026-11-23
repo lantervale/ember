@@ -1,9 +1,10 @@
 // Text shaped whole across elements against Chrome's: ligatures and
 // kerned pairs across the edge of inline elements of one font
 // (go-features.ttf), each glyph drawn in the colour of the element its
-// first character is in, edges that take room cutting them, and a
-// ligature and contextual alternates across a space (go-spaced.ttf);
-// both copies of internal/shape/testdata's.
+// first character is in, edges that take room cutting them, a
+// ligature and contextual alternates across a space (go-spaced.ttf),
+// and lines broken inside them, their ends shaped again; both copies of
+// internal/shape/testdata's.
 package main
 
 import (
@@ -31,6 +32,8 @@ div { white-space: nowrap; margin-bottom: 2px; }
 .spaced { font-family: Spaced; }
 .r { color: #c00; } .b { color: #06c; } .u { text-decoration: underline; } .bg { background: #fd6; }
 .pad { padding-left: 3px; } .sub { vertical-align: sub; } .ls { letter-spacing: 2px; }
+.w { display: inline-block; vertical-align: top; white-space: normal; width: 40px; margin-right: 24px; }
+.all { word-break: break-all; } .any { overflow-wrap: anywhere; } .w60 { width: 60px; }
 `
 
 func main() {
@@ -63,5 +66,25 @@ func main() {
 		}
 		d.Body().Append(ui.Div(args...))
 	}
-	pages.Run(d, 460, 320)
+	// Lines broken inside kerned pairs and ligatures.
+	var boxes []ui.Arg
+	for _, box := range []string{
+		"w all:AVAVA", "w any:office", "w all w60:ToTo|r:AV", "w spaced:ax xb", "w spaced w60:q q|b: q",
+	} {
+		classes, text, _ := strings.Cut(box, ":")
+		var args []ui.Arg
+		for c := range strings.FieldsSeq(classes) {
+			args = append(args, ui.Class(c))
+		}
+		for _, part := range strings.Split(text, "|") {
+			if class, t, ok := strings.Cut(part, ":"); ok {
+				args = append(args, ui.Span(ui.Class(class), ui.Text(t)))
+			} else {
+				args = append(args, ui.Text(part))
+			}
+		}
+		boxes = append(boxes, ui.Span(args...))
+	}
+	d.Body().Append(ui.Div(boxes...))
+	pages.Run(d, 460, 480)
 }

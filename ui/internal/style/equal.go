@@ -178,6 +178,8 @@ func (t *Text) equal(o *Text) bool {
 		t.TextTransform == o.TextTransform &&
 		t.PixelText == o.PixelText &&
 		t.ExactText == o.ExactText &&
+		t.SubpixelText == o.SubpixelText &&
+		t.TextRendering == o.TextRendering &&
 		t.Ellipsis == o.Ellipsis &&
 		t.EllipsisStart == o.EllipsisStart &&
 		t.Orphans == o.Orphans &&

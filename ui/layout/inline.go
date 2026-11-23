@@ -196,8 +196,7 @@ const (
 	marker
 	// anchor is where an out-of-flow element sits, zero wide; span is its index in anchors.
 	anchor
-	// tab is a tab of text that keeps it, as wide as it takes to reach the next tab stop,
-	// or a carriage return there, of no width.
+	// tab is a tab of text that keeps it, as wide as it takes to reach the next tab stop.
 	tab
 	// softHyphen is a soft hyphen a line may break after, of no width but at the end of
 	// a line, where it shows its hyphen, hyphen wide.
@@ -217,7 +216,7 @@ type piece struct {
 	start bool
 	// level is its bidi embedding level: odd ones are shown right to left.
 	level bidi.Level
-	// stop is a tab's distance between tab stops, none for a carriage return, and least
+	// stop is a tab's distance between tab stops, none under tab-size: 0, and least
 	// the room it takes at the least.
 	stop, least float32
 	// unspaced marks a gap whose first space starts the content's text, and so takes no
@@ -233,6 +232,14 @@ type piece struct {
 	// whole numbers the text Chrome shapes as one (shapingRuns) that the piece is in,
 	// 0 where it cuts it.
 	whole int32
+	// cutStart and cutEnd are what a word's width gains shaped again without the text
+	// before it, where a line starts at it, and without the rest of its word after it,
+	// where a line breaks inside the word after it (cuts).
+	cutStart, cutEnd float32
+	// ligated marks a space a ligature draws that starts the word before it, with text
+	// of its run after it: no line breaks after it on a line the word starts
+	// (ligatureOpens).
+	ligated bool
 }
 
 const (
@@ -241,13 +248,13 @@ const (
 )
 
 // unshown drops from s the characters that take no room and show nothing: zero-width
-// spaces and soft hyphens.
+// spaces, soft hyphens and the carriage returns of text that keeps them.
 func unshown(s string) string {
-	if !strings.ContainsAny(s, zeroWidthSpace+string(softHyphenChar)) {
+	if !strings.ContainsAny(s, zeroWidthSpace+string(softHyphenChar)+"\r") {
 		return s
 	}
 	return strings.Map(func(r rune) rune {
-		if r == softHyphenChar || string(r) == zeroWidthSpace {
+		if r == softHyphenChar || string(r) == zeroWidthSpace || r == '\r' {
 			return -1
 		}
 		return r
@@ -270,7 +277,7 @@ func collapsedBlanks(text string, ws style.WhiteSpace) string {
 	return text
 }
 
-func collapses(ws style.WhiteSpace) bool { return ws.Collapse() != style.Preserve }
+func collapses(ws style.WhiteSpace) bool { return !ws.KeepsSpaces() }
 
 func wraps(ws style.WhiteSpace) bool { return ws.Wraps() }
 
@@ -593,10 +600,15 @@ func (c *inlineContent) joinRuns(fonts box.Fonts) {
 		if whole && c.amid(fonts, k, &ties) {
 			lead, before := beside(c.pieces, k, -1, p.whole)
 			trail, after := beside(c.pieces, k, 1, p.whole)
-			p.width = wf.AdvanceAmid(r.st.Font, text, lead, trail, before, after) + r.st.Spacing(text)
+			w := wf.AdvanceAmid(r.st.Font, text, lead, trail, before, after)
+			p.width = w + r.st.Spacing(text)
 			if p.unspaced {
 				p.width -= r.st.WordGap()
 			}
+			if lead != "" {
+				p.cutStart = wf.AdvanceAmid(r.st.Font, text, "", trail, "", after) - w
+			}
+			c.markLigated(fonts, k, lead, trail, before, after)
 			continue
 		}
 		if p.kind != word || !joins {
@@ -614,8 +626,42 @@ func (c *inlineContent) joinRuns(fonts box.Fonts) {
 	}
 }
 
+// markLigated marks space k, shaped between lead and trail, ligated where a ligature
+// that starts the word before it draws it and the text after it is of its run: Chrome
+// breaks no line inside a ligature that opens it, but where an element's text ends.
+func (c *inlineContent) markLigated(fonts box.Fonts, k int, lead, trail, before, after string) {
+	p := &c.pieces[k]
+	cf, ok := fonts.(box.CaretFonts)
+	if !ok || p.kind != gap || lead == "" {
+		return
+	}
+	next := k + 1
+	for next < len(c.pieces) && c.pieces[next].kind != word && c.pieces[next].kind != gap {
+		next++
+	}
+	if next == len(c.pieces) || c.pieces[next].run != p.run {
+		return
+	}
+	font := c.runs[p.run].st.Font
+	if _, starts := cf.Carets(font, unshown(p.text), lead, trail, before, after); starts[0] {
+		return
+	}
+	prev := k - 1
+	for prev >= 0 && c.pieces[prev].kind != word && c.pieces[prev].kind != gap {
+		prev--
+	}
+	if prev < 0 || c.pieces[prev].kind != word || c.pieces[prev].whole != p.whole {
+		return
+	}
+	w := c.pieces[prev]
+	wLead, wBefore := beside(c.pieces, prev, -1, w.whole)
+	wTrail, wAfter := beside(c.pieces, prev, 1, w.whole)
+	_, starts := cf.Carets(c.runs[w.run].st.Font, unshown(w.text), wLead, wTrail, wBefore, wAfter)
+	p.ligated = !slices.Contains(starts[1:len(starts)-1], true)
+}
+
 // shapingRuns numbers the pieces Chrome shapes as one text in whole: the words and
-// spaces of runs of one font and spacing, shown left to right across lines, between the
+// spaces of runs of one font description, shown left to right across lines, between the
 // edges of elements that take no room and keep the baseline (CSS Text's boundary
 // shaping), with the break opportunities and anchors among them. A piece that cuts such
 // a text, an atomic inline, a newline, a tab, takes 0, as text set vertically or right
@@ -624,7 +670,8 @@ func (c *inlineContent) shapingRuns() {
 	var n int32
 	var last *style.Computed
 	var level bidi.Level
-	open := false
+	var lang string
+	open, run := false, -1
 	for k := range c.pieces {
 		p := &c.pieces[k]
 		p.whole = 0
@@ -635,7 +682,11 @@ func (c *inlineContent) shapingRuns() {
 				open = false
 				continue
 			}
-			if !open || p.level != level || !sameShaping(last, st) {
+			was := lang
+			if p.run != run {
+				run, lang = p.run, languageOf(c.runs[p.run].box.Node)
+			}
+			if !open || p.level != level || !sameShaping(last, st) || lang != was {
 				n++
 			}
 			open, last, level = true, st, p.level
@@ -657,9 +708,28 @@ func (c *inlineContent) shapingRuns() {
 }
 
 // sameShaping reports whether Chrome shapes text of styles a and b as one: of one font,
-// letter-spacing and word-spacing.
+// letter-spacing, word-spacing, text-rendering and -webkit-font-smoothing.
 func sameShaping(a, b *style.Computed) bool {
-	return a == b || a.Font.Equal(b.Font) && a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing
+	return a == b || a.Font.Equal(b.Font) && a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing &&
+		a.TextRendering == b.TextRendering && a.PixelText == b.PixelText && a.ExactText == b.ExactText &&
+		a.SubpixelText == b.SubpixelText
+}
+
+// languageOf is the language of text node n, which Chrome's font description holds: the
+// lang attribute of the nearest element holding it that has one, else the Document's.
+func languageOf(n *dom.Node) string {
+	if n == nil {
+		return ""
+	}
+	for p := n.Parent(); p != nil; p = p.Parent() {
+		if v, ok := p.Attr("lang"); ok {
+			return v
+		}
+		if p.Parent() == nil {
+			return dom.Data(p).Language
+		}
+	}
+	return ""
 }
 
 // cutsShaping reports whether edge p of a span cuts the text Chrome shapes as one: it
@@ -920,7 +990,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			from = n
 		}
 		n++
-		if soft[at] && ch != ' ' && ch != '\n' && string(ch) != zeroWidthSpace && (b.Len() > 0 || at == 0 && c.afterWord()) {
+		if c.softBreakAt(soft, r, at, ch, b.Len() > 0) {
 			if b.Len() > 0 {
 				emit(word)
 				from = n - 1
@@ -930,7 +1000,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			}
 		}
 		switch {
-		case ch == '\n' || ch == '\t' || ch == '\r':
+		case ch == '\n' || ch == '\t':
 			emit(word)
 			afterSpace = c.control(fonts, r.st, i, n-1, ch, level)
 		case ch == ' ':
@@ -952,6 +1022,16 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	}
 	emit(word)
 	return afterSpace
+}
+
+// softBreakAt reports whether a line breaks before character ch at byte at of run r's
+// text where it is no space: inside a word, when inWord, or after the word before the run.
+func (c *inlineContent) softBreakAt(soft map[int]bool, r *textRun, at int, ch rune, inWord bool) bool {
+	if ch == ' ' || ch == '\n' || string(ch) == zeroWidthSpace ||
+		!soft[at] && (at != 0 || !c.breaksAllBefore(collapsedBlanks(r.text, r.st.WhiteSpace))) {
+		return false
+	}
+	return inWord || at == 0 && c.wordBefore() >= 0
 }
 
 // breakBeforeEdges adds break p, where run i's text starts, before the start edges of the
@@ -1018,20 +1098,17 @@ func splitsWords(st *style.Computed) bool {
 	return st.WrapsAnywhere() || st.WordBreak == style.BreakAll || st.LineBreak == style.LineBreakAnywhere
 }
 
-// control adds the newline, the tab or the carriage return ch of run i at character at,
-// and reports whether a collapsible space after it is dropped: after a newline.
+// control adds the newline or the tab ch of run i at character at, and reports whether
+// a collapsible space after it is dropped: after a newline.
 func (c *inlineContent) control(fonts box.Fonts, st *style.Computed, i int, at int32, ch rune,
 	level bidi.Level) bool {
-	p := piece{kind: tab, run: i, at: at, level: level}
-	switch ch {
-	case '\n':
-		p = piece{kind: newline, run: i, level: level}
-	case '\t':
-		space := advance(fonts, st, " ")
-		p.stop, p.least = st.TabStop(space), space/2
+	if ch == '\n' {
+		c.pieces = append(c.pieces, piece{kind: newline, run: i, level: level})
+		return true
 	}
-	c.pieces = append(c.pieces, p)
-	return ch == '\n'
+	space := advance(fonts, st, " ")
+	c.pieces = append(c.pieces, piece{kind: tab, run: i, at: at, level: level, stop: st.TabStop(space), least: space / 2})
+	return false
 }
 
 // anchorsAt adds the anchors of the out-of-flow elements before run i, and notes the
@@ -1053,22 +1130,45 @@ func (c *inlineContent) anchorsAt(i int) {
 }
 
 // graphemes adds word s of run i, at bidi level level, as one piece per grapheme, each
-// measured as the growth of the word's advance so that they add up to it. Between two, a line
-// breaks where word-break: break-all or line-break: anywhere let it, else in an emergency where
-// overflow-wrap does; two graphemes with neither stay one piece.
+// measured as the growth of the word's advance so that they add up to it, a pair's kerning
+// its first's where fonts places carets. Between two, a line breaks where word-break:
+// break-all or line-break: anywhere let it, else in an emergency where overflow-wrap
+// does; two graphemes with neither, or that a ligature draws, stay one piece. A line
+// that breaks between two shapes their ends again, as Chrome does (cutStart, cutEnd).
 func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s string, from int32,
 	level bidi.Level) {
+	var xs []float32
+	var starts []bool
+	cf, carets := fonts.(box.CaretFonts)
+	if carets = carets && !st.Stands() && unshown(s) == s; carets {
+		xs, starts = cf.Carets(st.Font, s, "", "", "", "")
+	}
+	first := len(c.pieces)
 	rest, state := s, -1
 	var g, last string
 	prev := float32(0)
+	n := 0
 	for at := 0; len(rest) > 0; {
 		g, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
 		at += len(g)
-		adv := advance(fonts, st, unshown(s[:at]))
-		w := adv - prev + st.Spacing(unshown(g))
-		prev = adv
+		start := n
+		n += utf8.RuneCountInString(g)
+		var w float32
+		if carets {
+			w = xs[n] - xs[start] + st.Spacing(g)
+		} else {
+			adv := advance(fonts, st, unshown(s[:at]))
+			w = adv - prev + st.Spacing(unshown(g))
+			prev = adv
+		}
 		switch {
 		case at == len(g):
+		case carets && !starts[start]:
+			c.pieces[len(c.pieces)-1].text += g
+			c.pieces[len(c.pieces)-1].width += w
+			last = g
+			from += int32(utf8.RuneCountInString(g)) //nolint:gosec // a text node's length
+			continue
 		case st.LineBreak == style.LineBreakAnywhere || st.WordBreak == style.BreakAll && breaksAll(last, g):
 			c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
 		case st.WrapsAnywhere():
@@ -1085,14 +1185,61 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		c.pieces = append(c.pieces, piece{kind: word, run: i, text: g, width: w, at: from, level: level})
 		from += int32(utf8.RuneCountInString(g)) //nolint:gosec // a text node's length
 	}
+	if wf, ok := fonts.(box.WholeFonts); ok && carets {
+		c.cutGraphemes(wf, st, s, first)
+	}
 }
 
-// breaksAll reports whether word-break: break-all breaks between the graphemes a and b:
-// after a letter or a digit, before another or a hyphen, as Chrome breaks it.
+// cutGraphemes gives the pieces of word s from first on what their widths gain where a
+// line starts at one, shaped without the text before it, or ends inside the word after
+// one, shaped without the rest of the word.
+func (c *inlineContent) cutGraphemes(wf box.WholeFonts, st *style.Computed, s string, first int) {
+	at := 0
+	for k := first; k < len(c.pieces); k++ {
+		p := &c.pieces[k]
+		if p.kind != word {
+			continue
+		}
+		end := at + len(p.text)
+		if at > 0 || end < len(s) {
+			w := p.width - st.Spacing(p.text)
+			if at > 0 {
+				p.cutStart = wf.AdvanceAmid(st.Font, p.text, "", s[end:], "", "") - w
+			}
+			if end < len(s) {
+				p.cutEnd = wf.AdvanceAmid(st.Font, p.text, s[:at], "", "", "") - w
+			}
+		}
+		at = end
+	}
+}
+
+// breaksAll reports whether word-break: break-all breaks between the graphemes a and b,
+// as Chrome breaks it: by UAX #14 with letters and digits read as ideographs, and before
+// a hyphen-minus after a letter or a digit.
 func breaksAll(a, b string) bool {
 	ra, _ := utf8.DecodeLastRuneInString(a)
 	rb, _ := utf8.DecodeRuneInString(b)
-	return letterLike(ra) && (letterLike(rb) || rb == '-' || rb == '\u2010')
+	if !letterLike(ra) && !letterLike(rb) {
+		return false
+	}
+	if letterLike(ra) && rb == '-' {
+		return true
+	}
+	first := asIdeographs(a)
+	seg, _, _, _ := uniseg.FirstLineSegmentInString(first+asIdeographs(b), -1)
+	return len(seg) == len(first)
+}
+
+// asIdeographs is s with its letters and digits turned into an ideograph, which UAX #14
+// breaks before and after.
+func asIdeographs(s string) string {
+	return strings.Map(func(r rune) rune {
+		if letterLike(r) {
+			return '\u4e00'
+		}
+		return r
+	}, s)
 }
 
 func letterLike(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }
@@ -1136,19 +1283,35 @@ func markerWidth(fonts box.Fonts, st *style.Computed) float32 {
 	return fonts.Advance(st.Font, markerOf(st)+" ")
 }
 
-// afterWord reports whether the last piece, edges aside, is a word.
-func (c *inlineContent) afterWord() bool {
+// wordBefore is the last piece when it is a word, edges aside, -1 otherwise.
+func (c *inlineContent) wordBefore() int {
 	for k := len(c.pieces) - 1; k >= 0; k-- {
 		switch c.pieces[k].kind {
 		case edge:
 			continue
 		case word:
-			return true
+			return k
 		case gap, breakHere, newline, atomic, emergency, marker, anchor, tab, softHyphen:
 		}
+		return -1
+	}
+	return -1
+}
+
+// breaksAllBefore reports whether a line may break before text, which starts a run after
+// a word, by the word-break: break-all of that word: a break between two elements follows
+// the text before it, as Chrome's.
+func (c *inlineContent) breaksAllBefore(text string) bool {
+	k := c.wordBefore()
+	if k < 0 {
 		return false
 	}
-	return false
+	st := c.runs[c.pieces[k].run].st
+	if st.WordBreak != style.BreakAll || !wraps(st.WhiteSpace) {
+		return false
+	}
+	g, _, _, _ := uniseg.FirstGraphemeClusterInString(text, -1)
+	return breaksAll(c.pieces[k].text, g)
 }
 
 // openSpans adds the start edges of the spans whose runs begin at run i, outer spans first
@@ -1182,7 +1345,8 @@ func (c *inlineContent) closeSpans(i int) {
 // softBreaks finds UAX #14's line break opportunities inside words, run by run: soft[i][at]
 // is set when a line may break before byte at of run i's text. The runs are read as one text,
 // atoms as U+FFFC, so the rules see across run boundaries; breaks at spaces and newlines are
-// cut's own. As in Chrome, a path such as a/b doesn't break after its slash.
+// cut's own. As in Chrome, a path such as a/b doesn't break after its slash, nor a word
+// after a carriage return.
 func (c *inlineContent) softBreaks() []map[int]bool {
 	var all strings.Builder
 	starts := make([]int, len(c.runs))
@@ -1216,7 +1380,8 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		if c.runs[run].atomic != nil || c.runs[run].st.WordBreak == style.KeepAll && keeps(text[:pos], rest) {
 			continue
 		}
-		if r, _ := utf8.DecodeLastRuneInString(text[:pos]); r == softHyphenChar && c.hyphensOff(starts, pos-1) {
+		if r, _ := utf8.DecodeLastRuneInString(text[:pos]); r == softHyphenChar && c.hyphensOff(starts, pos-1) ||
+			r == '\r' {
 			continue
 		}
 		if soft[run] == nil {
@@ -1389,6 +1554,12 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 		}
 		return minW, maxW
 	}
+	return c.minContent(), maxW
+}
+
+// minContent is the widest unbreakable segment of the content, which wraps.
+func (c *inlineContent) minContent() float32 {
+	var minW float32
 	cur := newPen(c.unit, c.indent(unbounded))
 	cur.origin = 0
 	hung := false
@@ -1412,6 +1583,10 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 			cur = newPen(c.unit, 0)
 		case gap:
 			switch {
+			case c.held(i):
+				cur.step(p, 0)
+				minW = max(minW, cur.end())
+				cur = newPen(c.unit, 0)
 			case !collapses(c.runs[p.run].st.WhiteSpace):
 				cur = newPen(c.unit, 0)
 			case c.edgeAt(i+1, false):
@@ -1425,11 +1600,17 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 				minW = max(minW, cur.end()+p.hyphen)
 				cur = newPen(c.unit, 0)
 			}
-		case breakHere, newline, anchor, tab:
+		case tab:
+			if c.held(i) {
+				cur.step(p, 0)
+				minW = max(minW, cur.end())
+			}
+			cur = newPen(c.unit, 0)
+		case breakHere, newline, anchor:
 			cur = newPen(c.unit, 0)
 		}
 	}
-	return minW, maxW
+	return minW
 }
 
 // edgeAt reports whether piece i is a span's edge, its start or its end.
@@ -1513,21 +1694,37 @@ func (c *inlineContent) wrapsAt(i int) bool {
 }
 
 // unitEnd is where the unit starting at piece i ends: a word, edge, marker or anchor
-// takes the pieces glued after it.
+// takes the pieces glued after it, and the space or tab break-spaces holds after them.
 func (c *inlineContent) unitEnd(i int) int {
 	end := i + 1
 	if k := c.pieces[i].kind; k == word || k == edge || k == marker || k == anchor {
 		hyphen := false
-		for end < len(c.pieces) && glued(c.pieces[end].kind) {
+		for end < len(c.pieces) && (glued(c.pieces[end].kind) || c.held(end) && !c.anywhere(end)) {
 			// after a soft hyphen, only the ends of spans and anchors stay
 			if p := c.pieces[end]; hyphen && (p.kind != edge || p.start) && p.kind != anchor {
 				break
 			}
 			hyphen = hyphen || c.pieces[end].kind == softHyphen
 			end++
+			if c.held(end - 1) {
+				break
+			}
 		}
 	}
 	return end
+}
+
+// held reports whether piece i is a space or a tab of text under white-space:
+// break-spaces: it takes its room at a line's end too, and a line may break after it.
+func (c *inlineContent) held(i int) bool {
+	p := c.pieces[i]
+	return (p.kind == gap || p.kind == tab) && c.runs[p.run].st.WhiteSpace == style.BreakSpaces
+}
+
+// anywhere reports whether piece i's text breaks between any two characters: line-break:
+// anywhere, which breaks before a space too.
+func (c *inlineContent) anywhere(i int) bool {
+	return c.runs[c.pieces[i].run].st.LineBreak == style.LineBreakAnywhere
 }
 
 // hyphenEnd is the soft hyphen a line ending before piece end ends at, -1 for none:
@@ -1631,24 +1828,36 @@ func (c *inlineContent) hangEnd(pending, i, end int) (int, bool) {
 }
 
 // shown is line l's pieces as they are placed: the collapsible spaces before its first
-// content and after its last, whatever span edges stand between, are breaks of no width.
+// content and after its last, whatever span edges stand between, are breaks of no width,
+// and the spaces break-spaces keeps after its last content are text, which neither
+// justify widens nor the bidi algorithm takes to the paragraph's level, as Chrome's.
 func (c *inlineContent) shown(l line) []piece {
 	pieces := c.pieces[l.from:l.to]
 	out := pieces
-	drop := func(i int) {
-		if pieces[i].kind != gap {
-			return
-		}
+	set := func(i int, p piece) {
 		if &out[0] == &pieces[0] {
 			out = slices.Clone(pieces)
 		}
-		out[i] = piece{kind: breakHere, run: pieces[i].run}
+		out[i] = p
+	}
+	drop := func(i int) {
+		if pieces[i].kind == gap {
+			set(i, piece{kind: breakHere, run: pieces[i].run})
+		}
 	}
 	for i := 0; i < len(pieces) && c.passes(pieces[i]); i++ {
 		drop(i)
 	}
-	for i := len(pieces) - 1; i >= 0 && c.passes(pieces[i]); i-- {
+	i := len(pieces) - 1
+	for ; i >= 0 && c.passes(pieces[i]); i-- {
 		drop(i)
+	}
+	for ; i >= 0 && (pieces[i].kind == edge || pieces[i].kind == anchor || c.held(l.from+i)); i-- {
+		if pieces[i].kind == gap {
+			p := pieces[i]
+			p.kind = word
+			set(i, p)
+		}
 	}
 	if l.hyphen >= l.from && l.hyphen < l.to {
 		if &out[0] == &pieces[0] {
@@ -1674,7 +1883,52 @@ func (c *inlineContent) shown(l line) []piece {
 		place(first, l.start, false)
 		place(last, midLine, c.runGoesOn(last, l.to))
 	}
+	if first, start, last, end := c.cuts(l); start != 0 || end != 0 {
+		if &out[0] == &pieces[0] {
+			out = slices.Clone(pieces)
+		}
+		if start != 0 {
+			out[first-l.from].width += start
+		}
+		if end != 0 {
+			out[last-l.from].width += end
+		}
+	}
 	return out
+}
+
+// cuts is line l's first word and what it gains, then its last and what it gains, shaped
+// again at the line's ends as Chrome reshapes them: the first word without the text
+// before it, where the line does not start the content, and the last without the rest of
+// its word, where the line breaks inside one.
+func (c *inlineContent) cuts(l line) (int, float32, int, float32) {
+	var first, last int
+	var start, end float32
+	if l.from > 0 {
+		for k := l.from; k < l.to; k++ {
+			if p := c.pieces[k]; p.kind == word {
+				first, start = k, p.cutStart
+				break
+			} else if !c.passes(p) {
+				break
+			}
+		}
+	}
+	if k := l.to - 1; k >= l.from && l.to < len(c.pieces) && c.pieces[k].kind == word {
+		if b := c.pieces[l.to].kind; b == emergency || b == breakHere {
+			last, end = k, c.pieces[k].cutEnd
+		}
+	}
+	return first, start, last, end
+}
+
+// reshaped is ls with each line as wide as its ends shaped again make it (cuts).
+func (c *inlineContent) reshaped(ls []line) []line {
+	for k := range ls {
+		_, start, _, end := c.cuts(ls[k])
+		ls[k].width += start + end
+	}
+	return ls
 }
 
 // joined is the pen from at past the pieces from end no line may end among: the units
@@ -1814,7 +2068,7 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 				kept.step(lead.of(c.pieces, k), 0)
 			}
 		}
-		if !b.blank && !hung && b.wrapsBefore(i) && b.endsBefore(i, end, next, width) {
+		if !b.blank && !hung && b.wrapsBefore(i) && !b.ligatureOpens() && b.endsBefore(i, end, next, width) {
 			b.finish(i)
 			return i, true
 		}
@@ -1837,6 +2091,22 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 		i = end
 	}
 	return i, false
+}
+
+// ligatureOpens reports whether the space pending is inside a ligature the line's first
+// word starts, where Chrome breaks no line.
+func (b *breaker) ligatureOpens() bool {
+	c := b.c
+	if b.pending < 0 || !c.pieces[b.pending].ligated {
+		return false
+	}
+	words := 0
+	for k := b.cur.from; k < b.pending; k++ {
+		if c.pieces[k].kind == word {
+			words++
+		}
+	}
+	return words == 1
 }
 
 // endsBefore reports whether the line, which may end before piece i, does: at its stop,
@@ -1873,6 +2143,9 @@ func (b *breaker) wrapsBefore(i int) bool {
 // break at.
 func (b *breaker) between(i int) bool {
 	p := b.c.pieces[i]
+	if b.c.held(i) {
+		return false
+	}
 	switch p.kind {
 	case gap:
 		if (b.empty || b.blank) && collapses(b.c.runs[p.run].st.WhiteSpace) {
@@ -2032,7 +2305,7 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			break
 		}
 	}
-	return b.close()
+	return c.reshaped(b.close())
 }
 
 // brClear is the clear of the br whose break is piece i, none for any other piece: the
@@ -2062,7 +2335,7 @@ func (c *inlineContent) lines(width float32) []line {
 		return c.broken
 	}
 	b := breaker{c: c}
-	out := c.styled(width, b.breakAll(width))
+	out := c.reshaped(c.styled(width, b.breakAll(width)))
 	if width >= unbounded {
 		c.unbroken = out
 	} else {
@@ -2946,7 +3219,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
 		t.writeRuns(c, pieces, geom.Rect{X: x, Y: y, H: lh}, lb, l.indent, perGap, [2]bool{cutStart, cut}, runRects,
-			seen)
+			seen, c.tailOf(l))
 		c.lineBoxes = append(c.lineBoxes, span{y, y + lh})
 		c.useFirst(was)
 		y = flowY + lh
@@ -2958,7 +3231,7 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 // at at (its width aside) with its baseline lb, an ellipsis before or after it as cut
 // says, and grows each run's rectangle in rects.
 func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, indent, perGap float32, cut [2]bool,
-	rects []geom.Rect, seen []bool) {
+	rects []geom.Rect, seen []bool, tail lineTail) {
 	y, lh := at.Y, at.H
 	cutStart := cut[0]
 	walk := line{indent: indent}.pen(c.unit, at.X)
@@ -3004,6 +3277,9 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		if whole := wholeOf(pieces[first:i]); whole != 0 && !frag.Ellipsis {
 			lead, before := beside(pieces, first, -1, whole)
 			trail, after := beside(pieces, i-1, 1, whole)
+			if tail.whole == whole && trail == "" && lastText(pieces, i) {
+				trail, after = tail.trail, tail.after
+			}
 			if lead != "" || trail != "" {
 				frag.Lead, frag.Trail, frag.Before, frag.After = lead, trail, before, after
 			}
@@ -3375,6 +3651,38 @@ func (t *tree) atomsIntoSpans(n *node) {
 		}
 		r.parent.Append(r.box)
 	}
+}
+
+// lineTail is the text after a line's end that its last text is shaped as one with: that
+// of the text Chrome shapes as one it is in, whole, and the text round it.
+type lineTail struct {
+	whole        int32
+	trail, after string
+}
+
+// tailOf is what line l's last text is drawn shaped with past the line's end: where the
+// line ends at a space, the text after it, as Chrome keeps the shaping of a line's end
+// there; nothing where it breaks inside a word, whose end Chrome shapes again.
+func (c *inlineContent) tailOf(l line) lineTail {
+	k := l.to - 1
+	if k < l.from || l.to >= len(c.pieces) || c.pieces[l.to].kind != gap || c.pieces[k].whole == 0 {
+		return lineTail{}
+	}
+	if p := c.pieces[k]; p.kind == word {
+		trail, after := beside(c.pieces, k, 1, p.whole)
+		return lineTail{p.whole, trail, after}
+	}
+	return lineTail{}
+}
+
+// lastText reports whether no word or space of pieces comes after the first end.
+func lastText(pieces []piece, end int) bool {
+	for _, p := range pieces[end:] {
+		if p.kind == word || p.kind == gap {
+			return false
+		}
+	}
+	return true
 }
 
 // wholeOf is the text Chrome shapes as one that a fragment's pieces are in, 0 for none.

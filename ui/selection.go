@@ -304,23 +304,19 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	if st.Mode.Vertical() {
 		length = frag.Rect.H
 	}
-	advance := func(i int) float32 { return d.fonts.Advance(st.Font, text[:i]) }
+	carets, _ := d.fonts.Carets(st.Font, text, frag.Lead, frag.Trail, frag.Before, frag.After)
+	advance := func(_, n int) float32 { return carets[n] }
 	switch {
 	case st.Combine && st.Mode.Vertical():
 		// combined text stands across one em, its characters inside it
-		advance = func(int) float32 { return 0 }
+		advance = func(int, int) float32 { return 0 }
 	case st.Stands():
-		advance = func(i int) float32 { return d.uprightAdvance(st, text[:i]) }
-	case frag.Lead != "" || frag.Trail != "":
-		// A ligature across the fragment's start is the text before's, one
-		// across its end its own: its characters after it stand at its end.
-		advance = func(i int) float32 {
-			return d.fonts.AdvanceAmid(st.Font, text[:i], frag.Lead, text[i:]+frag.Trail, frag.Before, frag.After)
-		}
+		advance = func(i, _ int) float32 { return d.uprightAdvance(st, text[:i]) }
 	}
 	var room float32
 	last := rune(-1)
 	han := b.Lines[k].Spacing
+	n := 0
 	for i, r := range text {
 		if i > 0 {
 			room += sp.after(last)
@@ -328,9 +324,10 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 				room += han[0].Space
 				han = han[1:]
 			}
-			f.xs = append(f.xs, advance(i)+room)
+			f.xs = append(f.xs, advance(i, n)+room)
 		}
 		last = r
+		n++
 	}
 	if len(text) > 0 {
 		f.xs = append(f.xs, max(length, f.xs[len(f.xs)-1]))
@@ -1077,7 +1074,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 // stop, the first from the fragment's end.
 func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float32, float32) {
 	st, f := b.Style, b.Lines[k]
-	if m == nil || f.RTL || st.WhiteSpace.Collapse() != style.Preserve || st.Mode.Vertical() {
+	if m == nil || f.RTL || !st.WhiteSpace.KeepsSpaces() || st.Mode.Vertical() {
 		return false, 0, 0
 	}
 	var after *box.Fragment
@@ -1322,7 +1319,7 @@ func (c *copier) dropped(src []rune, from, to int, ws style.WhiteSpace, wrap boo
 		switch {
 		case r == '\n' && keeps:
 			c.put('\n')
-		case r == '\t' && ws.Collapse() == style.Preserve:
+		case r == '\t' && ws.KeepsSpaces():
 			c.put('\t')
 		case isBlank(r) && wrap:
 			if c.last != ' ' {
