@@ -5,19 +5,42 @@ import (
 	"compress/gzip"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"math"
 	"regexp"
-
-	"github.com/lantervale/ember/svg"
+	"sync/atomic"
 )
+
+// SVGReader draws an SVG document into a picture width by height
+// pixels, its currentColor fg.
+type SVGReader func(doc []byte, width, height int, fg color.NRGBA) (*image.RGBA, error)
+
+// svgReader draws the SVG table's glyphs. Without one they are left to
+// the font's other colour tables or its outlines, so a program links no
+// SVG reader it did not import.
+var svgReader atomic.Pointer[SVGReader] //nolint:gochecknoglobals // set by an import, as ui's vector formats
+
+// RegisterSVG has read draw the SVG table's glyphs, as importing ui/svg
+// does, and returns the reader it replaces; nil leaves them undrawn.
+func RegisterSVG(read SVGReader) SVGReader {
+	var next *SVGReader
+	if read != nil {
+		next = &read
+	}
+	if prev := svgReader.Swap(next); prev != nil {
+		return *prev
+	}
+	return nil
+}
 
 // maxSVGDocument is the longest SVG document read, unzipped.
 const maxSVGDocument = 1 << 24
 
-// svgDoc is the document drawing glyph gid, nil for none.
+// svgDoc is the document drawing glyph gid, nil for none or while no
+// reader is registered.
 func (f *Font) svgDoc(gid uint16) []byte {
-	if f.svg == nil {
+	if f.svg == nil || svgReader.Load() == nil {
 		return nil
 	}
 	t := f.svg
@@ -46,10 +69,14 @@ var (
 )
 
 // drawSVG draws glyph gid's element, glyphN, of its document, whose
-// user space is the font's units with y down, through the svg package,
-// over the font's bounding box.
+// user space is the font's units with y down, through the registered
+// reader, over the font's bounding box.
 func (f *Font) drawSVG(gid uint16, req Request) (*image.RGBA, image.Point, bool) {
+	read := svgReader.Load()
 	doc := f.svgDoc(gid)
+	if read == nil || doc == nil {
+		return nil, image.Point{}, false
+	}
 	if len(doc) > 2 && doc[0] == 0x1f && doc[1] == 0x8b {
 		z, err := gzip.NewReader(bytes.NewReader(doc))
 		if err != nil {
@@ -76,12 +103,8 @@ func (f *Font) drawSVG(gid uint16, req Request) (*image.RGBA, image.Point, bool)
 		pw, ph, px0/s, py0/s, float64(pw)/s, float64(ph)/s)
 	b.Write(doc)
 	fmt.Fprintf(&b, `</defs><use href="#glyph%d"/></svg>`, gid)
-	pic, err := svg.NewPicture(b.Bytes(), svg.CurrentColor(req.Foreground))
-	if err != nil {
-		return nil, image.Point{}, false
-	}
-	img, err := pic.Rasterise(pw, ph)
-	if err != nil {
+	img, err := (*read)(b.Bytes(), pw, ph, req.Foreground)
+	if err != nil || img == nil {
 		return nil, image.Point{}, false
 	}
 	return img, image.Pt(int(px0), int(py0)), true

@@ -88,8 +88,9 @@ func Mono() *Face      { return mono }
 // NewFace parses ttf, the bytes of a TrueType font file. TrueType is the
 // one format: OpenType fonts with CFF outlines (.otf), collections and
 // web fonts are refused. A colour font's glyphs (COLR layers and
-// gradients, sbix and CBDT bitmaps, SVG documents) draw in colour, its
-// first palette, the text's colour standing for its foreground.
+// gradients, sbix and CBDT bitmaps, and SVG documents once ui/svg is
+// imported, else their outlines) draw in colour, its first palette, the
+// text's colour standing for its foreground.
 func NewFace(ttf []byte, opts ...FaceOption) (*Face, error) {
 	f, err := parseFace("font", ttf)
 	if err != nil {

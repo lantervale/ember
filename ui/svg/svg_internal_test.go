@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"image"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,8 +9,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/colourfont"
+	"github.com/lantervale/ember/internal/colourfont/colourtest"
+	"github.com/lantervale/ember/internal/draw"
 	rootsvg "github.com/lantervale/ember/svg"
 )
+
+func TestImportingItDrawsColourFontsSVGGlyphs(t *testing.T) {
+	f, err := draw.ParseFace("drawn", colourtest.SVG(false))
+	require.NoError(t, err)
+	var c draw.List
+	c.Text(geom.Vec2{}, "A", draw.Style{Face: f, Size: 40})
+	pictures := 0
+	for _, b := range c.Batches {
+		for i := range b.ImageCount {
+			if tex := b.Images[i]; tex != nil {
+				if _, rgba := tex.Image.(*image.RGBA); rgba {
+					pictures++
+				}
+			}
+		}
+	}
+	assert.Equal(t, 1, pictures, "A drawn from its SVG document")
+	prev := colourfont.RegisterSVG(nil)
+	t.Cleanup(func() { colourfont.RegisterSVG(prev) })
+	assert.NotNil(t, prev, "the svg reader registered")
+}
 
 func TestAnSVGIsKnownByItsNameOrByItsBytes(t *testing.T) {
 	for name, want := range map[string]bool{
