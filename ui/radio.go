@@ -6,7 +6,7 @@ import (
 )
 
 // A radio is an input of type radio, grouped with the others of its name
-// in the document, or an element of role radio, grouped by its nearest
+// and its form owner (decision 0152), or an element of role radio, grouped by its nearest
 // role=radiogroup ancestor and checked by aria-checked="true" (WAI-ARIA's
 // radio group). Either way a click or Activate checks it and unchecks the
 // rest of its group, the arrows move the check along the group, wrapping,
@@ -44,10 +44,10 @@ func (d *Document) radioGroup(n *Node) []*Node {
 		})
 		return out
 	}
-	name, _ := n.Attr("name")
-	if name == "" {
+	if !has(n, "name") {
 		return []*Node{n}
 	}
+	k := radioKeyOf(n)
 	var out []*Node
 	d.grouped++
 	d.html.Walk(func(c *Node) bool {
@@ -55,7 +55,7 @@ func (d *Document) radioGroup(n *Node) []*Node {
 			return false
 		}
 		if _, ok := d.machine(c).(*control.Radio); ok {
-			if cn, _ := c.Attr("name"); cn == name {
+			if has(c, "name") && radioKeyOf(c) == k {
 				out = append(out, c)
 			}
 		}
@@ -83,8 +83,9 @@ func (d *Document) walkedGroup(n *Node) []*Node {
 		return d.radioGroup(n)
 	}
 	d.group = d.group[:0]
+	k := radioKeyOf(n)
 	for _, c := range d.radios {
-		if cn, _ := c.Attr("name"); cn == name {
+		if radioKeyOf(c) == k {
 			d.group = append(d.group, c)
 		}
 	}

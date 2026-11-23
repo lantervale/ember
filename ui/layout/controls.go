@@ -119,7 +119,7 @@ func contentAlign(n *node) style.Align {
 	case style.AlignBottom:
 		return style.AlignEnd
 	case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignTextTop, style.AlignTextBottom,
-		style.AlignTop, style.AlignLength:
+		style.AlignTop, style.AlignLength, style.AlignBaselineMiddle:
 	}
 	return style.AlignStart
 }

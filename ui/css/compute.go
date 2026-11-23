@@ -1477,7 +1477,7 @@ func linear(c Component, cur color.Color) color.Color {
 var verticalAligns = map[string]style.VerticalAlign{
 	kwBaseline: style.AlignBaselineText, "sub": style.AlignSub, "super": style.AlignSuper,
 	"text-top": style.AlignTextTop, "text-bottom": style.AlignTextBottom, kwMiddle: style.AlignMiddle,
-	kwTop: style.AlignTop, kwBottom: style.AlignBottom,
+	kwTop: style.AlignTop, kwBottom: style.AlignBottom, "-webkit-baseline-middle": style.AlignBaselineMiddle,
 }
 
 //nolint:gochecknoglobals,goconst // lookup table
@@ -2458,6 +2458,7 @@ func gridLine(_ *ctx, v []Component) style.GridLine {
 //nolint:gochecknoglobals,goconst // lookup table
 var fontSizes = map[string]float32{
 	"xx-small": 9, "x-small": 10, "small": 13, "medium": 16, "large": 18, "x-large": 24, "xx-large": 32,
+	"xxx-large": 48,
 }
 
 func (x *ctx) fontSize(v []Component) float32 {

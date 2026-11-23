@@ -29,7 +29,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | fonts a script loads (Typekit…) | ui runs no script: a sheet a browser's script adds gives its `@font-face` rules as any other, but a `FontFace` a script makes itself is not known, and the next family of the list is used |
 | some installed fonts | `ui.SystemFonts()` skips a file it cannot read; nothing waits for the scan in the public API |
 | a span ending a centred line | up to 3 points narrower than Chrome's |
-| a control's own font, colour and line height under `ui.BrowserSheets()` | a `button`, `input`, `select` or `textarea` takes its parent's `font`, `color` and `line-height`, where Chrome's sheet starts each from its own (13.33px Arial, a textarea's monospace, `FieldText`, `normal`); so does `option` its `white-space` and `optgroup` its weight |
+| `optgroup` | ui has no such element: an option's group label, which Chrome draws in bold, is the page's own element |
 | a `word-spacing` or `letter-spacing` so far below zero that a run of text ends left of its start | the run's box is empty at its start, as Chrome's, but what follows on the line starts where the run's glyphs end, left of it, where Chrome starts it at the run's start; a block sized by such text can differ from Chrome's by a glyph |
 | `word-spacing` and `letter-spacing` in a select's list and a broken picture's alt text | the list and the alt text are measured without them |
 | `word-spacing` on the first kept space of a block that collapses its own (`<div><span style="white-space: pre"> a</span></div>`) | widened as every other kept space; Chrome leaves that one space as the font has it |
@@ -60,7 +60,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a flex container or a table cut between rows by a column | kept whole |
 | a positioned box cut by a column | kept whole |
 | columns right to left | left to right only, their content laid out right to left in each |
-| a table's background round a collapsed column | drawn over the table's box, where Chrome draws it as wide as before the column was taken out |
+| a table with a collapsed column as a grid item, or as a flex item with a width of its own | laid out at the width its container gives it, where Chrome narrows the grid item's by the column and sizes the flex item's apart; a flex item of an automatic width keeps it, as Chrome |
 | a scroller of direction `rtl` | scrolls from its left, where Chrome starts it at its right end; its bar is on its left, as Chrome's |
 | collapsed borders of a table of direction `rtl` | each cell's left border still wins its left edge, where Chrome resolves its start edge first |
 | logical properties in `@keyframes` and `transition-property` under `direction: rtl` | the left side's |
@@ -75,8 +75,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | an absolutely positioned box inside an inline element `position: relative` moves | placed where the element stood before it moved |
 | an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's |
 | a `summary`'s marker in a font without ▸ | measured with ui's fallback face for the triangle, where Chrome on macOS takes 1.06em whatever the font: about 3 points narrower at 16px |
-| a `font` element's attributes | read, and they do nothing |
-| the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
+| the presentational attributes but those [read](03-css.md): `link`, `vlink` and `alink` on `body` | read, and they do nothing |
 | an absolutely positioned element right in a block after its text (`<div>text<span style="position: absolute">`) | at the start of the line, where Chrome puts it after the text; inside an inline element it stands after the text |
 
 ## Backgrounds and borders
@@ -139,7 +138,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a `pattern` Go's `regexp` cannot read (a lookahead, a backreference) | constrains nothing, where Chrome reads it as JavaScript does |
 | an email address whose domain is not in ASCII letters | invalid, where Chrome turns the domain to punycode first |
 | `:user-invalid` after a form is submitted | ui submits no form: only the fields the player changed or submitted match |
-| a radio group by its form | grouped by name across the Document, where Chrome groups by name within each form |
 | `ex` in a bold or italic the engine makes from another face | the x-height of the face it is made from, where Chrome measures the thickened `x` |
 | `scroll-state()` container queries and `container-type: scroll-state` | refused, with a warning: the condition never holds |
 | a `style()` query compared with a custom property whose value differs only in its white space (`--d: 1px  2px`) | equal, where Chrome compares the text as written |

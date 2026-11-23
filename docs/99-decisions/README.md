@@ -147,6 +147,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0142 | [The pointer and the keys reach callbacks as a page's DOM events](0142-the-pointer-and-the-keys-reach-callbacks-as-a-pages-dom-events.md) | api |
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
 | 0144 | [A background clipped to text shows through a picture of its glyphs](0144-a-background-clipped-to-text-shows-through-a-picture-of-its-glyphs.md) | rendering |
+| 0152 | [The old attributes of tables, rules and fonts are hints as Chrome's](0152-the-old-attributes-of-tables-rules-and-fonts-are-hints-as-chromes.md) | api |
 
 ## Writing one
 
