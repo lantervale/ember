@@ -22,9 +22,9 @@ func (c claims) take(p style.Position) bool {
 
 // containingBlockClaims is which out-of-flow boxes a node of style st
 // lays out: the absolute ones when it is positioned, and the fixed ones
-// too when it is filtered, as Chrome does.
+// too when it is filtered or filters its backdrop, as Chrome does.
 func containingBlockClaims(st *style.Computed) claims {
-	filtered := len(st.Filters) > 0
+	filtered := st.Filtered()
 	return claims{absolute: st.Position != style.Static || filtered, fixed: filtered}
 }
 

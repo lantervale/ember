@@ -750,6 +750,9 @@ type Look struct {
 	// background-clip's, the box it shows in (the border box when
 	// InitialBox).
 	BackgroundOrigins, BackgroundClips []BackgroundBox
+	// BackgroundBlends are background-blend-mode's: how each layer mixes
+	// with the layers and the colour under it.
+	BackgroundBlends []BlendMode
 	// MaskImage is mask-image: the picture whose alpha is the shape the
 	// background colour is painted through (decision 0093), sized, tiled
 	// and placed in the border box by MaskSize, MaskRepeat and
@@ -808,8 +811,15 @@ type Look struct {
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
 	TransformOrigin Size[Length]
-	// Filters is filter's functions in order, none when empty.
-	Filters     []Filter
+	// Filters is filter's functions in order, none when empty, and
+	// BackdropFilters backdrop-filter's.
+	Filters         []Filter
+	BackdropFilters []Filter
+	// BlendMode is mix-blend-mode: how the element and its content, as one
+	// picture, mix with what is under them in the group they stack in, and
+	// Isolate is isolation: isolate, the element such a group.
+	BlendMode   BlendMode
+	Isolate     bool
 	Transitions []Transition
 	Animations  []Animation
 }
@@ -831,6 +841,44 @@ type TransformOp struct {
 	Kind TransformKind
 	X, Y Length
 	A    [6]float32
+}
+
+// BlendMode is how colours mix with those under them, as the
+// Compositing and Blending spec names its modes.
+type BlendMode uint8
+
+const (
+	BlendNormal BlendMode = iota
+	BlendMultiply
+	BlendScreen
+	BlendOverlay
+	BlendDarken
+	BlendLighten
+	BlendColorDodge
+	BlendColorBurn
+	BlendHardLight
+	BlendSoftLight
+	BlendDifference
+	BlendExclusion
+	BlendHue
+	BlendSaturation
+	BlendColor
+	BlendLuminosity
+)
+
+// Filtered reports whether the element filters itself or its backdrop,
+// which holds its absolute and fixed descendants.
+func (l *Look) Filtered() bool { return len(l.Filters) > 0 || len(l.BackdropFilters) > 0 }
+
+// BackgroundBlended reports whether a background layer mixes otherwise
+// than normally.
+func (l *Look) BackgroundBlended() bool {
+	for _, b := range l.BackgroundBlends {
+		if b != BlendNormal {
+			return true
+		}
+	}
+	return false
 }
 
 type FilterKind uint8
@@ -1028,6 +1076,7 @@ type BackgroundLayer struct {
 	Position     BackgroundPosition
 	Attachment   BackgroundAttachment
 	Origin, Clip BackgroundBox
+	Blend        BlendMode
 }
 
 // BackgroundLayers is how many layers the background has: one a
@@ -1044,6 +1093,7 @@ func (l *Look) BackgroundLayer(i int) BackgroundLayer {
 		Attachment: layerItem(l.BackgroundAttachments, i, AttachScroll),
 		Origin:     layerItem(l.BackgroundOrigins, i, InitialBox),
 		Clip:       layerItem(l.BackgroundClips, i, InitialBox),
+		Blend:      layerItem(l.BackgroundBlends, i, BlendNormal),
 	}
 }
 

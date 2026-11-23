@@ -68,7 +68,7 @@ func held(b *box.Box) *box.Box {
 	}
 	top := b.Parent
 	for ; top != nil && top.Parent != nil; top = top.Parent {
-		if isFixed(top) || top.Kind == box.Element && top.Style != nil && len(top.Style.Filters) > 0 {
+		if isFixed(top) || top.Kind == box.Element && top.Style != nil && top.Style.Filtered() {
 			return nil
 		}
 	}

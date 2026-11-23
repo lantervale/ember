@@ -158,6 +158,8 @@ var (
 	alignWords = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
 		"self-start", "self-end"}
 	// textAlign has Chrome's -webkit- values, which place blocks as well as lines.
+	blendMode = words("normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn",
+		"hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity")
 	textAlign = words("start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",
 		"-webkit-center")
 )
@@ -440,6 +442,10 @@ var checks = map[string]check{
 	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),
 	"transform":             checkTransform,
 	"filter":                checkFilter,
+	"backdrop-filter":       checkFilter,
+	"mix-blend-mode":        single(blendMode),
+	"isolation":             single(words("auto", "isolate")),
+	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,
 	"appearance":            single(words("none", "auto", "textfield")),
 	"resize":                single(words("none", "both", "horizontal", "vertical")),

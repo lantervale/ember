@@ -226,3 +226,31 @@ func TestChromeLaysOutRightToLeft(t *testing.T) {
 		})
 	}
 }
+
+// TestFirstLettersAndLinesRightToLeftMatchChrome has ::first-letter and
+// ::first-line style paragraphs of direction rtl, of Latin and of Hebrew
+// in a font both draw alike, a first letter floated to the start.
+func TestFirstLettersAndLinesRightToLeftMatchChrome(t *testing.T) {
+	font := hebrewFont(t)
+	doc := ui.NewDocument(ui.FetchFonts(func(_, _ string) ([]byte, error) { return font, nil }), ui.CSS(`
+@font-face { font-family: Hebrew; src: url(hebrew.ttf); }
+body { font-family: Hebrew; margin: 8px; font-size: 16px; width: 300px; }
+p { margin: 0 0 10px; }
+.big::first-letter { font-size: 200%; }
+.drop::first-letter { float: inline-start; font-size: 3em; line-height: 1; margin-inline-end: 6px; }
+.line::first-line { font-size: 22px; letter-spacing: 1px; }
+`))
+	para := func(class, text string) *ui.Node {
+		return ui.P(append([]ui.Arg{ui.Attr("dir", "rtl"), ui.Class(class)}, words(text)...)...)
+	}
+	latin := "Lines from the right, every word in a span of its own, wrapping over three lines or so."
+	hebrew := "אבג דהו זחט יכל מנס עפצ קרש תאב גדה וזח טיכ למנ סעפ צקר"
+	doc.Body().Append(
+		para("big", latin), para("drop", latin+" "+latin), para("line", latin),
+		para("big", hebrew), para("drop", hebrew+" "+hebrew), para("line", hebrew+" 123 abc"),
+	)
+	size := geom.V2(400, 900)
+	landed(t, doc, size)
+	r := chrome.Match(t, doc, size)
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

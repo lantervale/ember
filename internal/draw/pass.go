@@ -46,6 +46,24 @@ func (c *List) Picture(r geom.Rect, p *Pass, m Blend, mask *Pass) {
 	c.Batches = append(c.Batches, b)
 }
 
+// Mix is how a picture's colours mix with its backdrop's, as twod.Mix:
+// 0 for not at all.
+type Mix uint8
+
+// PictureOver draws the whole of p over r as Picture does, its colours
+// first mixed by m with those of back, shown over backRect of the List's
+// space, where it lies under r.
+func (c *List) PictureOver(r geom.Rect, p, back *Pass, backRect geom.Rect, m Mix) {
+	c.Picture(r, p, Alpha, nil)
+	b := &c.Batches[len(c.Batches)-1]
+	b.Images[1], b.ImageCount = back.Target, 2
+	b.Mix = m
+	b.ToBackdrop = geom.Transform2D{
+		X: geom.V2(1/backRect.W, 0), Y: geom.V2(0, 1/backRect.H),
+		Origin: geom.V2(-backRect.X/backRect.W, -backRect.Y/backRect.H),
+	}
+}
+
 // Source is what a World's windows drew: twod installs one, presenters and
 // engine tests read it.
 type Source interface {
