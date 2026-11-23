@@ -74,6 +74,8 @@ type Document struct {
 	// last paint drew.
 	playing       map[string]*playing
 	drawnPictures map[string]bool
+	// prioritized are the imgs that say their fetchpriority.
+	prioritized []*Node
 	// pageFonts are the fonts of its @font-face rules that are fetched
 	// (FetchFonts).
 	pageFonts pageFonts
@@ -366,6 +368,10 @@ func (d *Document) Body() *Node { return d.body }
 // show their state before styling, so their pseudo-classes restyle them
 // the same frame.
 func (d *Document) Layout(size geom.Vec2) {
+	d.fetching.mu.Lock()
+	d.fetching.holding = true
+	d.fetching.mu.Unlock()
+	defer d.fetchQueued()
 	d.landImages()
 	d.landFonts()
 	d.landSheets()
@@ -546,6 +552,7 @@ func (d *Document) style() {
 	} else {
 		d.controls, d.forms = d.controls[:0], d.forms[:0]
 		d.choices.imgs, d.choices.stale = d.choices.imgs[:0], true
+		d.prioritized = d.prioritized[:0]
 		d.html.Walk(func(n *Node) bool {
 			if dom.Data(n).Dirty&dom.DirtyTree != 0 {
 				d.restructure = true
@@ -581,6 +588,9 @@ func (d *Document) style() {
 func (d *Document) noteImg(n *Node) {
 	if n.Tag() != dom.Img {
 		return
+	}
+	if _, ok := n.Attr("fetchpriority"); ok {
+		d.prioritized = append(d.prioritized, n)
 	}
 	if !choosesPicture(n) {
 		dom.Unchoose(n)

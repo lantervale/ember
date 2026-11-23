@@ -7,6 +7,8 @@ import (
 	_ "image/png" // ui.Images and url() backgrounds decode PNG
 	"io/fs"
 	"math"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/animated"
 	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // imageBytes is the file url names: one of css.DefaultImages, else a path
@@ -76,12 +79,22 @@ type fetches struct {
 	// layout.
 	drawn []drawnVector
 	slots chan struct{}
+	// queue are the urls asked for that wait for one of the
+	// fetchesAtOnce fetches, running, the most urgent first once a frame
+	// sorted them; fetch is the fetcher they go to.
+	queue   []string
+	running int
+	fetch   ImageFetcher
+	// holding is set during a layout, which asks for its pictures all
+	// before fetchQueued sorts them.
+	holding bool
 	// onWay are the urls asked for that have not landed, read and
 	// written on the frame.
 	onWay map[string]bool
 }
 
-// fetchImage asks the fetcher for url off the frame.
+// fetchImage asks the fetcher for url off the frame: during a layout,
+// once it sorted it among the others asked for (fetchQueued).
 func (d *Document) fetchImage(url string) {
 	f := &d.fetching
 	if f.slots == nil {
@@ -91,16 +104,66 @@ func (d *Document) fetchImage(url string) {
 		f.onWay = map[string]bool{}
 	}
 	f.onWay[url] = true
-	fetch := d.fetch
 	f.Add(1)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fetch, f.queue = d.fetch, append(f.queue, url)
+	for !f.holding && f.running < fetchesAtOnce && len(f.queue) > 0 {
+		f.startNext()
+	}
+}
+
+// fetchQueued sorts the pictures waiting to be fetched by the priority
+// their imgs' fetchpriority gives them, high first and low last, as
+// Chrome does, then has them fetched while fewer than fetchesAtOnce are.
+func (d *Document) fetchQueued() {
+	f := &d.fetching
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.holding = false
+	if len(f.queue) == 0 {
+		return
+	}
+	priority := map[string]int{}
+	for _, n := range d.prioritized {
+		url, ok := dom.Picture(n)
+		if !ok {
+			continue
+		}
+		v, _ := n.Attr("fetchpriority")
+		switch strings.ToLower(v) {
+		case "high":
+			priority[url] = max(priority[url], 1)
+		case "low":
+			if _, set := priority[url]; !set {
+				priority[url] = -1
+			}
+		}
+	}
+	slices.SortStableFunc(f.queue, func(a, b string) int { return priority[b] - priority[a] })
+	for f.running < fetchesAtOnce && len(f.queue) > 0 {
+		f.startNext()
+	}
+}
+
+// startNext fetches the first picture of the queue off the frame, then
+// the next once it is back; f.mu is held.
+func (f *fetches) startNext() {
+	url, fetch := f.queue[0], f.fetch
+	f.queue = f.queue[1:]
+	f.running++
 	go func() {
 		defer f.Done()
 		f.slots <- struct{}{}
-		defer func() { <-f.slots }()
 		got := fetched(url, fetch)
+		<-f.slots
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.landed = append(f.landed, got)
+		f.running--
+		if len(f.queue) > 0 {
+			f.startNext()
+		}
 	}()
 }
 

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -274,4 +275,53 @@ func TestAnImgChoosesAgainWhenChromesDoes(t *testing.T) {
 		})
 		assert.Equal(t, want[i], got, step.name)
 	}
+}
+
+func TestAPictureOfHighFetchPriorityIsAskedForFirstAsChromes(t *testing.T) {
+	var b bytes.Buffer
+	require.NoError(t, png.Encode(&b, image.NewNRGBA(image.Rect(0, 0, 10, 10))))
+	files := map[string][]byte{}
+	build := func(opts ...ui.DocumentOption) *ui.Document {
+		d := ui.NewDocument(opts...)
+		for i := range 22 {
+			name := fmt.Sprintf("p%d.png", i)
+			files[name] = b.Bytes()
+			img := ui.Img(ui.Attr("src", name))
+			if i >= 20 {
+				img.SetAttr("fetchpriority", "high")
+			}
+			d.Body().Append(img)
+		}
+		return d
+	}
+	srv, requests := chrome.Serve(t, build(), files, 300*time.Millisecond)
+	chrome.Open(t, srv.URL, geom.V2(400, 300), 1)
+	asked := requests()
+	require.Len(t, asked, 22)
+	first := asked[:8]
+	assert.Contains(t, first, "/p20.png", "among the first eight Chrome asks for")
+	assert.Contains(t, first, "/p21.png", "among the first eight Chrome asks for")
+
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var got []string
+	d := build(ui.FetchImages(func(url string) ([]byte, error) {
+		mu.Lock()
+		got = append(got, url)
+		mu.Unlock()
+		<-release
+		return files[url], nil
+	}))
+	d.Layout(geom.V2(400, 300))
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got) == 6
+	}, 10*time.Second, time.Millisecond)
+	mu.Lock()
+	assert.Contains(t, got, "p20.png")
+	assert.Contains(t, got, "p21.png")
+	mu.Unlock()
+	close(release)
+	ui.LandImages(d, geom.V2(400, 300))
 }
