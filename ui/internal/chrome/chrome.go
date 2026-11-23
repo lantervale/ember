@@ -433,8 +433,7 @@ func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]b
 	if len(features) > 0 {
 		args = append([]string{"--enable-blink-features=" + strings.Join(features, ",")}, args...)
 	}
-	//nolint:gosec // the Chrome found on this machine, run on our own page
-	cmd := exec.CommandContext(ctx, browser(), args...)
+	cmd := browserCommand(ctx, helpersWait, browser(), args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -445,6 +444,19 @@ func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]b
 		return nil, fmt.Errorf("chrome: %w: %s", err, stderr.String())
 	}
 	return out, nil
+}
+
+// helpersWait is how long Chrome's helper processes may keep its output
+// open once the browser has exited or been killed.
+const helpersWait = 10 * time.Second
+
+// browserCommand runs the browser at path until ctx is done, then kills it
+// and, wait later, closes its output under any helper still holding it,
+// which would otherwise hang the read for as long as that helper lives.
+func browserCommand(ctx context.Context, wait time.Duration, path string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.WaitDelay = wait
+	return cmd
 }
 
 // blinkSettings has Chrome answer the media features as m does, whatever
