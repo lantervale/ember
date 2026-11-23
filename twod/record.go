@@ -50,9 +50,9 @@ func (u *Canvas) Try(do func()) (any, []byte) {
 }
 
 // Keep keeps what u drew since m in r, reusing its room, and reports
-// whether Replay can draw it again: not when it was lit, masked or a
-// pass's picture, or when u's transform, modulate, blend or clip moved
-// since m.
+// whether Replay can draw it again: not when it was lit, masked, cut by
+// a picture or a pass's picture, or when u's transform, modulate, blend or
+// clip moved since m.
 func (u *Canvas) Keep(m Mark, r *Recording) bool { return u.list.Record(m.m, &r.r) }
 
 // Replay draws r again, at the same place, and reports whether it did:

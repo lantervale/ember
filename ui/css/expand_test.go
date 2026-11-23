@@ -117,6 +117,11 @@ func TestValidate(t *testing.T) {
 		"opacity":                    {"0.5", "50%"},
 		"z-index":                    {"-1", "auto"},
 		"transition-timing-function": {"cubic-bezier(0.1, 0.7, 1, 0.1)", "steps(4, jump-end)"},
+		"font":                       {"small-caps bold 12px/1.5 Go", "italic small-caps condensed 12px Go"},
+		"font-variant": {"normal", "none", "small-caps", "tabular-nums slashed-zero all-petite-caps",
+			"no-common-ligatures contextual super"},
+		"letter-spacing": {"10%", "calc(5% + 1px)"},
+		"color":          {"revert", "revert-layer"},
 	}
 	for name, vals := range good {
 		for _, v := range vals {
@@ -126,7 +131,9 @@ func TestValidate(t *testing.T) {
 		}
 	}
 	bad := map[string][]string{
-		"font":              {"georgia", "12px", "italic georgia", "12px/ georgia", "small-caps 12px georgia", "caption"},
+		"font": {"georgia", "12px", "italic georgia", "12px/ georgia", "small-caps small-caps 12px georgia", "caption"},
+		"font-variant": {"small-caps petite-caps", "none common-ligatures", "tabular-nums proportional-nums",
+			"sub-pixel"},
 		"background-repeat": {"repeat-z", "repeat repeat repeat"},
 		"background-size":   {"cover 10px", "contain cover", "-4px", "10px 20px 30px", "stretch"},
 		"background": {"url(x.png) / cover", "url(x.png) center /", "center / cover / contain", "/ cover center",

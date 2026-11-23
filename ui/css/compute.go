@@ -444,7 +444,7 @@ var colored = map[string]bool{
 	"border-right-color": true, "border-bottom-color": true, "border-left-color": true, "border-image-source": true,
 	"outline-color": true, "text-decoration-color": true, "column-rule-color": true, "accent-color": true,
 	"caret-color": true, "box-shadow": true, "text-shadow": true, "mask-image": true, "filter": true,
-	"backdrop-filter": true,
+	"backdrop-filter": true, "-webkit-text-fill-color": true,
 }
 
 //nolint:gochecknoglobals // a fixed value every element shares
@@ -1437,6 +1437,17 @@ func (x *ctx) unit(u relUnit) float32 {
 	}
 }
 
+// spacing is a letter-spacing or a word-spacing: a calc() resolved, a
+// percentage kept to resolve against the font size of each element that
+// inherits it.
+func (x *ctx) spacing(v []Component) style.Spacing {
+	l := x.length(v[0])
+	if l.Calc != (unique.Handle[style.Calc]{}) {
+		return style.Spacing{Px: l.At(x.em)}
+	}
+	return style.Spacing{Px: l.Px, Percent: l.Percent}
+}
+
 func (x *ctx) px(c Component) float32 {
 	return x.length(c).Px
 }
@@ -1870,16 +1881,21 @@ var props = func() map[string]prop {
 				return style.LineHeight{Px: l.At(x.em)}
 			}, lineHeights,
 		),
-		"letter-spacing": field(func(c *style.Computed) *float32 { return &c.LetterSpacing },
-			func(x *ctx, v []Component) float32 { return x.px(v[0]) }, numbers(-math.MaxFloat32, math.MaxFloat32)),
-		"word-spacing": field(func(c *style.Computed) *style.WordSpacing { return &c.WordSpacing },
-			func(x *ctx, v []Component) style.WordSpacing {
-				l := x.length(v[0])
-				if l.Calc != (unique.Handle[style.Calc]{}) {
-					return style.WordSpacing{Px: l.At(x.em)}
-				}
-				return style.WordSpacing{Px: l.Px, Percent: l.Percent}
-			}, wordSpacings),
+		propCaps: keyword(func(c *style.Computed) *style.FontCaps { return &c.Font.Caps }, capsWords),
+		propLigatures: field(func(c *style.Computed) *string { return &c.FontVariant.Ligatures },
+			variantField(propLigatures), flips[string]()),
+		propNumeric: field(func(c *style.Computed) *string { return &c.FontVariant.Numeric },
+			variantField(propNumeric), flips[string]()),
+		propEastAsian: field(func(c *style.Computed) *string { return &c.FontVariant.EastAsian },
+			variantField(propEastAsian), flips[string]()),
+		propAlternates: field(func(c *style.Computed) *string { return &c.FontVariant.Alternates },
+			variantField(propAlternates), flips[string]()),
+		propPosition: field(func(c *style.Computed) *string { return &c.FontVariant.Position },
+			variantField(propPosition), flips[string]()),
+		"letter-spacing": field(func(c *style.Computed) *style.Spacing { return &c.LetterSpacing },
+			(*ctx).spacing, textSpacings),
+		"word-spacing": field(func(c *style.Computed) *style.Spacing { return &c.WordSpacing },
+			(*ctx).spacing, textSpacings),
 		"color": field(
 			func(c *style.Computed) *color.Color { return &c.Color },
 			func(x *ctx, v []Component) color.Color {
@@ -1938,6 +1954,21 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
+		"text-decoration-skip-ink": keyword(func(c *style.Computed) *bool { return &c.InkThrough },
+			map[string]bool{"auto": false, "all": false, "none": true}),
+		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
+			func(x *ctx, v []Component) style.TabSize {
+				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
+					return style.TabSize{Spaces: x.number(v[0], 0)}
+				}
+				return style.TabSize{Px: x.px(v[0]), Length: true}
+			}, tabSizes),
+		"word-break": keyword(func(c *style.Computed) *style.WordBreak { return &c.WordBreak },
+			map[string]style.WordBreak{"normal": style.WordBreakNormal, "break-all": style.BreakAll,
+				"keep-all": style.KeepAll, "break-word": style.WordBreakBreakWord}),
+		"line-break": keyword(func(c *style.Computed) *style.LineBreak { return &c.LineBreak },
+			map[string]style.LineBreak{"auto": style.LineBreakAuto, "loose": style.LineBreakLoose,
+				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
 		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
@@ -2009,6 +2040,7 @@ var props = func() map[string]prop {
 		"background-clip": layered(func(c *style.Computed) *[]style.BackgroundBox { return &c.BackgroundClips },
 			wordOf(map[string]style.BackgroundBox{
 				"border-box": style.InitialBox, "padding-box": style.UnderPadding, "content-box": style.UnderContent,
+				"text": style.UnderText,
 			}), flips[[]style.BackgroundBox]()),
 		"mask-image": layered(func(c *style.Computed) *[]style.Image { return &c.MaskImages },
 			backgroundImage, flips[[]style.Image]()),
@@ -2046,6 +2078,9 @@ var props = func() map[string]prop {
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
 		"caret-color":  autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.CaretColor, &c.CaretAuto }),
+
+		"-webkit-text-fill-color": textFill(),
+
 		"object-position": field(func(c *style.Computed) *style.BackgroundPosition { return &c.ObjectPosition },
 			(*ctx).position, positions),
 		"object-fit": keyword(func(c *style.Computed) *style.ObjectFit { return &c.ObjectFit },
@@ -2053,7 +2088,7 @@ var props = func() map[string]prop {
 				"none": style.FitNone, "scale-down": style.FitScaleDown}),
 		"border-image-source": field(func(c *style.Computed) *string { return &c.BorderImage.Source },
 			imageSource, flips[string]()),
-		"border-image-slice": field(
+		"border-image-slice": filled(field(
 			func(c *style.Computed) *style.Sides[float32] { return &c.BorderImage.Slice },
 			func(_ *ctx, v []Component) style.Sides[float32] {
 				if len(v) == 1 && v[0].Kind == Percentage && v[0].Num == 100 {
@@ -2068,7 +2103,7 @@ var props = func() map[string]prop {
 				pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(n)-1]
 				return style.Sides[float32]{Top: n[pick[0]], Right: n[pick[1]], Bottom: n[pick[2]], Left: n[pick[3]]}
 			}, imageSlices,
-		),
+		)),
 		"border-image-width": field(
 			func(c *style.Computed) *style.Sides[style.ImageWidth] { return &c.BorderImageWidth },
 			func(x *ctx, v []Component) style.Sides[style.ImageWidth] {
@@ -2267,6 +2302,43 @@ func autoColor(get func(*style.Computed) (*color.Color, *bool)) prop {
 				ca, aa := get(a)
 				cb, ab := get(b)
 				return *aa == *ab && (*aa || *ca == *cb)
+			},
+		},
+	}
+}
+
+// filled is border-image-slice's p that also reads its fill word, which
+// flips with the slices.
+func filled(p prop) prop {
+	set, inherit := p.set, p.inherit
+	p.set = func(x *ctx, v []Component) {
+		set(x, v)
+		x.c.BorderImage.Fill = slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "fill") })
+	}
+	p.inherit = func(dst, src *style.Computed) {
+		inherit(dst, src)
+		dst.BorderImage.Fill = src.BorderImage.Fill
+	}
+	return p
+}
+
+// textFill is -webkit-text-fill-color: a colour, or currentColor, which
+// leaves the glyphs to color, as the element's own, inherited or not.
+func textFill() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			if x.c.TextFilled = !isWord(v[0], kwCurrentColor); x.c.TextFilled {
+				x.c.TextFill = linear(v[0], x.c.Color)
+			}
+		},
+		inherit: func(dst, src *style.Computed) { dst.TextFill, dst.TextFilled = src.TextFill, src.TextFilled },
+		anim: anim{kind: interpolated,
+			lerp: func(dst, a, b *style.Computed, t float32) bool {
+				dst.TextFill, dst.TextFilled = lerpColor(a.Fill(), b.Fill(), t), true
+				return true
+			},
+			equal: func(a, b *style.Computed) bool {
+				return a.TextFilled == b.TextFilled && (!a.TextFilled || a.TextFill == b.TextFill)
 			},
 		},
 	}

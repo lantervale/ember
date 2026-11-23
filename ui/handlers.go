@@ -275,7 +275,9 @@ func wrap[F Handler](fn F) func(*world.World, Event) {
 // dispatch runs the callbacks of the element an emitted event is about,
 // in the order they were added, when it is still in the Document, and
 // reports whether one prevented its default. While they run, the element
-// is the one a SetValue answers at once.
+// is the one a SetValue answers at once. A key or a Back no callback of a
+// framed Document stopped goes on from its iframe in the Document round
+// it (decision 0141).
 func (d *Document) dispatch(w *world.World, raw any) bool {
 	e, ok := eventOf(raw)
 	if _, body := raw.(bodyBack); body {
@@ -286,10 +288,18 @@ func (d *Document) dispatch(w *world.World, raw any) bool {
 	}
 	stopped, prevented := false, false
 	e.stopped, e.prevented = &stopped, &prevented
+	d.bubble(w, e)
+	return prevented
+}
+
+func (d *Document) bubble(w *world.World, e Event) {
+	if !d.holds(e.Node) {
+		return
+	}
 	was := d.answering
 	d.answering = e.Node
 	defer func() { d.answering = was }()
-	for n := e.Node; n != nil && !stopped; n = n.Parent() {
+	for n := e.Node; n != nil && !*e.stopped; n = n.Parent() {
 		if n != e.Node && !d.holds(n) {
 			continue
 		}
@@ -301,10 +311,13 @@ func (d *Document) dispatch(w *world.World, raw any) bool {
 			}
 		}
 		if !bubbles(e.Type) {
-			break
+			return
 		}
 	}
-	return prevented
+	if f := d.framed; f != nil && !*e.stopped && (e.Type == EventKey || e.Type == EventBack) {
+		e.Node = f.n
+		f.host.bubble(w, e)
+	}
 }
 
 // bodyBack is a Back pressed with nothing focused: no World event, as

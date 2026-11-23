@@ -114,6 +114,10 @@ type Box struct {
 	// with (mix-blend-mode), or the backdrop root an element under it
 	// filters what lies behind it up to (backdrop-filter).
 	Group bool
+	// Canvas is set with Ink on an element that is or holds a canvas or
+	// an iframe, which draw in their own colours: opacity fades it as one
+	// picture.
+	Canvas bool
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Picture is the address of the picture a Marker shows, its item's
@@ -222,6 +226,15 @@ type Fonts interface {
 	Metrics(f style.Font) Metrics
 	// Advance is the width of text on one line, letter spacing apart.
 	Advance(f style.Font, text string) float32
+}
+
+// InkFonts is Fonts that knows where glyphs' ink is: Intercepts are the
+// stretches of x where the glyphs of text, drawn from 0 on its baseline
+// with letter points after each character and word after each word
+// separator, cross the band from top to bottom below the baseline, one a
+// glyph.
+type InkFonts interface {
+	Intercepts(f style.Font, text string, letter, word, top, bottom float32) [][2]float32
 }
 
 // FallbackFonts is Fonts that draws some characters from other faces:

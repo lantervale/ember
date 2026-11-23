@@ -29,9 +29,11 @@ func bound(b *box.Box) (bool, bool) {
 	r, loose := ownInk(b, st), looseItself(b, st)
 	cuts := st.Overflow.Width != style.Visible && st.Overflow.Height != style.Visible &&
 		(b.Kind == box.Element || b.Kind == box.Viewport)
+	canvas := b.Kind == box.Element && b.Node != nil && (b.Node.Tag() == dom.Canvas || b.Node.Tag() == dom.Iframe)
 	for _, c := range b.Children {
 		bl, bd := bound(c)
 		blends, backdrops = blends || bl, backdrops || bd
+		canvas = canvas || c.Canvas
 		switch {
 		case c.Loose:
 			loose = true
@@ -45,7 +47,7 @@ func bound(b *box.Box) (bool, bool) {
 	if s, ok := clipShapeOf(b, geom.Vec2{}, st); ok {
 		r = intersect(r, s.bounds)
 	}
-	b.Ink, b.Loose, b.Group = r, loose, false
+	b.Ink, b.Loose, b.Group, b.Canvas = r, loose, false, canvas
 	if b.Kind != box.Element {
 		return blends, backdrops
 	}

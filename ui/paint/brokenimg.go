@@ -57,7 +57,7 @@ func (p *painter) altText(e entry, box geom.Rect, alt string, alpha float32) {
 	st := shown(e.b)
 	opts := []twod.TextOption{
 		twod.Typeface(p.faceOf(st.Font)), twod.FontSize(st.Font.Size),
-		twod.Color(fade(st.Color, alpha)), twod.Tracking(st.LetterSpacing),
+		twod.Color(fade(st.Color, alpha)), twod.Tracking(st.LetterGap()),
 	}
 	if p.fonts == nil {
 		p.s.Text(geom.V2(box.X+BrokenIcon, box.Y), alt, opts...)
