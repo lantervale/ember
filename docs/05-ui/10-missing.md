@@ -167,7 +167,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a select's list of a Document in an `iframe`, where it passes the frame's box | cut at the box, where Chrome shows its list whole over the page; a menu, a tooltip or a dialog are cut there as in Chrome, the top layer being each Document's own |
 | a selection running from a page into its frame, and select all over both | each Document selects its own text, one at a time |
 | an element lying over an `iframe`, or an `opacity` below 1 on it or round it | the page is painted each frame while it does, where it replays with nothing over the frame: the framed Document is drawn in the page's paint, which a replay skips |
-| `aspect-ratio` on a flex item `iframe` with neither a width nor a height | no width, where Chrome gives it its container's |
 | `scrolling="no"`, `allowtransparency`, `loading`, `sandbox`, `allow`, `name` | not read: what a frame may do is the program's |
 | a panic of a framed Document outside its own frame: a call the program makes on it, a fetch it started | the program's own, with or without `ui.Guarded()` |
 | a control taken out of its Document (a field, a canvas, an `iframe`) | its node and state stay held by the Document until the Document goes; an `iframe` lets go of what it showed |

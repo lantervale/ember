@@ -605,7 +605,17 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 			if room, ok := fillRoom(c, it); ok {
 				childAvail = childAvail.with(d.main(), room)
 			}
-			minContentMain := t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
+			var minContentMain float32
+			if cross := ckd.get(d.cross()); crossIsDefinite && some(it.aspectRatio) && some(cross) && it.node.fills() {
+				// a picture with proportions alone is as small as its definite cross size
+				// makes it, as Chrome's transferred size has it
+				minContentMain = cross / it.aspectRatio
+				if d.isRow() {
+					minContentMain = cross * it.aspectRatio
+				}
+			} else {
+				minContentMain = t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
+			}
 			clampedMin := mMin(mMin(minContentMain, it.size.get(d.main())), tMax.get(d.main()))
 			it.resolvedMinimumMainSize = mMax(clampedMin, pbSums.get(d.main()))
 		}
