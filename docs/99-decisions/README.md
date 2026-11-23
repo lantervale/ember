@@ -148,6 +148,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0143 | [A face's look, and the faces a family has, follow its sheets](0143-a-faces-look-and-the-faces-a-family-has-follow-its-sheets.md) | rendering |
 | 0144 | [A background clipped to text shows through a picture of its glyphs](0144-a-background-clipped-to-text-shows-through-a-picture-of-its-glyphs.md) | rendering |
 | 0148 | [Variable fonts are read in pure Go, and font-display is timed on the Document's clock](0148-variable-fonts-are-read-in-pure-go-and-font-display-is-timed-on-the-documents-clock.md) | rendering |
+| 0150 | [SVG filters run on the CPU over the pixels they show at](0150-svg-filters-run-on-the-cpu-over-the-pixels-they-show-at.md) | assets |
 
 ## Writing one
 

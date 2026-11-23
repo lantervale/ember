@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	utf16std "unicode/utf16"
 )
 
 const (
@@ -228,10 +229,37 @@ func (r *reader) chars(parent *node, s string) error {
 	return nil
 }
 
+// utf16 is data as UTF-8 when it is UTF-16, which its byte order mark
+// or its first character, a '<', tells: big- or little-endian.
+func utf16(data []byte) ([]byte, bool) {
+	var big bool
+	switch {
+	case bytes.HasPrefix(data, []byte{0xfe, 0xff}):
+		big, data = true, data[2:]
+	case bytes.HasPrefix(data, []byte{0xff, 0xfe}):
+		data = data[2:]
+	case bytes.HasPrefix(data, []byte{0, '<'}):
+		big = true
+	case bytes.HasPrefix(data, []byte{'<', 0}):
+	default:
+		return data, false
+	}
+	units := make([]uint16, len(data)/2)
+	for i := range units {
+		if big {
+			units[i] = uint16(data[2*i])<<8 | uint16(data[2*i+1])
+		} else {
+			units[i] = uint16(data[2*i+1])<<8 | uint16(data[2*i])
+		}
+	}
+	return []byte(string(utf16std.Decode(units))), true
+}
+
 func readDocument(data []byte) (*document, error) {
 	if len(data) > MaxBytes {
 		return nil, ErrTooLarge
 	}
+	data, wide := utf16(data)
 	// The decoder is given no entity and follows no reference: it reads
 	// these bytes and nothing else.
 	d := xml.NewDecoder(bytes.NewReader(data)) //nolint:gosec // untrusted on purpose: bounded by the limits of svg.go
@@ -240,6 +268,10 @@ func readDocument(data []byte) (*document, error) {
 		switch strings.ToLower(charset) {
 		case "utf-8", "utf8", "us-ascii", "ascii":
 			return in, nil
+		case "utf-16", "utf-16le", "utf-16be":
+			if wide {
+				return in, nil
+			}
 		}
 		return &latin1{r: in}, nil
 	}

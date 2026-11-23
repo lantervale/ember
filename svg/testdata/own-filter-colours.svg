@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="rainbow"><stop stop-color="#f00"/><stop offset=".33" stop-color="#ff0"/><stop offset=".66" stop-color="#0c0"/><stop offset="1" stop-color="#00f"/></linearGradient>
+    <filter id="grey"><feColorMatrix type="saturate" values="0"/></filter>
+    <filter id="half"><feColorMatrix type="saturate" values=".4"/></filter>
+    <filter id="turn"><feColorMatrix type="hueRotate" values="120"/></filter>
+    <filter id="lum"><feColorMatrix type="luminanceToAlpha"/></filter>
+    <filter id="swap"><feColorMatrix values="0 0 1 0 0  0 1 0 0 0  1 0 0 0 0  0 0 0 .7 0"/></filter>
+    <filter id="poster"><feComponentTransfer><feFuncR type="discrete" tableValues="0 .5 1"/><feFuncG type="discrete" tableValues="0 .5 1"/><feFuncB type="discrete" tableValues="0 1"/></feComponentTransfer></filter>
+    <filter id="levels"><feComponentTransfer><feFuncR type="linear" slope=".5" intercept=".25"/><feFuncG type="gamma" amplitude="1" exponent="2" offset="0"/><feFuncB type="table" tableValues="1 0"/><feFuncA type="table" tableValues="0 .8"/></feComponentTransfer></filter>
+    <filter id="srgb" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="table" tableValues="1 0"/><feFuncG type="table" tableValues="1 0"/><feFuncB type="table" tableValues="1 0"/></feComponentTransfer></filter>
+    <filter id="mixed" x="0" y="0" width="1" height="1">
+      <feFlood flood-color="#36c" result="blue"/>
+      <feComposite in="SourceGraphic" in2="blue" operator="arithmetic" k1="0" k2=".6" k3=".4" k4="0"/>
+    </filter>
+    <filter id="multiply" x="0" y="0" width="1" height="1"><feFlood flood-color="#fc0" result="y"/><feBlend in="SourceGraphic" in2="y" mode="multiply"/></filter>
+    <filter id="screen" x="0" y="0" width="1" height="1"><feFlood flood-color="#036" result="d"/><feBlend in="SourceGraphic" in2="d" mode="screen"/></filter>
+    <filter id="hue" x="0" y="0" width="1" height="1"><feFlood flood-color="#2a7" result="g"/><feBlend in="g" in2="SourceGraphic" mode="hue"/></filter>
+    <filter id="xor" x="0" y="0" width="1" height="1"><feFlood flood-color="#c33" x="10%" y="10%" width="50%" height="50%" result="r"/><feComposite in="SourceGraphic" in2="r" operator="xor"/></filter>
+  </defs>
+  <rect width="120" height="120" fill="#fff"/>
+  <rect x="4" y="4" width="34" height="22" fill="url(#rainbow)" filter="url(#grey)"/>
+  <rect x="43" y="4" width="34" height="22" fill="url(#rainbow)" filter="url(#half)"/>
+  <rect x="82" y="4" width="34" height="22" fill="url(#rainbow)" filter="url(#turn)"/>
+  <rect x="4" y="32" width="34" height="22" fill="url(#rainbow)" filter="url(#lum)"/>
+  <rect x="43" y="32" width="34" height="22" fill="url(#rainbow)" filter="url(#swap)"/>
+  <rect x="82" y="32" width="34" height="22" fill="url(#rainbow)" filter="url(#poster)"/>
+  <rect x="4" y="60" width="34" height="22" fill="url(#rainbow)" filter="url(#levels)"/>
+  <rect x="43" y="60" width="34" height="22" fill="url(#rainbow)" filter="url(#srgb)"/>
+  <rect x="82" y="60" width="34" height="22" fill="url(#rainbow)" filter="url(#mixed)"/>
+  <rect x="4" y="88" width="34" height="22" fill="url(#rainbow)" filter="url(#multiply)"/>
+  <rect x="43" y="88" width="34" height="22" fill="url(#rainbow)" filter="url(#screen)"/>
+  <rect x="82" y="88" width="34" height="22" fill="url(#rainbow)" filter="url(#hue)"/>
+  <rect x="46" y="111" width="28" height="8" fill="#06c" filter="url(#xor)"/>
+</svg>

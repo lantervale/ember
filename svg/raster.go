@@ -42,14 +42,17 @@ func (p *Picture) draw(dst *image.RGBA, r image.Rectangle, unit float64) {
 		return
 	}
 	view := translate(float64(r.Min.X), float64(r.Min.Y)).Mul(p.viewTransform(float64(r.Dx()), float64(r.Dy()), unit))
-	d := &drawer{view: view}
+	d := &drawer{view: view, unit: unit}
 	d.items(dst, clip, p.Items, 1, 0)
 }
 
 // drawer draws items through one view, and keeps what it allocates from
 // one shape to the next.
 type drawer struct {
-	view   Matrix
+	view Matrix
+	// unit is pixels a CSS pixel, what a stroke that does not scale is
+	// measured in.
+	unit   float64
 	cover  coverage
 	shader shader
 	layers []*image.RGBA
@@ -63,28 +66,43 @@ func (d *drawer) items(dst *image.RGBA, clip image.Rectangle, items []Item, fade
 		case it.Image != nil:
 			d.image(dst, clip, it.Image, fade)
 		case it.Group == nil:
-		case it.Group.Clip == nil && it.Group.Mask == nil && depth >= maxLayers:
+		case it.Group.Clip == nil && it.Group.Mask == nil && it.Group.Filters == nil &&
+			it.Group.Blend == BlendNormal && depth >= maxLayers:
 			d.items(dst, clip, it.Group.Items, fade*it.Group.Opacity, depth)
 		default:
-			g := it.Group
-			box := d.bounds(g.Items).Intersect(clip)
-			if g.Clip != nil {
-				box = box.Intersect(d.clipBounds(g.Clip))
-			}
-			if box.Empty() || depth >= maxEffectLayers {
-				continue
-			}
-			layer := d.layer(depth, box)
-			d.items(layer, box, g.Items, 1, depth+1)
-			if g.Clip != nil {
-				applyCover(layer, d.clipCover(g.Clip, box))
-			}
-			if g.Mask != nil {
-				d.mask(layer, g.Mask, depth+1)
-			}
-			composite(dst, layer, fade*g.Opacity)
+			d.group(dst, clip, it.Group, fade, depth)
 		}
 	}
+}
+
+func (d *drawer) group(dst *image.RGBA, clip image.Rectangle, g *Group, fade float64, depth int) {
+	if depth >= maxEffectLayers {
+		return
+	}
+	if g.Clip != nil {
+		clip = clip.Intersect(d.clipBounds(g.Clip))
+	}
+	var layer *image.RGBA
+	if g.Filters != nil {
+		layer = d.filtered(g, clip, depth)
+	} else if box := d.bounds(g.Items).Intersect(clip); !box.Empty() {
+		layer = d.layer(depth, box)
+		d.items(layer, box, g.Items, 1, depth+1)
+	}
+	if layer == nil {
+		return
+	}
+	if g.Clip != nil {
+		applyCover(layer, d.clipCover(g.Clip, layer.Rect))
+	}
+	if g.Mask != nil {
+		d.mask(layer, g.Mask, depth+1)
+	}
+	if g.Blend != BlendNormal {
+		blendOnto(dst, layer, fade*g.Opacity, g.Blend)
+		return
+	}
+	composite(dst, layer, fade*g.Opacity)
 }
 
 // layer is a clear image over box, the one of its depth reused.
@@ -163,16 +181,29 @@ func shapeBounds(s *Shape, m Matrix) image.Rectangle {
 	return image.Rect(limit(math.Floor(dlo.X)), limit(math.Floor(dlo.Y)), limit(math.Ceil(dhi.X)), limit(math.Ceil(dhi.Y)))
 }
 
+// shapeBounds is shapeBounds with a stroke that does not scale
+// measured in pixels.
+func (d *drawer) shapeBounds(s *Shape, m Matrix) image.Rectangle {
+	if !s.NonScalingStroke {
+		return shapeBounds(s, m)
+	}
+	r := int(math.Ceil(s.reach() * d.unit))
+	return shapeBounds(&Shape{Path: s.Path}, m).Inset(-r)
+}
+
 func (d *drawer) bounds(items []Item) image.Rectangle {
 	var r image.Rectangle
 	for _, it := range items {
 		switch {
 		case it.Shape != nil:
-			r = r.Union(shapeBounds(it.Shape, d.view.Mul(it.Shape.Transform)))
+			r = r.Union(d.shapeBounds(it.Shape, d.view.Mul(it.Shape.Transform)))
 		case it.Image != nil:
 			r = r.Union(imageBounds(it.Image, d.view.Mul(it.Image.Transform)))
 		case it.Group != nil:
 			g := d.bounds(it.Group.Items)
+			if it.Group.Filters != nil {
+				g = d.filterArea(it.Group.Filters, g)
+			}
 			if it.Group.Clip != nil {
 				g = g.Intersect(d.clipBounds(it.Group.Clip))
 			}
@@ -223,7 +254,7 @@ func (d *drawer) shape(dst *image.RGBA, clip image.Rectangle, s *Shape, fade flo
 	if !s.Path.sound() || !m.finite() {
 		return
 	}
-	clip = clip.Intersect(shapeBounds(s, m))
+	clip = clip.Intersect(d.shapeBounds(s, m))
 	if clip.Empty() {
 		return
 	}
@@ -246,6 +277,10 @@ func (d *drawer) shape(dst *image.RGBA, clip image.Rectangle, s *Shape, fade flo
 	}
 	stroke := func() {
 		if !stroked {
+			return
+		}
+		if s.NonScalingStroke {
+			d.screenStroke(dst, clip, s, m, fade)
 			return
 		}
 		lines := subs
@@ -315,4 +350,37 @@ func blend(px []uint8, src *[4]float32, cover float32) {
 	px[1] = min(uint8(src[1]*cover+float32(px[1])*keep+0.5), a)
 	px[2] = min(uint8(src[2]*cover+float32(px[2])*keep+0.5), a)
 	px[3] = a
+}
+
+// screenStroke strokes s as vector-effect: non-scaling-stroke asks: its
+// path moved to pixels, then stroked there, its width and dashes in CSS
+// pixels.
+func (d *drawer) screenStroke(dst *image.RGBA, clip image.Rectangle, s *Shape, m Matrix, fade float64) {
+	u := d.unit
+	if !(u > 0) {
+		u = 1
+	}
+	lines := flatten(s.Path, m.stretch(), s.StrokeWidth/2*u)
+	for i := range lines {
+		pts := make([]Point, len(lines[i].pts))
+		for k, p := range lines[i].pts {
+			pts[k] = m.Apply(p)
+		}
+		lines[i].pts = pts
+	}
+	screen := *s
+	screen.StrokeWidth *= u
+	screen.DashOffset *= u
+	screen.Dashes = nil
+	for _, v := range s.Dashes {
+		screen.Dashes = append(screen.Dashes, v*u)
+	}
+	if pattern := screen.dashes(); pattern != nil && !math.IsNaN(screen.DashOffset) && !math.IsInf(screen.DashOffset, 0) {
+		lines = dash(lines, pattern, screen.DashOffset)
+	}
+	d.cover.reset(clip)
+	for _, poly := range strokeOutline(lines, &screen, 1) {
+		d.cover.add(poly, Identity())
+	}
+	d.paint(dst, s.Stroke, m, fade, false)
 }

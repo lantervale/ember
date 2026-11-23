@@ -31,6 +31,9 @@ func TestAnSVGIsKnownByItsNameOrByItsBytes(t *testing.T) {
 		`<!DOCTYPE html><html><svg></svg></html>`:                                                            false,
 		"<svgs>": false, "<svg": false, "<?xml never closed <svg>": false, "<!-- never closed <svg>": false,
 		"": false, "\x89PNG\r\n\x1a\n": false, "svg": false,
+		"\xff\xfe<\x00s\x00v\x00g\x00>\x00": true, "\xfe\xff\x00<\x00s\x00v\x00g\x00>": true,
+		"<\x00s\x00v\x00g\x00 \x00": true, "\x00<\x00?\x00x\x00?\x00>\x00<\x00s\x00v\x00g\x00/": true,
+		"\xff\xfe<\x00r\x00s\x00s\x00>\x00": false, "\xff\xfe<\x00s\x01v\x00g\x00>\x00": false,
 	} {
 		assert.Equal(t, want, is("picture", []byte(file)), file)
 	}
