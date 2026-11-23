@@ -635,6 +635,9 @@ func timeTerm(nonNeg bool) term {
 // transitionTarget is a property transition-property names: any ui
 // knows, as Chrome keeps any; one that doesn't interpolate runs none.
 func transitionTarget(c Component) error {
+	if c.Kind == Ident && strings.HasPrefix(c.Text, "--") {
+		return nil
+	}
 	name := strings.ToLower(c.Text)
 	name = physical(name, false)
 	if _, long := properties[name]; c.Kind == Ident && (long || shorthands[name] != nil) {

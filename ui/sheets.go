@@ -259,3 +259,21 @@ func (d *Document) take() {
 	d.takeFontFaces()
 	dom.Data(d.html).Dirty |= dom.DirtyStyle
 }
+
+// RegisterProperty registers a custom property as a page's
+// CSS.registerProperty does, over any @property rule of its name: its
+// values compute as its syntax's type, which transitions and animations
+// interpolate, and it inherits only as def says. A name registered so
+// before, or an invalid definition, is an error.
+func (d *Document) RegisterProperty(def css.PropertyDefinition) error {
+	if err := d.trans.RegisterProperty(def); err != nil {
+		return err
+	}
+	d.registered = append(d.registered, def)
+	dom.Data(d.html).Dirty |= dom.DirtyStyle
+	return nil
+}
+
+// RegisteredProperties are the custom properties RegisterProperty
+// registered, in order.
+func (d *Document) RegisteredProperties() []css.PropertyDefinition { return slices.Clone(d.registered) }

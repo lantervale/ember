@@ -49,6 +49,8 @@ type measures struct {
 	// whether one was read since the tree was last styled whole.
 	titleBar     TitleBarArea
 	titleBarRead bool
+	// props are the registered custom properties.
+	props *registry
 }
 
 // TitleBarArea is the part of a window's title bar a Document drawn under

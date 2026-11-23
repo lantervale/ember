@@ -76,7 +76,7 @@ func browserAgent() *Sheet {
 // answered for its own, through Transitions.
 func Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	all := append([]*Sheet{userAgent()}, sheets...)
-	env := &measures{}
+	env := &measures{props: newRegistry(all, nil)}
 	m := &matcher{off: mediaOff(all, Media{}), ranks: layerRanks(all), env: env}
 	pm := &matcher{off: m.off, ranks: m.ranks, env: env}
 	r := restyler{sheets: all, m: m, pm: pm, computed: new(int), env: env}
@@ -410,12 +410,17 @@ type ctx struct {
 	// line-height are known: until then the units of the font and lh read
 	// the parent's. root is set for the root, whose root units are its own.
 	sized, lined, root bool
-	vars               map[string][]Component
-	resolving          map[string]bool
-	raw                map[string]*Declaration
-	trans              [5][]Component
-	anims              [8][]Component
-	composite          []Component
+	// fontRead is set once a registered custom property read a unit of
+	// the element's font.
+	fontRead bool
+	vars     map[string][]Component
+	// inherited are the custom properties the element starts from.
+	inherited map[string]string
+	resolving map[string]bool
+	raw       map[string]*Declaration
+	trans     [5][]Component
+	anims     [8][]Component
+	composite []Component
 	// over is what the element's animations set on its style; transit is
 	// the restyler's, for moving, which runs transitions when transits is
 	// set.
@@ -540,7 +545,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		casc = r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
 		r.m.bare = false
 	}
-	r.overKeyframe(casc)
+	r.overKeyframe(&casc)
 	if r.over != nil {
 		x.over = r.over(n)
 	}
@@ -603,9 +608,15 @@ func (r *restyler) transitOf(x *ctx, n *dom.Node) {
 
 // overKeyframe puts the keyframe's declarations in casc where no
 // !important one won, as animations stand in the cascade.
-func (r *restyler) overKeyframe(casc cascaded) {
+func (r *restyler) overKeyframe(casc *cascaded) {
 	for i := range r.keyframe {
 		d := &r.keyframe[i]
+		if strings.HasPrefix(d.Name, "--") {
+			if !slices.ContainsFunc(casc.custom, func(c *Declaration) bool { return c.Name == d.Name && c.Important }) {
+				casc.custom = append(casc.custom, d)
+			}
+			continue
+		}
 		for _, name := range longhandsOf(d.Name) {
 			if casc.rtl && d.inline {
 				name = mirrored(name)
@@ -654,6 +665,7 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 func (x *ctx) cascaded(casc cascaded, root bool) {
 	x.rtl = casc.rtl
 	x.customs(casc.custom)
+	x.fontFirst(casc, root)
 	if !x.transitioning(casc) {
 		x.longhands(casc, root, x.over)
 		x.finish(root)
@@ -673,8 +685,39 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 	}
 	if over := x.transit(x.moving, next); len(over) > 0 {
 		*x, *x.c = start, c
-		x.longhands(casc, root, append(slices.Clip(x.over), over...))
+		all := append(slices.Clip(x.over), over...)
+		if slices.ContainsFunc(over, func(o override) bool { return o.custom != "" }) {
+			x.over = all
+			x.customs(casc.custom)
+		}
+		x.longhands(casc, root, all)
 		x.finish(root)
+	}
+}
+
+// fontFirst works the element's font out before its custom properties
+// again when a registered one read a unit of it, so that unit is the
+// element's own, as in Chrome.
+func (x *ctx) fontFirst(casc cascaded, root bool) {
+	if !x.fontRead || x.sized {
+		return
+	}
+	y, c := *x, *x.c
+	y.c = &c
+	for i := range longhands[:orderIndex[propFontSize]+1] {
+		y.apply(&longhands[i], casc.longhands[i])
+	}
+	x.em, x.sized = c.Font.Size, true
+	if root {
+		x.rem = c.Font.Size
+	}
+	saved := x.c.Font
+	x.c.Font = c.Font
+	x.customs(casc.custom)
+	x.c.Font = saved
+	x.em, x.sized, x.fontRead = x.parent.Font.Size, false, false
+	if root {
+		x.rem = initial.Font.Size
 	}
 }
 
@@ -811,32 +854,57 @@ var (
 	varsParsed = map[string][]Component{}
 )
 
-// customs sets the element's custom properties: the parent's, then its
-// own, each with its var() references substituted. A cycle or a missing
-// reference without fallback leaves the property unset.
+// customs sets the element's custom properties: the parent's, the
+// registered ones that don't inherit at their initial values, then its
+// own, each with its var() references substituted, and over them what
+// its animations and transitions set. A cycle or a missing reference
+// without fallback leaves an unregistered property unset; a registered
+// one computes as its syntax says.
 func (x *ctx) customs(decls []*Declaration) {
-	x.c.Vars = x.parent.Vars
-	if len(decls) == 0 {
-		return
+	x.inherited = x.env.props.inherited(x.parent.Vars, x.root)
+	x.c.Vars = x.inherited
+	if len(decls) > 0 {
+		x.raw = map[string]*Declaration{}
+		for _, d := range decls {
+			x.raw[d.Name] = d
+		}
+		x.vars = map[string][]Component{}
+		x.resolving = map[string]bool{}
+		vars := make(map[string]string, len(x.inherited)+len(decls))
+		for k, v := range x.inherited {
+			vars[k] = v
+		}
+		for name := range x.raw {
+			if v, ok := x.lookup(name); ok {
+				vars[name] = join(v)
+			} else {
+				delete(vars, name)
+			}
+		}
+		x.c.Vars = vars
 	}
-	x.raw = map[string]*Declaration{}
-	for _, d := range decls {
-		x.raw[d.Name] = d
-	}
-	x.vars = map[string][]Component{}
-	x.resolving = map[string]bool{}
-	vars := make(map[string]string, len(x.parent.Vars)+len(decls))
-	for k, v := range x.parent.Vars {
-		vars[k] = v
-	}
-	for name := range x.raw {
-		if v, ok := x.lookup(name); ok {
-			vars[name] = join(v)
+	copied := len(decls) > 0
+	for _, o := range x.over {
+		if o.custom == "" {
+			continue
+		}
+		if !copied {
+			copied = true
+			vars := make(map[string]string, len(x.c.Vars)+1)
+			for k, v := range x.c.Vars {
+				vars[k] = v
+			}
+			x.c.Vars = vars
+		}
+		if o.unset {
+			delete(x.c.Vars, o.custom)
 		} else {
-			delete(vars, name)
+			x.c.Vars[o.custom] = o.text
+		}
+		if x.vars != nil {
+			delete(x.vars, o.custom)
 		}
 	}
-	x.c.Vars = vars
 }
 
 func (x *ctx) lookup(name string) ([]Component, bool) {
@@ -845,7 +913,7 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 	}
 	d, own := x.raw[name]
 	if !own {
-		if text, ok := x.parent.Vars[name]; ok {
+		if text, ok := x.c.Vars[name]; ok {
 			return parsedVar(text), true
 		}
 		return nil, false
@@ -856,7 +924,14 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 	x.resolving[name] = true
 	v, ok := x.substitute(d.Value)
 	x.resolving[name] = false
-	if !ok || globalKeyword(v) != "" {
+	if r := x.env.props.get(name); r != nil {
+		var text string
+		text, ok = x.registered(r, v, ok)
+		v = nil
+		if ok {
+			v = parsedVar(text)
+		}
+	} else if !ok || globalKeyword(v) != "" {
 		v, ok = x.customKeyword(name, v, ok)
 	}
 	x.vars[name] = v
@@ -1341,7 +1416,10 @@ func transitionList(trans [5][]Component) []style.Transition {
 	}
 	var out []style.Transition
 	for i, p := range props {
-		t := style.Transition{Property: strings.ToLower(p[0].Text)}
+		t := style.Transition{Property: p[0].Text}
+		if !strings.HasPrefix(t.Property, "--") {
+			t.Property = strings.ToLower(t.Property)
+		}
 		dur, _ := duration(lists[1][i%len(lists[1])][0])
 		t.Duration = float32(max(dur, 0))
 		t.Easing = lists[2][i%len(lists[2])][0].String()

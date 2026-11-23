@@ -27,7 +27,7 @@ func TestWhatAKeyframeAndATransitionTake(t *testing.T) {
 	for name, want := range map[string]bool{
 		"width": true, "font-size": true, "margin": true, "border": true, "text-align": true,
 		"display": true, "transition-behavior": false, "animation-name": false, "animation": false,
-		"transition": false, "--x": false,
+		"transition": false, "--x": true,
 	} {
 		if animates(name) != want {
 			t.Errorf("animates(%s) = %v", name, !want)

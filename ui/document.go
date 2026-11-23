@@ -82,6 +82,8 @@ type Document struct {
 	// pageSheets are the sheets its @import rules name (FetchSheets).
 	pageSheets pageSheets
 	trans      *css.Transitions
+	// registered are the custom properties RegisterProperty registered.
+	registered []css.PropertyDefinition
 	emoji      *twod.EmojiSet
 	// clock is the World's real time at the last Draw, -1 before it.
 	clock float32

@@ -198,6 +198,8 @@ type Sheet struct {
 	imports []Import
 	base    *Sheet
 	spliced []splice
+	// properties are its @property rules, in order.
+	properties []*registration
 }
 
 // anonymous begins the name a layer without one goes by.
@@ -269,6 +271,9 @@ func (s *Sheet) String() string {
 			b.WriteString("@media " + s.media[m].text + " { ")
 		}
 		b.WriteString(cs.String() + strings.Repeat(" }", len(cs.media)) + "\n")
+	}
+	for _, r := range s.properties {
+		b.WriteString(r.written + "\n")
 	}
 	return b.String()
 }
@@ -727,6 +732,8 @@ func (p *parser) atRule(t Token, in scope) {
 		p.scope(t, in)
 	case name == "counter-style":
 		p.counterStyle(t, in)
+	case name == "property":
+		p.propertyRule(t)
 	case name == "supports" && p.browser:
 		p.supports(t, in)
 	case name == atLayer && p.browser:
@@ -901,7 +908,7 @@ func animates(name string) bool {
 		return true
 	}
 	if strings.HasPrefix(name, "--") {
-		return false
+		return true
 	}
 	return slices.ContainsFunc(longhandsOf(name), func(l string) bool {
 		p, ok := props[l]

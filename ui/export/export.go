@@ -5,6 +5,7 @@ package export
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -104,6 +105,18 @@ func Write(w io.Writer, d *ui.Document, opts ...Option) error {
 		b.WriteString(states(inline(d, s.String(), s.URL)))
 	}
 	b.WriteString("</style>\n")
+	if defs := d.RegisteredProperties(); len(defs) > 0 {
+		b.WriteString("<script>\n")
+		for _, def := range defs {
+			o := map[string]any{"name": def.Name, "syntax": def.Syntax, "inherits": def.Inherits}
+			if def.Initial != "" {
+				o["initialValue"] = def.Initial
+			}
+			js, _ := json.Marshal(o)
+			b.WriteString("CSS.registerProperty(" + string(js) + ");\n")
+		}
+		b.WriteString("</script>\n")
+	}
 	b.WriteString(showModals)
 	b.WriteString(scrollTo)
 	b.WriteString(selectText)
