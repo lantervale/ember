@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 func TestHasMatchesByWhatIsBelowOrAfter(t *testing.T) {
@@ -265,6 +266,16 @@ func TestAChangeHasReadsRestylesItsAnchor(t *testing.T) {
 			func(x tree) *dom.Node { return x.inner }},
 		{"inside :is()", ":is(.card:has(:checked), .none) p { color: #f00 }",
 			func(x tree) { x.img.SetState(dom.Checked, true) }, func(x tree) *dom.Node { return x.p }},
+		{"a class above through :is()", ".card:has(:is(.dark img)) { color: #f00 }",
+			func(x tree) { x.root.Children()[0].AddClass("dark") }, func(x tree) *dom.Node { return x.card }},
+		{"a class above through :not()", ".card:not(:has(img:not(.light *))) { color: #f00 }",
+			func(x tree) { x.root.AddClass("light") }, func(x tree) *dom.Node { return x.card }},
+		{"a state above through :is()", ".card:has(:is(:hover > .card > img)) { color: #f00 }",
+			func(x tree) { x.root.Children()[0].SetState(dom.Hover, true) }, func(x tree) *dom.Node { return x.card }},
+		{"a sibling before through :is()", "p:has(:is(.card ~ .on span)) { color: #f00 }",
+			func(x tree) { x.after.AddClass("on") }, func(tree) *dom.Node { return nil }},
+		{"a sibling's class through :is()", "div:has(:is(.on ~ div span)) { color: #f00 }",
+			func(x tree) { x.next.AddClass("on") }, func(x tree) *dom.Node { return x.after }},
 	}
 	for _, step := range steps {
 		x := build()
@@ -342,6 +353,40 @@ func TestLangAndEditingReadAboveTheSubject(t *testing.T) {
 	tr.Compute(root, sheets)
 	if styleOf(span).Color != red || styleOf(span).Background == red {
 		t.Error("the Document's language restyles what reads it")
+	}
+}
+
+func TestAutoDirFollowsTheTextBelow(t *testing.T) {
+	red := hex("#f00")
+	word := dom.NewText("hello")
+	span := with(el(dom.Span, "s"), word)
+	auto := with(el(dom.Div, "auto"), span)
+	auto.SetAttr("dir", "auto")
+	inner := with(el(dom.P, "inner"), dom.NewText("x"))
+	inner.SetAttr("dir", "ltr")
+	bdi := with(el(dom.Bdi, "bdi"), dom.NewText("abc"))
+	root := page(auto, with(el(dom.Div, "outer"), bdi))
+	auto.Append(inner)
+	sheets := []*Sheet{sheet(t, "span, p, bdi { color: #000 } :dir(rtl) { color: #f00 }")}
+	tr := NewTransitions()
+	tr.Compute(root, sheets)
+	if styleOf(span).Color == red || styleOf(auto).Dir == style.RTL {
+		t.Fatal("rtl before the change")
+	}
+	word.SetText("שלום")
+	bdi.Children()[0].SetText("עברית")
+	tr.Compute(root, sheets)
+	if styleOf(span).Color != red || styleOf(auto).Dir != style.RTL || styleOf(bdi).Color != red {
+		t.Error("the text turning right to left restyles what reads :dir()")
+	}
+	if styleOf(inner).Color == red {
+		t.Error("an element of its own dir keeps it")
+	}
+	span.Remove(word)
+	span.Append(dom.NewText("hi"))
+	tr.Compute(root, sheets)
+	if styleOf(span).Color == red || styleOf(auto).Dir != style.LTR {
+		t.Error("new text left to right restyles it back")
 	}
 }
 

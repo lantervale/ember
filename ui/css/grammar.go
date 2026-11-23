@@ -211,6 +211,24 @@ func checkScrollbarColor(v []Component) error {
 	return repeated(colorTerm, 2)(v)
 }
 
+// checkSnapType takes none, or an axis with mandatory or proximity after
+// it or not.
+func checkSnapType(v []Component) error {
+	axes := words("x", "y", kwBlock, kwInline, kwBoth)
+	switch {
+	case len(v) == 1 && isWord(v[0], kwNone):
+		return nil
+	case len(v) == 1:
+		return axes(v[0])
+	case len(v) == 2:
+		if err := axes(v[0]); err != nil {
+			return err
+		}
+		return words("mandatory", "proximity")(v[1])
+	}
+	return errors.New("expected none, or an axis and mandatory or proximity")
+}
+
 // checkScrollbarGutter takes auto, or stable with both-edges in either
 // order.
 func checkScrollbarGutter(v []Component) error {
@@ -242,13 +260,25 @@ func checkMaskPosition(v []Component) error {
 	return checkPosition(v)
 }
 
-// checkContainerType takes normal, size or inline-size: a container of
-// its scroll state is not supported.
+// checkContainerType takes normal, or size or inline-size and
+// scroll-state, either or both in any order. anchored, which Chrome
+// reads too, is not supported.
 func checkContainerType(v []Component) error {
-	if slices.ContainsFunc(v, func(c Component) bool { return isWord(c, "scroll-state") }) {
-		return fmt.Errorf("container-type: scroll-state is not supported")
+	if len(v) == 1 && isWord(v[0], "normal") {
+		return nil
 	}
-	return single(words("normal", "size", "inline-size"))(v)
+	sized, scrolled := false, false
+	for _, c := range v {
+		switch {
+		case isWord(c, "size", "inline-size") && !sized:
+			sized = true
+		case isWord(c, kwScrollState) && !scrolled:
+			scrolled = true
+		default:
+			return fmt.Errorf("expected normal, or size or inline-size and scroll-state, found %q", join(v))
+		}
+	}
+	return nil
 }
 
 // checkContainerName takes none, or names none of which is a word a
@@ -452,21 +482,36 @@ var checks = map[string]check{
 	"color-scheme":              checkColorScheme,
 	"cursor": single(words("auto", "default", "none", "pointer", "text", "move", "grab", "grabbing", "not-allowed",
 		"crosshair", "help", "wait", "progress", "ew-resize", "ns-resize", "col-resize", "row-resize")),
-	"text-overflow":     single(words("clip", "ellipsis")),
-	"scrollbar-width":   single(words("auto", "thin", "none")),
-	"scrollbar-color":   checkScrollbarColor,
-	"scrollbar-gutter":  checkScrollbarGutter,
-	"list-style-type":   checkListStyle,
-	"list-style-image":  checkListImage,
-	"content":           checkContent,
-	"counter-reset":     checkCounters,
-	"counter-increment": checkCounters,
-	"counter-set":       checkCounters,
-	"quotes":            checkQuotes,
-	"visibility":        single(words("visible", "hidden", "collapse")),
-	"pointer-events":    single(words("auto", "none")),
-	"app-region":        single(words("none", "drag", "no-drag")),
-	"user-select":       single(words("auto", "text", "none", "all")),
+	"text-overflow":         single(words("clip", "ellipsis")),
+	"scrollbar-width":       single(words("auto", "thin", "none")),
+	"scrollbar-color":       checkScrollbarColor,
+	"scrollbar-gutter":      checkScrollbarGutter,
+	propSnapType:            checkSnapType,
+	propSnapAlign:           repeated(words(kwNone, kwStart, kwEnd, kwCenter), 2),
+	propSnapStop:            single(words(kwNormal, "always")),
+	"scroll-padding-top":    single(either(sizeLP, words(kwAuto))),
+	"scroll-padding-right":  single(either(sizeLP, words(kwAuto))),
+	"scroll-padding-bottom": single(either(sizeLP, words(kwAuto))),
+	"scroll-padding-left":   single(either(sizeLP, words(kwAuto))),
+	"scroll-margin-top":     single(length),
+	"scroll-margin-right":   single(length),
+	"scroll-margin-bottom":  single(length),
+	"scroll-margin-left":    single(length),
+	propScrollBehavior:      single(words(kwAuto, "smooth")),
+	propOverscrollX:         single(words(kwAuto, kwContain, kwNone)),
+	propOverscrollY:         single(words(kwAuto, kwContain, kwNone)),
+	"list-style-type":       checkListStyle,
+	"list-style-image":      checkListImage,
+	"content":               checkContent,
+	"counter-reset":         checkCounters,
+	"counter-increment":     checkCounters,
+	"counter-set":           checkCounters,
+	"quotes":                checkQuotes,
+	"visibility":            single(words("visible", "hidden", "collapse")),
+	"pointer-events":        single(words("auto", "none")),
+	"app-region":            single(words("none", "drag", "no-drag")),
+	"user-select":           single(words("auto", "text", "none", "all")),
+	"list-style-position":   single(words("inside", "outside")),
 
 	"background-color":      single(colorTerm),
 	"background-image":      commaList(single(either(words("none"), imageTerm))),
@@ -483,7 +528,7 @@ var checks = map[string]check{
 	"mask-origin":           commaList(single(maskBox)),
 	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
 	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
-	"mask-composite":        commaList(single(words("add", "subtract", "intersect", "exclude"))),
+	"mask-composite":        commaList(single(checkMaskComposite)),
 	"clip-path":             checkClipPath,
 	"text-shadow":           checkTextShadow,
 	"image-rendering":       single(words("auto", "pixelated")),
@@ -500,7 +545,7 @@ var checks = map[string]check{
 	"transform":             checkTransform,
 	"filter":                checkFilter,
 	"backdrop-filter":       checkFilter,
-	"mix-blend-mode":        single(blendMode),
+	"mix-blend-mode":        single(either(blendMode, words("plus-lighter"))),
 	"isolation":             single(words("auto", "isolate")),
 	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,

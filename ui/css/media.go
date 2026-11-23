@@ -91,6 +91,9 @@ const (
 	mediaUnknown
 	// mediaStyle is a container's custom property, asked in style().
 	mediaStyle
+	// mediaScrollState is a feature of a container's scroll state, asked
+	// in scroll-state().
+	mediaScrollState
 )
 
 type mediaCond struct {
@@ -241,6 +244,10 @@ type subject struct {
 	of    *dom.Node
 	env   *measures
 	units *Units
+	// scroll is a scroll-state container's state, nil for any other;
+	// rtl its direction.
+	scroll *ScrollState
+	rtl    bool
 }
 
 func viewportSubject(m Media) *subject {
@@ -298,6 +305,8 @@ func (c *mediaCond) eval(s *subject) tri {
 	case mediaStyle:
 		v, has := s.vars[c.name]
 		return triOf(has && (!c.valued || v == c.word))
+	case mediaScrollState:
+		return c.scrollEval(s)
 	case mediaFeature:
 		// below
 	}
@@ -345,6 +354,8 @@ type mediaParser struct {
 	browser   bool
 	container bool
 	inStyle   bool
+	// inScrollState is set inside scroll-state().
+	inScrollState bool
 	// standardStyle is set once a style() query names a standard
 	// property: Chrome holds no condition that has one, whatever its other
 	// queries answer.
@@ -470,8 +481,11 @@ func (p *mediaParser) condition(toks []Component, orOK bool) (*mediaCond, bool) 
 
 func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 	switch {
-	case c.Kind == Function && p.container && !p.inStyle && strings.EqualFold(c.Text, "style"):
+	case c.Kind == Function && p.container && !p.inStyle && !p.inScrollState && strings.EqualFold(c.Text, "style"):
 		return p.styleQuery(c), true
+	case c.Kind == Function && p.container && !p.inStyle && !p.inScrollState &&
+		strings.EqualFold(c.Text, kwScrollState):
+		return p.scrollStateQuery(c), true
 	case c.Kind == Function:
 		p.warn(c.Pos, "%s: %s() is not supported; its query never holds", p.rule(), c.Text)
 		return mediaCond{op: mediaUnknown}, true
@@ -490,6 +504,9 @@ func (p *mediaParser) inParens(c Component) (mediaCond, bool) {
 	}
 	if p.inStyle {
 		return p.styleFeature(c, c.Args), true
+	}
+	if p.inScrollState {
+		return p.scrollStateFeature(c, inner), true
 	}
 	return p.feature(c, inner), true
 }

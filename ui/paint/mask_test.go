@@ -112,14 +112,14 @@ func TestMaskLayersJoinAsTheirCompositingSays(t *testing.T) {
 		}
 	}
 	const content = "begin, rect, rect, end 0, "
-	for c, want := range map[style.MaskComposite]string{
-		style.CompositeAdd:       "begin, push 10, pop, push 10, pop, end 0, cut 2",
-		style.CompositeIntersect: "begin, begin, push 10, pop, end 0, cut 2, push 10, pop, pop, end 0, cut 3",
-		style.CompositeSubtract:  "begin, begin, push 10, pop, end 0, cut out 2, push 10, pop, pop, end 0, cut 3",
-		style.CompositeExclude: "begin, begin, push 10, pop, end 0, begin, push 10, pop, end 0, cut out 2, show(), pop, " +
+	for c, want := range []string{ // add, subtract, intersect and exclude
+		"begin, push 10, pop, push 10, pop, end 0, cut 2",
+		"begin, begin, push 10, pop, end 0, cut out 2, push 10, pop, pop, end 0, cut 3",
+		"begin, begin, push 10, pop, end 0, cut 2, push 10, pop, pop, end 0, cut 3",
+		"begin, begin, push 10, pop, end 0, begin, push 10, pop, end 0, cut out 2, show(), pop, " +
 			"cut out 3, sum 2, pop, end 0, cut 4",
 	} {
-		assert.Equal(t, content+want+", show(), pop", maskedPage(two(c)).steps(), "composite %d", c)
+		assert.Equal(t, content+want+", show(), pop", maskedPage(two(style.MaskComposite(c))).steps(), "composite %d", c)
 	}
 
 	r := maskedPage(func(s *style.Computed) {

@@ -20,7 +20,7 @@ func TestSupportsAppliesWhereUISupportsWhatItAsks(t *testing.T) {
 		"(-moz-appearance: none)":                          false,
 		"(display: -webkit-box)":                           true,
 		"(backdrop-filter: blur(4px))":                     true,
-		"(mix-blend-mode: plus-lighter)":                   false,
+		"(mix-blend-mode: plus-lighter)":                   true,
 		"(foo: bar)":                                       false,
 		"not (display: grid)":                              false,
 		"not (foo: bar)":                                   true,

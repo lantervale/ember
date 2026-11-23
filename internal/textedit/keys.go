@@ -10,17 +10,23 @@ import (
 type Platform int
 
 const (
-	// Others is Windows and Linux: Control for shortcuts, Control+arrows
+	// Others is Linux and the rest: Control for shortcuts, Control+arrows
 	// by word.
 	Others Platform = iota
 	// Mac is macOS: Command for shortcuts and line ends, Option by word.
 	Mac
+	// Windows has the keys of Others; a double click there takes the
+	// spaces after the word too.
+	Windows
 )
 
 // Current is the platform the program runs on.
 func Current() Platform {
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		return Mac
+	case "windows":
+		return Windows
 	}
 	return Others
 }
@@ -116,7 +122,7 @@ func Resolve(p Platform, key input.Key, m Mods) (Action, bool) {
 	case input.KeyZ:
 		a = pick(cmd, pick(m.Shift, Redo, Undo), None)
 	case input.KeyY:
-		a = pick(cmd && p == Others, Redo, None)
+		a = pick(cmd && p != Mac, Redo, None)
 	case input.KeyUnknown, input.KeySpace, input.KeyApostrophe, input.KeyComma, input.KeyMinus, input.KeyPeriod,
 		input.KeySlash, input.Key0, input.Key1, input.Key2, input.Key3, input.Key4, input.Key5, input.Key6, input.Key7,
 		input.Key8, input.Key9, input.KeySemicolon, input.KeyEqual, input.KeyB, input.KeyD, input.KeyE, input.KeyF,

@@ -42,6 +42,9 @@ type Pipeline struct {
 	Dirty   Dirty
 	// StyledState is the node's state when css last styled it.
 	StyledState State
+	// StyledDir is, for an element of dir="auto" or a bdi, the direction
+	// its text had when css last styled it, "" for another element.
+	StyledDir string
 	// Style is the node's computed style; a text node's is its parent's.
 	Style *style.Computed
 	// Shown is what paint draws: Style itself, or a copy with running
@@ -93,9 +96,13 @@ type Pipeline struct {
 	Language string
 	// Marker is the style of a list item's ::marker when a rule styles it,
 	// and MarkerText its content when that is not normal (HasMarkerText).
+	// MarkerNode stands for that ::marker while a rule styles it, as a
+	// generated node does, its transitions kept by it and its Shown what
+	// paint draws.
 	Marker        *style.Computed
 	MarkerText    string
 	HasMarkerText bool
+	MarkerNode    *Node
 	// Markup is what an svg element holds, as SVG, and picture the
 	// address of the picture it makes in the colour pictured.
 	Markup   string

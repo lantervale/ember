@@ -562,6 +562,12 @@ func (d *Document) textIn(e *Node) (Position, Position, bool) {
 // click takes it: across the text nodes the inline elements round p cut
 // it in, as Chrome reads wo<b>rd</b> as one word.
 func (d *Document) wordAt(p Position) (Position, Position) {
+	return d.wordSpan(p, false)
+}
+
+// wordSpan is wordAt, with the spaces and tabs after the word up to the
+// next line break when trailing is set.
+func (d *Document) wordSpan(p Position, trailing bool) (Position, Position) {
 	if d.mapOf(p.Node) == nil {
 		return p, p
 	}
@@ -602,7 +608,11 @@ func (d *Document) wordAt(p Position) (Position, Position) {
 		w, rest, state = uniseg.FirstWordInString(rest, state)
 		n := utf8.RuneCountInString(w)
 		if at < from+n || len(rest) == 0 {
-			return place(from, false), place(from+n, true)
+			to := from + n
+			for trailing && to < len(src) && (src[to] == ' ' || src[to] == '\t' || src[to] == ' ') {
+				to++
+			}
+			return place(from, false), place(to, true)
 		}
 		from += n
 	}

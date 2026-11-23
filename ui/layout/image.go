@@ -77,8 +77,8 @@ func pictureOf(e *dom.Node, st *style.Computed, images box.Images, fonts box.Fon
 		return size{brokenIcon, brokenIcon}, shape, false
 	case alt != "":
 		m := fonts.Metrics(st.Font)
-		return size{brokenIcon + fonts.Advance(st.Font, alt), max(brokenIcon, m.Ascent+m.Descent+m.LineGap)},
-			shape, false
+		w := brokenIcon + fonts.Advance(st.Font, alt) + st.Spacing(alt)
+		return size{w, max(brokenIcon, m.Ascent+m.Descent+m.LineGap)}, shape, false
 	}
 	return size{}, shape, false
 }

@@ -111,3 +111,17 @@ func TestDrawsSaysWhatShowsWhole(t *testing.T) {
 	s.SetEmoji(func(c string) bool { return c == "🔥" })
 	assert.True(t, s.Draws(f, "hot 🔥"))
 }
+
+func TestASpaceGoLacksIsMeasuredAsChromeFallsBackForIt(t *testing.T) {
+	s := Builtin()
+	f := style.Font{Family: []string{"Go"}, Size: 16, Weight: 400}
+	x := s.Advance(f, "x")
+	for text, want := range map[string]float32{
+		" ": 16, " ": 16, " ": 8, " ": 8, " ": 16.0 / 3, " ": 4, " ": 3.2,
+		" ": 16.0 / 6, " ": 1, " ": 16 * 4.0 / 18, " ": s.Advance(f, "."),
+	} {
+		assert.InDelta(t, 2*x+want, s.Advance(f, "x"+text+"x"), 1e-3, "%U", []rune(text)[0])
+	}
+	bold := style.Font{Family: []string{"Go"}, Size: 24, Weight: 700}
+	assert.InDelta(t, 24+4.8, s.Advance(bold, "  "), 1e-3, "an em of the face's size, whatever its weight")
+}

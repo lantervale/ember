@@ -18,6 +18,7 @@ var logical = func() map[string]string {
 		"inset-block-start": "top", "inset-block-end": "bottom",
 		"inset-inline-start": "left", "inset-inline-end": "right",
 		"overflow-inline": "overflow-x", "overflow-block": "overflow-y",
+		"overscroll-behavior-inline": propOverscrollX, "overscroll-behavior-block": propOverscrollY,
 		"border-start-start-radius": "border-top-left-radius", "border-start-end-radius": "border-top-right-radius",
 		"border-end-start-radius": "border-bottom-left-radius", "border-end-end-radius": "border-bottom-right-radius",
 	}
@@ -27,6 +28,8 @@ var logical = func() map[string]string {
 		m["margin-"+side] = "margin-" + physical
 		m["padding-"+side] = "padding-" + physical
 		m["border-"+side] = "border-" + physical
+		m["scroll-padding-"+side] = "scroll-padding-" + physical
+		m["scroll-margin-"+side] = "scroll-margin-" + physical
 		for _, part := range []string{"width", "style", "color"} {
 			m["border-"+side+"-"+part] = "border-" + physical + "-" + part
 		}
@@ -39,7 +42,8 @@ var logical = func() map[string]string {
 //
 //nolint:gochecknoglobals // a fixed set
 var inlineShorthands = func() map[string]bool {
-	m := map[string]bool{shortPaddingInline: true, shortMarginInline: true, shortInsetInline: true}
+	m := map[string]bool{shortPaddingInline: true, shortMarginInline: true, shortInsetInline: true,
+		shortScrollPaddingInline: true, shortScrollMarginInline: true}
 	for name := range shorthands {
 		if strings.HasPrefix(name, "border-inline") {
 			m[name] = true

@@ -112,6 +112,7 @@ func TestBrowserSheetsLetAPageBeSelected(t *testing.T) {
 }
 
 func TestADoubleClickTakesTheWordAndATripleTheBlock(t *testing.T) {
+	ui.SetPlatform(t, textedit.Mac)
 	p := ui.P(ui.Text("The quick "), ui.Strong(ui.Text("brown")), ui.Text(" fox"))
 	next := ui.P(ui.Text("jumps over"))
 	l := selectableDoc(t, "", p, next)
@@ -134,6 +135,42 @@ func TestADoubleClickTakesTheWordAndATripleTheBlock(t *testing.T) {
 		l.up()
 	}
 	assert.Equal(t, "The quick brown fox", l.doc.Selection().Text, "the block, through its inline elements")
+}
+
+func TestADoubleClickTakesTheSpacesAfterTheWordOnWindowsOnly(t *testing.T) {
+	for _, c := range []struct {
+		platform textedit.Platform
+		at       int
+		want     string
+	}{
+		{textedit.Mac, 1, "The"},
+		{textedit.Others, 1, "The"},
+		{textedit.Windows, 1, "The "},
+		{textedit.Mac, 5, "quick"},
+		{textedit.Windows, 5, "quick   "},
+		{textedit.Windows, 3, " "},
+	} {
+		ui.SetPlatform(t, c.platform)
+		p := ui.P(ui.Text("The qu"), ui.Strong(ui.Text("ick")), ui.Text("   brown"))
+		l := selectableDoc(t, "", p)
+		at := l.at(t, p, c.at)
+		for range 2 {
+			l.down(at)
+			l.up()
+		}
+		assert.Equal(t, c.want, l.doc.Selection().Text, "platform %d at %d", c.platform, c.at)
+	}
+}
+
+func TestADoubleClickOnWindowsStopsAtTheLineBreak(t *testing.T) {
+	ui.SetPlatform(t, textedit.Windows)
+	p := ui.P(ui.Style("white-space: pre"), ui.Text("fox  \njumps"))
+	l := selectableDoc(t, "", p)
+	for range 2 {
+		l.down(l.at(t, p, 1))
+		l.up()
+	}
+	assert.Equal(t, 5, l.doc.Selection().Focus.Offset)
 }
 
 func TestShiftClickMovesTheFocusAndAClickElsewhereClears(t *testing.T) {

@@ -50,6 +50,9 @@ type Fragment struct {
 	Ellipsis bool
 	// RTL is set when Text is shown right to left: Shown has it from the left.
 	RTL bool
+	// Unspaced is set when Text starts with a space that starts its block's
+	// text: word-spacing does not widen that one, as in Chrome.
+	Unspaced bool
 	// Style is the text's style on a first line a ::first-line styles,
 	// nil where the run's own draws it. Only a run's first fragments
 	// have one.
@@ -126,8 +129,10 @@ type Box struct {
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Picture is the address of the picture a Marker shows, its item's
-	// list-style-image, "" for its text or its bullet.
-	Picture string
+	// list-style-image, "" for its text or its bullet; Gradient the
+	// gradient it shows in its place.
+	Picture  string
+	Gradient *style.Gradient
 	// Fragments is an inline element's border box on each line it spans,
 	// in the box's space: the first holds its left edge and the last its
 	// right, as Chrome's getClientRects. With Broken they are a block's

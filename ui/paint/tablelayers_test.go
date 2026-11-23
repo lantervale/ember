@@ -79,7 +79,7 @@ func TestATableDrawsItsCollapsedBordersOverItsCellsAndTheyDrawNone(t *testing.T)
 	assert.Equal(t, white, rects[1].Color)
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 10, W: 42, H: 2}}, rectsOf(r, black)[:1],
 		"the grid's edges, after the cells' backgrounds")
-	assert.Greater(t, len(rectsOf(r, black)), 2, "a dashed edge in dashes")
+	assert.Greater(t, len(r.of("round")), 2, "a dashed edge in dashes")
 	dark, light := shades(green)
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 30, W: 42, H: 2}}, rectsOf(r, dark), "a groove dark, then light")
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 32, W: 42, H: 2}}, rectsOf(r, light))
