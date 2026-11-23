@@ -86,12 +86,10 @@ type vendor struct {
 
 // Why a -webkit- property is in webkit.own.
 const (
-	ownChrome  = "Chrome's own, with no plain property"
-	ownUI      = "a property of ui under this very name"
-	ownOldFlex = "the old flexbox of display: -webkit-box, with no plain property"
-	ownAxis    = "one axis of the plain property, which has no such longhand"
-	ownMask    = "Chrome's own masks, kept apart from mask and its longhands"
-	ownBreak   = "takes always, which the break-* property it sets refuses"
+	ownChrome = "Chrome's own, with no plain property"
+	ownUI     = "a property of ui under this very name"
+	ownAxis   = "one axis of the plain property, which has no such longhand"
+	ownBreak  = "takes always, which the break-* property it sets refuses"
 )
 
 // webkit is -webkit-, the prefix Chrome itself reads. Its property tables
@@ -140,11 +138,11 @@ var webkit = vendor{
 		"font-smoothing": ownUI, "text-fill-color": ownUI, "text-stroke": ownUI, "text-stroke-color": ownUI,
 		"text-stroke-width": ownUI,
 		"border-image":      "fills the middle without the fill word, where border-image leaves it empty",
-		"box-align":         ownOldFlex, "box-direction": ownOldFlex, "box-flex": ownOldFlex,
-		"box-ordinal-group": ownOldFlex, "box-orient": ownUI, "box-pack": ownOldFlex,
-		"mask-box-image": ownMask, "mask-box-image-outset": ownMask,
-		"mask-box-image-repeat": ownMask, "mask-box-image-slice": ownMask, "mask-box-image-source": ownMask,
-		"mask-box-image-width": ownMask, "mask-position-x": ownMask, "mask-position-y": ownMask,
+		"box-align":         ownUI, "box-direction": ownUI, "box-flex": ownUI,
+		"box-ordinal-group": ownUI, "box-orient": ownUI, "box-pack": ownUI,
+		"mask-box-image": ownUI, "mask-box-image-outset": ownUI,
+		"mask-box-image-repeat": ownUI, "mask-box-image-slice": ownUI, "mask-box-image-source": ownUI,
+		"mask-box-image-width": ownUI, "mask-position-x": ownUI, "mask-position-y": ownUI,
 		"perspective-origin-x": ownAxis, "perspective-origin-y": ownAxis, "transform-origin-x": ownAxis,
 		"transform-origin-y": ownAxis, "transform-origin-z": ownAxis,
 		"border-horizontal-spacing": ownChrome, "border-vertical-spacing": ownChrome,

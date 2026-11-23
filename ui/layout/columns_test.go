@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
@@ -375,4 +376,58 @@ func TestASpannerHoldsAPositionedBoxWhereItsLineHasIt(t *testing.T) {
 	assert.Equal(t, geom.Rect{Y: 20, W: 400, H: 10}, tr.Of[s].Rect(), "across the columns, below the first row")
 	assert.Equal(t, float32(20), tr.Of[abs].Rect().X, "after the text before it")
 	assert.Equal(t, float32(20), tr.Of[abs].Rect().Y)
+}
+
+func TestAFlexRowsItemsAreCutWhereTheColumnEnds(t *testing.T) {
+	a, b := para(4, nil), para(2, nil)
+	f := el(dom.Div, func(st *style.Computed) { st.Display = style.FlexDisplay }, a, b)
+	m := multicol(2, nil, f)
+	tr := lay(m, 600)
+	assert.Equal(t, float32(20), tr.Of[m].Size.Y)
+	assert.Equal(t, []geom.Rect{{W: 190, H: 20}, {X: 210, W: 190, H: 20}}, parts(tr.Of[f]))
+	assert.Equal(t, []fragmentAt{{"H", 0, 0}, {"H", 0, 10}, {"H", 210, 0}, {"H", 210, 10}}, fragments(tr.Of[a]))
+	assert.Len(t, parts(tr.Of[b]), 2, "stretched as tall as the line, cut with it")
+}
+
+func TestAForcedBreakCutsABoxThatAvoidsBreaks(t *testing.T) {
+	a := para(2, nil)
+	b := para(2, func(st *style.Computed) { st.BreakBefore = style.BreakColumn })
+	avoid := el(dom.Div, func(st *style.Computed) { st.Display, st.BreakInsideAvoid = style.Block, true }, a, b)
+	m := multicol(2, nil, avoid)
+	tr := lay(m, 600)
+	assert.Equal(t, geom.Rect{X: 210, W: 190, H: 20}, tr.Of[b].Rect())
+	assert.Len(t, parts(tr.Of[avoid]), 2)
+}
+
+func TestASpannerDeeperDownSpansTheColumns(t *testing.T) {
+	s := el(dom.Div, func(st *style.Computed) { st.Display, st.ColumnSpanAll = style.Block, true }, text("H"))
+	a, b := para(3, nil), para(4, nil)
+	w := el(dom.Div, block, a, s, b)
+	m := multicol(2, nil, w)
+	tr := lay(m, 600)
+	assert.Equal(t, geom.Rect{Y: 20, W: 400, H: 10}, tr.Of[s].Rect(), "across the columns, below the first row")
+	assert.Equal(t, []geom.Rect{{W: 190, H: 20}, {X: 210, W: 190, H: 10}, {Y: 30, W: 190, H: 20},
+		{X: 210, Y: 30, W: 190, H: 20}}, parts(tr.Of[w]), "the block round it shows on either side of it")
+	assert.Equal(t, float32(50), tr.Of[m].Size.Y)
+
+	s = el(dom.Div, func(st *style.Computed) { st.Display, st.ColumnSpanAll = style.Block, true }, text("H"))
+	padded := el(dom.Div, func(st *style.Computed) { st.Display, st.Padding.Top = style.Block, style.Px(1) },
+		para(2, nil), s)
+	tr = lay(multicol(2, nil, padded), 600)
+	assert.Equal(t, float32(190), tr.Of[s].Size.X, "a block with padding round it keeps it in its column")
+}
+
+func TestATablesSpacingBelowItsLastRowGivesWayAtTheColumnsEnd(t *testing.T) {
+	var rows []*dom.Node
+	for range 4 {
+		rows = append(rows, el(dom.Tr, nil, el(dom.Td, block, text("H"))))
+	}
+	table := el(dom.Table, func(st *style.Computed) { st.BorderSpacing = [2]float32{0, 4} }, el(dom.Tbody, nil, rows...))
+	m := multicol(2, nil, table)
+	tr := lay(m, 600)
+	assert.Equal(t, float32(30), tr.Of[m].Size.Y, "two rows a column")
+	got := parts(tr.Of[table])
+	require.Len(t, got, 2)
+	assert.Equal(t, float32(30), got[0].H)
+	assert.Equal(t, float32(28), got[1].H, "two rows, the spacing between and below them, which the column has room for")
 }

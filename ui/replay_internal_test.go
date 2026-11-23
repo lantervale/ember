@@ -80,8 +80,8 @@ func TestContentScrolledUnderAStillPointerTakesTheHover(t *testing.T) {
 
 	frames(3)
 	win.Input().AddWheel(geom.V2(0, 1))
-	frames(2)
-	assert.False(t, rows[4].State().Has(dom.Hover), "a wheel turn moves it on too, the frame after it scrolls")
+	frames(14)
+	assert.False(t, rows[4].State().Has(dom.Hover), "a wheel turn moves it on too, as it glides")
 }
 
 func TestAHiddenButtonLeavesTheTabOrderTheNextFrame(t *testing.T) {

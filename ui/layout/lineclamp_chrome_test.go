@@ -80,6 +80,27 @@ p { margin: 4px 0 } .three { line-clamp: 3 } .s { height: 10px; padding: 5px }`
 			ui.Div(ui.Class("c"), ui.P(ui.Text("first")), ui.P(ui.Text("second")))),
 		"sizes of its own": styled(sheet, ui.Div(ui.Class("c", "s"), ui.Text(long)),
 			ui.Div(ui.Class("c"), ui.Style("display: inline-block"), ui.Text(long))),
+		"no ellipsis": styled(sheet+` .n { line-clamp: 2 no-ellipsis } .k { line-clamp: no-ellipsis 2 }`,
+			ui.Div(ui.Class("c", "n"), ui.Span(ui.Text(long))), ui.Div(ui.Class("c", "k"), ui.Text(long))),
+		"no ellipsis ending inside a block": styled(sheet+` .n { line-clamp: 2 no-ellipsis } .b { margin: 6px 0 9px }`,
+			ui.Div(ui.Class("c", "n"), ui.P(ui.Text("one")), ui.P(ui.Text("two")), ui.P(ui.Text("three"))),
+			ui.Div(ui.Class("c", "n"), ui.P(ui.Text("one")), ui.Div(ui.Class("framed", "b"), ui.Text("two")),
+				ui.P(ui.Text("three"))),
+			ui.Div(ui.Class("c", "n"), ui.Div(ui.Class("framed", "b"), ui.Text(long)), ui.P(ui.Text("after"))),
+			ui.Div(ui.Class("c", "n"), ui.P(ui.Text("one")), ui.P(ui.Text("two")))),
+		"auto, at the last line the height holds": styled(sheet+` .a { line-clamp: auto } .m { max-height: 45px }
+.h { height: 45px } .n { line-clamp: no-ellipsis }`,
+			ui.Div(ui.Class("c", "a", "m"), ui.Text(long+" "+long)),
+			ui.Div(ui.Class("c", "a", "h"), ui.Text(long+" "+long)),
+			ui.Div(ui.Class("c", "a"), ui.Text(long)),
+			ui.Div(ui.Class("c", "a", "m"), ui.Text("one two")),
+			ui.Div(ui.Class("c", "n", "m"), ui.Text(long+" "+long)),
+			ui.Div(ui.Class("c", "a", "framed"), ui.Style("max-height: 80px"), ui.P(ui.Text("one")),
+				ui.Div(ui.Class("framed"), ui.Text(long)), ui.P(ui.Text("after")))),
+		"-webkit-legacy clamps a vertical -webkit-box alone": styled(sheet+` .l { line-clamp: 2 -webkit-legacy }
+.v { display: -webkit-box; -webkit-box-orient: vertical }`,
+			ui.Div(ui.Class("c", "l"), ui.Text(long)),
+			ui.Div(ui.Class("c", "l", "v"), ui.Text(long), ui.Div(ui.Text("after")))),
 	}
 	for name, d := range cases {
 		t.Run(name, func(t *testing.T) {

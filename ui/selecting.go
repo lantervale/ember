@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/lantervale/ember/geom"
@@ -136,6 +137,7 @@ func (d *Document) heldRightSelection(in *input.State, at geom.Vec2) {
 		return
 	case !in.Down(input.MouseRight):
 		s.rightArmed = false
+		d.dragScrollEnded()
 		if s.rightDragged && s.anchor != s.focus {
 			d.events = append(d.events, RightDragSelected{Node: d.body})
 		}
@@ -232,9 +234,25 @@ func (d *Document) scrollSelection(at geom.Vec2) {
 		off := bars.Scroll
 		off.X += dragSpeed(past.X) * dt
 		off.Y += dragSpeed(past.Y) * dt
+		d.scrollerOf(b.Node).glide = nil
 		d.setScroll(b, bars.Clamp(off))
+		if !slices.Contains(s.dragScrolled, b.Node) {
+			s.dragScrolled = append(s.dragScrolled, b.Node)
+		}
 		return
 	}
+}
+
+// dragScrollEnded snaps the containers a drag past their edge scrolled,
+// as Chrome once the drag ends.
+func (d *Document) dragScrollEnded() {
+	s := &d.sel
+	for _, n := range s.dragScrolled {
+		if b := d.scroller(n); b != nil && d.inDocument(n) {
+			d.scrollBoxTo(b, b.Scroll, snapEnd, true, false)
+		}
+	}
+	s.dragScrolled = s.dragScrolled[:0]
 }
 
 // pastEdge is how far v lies before at or past at+size, negative before.
@@ -316,7 +334,7 @@ func (d *Document) selectionKeys(c *twod.Canvas, in *input.State, taken *keySet)
 			if s := d.Selection(); !s.Empty() && s.Text != "" {
 				if w := c.Window(); w != nil {
 					// the clipboard takes plain spaces for the no-break ones, as Chrome's
-					w.SetClipboard(strings.ReplaceAll(s.Text, "\u00a0", " "))
+					w.SetClipboardHTML(d.SelectionHTML(), strings.ReplaceAll(s.Text, "\u00a0", " "))
 				}
 				took = true
 			}

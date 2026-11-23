@@ -439,6 +439,7 @@ func build(doc *document, p *Picture) error {
 		return err
 	}
 	p.unsupported = sortedKeys(b.missing)
+	p.filters = &elementFilters{b: b}
 	return nil
 }
 

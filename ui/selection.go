@@ -69,8 +69,10 @@ type selecting struct {
 	rightArmed, rightDragged bool
 	rightAt                  Position
 	rightFrom                geom.Vec2
-	// scrolledAt is the clock when a drag last scrolled a container.
-	scrolledAt float32
+	// scrolledAt is the clock when a drag last scrolled a container, and
+	// dragScrolled the containers it scrolled, snapped once it ends.
+	scrolledAt   float32
+	dragScrolled []*Node
 	// runs are the text nodes with fragments in tree order and maps what
 	// was asked of them, as layout serial laid them out.
 	runs    []*Node
@@ -811,6 +813,13 @@ func (d *Document) selectedParts() map[*box.Box][]paint.Selected {
 		if i+1 < len(runs) {
 			next = d.tree.Of[runs[i+1]]
 		}
+		if l, ok := d.letterOf(n); ok && from < l.end && to > l.lead {
+			a, z := max(from, l.lead)-l.lead, min(to, l.end)-l.lead
+			if ps := d.partsOf(l.text, l.run, nil, a, z, false); len(ps) > 0 {
+				s.parts[l.run] = ps
+				s.order = append(s.order, l.run)
+			}
+		}
 		if ps := d.partsOf(n, b, next, from, to, n != end.Node); len(ps) > 0 {
 			s.parts[b] = ps
 			s.order = append(s.order, b)
@@ -867,6 +876,32 @@ func (d *Document) breakMark(b *box.Box) paint.Selected {
 	return paint.Selected{Rect: geom.Rect{Y: top, W: d.fonts.Advance(b.Style.Font, " "), H: h}}
 }
 
+// letter is the part of a text node a ::first-letter box shows: the
+// letter's own text node and its run, and where it stands in the node's
+// text, from lead, after the white space it drops, up to end.
+type letter struct {
+	text      *Node
+	run       *box.Box
+	lead, end int
+}
+
+// letterOf is the first letter of n's text, which a ::first-letter box
+// shows apart from n's run: a selection of n's text takes it too.
+func (d *Document) letterOf(n *Node) (letter, bool) {
+	data := dom.Data(n)
+	g := data.Letter
+	if g == nil || dom.Data(g).Letter != n || len(g.Children()) != 1 || data.LetterEnd > len(n.Text()) {
+		return letter{}, false
+	}
+	t := g.Children()[0]
+	b := d.tree.Of[t]
+	if b == nil || b.Kind != box.TextRun || len(b.Lines) == 0 || !strings.HasSuffix(n.Text()[:data.LetterEnd], t.Text()) {
+		return letter{}, false
+	}
+	end := utf8.RuneCountInString(n.Text()[:data.LetterEnd])
+	return letter{text: t, run: b, lead: end - utf8.RuneCountInString(t.Text()), end: end}, true
+}
+
 // partsOf are the rectangles of the characters from to to of n's run b:
 // on each line from the first selected character to the last, as high as
 // the line and its glyphs, and where the selection goes on past the
@@ -889,10 +924,11 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 			out = append(out, d.emptyLines(n, b, k, from, to)...)
 		}
 		x0, x1, goesOn := float32(0), f.Rect.W, true
+		tabs, t0, t1 := d.tabRoom(m, b, k, from, to)
 		if !whole {
 			offs := m.frags[k].offs
 			j0, j1 := lower(offs, from), lower(offs, to)
-			if j1 <= j0 {
+			if j1 <= j0 && !tabs {
 				continue
 			}
 			xs := d.edges(m, b, k)
@@ -901,16 +937,59 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 		}
 		switch {
 		case !goesOn:
+		case tabs && x1 > x0:
+			x1 = t1
+		case tabs:
+			x0, x1 = t0, t1
 		case f.RTL:
 			x0 -= d.tail(b, k, next)
 		default:
 			x1 += d.tail(b, k, next)
+		}
+		if x1 <= x0 {
+			continue
 		}
 		top := min(f.Rect.Y, f.Baseline-metrics.Ascent)
 		bottom := max(f.Rect.Y+f.Rect.H, f.Baseline+metrics.Descent)
 		out = append(out, paint.Selected{Line: k, Rect: geom.Rect{X: f.Rect.X + x0, Y: top, W: x1 - x0, H: bottom - top}})
 	}
 	return out
+}
+
+// tabRoom is the room the tabs from to to take between fragment k of b
+// and the next on its line, in the fragment's space, when tabs alone
+// stand between them in text that keeps them: each reaches the next tab
+// stop, the first from the fragment's end.
+func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float32, float32) {
+	st, f := b.Style, b.Lines[k]
+	if m == nil || f.RTL || st.WhiteSpace != style.Pre && st.WhiteSpace != style.PreWrap {
+		return false, 0, 0
+	}
+	var after *box.Fragment
+	for j := range b.Lines {
+		if g := &b.Lines[j]; g.Start > f.Start && abs(g.Rect.Y-f.Rect.Y) < 0.5 && (after == nil || g.Start < after.Start) {
+			after = g
+		}
+	}
+	offs := m.frags[k].offs
+	first := int(offs[len(offs)-1])
+	if after == nil || int(after.Start) <= first {
+		return false, 0, 0
+	}
+	n := int(after.Start) - first
+	for _, r := range m.src[first:after.Start] {
+		if r != '\t' {
+			return false, 0, 0
+		}
+	}
+	a, z := max(from, first)-first, min(to, int(after.Start))-first
+	if z <= a {
+		return false, 0, 0
+	}
+	stop := st.TabStop(d.fonts.Advance(st.Font, " "))
+	end := after.Rect.X - f.Rect.X
+	edge := func(j int) float32 { return max(f.Rect.W, end-float32(n-j)*stop) }
+	return true, edge(a), edge(z)
 }
 
 // emptyLines are the marks of the empty lines between fragments k-1 and
@@ -942,26 +1021,32 @@ func (d *Document) emptyLines(n *Node, b *box.Box, k, from, to int) []paint.Sele
 }
 
 // tail is how far past its end fragment k of b is selected when the
-// selection goes on: up to the next fragment on its line, or a space
-// past the line's end, on its left for a fragment shown right to left.
+// selection goes on: up to the fragment after it on its line, the gap a
+// tab or a padding leaves, nothing where that fragment shows on the
+// other side, its text of the other direction, or a space past the
+// line's end, on its left for a fragment shown right to left.
 func (d *Document) tail(b *box.Box, k int, next *box.Box) float32 {
 	f := b.Lines[k]
 	at := b.Rect()
+	line := func(o geom.Rect, g box.Fragment) bool { return abs(o.Y+g.Rect.Y-(at.Y+f.Rect.Y)) < 0.5 }
 	var after *box.Fragment
 	origin := at
-	switch {
-	case k+1 < len(b.Lines):
-		after = &b.Lines[k+1]
-	case next != nil && len(next.Lines) > 0 && container(next) == container(b):
+	for j := range b.Lines {
+		if g := &b.Lines[j]; g.Start > f.Start && line(at, *g) && (after == nil || g.Start < after.Start) {
+			after = g
+		}
+	}
+	if after == nil && next != nil && len(next.Lines) > 0 && container(next) == container(b) &&
+		line(next.Rect(), next.Lines[0]) {
 		after, origin = &next.Lines[0], next.Rect()
 	}
-	if after != nil && abs(origin.Y+after.Rect.Y-(at.Y+f.Rect.Y)) < 0.5 {
-		if f.RTL {
-			return max(at.X+f.Rect.X-(origin.X+after.Rect.X+after.Rect.W), 0)
-		}
-		return max(origin.X+after.Rect.X-(at.X+f.Rect.X+f.Rect.W), 0)
+	if after == nil {
+		return d.fonts.Advance(b.Style.Font, " ")
 	}
-	return d.fonts.Advance(b.Style.Font, " ")
+	if f.RTL {
+		return max(at.X+f.Rect.X-(origin.X+after.Rect.X+after.Rect.W), 0)
+	}
+	return max(origin.X+after.Rect.X-(at.X+f.Rect.X+f.Rect.W), 0)
 }
 
 // container is the block whose lines b's fragments are on.
@@ -1079,6 +1164,18 @@ func (c *copier) text(n *Node) {
 	}
 	m := c.d.mapOf(n)
 	at := 0
+	if l, ok := c.d.letterOf(n); ok {
+		c.dropped(m.src, from, min(l.lead, to), b.Style.WhiteSpace, false)
+		if a, z := max(from, l.lead), min(to, l.end); z > a {
+			if c.space && c.last != 0 && !isBlank(c.last) {
+				c.put(' ')
+			}
+			for _, r := range m.src[a:z] {
+				c.put(r)
+			}
+		}
+		at = l.end
+	}
 	for k, f := range b.Lines {
 		offs := m.frags[k].offs
 		c.dropped(m.src, max(at, from), min(int(offs[0]), to), b.Style.WhiteSpace, k > 0)
@@ -1109,6 +1206,8 @@ func (c *copier) dropped(src []rune, from, to int, ws style.WhiteSpace, wrap boo
 		switch {
 		case r == '\n' && keeps:
 			c.put('\n')
+		case r == '\t' && (ws == style.Pre || ws == style.PreWrap):
+			c.put('\t')
 		case isBlank(r) && wrap:
 			if c.last != ' ' {
 				c.put(' ')

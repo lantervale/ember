@@ -82,6 +82,21 @@ type Plan struct {
 	// mentioned are the glyphs its lookups take after the first, read
 	// when Mentions is first asked.
 	mentioned glyphSet
+
+	script Tag
+	shaper shaper
+	// chosen is the script tag of GSUB's language system, 0 for none.
+	chosen Tag
+	// requests are the features asked for, masks their masks, and pauses
+	// what the shaper does after the GSUB stages they end.
+	requests []request
+	masks    map[Tag]uint32
+	pauses   map[int]pause
+	// positions is whether the font has a GPOS table.
+	positions bool
+	indic     *indicPlan
+	khmer     *khmerPlan
+	use       *usePlan
 }
 
 type planKey struct {
@@ -99,21 +114,59 @@ func (f *Font) Plan(script Tag, features string) *Plan {
 	if p, ok := f.plans[key]; ok {
 		return p
 	}
-	asked := requests(script, ParseFeatures(features))
+	chosen, gsubLS := f.gsub.langSys(script)
+	_, gposLS := f.gpos.langSys(script)
+	sh := shaperFor(script, chosen)
+	asked, pauses := requests(script, sh, ParseFeatures(features))
 	m := masks(asked)
-	p := &Plan{font: f, gsub: f.gsub.plan(script, asked, m), gpos: f.gpos.plan(script, asked, m),
-		rtl: RightToLeft(script), kerns: m[kern] != 0}
-	if slices.Contains(joiningScripts, script) {
+	p := &Plan{font: f, gsub: f.gsub.plan(gsubLS, asked, m), gpos: f.gpos.plan(gposLS, asked, m),
+		rtl: RightToLeft(script), kerns: m[kern] != 0, script: script, shaper: sh, chosen: chosen,
+		requests: asked, masks: m, pauses: pauses, positions: f.gpos.scripts != nil}
+	if sh == arabicShaper {
 		p.joins = true
 		for i, t := range formTags {
 			p.forms[i] = m[t]
 		}
+	}
+	switch sh { //nolint:exhaustive // the shapers that do something here
+	case indicShaper:
+		p.indic = newIndicPlan(p)
+	case khmerShaper:
+		p.khmer = newKhmerPlan(p)
+	case useShaper:
+		p.use = &usePlan{rphf: m[MakeTag("rphf")]}
 	}
 	for _, l := range append(slices.Clip(p.gsub), p.gpos...) {
 		p.first.union(l.lk.first)
 	}
 	f.plans[key] = p
 	return p
+}
+
+// stageOf is the GSUB stage feature t applies at, -1 when the plan has
+// no lookup of it.
+func (p *Plan) stageOf(t Tag) int {
+	for _, r := range p.requests {
+		if r.tag == t && p.masks[t] != 0 {
+			return r.stage
+		}
+	}
+	return -1
+}
+
+// stageLookups are the GSUB lookups of the stage feature t applies at.
+func (p *Plan) stageLookups(t Tag) []*lookup {
+	s := p.stageOf(t)
+	if s < 0 || !p.font.gsub.has(p.script, t) {
+		return nil
+	}
+	var out []*lookup
+	for _, l := range p.gsub {
+		if l.stage == s {
+			out = append(out, l.lk)
+		}
+	}
+	return out
 }
 
 // Mentions reports whether one of p's lookups may start at glyph g,
@@ -188,25 +241,25 @@ func (f *Font) Has(script Tag, t Tag) bool {
 	return f.gsub.has(script, t) || f.gpos.has(script, t)
 }
 
-// langSys is the default language system of script in l: of script, of
-// DFLT, or of Latin, the first l has.
-func (l *layout) langSys(script Tag) data {
+// langSys is the default language system of script in l, and the tag
+// it is of: of script by its tags (candidates), of DFLT, or of Latin,
+// the first l has.
+func (l *layout) langSys(script Tag) (Tag, data) {
 	n := int(l.scripts.u16(0))
-	for _, want := range []Tag{script, dflt, MakeTag("dflt"), latn} {
+	for _, want := range append(candidates(script), dflt, MakeTag("dflt"), latn) {
 		for i := range n {
 			if Tag(l.scripts.u32(2+6*i)) == want {
 				s := l.scripts.sub(2 + 6*i + 4)
-				return s.sub(0)
+				return want, s.sub(0)
 			}
 		}
 	}
-	return nil
+	return 0, nil
 }
 
-// features calls fn with each feature script's language system has in
-// l, its required one included, and its lookups' list.
-func (l *layout) features(script Tag, fn func(tag Tag, f data, required bool)) {
-	ls := l.langSys(script)
+// features calls fn with each feature language system ls has in l, its
+// required one included, and its lookups' list.
+func (l *layout) features(ls data, fn func(tag Tag, f data, required bool)) {
 	if ls == nil {
 		return
 	}
@@ -226,6 +279,7 @@ func (l *layout) features(script Tag, fn func(tag Tag, f data, required bool)) {
 
 func (l *layout) has(script Tag, t Tag) bool {
 	found := false
-	l.features(script, func(tag Tag, _ data, _ bool) { found = found || tag == t })
+	_, ls := l.langSys(script)
+	l.features(ls, func(tag Tag, _ data, _ bool) { found = found || tag == t })
 	return found
 }

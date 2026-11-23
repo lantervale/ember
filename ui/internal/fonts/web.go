@@ -690,6 +690,10 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 		run = run[:0]
 	}
 	for i, r := range text {
+		if sc, ok := shape.ScriptOf(r); ok && sc != script {
+			flush()
+			script = sc
+		}
 		c, g, waiting := ch.glyph(s, r)
 		if c == nil {
 			if waiting || ch.base == nil {

@@ -184,10 +184,10 @@ type ProgramReopened struct{}
 // cameras and UI elements, show in it.
 type Window struct {
 	*world.BasicEntity
-	opts      options
-	cursor    Cursor
-	shown     Cursor
-	clipboard string
+	opts                     options
+	cursor                   Cursor
+	shown                    Cursor
+	clipboard, clipboardHTML string
 
 	backend     Backend
 	input       *input.State
@@ -565,7 +565,42 @@ func (w *Window) Clipboard() string {
 // it itself, for tests.
 func (w *Window) SetClipboard(text string) {
 	if w.backend == nil {
-		w.clipboard = text
+		w.clipboard, w.clipboardHTML = text, ""
+		return
+	}
+	w.backend.SetClipboard(text)
+}
+
+// HTMLClipboard is a Backend whose system clipboard takes HTML beside
+// plain text, as macOS's and Windows' do (decision 0162).
+type HTMLClipboard interface {
+	ClipboardHTML() string
+	SetClipboardHTML(html, text string)
+}
+
+// ClipboardHTML is the HTML on the system clipboard, empty where it holds
+// none or the system's clipboard takes none.
+func (w *Window) ClipboardHTML() string {
+	if w.backend == nil {
+		return w.clipboardHTML
+	}
+	if h, ok := w.backend.(HTMLClipboard); ok {
+		return h.ClipboardHTML()
+	}
+	return ""
+}
+
+// SetClipboardHTML puts html on the system clipboard with text, its plain
+// version, as a rich copy does: an app that pastes HTML takes the one,
+// the others the text. A system's clipboard that takes no HTML gets the
+// text alone; a window not open keeps both itself, for tests.
+func (w *Window) SetClipboardHTML(html, text string) {
+	if w.backend == nil {
+		w.clipboard, w.clipboardHTML = text, html
+		return
+	}
+	if h, ok := w.backend.(HTMLClipboard); ok {
+		h.SetClipboardHTML(html, text)
 		return
 	}
 	w.backend.SetClipboard(text)

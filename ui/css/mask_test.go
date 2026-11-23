@@ -127,6 +127,46 @@ func TestChromesOwnMaskNamesAreReadAsTheirPlainOnes(t *testing.T) {
 		"three values, as Chrome's own longhands take them")
 }
 
+func TestChromesMaskPositionAxesAreTheLonghandsOfMaskPosition(t *testing.T) {
+	percent := func(v float32) style.Length { return style.Length{Kind: style.Fixed, Percent: v, IsPercent: true} }
+	s := computed(t, `-webkit-mask-image: url(a.png), url(a.png), url(a.png);
+		-webkit-mask-position: right 4px bottom; -webkit-mask-position-x: center, left 2px`)
+	bottom := style.BackgroundPosition{Y: percent(0), FromBottom: true}
+	assert.Equal(t, style.BackgroundPosition{X: percent(50), Y: bottom.Y, FromBottom: true}, s.MaskLayer(0).Position)
+	assert.Equal(t, style.BackgroundPosition{X: style.Px(2), Y: bottom.Y, FromBottom: true}, s.MaskLayer(1).Position)
+	assert.Equal(t, style.BackgroundPosition{X: percent(50), Y: bottom.Y, FromBottom: true}, s.MaskLayer(2).Position,
+		"the x list repeats")
+	l := computed(t, "-webkit-mask-position-y: bottom 3px; mask-position: 5px").MaskLayer(0)
+	assert.Equal(t, style.BackgroundPosition{X: style.Px(5), Y: percent(50)}, l.Position, "the shorthand later sets both")
+	l = computed(t, "-webkit-mask: url(a.png) left 2px top 3px; -webkit-mask-position-y: bottom 1px").MaskLayer(0)
+	assert.Equal(t, style.BackgroundPosition{X: style.Px(2), Y: style.Px(1), FromBottom: true}, l.Position)
+	for _, decl := range []string{"-webkit-mask-position-x: top", "-webkit-mask-position-y: left 2px",
+		"-webkit-mask-position-x: 1px 2px", "-webkit-mask-position-y: center 2px"} {
+		_, warns := Parse("t.css", "div { "+decl+" }", Browser())
+		assert.Len(t, warns, 1, decl)
+	}
+}
+
+func TestChromesMaskBoxImageIsABorderImageThatMasks(t *testing.T) {
+	mb := computed(t, "-webkit-mask-box-image: url(m.png) 8 4 / 12px 2 / 3px round stretch").MaskBoxImage
+	assert.Equal(t, "m.png", mb.Image.Source)
+	assert.Equal(t, style.Sides[float32]{Top: 8, Right: 4, Bottom: 8, Left: 4}, mb.Image.Slice)
+	assert.True(t, mb.Image.Fill, "the shorthand fills the middle, as Chrome's does")
+	assert.Equal(t, style.ImageWidth{Kind: style.WidthLength, V: 12}, mb.Width.Top)
+	assert.Equal(t, style.ImageWidth{Kind: style.WidthTimes, V: 2}, mb.Width.Left)
+	assert.Equal(t, style.ImageWidth{Kind: style.WidthLength, V: 3}, mb.Outset.Bottom)
+	assert.Equal(t, [2]style.ImageRepeat{style.RepeatRound, style.RepeatStretch}, mb.Repeat)
+	assert.True(t, computed(t, "-webkit-mask-box-image-source: url(m.png)").Masked())
+
+	mb = computed(t, "-webkit-mask-box-image-source: url(m.png); -webkit-mask-box-image-slice: 8").MaskBoxImage
+	assert.False(t, mb.Image.Fill, "the longhand fills only with fill")
+	mb = computed(t, "").MaskBoxImage
+	assert.True(t, mb.Image.Fill, "0 fill at first")
+	assert.Equal(t, style.WidthAuto, mb.Width.Right.Kind)
+	_, warns := Parse("t.css", "div { -webkit-mask-box-image: url(a.png) 8 / / ; }", Browser())
+	assert.Len(t, warns, 1)
+}
+
 // computed is the style of a div under decls, read as a browser's sheet.
 func computed(t *testing.T, decls string) *style.Computed {
 	t.Helper()

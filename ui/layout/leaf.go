@@ -39,8 +39,8 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 	} else {
 		ratio := aspectRatio(st)
 		styleSize := resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
-		minSize = resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-		maxSize = resolveMax(st.MaxSize, in.parent).mAdd(adj)
+		minSize = stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+		maxSize = stretched(resolveMax(st.MaxSize, in.parent).mAdd(adj), st.MaxSize, st, in.parent)
 		if !some(ratio) {
 			// A natural ratio holds between content boxes, whatever box-sizing.
 			ratio = n.naturalRatio()
@@ -112,6 +112,12 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		basis = none
 	}
 	clamp := textClamp(n, in.clamp)
+	if clamp.lines == style.ClampByHeight {
+		clamp.lines = linesHeld(or(nodeSize.h, maxSize.h), func(lines int) (float32, int) {
+			s, _, _, all := t.measureContent(n, size{known.w, none}, avail, basis, lines)
+			return s.h + inset.vertical(), all
+		})
+	}
 	measured, first, last, lines := t.measureContent(n, known, avail, basis, clamp.lines)
 	clamped := in.known.or(nodeSize).or(measured.add(inset.sum())).mClamp(minSize, maxSize)
 	s := clamped

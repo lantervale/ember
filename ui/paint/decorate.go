@@ -30,17 +30,23 @@ type piece struct {
 // line of an inline split over several, the left edge on the first and
 // the right edge on the last; one per column of a block columns cut, the
 // top edge on the first and the bottom edge on the last, as Chrome slices
-// it; else the box itself.
+// it; else the box itself. Lines past a line-clamp's last are left out, the
+// last shown with no right edge, as Chrome draws them.
 // They go in p's scratch, valid until the next call.
 func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
+	shown := len(b.Fragments) - b.Hidden
+	if b.Hidden > 0 && shown <= 0 {
+		p.scratch = p.scratch[:0]
+		return p.scratch
+	}
 	if len(b.Fragments) <= 1 {
 		s := framed(b)
 		p.scratch = append(p.scratch[:0], piece{geom.Rect{X: at.X, Y: at.Y + b.Wrap.Top, W: s.X, H: s.Y}, b.Border})
 		return p.scratch
 	}
-	out := slices.Grow(p.scratch[:0], len(b.Fragments))[:len(b.Fragments)]
+	out := slices.Grow(p.scratch[:0], shown)[:shown]
 	p.scratch = out
-	for i, f := range b.Fragments {
+	for i, f := range b.Fragments[:shown] {
 		e := b.Border
 		switch first, last := i == 0, i == len(b.Fragments)-1; {
 		case b.Broken:
@@ -380,7 +386,7 @@ func (p *painter) decorate(e entry, alpha float32) {
 		return
 	}
 	radius := radiiOf(st, framed(b))
-	if len(ps) > 1 {
+	if len(b.Fragments) > 1 {
 		radius = radii{}
 	}
 	// The lines of an inline are slices of one box, its lines end to end, and its
@@ -412,7 +418,7 @@ func (p *painter) decorate(e entry, alpha float32) {
 				p.insetShadow(inside(r, pc.edges), radius.inside(pc.edges), sh, alpha)
 			}
 		}
-		if tex, k := p.borderImage(st); tex != nil {
+		if tex, k := p.borderImage(st.BorderImage, st); tex != nil {
 			s := st.BorderImage.Slice
 			p.picture(r, tex, style.Sides[float32]{Top: s.Top * k, Right: s.Right * k, Bottom: s.Bottom * k, Left: s.Left * k},
 				imageWidths(r, st.BorderImageWidth, st.Border, s), st.BorderImageRepeat, st.BorderImage.Fill, alpha)
@@ -483,13 +489,14 @@ func (p *painter) find(img style.Image, st *style.Computed) *twod.Texture {
 	return pixelated(tex)
 }
 
-// borderImage is st's border-image picture and how many of its pixels
-// make one of the picture's own: a picture of shapes is drawn at the
-// screen's density, as Chrome rasterises it, its slices scaled to match.
-func (p *painter) borderImage(st *style.Computed) (*twod.Texture, float32) {
-	v := p.shapes(st.BorderImage.Source)
+// borderImage is img's picture, a border image of st, and how many of
+// its pixels make one of the picture's own: a picture of shapes is drawn
+// at the screen's density, as Chrome rasterises it, its slices scaled to
+// match.
+func (p *painter) borderImage(img style.Image, st *style.Computed) (*twod.Texture, float32) {
+	v := p.shapes(img.Source)
 	if v == nil {
-		return p.find(st.BorderImage, st), 1
+		return p.find(img, st), 1
 	}
 	natural := v.Intrinsic().Natural(geom.V2(defaultWidth, defaultHeight))
 	tex := p.drawn(v, natural)
@@ -1680,9 +1687,12 @@ func (p *painter) outline(e entry, alpha float32) {
 	grow := st.OutlineOffset + st.OutlineWidth
 	ps := p.pieces(b, e.at)
 	radius := radiiOf(st, b.Size).grown(grow)
-	if len(ps) > 1 {
+	switch {
+	case len(ps) == 0:
+		return
+	case len(b.Fragments) > 1:
 		radius = radii{}
-	} else {
+	default:
 		ps[0].rect = geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}
 	}
 	w := st.OutlineWidth

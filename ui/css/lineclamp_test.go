@@ -32,6 +32,14 @@ func TestLineClampComputesAsChromeLaysItOut(t *testing.T) {
 		{"display: block; -webkit-box-orient: vertical; -webkit-line-clamp: 2", style.Block, false, 0, false},
 		{"display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 4", style.Block, true,
 			4, false},
+		{"line-clamp: auto", style.Block, false, style.ClampByHeight, false},
+		{"line-clamp: no-ellipsis", style.Block, false, style.ClampByHeight, false},
+		{"line-clamp: no-ellipsis auto", style.Block, false, style.ClampByHeight, false},
+		{"line-clamp: 2 auto", style.Block, false, 2, false},
+		{"line-clamp: 2 -webkit-legacy", style.Block, false, 0, false},
+		{"display: -webkit-box; -webkit-box-orient: vertical; line-clamp: 2 -webkit-legacy", style.Block, true, 2, true},
+		{"display: -webkit-box; -webkit-box-orient: vertical; line-clamp: auto -webkit-legacy", style.Block, true,
+			style.ClampByHeight, true},
 	}
 	for _, c := range cases {
 		s := clampOfDecls(t, "display: block; "+c.decls)
@@ -47,10 +55,25 @@ func TestLineClampComputesAsChromeLaysItOut(t *testing.T) {
 }
 
 func TestLineClampsAreCheckedAsIntegers(t *testing.T) {
-	for _, decl := range []string{"line-clamp: 0", "line-clamp: 1.5", "-webkit-line-clamp: -1", "line-clamp: auto",
-		"-webkit-box-orient: diagonal"} {
+	for _, decl := range []string{"line-clamp: 0", "line-clamp: 1.5", "-webkit-line-clamp: -1",
+		"-webkit-box-orient: diagonal", "line-clamp: 2 2", "line-clamp: none no-ellipsis", "line-clamp: 2 auto no-ellipsis",
+		"line-clamp: -webkit-legacy", "line-clamp: -webkit-legacy 2", "line-clamp: 2 -webkit-legacy no-ellipsis",
+		"line-clamp: none -webkit-legacy", "line-clamp: auto auto", "line-clamp: \"x\"",
+		"max-lines: 2", "block-ellipsis: auto", "continue: discard"} {
 		if got := read(decl); got == decl+" | " {
 			t.Errorf("%s read", decl)
 		}
+	}
+}
+
+func TestNoEllipsisLeavesTheClampsEllipsisOut(t *testing.T) {
+	for _, decls := range []string{"line-clamp: 2 no-ellipsis", "line-clamp: no-ellipsis 2"} {
+		s := clampOfDecls(t, decls)
+		if lines, _ := s.Clamp(); lines != 2 || !s.NoEllipsis {
+			t.Errorf("%s: clamp %d, no ellipsis %v", decls, lines, s.NoEllipsis)
+		}
+	}
+	if s := clampOfDecls(t, "line-clamp: 2 no-ellipsis; line-clamp: 3"); s.NoEllipsis {
+		t.Error("a later line-clamp without it has its ellipsis")
 	}
 }

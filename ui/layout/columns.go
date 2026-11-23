@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"cmp"
 	"math"
 	"slices"
 
@@ -36,8 +37,11 @@ type columnSet struct {
 
 // columnPlace is where a column shows in the container's border box: x from the content
 // box's left (the first column's right edge is the content box's under rtl), top and
-// bottom down it. A spanner shows as a column at x 0.
-type columnPlace struct{ x, top, bottom float32 }
+// bottom down it. A spanner shows as a column at x 0, span set.
+type columnPlace struct {
+	x, top, bottom float32
+	span           bool
+}
 
 // columnRow is a row of count columns from the first, top down from the first column's
 // top and height high.
@@ -90,14 +94,26 @@ func (f *flowFrag) lineShift(y float32) (float32, float32) {
 }
 
 // cut gives f a piece in each column from first to last of a box of size w by h at at in
-// the flow, each from the origin it returns: origin moved to the pieces' top-left.
-func (f *flowFrag) cut(at point, w, h float32, first, last int, origin point) point {
+// the flow, each from the origin it returns: origin moved to the pieces' top-left. ends,
+// when not nil, are where the box's content ends in the flow in each column but the last.
+func (f *flowFrag) cut(at point, w, h float32, first, last int, origin point, ends []float32) point {
 	cs := f.cols
 	for k := first; k <= last; k++ {
+		if cs.places[k].span && k > first && k < last {
+			// a block round a spanner deeper down shows on either side of it
+			continue
+		}
 		shift := cs.shift(k)
 		top := fmax(at.y, cs.starts[k]) + shift.y
 		bottom := at.y + h + shift.y
-		if k < last {
+		switch {
+		case k == last:
+		case ends != nil && some(ends[k-first]):
+			bottom = fmin(ends[k-first]+shift.y, cs.places[k].bottom)
+		case cs.places[k+1].span:
+			// what a spanner cuts ends where its row's flow does
+			bottom = fmin(cs.starts[k+1]+shift.y, cs.places[k].bottom)
+		default:
 			// A box that goes on in the next column fills this one to its end.
 			bottom = cs.places[k].bottom
 		}
@@ -206,8 +222,8 @@ func (t *tree) columns(n *node, in input) output {
 	pbSize := padding.add(border).sum()
 	inset := padding.add(border).add(gutter)
 	adj := boxSizingAdjustment(st, pbSize)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	clamped := noSize
 	if in.sizing == inherentSize {
 		clamped = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)
@@ -218,7 +234,8 @@ func (t *tree) columns(n *node, in input) output {
 		return sizeOutput(styled)
 	}
 
-	parts := columnParts(n)
+	kids, wrappers := columnKids(n)
+	parts := columnParts(kids)
 	outerW := styled.w
 	if !some(outerW) {
 		outerW = mMax(mClamp(t.columnsWidth(n, in, inset, parts), minSize.w, maxSize.w), pbSize.w)
@@ -275,7 +292,7 @@ func (t *tree) columns(n *node, in input) output {
 			cs.rows = append(cs.rows, columnRow{first: k, count: len(starts), top: y - inset.t, height: h})
 		} else {
 			cs.starts = append(cs.starts, flowY)
-			cs.places = append(cs.places, columnPlace{top: y, bottom: y + h})
+			cs.places = append(cs.places, columnPlace{top: y, bottom: y + h, span: part.span})
 		}
 		if !some(firstBaseline) && some(inner.firstBaseline) {
 			at := inner.firstBaseline + off
@@ -285,6 +302,9 @@ func (t *tree) columns(n *node, in input) output {
 		y += h
 	}
 	cs.height = y - inset.t
+	for _, w := range wrappers {
+		wrap(w, inset.l, width)
+	}
 
 	final := size{outerW, mMax(or(styled.h, mClamp(cs.height+inset.vertical(), minSize.h, maxSize.h)), pbSize.h)}
 	scroll := isScrollContainer(st)
@@ -330,12 +350,76 @@ func spans(k *node) bool {
 		(st.Display == style.Block || st.Display == style.FlexDisplay || st.Display == style.GridDisplay)
 }
 
-// columnParts cuts n's children at its spanners, every part in the flow's order; without
-// a spanner the one part is all of them. A part with no spanner and nothing in the flow
-// between two spanners goes with the spanners after it, so their margins collapse.
-func columnParts(n *node) []columnPart {
+// columnKids are the children of a multi-column container laid out in its flow: its own,
+// but those that only wrap a spanner deeper down, whose children stand in their place,
+// and those wrappers, the deepest first.
+func columnKids(n *node) ([]*node, []*node) {
+	if !slices.ContainsFunc(n.kids, wrapsSpanner) {
+		return n.kids, nil
+	}
+	var kids, wrappers []*node
+	var walk func(*node)
+	walk = func(p *node) {
+		for _, k := range p.kids {
+			if wrapsSpanner(k) {
+				walk(k)
+				wrappers = append(wrappers, k)
+				continue
+			}
+			kids = append(kids, k)
+		}
+	}
+	walk(n)
+	return kids, wrappers
+}
+
+// wrapsSpanner reports a block holding a spanner (column-span: all) a multi-column
+// container's spanner cuts, as Chrome: one that starts no formatting context and has no
+// margin, border or padding, nor any box it positions, laid out as what it holds.
+func wrapsSpanner(k *node) bool {
+	st := k.st
+	if st.Display != style.Block || k.role != roleNone || k.context() != contextBlock || blockEstablishesBFC(st) ||
+		st.Position != style.Static || st.Float != style.FloatNone || st.ColumnSpanAll ||
+		edges(st.Margin, 1) != (rect{}) || edges(st.Padding, 1) != (rect{}) || k.borders() != (rect{}) {
+		return false
+	}
+	positions := slices.ContainsFunc(k.kids, func(c *node) bool {
+		return outOfFlow(c.st.Position) && c.st.Display != style.DisplayNone
+	})
+	return !positions && slices.ContainsFunc(k.kids, func(c *node) bool { return spans(c) || wrapsSpanner(c) })
+}
+
+// wrap lays w, a block wrapping a spanner, out round what it holds, laid out in the flow
+// of the multi-column container left (its content's left) and of columns width wide: from
+// the first's border top to the last's border bottom, what it holds placed from it.
+func wrap(w *node, left, width float32) {
+	top, bottom := float32(math.Inf(1)), float32(math.Inf(-1))
+	for _, k := range w.kids {
+		if k.st.Display == style.DisplayNone || outOfFlow(k.st.Position) {
+			continue
+		}
+		top = fmin(top, k.unrounded.location.y)
+		bottom = fmax(bottom, k.unrounded.location.y+k.unrounded.size.h)
+	}
+	if top > bottom {
+		top, bottom = 0, 0
+	}
+	h := bottom - top
+	w.unrounded = placed{location: point{left, top}, size: size{width, h},
+		overflow: newOverflowRect(rect{r: width, b: h}, [2]bool{})}
+	for _, k := range w.kids {
+		k.unrounded.location.x -= left
+		k.unrounded.location.y -= top
+	}
+}
+
+// columnParts cuts a multi-column container's children at its spanners, every part in the
+// flow's order; without a spanner the one part is all of them. A part with no spanner and
+// nothing in the flow between two spanners goes with the spanners after it, so their
+// margins collapse.
+func columnParts(kids []*node) []columnPart {
 	var parts []columnPart
-	for _, k := range n.kids {
+	for _, k := range kids {
 		span := spans(k)
 		last := len(parts) - 1
 		switch {
@@ -467,23 +551,79 @@ func (t *tree) touchFlow(n *node) {
 		k.performed = t.gen
 		if breaksInside(k) {
 			t.touchFlow(k)
+			t.touchPositioned(k)
+		}
+	}
+}
+
+// touchPositioned is touchFlow for the positioned boxes n cuts with the flow.
+func (t *tree) touchPositioned(n *node) {
+	for _, h := range n.hoisted {
+		if h.st.Position == style.Absolute {
+			h.performed = t.gen
+			if cuttable(h) {
+				t.touchFlow(h)
+				t.touchPositioned(h)
+			}
 		}
 	}
 }
 
 // breaksInside reports a box columns may cut: a block container in the flow that holds
-// blocks or lines. The others go into one column whole, as Chrome keeps monolithic
-// boxes; so do a float, a table, a flex or grid container and a nested multi-column
+// blocks or lines, a flex container between its lines and inside its items, a table or
+// a row group between its rows. The others go into one column whole, as Chrome keeps
+// monolithic boxes; so do a float, a row, a grid container and a nested multi-column
 // container, which Chrome would cut.
-func breaksInside(n *node) bool {
+func breaksInside(n *node) bool { return !outOfFlow(n.st.Position) && cuttable(n) }
+
+// cuttable is breaksInside whatever n's position: an absolutely positioned box whose
+// containing block is in the flow is cut with it.
+func cuttable(n *node) bool {
 	st := n.st
-	if n.atomic || n.replaced || n.control != noControl || n.role != roleNone || st.Display != style.Block ||
-		st.Float != style.FloatNone || st.BreakInsideAvoid || st.Multicol() || outOfFlow(st.Position) ||
-		isScrollContainer(st) {
+	if n.atomic || n.replaced || n.control != noControl ||
+		st.Display != style.Block && st.Display != style.FlexDisplay && st.Display != style.GridDisplay ||
+		st.Float != style.FloatNone || st.BreakInsideAvoid && !forcesBreak(n) || st.Multicol() || isScrollContainer(st) {
 		return false
 	}
-	c := n.context()
-	return c == contextBlock || c == contextLeaf
+	switch c := n.context(); n.role {
+	case roleTable:
+		return c == contextTable
+	case roleGroup, roleCaption:
+		return true
+	case roleNone:
+		return c == contextBlock || c == contextLeaf || c == contextFlex || c == contextGrid
+	case roleRow, roleColumn, roleColumnGroup:
+	}
+	return false
+}
+
+// trailingSpacing is the border-spacing below a table's last row, which Chrome cuts at the
+// end of the column holding the last part of a table columns cut, and balances the columns
+// without: 0 for any other box, a table collapsing its
+// borders, and one with a caption below.
+func trailingSpacing(n *node) float32 {
+	st := n.st
+	if n.role != roleTable || st.BorderCollapse || slices.ContainsFunc(n.captions(), func(c *node) bool {
+		return c.st.CaptionSide == style.CaptionBottom
+	}) {
+		return 0
+	}
+	return st.BorderSpacing[1]
+}
+
+// forcesBreak reports a box holding a block that forces a column break before or after
+// it: break-inside: avoid gives way to it, as Chrome's.
+func forcesBreak(n *node) bool {
+	for _, k := range n.kids {
+		st := k.st
+		if st.Display == style.DisplayNone || outOfFlow(st.Position) {
+			continue
+		}
+		if st.BreakBefore == style.BreakColumn || st.BreakAfter == style.BreakColumn || forcesBreak(k) {
+			return true
+		}
+	}
+	return false
 }
 
 // relativeShift is how far position: relative moves n from its place in the flow.
@@ -530,7 +670,9 @@ type flowUnit struct {
 }
 
 type unitWalk struct {
-	t     *tree
+	t *tree
+	// root is the multi-column container, whose positioned boxes columns never cut.
+	root  *node
 	units []flowUnit
 	// top is the edge the next unit starts at, a block's border top above its first
 	// content, and pending the strongest break-before or break-after since the last unit.
@@ -569,7 +711,7 @@ func (w *unitWalk) ask(b style.Break) {
 
 // flowUnits are the units of n's flow, in its border box of size s with inset.
 func (t *tree) flowUnits(n *node, s size, inset rect) []flowUnit {
-	w := &unitWalk{t: t, top: none, sorted: true}
+	w := &unitWalk{t: t, root: n, top: none, sorted: true}
 	w.content(n, 0, s, inset)
 	if !w.sorted {
 		slices.SortStableFunc(w.units, func(a, b flowUnit) int {
@@ -596,7 +738,8 @@ func (t *tree) flowUnits(n *node, s size, inset rect) []flowUnit {
 	return out
 }
 
-// content walks what n holds, its border box at y in the flow.
+// content walks what n holds, its border box at y in the flow, and the boxes it
+// positions, which columns cut with that flow.
 func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 	if c := n.inline; c != nil {
 		w.paras++
@@ -609,49 +752,99 @@ func (w *unitWalk) content(n *node, y float32, s size, inset rect) {
 				orphans: n.st.Orphans, widows: n.st.Widows})
 			at += lh
 		}
+	} else {
+		kids := n.kids
+		if n.role == roleTable {
+			// a caption at the bottom comes after the rows in the flow
+			kids = slices.Clone(kids)
+			slices.SortStableFunc(kids, func(a, b *node) int {
+				return cmp.Compare(a.unrounded.location.y, b.unrounded.location.y)
+			})
+		}
+		for _, k := range kids {
+			st := k.st
+			if st.Display == style.DisplayNone || outOfFlow(st.Position) || k.role == roleColumn ||
+				k.role == roleColumnGroup {
+				continue
+			}
+			w.ask(st.BreakBefore)
+			if w.pending == style.BreakColumn {
+				w.keep = fmax(k.unrounded.margin.t, 0)
+			}
+			w.box(k, y)
+			w.ask(st.BreakAfter)
+		}
+	}
+	if n == w.root {
 		return
 	}
-	for _, k := range n.kids {
-		st := k.st
-		if st.Display == style.DisplayNone || outOfFlow(st.Position) {
-			continue
+	for _, h := range n.hoisted {
+		if h.st.Position == style.Absolute && h.st.Display != style.DisplayNone {
+			w.box(h, y)
 		}
-		l := k.unrounded
-		top := y + l.location.y - relativeShift(k).y
-		bottom := top + l.size.h
-		w.ask(st.BreakBefore)
-		if w.pending == style.BreakColumn {
-			w.keep = fmax(l.margin.t, 0)
-		}
-		if !breaksInside(k) {
-			if l.size.h > 0 {
-				w.emit(flowUnit{top: top, bottom: bottom})
-			}
-			w.ask(st.BreakAfter)
-			continue
-		}
-		held := some(w.top)
-		if !held {
-			w.top = top
-		}
-		before := len(w.units)
-		w.content(k, top, l.size, l.padding.add(l.border))
-		switch {
-		case len(w.units) == before:
-			if !held {
-				w.top = none
-			}
-			if l.size.h > 0 {
-				w.emit(flowUnit{top: top, bottom: bottom, space: true})
-			}
-		case bottom-w.units[len(w.units)-1].bottom > l.padding.b+l.border.b+columnEpsilon:
-			w.emit(flowUnit{top: w.units[len(w.units)-1].bottom, bottom: bottom, space: true})
-		default:
-			u := &w.units[len(w.units)-1]
-			u.bottom = fmax(u.bottom, bottom)
-		}
-		w.ask(st.BreakAfter)
 	}
+}
+
+// box walks k, a box whose parent's border box is at y in the flow: one unit when
+// columns never cut it, else what it holds between its edges.
+func (w *unitWalk) box(k *node, y float32) {
+	l := k.unrounded
+	top := y + l.location.y - relativeShift(k).y
+	bottom := top + l.size.h
+	if !cuttable(k) {
+		if l.size.h > 0 {
+			w.emit(flowUnit{top: top, bottom: bottom})
+		}
+		return
+	}
+	held := some(w.top)
+	if !held {
+		w.top = top
+	}
+	before := len(w.units)
+	w.content(k, top, l.size, l.padding.add(l.border))
+	if k.st.BreakInsideAvoid {
+		w.join(before)
+	}
+	if len(w.units) == before {
+		if !held {
+			w.top = none
+		}
+		if l.size.h > 0 {
+			w.emit(flowUnit{top: top, bottom: bottom, space: true})
+		}
+		return
+	}
+	// A flex row's items and positioned boxes lie beside the rest: the lowest unit ends
+	// the content.
+	low := len(w.units) - 1
+	for j := before; j < len(w.units); j++ {
+		if w.units[j].bottom > w.units[low].bottom {
+			low = j
+		}
+	}
+	bottom -= trailingSpacing(k)
+	if end := w.units[low].bottom; bottom-end > l.padding.b+l.border.b+columnEpsilon {
+		w.emit(flowUnit{top: end, bottom: bottom, space: true})
+	} else {
+		w.units[low].bottom = fmax(end, bottom)
+	}
+}
+
+// join makes the units from the first on one, but where a break is forced: those of a
+// box with break-inside: avoid.
+func (w *unitWalk) join(first int) {
+	out := w.units[:first]
+	for _, u := range w.units[first:] {
+		if last := len(out) - 1; last >= first && !u.forced {
+			o := &out[last]
+			o.top, o.bottom = fmin(o.top, u.top), fmax(o.bottom, u.bottom)
+			o.space = o.space && u.space
+			continue
+		}
+		out = append(out, u)
+	}
+	w.units = out
 }
 
 // appealOf is the appeal of a break before unit i in a column that starts with unit
@@ -783,18 +976,23 @@ func keepFlow(n, m *node, flow, moved point) {
 		n.frag = &flowFrag{}
 	}
 	f := n.frag
-	breaks := breaksInside(n)
+	breaks := cuttable(n)
 	h := n.unrounded.size.h
 	first := cs.at(at.y)
 	last := first
 	if breaks {
-		last = cs.last(first, at.y+h)
+		last = cs.last(first, at.y+h-trailingSpacing(n))
+	}
+	if tail := trailingSpacing(n); last > first && tail > 0 {
+		// The spacing below the last row gives way at the column's end, as a margin.
+		end := at.y + h - tail + cs.shift(last).y
+		h -= tail - fmin(fmax(cs.places[last].bottom-end, 0), tail)
 	}
 	by := cs.shift(first)
 	origin := point{at.x + by.x, at.y + by.y}
 	*f = flowFrag{cols: cs, y: at.y, col: first, pieces: f.pieces[:0]}
 	if last > first {
-		origin = f.cut(at, n.unrounded.size.w, h, first, last, origin)
+		origin = f.cut(at, n.unrounded.size.w, h, first, last, origin, contentEnds(n, cs, at, first, last))
 	}
 	f.oy = origin.y
 	n.absolute = point{m.absolute.x + origin.x + moved.x, m.absolute.y + origin.y + moved.y}
@@ -815,8 +1013,51 @@ func keepFlow(n, m *node, flow, moved point) {
 			}
 		}
 	}
+	keepPositioned(n, m, at, moved, breaks)
+}
+
+// contentEnds are where a box, its border box at at in the flow, ends in each column from
+// first to last but the last, as Chrome ends it: a table's row group below the spacing
+// after the last row it shows there, a block round a spanner below the last box ending
+// there; nil for any other box.
+func contentEnds(n *node, cs *columnSet, at point, first, last int) []float32 {
+	var after float32
+	switch table := n.parent; {
+	case n.role == roleGroup && table != nil && table.role == roleTable:
+		if !table.st.BorderCollapse {
+			after = table.st.BorderSpacing[1]
+		}
+	case wrapsSpanner(n):
+	default:
+		return nil
+	}
+	ends := make([]float32, last-first)
+	for i := range ends {
+		ends[i] = none
+	}
+	for _, k := range n.kids {
+		if k.st.Display == style.DisplayNone || outOfFlow(k.st.Position) {
+			continue
+		}
+		top := at.y + k.unrounded.location.y
+		bottom := top + k.unrounded.size.h
+		if c := cs.last(cs.at(top), bottom) - first; c >= 0 && c < len(ends) {
+			ends[c] = fmax(or(ends[c], negInf), bottom+after)
+		}
+	}
+	return ends
+}
+
+// keepPositioned places the boxes n positions: when columns cut n, an absolutely
+// positioned one through the flow, at flow less the relative offsets moved, as keepFlow
+// does; the others as keepIn.
+func keepPositioned(n, m *node, flow, moved point, cut bool) {
 	for _, c := range n.hoisted {
-		keepIn(c, n.absolute, false)
+		if cut && c.st.Position == style.Absolute {
+			keepFlow(c, m, flow, moved)
+		} else {
+			keepIn(c, n.absolute, false)
+		}
 	}
 }
 

@@ -30,6 +30,8 @@ type State struct {
 	mouse, prevMouse, liveMouse geom.Vec2
 	wheel                       geom.Vec2
 	pendingWheel                geom.Vec2
+	wheelPrecise                bool
+	pendingTurns                turns
 	text                        []rune
 	pendingText                 []rune
 	dropped                     []string
@@ -182,6 +184,11 @@ func (s *State) MouseDelta() geom.Vec2 { return s.mouse.Sub(s.prevMouse) }
 // too, in lines: Y up is negative.
 func (s *State) Wheel() geom.Vec2 { return s.wheel }
 
+// WheelPrecise reports whether this frame's wheel came from a device
+// that scrolls by points, a trackpad or a smooth wheel, rather than by
+// a mouse's notches; Wheel then counts ten points a line, as GLFW does.
+func (s *State) WheelPrecise() bool { return s.wheelPrecise }
+
 // Text is the characters typed this frame, for text fields: what a key
 // writes in the player's layout, where a Key is a position.
 func (s *State) Text() []rune { return s.text }
@@ -262,8 +269,26 @@ func applyEdges(live []bool, edges *[]edge) {
 // SetMouse moves the pointer to p, in window points.
 func (s *State) SetMouse(p geom.Vec2) { s.liveMouse = p }
 
-// AddWheel turns the wheel by d, seen next frame.
-func (s *State) AddWheel(d geom.Vec2) { s.pendingWheel = s.pendingWheel.Add(d) }
+// AddWheel turns the wheel by d notches, seen next frame.
+func (s *State) AddWheel(d geom.Vec2) {
+	s.pendingWheel = s.pendingWheel.Add(d)
+	s.pendingTurns |= notched
+}
+
+// AddPreciseWheel scrolls by d as a trackpad does, in tenths of a point
+// (1 for 10 points), seen next frame, where WheelPrecise reports it.
+func (s *State) AddPreciseWheel(d geom.Vec2) {
+	s.pendingWheel = s.pendingWheel.Add(d)
+	s.pendingTurns |= precise
+}
+
+// turns are the kinds of wheel turns a frame had.
+type turns uint8
+
+const (
+	notched turns = 1 << iota
+	precise
+)
 
 // AddText types r, seen next frame.
 func (s *State) AddText(r rune) { s.pendingText = append(s.pendingText, r) }
@@ -301,6 +326,7 @@ func (f feed) BeginFrame() {
 	s.beginPads()
 	s.beginTouches()
 	s.wheel, s.pendingWheel = s.pendingWheel, geom.Vec2{}
+	s.wheelPrecise, s.pendingTurns = s.pendingTurns == precise, 0
 	s.text, s.pendingText = append(s.text[:0], s.pendingText...), s.pendingText[:0]
 	s.dropped, s.pendingDrops = append(s.dropped[:0], s.pendingDrops...), s.pendingDrops[:0]
 	clear(s.repeated[:])

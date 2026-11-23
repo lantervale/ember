@@ -152,8 +152,13 @@ type Document struct {
 	framedAt []*Document
 	shield   bool
 	idle     *input.State
+	// lists are the select lists of Documents in d's frames shown over
+	// it, d in a window (frame_lists.go).
+	lists frameLists
 	// wheel is how many times the wheel's turn d scrolls by (wheel.go).
 	wheel float32
+	// instant is whether the user's scrolls move at once (scrollmotion.go).
+	instant bool
 }
 
 // DocumentOption configures a Document.
@@ -172,6 +177,7 @@ func NewDocument(opts ...DocumentOption) *Document {
 	d.html.Append(d.body)
 	dom.Data(d.html).Root = true
 	d.trans.MeasureFonts(d.fontUnits)
+	d.trans.MeasureInk(d.fonts.Ink)
 	twod.Build(d, "document", twod.Overlay())
 	for _, o := range opts {
 		o(d)
@@ -656,6 +662,17 @@ func init() {
 // it: at the window's size, or at c.Size() when an element hosting the
 // document draws it in its own space.
 func (d *Document) Draw(c *twod.Canvas) {
+	d.draw(c)
+	if d.framed == nil {
+		d.drawLists(c)
+	} else {
+		d.showLists()
+	}
+}
+
+// window takes the scale, the focus and the selection colours of the
+// window d is drawn in, repainting where one changed.
+func (d *Document) window(c *twod.Canvas) {
 	if win := c.Window(); win != nil {
 		d.fonts.SetScale(win.ContentScale() * d.Zoom() * d.outerZoom())
 		if d.inactive != !win.Focused() {
@@ -665,12 +682,17 @@ func (d *Document) Draw(c *twod.Canvas) {
 	if h := d.systemHighlight(); h != d.highlight {
 		d.highlight, d.replay.repaint = h, true
 	}
+}
+
+func (d *Document) draw(c *twod.Canvas) {
+	d.window(c)
 	animating := d.tick(c)
 	if (animating || d.replay.animating) && d.tree != nil {
 		d.tree.Inked = false
 	}
 	size := d.drawSize(c)
 	d.viewport = geom.Rect{W: size.X, H: size.Y}
+	d.placeLists(c, size)
 	d.Layout(size)
 	if d.follow(c) {
 		d.Layout(size)
@@ -688,6 +710,10 @@ func (d *Document) Draw(c *twod.Canvas) {
 	d.replay.invalidated = false
 	switch {
 	case why != "":
+	case live.Any() && d.replay.inPlace && d.replayAround(c):
+		count(c, replayedAround)
+		d.replay.replayedLast = true
+		return
 	case live.Any() && d.replay.inPlace && live.Timed():
 		why = repaintLive
 	case live.Any() && d.replay.inPlace && invalidated:
@@ -709,9 +735,10 @@ func (d *Document) Draw(c *twod.Canvas) {
 	apart := !d.replay.inPlace
 	d.paintBegins()
 	d.replay.frame = paint.Frame{Time: d.clock, Live: live, Apart: apart, Keep: d.tree.Of[d.focused()],
-		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight}
+		Selection: d.selectionPaint(), Inactive: d.medium().Inactive, Highlight: d.highlight,
+		Lists: d.listsFrame(), ListsApart: d.framed != nil}
 	d.zoomed(c, func() { paint.Paint(c, d.inked(), d.frameOptions()...) })
-	d.replay.recorded = c.Keep(m, &d.replay.last)
+	d.keep(c, m, apart)
 	d.paintApart(c, apart)
 	d.replay.inPlace = live.Covered()
 	d.replay.replayedLast = false
@@ -724,6 +751,18 @@ func (d *Document) paintBegins() {
 	d.painted++
 	d.unsettled = false
 	clear(d.drawnPictures)
+}
+
+// keep records what d painted since m to replay: round the live parts
+// it drew in their place where something covers them (decision 0166),
+// whole otherwise.
+func (d *Document) keep(c *twod.Canvas, m twod.Mark, apart bool) {
+	live := &d.replay.live
+	if gaps := live.Gaps(); !apart && len(gaps) > 0 && live.Covered() {
+		d.replay.recorded = c.KeepAround(m, gaps, &d.replay.last)
+		return
+	}
+	d.replay.recorded = c.Keep(m, &d.replay.last)
 }
 
 // tick moves the document's clock to the World's real time and steps its

@@ -81,8 +81,8 @@ type clampIn struct {
 	lines int
 	more  bool
 	// hides is set when the content after the clamp is not drawn, as line-clamp's;
-	// -webkit-line-clamp's is.
-	hides bool
+	// -webkit-line-clamp's is; bare when its last line ends in no ellipsis.
+	hides, bare bool
 }
 
 // ends reports whether the clamp falls in a box of so many lines: past them, or at its
@@ -96,7 +96,7 @@ func (c clampIn) out(lines int) clampOut {
 	if !c.ends(lines) {
 		return clampOut{}
 	}
-	return clampOut{shown: c.lines, hides: c.hides, ellipsis: true}
+	return clampOut{shown: c.lines, hides: c.hides, ellipsis: !c.bare}
 }
 
 // textClamp is the clamp the text of n follows, none for a control's.
@@ -109,10 +109,34 @@ func textClamp(n *node, in clampIn) clampIn {
 
 // clampFor is the clamp n's lines follow: its own line-clamp's, or in's.
 func clampFor(n *node, in clampIn) clampIn {
-	if lines, keeps := n.st.Clamp(); lines > 0 {
-		return clampIn{lines: lines, hides: !keeps}
+	if lines, keeps := n.st.Clamp(); lines != 0 {
+		return clampIn{lines: lines, hides: !keeps, bare: n.st.NoEllipsis && !keeps}
 	}
 	return in
+}
+
+// linesHeld is the lines a box clamping by its height (line-clamp: auto) shows: the most
+// that, clamped there, leave its border box no taller than limit, laid giving that height
+// and the lines laid for a clamp of so many, all of them for math.MaxInt32. It is 0 when
+// they all fit or nothing limits the box, and 1 when not even one does, as Chrome.
+func linesHeld(limit float32, laid func(lines int) (float32, int)) int {
+	if !some(limit) {
+		return 0
+	}
+	h, total := laid(math.MaxInt32)
+	if h <= limit+columnEpsilon {
+		return 0
+	}
+	held := 1
+	for lo, hi := 2, total-1; lo <= hi; {
+		mid := (lo + hi) / 2
+		if at, _ := laid(mid); at <= limit+columnEpsilon {
+			held, lo = mid, mid+1
+		} else {
+			hi = mid - 1
+		}
+	}
+	return held
 }
 
 // marginSet is Taffy's CollapsibleMarginSet.
@@ -481,8 +505,8 @@ func (t *tree) inFlowRoot(n *node, avail spaces) (placed, []oofCandidate) {
 		padding := edges(st.Padding, parent.w)
 		pb := padding.add(n.borders()).sum()
 		adj := boxSizingAdjustment(st, pb)
-		minSize := resolveSize(st.MinSize, parent).withAspectRatio(ratio).mAdd(adj)
-		maxSize := resolveMax(st.MaxSize, parent).withAspectRatio(ratio).mAdd(adj)
+		minSize := stretched(resolveSize(st.MinSize, parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, parent)
+		maxSize := stretched(resolveMax(st.MaxSize, parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, parent)
 		clamped := resolveSize(st.Size, parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)
 		minMax := size{definiteMinMax(minSize.w, maxSize.w), definiteMinMax(minSize.h, maxSize.h)}
 		known = known.or(minMax).or(clamped).or(size{rootAvail.w.value(), none}).mMax(pb)

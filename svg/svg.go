@@ -122,6 +122,7 @@ type Picture struct {
 	// transform is the root's, about the viewport's centre in CSS pixels.
 	transform Matrix
 	nesting   int
+	filters   *elementFilters
 }
 
 // Option sets how a picture is read.

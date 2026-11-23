@@ -29,7 +29,7 @@ func TestAScrollTurnsByTheWheel(t *testing.T) {
 	s.in.SetMouse(sc.Box().Center())
 	s.frames(1)
 	s.in.AddWheel(geom.V2(0, 1))
-	s.frames(2)
+	s.frames(14)
 	assert.Less(t, first.Box().Y, top, "the content moved up")
 }
 
@@ -57,7 +57,7 @@ func TestBarNeverStillTurnsByTheWheel(t *testing.T) {
 	s.in.SetMouse(sc.Box().Center())
 	s.frames(1)
 	s.in.AddWheel(geom.V2(0, 1))
-	s.frames(2)
+	s.frames(14)
 	assert.Less(t, first.Box().Y, top)
 }
 

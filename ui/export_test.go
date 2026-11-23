@@ -162,3 +162,61 @@ func ShownFrame(d *Document, url string) int {
 	}
 	return -1
 }
+
+// fieldLine is line l of field n's text run, laid out, in the document's
+// space as paint places it.
+func fieldLine(d *Document, n *Node, l textedit.Layout, line int) geom.Rect {
+	b := d.tree.Of[n]
+	at := n.Box()
+	origin := geom.V2(at.X, at.Y).Sub(b.Scroll)
+	for _, c := range b.Children {
+		if c.Kind != box.TextRun {
+			continue
+		}
+		if a, ok := l.(*area); ok {
+			f := a.Row(line)
+			return geom.Rect{X: origin.X + c.Pos.X + f.X, Y: origin.Y + c.Pos.Y + f.Y, W: f.W, H: f.H}
+		}
+		if line < len(c.Lines) {
+			f := c.Lines[line].Rect
+			for _, g := range c.Lines {
+				f.X = min(f.X, g.Rect.X)
+			}
+			return geom.Rect{X: origin.X + c.Pos.X + f.X, Y: origin.Y + c.Pos.Y + f.Y, W: f.W, H: f.H}
+		}
+	}
+	return geom.Rect{}
+}
+
+// FieldSelectionRects are the rectangles text field n's selection is drawn
+// in, in the document's space, laid out as a frame would.
+func FieldSelectionRects(d *Document, n *Node) []geom.Rect {
+	d.layText()
+	t := textOf(d.machine(n))
+	from, to := t.Editor.Selection()
+	if from == to {
+		return nil
+	}
+	l := t.Layout
+	var out []geom.Rect
+	for line := l.Line(from); line <= l.Line(to); line++ {
+		row := fieldLine(d, n, l, line)
+		ranged, _ := l.(interface {
+			Ranges(line, from, to int) [][2]float32
+		})
+		for _, r := range ranged.Ranges(line, from, to) {
+			out = append(out, geom.Rect{X: row.X + r[0], Y: row.Y, W: r[1] - r[0], H: row.H})
+		}
+	}
+	return out
+}
+
+// FieldCaretRect is where text field n's caret stands, in the document's
+// space, laid out as a frame would.
+func FieldCaretRect(d *Document, n *Node) geom.Rect {
+	d.layText()
+	t := textOf(d.machine(n))
+	i := t.Editor.Caret()
+	row := fieldLine(d, n, t.Layout, t.Layout.Line(i))
+	return geom.Rect{X: row.X + t.Layout.X(i), Y: row.Y, W: 1, H: row.H}
+}

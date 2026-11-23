@@ -383,6 +383,28 @@ func TestADragPastAScrollersEdgeScrollsIt(t *testing.T) {
 	assert.InDelta(t, scroll, scrolled(), 0.01, "the button up, it stops")
 }
 
+func TestADragPastASnapContainersEdgeSnapsItOnceItEnds(t *testing.T) {
+	var lines []ui.Arg
+	for range 30 {
+		lines = append(lines, ui.P(ui.Style("margin: 0; height: 40px; scroll-snap-align: start"), ui.Text("a line of text")))
+	}
+	scroller := ui.Div(append(lines, ui.Style("height: 100px; overflow: auto; scroll-snap-type: y mandatory"))...)
+	l := selectableDoc(t, "", scroller)
+	first := scroller.Children()[0]
+	l.down(l.at(t, first, 2))
+	scrolled := func() float32 { return scroller.Box().Y - first.Box().Y }
+	unsnapped := false
+	for range 30 {
+		l.moveTo(geom.V2(40, 160))
+		unsnapped = unsnapped || int(scrolled())%40 != 0
+	}
+	assert.True(t, unsnapped, "the drag scrolls freely")
+	l.up()
+	l.frames(40)
+	assert.Positive(t, scrolled())
+	assert.InDelta(t, 0, float32(int(scrolled()+0.5)%40), 0.01, "let go, it glides to a line's start: %v", scrolled())
+}
+
 func TestAutomationSelectsALabelsText(t *testing.T) {
 	note := ui.P(ui.ID("note"), ui.Text("The quick brown fox"))
 	fixed := ui.P(ui.ID("fixed"), ui.Style("user-select: none"), ui.Text("not for selecting"))
@@ -452,4 +474,59 @@ func TestSelectAllWorksWithAButtonFocused(t *testing.T) {
 	l.clickAt(button)
 	l.held(input.KeyLeftSuper, input.KeyA)
 	assert.Equal(t, "The quick brown fox\n\nPress", l.doc.Selection().Text, "as Chrome: the focus is in no field")
+}
+
+func TestASelectedTabIsCopiedAndDrawnInItsRoom(t *testing.T) {
+	pre := ui.Pre(ui.Text("one\t\ttwo"))
+	l := selectableDoc(t, "pre { margin: 0; font: inherit; }", pre)
+	n := textOf(pre)
+	l.doc.Select(ui.Position{Node: n, Offset: 4}, ui.Position{Node: n, Offset: 5})
+	assert.Equal(t, "\t", l.doc.Selection().Text)
+	second := l.doc.SelectionRects()
+	require.Len(t, second, 1, "the second tab's room")
+	l.doc.Select(ui.Position{Node: n, Offset: 3}, ui.Position{Node: n, Offset: 5})
+	both := l.doc.SelectionRects()
+	require.Len(t, both, 1)
+	assert.Greater(t, both[0].W, second[0].W, "the first tab's room before it")
+	assert.InDelta(t, both[0].X+both[0].W, second[0].X+second[0].W, 0.01, "both end at the second's stop")
+}
+
+func TestTheCopiedHTMLKeepsTheInlineElementsRoundTheSelection(t *testing.T) {
+	link := ui.A(ui.Attr("href", `a"b`), ui.B(ui.Text("bold & <brave>")))
+	p := ui.P(ui.Text("a "), link, ui.Text(" end"))
+	l := selectableDoc(t, "", p)
+	word := textOf(link.Children()[0])
+	assert.Empty(t, l.doc.SelectionHTML(), "nothing selected")
+	l.doc.Select(ui.Position{Node: word, Offset: 0}, ui.Position{Node: word, Offset: 4})
+	assert.Equal(t, `<a href="a&quot;b"><b>bold</b></a>`, l.doc.SelectionHTML(), "a word of a bold link")
+	l.doc.Select(ui.Position{Node: word, Offset: 5}, ui.Position{Node: textOf(p), Offset: 1})
+	assert.Equal(t, ` <a href="a&quot;b"><b>bold </b></a>`, l.doc.SelectionHTML(),
+		"backwards, out of it: the paragraph's own text, the link cut to it")
+	l.doc.Select(ui.Position{Node: word, Offset: 5}, ui.Position{Node: word, Offset: 14})
+	assert.Equal(t, `<a href="a&quot;b"><b>&amp; &lt;brave&gt;</b></a>`, l.doc.SelectionHTML(), "escaped")
+}
+
+func TestACopyPutsTheSelectionsHTMLBesideItsText(t *testing.T) {
+	ui.SetPlatform(t, textedit.Mac)
+	p := ui.P(ui.Text("plain "), ui.B(ui.Text("bold")))
+	l := selectableDoc(t, "", p)
+	require.True(t, l.doc.SelectContents(p))
+	l.held(input.KeyLeftSuper, input.KeyC)
+	assert.Equal(t, "plain bold", l.win.Clipboard())
+	assert.Equal(t, "plain <b>bold</b>", l.win.ClipboardHTML())
+}
+
+func TestAFirstLetterIsSelectedWithItsText(t *testing.T) {
+	p := ui.P(ui.Class("drop"), ui.Text("Lantern light"))
+	l := selectableDoc(t, ".drop::first-letter { float: left; font-size: 40px; }", p)
+	require.True(t, l.doc.SelectContents(p))
+	assert.Equal(t, "Lantern light", l.doc.Selection().Text)
+	rects := l.doc.SelectionRects()
+	require.Len(t, rects, 2, "the letter's, then the rest's")
+	assert.Greater(t, rects[0].H, rects[1].H, "the letter as high as its own line")
+
+	n := textOf(p)
+	l.doc.Select(ui.Position{Node: n, Offset: 1}, ui.Position{Node: n, Offset: 4})
+	assert.Equal(t, "ant", l.doc.Selection().Text)
+	assert.Len(t, l.doc.SelectionRects(), 1, "the letter left out")
 }
