@@ -98,7 +98,7 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 		err = expandTransition(v, out)
 	case shortAnimation:
 		err = expandAnimation(v, out)
-	case "text-decoration":
+	case shortDecoration:
 		err = expandTextDecoration(v, out)
 	case shortFont:
 		err = expandFont(v, out)

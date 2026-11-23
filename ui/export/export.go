@@ -233,6 +233,9 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 			write("data-ember-focus", place(d, sel.Focus))
 		}
 	}
+	if from, to := d.SelectionRange(n); from != to && (d.Focused(n) || hasAttr(n, "autofocus")) {
+		write("data-ember-field-selection", fmt.Sprintf("%d %d", from, to))
+	}
 	if style := liveStyle(d, n); style != "" {
 		write("style", inline(d, style, nil))
 	}
@@ -572,13 +575,21 @@ func place(d *ui.Document, p ui.Position) string {
 	return fmt.Sprintf("%d %d", index-1, offset)
 }
 
-// selectText selects in Chrome the text the Document has selected, once
-// the page is parsed and again once it has loaded.
+func hasAttr(n *dom.Node, name string) bool {
+	_, ok := n.Attr(name)
+	return ok
+}
+
+// selectText selects in Chrome the text the Document has selected, and
+// the characters of its focused field, or of one to be focused, once the page is parsed and again
+// once it has loaded.
 const selectText = `<script>const emberSelect = () => { ` +
 	`const end = name => { const e = document.querySelector("[data-ember-" + name + "]"); if (!e) return null; ` +
 	`const [i, o] = e.dataset["ember" + name[0].toUpperCase() + name.slice(1)].split(" ").map(Number); ` +
 	`return [e.childNodes[i], o]; };
-const a = end("anchor"), f = end("focus"); if (a && f) getSelection().setBaseAndExtent(a[0], a[1], f[0], f[1]); };
+const a = end("anchor"), f = end("focus"); if (a && f) getSelection().setBaseAndExtent(a[0], a[1], f[0], f[1]);
+const field = document.querySelector("[data-ember-field-selection]"); if (field) { field.focus(); ` +
+	`field.setSelectionRange(...field.dataset.emberFieldSelection.split(" ").map(Number)); } };
 addEventListener("DOMContentLoaded", emberSelect); ` +
 	`addEventListener("load", () => document.fonts.ready.then(emberSelect));</script>` + "\n"
 

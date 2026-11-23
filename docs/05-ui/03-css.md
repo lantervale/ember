@@ -302,7 +302,7 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 | `::marker` | the list item's marker (above) |
 | `::first-line`, `::first-letter` (and `:first-line`, `:first-letter`) | a block's first line and letter (above) |
 | `::placeholder` | an empty field's placeholder: `color`, `opacity` |
-| `::selection` | selected text, in a page and in a field: `background-color`, and in a page `color` ([Selecting text](#selecting-text)) |
+| `::selection` | selected text, in a page and in a field: `background-color`, `color`, `text-shadow` and `text-decoration`; `::selection:window-inactive` while the window is inactive ([Selecting text](#selecting-text)) |
 | `::backdrop` | behind a modal dialog: `background-color`, `opacity` |
 | `::file-selector-button` | refused: ui has no file input |
 | `::details-content` | refused: a details' content has no box of its own |
@@ -316,7 +316,7 @@ Every pseudo-element Chrome reads is here (`TestChromeReadsThePseudoElementsOfTh
 | a vendor's (`::-webkit-scrollbar`, `::-moz-focus-inner`…) | refused; under `ui.BrowserSheets()` as the [vendor tables](#vendor-prefixes) say |
 | any other name | refused: unknown, as Chrome drops the rule |
 
-A pseudo-element's rule that sets a property it does not take keeps its other declarations and warns of that one. Nothing may follow a pseudo-element in a selector: `::before:hover` and `li::marker::before` are refused as Chrome refuses them; `::before::marker` and `::after::marker` are read as Chrome reads them, and `::selection:window-inactive` is refused.
+A pseudo-element's rule that sets a property it does not take keeps its other declarations and warns of that one. Nothing may follow a pseudo-element in a selector: `::before:hover` and `li::marker::before` are refused as Chrome refuses them; `::before::marker` and `::after::marker` are read as Chrome reads them, and so is `::selection:window-inactive`, the one pseudo-class after a pseudo-element; `:window-inactive` elsewhere matches nothing, as in Chrome.
 
 ## Selecting text
 
@@ -337,7 +337,9 @@ go run ./examples/92-ui-kit -element selection
 
 What is selected is copied as Chrome's `Selection.toString()` writes it: the text as drawn, its white space collapsed and its `text-transform` applied, a line break for a `br` and round each block and table row, two after a `p`, a tab between a row's cells; nothing of `user-select: none`, `display: none` or `visibility: hidden` text, of generated content, of a picture or of a field. The clipboard gets plain text, its no-break spaces as plain ones.
 
-The selection is drawn behind the text, on each line from its first selected character to its last, as high as the line box and no less than the glyphs, and a space wider where it goes on past the line's end, as Chrome draws a selected line break. A picture wholly inside it is tinted. `::selection` sets its `background-color` and the text's `color`; it is inherited from the parent's `::selection`, so one rule on a container styles what it holds. A rule that sets only one of the two leaves the other as CSS has it: no background, or the text's own colour. With no rule the background is Chrome's on macOS, `#b3d7fe` over white, and the text keeps its colour. A field's own selection takes `::selection`'s `background-color` only.
+The selection is drawn behind the text, on each line from its first selected character to its last, as high as the line box and no less than the glyphs, and a space wider where it goes on past the line's end, as Chrome draws a selected line break; an empty line it goes past, a `br` alone on its line or one of preformatted text, is marked a space wide from its start. A picture wholly inside it is tinted. `::selection` sets its `background-color` and the text's `color`, `text-shadow` (the selected text's shadows in place of its own) and `text-decoration` (drawn on the selected text over its own); it is inherited from the parent's `::selection`, so one rule on a container styles what it holds. A rule that sets only one of the two colours leaves the other as CSS has it: no background, or the text's own colour. With no rule the background is Chrome's on macOS, `#b3d7fe` over white, and the text keeps its colour. A field's own selection takes `::selection`'s `background-color` and `color` too.
+
+While the window the Document shows in is not the focused one (`win.Focused()`, which a test sets with `win.SetFocused`), a selection with no `::selection` colours is greyed as Chrome greys it on macOS, `#dcdcdc` over white, and `::selection:window-inactive` rules hold: the cascade is answered again when the window gains or loses the focus ([decision 0140](../99-decisions/0140-a-documents-window-focus-is-a-state-the-cascade-answers.md)). A double click takes the word under the pointer across the inline elements that cut it, `wo<b>rd</b>` whole; a drag past an edge of a scroller scrolls it that way, sideways too.
 
 ## Media queries
 

@@ -1682,18 +1682,65 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	ink := c
 	if len(parts) > 0 {
 		ink = p.highlight(e, st, parts, c, alpha)
+	} else if st.HasSelectionText {
+		// a field's selection is drawn behind it, its text in the colour here
+		if parts = p.fieldParts(e); len(parts) > 0 {
+			ink = fade(st.SelectionText, alpha)
+		}
 	}
 	p.decorations(e, st, style.Underline|style.Overline, alpha)
+	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
 	if c.A <= 0 && ink == c {
 		p.decorations(e, st, style.LineThrough, alpha)
+		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
 	face := p.faceOf(st.Font)
-	for i := len(st.TextShadows) - 1; i >= 0; i-- {
-		sh := st.TextShadows[i]
+	if len(st.TextShadows) > 0 || len(parts) > 0 && len(st.SelectionShadows) > 0 {
+		for i, f := range b.Lines {
+			k := -1
+			if st.HasSelectionShadows {
+				k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+			}
+			if k < 0 {
+				p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
+				continue
+			}
+			for j, clip := range p.partClips(e, st, f, parts[k]) {
+				shadows, current := st.TextShadows, st.Color
+				if j == 1 {
+					shadows, current = st.SelectionShadows, color.Color{}
+				}
+				if clip.W <= 0 || len(shadows) == 0 {
+					continue
+				}
+				p.s.PushClip(clip)
+				p.shadows(e, st, face, f, shadows, current, alpha)
+				p.s.PopClip()
+			}
+		}
+	}
+	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
+	if ink != c {
+		p.recoloured(e, st, face, parts, c, ink)
+	} else {
+		for _, f := range b.Lines {
+			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+		}
+	}
+	p.decorations(e, st, style.LineThrough, alpha)
+	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// shadows draws the text shadows of fragment f of e's run, the last
+// first, those in currentColor in current, else in their own colour.
+func (p *painter) shadows(e entry, st *style.Computed, face *twod.Face, f box.Fragment, shadows []style.Shadow,
+	current color.Color, alpha float32) {
+	for i := len(shadows) - 1; i >= 0; i-- {
+		sh := shadows[i]
 		sc := sh.Color
-		if sh.CurrentColor {
-			sc = st.Color
+		if sh.CurrentColor && current.A > 0 {
+			sc = current
 		}
 		for _, t := range taps(sh.Blur) {
 			tc := fade(fade(sc, alpha), t.weight)
@@ -1701,21 +1748,33 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 				continue
 			}
 			o := p.textOptions(face, st.Font.Size, st.LetterSpacing, tc, smoothingOf(st))
-			for _, f := range b.Lines {
-				p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Shown(), st, o)
-			}
+			p.words(geom.V2(e.at.X+f.Rect.X+sh.X+t.at.X, e.at.Y+f.Baseline+sh.Y+t.at.Y), f.Shown(), st, o)
 		}
 	}
-	opts := p.textOptions(face, st.Font.Size, st.LetterSpacing, c, smoothingOf(st))
-	if ink != c {
-		p.recoloured(e, st, face, parts, c, ink)
-		p.decorations(e, st, style.LineThrough, alpha)
+}
+
+// selectionDecorations draws the ::selection's text-decoration lines
+// among lines on the selected parts of e's run.
+func (p *painter) selectionDecorations(e entry, st *style.Computed, parts []Selected, lines style.DecorationLine,
+	alpha float32) {
+	if len(parts) == 0 || !st.HasSelectionDecoration || st.SelectionDecoration.Line&lines == 0 {
 		return
 	}
-	for _, f := range b.Lines {
-		p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+	sel := *st
+	sel.Decorations = []style.Decoration{{TextDecoration: st.SelectionDecoration, Font: st.Font}}
+	for _, part := range parts {
+		if part.Line < 0 {
+			continue
+		}
+		f := e.b.Lines[part.Line]
+		run := *e.b
+		run.Lines = e.b.Lines[part.Line : part.Line+1]
+		one := e
+		one.b = &run
+		p.s.PushClip(p.partClips(e, st, f, part)[1])
+		p.decorations(one, &sel, lines, alpha)
+		p.s.PopClip()
 	}
-	p.decorations(e, st, style.LineThrough, alpha)
 }
 
 // words draws text from at as opts draw it, each word separator widened
@@ -1755,9 +1814,13 @@ func (p *painter) advance(st *style.Computed, s string, opts []twod.TextOption) 
 // selectionColors are the ::selection of the element st styles: its
 // background-color and its color. A rule that sets either leaves the
 // other as CSS has it, no background and the text's own colour; with no
-// rule the background is Chrome's on macOS and the text keeps its colour.
-func selectionColors(st *style.Computed, text color.Color, alpha float32) (color.Color, color.Color) {
+// rule the background is Chrome's on macOS, greyed while the window is
+// inactive, and the text keeps its colour.
+func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha float32) (color.Color, color.Color) {
 	if !st.HasSelection && !st.HasSelectionText {
+		if p.inactive {
+			return fade(inactiveSelection, alpha), text
+		}
 		return fade(pageSelection, alpha), text
 	}
 	var back color.Color
@@ -1774,7 +1837,7 @@ func selectionColors(st *style.Computed, text color.Color, alpha float32) (color
 // returns the colour their text takes.
 func (p *painter) highlight(e entry, st *style.Computed, parts []Selected, text color.Color,
 	alpha float32) color.Color {
-	back, ink := selectionColors(st, text, alpha)
+	back, ink := p.selectionColors(st, text, alpha)
 	if back.A > 0 {
 		for _, s := range parts {
 			p.s.Rect(p.snap(geom.Rect{X: e.at.X + s.Rect.X, Y: e.at.Y + s.Rect.Y, W: s.Rect.W, H: s.Rect.H}), back)
@@ -1794,36 +1857,43 @@ func (p *painter) recoloured(e entry, st *style.Computed, face *twod.Face, parts
 			p.words(at, f.Shown(), st, plain)
 			continue
 		}
-		// room above and below a line for what its glyphs draw outside it
-		reach := st.Font.Size
-		line := geom.Rect{X: e.at.X + f.Rect.X - reach, Y: e.at.Y + f.Rect.Y - reach, W: f.Rect.W + 2*reach,
-			H: f.Rect.H + 2*reach}
-		in := line
-		// a part from the fragment's start or to its end takes what its
-		// glyphs draw past it too
-		const near = 0.01
-		if left := e.at.X + parts[k].Rect.X; left > e.at.X+f.Rect.X+near {
-			in.W -= left - in.X
-			in.X = left
-		}
-		if right := e.at.X + parts[k].Rect.X + parts[k].Rect.W; right < e.at.X+f.Rect.X+f.Rect.W-near {
-			in.W = right - in.X
-		}
-		for _, part := range []struct {
-			clip geom.Rect
-			ink  color.Color
-		}{
-			{geom.Rect{X: line.X, Y: line.Y, W: in.X - line.X, H: line.H}, c},
-			{in, ink},
-			{geom.Rect{X: in.X + in.W, Y: line.Y, W: line.X + line.W - in.X - in.W, H: line.H}, c},
-		} {
-			if part.clip.W <= 0 || part.ink.A <= 0 {
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			drawn := c
+			if j == 1 {
+				drawn = ink
+			}
+			if clip.W <= 0 || drawn.A <= 0 {
 				continue
 			}
-			p.s.PushClip(part.clip)
-			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterSpacing, part.ink, smoothingOf(st)))
+			p.s.PushClip(clip)
+			p.words(at, f.Shown(), st, p.textOptions(face, st.Font.Size, st.LetterSpacing, drawn, smoothingOf(st)))
 			p.s.PopClip()
 		}
+	}
+}
+
+// partClips are the clips the selected part of fragment f of e's run
+// cuts its line in: before the part, the part, and after it, each with
+// room above and below for what glyphs draw outside the line, the part
+// taking what its glyphs draw past the fragment's start or end where it
+// reaches them.
+func (p *painter) partClips(e entry, st *style.Computed, f box.Fragment, part Selected) [3]geom.Rect {
+	reach := st.Font.Size
+	line := geom.Rect{X: e.at.X + f.Rect.X - reach, Y: e.at.Y + f.Rect.Y - reach, W: f.Rect.W + 2*reach,
+		H: f.Rect.H + 2*reach}
+	in := line
+	const near = 0.01
+	if left := e.at.X + part.Rect.X; left > e.at.X+f.Rect.X+near {
+		in.W -= left - in.X
+		in.X = left
+	}
+	if right := e.at.X + part.Rect.X + part.Rect.W; right < e.at.X+f.Rect.X+f.Rect.W-near {
+		in.W = right - in.X
+	}
+	return [3]geom.Rect{
+		{X: line.X, Y: line.Y, W: in.X - line.X, H: line.H},
+		in,
+		{X: in.X + in.W, Y: line.Y, W: line.X + line.W - in.X - in.W, H: line.H},
 	}
 }
 

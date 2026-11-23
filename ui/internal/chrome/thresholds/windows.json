@@ -54,6 +54,8 @@
   "rounded-clip": 0.004,
   "scrolled": 0.0152,
   "selection": 0.008,
+  "selection-marks": 0.013,
+  "field-selection": 0.008,
   "shadows": 0.0103,
   "table-caption": 0.0064,
   "table-collapse": 0.0042,

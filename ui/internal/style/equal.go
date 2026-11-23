@@ -114,6 +114,10 @@ func (t *Text) equal(o *Text) bool {
 		t.HasSelection == o.HasSelection &&
 		t.SelectionText == o.SelectionText &&
 		t.HasSelectionText == o.HasSelectionText &&
+		sameSlice(t.SelectionShadows, o.SelectionShadows) &&
+		t.HasSelectionShadows == o.HasSelectionShadows &&
+		t.SelectionDecoration == o.SelectionDecoration &&
+		t.HasSelectionDecoration == o.HasSelectionDecoration &&
 		sameSlice(t.TextShadows, o.TextShadows) &&
 		t.TextDecoration == o.TextDecoration &&
 		sameSliceFunc(t.Decorations, o.Decorations, (*Decoration).equal) &&

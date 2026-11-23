@@ -579,6 +579,15 @@ type Text struct {
 	HasSelection     bool
 	SelectionText    color.Color
 	HasSelectionText bool
+	// SelectionShadows is the ::selection's text-shadow, set when
+	// HasSelectionShadows is: the selected text's shadows in place of its
+	// own. SelectionDecoration is its text-decoration, set when
+	// HasSelectionDecoration is, drawn on the selected text over the
+	// text's own.
+	SelectionShadows       []Shadow
+	HasSelectionShadows    bool
+	SelectionDecoration    TextDecoration
+	HasSelectionDecoration bool
 	// TextShadows is text-shadow: Spread and Inset are unused.
 	TextShadows []Shadow
 	// TextDecoration is the element's own text-decoration, and Decorations

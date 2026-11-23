@@ -162,14 +162,15 @@ var initialFont = style.Font{Family: []string{"sans-serif"}, Size: 16, Weight: 4
 
 // medium is what the Document answers the media features that aren't
 // its viewport's with. The pointer is its window's, the outermost
-// Document's.
+// Document's, and so is whether that window is inactive.
 func (d *Document) medium() css.Media {
 	top := d
 	for top.framed != nil {
 		top = top.framed.host
 	}
 	m := css.Media{Dark: d.ColorScheme() == platform.AppearanceDark, ReducedMotion: d.ReducedMotion(),
-		ForcedColors: d.ForcedColors(), Touch: top.touch, TouchOnly: d.TouchOnly(), Font: d.fontUnits(initialFont)}
+		ForcedColors: d.ForcedColors(), Touch: top.touch, TouchOnly: d.TouchOnly(), Font: d.fontUnits(initialFont),
+		Inactive: top.inactive}
 	if c := d.Contrast(); c != ContrastNoPreference {
 		m.Contrast = c.String()
 	}
