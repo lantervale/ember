@@ -2,7 +2,8 @@
 // in pure Go: COLR versions 0 and 1 (layers, gradients, transforms and
 // composites) in the colours of a CPAL palette, the PNG bitmaps of sbix
 // (Apple's emoji) and of CBDT and CBLC (Noto's), and the documents of an
-// SVG table through ember's svg package.
+// SVG table through the reader importing ui/svg registers (RegisterSVG),
+// without which they are left to the font's other tables or outlines.
 package colourfont
 
 import (
@@ -99,7 +100,8 @@ func directory(ttf []byte) map[string]table {
 }
 
 // Kind is how glyph gid is coloured, the first of COLR, the bitmaps and
-// the SVG table that has it, as Chrome prefers them.
+// the SVG table that has it, as Chrome prefers them; the SVG table only
+// once a reader is registered.
 func (f *Font) Kind(gid uint16) Kind {
 	if f == nil {
 		return None

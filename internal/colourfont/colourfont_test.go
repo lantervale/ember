@@ -1,6 +1,7 @@
 package colourfont_test
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/lantervale/ember/internal/colourfont"
 	"github.com/lantervale/ember/internal/colourfont/colourtest"
+	"github.com/lantervale/ember/internal/colourfont/svgglyph"
 )
 
 func parse(t *testing.T, ttf []byte) *colourfont.Font {
@@ -149,7 +151,39 @@ func TestAnSbixGlyphShowsWithinItsOutlinesBounds(t *testing.T) {
 	}
 }
 
+// readingSVG registers the svg package's reader for the test, as
+// importing ui/svg does.
+func readingSVG(t *testing.T) {
+	t.Helper()
+	prev := colourfont.RegisterSVG(svgglyph.Read)
+	t.Cleanup(func() { colourfont.RegisterSVG(prev) })
+}
+
+func TestWithoutAnSVGReaderSVGGlyphsFallBackToTheOtherTablesOrTheOutlines(t *testing.T) {
+	prev := colourfont.RegisterSVG(nil)
+	t.Cleanup(func() { colourfont.RegisterSVG(prev) })
+	svgDoc := func(r rune) string {
+		return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg"><g id="glyph%d">`+
+			`<rect width="1000" height="1000" y="-1000" fill="#00ff00"/></g></svg>`, colourtest.GlyphID(r))
+	}
+	cf := parse(t, colourtest.Build(colourtest.Options{
+		Layers:   map[rune][]colourtest.Layer{'A': {{Shape: colourtest.Square, Palette: 2}, {Shape: colourtest.Disc}}},
+		Palettes: [][]color.NRGBA{colourtest.Default},
+		SVG:      map[rune]string{'A': svgDoc('A'), 'C': svgDoc('C')},
+	}))
+	assert.Equal(t, colourfont.Layers, cf.Kind(colourtest.GlyphID('A')), "COLR over SVG")
+	near(t, colourtest.Default[0], at(t, cf, 'A', colourfont.Request{}, discX, discY), "A's disc from COLR")
+	assert.Equal(t, colourfont.None, cf.Kind(colourtest.GlyphID('C')), "an SVG glyph alone is its outline")
+	_, _, ok := cf.Draw(colourtest.GlyphID('C'), colourfont.Request{PPEM: 100})
+	assert.False(t, ok, "left to the outline")
+
+	readingSVG(t)
+	assert.Equal(t, colourfont.SVG, cf.Kind(colourtest.GlyphID('C')), "drawn once a reader is registered")
+	near(t, color.NRGBA{0, 0xff, 0, 0xff}, at(t, cf, 'C', colourfont.Request{}, 0.25, 0.25), "C's document")
+}
+
 func TestSVGGlyphsAreDrawnByTheSVGPackage(t *testing.T) {
+	readingSVG(t)
 	for _, zipped := range []bool{false, true} {
 		cf := parse(t, colourtest.SVG(zipped))
 		assert.Equal(t, colourfont.SVG, cf.Kind(colourtest.GlyphID('A')))
@@ -171,6 +205,7 @@ func TestAFontWithoutColourGlyphsIsNone(t *testing.T) {
 }
 
 func TestACutColourTableDrawsWithoutPanicking(t *testing.T) {
+	readingSVG(t)
 	for _, ttf := range [][]byte{colourtest.COLRv0(), colourtest.COLRv1(), colourtest.Sbix(true),
 		colourtest.CBDT(true), colourtest.SVG(true)} {
 		f, err := sfnt.Parse(ttf)

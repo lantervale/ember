@@ -11,6 +11,7 @@ import (
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/colourfont"
 	"github.com/lantervale/ember/internal/colourfont/colourtest"
+	"github.com/lantervale/ember/internal/colourfont/svgglyph"
 	"github.com/lantervale/ember/render"
 )
 
@@ -70,6 +71,13 @@ func TestAColourGlyphTakesItsLooksPaletteAndTheTextsColour(t *testing.T) {
 	var c List
 	c.Text(geom.Vec2{}, "A", Style{Face: drawn.Styled(Look{NoSVG: true}), Size: 40})
 	assert.Empty(t, colourPictures(&c), "an SVG glyph left to its outline")
+	c = List{}
+	c.Text(geom.Vec2{}, "A", Style{Face: drawn, Size: 40})
+	assert.Empty(t, colourPictures(&c), "to its outline too while no SVG reader is registered")
+	prev := colourfont.RegisterSVG(svgglyph.Read)
+	t.Cleanup(func() { colourfont.RegisterSVG(prev) })
+	drawn, err = ParseFace("drawn", colourtest.SVG(false))
+	require.NoError(t, err)
 	c = List{}
 	c.Text(geom.Vec2{}, "A", Style{Face: drawn, Size: 40})
 	assert.Len(t, colourPictures(&c), 1, "else drawn")

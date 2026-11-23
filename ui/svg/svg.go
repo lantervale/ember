@@ -8,6 +8,10 @@
 // A file is one by its name ending in .svg or by its bytes starting, past
 // an XML prolog, a doctype and comments, with an svg element. What a file
 // uses that the reader doesn't draw is a warning of the Document.
+//
+// It also draws the SVG glyphs of colour fonts in twod's texts, which
+// without it are left to the font's other colour tables or its outlines;
+// ui leaves them to their outlines either way, as Chrome.
 package svg
 
 import (
@@ -16,6 +20,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/lantervale/ember/internal/colourfont"
+	"github.com/lantervale/ember/internal/colourfont/svgglyph"
 	"github.com/lantervale/ember/svg"
 	"github.com/lantervale/ember/ui"
 )
@@ -25,6 +31,7 @@ const mime = "image/svg+xml"
 //nolint:gochecknoinits // registers the format on import, as audio's decoders do
 func init() {
 	ui.RegisterVectorFormat(mime, is, parse)
+	colourfont.RegisterSVG(svgglyph.Read)
 }
 
 // is reports whether the file name with these bytes is an SVG picture.
