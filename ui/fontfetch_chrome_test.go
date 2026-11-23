@@ -27,6 +27,7 @@ func foundry(t *testing.T) ui.FontFetcher {
 	t.Helper()
 	files := map[string][]byte{"heavy.ttf": gobold.TTF, "mono.ttf": gomono.TTF, "weighty.ttf": varfonttest.Weighty(),
 		"weighty-phantom.ttf": varfonttest.Build(varfonttest.Options{NoHVAR: true}),
+		"weighty-layout.ttf":  varfonttest.Build(varfonttest.Options{Layout: true}),
 		"layered.ttf":         colourtest.COLRv0(), "painted.ttf": colourtest.COLRv1(), "struck.ttf": colourtest.Sbix(true),
 		"bitmapped.ttf": colourtest.CBDT(true), "drawn.ttf": colourtest.SVG(true),
 		"bold-mono.ttc": colourtest.Collection(gobold.TTF, gomono.TTF)}

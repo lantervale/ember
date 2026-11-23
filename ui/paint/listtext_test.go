@@ -58,3 +58,30 @@ func TestAltTextSpacesAndSmoothsAsItsImage(t *testing.T) {
 	require.Len(t, texts, 2, "'ab cd' fits 55 unspaced, not spaced: it wraps")
 	assert.Equal(t, float32(10), texts[1].At.X, "the second word under the icon")
 }
+
+func textsOf(r *recorder) []string {
+	var out []string
+	for _, o := range r.of("text") {
+		out = append(out, o.Text)
+	}
+	return out
+}
+
+func TestASelectsListDrawsItsOptionsInSmallCapitals(t *testing.T) {
+	tr, sel, m, find := selectPage(20, 50, control.Option{Label: "Ab"})
+	sel.Style.Font.Caps = style.SmallCaps
+	m.Do(control.Activate)
+	r := newRecorder()
+	Paint(r, tr, find, Fonts(ahem{}))
+	texts := textsOf(r)
+	require.GreaterOrEqual(t, len(texts), 2)
+	assert.Equal(t, []string{"A", "B"}, texts[len(texts)-2:], "the lowercase as small capitals")
+}
+
+func TestAltTextIsDrawnInSmallCapitals(t *testing.T) {
+	b := ctl(dom.Img, 300, 50, "src", "missing", "alt", "Ab")
+	b.Style.Font.Caps = style.SmallCaps
+	r := newRecorder()
+	Paint(r, tree(el(0, 0, 400, 300, nil, b)), Images(func(string) *twod.Texture { return nil }), Fonts(ahem{}))
+	assert.Equal(t, []string{"A", "B"}, textsOf(r))
+}

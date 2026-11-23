@@ -41,6 +41,9 @@ type Options struct {
 	NoAvar bool
 	// Source is the TrueType font made variable, Go Regular when nil.
 	Source []byte
+	// Layout adds GDEF, GSUB and GPOS that vary over the axes, in place
+	// of the source's: see KernAV.
+	Layout bool
 }
 
 // Weighty is Go Regular made variable: wght from 100 to 900, 400 its
@@ -90,6 +93,9 @@ func Build(opts Options) []byte {
 	}
 	if !opts.NoHVAR {
 		tables["HVAR"] = hvar(advances)
+	}
+	if opts.Layout {
+		layout(tables, src)
 	}
 	tables["name"] = names(tables["name"])
 	return build(tables)
