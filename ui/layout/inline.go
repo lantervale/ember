@@ -1327,7 +1327,8 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		a.overflow = out.overflow
 		a.node.pendingOOF = out.oof
 		switch {
-		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl:
+		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl,
+			a.node.slider:
 		case some(out.lastBaseline):
 			a.baseline = out.lastBaseline
 		case some(out.firstBaseline):

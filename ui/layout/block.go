@@ -176,6 +176,9 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		if some(res.firstBaseline) {
 			res.firstBaseline += offset
 		}
+		if some(res.lastBaseline) {
+			res.lastBaseline += offset
+		}
 		anyInFlow := false
 		for _, it := range items {
 			if it.final != nil {
@@ -214,7 +217,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	out := output{
 		size:             final,
 		firstBaseline:    res.firstBaseline,
-		lastBaseline:     none,
+		lastBaseline:     res.lastBaseline,
 		collapsesThrough: !preventsCollapse && outerH == 0 && allCollapse,
 		lines:            res.lines,
 		clamped:          res.clamped,
@@ -449,6 +452,7 @@ type blockResult struct {
 	firstTop      marginSet
 	lastBottom    marginSet
 	firstBaseline float32
+	lastBaseline  float32
 	lines         int
 	clamped       bool
 }
@@ -502,7 +506,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	yForAbsolute := rInset.t
 	var firstTop, active marginSet
 	collapsingWithFirst := true
-	firstBaseline := none
+	firstBaseline, lastBaseline := none, none
 	// activeHasClearance is set while the margins waiting to collapse are those of an
 	// empty element with clearance: they collapse with what follows, never out of the
 	// block's bottom.
@@ -768,6 +772,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				firstBaseline = loc.y - insetOffset.y + b
 			}
 		}
+		if b := childLastBaseline(lo, finalSize.h, it.overflow.Height); some(b) {
+			lastBaseline = loc.y - insetOffset.y + b
+		}
 		if avoids {
 			if !some(margin.l) {
 				resolved.l += avoid.x - rInset.l
@@ -859,6 +866,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		firstTop:      firstTop,
 		lastBottom:    lastBottom,
 		firstBaseline: firstBaseline,
+		lastBaseline:  lastBaseline,
 		lines:         clamp.lines - max(left, 0),
 		clamped:       some(clampEnd),
 	}

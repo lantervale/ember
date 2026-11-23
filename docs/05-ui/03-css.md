@@ -199,14 +199,14 @@ progress::-webkit-progress-value { border-radius: 7px; background-color: #6b8f5a
 
 | Part | |
 |---|---|
-| `::-webkit-slider-runnable-track` | across the range, centred down it, as tall as the thumb unless sized; the range is as tall as the track when its height is `auto` |
+| `::-webkit-slider-runnable-track` | across the range, between its `::before` and `::after`, centred down it, as tall as the thumb unless sized; the range is at least as tall as the track when its height is `auto` |
 | `::-webkit-slider-thumb` | at the value along the track's content box less its own width, from its top and its `margin-top`; Chrome's blue disc, in the range's `accent-color`, unless its own `appearance` is `none` |
-| `::-webkit-progress-inner-element`, `::-webkit-meter-inner-element` | the control's content box |
+| `::-webkit-progress-inner-element`, `::-webkit-meter-inner-element` | the control's content box, or a block as tall between the lines of its `::before` and `::after` |
 | `::-webkit-progress-bar`, `::-webkit-meter-bar` | the inner element's content box, a meter's half as tall and centred; grey for a progress, Chrome's grey gradient for a meter |
 | `::-webkit-progress-value` | the bar's content box cut to the value; green |
 | `::-webkit-meter-optimum-value`, `-suboptimum-value`, `-even-less-good-value` | the bar's content box cut to the value, styled by the region the value is in; Chrome's green, yellow and red gradients |
 
-A meter of its own look takes its styled bar's and values' `background-color`s. The parts are read in every sheet; `-webkit-appearance` is read under `ui.BrowserSheets()` only, so a game's sheet writes `appearance`.
+A progress and a meter stand 0.2 em below the baseline of a line of text, as Chrome's sheet sets them, whatever their look. A switch of `appearance: none` is an empty box as a checkbox is, as Chrome, which draws no switch, shows it. A meter of its own look takes its styled bar's and values' `background-color`s. The parts are read in every sheet; `-webkit-appearance` is read under `ui.BrowserSheets()` only, so a game's sheet writes `appearance`.
 
 ### Clamping lines
 
@@ -335,7 +335,7 @@ An animation starts when its name enters the element's list and keeps its time w
 
 A pseudo-element ends its selector, after any compound: `.card:hover::before`, `nav ul li:nth-child(2)::before`, `ol > li::marker`. It counts as a type selector in the specificity. `:before`, `:after` are read as the two-colon forms, as Chrome reads them ([decision 0089](../99-decisions/0089-a-generated-box-is-a-node-of-its-element.md)).
 
-`::before` and `::after` make a box inside their element, before its first child and after its last, once their `content` is something other than `none` or `normal`. The box takes any property an element takes: a display, a position, a float, a place in a flex or a grid, backgrounds, transforms, transitions, animations. It inherits from its element. It is no element: no selector matches it, `ByID`, `Children()` and automation never see it, its text is not selected or translated, and a click on it is a click on its element. The elements Chrome gives none have none (`img`, `br`, `input`, `textarea`, `select`, `canvas`), and neither have `progress`, `meter`, `table` and a table's row groups and rows, which ui lays out whole. It is sized as the Document's elements are: by its border box, or by its content under `ui.BrowserSheets()`.
+`::before` and `::after` make a box inside their element, before its first child and after its last, once their `content` is something other than `none` or `normal`. The box takes any property an element takes: a display, a position, a float, a place in a flex or a grid, backgrounds, transforms, transitions, animations. It inherits from its element. It is no element: no selector matches it, `ByID`, `Children()` and automation never see it, its text is not selected or translated, and a click on it is a click on its element. The elements Chrome gives none have none (`img`, `br`, text fields, `textarea`, `select`, `canvas`), and neither have `table` and a table's row groups and rows, which ui lays out whole. It is sized as the Document's elements are: by its border box, or by its content under `ui.BrowserSheets()`.
 
 ![A journal's contents: chapters numbered I and II, their parts 1.1 to 2.2, a page count after the first title, an orange bar down the right side, a note with a plus for its marker and a quotation in guillemets](generated.png "ember · generated")
 
@@ -365,7 +365,7 @@ go run ./examples/92-ui-kit -element generated
 
 On an element itself, `content: url(picture.png)` alone replaces the element by the picture, sized as an `img` (its children are not shown), as Chrome does; any other `content` there is read and does nothing. A form control, a frame and a canvas keep their own look.
 
-A checkbox and a radio take `::before` and `::after`, laid out in their box and past it as in Chrome; a range, a progress bar and a meter take none yet, nor do text fields, as in Chrome.
+A checkbox and a radio take `::before` and `::after`, laid out in their box from its top and past it as in Chrome. So do a range, a progress bar and a meter, among their parts as Chrome lays them out ([decision 0184](../99-decisions/0184-a-controls-generated-content-is-laid-out-round-a-box-of-its-parts.md)): a progress's or a meter's on lines above and below its bar, overflowing its box, its last line giving it its baseline; a range's at the start and the end of a row, the track between them, the range keeping its baseline at its bottom. Text fields take none, as in Chrome.
 
 ### Lists and counter styles
 

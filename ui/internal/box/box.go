@@ -27,6 +27,10 @@ const (
 	// its Style the root's Viewport. Node is the root element, which
 	// keeps its scroll offset.
 	Viewport
+	// ControlPart is the inner element of a progress or a meter, or the
+	// slider container of a range, among the control's ::before and
+	// ::after: the box its parts are drawn in. Node is nil.
+	ControlPart
 )
 
 // Edges is a resolved margin, border or padding, in points.

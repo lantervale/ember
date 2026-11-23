@@ -88,6 +88,7 @@
   "scrollbar-parts": 0.0005,
   "scrollbar-gutter": 0.003,
   "control-parts": 0.002,
+  "control-generated": 0.006,
   "scrolled": 0.0152,
   "selection": 0.008,
   "selection-marks": 0.013,

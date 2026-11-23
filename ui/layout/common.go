@@ -18,6 +18,18 @@ func childFirstBaseline(first, height float32, overflowY style.Overflow) float32
 	return first
 }
 
+// childLastBaseline is the baseline of the last line in a child laid out as out, its first
+// where it reports no last; a scroll container's is its bottom, as Chrome's.
+func childLastBaseline(out output, height float32, overflowY style.Overflow) float32 {
+	switch {
+	case scrollContainer(overflowY):
+		return height
+	case some(out.lastBaseline):
+		return out.lastBaseline
+	}
+	return out.firstBaseline
+}
+
 func resolveSelfAlignmentSafety(a alignment, overflows bool) style.Align {
 	if a.safe && overflows {
 		return style.AlignStart
