@@ -326,7 +326,8 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			t.lineBreak(c, parent, it.element, st)
 			continue
 		}
-		if isAtomicDisplay(st.Display) || st.Display == style.Inline && pictured(it.element) {
+		if isAtomicDisplay(st.Display) || st.Display == style.Inline && (pictured(it.element) || st.Mode != frameOf(c.owner)) {
+			// an inline element of another writing mode than its line is laid out as an inline-block
 			n := t.build(it.element, c.owner)
 			n.atomic = true
 			c.runs = append(c.runs,

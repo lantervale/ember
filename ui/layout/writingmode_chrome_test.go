@@ -120,6 +120,23 @@ func TestVerticalFormattingContextsMatchChrome(t *testing.T) {
 			ui.Div(ui.Class("lr"), words("margin: 0", "left"), ui.Div(ui.Class("rl"), words("margin: 0", shortSentence)),
 				words("margin: 0", "right")),
 		),
+		"a vertical-rl scroller starts at its right": styled(`
+.v { writing-mode: vertical-rl; width: 120px; height: 100px; overflow: auto; border: 2px solid; }
+.v > div { block-size: 50px; background: #ccc; margin: 2px; }`,
+			ui.Div(ui.Class("v"), ui.Div(ui.Text("one")), ui.Div(ui.Text("two")), ui.Div(ui.Text("three")),
+				ui.Div(ui.Text("four"))),
+		),
+		"a vertical-lr scroller scrolling down": styled(`
+.v { writing-mode: vertical-lr; width: 120px; height: 100px; overflow: scroll; }
+.v > div { inline-size: 200px; block-size: 30px; background: #ccc; }`,
+			ui.Div(ui.Class("v"), ui.Div(ui.Text("long")), ui.Div(ui.Text("lines"))),
+		),
+		"a span of another writing mode is an inline-block": styled(`
+.v { writing-mode: vertical-rl; }`,
+			ui.P(ui.Text("Across "), ui.Span(ui.Class("v"), ui.Text("down")), ui.Text(" across.")),
+		),
+		"a vertical-rl root": styled(`html { writing-mode: vertical-rl; } p { background: #ccc; }`,
+			words("", shortSentence), words("", "second paragraph")),
 		"inline elements of vertical lines": styled(`
 .v { writing-mode: vertical-rl; height: 180px; }
 .v b { padding: 2px 4px; border: 1px solid; margin-inline: 3px; }

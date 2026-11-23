@@ -77,6 +77,15 @@ func turnSides[T any](s style.Sides[T], mode style.WritingMode) style.Sides[T] {
 	return s
 }
 
+// outerFrame is the frame of the content of parent, where a node of physical style st
+// stands: the root's own, as the initial containing block takes its writing mode.
+func outerFrame(parent *node, st *style.Computed) style.WritingMode {
+	if parent == nil {
+		return st.Mode
+	}
+	return frameOf(parent)
+}
+
 // frameOf is the frame n lays its content out in: its writing mode's.
 func frameOf(n *node) style.WritingMode {
 	if n == nil || n.box.Style == nil {

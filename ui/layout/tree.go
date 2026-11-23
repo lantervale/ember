@@ -143,13 +143,17 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 		return t.out, nil, t
 	}
 	port := viewportOf(root)
-	if !avail.values().both() {
+	if !avail.values().both() || frameOf(r).Vertical() {
 		port = nil
 	}
 	var gutter, content size
-	if port != nil {
+	switch {
+	case port != nil:
 		gutter, content = t.viewport(r, avail.values(), port)
-	} else {
+	case frameOf(r).Vertical():
+		// the initial containing block takes the root's writing mode
+		t.root(r, avail.across())
+	default:
 		t.root(r, avail)
 	}
 	if rounding {
@@ -415,7 +419,7 @@ func (t *tree) kept(e *dom.Node, parent *node) *node {
 	}
 	d := dom.Data(e)
 	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.box.Style != d.Style ||
-		n.st != t.turned(styleOf(e), frameOf(parent)) || !e.SameFlow(n.children) {
+		n.st != t.turned(styleOf(e), outerFrame(parent, styleOf(e))) || !e.SameFlow(n.children) {
 		return nil
 	}
 	return n
@@ -434,7 +438,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 		*b = box.Box{Kind: box.Element, Node: e, Style: st, Children: b.Children[:0]}
 		*n = node{box: b, st: st, parent: parent, fresh: true, readsParent: n.readsParent,
 			kids: n.kids[:0], children: n.children, gutter: n.gutter, reached: t.gen}
-		t.frame(n, st, frameOf(parent))
+		t.frame(n, st, outerFrame(parent, st))
 		t.place(e, b)
 		t.nodes[e] = n
 		return n
@@ -442,7 +446,7 @@ func (t *tree) element(e *dom.Node, parent *node) *node {
 	b := &box.Box{Kind: box.Element, Node: e, Style: st}
 	t.place(e, b)
 	n := &node{box: b, st: st, parent: parent, fresh: true, readsParent: readsParent(st), reached: t.gen}
-	t.frame(n, st, frameOf(parent))
+	t.frame(n, st, outerFrame(parent, st))
 	if t.nodes != nil {
 		if old != nil {
 			t.retire(old, true)
@@ -1051,7 +1055,12 @@ func (t *tree) write(n *node, parent *node) {
 // parent placed it this time: an atomic inline keeps its place in a kept span otherwise.
 func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b := n.box
-	outer := frameOf(parent)
+	outer, in := frameOf(parent), size{}
+	if parent != nil {
+		in = parent.final.size
+	} else if outer = frameOf(n); outer.Vertical() {
+		in = t.icb.across()
+	}
 	f := turnPlaced(n.final, outer, style.HorizontalTB)
 	rewrite := t.keep == nil || n.fresh || n.performed == t.gen
 	n.fresh = false
@@ -1064,8 +1073,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		at := n.absolute
 		b.Pos = geom.Vec2{X: at.x - origin.x, Y: at.y - origin.y}
 		if outer.Vertical() {
-			r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: n.final.size.w, H: n.final.size.h},
-				parent.final.size, outer)
+			r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: n.final.size.w, H: n.final.size.h}, in, outer)
 			b.Pos = geom.Vec2{X: r.X, Y: r.Y}
 		}
 		b.Sticky = geom.Vec2{}
