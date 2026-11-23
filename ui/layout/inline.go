@@ -577,16 +577,9 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
 		}
 		switch {
-		case ch == '\n':
+		case ch == '\n' || ch == '\t' || ch == '\r':
 			emit(word)
-			afterSpace = true
-			c.pieces = append(c.pieces, piece{kind: newline, run: i, level: level})
-		case ch == '\t' || ch == '\r':
-			emit(word)
-			p := tabPiece(fonts, r.st, i, n-1, ch)
-			p.level = level
-			c.pieces = append(c.pieces, p)
-			afterSpace = false
+			afterSpace = c.control(fonts, r.st, i, n-1, ch, level)
 		case ch == ' ':
 			emit(word)
 			if collapses(ws) && afterSpace {
@@ -614,14 +607,20 @@ func splitsWords(st *style.Computed) bool {
 	return st.WrapsAnywhere() || st.WordBreak == style.BreakAll || st.LineBreak == style.LineBreakAnywhere
 }
 
-// tabPiece is the tab or the carriage return ch of run i at character at.
-func tabPiece(fonts box.Fonts, st *style.Computed, i int, at int32, ch rune) piece {
-	p := piece{kind: tab, run: i, at: at}
-	if ch == '\t' {
+// control adds the newline, the tab or the carriage return ch of run i at character at,
+// and reports whether a collapsible space after it is dropped: after a newline.
+func (c *inlineContent) control(fonts box.Fonts, st *style.Computed, i int, at int32, ch rune,
+	level bidi.Level) bool {
+	p := piece{kind: tab, run: i, at: at, level: level}
+	switch ch {
+	case '\n':
+		p = piece{kind: newline, run: i, level: level}
+	case '\t':
 		space := fonts.Advance(st.Font, " ")
 		p.stop, p.least = st.TabStop(space), space/2
 	}
-	return p
+	c.pieces = append(c.pieces, p)
+	return ch == '\n'
 }
 
 // anchorsAt adds the anchors of the out-of-flow elements before run i, and notes the
