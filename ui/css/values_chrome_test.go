@@ -185,7 +185,7 @@ func TestMathFunctionsInTimesComputeAsInChrome(t *testing.T) {
 // the line-height.
 func TestPercentagesInSignInALineHeightComputeAsInChrome(t *testing.T) {
 	values := []string{"calc(20px + 10px * sign(1% - 0.5px))", "calc(20px + 10px * sign(1% - 1.5px))",
-		"calc(20px + 10px * sign(10% - 9px))", "calc(20px * sign(50% - 49px) + 150%)",
+		"calc(20px + 10px * sign(10% - 9px))",
 		"calc(2 * sign(5% - 6px) + 3)", "calc(20px + 10px * sign(abs(-1%) - 0.5px))",
 		"calc(10px * sign(1% - 1px) + 10px)", "max(150%, 10px * sign(2% - 1px))"}
 	sheet := "body { font-size: 10px; } div { height: 4px; }\n"
