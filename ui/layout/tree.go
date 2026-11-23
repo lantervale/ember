@@ -536,10 +536,7 @@ func (t *tree) buildChildren(n *node, children []*dom.Node) {
 	inFlow := false
 	// marked is the item whose marker stands inside it until a line takes the marker:
 	// the first, or one of its own before a first block.
-	marked := insideMarked(n)
-	if inFlexOrGrid {
-		marked = nil
-	}
+	marked := insideMarked(n, inFlexOrGrid)
 	flush := func() {
 		if onlyCollapsibleSpace(run) && marked == nil {
 			run = nil
@@ -627,13 +624,13 @@ func (t *tree) buildInline(n *node, items []item) {
 			n.kids = append(n.kids, t.build(it.element, n))
 		}
 	}
-	n.inline = t.inlineOf(n, items, insideMarked(n))
+	n.inline = t.inlineOf(n, items, insideMarked(n, false))
 }
 
 // insideMarked is n where it is a list item whose marker stands inside it, nil
-// otherwise.
-func insideMarked(n *node) *node {
-	if n.st.ListItem && n.st.ListInside && n.box.Kind == box.Element {
+// otherwise or when it lays its children out as a flex or grid container.
+func insideMarked(n *node, flexOrGrid bool) *node {
+	if n.st.ListItem && n.st.ListInside && n.box.Kind == box.Element && !flexOrGrid {
 		return n
 	}
 	return nil
@@ -1066,7 +1063,7 @@ func (t *tree) markerOf(n *node) (markerContent, bool) {
 
 // bullet is the side of a bullet's square and how far below the font's top it starts,
 // as Chrome sizes it from the ascent.
-func (m markerContent) bulletRect() (side, top float32) {
+func (m markerContent) bulletRect() (float32, float32) {
 	offset := float32(math.Floor(float64(m.ascent * 2 / 3)))
 	return float32(math.Floor(float64((offset + 1) / 2))), float32(math.Floor(float64(3 * (m.ascent - offset) / 2)))
 }

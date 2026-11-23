@@ -108,11 +108,13 @@ func TestChromesOwnMaskNamesAreReadAsTheirPlainOnes(t *testing.T) {
 	} {
 		assert.Equal(t, as, computed(t, "-webkit-mask-composite: "+word).MaskLayer(0).Composite, word)
 	}
-	_, warns := Parse("t.css", "div { mask-composite: copy; -webkit-mask-composite: plus-darker; -webkit-mask: url(a.png) no-clip }", Browser())
+	_, warns := Parse("t.css", "div { mask-composite: copy; -webkit-mask-composite: plus-darker; "+
+		"-webkit-mask: url(a.png) no-clip }", Browser())
 	assert.Len(t, warns, 3, "the plain property refuses the compositing words, as Chrome refuses plus-darker and no-clip")
-	l = computed(t, "-webkit-mask: url(a.png) right 4px top / 10px; -webkit-mask-position: center bottom 3px, left 2px center").MaskLayer(0)
-	pct := func(v float32) style.Length { return style.Length{Kind: style.Fixed, Percent: v, IsPercent: true} }
-	assert.Equal(t, style.BackgroundPosition{X: pct(50), Y: style.Px(3), FromBottom: true}, l.Position)
+	l = computed(t, "-webkit-mask: url(a.png) right 4px top / 10px; "+
+		"-webkit-mask-position: center bottom 3px, left 2px center").MaskLayer(0)
+	half := style.Length{Kind: style.Fixed, Percent: 50, IsPercent: true}
+	assert.Equal(t, style.BackgroundPosition{X: half, Y: style.Px(3), FromBottom: true}, l.Position)
 
 	s = computed(t, `-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
 		-webkit-mask-composite: xor; mask-composite: exclude`)
@@ -120,8 +122,8 @@ func TestChromesOwnMaskNamesAreReadAsTheirPlainOnes(t *testing.T) {
 	assert.Equal(t, style.UnderContent, s.MaskLayer(0).Clip)
 	assert.Equal(t, style.CompositeExclude, s.MaskLayer(0).Composite)
 	l = computed(t, "-webkit-mask: url(a.png) right 4px top / 10px").MaskLayer(0)
-	assert.Equal(t, style.BackgroundPosition{X: style.Px(4), Y: style.Length{Kind: style.Fixed, IsPercent: true}, FromRight: true},
-		l.Position,
+	top := style.Length{Kind: style.Fixed, IsPercent: true}
+	assert.Equal(t, style.BackgroundPosition{X: style.Px(4), Y: top, FromRight: true}, l.Position,
 		"three values, as Chrome's own longhands take them")
 }
 

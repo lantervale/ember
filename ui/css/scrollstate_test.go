@@ -1,4 +1,4 @@
-package css
+package css //nolint:testpackage // answers the containers through the unexported cascade
 
 import (
 	"testing"

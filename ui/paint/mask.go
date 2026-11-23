@@ -141,37 +141,43 @@ func (p *painter) maskFrom(on Pictures, e entry, st *style.Computed, i int) {
 	case style.CompositeAdd:
 		p.maskFrom(on, e, st, i+1)
 		p.maskLayer(on, e, st, &l)
-		return
 	case style.CompositeDestinationOver:
 		p.maskLayer(on, e, st, &l)
 		p.maskFrom(on, e, st, i+1)
-		return
 	case style.CompositeCopy:
 		p.maskLayer(on, e, st, &l)
-		return
 	case style.CompositeClear:
-		return
+	case style.CompositeSubtract, style.CompositeIntersect, style.CompositeExclude, style.CompositeSourceOver,
+		style.CompositeSourceIn, style.CompositeSourceOut, style.CompositeXor, style.CompositeSourceAtop,
+		style.CompositeDestinationIn, style.CompositeDestinationOut, style.CompositeDestinationAtop,
+		style.CompositePlusLighter:
+		on.BeginPicture()
+		p.maskFrom(on, e, st, i+1)
+		p.maskJoin(on, e, st, &l, composite, on.EndPicture(0))
 	}
-	on.BeginPicture()
-	p.maskFrom(on, e, st, i+1)
-	under := on.EndPicture(0)
+}
+
+// maskJoin draws l, a layer of st's mask, joined by composite to under,
+// the picture of the layers under it.
+func (p *painter) maskJoin(on Pictures, e entry, st *style.Computed, l *style.MaskLayer, composite style.MaskComposite,
+	under *twod.Picture) {
 	layer := func() *twod.Picture {
 		on.BeginPicture()
-		p.maskLayer(on, e, st, &l)
+		p.maskLayer(on, e, st, l)
 		return on.EndPicture(0)
 	}
 	switch composite {
 	case style.CompositeIntersect:
 		on.PushClipPicture(under)
-		p.maskLayer(on, e, st, &l)
+		p.maskLayer(on, e, st, l)
 		p.s.PopClip()
 	case style.CompositeSubtract:
 		on.PushClipPicture(under, twod.Inverted())
-		p.maskLayer(on, e, st, &l)
+		p.maskLayer(on, e, st, l)
 		p.s.PopClip()
 	case style.CompositeExclude:
 		on.BeginPicture()
-		p.maskLayer(on, e, st, &l)
+		p.maskLayer(on, e, st, l)
 		over := on.EndPicture(0)
 		on.PushClipPicture(under, twod.Inverted())
 		on.DrawPicture(over)

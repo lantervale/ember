@@ -6,7 +6,16 @@ import (
 	"github.com/lantervale/ember/ui/internal/dom"
 )
 
-const kwScrollState = "scroll-state"
+const (
+	kwScrollState = "scroll-state"
+	kwBlockStart  = "block-start"
+	kwBlockEnd    = "block-end"
+	kwInlineStart = "inline-start"
+	kwInlineEnd   = "inline-end"
+	kwBlock       = "block"
+	kwInline      = "inline"
+	kwBoth        = "both"
+)
 
 // Sides are the physical sides of a box, a bit each.
 type Sides uint8
@@ -30,10 +39,10 @@ type ScrollState struct {
 //
 //nolint:gochecknoglobals // lookup table
 var scrollStateFeatures = map[string][]string{
-	"stuck": {kwNone, kwTop, kwRight, kwBottom, kwLeft, "block-start", "block-end", "inline-start", "inline-end"},
-	"scrollable": {kwNone, kwTop, kwRight, kwBottom, kwLeft, "block-start", "block-end", "inline-start", "inline-end",
-		"x", "y", "block", "inline"},
-	"snapped": {kwNone, "x", "y", "block", "inline", "both"},
+	"stuck": {kwNone, kwTop, kwRight, kwBottom, kwLeft, kwBlockStart, kwBlockEnd, kwInlineStart, kwInlineEnd},
+	"scrollable": {kwNone, kwTop, kwRight, kwBottom, kwLeft, kwBlockStart, kwBlockEnd, kwInlineStart, kwInlineEnd,
+		"x", "y", kwBlock, kwInline},
+	"snapped": {kwNone, "x", "y", kwBlock, kwInline, kwBoth},
 }
 
 // scrollStateQuery reads scroll-state(): one feature, or conditions on
@@ -113,21 +122,21 @@ func sidesOf(word string, rtl bool) Sides {
 		start, end = end, start
 	}
 	switch word {
-	case kwTop, "block-start":
+	case kwTop, kwBlockStart:
 		return SideTop
-	case kwBottom, "block-end":
+	case kwBottom, kwBlockEnd:
 		return SideBottom
 	case kwLeft:
 		return SideLeft
 	case kwRight:
 		return SideRight
-	case "inline-start":
+	case kwInlineStart:
 		return start
-	case "inline-end":
+	case kwInlineEnd:
 		return end
-	case "x", "inline":
+	case "x", kwInline:
 		return SideLeft | SideRight
-	case "y", "block":
+	case "y", kwBlock:
 		return SideTop | SideBottom
 	}
 	return 0

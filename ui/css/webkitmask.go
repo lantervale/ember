@@ -7,6 +7,11 @@ import (
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
+const (
+	propMaskComposite = "mask-composite"
+	propMaskPosition  = "mask-position"
+)
+
 // legacyComposite is the prefix the compositing words of
 // -webkit-mask-composite take once read as mask-composite's, which
 // refuses them written plain, as Chrome does.
@@ -56,7 +61,7 @@ func checkMaskComposite(c Component) error {
 // as the four it stands for, and -webkit-mask refuses no-clip, as Chrome
 // does.
 func webkitMask(rest string, value []Component) ([]Component, error) {
-	if rest == "mask-composite" {
+	if rest == propMaskComposite {
 		for i := range value {
 			if c := &value[i]; c.Kind == Ident {
 				if as, ok := legacyCompositeWords[strings.ToLower(c.Text)]; ok {
@@ -65,7 +70,7 @@ func webkitMask(rest string, value []Component) ([]Component, error) {
 			}
 		}
 	}
-	if rest != "mask" && rest != "mask-position" {
+	if rest != shortMask && rest != propMaskPosition {
 		return value, nil
 	}
 	var out []Component
@@ -73,14 +78,14 @@ func webkitMask(rest string, value []Component) ([]Component, error) {
 		if i > 0 {
 			out = append(out, Component{Token: Token{Kind: Comma, Text: ","}})
 		}
-		if rest == "mask" {
+		if rest == shortMask {
 			for _, c := range layer {
 				if isWord(c, "no-clip") {
 					return nil, fmt.Errorf("-webkit-mask takes no no-clip")
 				}
 			}
 		}
-		start, end := positionRun(layer, rest == "mask-position")
+		start, end := positionRun(layer, rest != shortMask)
 		if end-start == 3 {
 			four := fourValues(layer[start:end])
 			layer = append(append(append([]Component{}, layer[:start]...), four...), layer[end:]...)

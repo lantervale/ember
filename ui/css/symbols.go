@@ -93,8 +93,7 @@ func symbolsStyle(name string) *style.CounterStyle {
 	if !strings.HasPrefix(name, kwSymbols+"(") {
 		return nil
 	}
-	if cs, ok := anonymousStyles.Load(name); ok {
-		return cs.(*style.CounterStyle) //nolint:forcetypeassert // the map holds nothing else
-	}
-	return nil
+	v, _ := anonymousStyles.Load(name)
+	cs, _ := v.(*style.CounterStyle)
+	return cs
 }

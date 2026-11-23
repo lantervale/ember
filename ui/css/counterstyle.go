@@ -104,7 +104,7 @@ func (p *parser) counterStyle(t Token, in scope) {
 			continue
 		}
 		v = items(trim(v[1:]))
-		if _, _, ok := internalSystem(v); ok && desc == "system" && p.sheet.Name == predefinedSheet {
+		if _, _, internal := internalSystem(v); internal && desc == "system" && p.sheet.Name == predefinedSheet {
 			cs.Descs[desc] = v
 			continue
 		}
@@ -368,6 +368,19 @@ func (cs *counterStyles) lookup(name string, extending []string) *style.CounterS
 // extends, or over CSS's initial ones. A rule whose system lacks the
 // symbols it needs defines none.
 func (cs *counterStyles) resolve(r *CounterStyle, extending []string) *style.CounterStyle {
+	out := cs.system(r, extending)
+	if out == nil {
+		return nil
+	}
+	out.Name = r.Name
+	cs.descriptors(r, out)
+	return out
+}
+
+// system is r's style from its system and symbols alone, nil when they
+// define none: what it extends, or its own symbols over CSS's initial
+// descriptors.
+func (cs *counterStyles) system(r *CounterStyle, extending []string) *style.CounterStyle {
 	out := &style.CounterStyle{Negative: [2]string{"-"}, Suffix: ". ", Fallback: kwDecimal}
 	system := r.Descs["system"]
 	if len(system) == 2 && isWord(system[0], "extends") {
@@ -379,23 +392,23 @@ func (cs *counterStyles) resolve(r *CounterStyle, extending []string) *style.Cou
 			base = predefined().lookup(kwDecimal, nil)
 		}
 		*out = *base
-	} else if sys, l, ok := internalSystem(system); ok {
-		out.System, out.Longhand = sys, l
-	} else {
-		out.System, out.First = systemOf(system)
-		for _, c := range r.Descs["symbols"] {
-			out.Symbols = append(out.Symbols, c.Text)
-		}
-		for _, part := range splitOn(r.Descs["additive-symbols"], func(c Component) bool { return c.Kind == Comma }) {
-			w, s, _ := weighted(part)
-			out.Additive = append(out.Additive, style.AdditiveSymbol{Weight: w, Symbol: s})
-		}
-		if !enoughSymbols(out) {
-			return nil
-		}
+		return out
 	}
-	out.Name = r.Name
-	cs.descriptors(r, out)
+	if sys, l, ok := internalSystem(system); ok {
+		out.System, out.Longhand = sys, l
+		return out
+	}
+	out.System, out.First = systemOf(system)
+	for _, c := range r.Descs["symbols"] {
+		out.Symbols = append(out.Symbols, c.Text)
+	}
+	for _, part := range splitOn(r.Descs["additive-symbols"], func(c Component) bool { return c.Kind == Comma }) {
+		w, s, _ := weighted(part)
+		out.Additive = append(out.Additive, style.AdditiveSymbol{Weight: w, Symbol: s})
+	}
+	if !enoughSymbols(out) {
+		return nil
+	}
 	return out
 }
 
@@ -457,6 +470,8 @@ func enoughSymbols(s *style.CounterStyle) bool {
 		return len(s.Symbols) >= 2
 	case style.CounterAdditive:
 		return len(s.Additive) > 0
+	case style.CounterLonghand, style.CounterEthiopic:
+		return true
 	case style.CounterCyclic, style.CounterFixed, style.CounterSymbolic:
 	}
 	return len(s.Symbols) > 0

@@ -83,40 +83,10 @@ func (l *Longhand) grouped(n int) string {
 		}
 	}
 	chinese := l.Lang == LonghandChinese
-	dropOne := func(d int) bool { return l.Lang == LonghandKorean && l.Informal && d == 1 }
 	for i := range 4 {
 		v := n % 10000
 		n /= 10000
-		g := &buf[3-i]
-		if v != 0 && i > 0 {
-			g[7] = groupMarker + i - 1
-		}
-		d := v % 10
-		trailing := chinese && d == 0
-		if d != 0 && (i == 0 || !dropOne(d)) {
-			g[6] = d
-		}
-		for place, div := 1, 10; place <= 3; place, div = place+1, div*10 {
-			if n == 0 && v < div {
-				break
-			}
-			d = v / div % 10
-			if d != 0 && !dropOne(d) || d == 0 && !trailing {
-				g[6-2*place] = d
-			}
-			if place < 3 {
-				trailing = trailing && d == 0
-			}
-			if d != 0 {
-				g[7-2*place] = tensMarker + place - 1
-			}
-		}
-		if trailing && i > 0 {
-			g[6], g[7], g[8] = g[7], g[8], 0
-		}
-		if l.Informal && v < 20 {
-			g[4] = noSymbol
-		}
+		l.group(&buf[3-i], i, v, n != 0)
 		if n == 0 {
 			break
 		}
@@ -146,6 +116,43 @@ func (l *Longhand) grouped(n int) string {
 	return s
 }
 
+// group writes the i-th group of four digits, of value v, into g: its
+// digits and markers at even and odd places, its group marker last;
+// more is set when groups stand before it.
+func (l *Longhand) group(g *[9]int, i, v int, more bool) {
+	chinese := l.Lang == LonghandChinese
+	dropOne := func(d int) bool { return l.Lang == LonghandKorean && l.Informal && d == 1 }
+	if v != 0 && i > 0 {
+		g[7] = groupMarker + i - 1
+	}
+	d := v % 10
+	trailing := chinese && d == 0
+	if d != 0 && (i == 0 || !dropOne(d)) {
+		g[6] = d
+	}
+	for place, div := 1, 10; place <= 3; place, div = place+1, div*10 {
+		if !more && v < div {
+			break
+		}
+		d = v / div % 10
+		if d != 0 && !dropOne(d) || d == 0 && !trailing {
+			g[6-2*place] = d
+		}
+		if place < 3 {
+			trailing = trailing && d == 0
+		}
+		if d != 0 {
+			g[7-2*place] = tensMarker + place - 1
+		}
+	}
+	if trailing && i > 0 {
+		g[6], g[7], g[8] = g[7], g[8], 0
+	}
+	if l.Informal && v < 20 {
+		g[4] = noSymbol
+	}
+}
+
 func (l *Longhand) symbol(a int) string {
 	switch {
 	case a >= groupMarker:
@@ -155,6 +162,12 @@ func (l *Longhand) symbol(a int) string {
 	}
 	return l.Digits[a]
 }
+
+//nolint:gochecknoglobals // Ethiopic's digits
+var (
+	ethiopicOnes = []rune("\u1369\u136a\u136b\u136c\u136d\u136e\u136f\u1370\u1371")
+	ethiopicTens = []rune("\u1372\u1373\u1374\u1375\u1376\u1377\u1378\u1379\u137a")
+)
 
 // ethiopic writes n, at least 1, in Ethiopic numerals: groups of two
 // digits from the right, each written in tens and ones, those of an odd
@@ -174,10 +187,10 @@ func ethiopic(n int) string {
 		g := groups[i]
 		if g != 0 && (g != 1 || i != len(groups)-1 && i%2 == 0) {
 			if g/10 > 0 {
-				b.WriteRune(rune(0x1372 + g/10 - 1))
+				b.WriteRune(ethiopicTens[g/10-1])
 			}
 			if g%10 > 0 {
-				b.WriteRune(rune(0x1369 + g%10 - 1))
+				b.WriteRune(ethiopicOnes[g%10-1])
 			}
 		}
 		switch {
