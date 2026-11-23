@@ -429,7 +429,7 @@ func (t *Transitions) customTransitions(n *dom.Node, a *nodeAnim, old, next *sty
 		if a != nil {
 			r = a.customs[name]
 		}
-		tr, ok := transitionFor(next.Transitions, name, false)
+		tr, ok := transitionFor(next.Transitions, name, flow{})
 		to, toOK := next.Vars[name]
 		switch {
 		case r != nil && sameVar(r.to, name, to, toOK):
@@ -501,7 +501,7 @@ func (t *Transitions) after(n *dom.Node) *style.Computed {
 func (t *Transitions) retarget(i int, r *run, shown, next *style.Computed, to **style.Computed) (*run, bool) {
 	l := &longhands[i]
 	an := &l.prop.anim
-	tr, ok := transitionFor(next.Transitions, l.name, next.Dir == style.RTL)
+	tr, ok := transitionFor(next.Transitions, l.name, flowOf(next))
 	switch {
 	case r == nil && (!ok || an.kind == discrete && !tr.Discrete):
 		return nil, true
@@ -725,9 +725,9 @@ func clamp01f(v float32) float32 { return min(max(v, 0), 1) }
 // transitionFor finds the transition the list gives property name: the
 // last entry naming it, a shorthand of it or all, a logical name the
 // physical one it stands for, on the right under rtl.
-func transitionFor(list []style.Transition, name string, rtl bool) (style.Transition, bool) {
+func transitionFor(list []style.Transition, name string, f flow) (style.Transition, bool) {
 	for i := len(list) - 1; i >= 0; i-- {
-		p := physical(list[i].Property, rtl)
+		p := physical(list[i].Property, f)
 		if p == name || p == kwAll || slices.Contains(shorthands[p], name) {
 			return list[i], list[i].Duration+list[i].Delay > 0
 		}

@@ -450,19 +450,20 @@ type ctx struct {
 	// pseudo-element, whose container may be the element itself.
 	node *dom.Node
 	self bool
-	// rtl is the cascade's: the element's inline sides are mirrored.
-	rtl bool
+	// flow is the cascade's: the writing-mode and direction the
+	// element's logical declarations are placed by.
+	flow flow
 }
 
 // leading are the longhands the others read, in the order they are
-// applied before them: direction, the side inline-start and inline-end
-// stand on, color-scheme, which resolves the colours, the
+// applied before them: writing-mode and direction, the sides the logical
+// ones stand on, color-scheme, which resolves the colours, the
 // font's family, style and weight, which its own units measure, then
 // font-size (em), line-height (lh) and color (currentcolor).
 //
 //nolint:gochecknoglobals,goconst // a fixed list
 var leading = []string{
-	propDirection, propColorScheme, "font-family", "font-style", "font-weight", "font-stretch", propFontSize,
+	propWritingMode, propDirection, propColorScheme, "font-family", "font-style", "font-weight", "font-stretch", propFontSize,
 	"line-height", "color",
 }
 
@@ -542,13 +543,13 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 		parent = &initial
 		rem = initial.Font.Size
 	}
-	casc := r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
+	casc := r.m.cascade(r.m.matched(n, r.sheets, inline), parent)
 	c := initial
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
 	if r.m.native && !x.appearance(casc).Native() {
 		r.m.bare = true
-		casc = r.m.cascade(r.m.matched(n, r.sheets, inline), parent.Dir)
+		casc = r.m.cascade(r.m.matched(n, r.sheets, inline), parent)
 		r.m.bare = false
 	}
 	r.overKeyframe(&casc)
@@ -625,9 +626,7 @@ func (r *restyler) overKeyframe(casc *cascaded) {
 			continue
 		}
 		for _, name := range longhandsOf(d.Name) {
-			if casc.rtl && d.inline {
-				name = mirrored(name)
-			}
+			name = casc.flow.place(name, d)
 			if w := casc.longhands[orderIndex[name]]; w == nil || !w.Important {
 				casc.longhands[orderIndex[name]] = d
 			}
@@ -670,7 +669,7 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 
 // cascaded applies every longhand's winner, then what depends on several.
 func (x *ctx) cascaded(casc cascaded, root bool) {
-	x.rtl = casc.rtl
+	x.flow = casc.flow
 	x.customs(casc.custom)
 	x.fontFirst(casc, root)
 	if !x.transitioning(casc) {
@@ -796,14 +795,14 @@ func (r *restyler) may(n *dom.Node, name string) bool {
 // pseudo-element takes set by its rules, inheriting from the element;
 // false when no rule sets any.
 func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*style.Computed, bool) {
-	casc := m.cascadeFor(m.matchedFor(n, sheets, nil, name), name, x.c.Dir)
+	casc := m.cascadeFor(m.matchedFor(n, sheets, nil, name), name, x.c)
 	if !slices.ContainsFunc(casc.longhands, func(d *Declaration) bool { return d != nil }) && len(casc.custom) == 0 {
 		return nil, false
 	}
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
 	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
-	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, rtl: casc.rtl}
+	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, flow: casc.flow}
 	px.customs(casc.custom)
 	for i := range longhands {
 		l := &longhands[i]
@@ -1138,10 +1137,7 @@ func (x *ctx) valueOf(name string, d *Declaration) ([]Component, bool) {
 // keyOf is the longhand d gives name the value of: the other side's
 // when d is of an inline side and the element's direction rtl.
 func (x *ctx) keyOf(name string, d *Declaration) string {
-	if x.rtl && d.inline {
-		return mirrored(name)
-	}
-	return name
+	return x.flow.key(name, d)
 }
 
 // inherit gives a longhand its parent's value; the root's is its initial
@@ -1781,6 +1777,10 @@ var breaks = map[string]style.Break{
 //nolint:gochecknoglobals // lookup tables
 var (
 	directions   = map[string]style.Direction{dirLTR: style.LTR, dirRTL: style.RTL}
+	writingModes = map[string]style.WritingMode{"horizontal-tb": style.HorizontalTB, "vertical-rl": style.VerticalRL,
+		"vertical-lr": style.VerticalLR, "sideways-rl": style.SidewaysRL, "sideways-lr": style.SidewaysLR,
+		"lr": style.HorizontalTB, "lr-tb": style.HorizontalTB, "rl": style.HorizontalTB, "rl-tb": style.HorizontalTB,
+		"tb": style.VerticalRL, "tb-rl": style.VerticalRL}
 	unicodeBidis = map[string]style.UnicodeBidi{"normal": style.BidiNormal, "embed": style.BidiEmbed,
 		"isolate": style.BidiIsolate, "bidi-override": style.BidiOverride, "isolate-override": style.BidiIsolateOverride,
 		"plaintext": style.BidiPlaintext}
@@ -1888,6 +1888,16 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.Dir = src.Dir },
 			anim:    anim{kind: still},
 		},
+		propWritingMode: {
+			set:     func(x *ctx, v []Component) { x.c.Mode = writingModes[strings.ToLower(v[0].Text)] },
+			inherit: func(dst, src *style.Computed) { dst.Mode = src.Mode },
+			anim:    anim{kind: still},
+		},
+		"text-orientation": keyword(func(c *style.Computed) *style.TextOrientation { return &c.Orientation },
+			map[string]style.TextOrientation{"mixed": style.OrientMixed, "upright": style.OrientUpright,
+				"sideways": style.OrientSideways, "sideways-right": style.OrientSideways}),
+		"text-combine-upright": keyword(func(c *style.Computed) *bool { return &c.Combine },
+			map[string]bool{"none": false, "all": true}),
 		"unicode-bidi": {
 			set:     func(x *ctx, v []Component) { x.c.Bidi = unicodeBidis[strings.ToLower(v[0].Text)] },
 			inherit: func(dst, src *style.Computed) { dst.Bidi = src.Bidi },

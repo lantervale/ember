@@ -531,6 +531,10 @@ var checks = map[string]check{
 	"table-layout":    single(words("auto", "fixed")),
 	"text-align":      single(textAlign),
 	"direction":       single(words("ltr", "rtl")),
+	propWritingMode: single(words("horizontal-tb", "vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr",
+		"lr", "lr-tb", "rl", "rl-tb", "tb", "tb-rl")),
+	"text-orientation":     single(words("mixed", "upright", "sideways", "sideways-right")),
+	"text-combine-upright": single(words("none", "all")),
 	"unicode-bidi": single(words("normal", "embed", "isolate", "bidi-override", "isolate-override",
 		"plaintext")),
 	"text-indent":               single(lengthPercent),
@@ -672,7 +676,7 @@ func transitionTarget(c Component) error {
 		return nil
 	}
 	name := strings.ToLower(c.Text)
-	name = physical(name, false)
+	name = physical(name, flow{})
 	if _, long := properties[name]; c.Kind == Ident && (long || shorthands[name] != nil) {
 		return nil
 	}

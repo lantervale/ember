@@ -325,13 +325,13 @@ func anchorProps() map[string]prop {
 		"position-area": anchorProp(func(x *ctx, v []Component) {
 			x.c.Anchoring.Area = style.PositionArea{}
 			if !isWord(v[0], kwNone) {
-				x.c.Anchoring.Area, _ = positionArea(v, x.rtl)
+				x.c.Anchoring.Area, _ = positionArea(v, x.flow.rtl)
 			}
 		}, func(dst, src *style.Anchoring) { dst.Area = src.Area }),
 		"position-try-fallbacks": anchorProp(func(x *ctx, v []Component) {
 			x.c.Anchoring.Fallbacks = nil
 			if !isWord(v[0], kwNone) {
-				x.c.Anchoring.Fallbacks, _ = tryFallbacks(v, x.rtl)
+				x.c.Anchoring.Fallbacks, _ = tryFallbacks(v, x.flow.rtl)
 			}
 		}, func(dst, src *style.Anchoring) { dst.Fallbacks = src.Fallbacks }),
 		"position-try-order": anchorProp(func(x *ctx, v []Component) {
