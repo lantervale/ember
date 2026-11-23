@@ -64,6 +64,9 @@ type Fragment struct {
 	// is shaped between, where a letter of Text may join theirs; empty
 	// elsewhere. Where Lead or Trail is set, they are the text round them.
 	Before, After string
+	// Spacing is the room text-spacing-trim and text-autospace give
+	// characters of Text, in Rect, by their byte, in order; nil for none.
+	Spacing []Spacing
 	// Lead and Trail are the text beside Text on its line that Chrome
 	// shapes as one with it, the runs on either side sharing its font and
 	// spacing across edges that take no room: Text draws the glyphs whose
@@ -266,8 +269,16 @@ type Tree struct {
 
 // Metrics are a font's vertical metrics at a size, in points: CSS's
 // normal line height is Ascent+Descent+LineGap, and XHeight and CapHeight
-// are how tall a lowercase x and a capital stand, unrounded.
-type Metrics struct{ Ascent, Descent, LineGap, XHeight, CapHeight float32 }
+// are how tall a lowercase x and a capital stand, unrounded. Underline is
+// how far below the baseline the face's own underline begins and
+// UnderlineThickness how thick it is, set when Underlined; EmAscent is
+// the share of the em box above the baseline, 0 when unknown.
+type Metrics struct {
+	Ascent, Descent, LineGap, XHeight, CapHeight float32
+	Underline, UnderlineThickness                float32
+	Underlined                                   bool
+	EmAscent                                     float32
+}
 
 // Fonts measures text for layout, which knows no faces: the root package
 // implements it over twod's.
@@ -309,6 +320,47 @@ type InkFonts interface {
 // line to fit them, not the inline box holding them.
 type FallbackFonts interface {
 	FallbackMetrics(f style.Font, text string) (Metrics, bool)
+}
+
+// HanFonts is Fonts that knows what text-spacing-trim reads of a
+// full-width punctuation mark's glyph: HanGlyph is r's glyph in the face
+// drawing it in f.
+type HanFonts interface {
+	HanGlyph(f style.Font, r rune) HanGlyph
+}
+
+// HanGlyph is what text-spacing-trim reads of a glyph, in points at its
+// size.
+type HanGlyph struct {
+	// Halt is set when the face has the halt feature, which sets
+	// full-width punctuation half its width: Shift is how far it moves
+	// this glyph and Narrow how much it takes off its advance (both
+	// negative, 0 for a glyph it leaves).
+	Halt          bool
+	Shift, Narrow float32
+	// Ink is where the glyph's ink stands in its advance: InkLeft in its
+	// left half, InkCentred in its middle half, else InkElsewhere; Full
+	// is set when the advance is an em.
+	Ink  Ink
+	Full bool
+}
+
+// Ink is where a glyph's ink stands in its advance.
+type Ink uint8
+
+const (
+	InkElsewhere Ink = iota
+	InkLeft
+	InkCentred
+)
+
+// Spacing is the room text-spacing-trim and text-autospace give a
+// character of a Fragment's Text, the one starting at byte At: its glyph
+// is drawn Shift from where the pen stands, and the pen moves Space
+// further than its advance after it.
+type Spacing struct {
+	At           int
+	Shift, Space float32
 }
 
 // VerticalFonts is Fonts that knows its faces' vertical metrics (vhea, vmtx, VORG):

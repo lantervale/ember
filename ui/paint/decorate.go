@@ -1828,8 +1828,10 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 		return
 	}
 	if p.glyphsOnly {
-		white := color.White
-		p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		if !p.lineDecorated {
+			white := color.White
+			p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		}
 		opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), color.White, smoothingOf(st))
 		for _, f := range b.Lines {
 			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
@@ -1852,11 +1854,11 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 			ink = fade(st.SelectionText, alpha)
 		}
 	}
-	p.decorations(e, st, style.Underline|style.Overline, alpha)
+	p.ownDecorations(e, st, style.Underline|style.Overline, alpha)
 	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
 	stroked := st.TextStroke.Width > 0 || len(parts) > 0 && st.HasSelectionStroke
 	if c.A <= 0 && ink == c && !stroked {
-		p.decorations(e, st, style.LineThrough, alpha)
+		p.ownDecorations(e, st, style.LineThrough, alpha)
 		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
@@ -1875,8 +1877,16 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	if stroked {
 		p.strokes(e, st, face, parts, alpha)
 	}
-	p.decorations(e, st, style.LineThrough, alpha)
+	p.ownDecorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// ownDecorations is decorations, but for a part of a vertical line, whose
+// line draws them.
+func (p *painter) ownDecorations(e entry, st *style.Computed, lines style.DecorationLine, alpha float32) {
+	if !p.lineDecorated {
+		p.decorations(e, st, lines, alpha)
+	}
 }
 
 // runShadows draws the text shadows of e's run, the selected parts' the
@@ -2049,7 +2059,7 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 			// The space starting its block's text takes no word-spacing.
 			at.X -= st.WordGap()
 		}
-		p.words(at, shown, st, opts)
+		p.spaced(at, shown, f.Spacing, st, opts)
 		return
 	}
 	opts = append(slices.Clip(opts), twod.RightToLeft())
@@ -2096,6 +2106,50 @@ func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, op
 		x -= pc.w
 		p.s.Text(geom.V2(x+pc.gap, at.Y), pc.text, pc.opts...)
 	}
+}
+
+// spaced draws text from at with words, each character spacing gives
+// room moved and the pen past it as text-spacing-trim and
+// text-autospace have layout measure it. Its pieces are shaped alone:
+// what Chrome trims and spaces joins nothing across them.
+func (p *painter) spaced(at geom.Vec2, text string, spacing []box.Spacing, st *style.Computed,
+	opts []twod.TextOption) {
+	if len(spacing) > 0 {
+		p.around, p.amid = [2]string{}, [2]string{}
+	}
+	from := 0
+	for _, s := range spacing {
+		if s.At >= len(text) {
+			break
+		}
+		_, n := utf8.DecodeRuneInString(text[s.At:])
+		end := s.At + n
+		if s.Shift == 0 {
+			p.words(at, text[from:end], st, opts)
+			at.X += p.textAdvance(st, text[from:end], opts) + s.Space
+			from = end
+			continue
+		}
+		p.words(at, text[from:s.At], st, opts)
+		at.X += p.textAdvance(st, text[from:s.At], opts)
+		p.words(geom.V2(at.X+s.Shift, at.Y), text[s.At:end], st, opts)
+		at.X += p.textAdvance(st, text[s.At:end], opts) + s.Space
+		from = end
+	}
+	if from < len(text) {
+		p.words(at, text[from:], st, opts)
+	}
+}
+
+// textAdvance is how far text takes the pen in st, as layout measures it.
+func (p *painter) textAdvance(st *style.Computed, text string, opts []twod.TextOption) float32 {
+	if text == "" {
+		return 0
+	}
+	if p.fonts == nil {
+		return twod.Measure(text, opts...).X
+	}
+	return p.fonts.Advance(st.Font, text) + st.Spacing(text)
 }
 
 // capsFonts are fonts that know which capitals a face draws itself

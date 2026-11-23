@@ -1,6 +1,7 @@
 package paint
 
 import (
+	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	textshape "github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/internal/box"
@@ -12,7 +13,8 @@ import (
 // glyphs' tops to the right, or anticlockwise for sideways-lr, their tops to the left.
 // The characters standing upright (text-orientation) are drawn unturned, each centred
 // on the line in the room it takes along it, and text-combine-upright's text across
-// the em it takes, pressed into it when wider.
+// the em it takes, pressed into it when wider. The text decorations go along the
+// whole line, the turned parts' and the upright ones' alike, as Chrome draws them.
 func (p *painter) verticalText(e entry, alpha float32) {
 	saved := p.s.Transform()
 	defer p.s.SetTransform(saved)
@@ -32,6 +34,12 @@ func (p *painter) verticalText(e entry, alpha float32) {
 		if f.Style != nil {
 			st = f.Style
 		}
+		whole := *e.b
+		whole.Lines = []box.Fragment{line}
+		along := entry{b: &whole, clip: e.clip, pseudo: e.pseudo}
+		p.s.SetTransform(saved.Mul(turn))
+		p.lineDecorations(along, st, style.Underline|style.Overline, alpha)
+		p.lineDecorated = true
 		for _, seg := range p.orientedParts(line, st) {
 			one := *e.b
 			one.Lines = []box.Fragment{seg.Fragment}
@@ -61,7 +69,26 @@ func (p *painter) verticalText(e entry, alpha float32) {
 			}
 			p.horizontalText(entry{b: &one, clip: e.clip, pseudo: e.pseudo}, alpha)
 		}
+		p.lineDecorated = false
+		p.s.SetTransform(saved.Mul(turn))
+		p.lineDecorations(along, st, style.LineThrough, alpha)
 	}
+}
+
+// lineDecorations draws the lines of st's text decorations along a vertical line,
+// in its turned frame, where textLines would draw them on its text.
+func (p *painter) lineDecorations(e entry, st *style.Computed, lines style.DecorationLine, alpha float32) {
+	if !st.Visible {
+		return
+	}
+	if p.glyphsOnly {
+		if lines&style.Underline != 0 {
+			white := color.White
+			p.decorationsIn(e, st, style.Underline|style.Overline|style.LineThrough, 1, geom.Vec2{}, &white)
+		}
+		return
+	}
+	p.decorations(e, st, lines, alpha)
 }
 
 // standing is st with the features of glyphs standing in vertical lines (vert) first

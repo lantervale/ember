@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/cull"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -79,6 +80,7 @@ func (i inkyAll) Intercepts(f style.Font, s string, letter, word, top, bottom fl
 }
 
 func TestSkipInkAllAsksForEveryGlyphsInkAndLeavesLinesThroughWhole(t *testing.T) {
+	defer cull.Set(cull.On, nil)()
 	for _, c := range []struct {
 		skip style.SkipInk
 		all  bool

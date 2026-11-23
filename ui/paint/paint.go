@@ -279,6 +279,9 @@ type painter struct {
 	// glyphsOnly draws text as the shape of its glyphs and decorations,
 	// opaque white: the picture background-clip: text shows through.
 	glyphsOnly bool
+	// lineDecorated is set while the parts of a vertical line are drawn,
+	// whose text decorations are drawn along the whole line instead.
+	lineDecorated bool
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey

@@ -966,8 +966,12 @@ type Text struct {
 	LineBreak     LineBreak
 	TabSize       TabSize
 	SkipInk       SkipInk
-	WrapStyle     WrapStyle
-	Hyphens       Hyphens
+	// UnderlineOffset is text-underline-offset, Auto for auto, its
+	// percentage kept: it is of the font size of the box decorating.
+	UnderlineOffset   Length
+	UnderlinePosition UnderlinePosition
+	WrapStyle         WrapStyle
+	Hyphens           Hyphens
 	// HyphenChar is hyphenate-character's string when HyphenChosen,
 	// else it is auto.
 	HyphenChar   string
@@ -975,7 +979,7 @@ type Text struct {
 	TextBoxTrim  TextBoxTrim
 	TextBoxEdge  TextBoxEdge
 	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:
-	// normal; both read and computed, laid out as their initial values.
+	// normal.
 	SpacingTrim SpacingTrim
 	Autospace   bool
 	// KeywordSizes is interpolate-size: allow-keywords.
