@@ -1028,13 +1028,14 @@ func floatInside(e *dom.Node) bool {
 }
 
 // anonymous is the block wrapping inline content in a flex, grid or block container: it
-// inherits the text properties and nothing else.
+// inherits the text properties and nothing else, text-box-trim being none of them.
 func (t *tree) anonymous(parent *node) *node {
 	st := t.anonymousStyles[parent.st]
 	if st == nil {
 		s := style.Initial()
 		s.Display = style.Block
 		s.Text = parent.st.Text
+		s.TextBoxTrim = style.TrimNone
 		st = &s
 		if t.anonymousStyles == nil {
 			t.anonymousStyles = map[*style.Computed]*style.Computed{}
