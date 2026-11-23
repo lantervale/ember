@@ -725,6 +725,9 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 // its first, that draw some of text.
 func (s *Set) chainFallbackMetrics(ch *Chain, size float32, text string) (box.Metrics, bool) {
 	first := ch.first()
+	if isASCII(text) && s.drawsASCII(first) {
+		return box.Metrics{}, false
+	}
 	var out box.Metrics
 	var seen *Face
 	found := false
