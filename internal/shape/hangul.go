@@ -45,7 +45,7 @@ func hangulTone(r rune) bool   { return r == 0x302E || r == 0x302F }
 // syllables it cannot compose for ljmo, vjmo and tjmo, and puts a tone
 // mark before its syllable, as HarfBuzz's Hangul shaper does.
 //
-//nolint:funlen,gocognit,gocyclo // HarfBuzz's cases, in their order
+//nolint:cyclop,funlen,gocognit,gocyclo // HarfBuzz's cases, in their order
 func (b *buffer) preprocessHangul() {
 	start, end := 0, 0
 	for i := 0; i < len(b.glyphs); {
