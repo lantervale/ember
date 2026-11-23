@@ -381,8 +381,8 @@ func TestSummaryMarker(t *testing.T) {
 	m := b.Children[0]
 	assert.Equal(t, box.Marker, m.Kind)
 	assert.Same(t, sum, m.Node)
-	w := float32(2 * 10)
-	assert.InDelta(t, w, m.Size.X, 0.01, "▸ and a space, as Chrome's ::marker text")
+	w := float32(10.59375)
+	assert.InDelta(t, w, m.Size.X, 0.01, "1.06em whatever the font, as Chrome's ::marker")
 	assert.InDelta(t, w, b.Children[1].Pos.X, 0.01, "the text after the marker")
 	require.Len(t, m.Lines, 1)
 	assert.Equal(t, "▸", m.Lines[0].Text)

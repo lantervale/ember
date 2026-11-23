@@ -57,6 +57,29 @@ func TestAnSVGImgTakesTheSizeItsFileAsksFor(t *testing.T) {
 	assert.Empty(t, d.Warnings())
 }
 
+func TestAViewBoxAloneTakesTheRoomOfAFlexRowAndOfAnAbsoluteBox(t *testing.T) {
+	d := ui.NewDocument(ui.Stylesheet(samples(t, "body { margin: 0; width: 500px; }"), "page.css"))
+	img := func(src string, args ...ui.Arg) *ui.Node {
+		return ui.Img(append([]ui.Arg{ui.Attr("src", src)}, args...)...)
+	}
+	alone := img("shaped.svg")
+	pair := []*ui.Node{img("shaped.svg"), img("shaped.svg")}
+	free, between, high := img("shaped.svg", ui.Style("position: absolute")),
+		img("shaped.svg", ui.Style("position: absolute; left: 10px; right: 30px")),
+		img("sized.svg", ui.Style("position: absolute; top: 0; bottom: 100px"))
+	d.Body().Append(
+		ui.Div(ui.Style("display: flex"), alone),
+		ui.Div(ui.Style("display: flex; width: 300px"), pair[0], pair[1]),
+		ui.Div(ui.Style("position: relative; width: 240px; height: 300px"), free, between, high))
+	d.Layout(geom.V2(800, 900))
+	assert.Equal(t, geom.V2(500, 250), size(alone), "the row's width")
+	assert.Equal(t, geom.V2(300, 150), size(pair[0]), "no narrower than the row, whatever the items beside")
+	assert.Equal(t, float32(300), pair[1].Box().X)
+	assert.Equal(t, geom.V2(240, 120), size(free), "its containing block's width")
+	assert.Equal(t, geom.V2(200, 100), size(between), "between its insets")
+	assert.Equal(t, geom.V2(200, 100), size(high), "a picture of its own size keeps it between insets")
+}
+
 func TestWhatAnSVGUsesThatIsNotDrawnIsAWarningNamingTheFile(t *testing.T) {
 	d := ui.NewDocument(ui.Stylesheet(samples(t, `body { background: url(clip.svg); }`), "page.css"))
 	for _, src := range []string{"text.svg", "text.svg", "sized.svg"} {

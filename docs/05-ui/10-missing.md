@@ -56,21 +56,13 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | columns right to left | left to right only |
 | `visibility: collapse` on a row or a column, `empty-cells: hide` | the row or the column keeps its room; an empty cell keeps its borders and background |
 | a table's collapsed borders where they meet at a corner, borders of different widths, or as wide in a style of two shades (`inset`, `outset`, `groove`, `ridge`) | the wider way goes through and the other stops beside it, as wide the one across; Chrome's joins differ by a few pixels there, an edge down going through at the table's right corners and between cells |
-| a float and text beside it in a box that shrinks to fit (a float, an inline-block, a `display: table`) | as wide as the wider of the two, where Chrome adds them |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
-| a picture with a ratio and no size (an SVG with only a `viewBox`) as an unsized flex item or absolutely positioned | no width, where Chrome gives it one: give it a width |
-| a replaced grid item | stretched to its cell |
 | `align-self: baseline` in a subgrid | its items align on their own baseline, not shared with the grid round it; aligned at the start where they share the grid's rows |
 | a subgrid's own `repeat(auto-fill, …)` of names beside a grid's names on its lines | the grid's names stay on its lines, where Chrome drops some of them |
 | the height of a subgrid's item sizing the grid's columns, in a subgrid of columns alone | measured without the subgrid's rows: a percentage height or an aspect ratio there counts as on no row |
-| the `width` and `height` attributes of an `img` as its proportions, when a rule takes one of the two back (`height: auto`, as responsive sheets do) | the box has its broken picture's proportions until the picture lands, then is laid out again, where Chrome keeps the room the attributes give (`aspect-ratio: auto 250 / 167`) |
-| a picture made a block (`display: block`) with a percentage `width` or `max-width`, in a box as wide as its content (a float, a flex item, a grid track) | counts for its own width at the box's narrowest, where Chrome counts it for none, so the box is wider, and a float round one is 3 points taller; one left inline counts for none |
-| a `position: fixed` box in an element that scrolls on its own | moves with that element |
-| an absolutely positioned box placed by a block above an element that scrolls | not cut by that element, as in Chrome, but moves with its scroll |
-| a part with no text of an inline element cut by a block inside it, when it has a border or a padding | no line and no box, where Chrome keeps a line for it |
-| `position: relative`, `opacity` on an inline element holding blocks | its lines move and fade, the blocks inside it do not |
-| an empty inline element after a `br` that ends its block | its box of no size stands on the `br`'s line, where Chrome puts it a line lower |
-| a `summary`'s marker | about 3 points narrower than Chrome's, so what follows sits left |
+| `opacity` on an inline element holding blocks | its lines fade, the blocks inside it do not |
+| an absolutely positioned box inside an inline element `position: relative` moves | placed where the element stood before it moved |
+| an `img` whose picture is broken, as tall as its attributes' proportions make it (`width: 100%; height: auto`) | stands on its line by its bottom, where Chrome's stands by the line of its icon and alt text inside it: its line is 3 points taller than Chrome's |
 | `bdo`, a `font` element's attributes | read, and they do nothing |
 | the presentational attributes but those [read](03-css.md): `border`, `rules` and `frame` on a `table`, `align="left"` and `"right"` on a `table` or an `img`, `clear` on a `br`, `hspace`, `vspace`, `background`, `link`, `vlink`, `size` and `noshade` on an `hr`, `align` and `valign` on a `col` or a `colgroup` | read, and they do nothing |
 | a percentage width on a cell spanning columns | not counted: the cell is as wide as its content asks |

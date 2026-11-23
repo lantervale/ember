@@ -68,6 +68,14 @@ func TestABrBreaksTheLine(t *testing.T) {
 	assert.Equal(t, float32(30), tr.Of[two].Size.Y, "two in a row leave an empty line")
 }
 
+func TestAnEmptyInlineAfterAnEndingBrStandsALineLower(t *testing.T) {
+	empty := el(dom.Span, nil)
+	p := el(dom.P, block, text("HH"), el(dom.Br, nil), empty)
+	tr := lay(el(dom.Div, width(100), p), 200)
+	assert.Equal(t, geom.Rect{Y: 10}, tr.Of[empty].Rect(), "at the start of the line after the br, of no size")
+	assert.Equal(t, float32(10), tr.Of[p].Size.Y, "a line holding nothing has no height")
+}
+
 func TestAFieldsetsLegendStandsOnItsTopBorder(t *testing.T) {
 	legend := el(dom.Legend, func(st *style.Computed) {
 		st.Display = style.Block

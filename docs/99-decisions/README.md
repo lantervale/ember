@@ -132,6 +132,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0127 | [A first line is laid out in its own styles](0127-a-first-line-is-laid-out-in-its-own-styles.md) | api |
 | 0130 | [A mixed element reads its group so far as a picture](0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md) | rendering |
 | 0132 | [Border sides are mitered pieces smoothed by their own geometry](0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md) | rendering |
+| 0137 | [A box placed past a scroller is moved back as it scrolls](0137-a-box-placed-past-a-scroller-is-moved-back-as-it-scrolls.md) | api |
 
 ## Writing one
 
