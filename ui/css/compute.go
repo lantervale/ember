@@ -1285,7 +1285,10 @@ func (x *ctx) finish(root bool) {
 			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
-	c.Resizable = c.Resizable && (scrolls(ox) || scrolls(oy))
+	if !scrolls(ox) && !scrolls(oy) {
+		c.Resize = style.ResizeNone
+	}
+	c.Resize = c.Resize.Physical(c.Mode)
 	if scrolls(ox) && !scrolls(oy) {
 		c.Overflow.Height = fix(oy)
 	} else if scrolls(oy) && !scrolls(ox) {
@@ -2542,8 +2545,10 @@ var props = func() map[string]prop {
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
 		"appearance": keyword(func(c *style.Computed) *style.Appearance { return &c.Appearance }, appearances),
-		"resize": keyword(func(c *style.Computed) *bool { return &c.Resizable },
-			map[string]bool{"none": false, "both": true, "horizontal": true, "vertical": true}),
+		"resize": keyword(func(c *style.Computed) *style.Resize { return &c.Resize },
+			map[string]style.Resize{"none": style.ResizeNone, "both": style.ResizeBoth,
+				"horizontal": style.ResizeHorizontal, "vertical": style.ResizeVertical, "block": style.ResizeBlock,
+				"inline": style.ResizeInline}),
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
 			cornerOf, pairs(sizeLength)),

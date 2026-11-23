@@ -19,20 +19,51 @@ const barGutter = 15
 // resize its ::-webkit-resizer, and the root and body, of parent's
 // style, the viewport's bars as their rules style them.
 func (r *restyler) scrollbars(c *style.Computed, n *dom.Node, rem float32, viewport bool, parent *style.Computed) {
-	if c.Resizable {
+	data := dom.Data(n)
+	own := data.BarsOwn
+	if c.ScrollbarWidth > 0 && !c.ScrollbarColored && !c.ScrollbarThin && r.may(n, webkitScrollbar) {
+		own = r.part(n, c, rem, webkitScrollbar, 0)
+	}
+	whole := r.restylesBars(data, c) || !own.Equal(data.BarsOwn)
+	data.BarsOwn = own
+	if c.Resizable() {
 		c.Resizer = r.part(n, c, rem, webkitResizer, 0)
+		if !whole && data.Style != nil {
+			c.Resizer = data.Style.Resizer
+		}
 	}
 	if viewport {
 		r.viewportBars(c, n, rem, parent)
 	}
 	if c.ScrollbarWidth == 0 || c.ScrollbarColored || c.ScrollbarThin || !r.may(n, webkitScrollbar) {
+		data.BarsShown = nil
 		return
 	}
-	data := dom.Data(n)
-	if p := r.barParts(c, c, n, rem, data.BarHover, data.BarPressed); p != nil {
+	p := r.barParts(c, c, n, rem, data.BarHover, data.BarPressed)
+	if !whole {
+		p = data.BarsStale.Kept(data.BarsShown, p)
+	}
+	data.BarsShown, data.BarsStale, data.BarsInactive = p, style.BarStale{}, r.env.inactive
+	if p != nil {
 		c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight = p.Parts, p.Width, p.Height
 		c.ScrollbarNone = p.Parts == nil
 	}
+}
+
+// restylesBars reports whether the parts of the bars of n, whose pipeline
+// is data, restyle whole as its style becomes c: on the first, once its
+// own style changes, the parts aside, or once the window's focus does,
+// as Chrome's (decision 0207); its ::-webkit-scrollbar in no part's state is the
+// caller's.
+func (r *restyler) restylesBars(data *dom.Pipeline, c *style.Computed) bool {
+	old := data.Style
+	if old == nil || data.BarsShown == nil || data.BarsInactive != r.env.inactive {
+		return true
+	}
+	was := *old
+	was.Scrollbar, was.ScrollbarWidth, was.ScrollbarHeight = c.Scrollbar, c.ScrollbarWidth, c.ScrollbarHeight
+	was.ScrollbarNone, was.ViewportBars, was.Resizer = c.ScrollbarNone, c.ViewportBars, c.Resizer
+	return !was.Equal(c)
 }
 
 // viewportBars gives the root or body n, of style c under parent's, the
@@ -63,7 +94,7 @@ func (r *restyler) barParts(box, el *style.Computed, n *dom.Node, rem float32,
 	hover, pressed style.BarPart) *style.StyledBars {
 	corner := partState(0)
 	if box.Overflow.Width == style.Scroll && box.Overflow.Height == style.Scroll ||
-		box.Resizable && (box.Overflow.Width == style.Scroll || box.Overflow.Height == style.Scroll) {
+		box.Resizable() && (box.Overflow.Width == style.Scroll || box.Overflow.Height == style.Scroll) {
 		corner = partCornerPresent
 	}
 	held := func(horizontal bool, part style.BarPart) partState {

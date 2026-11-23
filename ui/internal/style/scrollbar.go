@@ -82,3 +82,71 @@ func (b *StyledBars) Equal(o *StyledBars) bool {
 	}
 	return b.Width == o.Width && b.Height == o.Height && b.Parts.Equal(o.Parts)
 }
+
+// BarStale are the parts of a scroll container's bars to restyle at its
+// next restyle, one bit per BarPart on each bar and barTrackBit for the
+// track: Chrome restyles the part the pointer leaves and the one it
+// reaches, with their bar and its track, and leaves the others as they
+// were shown.
+type BarStale struct{ V, H barBits }
+
+type barBits uint16
+
+// barTrackBit stands for a bar's track among BarStale's bits.
+const barTrackBit = 15
+
+// Mark notes the part p, its bar and its track stale; none for NoBarPart.
+func (s *BarStale) Mark(p BarPart) {
+	if p == NoBarPart {
+		return
+	}
+	bits := &s.V
+	if p&BarHorizontal != 0 {
+		bits = &s.H
+	}
+	*bits |= 1<<p.Part() | 1<<BarBackground | 1<<barTrackBit
+}
+
+// Kept is fresh, a scroller's bars as its rules style them now, with the
+// parts shown before that s doesn't name stale kept as they were shown,
+// as Chrome keeps a bar's parts until the pointer changes the state of
+// one: fresh whole when the bars changed shape (a bar or the parts came
+// or went).
+func (s BarStale) Kept(shown, fresh *StyledBars) *StyledBars {
+	if shown == nil || fresh == nil || shown.Parts == nil || fresh.Parts == nil {
+		return fresh
+	}
+	parts := *fresh.Parts
+	out := &StyledBars{Parts: &parts, Width: fresh.Width, Height: fresh.Height}
+	if s.V&(1<<BarBackground) == 0 {
+		out.Width = shown.Width
+	}
+	if s.H&(1<<BarBackground) == 0 {
+		out.Height = shown.Height
+	}
+	parts.V = s.V.keep(shown.Parts.V, fresh.Parts.V)
+	parts.H = s.H.keep(shown.Parts.H, fresh.Parts.H)
+	parts.Corner = shown.Parts.Corner
+	return out
+}
+
+// keep is fresh with the parts of shown whose bits aren't set in bits.
+func (bits barBits) keep(shown, fresh BarParts) BarParts {
+	pick := func(bit uint, was, now *Computed) *Computed {
+		if bits&(1<<bit) != 0 {
+			return now
+		}
+		return was
+	}
+	out := BarParts{
+		Bar:   pick(uint(BarBackground), shown.Bar, fresh.Bar),
+		Track: pick(barTrackBit, shown.Track, fresh.Track),
+		Start: pick(uint(BarBackTrack), shown.Start, fresh.Start),
+		End:   pick(uint(BarForwardTrack), shown.End, fresh.End),
+		Thumb: pick(uint(BarThumb), shown.Thumb, fresh.Thumb),
+	}
+	for i := range out.Buttons {
+		out.Buttons[i] = pick(uint(BarBackStart)+uint(i), shown.Buttons[i], fresh.Buttons[i])
+	}
+	return out
+}

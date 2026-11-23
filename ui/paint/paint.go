@@ -690,7 +690,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	if r, ok := clipRect(b, e.at); ok {
 		round, rr := clipRound(b, e.at)
 		inner = p.newClip(clip{rect: r, round: round, radii: rr, xf: p.s.Transform(), parent: e.clip, by: b})
-		if scrolls(shown(b)) {
+		if st := shown(b); scrolls(st) || st.Resizable() {
 			own.scrollers = append(own.scrollers, e)
 		}
 	}

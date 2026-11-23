@@ -1262,11 +1262,12 @@ type Look struct {
 	// ScrollbarColored.
 	ScrollbarThumb, ScrollbarTrack color.Color
 	ScrollbarColored               bool
-	// Resizable is resize other than none on a box that clips: Chrome
-	// keeps its bars' corner for the resizer, which Resizer, its
-	// ::-webkit-resizer, draws where a rule styles it.
-	Resizable bool
-	Resizer   *Computed
+	// Resize is the axes resize lets the user drag on a box that clips,
+	// none on one that doesn't: Chrome keeps its bars' corner for the
+	// resizer, which Resizer, its ::-webkit-resizer, draws where a rule
+	// styles it, its own grip otherwise.
+	Resize  Resize
+	Resizer *Computed
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
 	Background color.Color
@@ -1912,3 +1913,37 @@ func (s ColorScheme) Dark(prefersDark bool) bool {
 	}
 	return s&SchemeDark != 0
 }
+
+// Resize is the axes along which the user may drag a box's size by its
+// resizer: block and inline as written, until the writing mode turns them
+// into the page's.
+type Resize uint8
+
+// The values of resize.
+const (
+	ResizeNone Resize = iota
+	ResizeBoth
+	ResizeHorizontal
+	ResizeVertical
+	ResizeBlock
+	ResizeInline
+)
+
+// Resizable reports a resizer on the box: resize other than none on one
+// that clips.
+func (s *Computed) Resizable() bool { return s.Resize != ResizeNone }
+
+// Physical is r along the page's axes in writing mode m.
+func (r Resize) Physical(m WritingMode) Resize {
+	switch {
+	case r == ResizeBlock && m.Vertical() || r == ResizeInline && !m.Vertical():
+		return ResizeHorizontal
+	case r == ResizeBlock || r == ResizeInline:
+		return ResizeVertical
+	}
+	return r
+}
+
+// Width and Height report whether r lets the user drag that size.
+func (r Resize) Width() bool  { return r == ResizeBoth || r == ResizeHorizontal }
+func (r Resize) Height() bool { return r == ResizeBoth || r == ResizeVertical }
