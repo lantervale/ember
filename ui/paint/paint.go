@@ -256,6 +256,8 @@ type painter struct {
 	spread float32
 	// scratch holds pieces' parts.
 	scratch []piece
+	// standings are the styles of glyphs standing in vertical lines, by their own.
+	standings map[*style.Computed]*style.Computed
 	// base is the surface's transform as painting starts: the root's
 	// space, where the viewport culls.
 	base geom.Transform2D

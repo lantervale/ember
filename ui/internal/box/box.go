@@ -292,6 +292,27 @@ type FallbackFonts interface {
 	FallbackMetrics(f style.Font, text string) (Metrics, bool)
 }
 
+// VerticalFonts is Fonts that knows its faces' vertical metrics (vhea, vmtx, VORG):
+// Upright is how one grapheme cluster standing in a vertical line is set in its glyphs
+// for vertical lines (vert), how far it takes down the line and how far below the top of
+// that room its baseline stands; ok false when its face has none.
+type VerticalFonts interface {
+	Upright(f style.Font, cluster string) (advance, baseline float32, ok bool)
+}
+
+// Upright is how cluster, standing in a vertical line in f, is set: by its face's
+// vertical metrics, or else, as Chrome's, in a room of its ascent and descent with its
+// baseline the ascent below its top.
+func Upright(fonts Fonts, f style.Font, cluster string) (advance, baseline float32) {
+	if v, ok := fonts.(VerticalFonts); ok {
+		if a, b, has := v.Upright(f, cluster); has {
+			return a, b
+		}
+	}
+	m := fonts.Metrics(f)
+	return m.Ascent + m.Descent, m.Ascent
+}
+
 // Images gives layout the natural size of a replaced element's picture,
 // such as an img's src, in points; ok false when there is none.
 type Images interface {

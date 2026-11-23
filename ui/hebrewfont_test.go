@@ -3,6 +3,7 @@ package ui_test
 import (
 	"encoding/binary"
 	"slices"
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/gofont/goregular"
@@ -91,6 +92,13 @@ func cmap4(glyphs map[rune]uint16) []byte {
 // withCmap is the font file ttf with its cmap table replaced by cmap.
 func withCmap(t testing.TB, ttf, cmap []byte) []byte {
 	t.Helper()
+	return withTables(t, ttf, map[string][]byte{"cmap": cmap})
+}
+
+// withTables is the font file ttf with the tables of with in place of its own of their
+// tags, those it lacks added in their tags' order.
+func withTables(t testing.TB, ttf []byte, with map[string][]byte) []byte {
+	t.Helper()
 	be := binary.BigEndian
 	n := int(be.Uint16(ttf[4:]))
 	type table struct {
@@ -102,8 +110,8 @@ func withCmap(t testing.TB, ttf, cmap []byte) []byte {
 		rec := ttf[12+16*i:]
 		off, size := be.Uint32(rec[8:]), be.Uint32(rec[12:])
 		tables[i] = table{string(rec[:4]), ttf[off : off+size]}
-		if tables[i].tag == "cmap" {
-			tables[i].data = cmap
+		if data, ok := with[tables[i].tag]; ok {
+			tables[i].data = data
 		}
 		if tables[i].tag == "head" {
 			head := slices.Clone(tables[i].data)
@@ -111,7 +119,23 @@ func withCmap(t testing.TB, ttf, cmap []byte) []byte {
 			tables[i].data = head
 		}
 	}
+	for tag, data := range with {
+		if !slices.ContainsFunc(tables, func(tb table) bool { return tb.tag == tag }) {
+			tables = append(tables, table{tag, data})
+		}
+	}
+	slices.SortFunc(tables, func(a, b table) int { return strings.Compare(a.tag, b.tag) })
+	n = len(tables)
 	out := slices.Clone(ttf[:12])
+	be.PutUint16(out[4:], uint16(n))
+	search, selector := 1, 0
+	for search*2 <= n {
+		search *= 2
+		selector++
+	}
+	be.PutUint16(out[6:], uint16(16*search))
+	be.PutUint16(out[8:], uint16(selector))
+	be.PutUint16(out[10:], uint16(16*(n-search)))
 	off := 12 + 16*n
 	var body []byte
 	var headAt int

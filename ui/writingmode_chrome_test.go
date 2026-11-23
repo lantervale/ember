@@ -78,7 +78,37 @@ func TestVerticalTextOrientationMatchesChrome(t *testing.T) {
 			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("一丁丂七", "abc", "丄丅")...)))
 			return d
 		},
+		"UAX 50 stands the symbols among turned letters": func(t *testing.T) *ui.Document {
+			d := cjkDocument(t, `.v { writing-mode: vertical-rl; height: 300px; }`)
+			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("a©b", "§2", "±x×y÷z", "¼½", "®™", "一«丁»")...)))
+			return d
+		},
 	}
+	matchVertical(t, cases)
+}
+
+func TestVerticalGlyphsMatchChrome(t *testing.T) {
+	matchVertical(t, map[string]func(t *testing.T) *ui.Document{
+		"a face's vertical advances set its ideographs": func(t *testing.T) *ui.Document {
+			d := verticalDocument(t, false, `.v { writing-mode: vertical-rl; height: 200px; font-size: 20px; }`)
+			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("一丁丂七", "abc", "丄丅丆", "万丈三上下")...)))
+			return d
+		},
+		"brackets and stops in their vertical alternates": func(t *testing.T) *ui.Document {
+			d := verticalDocument(t, false, `.v { writing-mode: vertical-lr; height: 200px; font-size: 20px; }`)
+			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("「一丁」", "丂、七。", "「abc」")...)))
+			return d
+		},
+		"VORG's origins leave the advances": func(t *testing.T) *ui.Document {
+			d := verticalDocument(t, true, `.v { writing-mode: vertical-rl; height: 200px; font-size: 20px; }`)
+			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("「一丁」", "丂七。")...)))
+			return d
+		},
+	})
+}
+
+func matchVertical(t *testing.T, cases map[string]func(t *testing.T) *ui.Document) {
+	t.Helper()
 	for name, build := range cases {
 		t.Run(name, func(t *testing.T) {
 			d := build(t)

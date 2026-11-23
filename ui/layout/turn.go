@@ -1,8 +1,6 @@
 package layout
 
 import (
-	"unicode/utf8"
-
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -426,33 +424,19 @@ func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geo
 }
 
 // advance is the length of text s of style st along its line: in vertical lines each
-// character standing upright takes its font's ascent and descent, as Chrome's when the
-// face has no vertical metrics.
+// cluster standing upright takes its vertical advance (box.Upright).
 func advance(fonts box.Fonts, st *style.Computed, s string) float32 {
 	if !st.Stands() {
 		return fonts.Advance(st.Font, s)
 	}
 	var w float32
-	from := 0
-	for i, r := range s {
-		if !style.Upright(r, st.Orientation) {
-			continue
+	style.Oriented(s, st.Orientation, func(part string, upright bool) {
+		if upright {
+			a, _ := box.Upright(fonts, st.Font, part)
+			w += a
+			return
 		}
-		if from < i {
-			w += fonts.Advance(st.Font, s[from:i])
-		}
-		w += uprightAdvance(fonts, st)
-		from = i + utf8.RuneLen(r)
-	}
-	if from < len(s) {
-		w += fonts.Advance(st.Font, s[from:])
-	}
+		w += fonts.Advance(st.Font, part)
+	})
 	return w
-}
-
-// uprightAdvance is how far a character standing upright in vertical lines of style st
-// takes along them.
-func uprightAdvance(fonts box.Fonts, st *style.Computed) float32 {
-	m := fonts.Metrics(st.Font)
-	return m.Ascent + m.Descent
 }
