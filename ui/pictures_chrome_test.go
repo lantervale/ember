@@ -87,7 +87,11 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	// then reads the frame at the top-left: the picture below begins when
 	// first drawn, long after it landed; the top one, out of view across
 	// its play's end, begins the next play when drawn again, and out of
-	// view within a play comes back in step.
+	// view within a play comes back in step. Chrome's frame was drawn
+	// somewhere between the asking for the shot and its coming back, a
+	// while on a loaded machine, so ui is to show it somewhere in that
+	// span, scrolled when Chrome was, past the one frame a picture drawn
+	// again shows as it left.
 	steps := []struct {
 		at     float64
 		scroll float32
@@ -98,18 +102,23 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	var loaded float64
 	s.Eval(`performance.getEntriesByType("navigation")[0].loadEventEnd / 1000`, &loaded)
 	var want []int
-	var when []float64
+	var scrolled, shotFrom, shotTo []float64
+	sinceLoad := func() float64 {
+		var now float64
+		s.Eval(`performance.now() / 1000`, &now)
+		return now - loaded
+	}
 	for _, step := range steps {
 		var now float64
 		s.Eval(fmt.Sprintf(`new Promise(r => setTimeout(r, Math.max(0, %f * 1000 - performance.now())))
 			.then(() => (scrollTo(0, %g), performance.now() / 1000))`, step.at+loaded, step.scroll), &now)
+		scrolled = append(scrolled, now-loaded)
 		if step.url == "" {
 			continue
 		}
+		shotFrom = append(shotFrom, sinceLoad())
 		want = append(want, flagAt(s.Shot(), 20, 20))
-		var shot float64
-		s.Eval(`performance.now() / 1000`, &shot)
-		when = append(when, shot-loaded)
+		shotTo = append(shotTo, sinceLoad())
 	}
 	require.Len(t, want, 3)
 	for i, w := range want {
@@ -117,7 +126,7 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	}
 	// Chrome's own timing: below.gif first drawn shows its first frame;
 	// top.gif drawn again after its play's end its first; then in step.
-	assert.Equal(t, []int{0, 0, 2}, want, "Chrome's frames, shot at %v", when)
+	assert.Equal(t, []int{0, 0, 2}, want, "Chrome's frames, shot between %v and %v", shotFrom, shotTo)
 
 	mapFS := fstest.MapFS{}
 	for name, data := range files {
@@ -129,15 +138,23 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	w := ember.New().AddEntities(win)
 	w.RunFrames(1)
 	k := 0
-	for _, step := range steps {
-		runUntil(w, step.at)
+	for i, step := range steps {
+		runUntil(w, scrolled[i])
 		ui.ScrollTo(d, d.HTML(), geom.V2(0, step.scroll))
 		if step.url == "" {
 			continue
 		}
-		runUntil(w, when[k])
 		w.RunFrames(1)
-		assert.Equal(t, want[k], ui.ShownFrame(d, step.url), "%s at %gs", step.url, when[k])
+		runUntil(w, shotFrom[k])
+		var shown []int
+		for {
+			w.RunFrames(1)
+			shown = append(shown, ui.ShownFrame(d, step.url))
+			if float64(w.Time().RealElapsed) >= shotTo[k] {
+				break
+			}
+		}
+		assert.Contains(t, shown, want[k], "%s between %gs and %gs", step.url, shotFrom[k], shotTo[k])
 		k++
 	}
 }
