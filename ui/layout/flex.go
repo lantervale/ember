@@ -572,13 +572,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 					}
 				}
 			}
-			if crossIsDefinite && some(it.aspectRatio) && some(ckd.get(d.cross())) {
+			if b, ok := it.transferred(d, ckd, crossIsDefinite); ok {
 				it.basisIsDefinite = true
-				cross := ckd.get(d.cross())
-				if d.isRow() {
-					return cross * it.aspectRatio
-				}
-				return cross / it.aspectRatio
+				return b
 			}
 			mainAvail := maxContentSpace
 			if avail.get(d.main()).kind == minContent {
@@ -605,15 +601,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 			if room, ok := fillRoom(c, it); ok {
 				childAvail = childAvail.with(d.main(), room)
 			}
-			var minContentMain float32
-			if cross := ckd.get(d.cross()); crossIsDefinite && some(it.aspectRatio) && some(cross) && it.node.fills() {
-				// a picture with proportions alone is as small as its definite cross size
-				// makes it, as Chrome's transferred size has it
-				minContentMain = cross / it.aspectRatio
-				if d.isRow() {
-					minContentMain = cross * it.aspectRatio
-				}
-			} else {
+			// a picture with proportions alone is as small as its definite cross size makes it
+			minContentMain, ok := it.transferred(d, ckd, crossIsDefinite)
+			if !ok || !it.node.fills() {
 				minContentMain = t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
 			}
 			clampedMin := mMin(mMin(minContentMain, it.size.get(d.main())), tMax.get(d.main()))
@@ -624,6 +614,19 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 		it.hypotheticalInnerSize.set(d.main(), hypInner)
 		it.hypotheticalOuterSize.set(d.main(), hypInner+d.mainSum(it.margin))
 	}
+}
+
+// transferred is the main size an item with an aspect ratio takes from its definite
+// cross size, false for one without either.
+func (it *flexItem) transferred(d flexDir, known size, crossIsDefinite bool) (float32, bool) {
+	cross := known.get(d.cross())
+	if !crossIsDefinite || !some(it.aspectRatio) || !some(cross) {
+		return 0, false
+	}
+	if d.isRow() {
+		return cross * it.aspectRatio, true
+	}
+	return cross / it.aspectRatio, true
 }
 
 // fillRoom is the room a picture with proportions and no size of its own takes in a row:
