@@ -60,8 +60,8 @@ func (x *ctx) readFont(v []Component) {
 }
 
 // fontUnitsIn reports whether v has a unit of the element's font, lh
-// among them, and whether lh; on the root the root's
-// units count too, its font being theirs.
+// among them, and whether it has lh; on the root the root's units count
+// too, its font being theirs.
 func fontUnitsIn(v []Component, root bool) (bool, bool) {
 	font, line := false, false
 	for _, c := range v {
