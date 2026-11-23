@@ -253,6 +253,9 @@ func (t *tree) turnedLayout(n *node, in input) output {
 	n.st, n.inside = n.inner, true
 	defer func() { n.st, n.inside = outer, false }()
 	from, to := frameOf(n), frameOf(n.parent)
+	if n.placer != nil {
+		to = frameOf(n.placer)
+	}
 	if !n.across {
 		out := t.computeChildIn(n, in, nil)
 		out.overflow = t.reframeOverflow(n, out, from, to)
@@ -327,8 +330,32 @@ func turnCandidate(c oofCandidate, in size, from, to style.WritingMode) oofCandi
 		x, y = y, x
 	}
 	x.area, y.area = span{r.l, r.r}, span{r.t, r.b}
+	flip := reversedIn([2]bool{}, from, to)
+	if flip[0] {
+		x.align = x.align.flipped()
+	}
+	if flip[1] {
+		y.align = y.align.flipped()
+	}
 	c.x, c.y = x, y
 	return c
+}
+
+// flipped is a, aligned in an area whose axis runs the other way.
+func (a staticAlign) flipped() staticAlign {
+	a.keyword, a.fallback = a.keyword.flipped(), a.fallback.flipped()
+	return a
+}
+
+func (e staticEdge) flipped() staticEdge {
+	switch e {
+	case edgeStart:
+		return edgeEnd
+	case edgeEnd:
+		return edgeStart
+	case edgeCenter:
+	}
+	return e
 }
 
 // turnPlaced is p, a node's layout in the frame from, in the frame to: its place left as
