@@ -2,8 +2,11 @@ package draw
 
 import (
 	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/image/font/sfnt"
+	"golang.org/x/text/unicode/bidi"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/shape"
@@ -40,10 +43,15 @@ type item struct {
 	clusters int
 }
 
-// pending is a cluster of a run of one face waiting to be shaped.
+// pending is a character of a run of one face waiting to be shaped:
+// the first of its cluster, whose glyph is g, or one after it, glyph
+// idx of the face.
 type pending struct {
-	r rune
-	g glyph
+	r       rune
+	g       glyph
+	idx     sfnt.GlyphIndex
+	cluster int32
+	first   bool
 }
 
 // planMemo is the plan a face shapes with last asked for.
@@ -68,16 +76,38 @@ func (f *Font) plan(face int, script shape.Tag, features string) *shape.Plan {
 
 // items calls fn with what s is drawn as, shaped with features after
 // each face's own: each run of clusters one face draws shaped together,
-// a picture or a character no face has breaking the run.
-func (f *Font) items(s, features string, fn func(item)) {
+// a picture or a character no face has breaking the run. Text right to
+// left is shaped in its order and each line given from its end, its
+// brackets turned round.
+func (f *Font) items(s, features string, rtl bool, fn func(item)) {
+	if rtl {
+		line := f.line[:0]
+		f.items(mirrored(s), features, false, func(it item) {
+			if !it.newline {
+				line = append(line, it)
+				return
+			}
+			for i := len(line) - 1; i >= 0; i-- {
+				fn(line[i])
+			}
+			line = line[:0]
+			fn(it)
+		})
+		for i := len(line) - 1; i >= 0; i-- {
+			fn(line[i])
+		}
+		f.line = line[:0]
+		return
+	}
 	run := f.pending[:0]
 	face := -1
+	var clusters int32
 	script := shape.Script(s)
 	flush := func() {
 		if len(run) > 0 {
-			f.shapeRun(face, run, script, features, fn)
+			f.shapeRun(face, run, clusters, script, features, fn)
 		}
-		run = run[:0]
+		run, clusters = run[:0], 0
 	}
 	eachCluster(s, func(c string, first rune) {
 		if first == '\n' || first == '\r' {
@@ -100,24 +130,57 @@ func (f *Font) items(s, features string, fn func(item)) {
 			flush()
 			face = g.face
 		}
-		run = append(run, pending{first, g})
+		run = append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true})
+		for _, r := range c[utf8.RuneLen(first):] {
+			if idx, err := f.sources[face].GlyphIndex(&f.buf, r); err == nil && idx != 0 {
+				run = append(run, pending{r: r, g: g, idx: idx, cluster: clusters})
+			}
+		}
+		clusters++
 	})
 	flush()
 	f.pending = run
 }
 
-// shapeRun calls fn with the glyphs run, clusters face draws, is drawn
-// as: each its own glyph where the face's layout changes nothing.
-func (f *Font) shapeRun(face int, run []pending, script shape.Tag, features string, fn func(item)) {
+// mirrored is s with each bracket turned round, as text right to left
+// draws it.
+func mirrored(s string) string {
+	if !strings.ContainsFunc(s, isBracket) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if isBracket(r) {
+			m, _ := utf8.DecodeRuneInString(bidi.ReverseString(string(r)))
+			return m
+		}
+		return r
+	}, s)
+}
+
+func isBracket(r rune) bool {
+	p, _ := bidi.LookupRune(r)
+	return p.IsBracket()
+}
+
+// shapeRun calls fn with the glyphs run, characters face draws of n
+// clusters, is drawn as: each cluster its first character's glyph where
+// the face's layout changes nothing.
+func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, features string, fn func(item)) {
 	p := f.plan(face, script, features)
 	glyphs := f.run[:0]
+	starts := f.starts[:0]
 	for i, c := range run {
-		glyphs = append(glyphs, shape.Glyph{ID: uint16(c.g.idx), Cluster: int32(i)})
+		if c.first {
+			starts = append(starts, i)
+		}
+		glyphs = append(glyphs, shape.Glyph{ID: uint16(c.idx), Cluster: c.cluster, Char: c.r})
 	}
-	f.run = glyphs
+	f.run, f.starts = glyphs, starts
 	if !p.Touches(glyphs) {
 		for _, c := range run {
-			fn(item{r: c.r, g: c.g, advance: c.g.advance, clusters: 1})
+			if c.first {
+				fn(item{r: c.r, g: c.g, advance: c.g.advance, clusters: 1})
+			}
 		}
 		return
 	}
@@ -126,12 +189,12 @@ func (f *Font) shapeRun(face int, run []pending, script shape.Tag, features stri
 	v := f.looks[face].varied()
 	for i, sg := range shaped {
 		advance := float32(sg.Advance)
-		if v != nil {
+		if v != nil && advance != 0 {
 			// GPOS's values stay the default instance's; the advance is the instance's.
 			advance += v.Font.Advance(sg.ID, v.Coords) - v.Font.Advance(sg.ID, nil)
 		}
-		c := run[sg.Cluster]
-		next := int32(len(run)) //nolint:gosec // a run of a line
+		c := run[starts[sg.Cluster]]
+		next := n
 		if i+1 < len(shaped) {
 			next = shaped[i+1].Cluster
 		}
@@ -144,11 +207,15 @@ func (f *Font) shapeRun(face int, run []pending, script shape.Tag, features stri
 	}
 }
 
-// shaped is glyphs shaped by p, kept for the next time the same run is.
+// shaped is glyphs shaped by p, kept for the next time the same run, of
+// the same glyphs in the same clusters, is.
 func (f *Font) shaped(p *shape.Plan, glyphs []shape.Glyph) []shape.Glyph {
 	ids := f.ids[:0]
-	for _, g := range glyphs {
+	for i, g := range glyphs {
 		ids = append(ids, byte(g.ID>>8), byte(g.ID&0xff))
+		if i > 0 && g.Cluster == glyphs[i-1].Cluster {
+			ids = append(ids, 0)
+		}
 	}
 	f.ids = ids
 	runs := f.shapedRuns[p]

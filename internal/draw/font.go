@@ -333,6 +333,8 @@ type Font struct {
 	shapedRuns  map[*shape.Plan]map[string][]shape.Glyph
 	shapedCount int
 	pending     []pending
+	starts      []int
+	line        []item
 	run         []shape.Glyph
 	ids         []byte
 	// only are the characters each source draws, and blank those drawn
@@ -422,7 +424,7 @@ func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0) }
 func (f *Font) measure(s, features string, tracking float32) geom.Vec2 {
 	var w, line float32
 	lines := 1
-	f.items(s, features, func(it item) {
+	f.items(s, features, false, func(it item) {
 		if it.newline {
 			w = max(w, line)
 			line = 0

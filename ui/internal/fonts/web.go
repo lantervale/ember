@@ -703,7 +703,7 @@ func (s *Set) chainAdvance(ch *Chain, f style.Font, text string) float32 {
 			flush()
 			of = c
 		}
-		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i)}) //nolint:gosec // a glyph index and a text offset
+		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r}) //nolint:gosec // a glyph index and a text offset
 	}
 	flush()
 	s.run = run

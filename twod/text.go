@@ -38,7 +38,9 @@ type Text struct {
 	exactCoverage bool `node:"prop"`
 	// features are the OpenType features it is shaped with (Features).
 	features string `node:"prop"`
-	face     *Face
+	// rightToLeft draws each line from its end (RightToLeft).
+	rightToLeft bool `node:"prop"`
+	face        *Face
 	// expanded is text with its shortcodes replaced, for expandedFrom.
 	expanded, expandedFrom string
 }
@@ -120,14 +122,15 @@ func (t *Text) SetColor(c color.Color) { t.color = c }
 
 func (t *Text) style() draw.Style {
 	return draw.Style{
-		Face:      t.face.draw(),
-		Size:      t.size,
-		Color:     t.color,
-		Tracking:  t.tracking,
-		Baseline:  t.baseline,
-		Pixelated: t.pixelated,
-		Exact:     t.exactCoverage,
-		Features:  t.features,
+		Face:        t.face.draw(),
+		Size:        t.size,
+		Color:       t.color,
+		Tracking:    t.tracking,
+		Baseline:    t.baseline,
+		Pixelated:   t.pixelated,
+		Exact:       t.exactCoverage,
+		Features:    t.features,
+		RightToLeft: t.rightToLeft,
 	}
 }
 
@@ -145,6 +148,19 @@ func (t *Text) Features() string { return t.features }
 
 // SetFeatures sets the OpenType features t is shaped with.
 func (t *Text) SetFeatures(features ...string) { t.features = strings.Join(features, ",") }
+
+// RightToLeft draws a text of a script written right to left, Arabic
+// or Hebrew, from the right: each line, given in the order it is read,
+// is shaped so, its letters joined, then laid out from its end, its
+// brackets turned round. A line is one direction: text mixing
+// directions is cut into runs by its reader first.
+func RightToLeft() TextOption { return textOption(func(t *Text) { t.rightToLeft = true }) }
+
+// RightToLeft reports whether t's lines are drawn from their end.
+func (t *Text) RightToLeft() bool { return t.rightToLeft }
+
+// SetRightToLeft sets whether t's lines are drawn from their end.
+func (t *Text) SetRightToLeft(on bool) { t.rightToLeft = on }
 
 // Pixelated reports whether t's glyphs are drawn unsmoothed.
 func (t *Text) Pixelated() bool { return t.pixelated }

@@ -1048,6 +1048,10 @@ type Style struct {
 	// those every text has, HarfBuzz's way, comma separated ("smcp,-liga");
 	// a face's own go where a '|' stands, else first (shape.Splice).
 	Features string
+	// RightToLeft draws each line from its end: the text, in the order
+	// it is read, is shaped so and laid out from the right, its brackets
+	// turned round.
+	RightToLeft bool
 }
 
 type Align int
@@ -1155,7 +1159,7 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 	y := float32(math.Round(float64((top+f.ascent/k)*px))) / px
 	x := p.X
 	shape := geom.Vec4{X: KindText}
-	f.items(text, s.Features, func(it item) {
+	f.items(text, s.Features, s.RightToLeft, func(it item) {
 		if it.newline {
 			x = p.X
 			y += f.lineHeight / k

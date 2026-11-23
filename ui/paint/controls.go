@@ -329,7 +329,7 @@ func (p *painter) marker(e entry, alpha float32) {
 		for _, f := range e.b.Lines {
 			p.shadows(e, st, p.faceOf(st.Font), f, st.TextShadows, st.Color, alpha)
 			opts := p.textOptions(p.faceOf(st.Font), st.Font.Size, st.LetterGap(), ink, smoothingOf(st))
-			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
+			p.fragment(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), &f, st, opts)
 		}
 		return
 	case st.ListStyle == style.ListDisc:
