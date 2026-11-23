@@ -215,6 +215,8 @@ type node struct {
 	// captionRoom a table's captions' room above and below its grid.
 	row         *tableRow
 	captionRoom [2]float32
+	// cut marks a cell a collapsed row or column narrowed, its content clipped.
+	cut bool
 	// atomic marks an atomic inline, placed by its owner's lines; pendingOOF is what its
 	// layout surfaced for an ancestor to place.
 	atomic     bool
@@ -929,6 +931,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Content = geom.Vec2{X: f.overflow.rect.r - f.overflow.rect.l, Y: f.overflow.rect.b - f.overflow.rect.t}
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w, Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
+	b.Cut = n.cut
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
 	}

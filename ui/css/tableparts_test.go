@@ -72,3 +72,23 @@ func TestATablePartThatFloatsOrLeavesTheFlowOrIsAFlexItemIsABlock(t *testing.T) 
 	}
 	assert.Equal(t, style.TableCell, styleOf(cell).TablePart)
 }
+
+func TestEmptyCellsInheritsAndCollapseIsAVisibilityThatHides(t *testing.T) {
+	td := el(dom.Td, "td")
+	row := with(el(dom.Tr, "r"), td)
+	table := with(el(dom.Table, "table"), with(el(dom.Tbody, "b"), row))
+	Compute(page(table), []*Sheet{sheet(t, `#table { empty-cells: hide } #r { visibility: collapse }`)})
+	assert.True(t, styleOf(table).EmptyCellsHide)
+	assert.True(t, styleOf(td).EmptyCellsHide, "inherited")
+	for _, n := range []*dom.Node{row, td} {
+		st := styleOf(n)
+		assert.False(t, st.Visible, describe(n))
+		assert.True(t, st.Collapse, describe(n))
+	}
+	td = el(dom.Td, "td")
+	table = with(el(dom.Table, "table"), with(el(dom.Tbody, "b"), with(el(dom.Tr, "r"), td)))
+	Compute(page(table), []*Sheet{sheet(t, `#table { empty-cells: hide } #td { empty-cells: show; visibility: hidden }`)})
+	assert.False(t, styleOf(td).EmptyCellsHide)
+	assert.False(t, styleOf(td).Visible)
+	assert.False(t, styleOf(td).Collapse, "hidden is no collapse")
+}

@@ -195,6 +195,9 @@ type Box struct {
 	// ColumnFillAuto is column-fill: auto: columns fill in turn, not
 	// balanced.
 	ColumnFillAuto bool
+	// ColumnSpanAll is column-span: all: a block of a multi-column
+	// container shown across all its columns, cutting them in rows.
+	ColumnSpanAll bool
 	// BreakInsideAvoid is break-inside: avoid; BreakBefore and BreakAfter
 	// are break-before and break-after between columns.
 	BreakInsideAvoid        bool
@@ -540,6 +543,9 @@ type Text struct {
 	// BorderCollapse is border-collapse: collapse: a table's cells share
 	// their borders, the widest winning each edge.
 	BorderCollapse bool
+	// EmptyCellsHide is empty-cells: hide: a cell with nothing in it draws
+	// no border and no background, borders kept apart.
+	EmptyCellsHide bool
 	CaptionSide    CaptionSide
 	TableLayout    TableLayout
 	TextTransform  TextTransform
@@ -756,8 +762,10 @@ type Look struct {
 	ColumnRuleStyle BorderStyle
 	ColumnRuleColor color.Color
 	Opacity         float32
-	// Visible is visibility: visible.
-	Visible bool
+	// Visible is visibility: visible, and Collapse visibility: collapse,
+	// which takes a table's row or column out with its room.
+	Visible  bool
+	Collapse bool
 	// PointerNone is pointer-events: none: hit testing passes through the
 	// box to what is under it.
 	PointerNone bool

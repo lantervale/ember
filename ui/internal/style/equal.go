@@ -60,6 +60,7 @@ func (b *Box) equal(o *Box) bool {
 		b.ColumnCount == o.ColumnCount &&
 		b.ColumnWidth == o.ColumnWidth &&
 		b.ColumnFillAuto == o.ColumnFillAuto &&
+		b.ColumnSpanAll == o.ColumnSpanAll &&
 		b.BreakInsideAvoid == o.BreakInsideAvoid &&
 		b.BreakBefore == o.BreakBefore &&
 		b.BreakAfter == o.BreakAfter &&
@@ -131,6 +132,7 @@ func (t *Text) equal(o *Text) bool {
 		t.ListImage == o.ListImage &&
 		t.BorderSpacing == o.BorderSpacing &&
 		t.BorderCollapse == o.BorderCollapse &&
+		t.EmptyCellsHide == o.EmptyCellsHide &&
 		t.CaptionSide == o.CaptionSide &&
 		t.TableLayout == o.TableLayout &&
 		t.TextTransform == o.TextTransform &&
@@ -192,6 +194,7 @@ func (l *Look) equal(o *Look) bool {
 		l.ColumnRuleColor == o.ColumnRuleColor &&
 		l.Opacity == o.Opacity &&
 		l.Visible == o.Visible &&
+		l.Collapse == o.Collapse &&
 		l.PointerNone == o.PointerNone &&
 		l.AppDrag == o.AppDrag &&
 		l.Cursor == o.Cursor &&
