@@ -3,7 +3,9 @@
 package ui_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -179,6 +181,219 @@ li::before { content: counter(list-item) " " counter(c) "|"; display: inline-blo
 	r := chrome.Match(t, d, geom.V2(600, 800))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 	assert.Len(t, d.Warnings(), 3, "each reversed() is refused")
+}
+
+// TestReversedListItemCountersAsChromes writes counter(list-item) in
+// items' ::before and in some ::marker's content, beside the markers
+// Chrome numbers apart from the counter: a reversed ol's markers count
+// down from its start, else from its number of items; an item's value
+// attribute numbers its marker alone, and a list or an item whose own
+// counter properties name list-item gets nothing implicit from the
+// counter. No item writing the counter has a value attribute, and every
+// reversed ol whose items write it has a start: Chrome resets the counter
+// of one with none to 1 and leaves it be at a value when it first counts,
+// as ui does, but to one over its number of items, and to the value in an
+// item's own scope, when it counts again, as it does at times while the
+// page loads. ui's first count of those is unit tested (css's
+// TestReversedListsCountTheirMarkersApart).
+func TestReversedListItemCountersAsChromes(t *testing.T) {
+	d := listItemCounters()
+	r := chrome.Match(t, d, geom.V2(700, 900))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// listItemCounters is TestReversedListItemCountersAsChromes's document,
+// its numbers written in roman and in letters as well, for their widths
+// to tell them apart.
+func listItemCounters() *ui.Document {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 14px; }
+ol, ul { margin: 0 0 4px; padding: 0; display: flex; gap: 12px; list-style: upper-roman inside; }
+li::before {
+  content: "[" counter(list-item) counter(list-item, upper-roman) counter(list-item, lower-alpha) "]";
+  display: inline-block;
+}
+.m::marker { content: counter(list-item, upper-roman) ") "; }
+.bare li::before { content: none; }
+`))
+	li := func(args ...ui.Arg) *ui.Node { return ui.Li(append(args, ui.Text("x"))...) }
+	items := func(n int, args ...ui.Arg) []ui.Arg {
+		for range n {
+			args = append(args, li())
+		}
+		return args
+	}
+	style := ui.Style
+	rev := func(start string, args ...ui.Arg) *ui.Node {
+		return ui.Ol(append([]ui.Arg{ui.Attr("reversed", ""), ui.Attr("start", start)}, args...)...)
+	}
+	d.Body().Append(
+		ui.Ol(items(4, ui.Class("bare"), ui.Attr("reversed", ""))...),
+		ui.Ol(ui.Class("bare"), ui.Attr("reversed", ""), li(style("counter-increment: list-item 0")), li(),
+			li(style("display: none")), ui.Div(li()), li(ui.Attr("value", "9")), li()),
+		rev("7", items(4)...),
+		rev("0", items(2)...),
+		rev("-3", items(2)...),
+		rev("3", li(ui.Class("m")), li(ui.Class("m")), li(ui.Class("m"))),
+		rev("3", ui.Class("bare"), li(), li(ui.Attr("value", "7")), li()),
+		ui.Ol(ui.Class("bare"), li(), li(ui.Attr("value", "7")), li()),
+		ui.Ol(ui.Class("bare"), ui.Attr("start", "3"), li(), li(ui.Attr("value", "0")), li()),
+		rev("4", li(style("counter-increment: list-item 0")), li(), li()),
+		rev("4", li(style("counter-increment: none")), li(), li()),
+		rev("5", li(style("counter-increment: list-item -2")), li(), li()),
+		ui.Ol(ui.Attr("start", "5"), li(style("counter-increment: list-item 3")), li(), li()),
+		rev("3", li(), li(style("counter-set: list-item 6")), li()),
+		ui.Ol(ui.Class("bare"), li(), li(ui.Attr("value", "9"), style("counter-set: list-item 3")), li()),
+		rev("3", ui.Class("bare"), li(), li(ui.Attr("value", "5"), style("counter-increment: list-item 3")), li()),
+		rev("3", li(), li(style("counter-increment: list-item 2; counter-set: list-item 9")), li()),
+		rev("3", li(), li(style("counter-reset: list-item 4; counter-increment: list-item 2")), li()),
+		ui.Ol(append(items(5, ui.Attr("reversed", "")), style("counter-reset: list-item 3"))...),
+		rev("6", ui.Div(li()), li(), li(style("display: none")), li()),
+		rev("6", li(), li(), ui.Ol(li(), li()), li()),
+		rev("6", li(), li(), ui.Div(style("counter-reset: list-item 20")), li()),
+		ui.Ul(items(2, ui.Attr("reversed", ""))...),
+	)
+	return d
+}
+
+// TestInsideMarkersOfRightToLeftItemsAsChromes lays markers inside
+// right-to-left items: at the right end of their first line, bullets,
+// numbers, strings, ::marker's content and pictures, before a block and
+// beside text whose bidi reorders it.
+func TestInsideMarkersOfRightToLeftItemsAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; }
+ul, ol { margin: 0 0 6px; padding: 0 40px 0 0; list-style-position: inside; }
+.d { list-style-type: decimal; } .c { list-style-type: circle; } .str { list-style-type: "->"; }
+.m::marker { content: "M: "; }
+.pic { list-style-image: url(pic.png); }
+.blk p { margin: 0; }
+.narrow { width: 120px; }
+.center { text-align: center; } .start { text-align: left; }
+`), ui.Images(fstest.MapFS{"pic.png": {Data: pngOf(12, 9)}}))
+	li := func(class string, kids ...ui.Arg) *ui.Node {
+		return ui.Li(append([]ui.Arg{ui.Class(strings.Fields(class)...)}, kids...)...)
+	}
+	x := func() ui.Arg { return ui.Span(ui.Text("item text")) }
+	d.Body().Append(
+		ui.Ul(ui.Attr("dir", "rtl"),
+			li("", x()), li("c", x()), li("d", x()), li("str", x()), li("m", x()), li("pic", x()),
+			li("", ui.Span(ui.Text("(item) text!"))), li("d", ui.Span(ui.Text("12 item, text"))), li(""), li("d"),
+			li("blk", ui.P(x())), li("d blk", ui.Span(ui.Text("lead")), ui.P(x())),
+			li("d narrow", ui.Span(ui.Text("words that wrap past the first line"))),
+			li("d center", x()), li("d start", x()),
+		),
+		ui.Ol(li("", ui.Attr("dir", "rtl"), x()), li("", ui.Style("direction: rtl"), ui.Text("item"))),
+	)
+	r := chrome.Match(t, d, geom.V2(500, 800))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// TestMarkersTakeThePointerAsChromes asks ui and Chrome for the element
+// at each point of a grid round each item's first line: an outside
+// ::marker is its item's to the pointer over its text's box, a bullet's
+// as the bullet and the space after it, the line's height, a picture's
+// over the picture.
+func TestMarkersTakeThePointerAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; }
+ul, ol { margin: 0 0 6px; padding: 0 60px; }
+li { margin-bottom: 4px; }
+.c { list-style-type: circle; } .s { list-style-type: square; } .d { list-style-type: decimal; }
+.str { list-style-type: "->"; } .m::marker { content: "Mm "; }
+.big { font-size: 26px; } .tall { line-height: 34px; } .small::marker { font-size: 9px; }
+.pic { list-style-image: url(pic.png); }
+.rtl { direction: rtl; }
+`), ui.Images(fstest.MapFS{"pic.png": {Data: pngOf(12, 9)}}))
+	var items []*ui.Node
+	li := func(class string) *ui.Node {
+		n := ui.Li(ui.ID(fmt.Sprintf("i%d", len(items))), ui.Class(strings.Fields(class)...), ui.Text("item"))
+		items = append(items, n)
+		return n
+	}
+	d.Body().Append(
+		ui.Ul(ui.ID("u"), li(""), li("c"), li("s"), li("big"), li("tall"), li("small"), li("str"), li("m"), li("pic")),
+		ui.Ol(ui.ID("o"), li("d"), li("d big")),
+		ui.Ul(ui.ID("r"), ui.Class("rtl"), li(""), li("big"), li("d"), li("pic"), li("str"), li("tall")),
+	)
+	size := geom.V2(400, 700)
+	d.Layout(size)
+	var points [][2]float32
+	for _, n := range items {
+		b := n.Box()
+		from, to := b.X-50, b.X+2
+		if strings.Contains(n.Parent().ID(), "r") {
+			from, to = b.X+b.W-2, b.X+b.W+50
+		}
+		for y := b.Y - 1.5; y < b.Y+40; y++ {
+			for x := from + 0.5; x < to; x++ {
+				points = append(points, [2]float32{x, y})
+			}
+		}
+	}
+	js, err := json.Marshal(points)
+	require.NoError(t, err)
+	out, err := chrome.Eval(d, size,
+		`return `+string(js)+`.map(([x, y]) => {
+const e = document.elementFromPoint(Math.floor(x), Math.floor(y));
+return e ? e.id : "";
+});`)
+	require.NoError(t, err)
+	var want []string
+	require.NoError(t, json.Unmarshal(out, &want))
+	require.Len(t, want, len(points))
+	// each item's marker as the points outside its box that find it span
+	type span struct{ ember, chrome geom.Rect }
+	spans := map[string]*span{}
+	grow := func(r *geom.Rect, p [2]float32) {
+		q := geom.Rect{X: p[0] - 0.5, Y: p[1] - 0.5, W: 1, H: 1}
+		if r.W == 0 {
+			*r = q
+			return
+		}
+		x0, y0 := min(r.X, q.X), min(r.Y, q.Y)
+		*r = geom.Rect{X: x0, Y: y0, W: max(r.X+r.W, q.X+q.W) - x0, H: max(r.Y+r.H, q.Y+q.H) - y0}
+	}
+	for i, p := range points {
+		got := ""
+		if n := d.ElementAt(geom.V2(p[0], p[1])); n != nil {
+			got = n.ID()
+		}
+		for _, id := range []string{got, want[i]} {
+			if id == "" || id[0] != 'i' || spans[id] != nil {
+				continue
+			}
+			spans[id] = &span{}
+		}
+		inside := func(id string) bool {
+			var b geom.Rect
+			for _, n := range items {
+				if n.ID() == id {
+					b = n.Box()
+				}
+			}
+			return p[0] >= b.X && p[0] < b.X+b.W && p[1] >= b.Y && p[1] < b.Y+b.H
+		}
+		if got != "" && got[0] == 'i' && !inside(got) {
+			grow(&spans[got].ember, p)
+		}
+		if want[i] != "" && want[i][0] == 'i' && !inside(want[i]) {
+			grow(&spans[want[i]].chrome, p)
+		}
+	}
+	for _, n := range items {
+		s := spans[n.ID()]
+		if s == nil {
+			t.Errorf("%s: no marker takes the pointer", n.ID())
+			continue
+		}
+		e, c := s.ember, s.chrome
+		if max(math.Abs(float64(e.X-c.X)), math.Abs(float64(e.Y-c.Y)), math.Abs(float64(e.X+e.W-c.X-c.W)),
+			math.Abs(float64(e.Y+e.H-c.Y-c.H))) > 1 {
+			t.Errorf("%s %v: ember's marker takes the pointer over %v, Chrome's over %v", n.ID(), n.Classes(),
+				s.ember, s.chrome)
+		}
+	}
 }
 
 // TestListTypeAttributesStyleAsChromes compares the list-style-type the

@@ -187,6 +187,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0183 | [Text is shaped as one across elements of one font and spacing](0183-text-is-shaped-as-one-across-elements-of-one-font-and-spacing.md) | api |
 | 0185 | [Boxes side by side are lanes, and a framed block round a spanner is laid out per part](0185-boxes-side-by-side-are-lanes-and-a-framed-wrapper-is-laid-out-per-part.md) | rendering |
 | 0186 | [A variable font's layout is shaped at its instance](0186-a-variable-fonts-layout-is-shaped-at-its-instance.md) | rendering |
+| 0191 | [Markers are numbered apart from the list-item counter](0191-markers-are-numbered-apart-from-the-list-item-counter.md) | rendering |
 
 ## Writing one
 

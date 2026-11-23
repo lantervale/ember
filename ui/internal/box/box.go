@@ -146,6 +146,10 @@ type Box struct {
 	// gradient it shows in its place.
 	Picture  string
 	Gradient *style.Gradient
+	// Area is what a Marker of a bullet or a picture takes the pointer
+	// over, in its box's space, as Chrome's: its inline box on the line,
+	// wider than the bullet; zero where that is its box.
+	Area geom.Rect
 	// Fragments is an inline element's border box on each line it spans,
 	// in the box's space: the first holds its left edge and the last its
 	// right, as Chrome's getClientRects. With Broken they are a block's

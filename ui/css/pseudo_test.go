@@ -165,6 +165,9 @@ func TestContentReadsAttributesAndPictures(t *testing.T) {
 	}
 }
 
+// TestCountersCountInDocumentOrder numbers headings as Chrome does: an
+// h1's section counter nests in body's, so it reaches the h1's own
+// descendants alone, and every h2 counts on body's.
 func TestCountersCountInDocumentOrder(t *testing.T) {
 	h := func(tag dom.Tag, text string) *dom.Node { return with(el(tag, ""), txt(text)) }
 	h1a, h2a, h2b, h1b, h2c := h(dom.H1, "a"), h(dom.H2, "b"), h(dom.H2, "c"), h(dom.H1, "d"), h(dom.H2, "e")
@@ -179,7 +182,7 @@ h1::before { content: counter(chapter, upper-roman) ". "; }
 h2::before { content: counter(chapter) "." counter(section) " " counter(nope); }
 h2::after { counter-set: section 10; content: "[" counter(section, lower-alpha) "]"; }
 `)})
-	for n, want := range map[*dom.Node]string{h1a: "III. ", h2a: "3.2 0", h2b: "3.12 0", h1b: "IV. ", h2c: "4.2 0"} {
+	for n, want := range map[*dom.Node]string{h1a: "III. ", h2a: "3.2 0", h2b: "3.12 0", h1b: "IV. ", h2c: "4.12 0"} {
 		if got := generatedText(n, dom.Before); got != want {
 			t.Errorf("%s: ::before %q, want %q", n.Text(), got, want)
 		}
@@ -220,6 +223,48 @@ li::before { content: counters(item, ".") " " counters(list-item, "-", lower-alp
 	if dom.Data(c).Dirty&dom.DirtyLayout == 0 || dom.Data(root).Dirty&dom.DirtyDescendant == 0 {
 		t.Error("the item whose number moved is laid out again")
 	}
+}
+
+// TestReversedListsCountTheirMarkersApart has markers numbered apart from
+// the list-item counter, as Chrome first counts them: a reversed ol
+// without a start counts the counter down from 0, its markers from its
+// number of items; a value numbers the marker alone; and a nested list's
+// counter doesn't reach the items after it.
+func TestReversedListsCountTheirMarkersApart(t *testing.T) {
+	li := func(attrs ...string) *dom.Node {
+		n := with(el(dom.Li, ""), txt("x"))
+		for i := 0; i < len(attrs); i += 2 {
+			n.SetAttr(attrs[i], attrs[i+1])
+		}
+		return n
+	}
+	check := func(name string, items []*dom.Node, markers []int, counters ...string) {
+		t.Helper()
+		for i, n := range items {
+			if got := dom.Data(n).Ordinal; got != markers[i] {
+				t.Errorf("%s: item %d's marker %d, want %d", name, i, got, markers[i])
+			}
+			if got := generatedText(n, dom.Before); got != counters[i] {
+				t.Errorf("%s: item %d's counter %q, want %q", name, i, got, counters[i])
+			}
+		}
+	}
+	s := sheet(t, `li::before { content: counter(list-item); } .own { counter-reset: list-item 3; }`)
+	a := []*dom.Node{li(), li(), li()}
+	b := []*dom.Node{li(), li("value", "7"), li()}
+	c := []*dom.Node{li(), li(), li()}
+	d := []*dom.Node{li(), li(), li()}
+	ra, rb := with(el(dom.Ol, ""), a...), with(el(dom.Ol, ""), b...)
+	rc := with(el(dom.Ol, "", "own"), c...)
+	ra.SetAttr("reversed", "")
+	rb.SetAttr("reversed", "")
+	rc.SetAttr("reversed", "")
+	nested := with(el(dom.Ol, ""), d[0], with(el(dom.Ol, ""), li()), d[1], d[2])
+	Compute(page(ra, rb, rc, nested), []*Sheet{s})
+	check("reversed", a, []int{3, 2, 1}, "0", "-1", "-2")
+	check("a value", b, []int{3, 7, 6}, "0", "-1", "-2")
+	check("its own reset", c, []int{3, 2, 1}, "2", "1", "0")
+	check("a nested list", d, []int{1, 2, 3}, "1", "2", "3")
 }
 
 func TestListItemsCountOnTheListItemCounter(t *testing.T) {
@@ -270,7 +315,7 @@ func TestListItemsCountOnTheListItemCounter(t *testing.T) {
 	b.SetStyle("display: none")
 	root = page(with(el(dom.Ol, ""), a, b, with(el(dom.Div, ""), c), d))
 	Compute(root, []*Sheet{sheet(t, `ol { counter-reset: list-item 4; } div > li { counter-increment: list-item 10; }`)})
-	same("the author's own list-item properties", ordinals(a, c, d), 5, 15, 16)
+	same("the author's own list-item properties", ordinals(a, c, d), 1, 11, 12)
 }
 
 func TestQuotesOpenAndCloseByDepth(t *testing.T) {

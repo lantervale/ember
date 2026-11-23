@@ -414,6 +414,18 @@ func markerShown(b *box.Box) *style.Computed {
 	return b.Style
 }
 
+// probeMarker has the marker take the pointer as its item's, with its own cursor, over
+// its box or its Area.
+func (p *painter) probeMarker(e entry, st *style.Computed) {
+	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	if a := e.b.Area; a.W > 0 {
+		r = geom.Rect{X: e.at.X + a.X, Y: e.at.Y + a.Y, W: a.W, H: a.H}
+	}
+	if st.Visible && !p.culled(e, union(inkOf(e, st), r)) {
+		p.probed(e.b, p.snap(r))
+	}
+}
+
 // marker draws a list item's bullet or number in its box, or a summary's
 // disclosure triangle as Chrome paints its
 // ::marker: Blink's canonical triangle in a square 0.657em wide whose
@@ -421,15 +433,14 @@ func markerShown(b *box.Box) *style.Computed {
 // right while closed and down while open, in the summary's colour.
 func (p *painter) marker(e entry, alpha float32) {
 	st := markerShown(e.b)
+	if p.probing {
+		p.probeMarker(e, st)
+		return
+	}
 	if !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
 	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
-	if p.probing {
-		// the marker is its item's to the pointer, with its own cursor
-		p.probed(e.b, p.snap(r))
-		return
-	}
 	if e.b.Picture != "" {
 		if tex := p.find(style.Image{Source: e.b.Picture}, st); tex != nil {
 			p.s.Image(p.snap(r), tex, texels(tex), fade(color.White, alpha))

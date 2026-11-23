@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
@@ -133,4 +134,24 @@ func TestFetchesRunAFewAtATime(t *testing.T) {
 	close(release)
 	d.fetching.Wait()
 	assert.LessOrEqual(t, most, fetchesAtOnce)
+}
+
+func TestAListStyleImageIsLaidOutWhenItLands(t *testing.T) {
+	const sheet = `ul { list-style: inside url(https://art.test/dot.png); }`
+	read := NewDocument(Images(fstest.MapFS{"dot.png": {Data: picture(t, 12, 9)}}),
+		CSS(strings.ReplaceAll(sheet, "https://art.test/", "")))
+	want := Span(Text("item"))
+	read.Body().Append(Ul(Li(want)))
+	read.Layout(geom.V2(200, 100))
+
+	a := &asked{pictures: map[string][]byte{"https://art.test/dot.png": picture(t, 12, 9)}}
+	d := NewDocument(FetchImages(a.fetch), CSS(sheet))
+	text := Span(Text("item"))
+	d.Body().Append(Ul(Li(text)))
+	d.Layout(geom.V2(200, 100))
+	assert.NotEqual(t, want.Box().X, text.Box().X, "a bullet stands in its place on its way")
+	d.fetching.Wait()
+	d.Layout(geom.V2(200, 100))
+	assert.Equal(t, want.Box().X, text.Box().X, "laid out again once it landed")
+	assert.Equal(t, []string{"https://art.test/dot.png"}, a.urls)
 }
