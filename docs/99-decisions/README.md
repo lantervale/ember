@@ -163,6 +163,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
 | 0159 | [A pattern is read as JavaScript, and a form is submitted by its button](0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md) | api |
 | 0161 | [SVG filters run in the element's own space, with every primitive Chrome draws](0161-svg-filters-run-in-the-elements-own-space-with-every-primitive-chrome-draws.md) | assets |
+| 0162 | [A copy puts the selection's markup beside its text](0162-a-copy-puts-the-selections-markup-beside-its-text.md) | api |
 | 0163 | [Scrolls snap and glide as Chrome's strategies, on the Document's clock](0163-scrolls-snap-and-glide-as-chromes-strategies-on-the-documents-clock.md) | api |
 
 ## Writing one

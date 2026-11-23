@@ -316,7 +316,7 @@ func (d *Document) selectionKeys(c *twod.Canvas, in *input.State, taken *keySet)
 			if s := d.Selection(); !s.Empty() && s.Text != "" {
 				if w := c.Window(); w != nil {
 					// the clipboard takes plain spaces for the no-break ones, as Chrome's
-					w.SetClipboard(strings.ReplaceAll(s.Text, "\u00a0", " "))
+					w.SetClipboardHTML(d.SelectionHTML(), strings.ReplaceAll(s.Text, "\u00a0", " "))
 				}
 				took = true
 			}

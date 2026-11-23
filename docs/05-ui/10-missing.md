@@ -10,14 +10,14 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `-webkit-text-stroke` on a colour emoji | drawn as the picture alone |
 | a stroke's mitre at a sharp corner between two short curves of a glyph | the curves are stroked as straight pieces, and the mitre can reach a little further than Chrome's |
 | the default selection colour on Windows and Linux, focused or not | the system's colours under `ui.Preferences` (Windows' `Highlight` and `HighlightText`, KDE's selection colours), blended with white as Chrome on macOS blends its own: the machines here run Chrome on macOS only, which can't say what the others draw; GNOME's accent colour is not read, an inactive window's selection there is Chrome's macOS grey, and without `ui.Preferences` macOS's blue everywhere ([decision 0155](../99-decisions/0155-the-system-says-its-contrast-forced-colours-and-selection-colours-read-only.md)) |
-| a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
 | the spaces after a word on Windows, in a field's double click, Control+Shift+Right and a drag by words | the word alone, where Chrome on Windows takes the spaces after it as a page's double click does |
-| selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
-| a selected tab or carriage return in text that keeps them | the selection is drawn on the text around it, not over the tab's room |
+| selecting by touch, dragging selected text | none: the pointer and the keys select, and a press inside the selection starts a new one where Chrome drags the text |
+| a rich copy's look, and one on a Linux desktop or the web | the HTML holds the elements and their attributes, where Chrome writes each element's computed style inline; a Linux desktop and the web get the plain text alone, GLFW offering no `text/html` target ([decision 0162](../99-decisions/0162-a-copy-puts-the-selections-markup-beside-its-text.md)) |
+| a carriage return in text that keeps it (`white-space: pre`) | laid out as a character of its line, the text after it on the same line, where Chrome breaks the line there |
 | `word-break: break-all` between two elements (`ab<b>cd</b>`), and between a letter and punctuation other than a hyphen | no break where the element changes; elsewhere ui breaks between two letters or digits and before a hyphen, which Chrome's table may differ from round brackets and marks |
 | `line-break: loose`, `normal` and `strict` | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| a first letter's text | not selected or copied with the rest of its text node, as `::before`'s text is not |
+| a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
 | `initial-letter` | refused with a warning, where Chrome sizes and sinks the first letter by lines: float a `::first-letter` for a drop cap |
 | `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
 | a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
@@ -37,8 +37,6 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | a face whose only layout tables are Apple's `morx` and `kerx` | drawn without its ligatures and kerning, where Chrome's HarfBuzz reads them; most of the Mac's faces have GSUB and GPOS too |
 | a variable font's GPOS values at an instance (their device and variation deltas) and its GSUB feature variations (`rvrn` by axis) | the default instance's kerning and substitutions, the glyphs' advances the instance's |
 | ligatures and kerning across the edge of two inline elements of one font (`A<span>V</span>`), and a ligature or a contextual substitution across a space | shaped apart, where Chrome shapes the run whole; a space's pair kerning with the words beside it is Chrome's |
-| a selected space where a line's text changes direction (`שלום abc` from the `ם` into `abc`) | its room is highlighted with the run it is shown in, where Chrome's range leaves it out |
-| the caret and the selection of a `textarea` in text shown right to left; a field's selection over text of both directions | measured from the left; one rectangle from the first selected character's edge to the last's, where Chrome draws one per run |
 
 ## Generated content
 

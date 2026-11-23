@@ -233,7 +233,7 @@ func attrs(b *strings.Builder, d *ui.Document, n *dom.Node) {
 			write("data-ember-focus", place(d, sel.Focus))
 		}
 	}
-	if from, to := d.SelectionRange(n); from != to && (d.Focused(n) || hasAttr(n, "autofocus")) {
+	if from, to := d.SelectionRange(n); (from != to || from != 0) && (d.Focused(n) || hasAttr(n, "autofocus")) {
 		write("data-ember-field-selection", fmt.Sprintf("%d %d", from, to))
 	}
 	if style := liveStyle(d, n); style != "" {
