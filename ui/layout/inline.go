@@ -226,6 +226,9 @@ type piece struct {
 	// the line it is shown in.
 	hyphen float32
 	shows  bool
+	// han is what text-spacing-trim and text-autospace do to a word, in its
+	// width; nil for nothing.
+	han *hanSpacing
 	// whole numbers the text Chrome shapes as one (shapingRuns) that the piece is in,
 	// 0 where it cuts it.
 	whole int32
@@ -556,6 +559,7 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 		c.closeSpans(i)
 	}
 	c.joinRuns(fonts)
+	c.spaceHan(fonts)
 	c.openSpans(len(c.runs))
 	c.anchorsAt(len(c.runs))
 	if c.reorders {
@@ -919,8 +923,10 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			if b.Len() > 0 {
 				emit(word)
 				from = n - 1
+				c.pieces = append(c.pieces, piece{kind: breakHere, run: i, level: level})
+			} else {
+				c.breakBeforeEdges(i, piece{kind: breakHere, run: i, level: level})
 			}
-			c.breakBefore(i, level)
 		}
 		switch {
 		case ch == '\n' || ch == '\t':
@@ -954,18 +960,22 @@ func (c *inlineContent) softBreakAt(soft map[int]bool, r *textRun, at int, ch ru
 		!soft[at] && (at != 0 || !c.breaksAllBefore(collapsedBlanks(r.text, r.st.WhiteSpace))) {
 		return false
 	}
-	return inWord || at == 0 && c.lastWord() >= 0
+	return inWord || at == 0 && c.wordBefore() >= 0
 }
 
-// breakBefore adds a place to break before the next piece of run i, at bidi level
-// level: before the starts of the elements just opened, as Chrome breaks where an
-// element starts.
-func (c *inlineContent) breakBefore(i int, level bidi.Level) {
+// breakBeforeEdges adds break p, where run i's text starts, before the start edges of the
+// elements run i opens: they go with its text to the line it begins, as Chrome's do.
+func (c *inlineContent) breakBeforeEdges(i int, p piece) {
 	k := len(c.pieces)
-	for c.edgeAt(k-1, true) {
+	for k > 0 && c.edgeAt(k-1, true) && c.spans[c.pieces[k-1].span].first == i {
 		k--
 	}
-	c.pieces = slices.Insert(c.pieces, k, piece{kind: breakHere, run: i, level: level})
+	c.pieces = slices.Insert(c.pieces, k, p)
+	for _, s := range c.spans {
+		if s.first == i && s.open >= k {
+			s.open++
+		}
+	}
 }
 
 // breakAt is the piece a zero-width space or a soft hyphen ch of run i, of style st,
@@ -974,7 +984,7 @@ func breakAt(fonts box.Fonts, st *style.Computed, ch rune, i int, at int32, leve
 	if ch == softHyphenChar {
 		return piece{kind: softHyphen, run: i, at: at, level: level, hyphen: hyphenWidth(fonts, st)}
 	}
-	return piece{kind: breakHere, run: i, level: level}
+	return piece{kind: breakHere, run: i, text: zeroWidthSpace, level: level}
 }
 
 // spaceTies is fonts that know whether a face shapes a space with the words beside it
@@ -1152,8 +1162,8 @@ func markerWidth(fonts box.Fonts, st *style.Computed) float32 {
 	return fonts.Advance(st.Font, markerOf(st)+" ")
 }
 
-// lastWord is the last piece when it is a word, edges aside, -1 otherwise.
-func (c *inlineContent) lastWord() int {
+// wordBefore is the last piece when it is a word, edges aside, -1 otherwise.
+func (c *inlineContent) wordBefore() int {
 	for k := len(c.pieces) - 1; k >= 0; k-- {
 		switch c.pieces[k].kind {
 		case edge:
@@ -1171,7 +1181,7 @@ func (c *inlineContent) lastWord() int {
 // a word, by the word-break: break-all of that word: a break between two elements follows
 // the text before it, as Chrome's.
 func (c *inlineContent) breaksAllBefore(text string) bool {
-	k := c.lastWord()
+	k := c.wordBefore()
 	if k < 0 {
 		return false
 	}
@@ -1258,6 +1268,19 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		}
 		soft[run][pos-starts[run]] = true
 	}
+	quoteBreaks(text, func(pos int) {
+		k := 0
+		for k+1 < len(c.runs) && starts[k+1] <= pos {
+			k++
+		}
+		if c.runs[k].atomic != nil || c.runs[k].st.WordBreak == style.KeepAll {
+			return
+		}
+		if soft[k] == nil {
+			soft[k] = map[int]bool{}
+		}
+		soft[k][pos-starts[k]] = true
+	})
 	return soft
 }
 
@@ -1500,6 +1523,11 @@ type line struct {
 	indent float32
 	// hyphen is the soft hyphen the line breaks after, showing its hyphen, -1 for none.
 	hyphen int
+	// start is how the line starts, which sets the trim of an opening bracket starting
+	// it, and closed is set when its last closing bracket is trimmed to fit
+	// (text-spacing-trim).
+	start  lineStart
+	closed bool
 }
 
 // pen is a pen at x walking l, its tab stops measured from l's start.
@@ -1716,6 +1744,23 @@ func (c *inlineContent) shown(l line) []piece {
 		p := &out[l.hyphen-l.from]
 		p.width, p.shows = p.hyphen, true
 	}
+	place := func(k int, start lineStart, end bool) {
+		if k < 0 || c.pieces[k].han == nil {
+			return
+		}
+		h, d := c.pieces[k].han.placed(len(c.pieces[k].text), start, end, end && l.closed)
+		if &out[0] == &pieces[0] {
+			out = slices.Clone(pieces)
+		}
+		p := &out[k-l.from]
+		p.han, p.width = h, p.width+d
+	}
+	if first, last := c.firstWord(l.from, l.to), c.lastWord(l.from, l.to); first == last {
+		place(first, l.start, c.runGoesOn(first, l.to))
+	} else {
+		place(first, l.start, false)
+		place(last, midLine, c.runGoesOn(last, l.to))
+	}
 	return out
 }
 
@@ -1748,8 +1793,8 @@ func (c *inlineContent) joins(i int) bool {
 }
 
 // measureUnit is the pen past pieces i to end from at, with the gaps pending since then,
-// and the pen past them alone.
-func (c *inlineContent) measureUnit(at pen, pending, i, end int) (pen, pen) {
+// and the pen past them alone, the word lead names as wide as the line's start sets it.
+func (c *inlineContent) measureUnit(at pen, pending, i, end int, lead leadWord) (pen, pen) {
 	next := at
 	if pending >= 0 {
 		for k := pending; k < i; k++ {
@@ -1760,8 +1805,9 @@ func (c *inlineContent) measureUnit(at pen, pending, i, end int) (pen, pen) {
 	}
 	alone := newPen(c.unit, 0)
 	for k := i; k < end; k++ {
-		next.step(c.pieces[k], 0)
-		alone.step(c.pieces[k], 0)
+		p := lead.of(c.pieces, k)
+		next.step(p, 0)
+		alone.step(p, 0)
 	}
 	return next, alone
 }
@@ -1795,13 +1841,18 @@ func (b *breaker) finish(next int) {
 			b.cur.width += b.c.pieces[b.cur.hyphen].hyphen
 		}
 	}
+	b.cur.width, b.cur.closed = b.c.lineEnd(b.cur, !b.cur.forced)
 	b.out = append(b.out, b.cur)
 	b.open(next, 0, b.cur.avail, 0)
 }
 
 // open starts the breaker's next line at piece i, in room avail wide starting at x.
 func (b *breaker) open(i int, x, avail, push float32) {
-	b.cur = line{from: i, to: i, x: x, avail: avail, push: push, first: len(b.out) == 0 && b.c.hasFirst(), hyphen: -1}
+	b.cur = line{from: i, to: i, x: x, avail: avail, push: push, first: len(b.out) == 0 && b.c.hasFirst(), hyphen: -1,
+		start: openingStart}
+	if n := len(b.out); n > 0 && !b.out[n-1].forced {
+		b.cur.start = wrappedStart
+	}
 	b.at = newPen(b.c.unit, 0)
 	b.kept = b.at
 	b.pending, b.spaced = -1, -1
@@ -1835,18 +1886,19 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 		if b.pending >= 0 && (p.kind == edge || p.kind == anchor) {
 			end, hung = c.hangEnd(b.pending, i, end)
 		}
-		next, alone := c.measureUnit(b.at, b.pending, i, end)
+		lead := b.lead(i, end)
+		next, alone := c.measureUnit(b.at, b.pending, i, end, lead)
 		if b.empty && alone.end() > width && c.wrapsAt(i) {
 			if cut := c.fitEnd(i, end, width); cut < end {
 				end = cut
-				next, alone = c.measureUnit(b.at, b.pending, i, end)
+				next, alone = c.measureUnit(b.at, b.pending, i, end, lead)
 			}
 		}
 		kept := next
 		if hung {
 			kept = b.kept
 			for k := i; k < end; k++ {
-				kept.step(c.pieces[k], 0)
+				kept.step(lead.of(c.pieces, k), 0)
 			}
 		}
 		if !b.blank && !hung && b.wrapsBefore(i) && b.endsBefore(i, end, next, width) {
@@ -1879,7 +1931,10 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 // seen hears of the place.
 func (b *breaker) endsBefore(i, end int, next pen, width float32) bool {
 	c := b.c
-	if i == b.stop || next.end()+c.hyphenAt(end) > width || c.joined(next, end).end() > width {
+	if i == b.stop || next.end()+c.hyphenAt(end)+c.endFit(b.cur.from, end, next.end(), width) > width {
+		return true
+	}
+	if joined := c.joined(next, end); joined != next && joined.end() > width {
 		return true
 	}
 	if b.seen != nil {
@@ -1955,6 +2010,7 @@ func (b *breaker) close() []line {
 	trails := b.trails()
 	if !b.empty && !trails || len(b.out) == 0 && b.cur.to > b.cur.from {
 		b.cur.width = b.kept.end()
+		b.cur.width, _ = b.c.lineEnd(b.cur, false)
 		b.out = append(b.out, b.cur)
 	} else if trails && b.opensSpan() {
 		// An inline element whole after the break stands on a line of its own, as
@@ -3016,6 +3072,9 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 		st := c.runs[run].st
 		frag := t.fragment(st, text, r, y+lb+c.runs[run].shift+t.alphabetic(c, st), cutStart, cut[1] && i == len(pieces))
 		frag.Start, frag.RTL, frag.Unspaced = from+c.runs[run].skip, rtl, unspaced
+		if !rtl {
+			frag.Spacing = fragmentSpacing(pieces[first:i])
+		}
 		for _, p := range pieces[first:i] {
 			if p.shows {
 				frag.Hyphen = hyphenText(t.fonts, c.runs[run].st)
