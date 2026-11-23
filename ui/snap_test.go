@@ -187,6 +187,60 @@ i { display: block; width: 1px; height: 1px; }
 	assert.Equal(t, geom.V2(2, 2), mark(cell), "the cell at 200 too is snapped on both")
 }
 
+// newScatteredSnap is a 100×100 container snapping on both axes over a
+// 600×600 room holding 50×50 areas at places, aligned by align.
+func newScatteredSnap(t *testing.T, kind, align string, places ...geom.Vec2) (*ui.Document, *world.World, *ui.Node) {
+	t.Helper()
+	doc := ui.NewDocument(ui.CSS(`
+#g { width: 100px; height: 100px; overflow: auto; scrollbar-width: none; scroll-snap-type: ` + kind + ` mandatory; }
+.room { position: relative; width: 600px; height: 600px; }
+.a { position: absolute; width: 50px; height: 50px; scroll-snap-align: ` + align + `; }
+`))
+	room := ui.Div(ui.Class("room"))
+	for _, at := range places {
+		room.Append(ui.Div(ui.Class("a"), ui.Style(fmt.Sprintf("left: %gpx; top: %gpx", at.X, at.Y))))
+	}
+	g := ui.Div(ui.ID("g"), room)
+	doc.Body().Append(g)
+	win := platform.NewWindow(platform.Size(300, 300))
+	win.Add(doc)
+	w := ember.New().AddEntities(win)
+	w.RunFrames(2)
+	return doc, w, g
+}
+
+func TestARelativeScrollSnappedOnOneAxisStaysWhereItBeganOnTheOther(t *testing.T) {
+	doc, w, g := newScatteredSnap(t, "x", "start", geom.V2(350, 100))
+	doc.SetScroll(g, geom.V2(350, 0))
+	w.RunFrames(2)
+	doc.ScrollBy(g, geom.V2(60, 60))
+	w.RunFrames(2)
+	assert.Equal(t, geom.V2(350, 0), doc.Scroll(g), "x snaps back to its area, so y doesn't move")
+	doc.ScrollBy(g, geom.V2(0, 120))
+	w.RunFrames(2)
+	assert.Equal(t, geom.V2(350, 120), doc.Scroll(g), "a scroll on y alone isn't snapped")
+}
+
+func TestARelativeScrollFindingNoAreaLandsWhereItWasSent(t *testing.T) {
+	doc, w, g := newScatteredSnap(t, "both", "start", geom.V2(200, 300), geom.V2(350, 100))
+	doc.SetScroll(g, geom.V2(350, 100))
+	w.RunFrames(2)
+	doc.ScrollBy(g, geom.V2(60, 60))
+	w.RunFrames(2)
+	assert.Equal(t, geom.V2(410, 160), doc.Scroll(g), "no area meets the snapport there on either axis")
+	doc.ScrollBy(g, geom.V2(120, -40))
+	w.RunFrames(2)
+	assert.Equal(t, geom.V2(350, 100), doc.Scroll(g), "back where both axes find an area")
+}
+
+func TestTheFirstLayoutSnapsFollowingTheBlockAxis(t *testing.T) {
+	doc, w, g := newScatteredSnap(t, "both", "start", geom.V2(150, 0), geom.V2(0, 200), geom.V2(30, 230))
+	assert.Equal(t, geom.V2(0, 200), doc.Scroll(g), "laid out, the area found on y is kept")
+	doc.SetScroll(g, geom.V2(0, 0))
+	w.RunFrames(2)
+	assert.Equal(t, geom.V2(150, 0), doc.Scroll(g), "a scrollTo keeps the axis whose area is the nearer")
+}
+
 func TestOverscrollBehaviorKeepsTheWheelFromTheScrollerRoundIt(t *testing.T) {
 	for _, c := range []struct {
 		sheet string
