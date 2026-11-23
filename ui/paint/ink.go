@@ -42,7 +42,7 @@ func bound(b *box.Box) (bool, bool) {
 		}
 	}
 	if b.Kind == box.Element && len(st.Filters) > 0 {
-		r = filterInk(r, st.Filters)
+		r = filterInk(r, st.Filters, b.Size)
 	}
 	if s, ok := clipShapeOf(b, geom.Vec2{}, st); ok {
 		r = intersect(r, s.bounds)

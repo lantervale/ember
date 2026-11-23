@@ -327,6 +327,9 @@ type matcher struct {
 	// part is the state of the scrollbar part being matched: a selector
 	// asking for states it is not in holds nothing.
 	part partState
+	// bare leaves out the rules of a control's own look, for one whose
+	// appearance is none; native is set once such a rule matched.
+	bare, native bool
 }
 
 // matched lists the declarations that apply to e, least important first.
@@ -344,7 +347,7 @@ func (m *matcher) matchedFor(e *dom.Node, sheets []*Sheet, inline []Declaration,
 	if m.best == nil {
 		m.best = map[int]ranked{}
 	}
-	m.out, m.self = m.out[:0], pseudo != ""
+	m.out, m.self, m.native = m.out[:0], pseudo != "", false
 	order := 0
 	if pseudo == "" {
 		for i := range m.hints {
@@ -435,13 +438,14 @@ func (m *matcher) try(s *Sheet, es []entry, e *dom.Node, off []bool) {
 		if was, ok := m.best[en.rule]; !ok || was.spec.Less(rank.spec) || was.spec == rank.spec && was.near < rank.near {
 			m.best[en.rule] = rank
 		}
+		m.native = m.native || sel.native
 	}
 }
 
 // active reports whether sel holds as the window stands: one with
 // :window-inactive only while it is inactive, which the cascade then reads.
 func (m *matcher) active(sel Selector) bool {
-	if sel.part&^m.part != 0 {
+	if sel.part&^m.part != 0 || sel.native && m.bare {
 		return false
 	}
 	if !sel.inactive {

@@ -51,12 +51,16 @@ type replay struct {
 	// restyled is how many elements css had styled when the tree's ink
 	// was last known to stand (inked).
 	restyled int
+	// fill draws a live part in its gap of a replay on the canvas on.
+	fill func(gap int)
+	on   *twod.Canvas
 }
 
 // Why a frame repaints, as the F3 overlay counts them.
 const (
 	replayed          = "ui replays"
 	replayedLive      = "ui replays + live"
+	replayedAround    = "ui replays round live"
 	repaintFirst      = "ui repaints: first"
 	repaintChanged    = "ui repaints: changed"
 	repaintTransition = "ui repaints: transition"
@@ -118,7 +122,7 @@ func (d *Document) options() []paint.Option {
 	if d.replay.opts == nil || d.replay.optsAt != d.viewport || d.replay.optsScale != d.fonts.Scale() {
 		d.replay.opts = []paint.Option{
 			paint.Faces(d.face), paint.Fonts(d.fonts), paint.Controls(d.machine),
-			paint.Viewport(d.viewport), paint.Images(d.image), paint.Vectors(d.vector),
+			paint.Viewport(d.viewport), paint.Images(d.image), paint.Vectors(d.vector), paint.Filters(d.svgFilter),
 			paint.Scale(d.fonts.Scale()),
 		}
 		d.replay.frameOpts = slices.Concat(d.replay.opts, []paint.Option{paint.Each(&d.replay.frame)})
@@ -138,4 +142,25 @@ func count(c *twod.Canvas, name string) {
 	if w := c.World(); w != nil {
 		w.Stats().Count(name)
 	}
+}
+
+// replayAround replays the last frame round the live parts it drew in
+// their place, covered, each drawn again in its gap (decision 0166),
+// reporting whether it did: not when the frame was kept whole.
+func (d *Document) replayAround(c *twod.Canvas) bool {
+	if d.replay.fill == nil {
+		d.replay.fill = func(i int) {
+			on := d.replay.on
+			t, z := on.Transform(), d.Zoom()
+			if z != 1 {
+				on.SetTransform(t.Mul(geom.Transform2D{X: geom.V2(z, 0), Y: geom.V2(0, z)}))
+			}
+			paint.FillGap(on, &d.replay.live, i, d.clock, d.options()...)
+			on.SetTransform(t)
+		}
+	}
+	d.replay.on = c
+	ok := c.ReplayAround(&d.replay.last, d.replay.fill)
+	d.replay.on = nil
+	return ok
 }

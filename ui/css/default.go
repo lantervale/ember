@@ -130,33 +130,47 @@ a:link:active { color: ActiveText; }
 code, kbd, samp, pre { font-family: "Go Mono", monospace; font-size: 0.8125em; }
 pre { margin: 1em 0; white-space: pre; }
 button, input, select, textarea {
-  appearance: none; margin: 0; padding: 0; border: 0; background: none;
+  appearance: auto; margin: 0; padding: 0; border: 0; background: none;
   font-family: inherit; font-size: inherit; font-weight: inherit; font-style: inherit;
   color: inherit; line-height: inherit; letter-spacing: inherit; word-spacing: inherit; text-align: inherit;
   text-indent: 0;
 }
+progress, meter { appearance: auto; }
 button, input, select, textarea, progress, meter, img, canvas, svg, iframe { display: inline-block; }
 iframe { border: 2px inset #eeeeee; }
 iframe[frameborder="0"], iframe[frameborder="no" i] { border-width: 0; }
 button, select, input[type="checkbox"], input[type="range"] { cursor: default; }
 input, textarea { cursor: text; }
-button {
-  padding: 1px 6px; border: 1px solid light-dark(#767676, #6b6b6b); border-radius: 3px; background-color: ButtonFace;
-  text-align: center;
+input { border: 2px inset light-dark(#767676, #858585); background-color: Field; }
+select, textarea { border: 1px solid light-dark(#767676, #858585); background-color: Field; }
+button, input[type="button"], input[type="submit"], input[type="reset"] {
+  border: 2px outset ButtonBorder; background-color: ButtonFace;
 }
-button:hover { background-color: light-dark(#e5e5e5, ButtonFace); }
-button:active { background-color: light-dark(#f5f5f5, ButtonFace); }
-input, select, textarea {
-  padding: 1px 2px; border: 1px solid light-dark(#767676, #858585); border-radius: 2px; background-color: Field;
+input[type="checkbox"], input[type="radio"] { border: 0; background-color: transparent; }
+/* A control's own look, while its appearance isn't none (:-ember-native); with none it is drawn from the rules
+   above, Chrome's for every control. */
+button { padding: 1px 6px; text-align: center; }
+button:-ember-native {
+  border: 1px solid light-dark(#767676, #6b6b6b); border-radius: 3px; background-color: ButtonFace;
+}
+button:hover:-ember-native { background-color: light-dark(#e5e5e5, ButtonFace); }
+button:active:-ember-native { background-color: light-dark(#f5f5f5, ButtonFace); }
+input, select, textarea { padding: 1px 2px; }
+input:-ember-native, select:-ember-native, textarea:-ember-native {
+  border: 1px solid light-dark(#767676, #858585); border-radius: 2px; background-color: Field;
 }
 input[type="button"], input[type="submit"], input[type="reset"] {
-  padding: 1px 6px; border-color: light-dark(#767676, #6b6b6b); border-radius: 3px; background-color: ButtonFace;
-  text-align: center; cursor: default;
+  padding: 1px 6px; text-align: center; cursor: default;
 }
-input[type="button"]:hover, input[type="submit"]:hover, input[type="reset"]:hover {
+input[type="button"]:-ember-native, input[type="submit"]:-ember-native, input[type="reset"]:-ember-native {
+  border-color: light-dark(#767676, #6b6b6b); border-radius: 3px; background-color: ButtonFace;
+}
+input[type="button"]:hover:-ember-native, input[type="submit"]:hover:-ember-native,
+input[type="reset"]:hover:-ember-native {
   background-color: light-dark(#e5e5e5, ButtonFace);
 }
-input[type="button"]:active, input[type="submit"]:active, input[type="reset"]:active {
+input[type="button"]:active:-ember-native, input[type="submit"]:active:-ember-native,
+input[type="reset"]:active:-ember-native {
   background-color: light-dark(#f5f5f5, ButtonFace);
 }
 ::placeholder { color: #757575; }
@@ -176,53 +190,71 @@ input, select { white-space: nowrap; }
 input { overflow: hidden; }
 select { overflow: clip; }
 textarea { white-space: pre-wrap; overflow: auto; overflow-wrap: break-word; }
-select {
+select:-ember-native {
   padding-right: 20px; background-image: url(ember:select-arrow); background-repeat: no-repeat;
   background-position: right 6px center;
 }
-select:dir(rtl) { padding-right: 2px; padding-left: 20px; background-position: left 6px center; }
-input[type="checkbox"] { width: 13px; height: 13px; padding: 0; border-radius: 2px; }
-input[type="checkbox"]:checked {
+select:dir(rtl):-ember-native { padding-right: 2px; padding-left: 20px; background-position: left 6px center; }
+input[type="checkbox"], input[type="radio"] { padding: 0; }
+input[type="checkbox"]:-ember-native { width: 13px; height: 13px; border-radius: 2px; }
+input[type="checkbox"]:checked:-ember-native {
   background-color: light-dark(#0075ff, #99c8ff); border-color: light-dark(#0075ff, #99c8ff);
   color: light-dark(#fff, #3b3b3b);
 }
-input[type="radio"] { width: 13px; height: 13px; padding: 0; border-radius: 50%; }
-input[type="radio"]:checked { border-color: light-dark(#0075ff, #99c8ff); color: light-dark(#0075ff, #99c8ff); }
+input[type="radio"]:-ember-native { width: 13px; height: 13px; border-radius: 50%; }
+input[type="radio"]:checked:-ember-native {
+  border-color: light-dark(#0075ff, #99c8ff); color: light-dark(#0075ff, #99c8ff);
+}
 /* Disabled controls and the switch in native Chrome's colours, measured from its own controls at 2x (headless Chrome
    through chrome.ScreenshotScaled, 2026-11-03, the dark ones 2026-11-22); its switch, unrendered there, follows the
    checkbox's. */
-input[type="checkbox"]:disabled, input[type="radio"]:disabled {
+input[type="checkbox"]:disabled:-ember-native, input[type="radio"]:disabled:-ember-native {
   background-color: light-dark(#f8f8f8, #3b3b3b); border-color: light-dark(rgba(118, 118, 118, 0.3), #626262);
 }
-input[type="checkbox"]:checked:disabled {
+input[type="checkbox"]:checked:disabled:-ember-native {
   background-color: light-dark(#d1d1d1, #757575); border-color: light-dark(#d1d1d1, #757575);
   color: light-dark(#ededed, #3b3b3b);
 }
 input[type="range"]:disabled { color: light-dark(#cbcbcb, #757575); }
-input[type="radio"]:checked:disabled {
+input[type="radio"]:checked:disabled:-ember-native {
   border-color: light-dark(#d1d1d1, #757575); color: light-dark(#d1d1d1, #757575);
 }
-input[type="checkbox"][switch] {
+input[type="checkbox"][switch]:-ember-native {
   width: 32px; height: 18px; border: 1px solid light-dark(#767676, #858585); border-radius: 9px;
   background-color: light-dark(#efefef, #3b3b3b); color: light-dark(#767676, #858585);
 }
-input[type="checkbox"][switch]:checked {
+input[type="checkbox"][switch]:checked:-ember-native {
   background-color: light-dark(#0075ff, #99c8ff); border-color: light-dark(#0075ff, #99c8ff);
   color: light-dark(#fff, #3b3b3b);
 }
-input[type="checkbox"][switch]:disabled {
+input[type="checkbox"][switch]:disabled:-ember-native {
   background-color: light-dark(#f8f8f8, #3b3b3b); border-color: light-dark(rgba(118, 118, 118, 0.3), #626262);
   color: light-dark(#d1d1d1, #626262);
 }
-input[type="checkbox"][switch]:checked:disabled {
+input[type="checkbox"][switch]:checked:disabled:-ember-native {
   background-color: light-dark(#d1d1d1, #757575); border-color: light-dark(#d1d1d1, #757575);
   color: light-dark(#f8f8f8, #3b3b3b);
 }
 input[type="range"] {
-  width: 129px; height: 16px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff);
+  width: 129px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff); overflow: visible;
 }
+input[type="range"]:-ember-native { height: 16px; }
 progress { width: 160px; height: 16px; color: light-dark(#0075ff, #99c8ff); }
 meter { width: 80px; height: 16px; }
+/* The parts of a range, a progress and a meter drawn from their CSS, as Chrome's sheet styles them. */
+input[type="range"]::-webkit-slider-thumb { appearance: auto; }
+progress::-webkit-progress-bar { background-color: gray; }
+progress::-webkit-progress-value { background-color: green; }
+meter::-webkit-meter-bar { background: linear-gradient(to bottom, #ddd, #eee 20%, #ccc 45%, #ccc 55%, #ddd); }
+meter::-webkit-meter-optimum-value {
+  background: linear-gradient(to bottom, #ad7, #cea 20%, #7a3 45%, #7a3 55%, #ad7);
+}
+meter::-webkit-meter-suboptimum-value {
+  background: linear-gradient(to bottom, #fe7, #ffc 20%, #db3 45%, #db3 55%, #fe7);
+}
+meter::-webkit-meter-even-less-good-value {
+  background: linear-gradient(to bottom, #f77, #fcc 20%, #d44 45%, #d44 55%, #f77);
+}
 summary { display: list-item; }
 details > summary { list-style-type: disclosure-closed; }
 details[open] > summary { list-style-type: disclosure-open; }

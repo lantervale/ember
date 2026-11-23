@@ -26,6 +26,9 @@ func filtersCSS(fs []style.Filter) string {
 	for _, f := range fs {
 		var arg string
 		switch f.Kind {
+		case style.FilterURL:
+			parts = append(parts, `url("#`+f.Ref+`")`)
+			continue
 		case style.Blur:
 			arg = px(f.Amount)
 		case style.HueRotate:
@@ -55,9 +58,10 @@ div { color: #0a0; }
 .none { filter: blur(2px); filter: none; }
 .bad { filter: sepia(1); filter: blur(-1px); filter: blur(1px) none; }
 .webkit { -webkit-filter: invert(1); }
+.url { filter: url(#soft) blur(1px) url("#glow"); }
 `
 	d := ui.NewDocument(ui.CSS(css), ui.BrowserSheets())
-	classes := []string{"all", "bare", "over", "units", "math", "none", "bad", "webkit"}
+	classes := []string{"all", "bare", "over", "units", "math", "none", "bad", "webkit", "url"}
 	for _, class := range classes {
 		d.Body().Append(ui.Div(ui.Class(class)))
 	}

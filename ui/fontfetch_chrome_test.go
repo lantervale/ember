@@ -41,6 +41,9 @@ func foundry(t *testing.T) ui.FontFetcher {
 	arabic, err := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", "go-arabic.ttf"))
 	require.NoError(t, err)
 	files["arabic.ttf"] = arabic
+	devanagari, err := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", "noto-devanagari.ttf"))
+	require.NoError(t, err)
+	files["devanagari.ttf"] = devanagari
 	return func(url, _ string) ([]byte, error) {
 		if b, ok := files[url]; ok {
 			return b, nil
