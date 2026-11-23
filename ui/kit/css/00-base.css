@@ -25,7 +25,7 @@ html {
 body { margin: 0; }
 
 /* Plain controls take kit's accent rather than Chrome's blue: ranges and progress bars through accent-color, checked checkboxes and switches in it, a switch off and a progress bar's track in kit's dark. */
-:root { accent-color: var(--accent-color); }
+input[type="range"], progress { accent-color: var(--accent-color); }
 input[type="checkbox"]:checked { background-color: var(--accent-color); border-color: var(--accent-color); color: var(--window-color); }
 input[type="checkbox"][switch] { border: 0; background-color: #3a332c; color: #f4ede4; }
 input[type="checkbox"][switch]:checked { background-color: var(--accent-color); color: #f4ede4; }

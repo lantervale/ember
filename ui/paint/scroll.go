@@ -257,10 +257,11 @@ func (p *painter) styledBars(l Bars, alpha float32) {
 	p.part(l.Parts.Corner, l.Corner, alpha)
 }
 
-// part paints a scrollbar's part of style st in r, as an element's box:
-// its shadows, backgrounds and borders.
+// part paints a scrollbar's or a control's part of style st in r, as an
+// element's box: its shadows, backgrounds and borders. A hit test meets no
+// part: the pointer is on the element the part is of.
 func (p *painter) part(st *style.Computed, r geom.Rect, alpha float32) {
-	if st == nil || r.W <= 0 || r.H <= 0 || st.Display == style.DisplayNone {
+	if p.probing || st == nil || r.W <= 0 || r.H <= 0 || st.Display == style.DisplayNone {
 		return
 	}
 	b := &box.Box{Kind: box.Element, Style: st, Size: geom.V2(r.W, r.H),
