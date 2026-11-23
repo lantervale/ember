@@ -2578,26 +2578,24 @@ func (t *tree) alphabetic(c *inlineContent, st *style.Computed) float32 {
 // lineHeight is one run's line height and the baseline's place in it (half-leading above
 // the ascent).
 func (t *tree) lineHeight(c *inlineContent, st *style.Computed) (float32, float32) {
-	return lineHeightOf(t.metricsOf(c, st), st)
+	return LineHeight(t.metricsOf(c, st), st, PixelsPerPoint(t.fonts))
 }
 
-// LineHeight is the line height a face with metrics m takes in a run of style st, and the
-// baseline's place in it.
-func LineHeight(m box.Metrics, st *style.Computed) (float32, float32) { return lineHeightOf(m, st) }
-
-// lineHeightOf is the line height a face with metrics m takes in a run of style st, and
-// the baseline's place in it.
-func lineHeightOf(m box.Metrics, st *style.Computed) (float32, float32) {
+// LineHeight is the line height a face with metrics m takes in a run of style st, and
+// the baseline's place in it, on a display of px device pixels per point.
+func LineHeight(m box.Metrics, st *style.Computed, px float32) (float32, float32) {
 	h := m.Ascent + m.Descent + m.LineGap
 	switch {
 	case st.LineHeight.Normal:
 	case st.LineHeight.Factor != 0:
-		h = st.LineHeight.Factor * st.Font.Size
+		h = floorToUnit(st.LineHeight.Factor*st.Font.Size, 64*px)
 	default:
-		h = st.LineHeight.Px
+		h = floorToUnit(st.LineHeight.Px, 64*px)
 	}
-	// Chrome puts the floor of half the leading above the glyphs, the rest below.
-	return h, m.Ascent + float32(math.Floor(float64(h-m.Ascent-m.Descent)/2))
+	// Chrome puts half the leading above the glyphs, the rest below: halved in layout
+	// units, truncated as C++ divides, then floored to device pixels.
+	half := int64(math.Round(float64((h-m.Ascent-m.Descent)*64*px))) / 2
+	return h, m.Ascent + float32(math.Floor(float64(half)/64))/px
 }
 
 // extent is what a box takes above and below a baseline.
@@ -2773,7 +2771,7 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 					pendingAlign{span: -1, run: p.run, by: c.aligner(r.st, k), at: r.st.VerticalAlign, extent: e})
 			}
 		} else if m, ok := t.fallbackMetrics(c, p, r.st); ok {
-			fh, fb := lineHeightOf(m, r.st)
+			fh, fb := LineHeight(m, r.st, PixelsPerPoint(t.fonts))
 			*into = into.with(extent{fb, fh - fb}, 0)
 		}
 	}

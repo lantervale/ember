@@ -974,7 +974,7 @@ func (d *Document) aloneOnLine(b *box.Box) bool {
 // the br's box as the line's central baseline centres it.
 func (d *Document) breakMark(b *box.Box) paint.Selected {
 	m := d.fonts.Metrics(b.Style.Font)
-	h, base := layout.LineHeight(m, b.Style)
+	h, base := layout.LineHeight(m, b.Style, layout.PixelsPerPoint(d.fonts))
 	space := d.fonts.Advance(b.Style.Font, " ")
 	switch mode := b.Style.Mode; {
 	case mode.Upward():

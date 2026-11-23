@@ -1446,7 +1446,7 @@ func (t *tree) markerArea(mark markerContent, m *box.Box, baseline, x, w float32
 	if rtl {
 		x += rtlMarkerPull
 	}
-	h, above := lineHeightOf(t.fonts.Metrics(mark.st.Font), mark.st)
+	h, above := LineHeight(t.fonts.Metrics(mark.st.Font), mark.st, PixelsPerPoint(t.fonts))
 	return geom.Rect{X: x, Y: baseline - above - m.Pos.Y, W: w, H: h}
 }
 
