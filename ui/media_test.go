@@ -99,6 +99,52 @@ func TestAChangeOfTheSystemRestylesTheNextFrame(t *testing.T) {
 	assert.InDelta(t, 20, c.Box().H, 0.01)
 }
 
+func TestADocumentAnswersContrastAndForcedColoursAsTheSystem(t *testing.T) {
+	sheet := `.card { height: 10px; width: 10px }
+@media (prefers-contrast: more) { .card { height: 12px } }
+@media (prefers-contrast: custom) { .card { height: 16px } }
+@media (forced-colors: active) { .card { width: 30px } }`
+	prefs := platform.NewPreferences()
+	doc := ui.NewDocument(ui.CSS(sheet), ui.Preferences(prefs))
+	c := mediaCard(doc)
+	doc.Layout(geom.V2(320, 200))
+	assert.Equal(t, ui.ContrastNoPreference, doc.Contrast(), "unknown is no preference")
+	assert.False(t, doc.ForcedColors())
+
+	prefs.SyncContrast(platform.ContrastMore)
+	prefs.SyncForcedColors(platform.ForcedColorsActive)
+	doc.Layout(geom.V2(320, 200))
+	assert.Equal(t, ui.ContrastMore, doc.Contrast())
+	assert.True(t, doc.ForcedColors())
+	assert.InDelta(t, 12, c.Box().H, 0.01, "restyled once the system asks for more contrast")
+	assert.InDelta(t, 30, c.Box().W, 0.01, "and once it forces its colours")
+
+	prefs.SyncContrast(platform.ContrastCustom)
+	prefs.SyncForcedColors(platform.ForcedColorsNone)
+	doc.Layout(geom.V2(320, 200))
+	assert.InDelta(t, 16, c.Box().H, 0.01)
+	assert.InDelta(t, 10, c.Box().W, 0.01)
+
+	prefs.SyncContrast(platform.ContrastMore)
+	prefs.SyncForcedColors(platform.ForcedColorsActive)
+	doc.SetContrast(ui.ContrastNoPreference)
+	doc.SetForcedColors(false)
+	doc.Layout(geom.V2(320, 200))
+	assert.Equal(t, ui.ContrastNoPreference, doc.Contrast(), "the program's answer wins, no preference too")
+	assert.False(t, doc.ForcedColors())
+	assert.InDelta(t, 10, c.Box().H, 0.01)
+	assert.InDelta(t, 10, c.Box().W, 0.01)
+
+	framed := ui.NewDocument(ui.CSS(sheet))
+	host := ui.NewDocument(ui.Preferences(prefs))
+	host.Body().Append(ui.Iframe(framed))
+	win := platform.NewWindow(platform.Size(320, 200))
+	win.Add(host)
+	ember.New().AddEntities(win).RunFrames(3)
+	assert.Equal(t, ui.ContrastMore, framed.Contrast(), "an iframe answers as its host's system")
+	assert.True(t, framed.ForcedColors())
+}
+
 func TestAFingerOnTheScreenIsACoarsePointer(t *testing.T) {
 	win := platform.NewWindow(platform.Size(320, 200))
 	doc := ui.NewDocument(ui.CSS(schemes))

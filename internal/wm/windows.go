@@ -172,6 +172,15 @@ func (s *inputFrames) Update(f world.Frame) {
 		if m, changed := p.TakeMotion(); changed {
 			world.Emit(f.World, platform.MotionChanged{Motion: m})
 		}
+		if c, changed := p.TakeContrast(); changed {
+			world.Emit(f.World, platform.ContrastChanged{Contrast: c})
+		}
+		if fc, changed := p.TakeForcedColors(); changed {
+			world.Emit(f.World, platform.ForcedColorsChanged{ForcedColors: fc})
+		}
+		if h, changed := p.TakeHighlight(); changed {
+			world.Emit(f.World, platform.HighlightChanged{Highlight: h})
+		}
 		if l, changed := p.TakeLanguages(); changed {
 			world.Emit(f.World, platform.LanguagesChanged{Languages: l})
 		}

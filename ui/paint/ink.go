@@ -68,7 +68,7 @@ func ownInk(b *box.Box, st *style.Computed) geom.Rect {
 	case box.Element, box.Marker:
 		r := inkOf(e, st)
 		if outlined(b) {
-			r = union(r, grow(r, st.OutlineOffset+st.OutlineWidth))
+			r = union(r, grow(r, outlineReach(st)))
 		}
 		return r
 	case box.TextRun:

@@ -16,6 +16,9 @@ const (
 	valAuto     = "auto"
 	valVisible  = "visible"
 	valNormal   = "normal"
+	valRound    = "round"
+	valEvenOdd  = "evenodd"
+	valNonZero  = "nonzero"
 )
 
 // clipsOverflow reports a viewport that cuts what overflows it.
@@ -490,6 +493,14 @@ func relocate(items []Item, m Matrix) []Item {
 			g := *it.Group
 			g.Items = relocate(g.Items, m)
 			g.Clip = relocateClip(g.Clip, m)
+			if g.Filters != nil {
+				g.Filters = make([]*Filter, len(it.Group.Filters))
+				for k, f := range it.Group.Filters {
+					moved := *f
+					moved.Transform = m.Mul(f.Transform)
+					g.Filters[k] = &moved
+				}
+			}
 			if g.Mask != nil {
 				mk := *g.Mask
 				mk.Items = relocate(mk.Items, m)

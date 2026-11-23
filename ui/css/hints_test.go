@@ -48,11 +48,12 @@ func TestATablesAttributesStyleItAndItsCells(t *testing.T) {
 	if ps.Size.Width.Kind != style.Auto || ps.TextAlign != style.BlockRight || ps.VerticalAlign != style.AlignBottom {
 		t.Errorf("plain, a width of 0 saying nothing and its own valign: %+v %v %v", ps.Size, ps.TextAlign, ps.VerticalAlign)
 	}
-	if ps.Background != hex("#fff") {
-		t.Errorf("hexadecimal digits without their #: %v", ps.Background)
+	if ps.Background != hex("#0f0f0f") {
+		t.Errorf("three digits without their #, a digit for each channel: %v", ps.Background)
 	}
-	if hs := styleOf(head); hs.TextAlign != style.BlockLeft || hs.Background.A != 0 || hs.Size.Width.Kind != style.Auto {
-		t.Errorf("head, a colour that is none left out whole: %v %v %+v", hs.TextAlign, hs.Background, hs.Size)
+	if hs := styleOf(head); hs.TextAlign != style.BlockLeft || hs.Background != hex("#ed0d09") ||
+		hs.Size.Width.Kind != style.Auto {
+		t.Errorf("head, a colour read as digits whatever it says: %v %v %+v", hs.TextAlign, hs.Background, hs.Size)
 	}
 }
 
@@ -117,5 +118,55 @@ func TestAHiddenInputHasNoBoxAndCenterPlacesBlocks(t *testing.T) {
 	}
 	if styleOf(center).TextAlign != style.BlockCenter {
 		t.Errorf("center: %v", styleOf(center).TextAlign)
+	}
+}
+
+func TestATablesBorderFrameAndRulesStyleItsCells(t *testing.T) {
+	cell := el(dom.Td, "c")
+	group := with(dom.NewElement(dom.Tbody), with(dom.NewElement(dom.Tr), cell))
+	table := attrs(with(el(dom.Table, "t"), group), "border", "3", "bordercolor", "red")
+	root := page(table)
+	Compute(root, nil)
+	ts, cs := styleOf(table), styleOf(cell)
+	if ts.Border.Top != 3 || ts.BorderStyle.Left != style.BorderSolid || ts.BorderColor.Top != hex("#f00") {
+		t.Errorf("table: %v %v %v", ts.Border, ts.BorderStyle, ts.BorderColor)
+	}
+	if cs.Border.Left != 1 || cs.BorderStyle.Top != style.BorderSolid || cs.BorderColor.Top != hex("#f00") {
+		t.Errorf("a cell takes a solid pixel in the table's colour: %v %v %v", cs.Border, cs.BorderStyle, cs.BorderColor)
+	}
+	table.SetAttr("rules", "rows")
+	table.SetAttr("frame", "lhs")
+	Compute(root, nil)
+	ts, cs = styleOf(table), styleOf(cell)
+	if !ts.BorderCollapse || ts.Border.Left != 1 || !ts.BorderHidden.Top || ts.BorderStyle.Left != style.BorderSolid {
+		t.Errorf("rules collapse, the frame after the border thins it: %v %v %v %v", ts.BorderCollapse, ts.Border,
+			ts.BorderHidden, ts.BorderStyle)
+	}
+	if cs.Border.Top != 1 || cs.Border.Bottom != 1 || cs.Border.Left != 0 {
+		t.Errorf("rules=rows draws between rows only: %v", cs.Border)
+	}
+}
+
+func TestTheOldElementsAttributes(t *testing.T) {
+	font := attrs(el(dom.Font, "f"), "size", "+2", "face", "Go Mono, monospace", "color", "0a0")
+	rule := attrs(el(dom.Hr, "r"), "size", "6", "noshade", "", "align", "left", "width", "0")
+	br := attrs(el(dom.Br, "b"), "clear", "ALL")
+	img := attrs(el(dom.Img, "i"), "align", "right", "hspace", "4", "vspace", "2", "border", "1")
+	Compute(page(font, rule, br, img), nil)
+	if fs := styleOf(font); fs.Font.Size != 24 || fs.Font.Family[0] != "Go Mono" || fs.Color != hex("#000a00") {
+		t.Errorf("font: %v %v %v", fs.Font.Size, fs.Font.Family, fs.Color)
+	}
+	rs := styleOf(rule)
+	if rs.Size.Height != style.Px(4) || rs.Size.Width != style.Px(1) || rs.BorderStyle.Top != style.BorderSolid ||
+		rs.Background != hex("#808080") || rs.Margin.Left != style.Px(0) || rs.Margin.Right.Kind != style.Auto {
+		t.Errorf("hr: %+v %v %v %+v", rs.Size, rs.BorderStyle, rs.Background, rs.Margin)
+	}
+	if styleOf(br).Clear != style.ClearBoth {
+		t.Errorf("br: %v", styleOf(br).Clear)
+	}
+	is := styleOf(img)
+	if is.Float != style.FloatRight || is.VerticalAlign != style.AlignTop || is.Margin.Left != style.Px(4) ||
+		is.Margin.Top != style.Px(2) || is.Border.Top != 1 {
+		t.Errorf("img: %v %v %+v %v", is.Float, is.VerticalAlign, is.Margin, is.Border)
 	}
 }

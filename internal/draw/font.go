@@ -7,13 +7,12 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
-	"runtime"
 	"strings"
-	"sync"
 	"unicode/utf8"
-	"weak"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/shape"
+	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/render"
 	"github.com/rivo/uniseg"
 	"golang.org/x/image/font"
@@ -43,14 +42,16 @@ type Emoji interface {
 // the pictures that replace emoji. Faces are rasterized on demand per
 // size.
 type Face struct {
-	name      string
-	font      *opentype.Font
+	name string
+	font *opentype.Font
+	// layout is the file's OpenType layout tables, which shape its text.
+	layout    *shape.Font
 	fallbacks []*Face
 	emoji     Emoji
 	// only are the characters the face draws of those it has (Only), all
 	// without any; blank those drawn as nothing when no face has them
-	// (Blank).
-	only, blank []Range
+	// (Blank); hidden those drawn invisible in their room (Hidden).
+	only, blank, hidden []Range
 	// look is how the face is drawn other than as its file has it.
 	look  Look
 	sizes map[float32]*Font
@@ -60,6 +61,15 @@ type Face struct {
 	// exactSizes are its fonts without stem darkening (ExactSize), apart
 	// as well.
 	exactSizes map[float32]*Font
+	// strokes are its fonts drawing each glyph's outline stroked.
+	strokes map[strokeKey]*Font
+}
+
+// strokeKey is a stroked font: its size, its stroke's width and its
+// smoothing.
+type strokeKey struct {
+	px, width float32
+	how       smoothing
 }
 
 // The engine's faces.
@@ -80,7 +90,7 @@ func ParseFace(name string, ttf []byte) (*Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("twod: parse font %s: %w", name, err)
 	}
-	return &Face{name: name, font: f, sizes: map[float32]*Font{}}, nil
+	return &Face{name: name, font: f, layout: shape.Parse(f, ttf), sizes: map[float32]*Font{}}, nil
 }
 
 func mustFace(name string, ttf []byte) *Face {
@@ -94,17 +104,37 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: f.look, fallbacks: fallbacks,
-		emoji: emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, layout: f.layout,
+		only: f.only, blank: f.blank, hidden: f.hidden, look: f.look,
+		fallbacks: fallbacks, emoji: emoji, sizes: map[float32]*Font{}}
 }
 
 // Look is how a face is drawn other than as its file has it, as an
 // @font-face and the font asked for have it: its glyphs and advances
 // scaled by Scale (0 for 1), made bold or slanted where its family has
-// no such face, kerned or not.
+// no such face, shaped with Features (HarfBuzz's, comma separated)
+// before the text's own, and a variable font's at the instance
+// Variation places it.
 type Look struct {
-	Scale                 float32
-	Bold, Oblique, NoKern bool
+	Scale         float32
+	Bold, Oblique bool
+	Features      string
+	Variation     *Variation
+}
+
+// Variation is an instance of a variable font: the face's file read by
+// varfont, and the place on its axes.
+type Variation struct {
+	Font   *varfont.Font
+	Coords varfont.Coords
+}
+
+// varied is the instance l draws, nil for the font's default.
+func (l Look) varied() *Variation {
+	if l.Variation == nil || l.Variation.Coords == nil {
+		return nil
+	}
+	return l.Variation
 }
 
 func (l Look) scale() float32 {
@@ -116,8 +146,9 @@ func (l Look) scale() float32 {
 
 // Styled is f drawn with look.
 func (f *Face) Styled(look Look) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: f.blank, look: look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, layout: f.layout,
+		only: f.only, blank: f.blank, hidden: f.hidden, look: look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Range is the characters from Lo to Hi.
@@ -137,16 +168,26 @@ func Covers(ranges []Range, r rune) bool {
 // Only is f drawing only the characters in ranges, as an @font-face's
 // unicode-range has it: another is left to the faces after it.
 func (f *Face) Only(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: ranges, blank: f.blank, look: f.look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, layout: f.layout,
+		only: ranges, blank: f.blank, hidden: f.hidden, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Blank is f drawing nothing, in no room, for a character in ranges
 // that neither it nor its fallbacks have, where another shows as '?':
 // what a face still on its way may draw.
 func (f *Face) Blank(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, only: f.only, blank: ranges, look: f.look, fallbacks: f.fallbacks,
-		emoji: f.emoji, sizes: map[float32]*Font{}}
+	return &Face{name: f.name, font: f.font, layout: f.layout,
+		only: f.only, blank: ranges, hidden: f.hidden, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
+}
+
+// Hidden is f drawing the characters in ranges invisible, in the room
+// they take: those of a face in its font-display block period.
+func (f *Face) Hidden(ranges []Range) *Face {
+	return &Face{name: f.name, font: f.font, layout: f.layout,
+		only: f.only, blank: f.blank, hidden: ranges, look: f.look,
+		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
 
 // Wrap makes the twod.Face of f, for the engine packages that build
@@ -206,7 +247,7 @@ func (f *Face) Size(px float32) *Font {
 	if fnt, ok := f.sizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, darkened)
+	fnt, err := newFont(f, px, darkened, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -223,7 +264,7 @@ func (f *Face) ExactSize(px float32) *Font {
 	if fnt, ok := f.exactSizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, exact)
+	fnt, err := newFont(f, px, exact, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -242,7 +283,7 @@ func (f *Face) PixelSize(px float32) *Font {
 	if fnt, ok := f.pixelSizes[px]; ok {
 		return fnt
 	}
-	fnt, err := newFont(f, px, unsmoothed)
+	fnt, err := newFont(f, px, unsmoothed, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -250,6 +291,26 @@ func (f *Face) PixelSize(px float32) *Font {
 		f.pixelSizes = map[float32]*Font{}
 	}
 	f.pixelSizes[px] = fnt
+	return fnt
+}
+
+// stroked returns the font at px logical pixels, exact or unsmoothed, whose
+// glyphs are their outlines stroked width pixels wide, half outside and
+// half inside, with mitred joins: -webkit-text-stroke. Its advances are
+// the plain font's.
+func (f *Face) stroked(px, width float32, how smoothing) *Font {
+	key := strokeKey{float32(math.Round(float64(px))), width, how}
+	if fnt, ok := f.strokes[key]; ok {
+		return fnt
+	}
+	fnt, err := newFont(f, key.px, how, width)
+	if err != nil {
+		panic(err)
+	}
+	if f.strokes == nil {
+		f.strokes = map[strokeKey]*Font{}
+	}
+	f.strokes[key] = fnt
 	return fnt
 }
 
@@ -287,16 +348,26 @@ type Font struct {
 	// ascii holds the ASCII glyphs at every phase, looked up without a
 	// map, as most text is ASCII.
 	ascii [128 * phases]glyph
-	// kerns caches the non-ASCII pairs met, by face and glyph indices
-	// packed for a fast map; asciiKerns is each face's ASCII table.
-	kerns      map[uint64]float32
-	asciiKerns []*[128 * 128]fixed.Int26_6
-	faces      []font.Face
-	sources    []*opentype.Font
+	// indexed are the glyphs shaping put in place of a character's,
+	// by face, index and phase.
+	indexed map[indexKey]glyph
+	faces   []font.Face
+	sources []*opentype.Font
+	// layouts are each source's layout tables, memos the plan each
+	// shaped with last, and shapedRuns the runs shaped so far, by plan
+	// and glyphs, shapedCount of them; pending, run and ids are scratch
+	// for a text being shaped.
+	layouts     []*shape.Font
+	memos       []planMemo
+	shapedRuns  map[*shape.Plan]map[string][]shape.Glyph
+	shapedCount int
+	pending     []pending
+	run         []shape.Glyph
+	ids         []byte
 	// only are the characters each source draws, and blank those drawn
 	// as nothing when no source has them (Face.Only, Face.Blank).
-	only  [][]Range
-	blank []Range
+	only          [][]Range
+	blank, hidden []Range
 	// looks are how each source is drawn (Face.Styled).
 	looks      []Look
 	emoji      Emoji
@@ -308,6 +379,9 @@ type Font struct {
 	size       float32
 	// smoothing is how glyphs are rasterized.
 	smoothing smoothing
+	// stroke is how wide the glyphs' outlines are stroked, in pixels of
+	// size, 0 for the glyphs filled.
+	stroke float32
 }
 
 // smoothing is what a font makes of a glyph's coverage: darkened, its
@@ -323,9 +397,9 @@ const (
 
 const atlasRunes = "ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜàâäçéèêëîïôöùûüœ·•×÷°±…—–’“”«»€£¥©®™←↑→↓★♥"
 
-func newFont(f *Face, px float32, how smoothing) (*Font, error) {
-	out := &Font{glyphs: map[glyphKey]glyph{}, kerns: map[uint64]float32{}, emoji: f.emoji, size: px, smoothing: how,
-		blank: f.blank}
+func newFont(f *Face, px float32, how smoothing, stroke float32) (*Font, error) {
+	out := &Font{glyphs: map[glyphKey]glyph{}, indexed: map[indexKey]glyph{}, emoji: f.emoji, size: px,
+		smoothing: how, blank: f.blank, hidden: f.hidden, stroke: stroke}
 	for _, src := range append([]*Face{f}, f.fallbacks...) {
 		face, err := opentype.NewFace(
 			src.font,
@@ -336,7 +410,7 @@ func newFont(f *Face, px float32, how smoothing) (*Font, error) {
 		}
 		out.faces, out.sources = append(out.faces, face), append(out.sources, src.font)
 		out.only, out.looks = append(out.only, src.only), append(out.looks, src.look)
-		out.asciiKerns = append(out.asciiKerns, asciiKerning(src.font))
+		out.layouts = append(out.layouts, src.layout)
 	}
 	m := out.faces[0].Metrics()
 	out.ascent = float32(m.Ascent.Ceil()) / oversample
@@ -373,29 +447,21 @@ func (f *Font) LineHeight() float32 { return f.lineHeight }
 func (f *Font) Ascent() float32 { return f.ascent }
 
 // Measure returns the size of a single- or multi-line string.
-func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, 0) }
+func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0) }
 
-// measure is the size of s with tracking after each cluster.
-func (f *Font) measure(s string, tracking float32) geom.Vec2 {
+// measure is the size of s shaped with features, with tracking after
+// each cluster.
+func (f *Font) measure(s, features string, tracking float32) geom.Vec2 {
 	var w, line float32
 	lines := 1
-	prev := none
-	eachCluster(s, func(c string, first rune) {
-		if first == '\n' || first == '\r' {
+	f.items(s, features, func(it item) {
+		if it.newline {
 			w = max(w, line)
 			line = 0
 			lines++
-			prev = none
 			return
 		}
-		if _, ok := f.picture(c); ok {
-			line += f.size + tracking
-			prev = none
-			return
-		}
-		g := f.glyph(first)
-		line += f.kern(prev, g) + g.advance + tracking
-		prev = g
+		line += it.advance + tracking*float32(it.clusters)
 	})
 	return geom.V2(max(w, line), float32(lines)*f.lineHeight)
 }
@@ -413,101 +479,15 @@ func (f *Font) picture(c string) (*render.Texture, bool) {
 func (f *Font) advance(face int, idx sfnt.GlyphIndex) float32 {
 	src := f.sources[face]
 	upem := src.UnitsPerEm()
+	if v := f.looks[face].varied(); v != nil {
+		return v.Font.Advance(uint16(idx), v.Coords) * f.size * f.looks[face].scale() / float32(upem)
+	}
 	a, err := src.GlyphAdvance(&f.buf, idx, fixed.I(int(upem)), font.HintingNone)
 	if err != nil {
 		return 0
 	}
 	return float32(a) / 64 * f.size * f.looks[face].scale() / float32(upem)
 }
-
-// kern is the room between glyphs p and g, drawn one after the other,
-// from their face's kerning table when both come from the same face; 0
-// after nothing (p's face < 0). ASCII pairs come from the face's table
-// read once; others are looked up and cached.
-func (f *Font) kern(p, g glyph) float32 {
-	if p.face < 0 || p.face != g.face || p.idx == 0 || g.idx == 0 || f.looks[g.face].NoKern {
-		return 0
-	}
-	src := f.sources[g.face]
-	upem := float32(src.UnitsPerEm())
-	size := f.size * f.looks[g.face].scale()
-	if p.r < 128 && g.r < 128 {
-		t := f.asciiKerns[g.face]
-		if t == nil {
-			return 0
-		}
-		return float32(t[p.r*128+g.r]) / 64 * size / upem
-	}
-	key := uint64(g.face)<<32 | uint64(p.idx)<<16 | uint64(g.idx) //nolint:gosec // a face index and two 16-bit glyph ids
-	if k, ok := f.kerns[key]; ok {
-		return k
-	}
-	k, err := src.Kern(&f.buf, p.idx, g.idx, fixed.I(int(upem)), font.HintingNone)
-	if err != nil {
-		k = 0
-	}
-	v := float32(k) / 64 * size / upem
-	f.kerns[key] = v
-	return v
-}
-
-// kerning holds each font's ASCII table while the font lives: keyed
-// weakly, so a page's font goes when its page does.
-//
-//nolint:gochecknoglobals // a cache every font shares, under its mutex
-var (
-	kerning   = map[weak.Pointer[opentype.Font]]*[128 * 128]fixed.Int26_6{}
-	kerningMu sync.Mutex
-)
-
-// keepKerning caches src's table until src is collected.
-func keepKerning(src *opentype.Font, t *[128 * 128]fixed.Int26_6) {
-	key := weak.Make(src)
-	kerning[key] = t
-	runtime.AddCleanup(src, func(key weak.Pointer[opentype.Font]) {
-		kerningMu.Lock()
-		defer kerningMu.Unlock()
-		delete(kerning, key)
-	}, key)
-}
-
-// asciiKerning is src's kerning between ASCII characters, in font units
-// as 26.6, read once for every size; nil when it kerns none of them.
-func asciiKerning(src *opentype.Font) *[128 * 128]fixed.Int26_6 {
-	kerningMu.Lock()
-	defer kerningMu.Unlock()
-	if t, ok := kerning[weak.Make(src)]; ok {
-		return t
-	}
-	var buf sfnt.Buffer
-	var idx [128]sfnt.GlyphIndex
-	for r := range idx {
-		idx[r], _ = src.GlyphIndex(&buf, rune(r))
-	}
-	t := new([128 * 128]fixed.Int26_6)
-	kerns := false
-	upem := fixed.I(int(src.UnitsPerEm()))
-	for a := 32; a < 128; a++ {
-		for b := 32; b < 128; b++ {
-			if idx[a] == 0 || idx[b] == 0 {
-				continue
-			}
-			if k, err := src.Kern(&buf, idx[a], idx[b], upem, font.HintingNone); err == nil && k != 0 {
-				t[a*128+b], kerns = k, true
-			}
-		}
-	}
-	if !kerns {
-		t = nil
-	}
-	keepKerning(src, t)
-	return t
-}
-
-// none is what comes before the first glyph: nothing to kern against.
-//
-//nolint:gochecknoglobals // a fixed value; Go has no constant structs
-var none = glyph{face: -1}
 
 // glyph is r's glyph at phase 0: its advance and face.
 func (f *Font) glyph(r rune) glyph { return f.glyphAt(r, 0) }
@@ -552,13 +532,22 @@ func (f *Font) raster(r rune, phase int) glyph {
 		}
 		return f.glyphAt('?', phase)
 	}
+	return f.rasterIndex(face, idx, r, phase)
+}
+
+// rasterIndex rasterizes glyph idx of face at phase into the atlas: r's
+// glyph, or for r < 0 one shaping put in a character's place.
+func (f *Font) rasterIndex(face int, idx sfnt.GlyphIndex, r rune, phase int) glyph {
 	g := glyph{advance: f.advance(face, idx), face: face, idx: idx, r: r}
+	if len(f.hidden) > 0 && Covers(f.hidden, r) {
+		return g
+	}
 	x := fixed.Int26_6(phase * 64 / phases) //nolint:gosec // phase < phases, so at most 64
 	var dr image.Rectangle
 	var mask image.Image
 	var mp image.Point
 	var ok bool
-	if l := f.looks[face]; l.Bold || l.Oblique {
+	if l := f.looks[face]; l.Bold || l.Oblique || l.varied() != nil || r < 0 || f.stroke > 0 {
 		dr, mask, ok = f.synthetic(face, idx, x, l)
 	} else {
 		dr, mask, mp, _, ok = f.faces[face].Glyph(fixed.Point26_6{X: x}, r)

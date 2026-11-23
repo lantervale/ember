@@ -22,6 +22,20 @@ func radio(name, value string, args ...ui.Arg) *ui.Node {
 	return ui.Input(append([]ui.Arg{ui.Type("radio"), ui.Attr("name", name), ui.Value(value)}, args...)...)
 }
 
+func TestARadioGroupIsItsNameInItsForm(t *testing.T) {
+	a, b := radio("size", "s", ui.Checked(true)), radio("size", "m")
+	c, loose := radio("size", "l", ui.Checked(true)), radio("size", "xl", ui.Checked(true))
+	owned := radio("size", "xxl", ui.Attr("form", "first"))
+	l := liveDoc(t, ui.Form(ui.ID("first"), a, b), ui.Form(c), loose, owned)
+
+	l.clickAt(b)
+	assert.False(t, l.doc.Checked(a), "the form's other radio unchecks")
+	assert.True(t, l.doc.Checked(c) && l.doc.Checked(loose), "another form's, and one in none, keep theirs")
+	l.clickAt(owned)
+	assert.False(t, l.doc.Checked(b), "a radio its form attribute puts in the first form is of its group")
+	assert.True(t, l.doc.Checked(loose))
+}
+
 func TestARadioGroupKeepsOneCheckedAndTheArrowsMoveIt(t *testing.T) {
 	a, b := radio("size", "s"), radio("size", "m", ui.Attr("checked", ""))
 	off, c := radio("size", "l", ui.Disabled()), radio("size", "xl")

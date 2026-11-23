@@ -405,28 +405,35 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 	if err = os.WriteFile(file, page, 0o600); err != nil { //nolint:gosec // a file in our own temporary folder
 		return nil, err
 	}
+	return runAt(dir, "file://"+file, size, action, m)
+}
+
+// runAt runs Chrome once on the page at address with a window of size,
+// its profile in dir.
+func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	// --run-all-compositor-stages-before-draw: headless shoots when the
 	// virtual time runs out, before its tiles are rasterized on a loaded
 	// machine, which left pages half drawn.
-	cmd := exec.CommandContext( //nolint:gosec // the Chrome found on this machine, run on our own page
-		ctx,
-		browser(),
-		"--headless=new",
+	args := []string{"--headless=new",
 		"--disable-gpu",
 		"--run-all-compositor-stages-before-draw",
 		fmt.Sprintf("--force-device-scale-factor=%g", deviceScale),
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--disable-extensions",
-		"--user-data-dir="+filepath.Join(dir, "profile"),
+		"--user-data-dir=" + filepath.Join(dir, "profile"),
 		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)),
 		blinkSettings(m),
 		"--virtual-time-budget=10000",
 		action,
-		"file://"+file,
-	)
+		address,
+	}
+	if len(features) > 0 {
+		args = append([]string{"--enable-blink-features=" + strings.Join(features, ",")}, args...)
+	}
+	cmd := browserCommand(ctx, helpersWait, browser(), args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -437,6 +444,19 @@ func runRaw(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, er
 		return nil, fmt.Errorf("chrome: %w: %s", err, stderr.String())
 	}
 	return out, nil
+}
+
+// helpersWait is how long Chrome's helper processes may keep its output
+// open once the browser has exited or been killed.
+const helpersWait = 10 * time.Second
+
+// browserCommand runs the browser at path until ctx is done, then kills it
+// and, wait later, closes its output under any helper still holding it,
+// which would otherwise hang the read for as long as that helper lives.
+func browserCommand(ctx context.Context, wait time.Duration, path string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.WaitDelay = wait
+	return cmd
 }
 
 // blinkSettings has Chrome answer the media features as m does, whatever
@@ -493,6 +513,19 @@ func MatchScaled(t testing.TB, d *ui.Document, size geom.Vec2, scale float32) Re
 	deviceScale = scale
 	fonts.Of(d).SetScale(scale)
 	defer func() { deviceScale = 1; fonts.Of(d).SetScale(1) }()
+	return Match(t, d, size)
+}
+
+// features are the Blink features Chrome runs with besides its own;
+// none unless MatchWith sets them.
+var features []string //nolint:gochecknoglobals // set for the length of one MatchWith
+
+// MatchWith is Match on a Chrome running with the Blink features named
+// on, those it ships behind a flag: CSSLineClamp for line-clamp.
+func MatchWith(t testing.TB, d *ui.Document, size geom.Vec2, feature ...string) Report {
+	t.Helper()
+	features = feature
+	defer func() { features = nil }()
 	return Match(t, d, size)
 }
 
@@ -679,6 +712,47 @@ func EvalScaled(d *ui.Document, size geom.Vec2, scale float32, expr string) ([]b
 	return Eval(d, size, expr)
 }
 
+// EvalScript is the script a page given to EvalPage holds: expr, the
+// body of an async function, evaluated once the page and its fonts have
+// loaded, the value it resolves to written into the page as JSON.
+func EvalScript(expr string) string {
+	return `<script>
+addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` + expr + ` })()).then(v => {
+	const out = document.createElement("script");
+	out.type = "application/json";
+	out.id = "ember-eval";
+	out.textContent = JSON.stringify(v);
+	document.head.appendChild(out);
+}));
+</script>`
+}
+
+// EvalPage loads the page at url, served from this machine, in Chrome in
+// a viewport of size points, and returns the value of its EvalScript as
+// JSON: what it fetches comes as the server sends it, timed as Chrome
+// times it.
+func EvalPage(url string, size geom.Vec2) ([]byte, error) {
+	unlock, err := lockChrome()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	dir, err := os.MkdirTemp("", "ember-chrome-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	out, err := runAt(dir, url, size, dumpDOM, css.Media{})
+	if err != nil {
+		return nil, err
+	}
+	res := evalJSON.FindSubmatch(out)
+	if res == nil {
+		return nil, fmt.Errorf("chrome: no result in the page:\n%s", out)
+	}
+	return res[1], nil
+}
+
 // Eval lays d out in Chrome in a viewport of size points, evaluates the
 // JavaScript expr, the body of an async function, once the fonts are
 // ready, and returns the value it resolves to as JSON. Chrome answers
@@ -690,17 +764,8 @@ func Eval(d *ui.Document, size geom.Vec2, expr string) ([]byte, error) {
 // EvalIn is Eval with Chrome answering the media features as m does: its
 // colour scheme, reduced motion and pointer.
 func EvalIn(m css.Media, d *ui.Document, size geom.Vec2, expr string) ([]byte, error) {
-	head := `<script>
-addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` + expr + ` })()).then(v => {
-	const out = document.createElement("script");
-	out.type = "application/json";
-	out.id = "ember-eval";
-	out.textContent = JSON.stringify(v);
-	document.head.appendChild(out);
-}));
-</script>`
 	var page bytes.Buffer
-	if err := export.Write(&page, d, export.Head(head)); err != nil {
+	if err := export.Write(&page, d, export.Head(EvalScript(expr))); err != nil {
 		return nil, err
 	}
 	out, err := run(page.Bytes(), size, dumpDOM, m)

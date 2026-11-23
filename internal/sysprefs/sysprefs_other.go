@@ -1,20 +1,9 @@
-//go:build !windows
+//go:build !windows && (!unix || darwin)
 
 package sysprefs
 
-import (
-	"os"
+import "os"
 
-	"github.com/lantervale/ember/platform"
-)
-
-// Languages is the user's languages as the environment has them.
-func Languages() []string { return FromEnv(os.Getenv) }
-
-// Appearance is unknown: a Linux desktop says whether it is dark through
-// its settings portal, over D-Bus, which ember does not speak.
-func Appearance() platform.Appearance { return platform.AppearanceUnknown }
-
-// Motion is unknown: GNOME's gtk-enable-animations is read through the
-// same portal.
-func Motion() platform.Motion { return platform.MotionUnknown }
+// Read is the user's languages as the environment has them: macOS says
+// the rest through AppKit, in platform/desktop.
+func Read() System { return System{Languages: FromEnv(os.Getenv)} }

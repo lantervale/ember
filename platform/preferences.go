@@ -3,11 +3,15 @@ package platform
 import (
 	"slices"
 
+	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/world"
 )
 
 // Appearance is the look the user asked their system for.
 type Appearance int
+
+// unknown is the word of an answer the system has not given.
+const unknown = "unknown"
 
 const (
 	// AppearanceUnknown is the appearance of a system that has not said,
@@ -26,7 +30,7 @@ func (a Appearance) String() string {
 		return "dark"
 	case AppearanceUnknown:
 	}
-	return "unknown"
+	return unknown
 }
 
 // AppearanceChanged is emitted when the system's appearance changes, the
@@ -57,13 +61,93 @@ func (m Motion) String() string {
 		return "reduced"
 	case MotionUnknown:
 	}
-	return "unknown"
+	return unknown
 }
 
 // MotionChanged is emitted when the system's reduced motion setting
 // changes, the first time it is known included.
 type MotionChanged struct {
 	Motion Motion
+}
+
+// Contrast is the contrast the user asked their system for, as CSS's
+// prefers-contrast words it.
+type Contrast int
+
+const (
+	// ContrastUnknown is the answer of a system that has not said, or
+	// cannot, as AppearanceUnknown.
+	ContrastUnknown Contrast = iota
+	ContrastNoPreference
+	ContrastMore
+	ContrastLess
+	// ContrastCustom is a system whose forced colours stand neither far
+	// apart nor close.
+	ContrastCustom
+)
+
+func (c Contrast) String() string {
+	switch c {
+	case ContrastNoPreference:
+		return "no-preference"
+	case ContrastMore:
+		return "more"
+	case ContrastLess:
+		return "less"
+	case ContrastCustom:
+		return "custom"
+	case ContrastUnknown:
+	}
+	return unknown
+}
+
+// ContrastChanged is emitted when the system's contrast changes, the
+// first time it is known included.
+type ContrastChanged struct {
+	Contrast Contrast
+}
+
+// ForcedColors is whether the system forces a palette of its own on
+// programs, as Windows' contrast themes do.
+type ForcedColors int
+
+const (
+	// ForcedColorsUnknown is the answer of a system that has not said,
+	// or cannot, as AppearanceUnknown.
+	ForcedColorsUnknown ForcedColors = iota
+	ForcedColorsNone
+	ForcedColorsActive
+)
+
+func (f ForcedColors) String() string {
+	switch f {
+	case ForcedColorsNone:
+		return "none"
+	case ForcedColorsActive:
+		return "active"
+	case ForcedColorsUnknown:
+	}
+	return unknown
+}
+
+// ForcedColorsChanged is emitted when the system starts or stops forcing
+// its colours, the first time it is known included.
+type ForcedColorsChanged struct {
+	ForcedColors ForcedColors
+}
+
+// Highlight is the colours the system selects text in: Background behind
+// it while its window is focused, Inactive while it isn't, and Text, the
+// text's own over them. A colour of no alpha is one the system does not
+// say.
+type Highlight struct {
+	Background, Inactive, Text color.Color
+}
+
+// HighlightChanged is emitted when the system's selection colours change,
+// the first time they are known included.
+type HighlightChanged struct {
+	Highlight Highlight
 }
 
 // LanguagesChanged is emitted when the user's languages change, the first
@@ -80,12 +164,14 @@ type LanguagesChanged struct {
 //	w.AddEntity(prefs)
 //
 // Nothing is known until the program runs, nor in a test, a hidden run or
-// a server: SyncAppearance, SyncMotion and SyncLanguages then stand for
-// the system.
+// a server: the Sync methods then stand for the system.
 type Preferences struct {
 	*world.BasicEntity
 	appearance, toldAppearance Appearance
 	motion, toldMotion         Motion
+	contrast, toldContrast     Contrast
+	forced, toldForced         ForcedColors
+	highlight, toldHighlight   Highlight
 	languages, toldLanguages   []string
 }
 
@@ -106,6 +192,54 @@ func (p *Preferences) Appearance() Appearance { return p.appearance }
 // Motion is whether the system asks programs to reduce motion,
 // MotionUnknown when it has not said.
 func (p *Preferences) Motion() Motion { return p.motion }
+
+// Contrast is the contrast the system asks programs for, ContrastUnknown
+// when it has not said.
+func (p *Preferences) Contrast() Contrast { return p.contrast }
+
+// ForcedColors is whether the system forces its own colours,
+// ForcedColorsUnknown when it has not said.
+func (p *Preferences) ForcedColors() ForcedColors { return p.forced }
+
+// Highlight is the colours the system selects text in, those it does not
+// say clear.
+func (p *Preferences) Highlight() Highlight { return p.highlight }
+
+// SyncContrast records the contrast the system asks for. Called by
+// platform implementations, and by tests in their place.
+func (p *Preferences) SyncContrast(c Contrast) { p.contrast = c }
+
+// SyncForcedColors records whether the system forces its colours. Called
+// by platform implementations, and by tests in their place.
+func (p *Preferences) SyncForcedColors(f ForcedColors) { p.forced = f }
+
+// SyncHighlight records the system's selection colours. Called by
+// platform implementations, and by tests in their place.
+func (p *Preferences) SyncHighlight(h Highlight) { p.highlight = h }
+
+// TakeContrast returns the contrast and whether it changed since it was
+// last taken. Called by the World's windows.
+func (p *Preferences) TakeContrast() (Contrast, bool) {
+	changed := p.contrast != p.toldContrast
+	p.toldContrast = p.contrast
+	return p.contrast, changed
+}
+
+// TakeForcedColors returns whether colours are forced and whether that
+// changed since it was last taken. Called by the World's windows.
+func (p *Preferences) TakeForcedColors() (ForcedColors, bool) {
+	changed := p.forced != p.toldForced
+	p.toldForced = p.forced
+	return p.forced, changed
+}
+
+// TakeHighlight returns the selection colours and whether they changed
+// since they were last taken. Called by the World's windows.
+func (p *Preferences) TakeHighlight() (Highlight, bool) {
+	changed := p.highlight != p.toldHighlight
+	p.toldHighlight = p.highlight
+	return p.highlight, changed
+}
 
 // Languages is the user's languages, the one they prefer first, as BCP 47
 // tags such as fr-FR or en; empty when the system has not said.

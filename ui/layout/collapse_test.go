@@ -66,8 +66,8 @@ func TestCollapsedBordersAreSharedHalfEach(t *testing.T) {
 	assert.Equal(t, geom.Rect{X: 18, Y: 18, W: 16, H: 16}, tr.Of[d].Rect())
 	assert.Equal(t, box.Edges{Top: 2, Right: 2, Bottom: 2, Left: 2}, tr.Of[d].Border)
 	require.Len(t, tr.Of[tb].Collapsed, 12, "the edges of the grid, for the table to draw")
-	assert.Equal(t, box.Edge{Rect: geom.Rect{X: 0, Y: 4, W: 4, H: 12}, Style: style.BorderSolid, Color: black},
-		tr.Of[tb].Collapsed[0], "over the middle of the edge, stopping where the border across goes through")
+	assert.Equal(t, box.Edge{Rect: geom.Rect{X: 0, Y: 0, W: 4, H: 20}, Style: style.BorderSolid, Color: black},
+		tr.Of[tb].Collapsed[0], "over the middle of the edge, through both corners it ties for, the first box's")
 }
 
 func TestADoubleEdgeGoesThroughABorderAsWideAcrossIt(t *testing.T) {
@@ -126,4 +126,34 @@ func TestATableThatStopsCollapsingGivesItsCellsTheirBordersBack(t *testing.T) {
 	assert.Equal(t, box.Edges{Top: 4, Right: 4, Bottom: 4, Left: 4}, tr.Of[a].Border)
 	assert.Equal(t, float32(7+2+20+2+28+2+7), tr.Of[tb].Size.X)
 	assert.Nil(t, tr.Of[tb].Collapsed)
+}
+
+// TestTheEdgeThatGoesThroughACornerIsChromes checks a grid of cells whose edges down are
+// red and edges across blue, as wide, against Chrome: at the top between two cells the
+// edge down wins its corner, the first cell's, and so does the one at the right; at the
+// top left both win and the edge across, drawn after, shows; inside and on the other
+// sides the edge across goes through.
+func TestTheEdgeThatGoesThroughACornerIsChromes(t *testing.T) {
+	red, blue := color.RGB(1, 0, 0), color.RGB(0, 0, 1)
+	edit := collapsing(func(st *style.Computed) {
+		st.Border, st.BorderStyle = style.All[float32](4), style.All(style.BorderSolid)
+		st.BorderColor = style.Sides[color.Color]{Top: blue, Right: red, Bottom: blue, Left: red}
+	})
+	a, b, c, d := cell("H", edit), cell("H", edit), cell("H", edit), cell("H", edit)
+	tb := collapsed(nil, row(a, b), row(c, d))
+	tr := lay(el(dom.Div, block, tb), 400)
+	edges := tr.Of[tb].Collapsed
+	require.Len(t, edges, 12)
+	rect := func(x, y, w, h float32) geom.Rect { return geom.Rect{X: x, Y: y, W: w, H: h} }
+	assert.Equal(t, []geom.Rect{
+		rect(0, 0, 4, 20), rect(0, 0, 20, 4), rect(16, 0, 4, 20), rect(20, 0, 16, 4), rect(32, 0, 4, 20),
+		rect(0, 20, 4, 16), rect(0, 16, 20, 4), rect(16, 20, 4, 16), rect(20, 16, 16, 4), rect(32, 20, 4, 16),
+		rect(0, 32, 20, 4), rect(20, 32, 16, 4),
+	}, func() []geom.Rect {
+		out := make([]geom.Rect, len(edges))
+		for i, e := range edges {
+			out[i] = e.Rect
+		}
+		return out
+	}(), "row by row, each edge down before the one across from its corner")
 }

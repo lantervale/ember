@@ -6,7 +6,6 @@ import (
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
-	"github.com/lantervale/ember/ui/internal/outline"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -227,67 +226,45 @@ func splitAt(poly []geom.Vec2, f func(geom.Vec2) float32) ([]geom.Vec2, []geom.V
 	return above, below
 }
 
-// roundedSides paints a rounded border as wide all round whose sides
-// differ in colour: a ring in each colour, cut by a mask to its run of
-// sides, each run meeting the next on the line from their outer corner to
-// the inner one, at 45 degrees, blended across it by the mask's edge as
-// Chrome blends them. When every side is opaque, the first side's colour
-// is a whole ring the others are drawn over.
-func (p *painter) roundedSides(r geom.Rect, w float32, c [4]color.Color, radius radii) {
-	ring := func(col color.Color) {
-		if radius.uniform() {
-			p.s.Border(r, radius[0], w, col)
-		} else {
-			p.s.BorderCorners(r, radius, w, col)
-		}
-	}
-	opaque := c[0].A >= 1 && c[1].A >= 1 && c[2].A >= 1 && c[3].A >= 1
-	start := 0
-	for start < 4 && c[start] == c[(start+3)%4] {
-		start++
-	}
-	if start == 4 {
-		if w > 0 && c[0].A > 0 {
-			ring(c[0])
-		}
+// ring paints a rounded border w wide all round in c.
+func (p *painter) ring(r geom.Rect, radius radii, w float32, c color.Color) {
+	if radius.uniform() {
+		p.s.Border(r, radius[0], w, c)
 		return
 	}
-	outer := [4]geom.Vec2{{X: r.X, Y: r.Y}, {X: r.X + r.W, Y: r.Y}, {X: r.X + r.W, Y: r.Y + r.H}, {X: r.X, Y: r.Y + r.H}}
-	d := min(r.W, r.H) / 2
-	deep := [4]geom.Vec2{
-		outer[0].Add(geom.V2(d, d)), outer[1].Add(geom.V2(-d, d)),
-		outer[2].Add(geom.V2(-d, -d)), outer[3].Add(geom.V2(d, -d)),
+	p.s.BorderCorners(r, radius, w, c)
+}
+
+// outlineReach is how far past the border box st's outline is drawn: its
+// offset and its width, and a focus ring's two strokes past the offset.
+func outlineReach(st *style.Computed) float32 {
+	reach := st.OutlineOffset + st.OutlineWidth
+	if st.OutlineStyle == style.BorderAuto {
+		inner, outer := focusStrokes(st.OutlineWidth)
+		reach = max(reach, st.OutlineOffset+inner/2+outer)
 	}
-	if opaque {
-		ring(c[0])
+	return reach
+}
+
+// focusStrokes are how wide a focus ring's strokes are for an outline w
+// wide: two thirds of it and a third, rounded up.
+func focusStrokes(w float32) (float32, float32) {
+	return float32(math.Ceil(float64(2 * w / 3))), float32(math.Ceil(float64(w / 3)))
+}
+
+// focusRing paints outline-style: auto round the box r of corners radius,
+// as Chrome draws its focus ring for an outline w wide and offset out: a
+// stroke of c two thirds of w across, rounded up, down the box grown by
+// offset, its corners those of the box grown or else w round, and outside
+// it a white one a third of w across, rounded up.
+func (p *painter) focusRing(r geom.Rect, radius radii, w, offset float32, c color.Color) {
+	inner, outer := focusStrokes(w)
+	middle := radius.grown(offset)
+	for i := range middle {
+		if middle[i] <= 0 {
+			middle[i] = w
+		}
 	}
-	for n := 0; n < 4; {
-		first := (start + n) % 4
-		last := first
-		for n++; n < 4 && c[(start+n)%4] == c[first]; n++ {
-			last = (start + n) % 4
-		}
-		if c[first].A <= 0 || opaque && c[first] == c[0] {
-			continue
-		}
-		var pts []geom.Vec2
-		for k := first; ; k = (k + 1) % 4 {
-			pts = append(pts, outer[k])
-			if k == last {
-				pts = append(pts, outer[(k+1)%4])
-				break
-			}
-		}
-		for k := (last + 1) % 4; ; k = (k + 3) % 4 {
-			pts = append(pts, deep[k])
-			if k == first {
-				break
-			}
-		}
-		shape := &clipShape{path: outline.Polygon(pts)}
-		shape.bounds, _ = shape.path.Bounds()
-		p.s.PushClipMask(shape.bounds, masks.mask(shape, p.maskScale()))
-		ring(c[first])
-		p.s.PopClip()
-	}
+	p.ring(grow(r, offset+inner/2+outer), middle.grown(inner/2+outer), inner+outer, color.RGB(1, 1, 1).Alpha(c.A))
+	p.ring(grow(r, offset+inner/2), middle.grown(inner/2), inner, c)
 }

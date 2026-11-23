@@ -91,9 +91,13 @@ type inlineOOF struct {
 	span       int
 }
 
+// anchorAt is an out-of-flow element before run i, in the box parent: the owner's, top,
+// or an inline element's.
 type anchorAt struct {
-	node *node
-	run  int
+	node   *node
+	run    int
+	parent *box.Box
+	top    bool
 }
 
 // oofOf is k's place in c's lines when k is out of flow inside it, nil otherwise.
@@ -293,16 +297,14 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			continue
 		}
 		if outOfFlow(st.Position) {
-			if parent == c.owner.box {
-				continue
-			}
 			n := t.build(it.element, c.owner)
 			c.owner.kids = append(c.owner.kids, n)
 			if c.oofs == nil {
 				c.oofs = map[*node]*inlineOOF{}
 			}
 			c.oofs[n] = &inlineOOF{span: -1}
-			c.anchors = append(c.anchors, anchorAt{node: n, run: len(c.runs)})
+			c.anchors = append(c.anchors, anchorAt{node: n, run: len(c.runs), parent: parent,
+				top: parent == c.owner.box})
 			continue
 		}
 		if it.element.Tag() == dom.Br {
@@ -562,6 +564,7 @@ func (c *inlineContent) rootStyle() *style.Computed {
 func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]bool, afterSpace bool,
 	levels []bidi.Level) bool {
 	ws := r.st.WhiteSpace
+	defer c.tieSpaces(fonts, r.st, len(c.pieces))
 	var b strings.Builder
 	// n counts the characters read, and from is where the text in b starts; level is the
 	// level of the character read last.
@@ -624,6 +627,37 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 	return afterSpace
 }
 
+// spaceTies is fonts that know whether a face shapes a space with the words beside it
+// (fonts.Set.SpaceTies).
+type spaceTies interface {
+	SpaceTies(f style.Font) bool
+}
+
+// tieSpaces gives the pieces of a run from first on the kerning across its spaces where
+// st's face kerns or joins a space with its words, as Chrome shapes the run whole: a
+// word takes its kerning with the space after it, a space its kerning with the word
+// after it.
+func (c *inlineContent) tieSpaces(fonts box.Fonts, st *style.Computed, first int) {
+	if t, ok := fonts.(spaceTies); !ok || !t.SpaceTies(st.Font) {
+		return
+	}
+	space := fonts.Advance(st.Font, " ")
+	ps := c.pieces
+	for k := first; k < len(ps); k++ {
+		if ps[k].kind != gap || ps[k].text != " " {
+			continue
+		}
+		if k > first && ps[k-1].kind == word && ps[k-1].run == ps[k].run {
+			w := ps[k-1].text
+			ps[k-1].width += fonts.Advance(st.Font, w+" ") - fonts.Advance(st.Font, w) - space
+		}
+		if k+1 < len(ps) && ps[k+1].kind == word && ps[k+1].run == ps[k].run {
+			w := ps[k+1].text
+			ps[k].width += fonts.Advance(st.Font, " "+w) - fonts.Advance(st.Font, w) - space
+		}
+	}
+}
+
 // splitsWords reports whether st's text may break inside a word: by overflow-wrap,
 // word-break or line-break.
 func splitsWords(st *style.Computed) bool {
@@ -647,7 +681,7 @@ func (c *inlineContent) control(fonts box.Fonts, st *style.Computed, i int, at i
 }
 
 // anchorsAt adds the anchors of the out-of-flow elements before run i, and notes the
-// innermost open span each sits in.
+// inline element each sits in.
 func (c *inlineContent) anchorsAt(i int) {
 	for k, a := range c.anchors {
 		if a.run != i {
@@ -656,10 +690,8 @@ func (c *inlineContent) anchorsAt(i int) {
 		o := c.oofs[a.node]
 		o.span = -1
 		for si, sp := range c.spans {
-			if sp.first <= i && i < sp.end || sp.first == i && sp.end == i {
-				if o.span < 0 || c.spans[o.span].first < sp.first || c.spans[o.span].end > sp.end {
-					o.span = si
-				}
+			if sp.box == a.parent {
+				o.span = si
 			}
 		}
 		c.pieces = append(c.pieces, piece{kind: anchor, run: min(i, max(len(c.runs)-1, 0)), span: k})
@@ -877,10 +909,15 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		}
 		a.margin = edges(st.Margin, parent.w)
 		inner := avail.mSub(a.margin.horizontal()).mMax(0)
-		if k, sp := resolveSizingKeyword(st.Size.Width, inner.value(), parent.w); k == keywordMeasure {
+		known := noSize
+		switch k, sp := resolveSizingKeyword(st.Size.Width, inner.value(), parent.w); k {
+		case keywordMeasure:
 			inner = sp
+		case keywordExact:
+			known.w = sp.v
+		case keywordNone:
 		}
-		a.width = t.measureChildSize(a.node, noSize, parent,
+		a.width = t.measureChildSize(a.node, known, parent,
 			spaces{inner, maxContentSpace}, inherentSize, horizontal, [2]bool{})
 		out := t.performChildLayout(a.node, size{a.width, none}, parent,
 			spaces{def(a.width), maxContentSpace}, inherentSize)
@@ -1453,10 +1490,27 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			i = after
 			y += lh
 			bottom = y
+			if side := c.brClear(after - 1); side != style.ClearNone {
+				if below := c.flow.clearedThreshold(side); some(below) && below > y {
+					y = below
+				}
+			}
 			break
 		}
 	}
 	return b.close()
+}
+
+// brClear is the clear of the br whose break is piece i, none for any other piece: the
+// line after it starts below the floats it names, as Chrome's.
+func (c *inlineContent) brClear(i int) style.Clear {
+	if i < 0 || i >= len(c.pieces) || c.pieces[i].kind != newline {
+		return style.ClearNone
+	}
+	if b := c.runs[c.pieces[i].run].parent; b != nil && b.Node != nil && b.Node.Tag() == dom.Br {
+		return b.Style.Clear
+	}
+	return style.ClearNone
 }
 
 // lines breaks the pieces greedily into lines no wider than width where they may wrap.
@@ -1591,6 +1645,12 @@ func (t *tree) lineBox(c *inlineContent, l line) (float32, float32) {
 	defer c.useFirst(was)
 	h, base := t.lineHeight(c, c.rootStyle())
 	root := extent{base, h - base}
+	if m := c.listMarker(); m != nil && l.from == 0 {
+		// an outside ::marker of its own style pushes the item's first line down to
+		// hold its top, its bottom left to overflow, as Chrome places it
+		_, mb := t.lineHeight(c, m)
+		root.above = max(root.above, mb)
+	}
 	c.stamp++
 	c.pending = c.pending[:0]
 	lo, hi := t.openBoxes(c, l, &root)
@@ -1689,6 +1749,17 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 	return lo, hi
 }
 
+// listMarker is the ::marker style a rule gives the list item whose lines c holds,
+// nil for content of another owner or a marker in the item's own style.
+func (c *inlineContent) listMarker() *style.Computed {
+	n := c.owner.box.Node
+	if n == nil || !c.owner.st.ListItem || n.Tag() == dom.Summary || c.owner.st.ListStyle == style.ListNone &&
+		!dom.Data(n).HasMarkerText {
+		return nil
+	}
+	return dom.Data(n).Marker
+}
+
 // styleAt is the style of span k, the owner's for -1.
 func (c *inlineContent) styleAt(k int) *style.Computed {
 	if k < 0 {
@@ -1712,6 +1783,8 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 		return -st.VerticalShift.At(h), true
 	case style.AlignMiddle:
 		return (e.above-e.below)/2 - t.metricsOf(c, parent).XHeight/2, true
+	case style.AlignBaselineMiddle:
+		return (e.above - e.below) / 2, true
 	case style.AlignTextTop, style.AlignTextBottom, style.AlignTop, style.AlignBottom:
 		return 0, false
 	}
@@ -1752,7 +1825,8 @@ func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
 			top = max(top, p.extent.above+p.extent.below)
 		case style.AlignBottom:
 			bottom = max(bottom, p.extent.above+p.extent.below)
-		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength:
+		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
+			style.AlignBaselineMiddle:
 		}
 	}
 	grown := *e
@@ -1774,7 +1848,7 @@ func (t *tree) alignPending(c *inlineContent, by int, e *extent) {
 		case style.AlignBottom:
 			c.settle(p, e, grown.below-p.extent.below)
 		case style.AlignBaselineText, style.AlignSub, style.AlignSuper, style.AlignMiddle, style.AlignLength,
-			style.AlignTextTop, style.AlignTextBottom:
+			style.AlignTextTop, style.AlignTextBottom, style.AlignBaselineMiddle:
 		}
 	}
 }
@@ -1814,7 +1888,8 @@ func isASCII(s string) bool {
 // measure is the inline content's size and baselines, Taffy's measure function for text.
 // Lines break at the available width; content wider than that (a word that breaks only
 // with overflow-wrap, or not at all) widens the size it reports, not the lines.
-func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) (size, float32, float32) {
+func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, clamp int) (size, float32, float32,
+	int) {
 	minW, maxW := t.contentWidths(c, parent)
 	w := known.w
 	lineW := w
@@ -1838,7 +1913,11 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) 
 	}
 	var h float32
 	first, last := none, none
-	for i, l := range c.lines(lineW) {
+	ls := c.lines(lineW)
+	for i, l := range ls {
+		if clamp > 0 && i == clamp {
+			break
+		}
 		lh, lb := t.lineBox(c, l)
 		h += l.push
 		if i == 0 {
@@ -1850,7 +1929,7 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size) 
 	if some(known.h) {
 		h = known.h
 	}
-	return size{w, h}, first, last
+	return size{w, h}, first, last, len(ls)
 }
 
 // placeText lays the text out at the owner's content width and places its atomic inlines.
@@ -1879,7 +1958,15 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 		for _, p := range shown {
 			x := at.step(p, perGap)
 			if p.kind == anchor {
-				c.oofs[c.anchors[p.span].node].static = point{x, y}
+				k := c.anchors[p.span].node
+				c.oofs[k].static = point{x, y}
+				if c.anchors[p.span].top && !k.st.StaticInline && isBlockDisplay(k.st.Display) {
+					// a block-level one starts a line: below this one when text is before it
+					c.oofs[k].static = point{inset.l, y}
+					if x > start {
+						c.oofs[k].static.y += lh
+					}
+				}
 			}
 			if p.kind == atomic {
 				a := c.runs[p.run].atomic
@@ -1899,15 +1986,21 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 		y += lh
 	}
 	for _, o := range c.oofs {
-		c.containingSpan(o, spanLines)
+		c.containingSpan(o, spanLines, size{content, none})
 	}
 }
 
 // containingSpan makes the nearest positioned span holding o its containing block: the
 // box from the start of its first fragment's padding box to the end of its last one's,
-// as CSS defines it for an inline element.
-func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect) {
+// as CSS defines it for an inline element, moved with the spans position: relative moves
+// round it. o's static place moves with the spans holding it; cb is what their offsets'
+// percentages are of.
+func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect, cb size) {
 	o.positioned = false
+	for k := o.span; k >= 0; k = c.spans[k].up {
+		moved := inlineOffset(c.spans[k].st, cb)
+		o.static = point{o.static.x + moved.X, o.static.y + moved.Y}
+	}
 	for k := o.span; k >= 0; k = c.spans[k].up {
 		sp := c.spans[k]
 		if sp.st.Position == style.Static {
@@ -1922,7 +2015,11 @@ func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.R
 		x1 := last.X + last.W - sp.border.r
 		y0 := first.Y + sp.border.t
 		y1 := last.Y + last.H - sp.border.b
-		o.areaAt = point{x0, y0}
+		moved := geom.Vec2{}
+		for j := k; j >= 0; j = c.spans[j].up {
+			moved = moved.Add(inlineOffset(c.spans[j].st, cb))
+		}
+		o.areaAt = point{x0 + moved.X, y0 + moved.Y}
 		o.areaSize = size{max(x1-x0, 0), max(y1-y0, 0)}
 		o.positioned = true
 		return
@@ -2065,7 +2162,20 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		}
 		t.spanRects(c, l, pieces, order, x, perGap, y, lb, spanRects, spanSeen, spanLines)
 		cut, cutStart := false, false
-		if ellipsis && l.width > l.avail && len(c.runs) > 0 {
+		switch {
+		case n.clamp.shown > 0 && li >= n.clamp.shown && n.clamp.hides:
+			pieces = nil
+		case n.clamp.ellipsis && li == n.clamp.shown-1 && len(c.runs) > 0:
+			// the clamp's last line makes room for its ellipsis, aligned with it
+			pieces, cut = t.ellipsize(c, pieces, l.avail)
+			w := newPen(c.unit, 0)
+			for _, p := range pieces {
+				w.step(p, 0)
+			}
+			ends := c.runs[pieces[len(pieces)-1].run].st
+			off, perGap = c.align(n.st, l, true, l.avail-w.end()-t.fonts.Advance(ends.Font, "…"))
+			x = inset.l + l.x + off
+		case ellipsis && l.width > l.avail && len(c.runs) > 0:
 			pieces, x, cut, cutStart = t.ellipsizeLine(n, c, pieces, x, inset.l+l.x, l.avail)
 		}
 		t.writeRuns(c, pieces, geom.Rect{X: x, Y: y, H: lh}, lb, l.indent, perGap, [2]bool{cutStart, cut}, runRects,
@@ -2187,14 +2297,14 @@ func (c *inlineContent) placeMarker(r geom.Rect, lb float32) {
 }
 
 // ellipsizeLine cuts a line too wide for content and puts the ellipsis at its end, or at
-// its start, then flush with the content's end.
+// its left, then flush with the content's right: the end of a line of direction rtl.
 func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left, content float32) ([]piece, float32,
 	bool, bool) {
-	if !n.st.EllipsisStart {
+	if !n.st.EllipsisStart && n.st.Dir != style.RTL {
 		kept, cut := t.ellipsize(c, pieces, content)
 		return kept, x, cut, false
 	}
-	pieces = t.ellipsizeStart(c, pieces, content)
+	pieces = t.ellipsizeStart(c, pieces, content, n.st.EllipsisStart)
 	w := newPen(c.unit, 0)
 	for _, p := range pieces {
 		w.step(p, 0)
@@ -2284,9 +2394,10 @@ func (t *tree) ellipsize(c *inlineContent, pieces []piece, width float32) ([]pie
 }
 
 // ellipsizeStart drops the line's start until an ellipsis and the rest fit in width, the
-// ellipsis a word of the first run kept. The line then ends at the box's end, as Chrome's
+// ellipsis a word of the first run kept, a space after it dropped when trim says so, as
+// truncate-start's isolated text has none there. The line then ends at the box's end, as Chrome's
 // right-to-left cut leaves its room before the ellipsis.
-func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32) []piece {
+func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32, trim bool) []piece {
 	last := pieces[len(pieces)-1].run
 	room := width - t.fonts.Advance(c.runs[last].st.Font, "…")
 	used := float32(0)
@@ -2306,7 +2417,7 @@ func (t *tree) ellipsizeStart(c *inlineContent, pieces []piece, width float32) [
 		break
 	}
 	out = append(out, pieces[i:]...)
-	for len(out) > 0 && out[0].kind == gap {
+	for trim && len(out) > 0 && out[0].kind == gap {
 		out = out[1:]
 	}
 	run := last
@@ -2330,6 +2441,10 @@ func (c *inlineContent) align(st *style.Computed, l line, last bool, free float3
 		if c.base%2 == 1 {
 			dir = style.RTL
 		}
+	}
+	if free < 0 && dir == style.RTL {
+		// a line too long for its box is start aligned, and overflows its end
+		return free, 0
 	}
 	start := alignOffset(style.Start.Resolve(dir), free)
 	if a := st.TextAlign; a != style.Justify {

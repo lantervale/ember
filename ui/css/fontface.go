@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // FontFace is an @font-face rule: a family's face for a weight, or the
@@ -20,7 +22,10 @@ type FontFace struct {
 	Weight  int
 	// WeightMax is Weight unless font-weight gives two.
 	WeightMax int
-	Italic    bool
+	// AutoWeight is a face whose font-weight is auto, as one that gives
+	// none: normal, or a variable font's own weights.
+	AutoWeight bool
+	Italic     bool
 	// Display is font-display's word, auto without one.
 	Display string
 	Ranges  []UnicodeRange
@@ -28,6 +33,9 @@ type FontFace struct {
 	// normal one, or the widths from Stretch to StretchMax a variable
 	// font covers.
 	Stretch, StretchMax float32
+	// AutoStretch is a face whose font-stretch is auto, as one that gives
+	// none: normal, or a variable font's own widths.
+	AutoStretch bool
 	// SizeAdjust scales the face's glyphs and metrics, 1 without
 	// size-adjust.
 	SizeAdjust float32
@@ -127,7 +135,7 @@ func (s FontSource) Reads() bool {
 //nolint:gochecknoglobals // a lookup table
 var ignoredFaceDescriptors = map[string]bool{
 	"font-width": true, "font-variant": true,
-	"font-variation-settings": true, "font-named-instance": true, "font-language-override": true,
+	propFontVariations: true, "font-named-instance": true, "font-language-override": true,
 	"subscript-position-override": true, "subscript-size-override": true,
 	"superscript-position-override": true, "superscript-size-override": true,
 }
@@ -137,8 +145,8 @@ func (p *parser) fontFace(pos Pos) (FontFace, bool) {
 	if !ok {
 		return FontFace{}, false
 	}
-	f := FontFace{Weight: 400, WeightMax: 400, Display: kwAuto, Stretch: 100, StretchMax: 100, SizeAdjust: 1,
-		Ascent: -1, Descent: -1, LineGap: -1}
+	f := FontFace{Weight: 400, WeightMax: 400, AutoWeight: true, Display: kwAuto, Stretch: 100, StretchMax: 100,
+		AutoStretch: true, SizeAdjust: 1, Ascent: -1, Descent: -1, LineGap: -1}
 	if p.origin != nil && p.origin.from != nil {
 		f.From = p.origin.from.String()
 	}
@@ -216,7 +224,7 @@ func (p *parser) fontFaceDescriptor(f *FontFace, name Component, raw, v []Compon
 		}
 	case propFontWeight:
 		if lo, hi, ok := fontFaceWeight(v); ok {
-			f.Weight, f.WeightMax = lo, hi
+			f.Weight, f.WeightMax, f.AutoWeight = lo, hi, len(v) == 1 && isWord(v[0], kwAuto)
 		} else {
 			p.warnf(v[0].Pos, "font-weight: expected normal, bold or 1 to 1000, once or twice")
 		}
@@ -251,7 +259,7 @@ func (p *parser) fontFaceLook(f *FontFace, descriptor string, raw, v []Component
 	switch descriptor {
 	case propFontStretch:
 		if lo, hi, ok := fontFaceStretch(v); ok {
-			f.Stretch, f.StretchMax = lo, hi
+			f.Stretch, f.StretchMax, f.AutoStretch = lo, hi, len(v) == 1 && isWord(v[0], kwAuto)
 		} else {
 			p.warnf(v[0].Pos, "font-stretch: expected auto, normal, condensed… or a percentage, once or twice")
 		}
@@ -328,8 +336,11 @@ func (p *parser) fontSources(v []Component) []FontSource {
 }
 
 // fontFaceWeight is an @font-face's font-weight: one weight, or the two
-// ends of a variable font's, the lighter first.
+// ends of a variable font's, the lighter first; auto is normal.
 func fontFaceWeight(v []Component) (int, int, bool) {
+	if len(v) == 1 && isWord(v[0], kwAuto) {
+		return 400, 400, true
+	}
 	if len(v) < 1 || len(v) > 2 {
 		return 0, 0, false
 	}
@@ -521,6 +532,26 @@ func fontFeatures(v []Component) ([]FontFeature, bool) {
 		}
 		out = append(out, f)
 	}
+	return out, len(out) > 0
+}
+
+// fontVariations reads font-variation-settings: normal, none at all,
+// or a list of four-letter tags each followed by a number, kept as
+// Chrome computes it: one a tag, the last written, in the tags' order.
+func fontVariations(v []Component) ([]style.FontVariation, bool) {
+	if all := items(v); len(all) == 1 && isWord(all[0], kwNormal) {
+		return nil, true
+	}
+	var out []style.FontVariation
+	for _, part := range splitOn(v, func(c Component) bool { return c.Kind == Comma }) {
+		part = items(part)
+		if len(part) != 2 || part[0].Kind != String || len(part[0].Text) != 4 || part[1].Kind != Number {
+			return nil, false
+		}
+		out = slices.DeleteFunc(out, func(f style.FontVariation) bool { return f.Tag == part[0].Text })
+		out = append(out, style.FontVariation{Tag: part[0].Text, Value: float32(part[1].Num)})
+	}
+	slices.SortFunc(out, func(a, b style.FontVariation) int { return strings.Compare(a.Tag, b.Tag) })
 	return out, len(out) > 0
 }
 

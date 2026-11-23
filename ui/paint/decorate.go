@@ -220,7 +220,7 @@ func (p *painter) collapsedBorders(e entry, alpha float32) {
 			}
 			p.s.Rect(a, first)
 			p.s.Rect(b, second)
-		case style.BorderNone, style.BorderSolid:
+		case style.BorderNone, style.BorderAuto, style.BorderSolid:
 			p.s.Rect(r, c)
 		}
 	}
@@ -446,14 +446,18 @@ func (p *painter) columnRules(e entry, st *style.Computed, alpha float32) {
 		rule.BorderStyle.Left = style.BorderRidge
 	case style.BorderOutset:
 		rule.BorderStyle.Left = style.BorderGroove
-	case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
+	case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderGroove,
 		style.BorderRidge, style.BorderDouble:
 	}
 	b := e.b
 	left, top := e.at.X+b.Border.Left+b.Padding.Left, e.at.Y+b.Border.Top+b.Padding.Top
+	right := e.at.X + b.Size.X - b.Border.Right - b.Padding.Right
 	for _, r := range c.Rows {
 		for k := 1; k < r.Count; k++ {
 			x := left + float32(k)*(c.Width+c.Gap) - (c.Gap+w)/2
+			if st.Dir == style.RTL {
+				x = right - float32(k)*(c.Width+c.Gap) + (c.Gap-w)/2
+			}
 			p.border(p.snap(geom.Rect{X: x, Y: top + r.Top, W: w, H: r.Height}), box.Edges{Left: w}, radii{}, &rule, alpha)
 		}
 	}
@@ -1366,10 +1370,10 @@ func grow(r geom.Rect, d float32) geom.Rect {
 	return g
 }
 
-// border paints the border: one stroke when every side is alike and the
-// box is rounded, else each side square, solid or dashed or dotted, solid
-// sides of more than one colour mitered into each other; a rounded dashed
-// border is drawn solid for now.
+// border paints the border: one stroke when the box is rounded and its
+// sides solid or double alike, any other rounded border side by side as
+// Chrome draws it, else each side square, solid or dashed or dotted, solid
+// sides of more than one colour mitered into each other.
 func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Computed, alpha float32) {
 	side := func(width float32, s style.BorderStyle, c color.Color) (float32, color.Color) {
 		if s == style.BorderNone || width <= 0 {
@@ -1381,6 +1385,11 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 	rw, rc := side(w.Right, st.BorderStyle.Right, st.BorderColor.Right)
 	bw, bc := side(w.Bottom, st.BorderStyle.Bottom, st.BorderColor.Bottom)
 	lw, lc := side(w.Left, st.BorderStyle.Left, st.BorderColor.Left)
+	styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
+	if !radius.zero() && !oneRing([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, styles) {
+		p.roundedBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, styles, radius)
+		return
+	}
 	if p.doubleBorder(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, radius, st.BorderStyle) {
 		return
 	}
@@ -1392,7 +1401,6 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 			p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
 			return
 		}
-		styles := [4]style.BorderStyle{st.BorderStyle.Top, st.BorderStyle.Right, st.BorderStyle.Bottom, st.BorderStyle.Left}
 		half, rest := [4]float32{tw, rw, bw, lw}, [4]float32{}
 		for i, s := range styles {
 			if s == style.BorderGroove || s == style.BorderRidge {
@@ -1405,9 +1413,10 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		p.bevel(in, rest, [4]color.Color{tc, rc, bc, lc}, inner)
 		return
 	}
-	if tw == rw && rw == bw && bw == lw && !radius.zero() &&
-		(tc == rc && rc == bc && bc == lc || solidAround(st.BorderStyle)) {
-		p.roundedSides(r, tw, [4]color.Color{tc, rc, bc, lc}, radius)
+	if !radius.zero() {
+		if tw > 0 && tc.A > 0 {
+			p.ring(r, radius, tw, tc)
+		}
 		return
 	}
 	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
@@ -1431,17 +1440,11 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		switch s.style {
 		case style.BorderDashed, style.BorderDotted:
 			p.dashes(s.rect, s.across, s.style == style.BorderDotted, s.c)
-		case style.BorderNone, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
+		case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderInset, style.BorderOutset, style.BorderGroove,
 			style.BorderRidge, style.BorderDouble:
 			p.s.Rect(s.rect, s.c)
 		}
 	}
-}
-
-// solidAround reports a border solid on every side.
-func solidAround(s style.Sides[style.BorderStyle]) bool {
-	return s.Top == style.BorderSolid && s.Right == style.BorderSolid && s.Bottom == style.BorderSolid &&
-		s.Left == style.BorderSolid
 }
 
 // mitered reports solid sides that must not lie over each other's
@@ -1488,7 +1491,7 @@ func halves(s style.Sides[style.BorderStyle]) (style.Sides[style.BorderStyle], s
 		case style.BorderRidge:
 			split = true
 			return style.BorderOutset, style.BorderInset
-		case style.BorderNone, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
+		case style.BorderNone, style.BorderAuto, style.BorderSolid, style.BorderDashed, style.BorderDotted, style.BorderInset,
 			style.BorderOutset, style.BorderDouble:
 		}
 		return x, x
@@ -1580,10 +1583,12 @@ func (p *painter) dashes(r geom.Rect, across, dotted bool, c color.Color) {
 	}
 }
 
-// outline paints an element's outline outside its border box.
+// outline paints an element's outline outside its border box: a solid or
+// double one as rings, any other as a border of its style all round would
+// be drawn there.
 func (p *painter) outline(e entry, alpha float32) {
 	b, st := e.b, shown(e.b)
-	ring := grow(inkOf(e, st), st.OutlineOffset+st.OutlineWidth)
+	ring := grow(inkOf(e, st), outlineReach(st))
 	if !outlined(b) || p.missed(e, ring) {
 		return
 	}
@@ -1600,24 +1605,28 @@ func (p *painter) outline(e entry, alpha float32) {
 	} else {
 		ps[0].rect = geom.Rect{X: e.at.X, Y: e.at.Y, W: b.Size.X, H: b.Size.Y}
 	}
+	w := st.OutlineWidth
+	lined := style.Computed{BorderStyle: style.All(st.OutlineStyle), BorderColor: style.All(c)}
 	for _, pc := range ps {
 		r := p.snap(pc.rect)
 		out := geom.Rect{X: r.X - grow, Y: r.Y - grow, W: r.W + 2*grow, H: r.H + 2*grow}
-		ring := func(r geom.Rect, radius radii, w float32) {
-			if radius.uniform() {
-				p.s.Border(r, radius[0], w, c)
-			} else {
-				p.s.BorderCorners(r, radius, w, c)
+		switch st.OutlineStyle {
+		case style.BorderAuto:
+			p.focusRing(r, radius.grown(-grow), w, st.OutlineOffset, c)
+		case style.BorderDouble:
+			if outer, inner, ok := doubleCut(w, p.maskScale()); ok {
+				p.ring(out, radius, outer, c)
+				gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
+				p.ring(inside(out, gap), radius.inside(gap), w-inner, c)
+				continue
 			}
+			p.ring(out, radius, w, c)
+		case style.BorderNone, style.BorderSolid:
+			p.ring(out, radius, w, c)
+		case style.BorderDashed, style.BorderDotted, style.BorderInset, style.BorderOutset, style.BorderGroove,
+			style.BorderRidge:
+			p.border(out, box.Edges{Top: w, Right: w, Bottom: w, Left: w}, radius, &lined, 1)
 		}
-		w := st.OutlineWidth
-		if outer, inner, ok := doubleCut(w, p.maskScale()); ok && st.OutlineStyle == style.BorderDouble {
-			ring(out, radius, outer)
-			gap := box.Edges{Top: inner, Right: inner, Bottom: inner, Left: inner}
-			ring(inside(out, gap), radius.inside(gap), w-inner)
-			continue
-		}
-		ring(out, radius, w)
 	}
 }
 
@@ -1745,46 +1754,108 @@ func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha
 	}
 	p.decorations(e, st, style.Underline|style.Overline, alpha)
 	p.selectionDecorations(e, st, parts, style.Underline|style.Overline, alpha)
-	if c.A <= 0 && ink == c {
+	stroked := st.TextStroke.Width > 0 || len(parts) > 0 && st.HasSelectionStroke
+	if c.A <= 0 && ink == c && !stroked {
 		p.decorations(e, st, style.LineThrough, alpha)
 		p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
 		return
 	}
 	face := p.faceOf(st.Font)
 	if len(st.TextShadows) > 0 || len(parts) > 0 && len(st.SelectionShadows) > 0 {
-		for i, f := range b.Lines {
-			k := -1
-			if st.HasSelectionShadows {
-				k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
-			}
-			if k < 0 {
-				p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
-				continue
-			}
-			for j, clip := range p.partClips(e, st, f, parts[k]) {
-				shadows, current := st.TextShadows, st.Color
-				if j == 1 {
-					shadows, current = st.SelectionShadows, color.Color{}
-				}
-				if clip.W <= 0 || len(shadows) == 0 {
-					continue
-				}
-				p.s.PushClip(clip)
-				p.shadows(e, st, face, f, shadows, current, alpha)
-				p.s.PopClip()
-			}
-		}
+		p.runShadows(e, st, face, parts, alpha)
 	}
 	opts := p.textOptions(face, st.Font.Size, st.LetterGap(), c, smoothingOf(st))
 	if ink != c {
 		p.recoloured(e, st, face, parts, c, ink)
-	} else {
+	} else if c.A > 0 {
 		for _, f := range b.Lines {
 			p.words(geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline), f.Shown(), st, opts)
 		}
 	}
+	if stroked {
+		p.strokes(e, st, face, parts, alpha)
+	}
 	p.decorations(e, st, style.LineThrough, alpha)
 	p.selectionDecorations(e, st, parts, style.LineThrough, alpha)
+}
+
+// runShadows draws the text shadows of e's run, the selected parts' the
+// ::selection's where it sets them.
+func (p *painter) runShadows(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	for i, f := range e.b.Lines {
+		k := -1
+		if st.HasSelectionShadows {
+			k = slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		}
+		if k < 0 {
+			p.shadows(e, st, face, f, st.TextShadows, st.Color, alpha)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			shadows, current := st.TextShadows, st.Color
+			if j == 1 {
+				shadows, current = st.SelectionShadows, color.Color{}
+			}
+			if clip.W <= 0 || len(shadows) == 0 {
+				continue
+			}
+			p.s.PushClip(clip)
+			p.shadows(e, st, face, f, shadows, current, alpha)
+			p.s.PopClip()
+		}
+	}
+}
+
+// strokes draws -webkit-text-stroke over the fill of e's run: the
+// outline of each glyph, the selected parts' as the ::selection strokes
+// them.
+func (p *painter) strokes(e entry, st *style.Computed, face *twod.Face, parts []Selected, alpha float32) {
+	plain := st.TextStroke
+	plain.Color = fade(plain.Color, alpha)
+	selected := plain
+	if len(parts) > 0 {
+		selected = p.selectionStroke(st, alpha)
+	}
+	draw := func(at geom.Vec2, f box.Fragment, s style.TextStroke) {
+		if s.Width > 0 && s.Color.A > 0 {
+			o := p.textOptions(face, st.Font.Size, st.LetterGap(), s.Color, smoothingOf(st))
+			p.words(at, f.Shown(), st, append(slices.Clip(o), twod.TextStroke(s.Width)))
+		}
+	}
+	for i, f := range e.b.Lines {
+		at := geom.V2(e.at.X+f.Rect.X, e.at.Y+f.Baseline)
+		k := slices.IndexFunc(parts, func(s Selected) bool { return s.Line == i })
+		if k < 0 || plain == selected {
+			draw(at, f, plain)
+			continue
+		}
+		for j, clip := range p.partClips(e, st, f, parts[k]) {
+			s := plain
+			if j == 1 {
+				s = selected
+			}
+			if clip.W > 0 {
+				p.s.PushClip(clip)
+				draw(at, f, s)
+				p.s.PopClip()
+			}
+		}
+	}
+}
+
+// selectionStroke is the stroke of the selected text: the ::selection's
+// where it sets one, else the text's own, in the selection's colour
+// where the stroke's is currentColor.
+func (p *painter) selectionStroke(st *style.Computed, alpha float32) style.TextStroke {
+	s := st.TextStroke
+	switch {
+	case st.HasSelectionStroke:
+		s = st.SelectionStroke
+	case st.HasSelectionText && st.CurrentColor&style.StrokeCurrent != 0:
+		s.Color = st.SelectionText
+	}
+	s.Color = fade(s.Color, alpha)
+	return s
 }
 
 // shadows draws the text shadows of fragment f of e's run, the last
@@ -1840,9 +1911,13 @@ func (p *painter) selectionDecorations(e entry, st *style.Computed, parts []Sele
 // by st's word-spacing: whole without one, else word by word, each where
 // layout measured it.
 func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []twod.TextOption) {
-	runs := st.Font.SmallCaps(text)
+	f := st.Font
+	if c, ok := p.fonts.(capsFonts); ok {
+		f = c.Caps(f, text)
+	}
+	runs := f.SmallCaps(text)
 	if runs == nil {
-		p.wordsIn(at, text, st, st.Font, opts)
+		p.wordsIn(at, text, st, f, withFeatures(opts, f))
 		return
 	}
 	for _, r := range runs {
@@ -1850,8 +1925,22 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 		if r.Font.Size != st.Font.Size {
 			o = append(slices.Clip(opts), twod.FontSize(r.Font.Size))
 		}
-		at.X = p.wordsIn(at, r.Text, st, r.Font, o)
+		at.X = p.wordsIn(at, r.Text, st, r.Font, withFeatures(o, r.Font))
 	}
+}
+
+// capsFonts are fonts that know which capitals a face draws itself
+// (fonts.Set.Caps).
+type capsFonts interface {
+	Caps(f style.Font, text string) style.Font
+}
+
+// withFeatures is opts drawing text shaped with f's OpenType features.
+func withFeatures(opts []twod.TextOption, f style.Font) []twod.TextOption {
+	if f.Features == "" {
+		return opts
+	}
+	return append(slices.Clip(opts), twod.Features(f.Features))
 }
 
 // wordsIn is words in font f, a part of st's text small capitals cut, and
@@ -1891,14 +1980,22 @@ func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []two
 // selectionColors are the ::selection of the element st styles: its
 // background-color and its color. A rule that sets either leaves the
 // other as CSS has it, no background and the text's own colour; with no
-// rule the background is Chrome's on macOS, greyed while the window is
-// inactive, and the text keeps its colour.
+// rule they are the system's, its background blended with white as Chrome
+// on macOS blends it, else Chrome's there, greyed while the window is
+// inactive, and the text keeps its colour where the system gives it none.
 func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha float32) (color.Color, color.Color) {
 	if !st.HasSelection && !st.HasSelectionText {
+		back, sys := pageSelection, p.system.Background
 		if p.inactive {
-			return fade(inactiveSelection, alpha), text
+			back, sys = inactiveSelection, p.system.Inactive
 		}
-		return fade(pageSelection, alpha), text
+		if sys.A > 0 {
+			back = blendWithWhite(sys)
+		}
+		if p.system.Text.A > 0 {
+			text = fade(p.system.Text, alpha)
+		}
+		return fade(back, alpha), text
 	}
 	var back color.Color
 	if st.HasSelection {
@@ -1909,6 +2006,34 @@ func (p *painter) selectionColors(st *style.Computed, text color.Color, alpha fl
 	}
 	return back, text
 }
+
+// blendWithWhite is c made as translucent as it can be, from 60% to 80%
+// opaque, and still show as c over white, as Chrome draws a system's
+// selection colour (Color::BlendWithWhite): a colour too dark for that
+// keeps 80%, its channels clamped. A translucent colour stays as it is.
+func blendWithWhite(c color.Color) color.Color {
+	if c.A < 1 {
+		return c
+	}
+	srgb := c.SRGB()
+	var ch [3]int
+	alpha := 153
+	for ; alpha <= 204; alpha += 17 {
+		a := float32(alpha) / 255
+		negative := false
+		for i, v := range srgb {
+			ch[i] = int(float32(int(v*255+0.5)-(255-alpha)) / a)
+			negative = negative || ch[i] < 0
+		}
+		if !negative {
+			break
+		}
+	}
+	alpha = min(alpha, 204)
+	return color.RGB8(clamp8(ch[0]), clamp8(ch[1]), clamp8(ch[2])).Alpha(float32(alpha) / 255)
+}
+
+func clamp8(v int) uint8 { return uint8(max(0, min(255, v))) }
 
 // highlight draws the selection behind a text run's selected parts and
 // returns the colour their text takes.

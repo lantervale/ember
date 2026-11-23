@@ -153,7 +153,7 @@ func TestChromeReadsWebkitValuesSelectorsAndAtRulesAsTheTable(t *testing.T) {
 	on := map[string]string{"calc": "width: -webkit-calc(1px + 2px)", "min-content": "width: -webkit-min-content",
 		"max-content": "width: -webkit-max-content", "fit-content": "width: -webkit-fit-content",
 		"flex": "display: -webkit-flex", "inline-flex": "display: -webkit-inline-flex", "grab": "cursor: -webkit-grab",
-		"grabbing": "cursor: -webkit-grabbing"}
+		"grabbing": "cursor: -webkit-grabbing", "fill-available": "width: -webkit-fill-available"}
 	var decls []string
 	for _, name := range slices.Sorted(maps.Keys(css.WebkitValues())) {
 		if on[name] == "" {
@@ -162,7 +162,7 @@ func TestChromeReadsWebkitValuesSelectorsAndAtRulesAsTheTable(t *testing.T) {
 		decls = append(decls, on[name])
 	}
 	// Chrome's own values, which keep their warning but text-align's, and one it refuses.
-	decls = append(decls, "display: -webkit-box", "width: -webkit-fill-available", "text-align: -webkit-center",
+	decls = append(decls, "display: -webkit-box", "text-align: -webkit-center",
 		"background-image: -webkit-linear-gradient(top, red, blue)", "position: -webkit-sticky")
 	selectors := []string{"input::-webkit-input-placeholder", "a:-webkit-any-link", "::-webkit-scrollbar",
 		"::-webkit-search-decoration", "::-webkit-anything-at-all", "input:-webkit-autofill", "p:-webkit-drag",
@@ -400,6 +400,57 @@ return out;`, &chromes)
 		if len(s.TextShadows) > 0 {
 			got[3] = "rgb(255, 0, 0) 1px 1px 0px"
 		}
+		if got != chromes[i] {
+			typ, _ := n.Attr("type")
+			t.Errorf("%s %s: ember %v, Chrome %v", n.Tag(), typ, got, chromes[i])
+		}
+	}
+}
+
+// TestChromeFontsTheControlsAsABrowsersSheetDoes asks a page with Chrome's
+// own sheet alone what font, line height and colour each control takes
+// in a body that sets them all, and how an option breaks its text.
+func TestChromeFontsTheControlsAsABrowsersSheetDoes(t *testing.T) {
+	types := []string{"text", "search", "password", "number", "email", "button", "submit", "reset", "checkbox"}
+	const look = "font: italic bold 20px/30px Georgia; font-stretch: condensed; color: red; white-space: pre-wrap"
+	var chromes [][6]string
+	typeList, _ := json.Marshal(types)
+	ask(t, geom.V2(800, 600), `
+const frame = document.createElement("iframe");
+document.body.appendChild(frame);
+const doc = frame.contentDocument, out = [];
+doc.open(); doc.write("<!DOCTYPE html><body style='`+look+`'>"); doc.close();
+const read = e => { const s = frame.contentWindow.getComputedStyle(e);
+	out.push([s.fontFamily, s.fontSize, s.fontWeight + " " + s.fontStyle + " " + s.fontStretch, s.lineHeight,
+		s.color, s.whiteSpace]); };
+const add = e => { doc.body.appendChild(e); read(e); };
+for (const type of `+string(typeList)+`) { const e = doc.createElement("input"); e.type = type; add(e); }
+for (const tag of ["textarea", "button", "p"]) add(doc.createElement(tag));
+const sel = doc.createElement("select"), opt = doc.createElement("option");
+sel.appendChild(opt); add(sel); read(opt);
+return out;`, &chromes)
+	d := ui.NewDocument(ui.BrowserSheets())
+	d.Body().SetStyle(look)
+	for _, typ := range types {
+		d.Body().Append(ui.Input(ui.Type(typ)))
+	}
+	opt := ui.Option()
+	d.Body().Append(ui.Textarea(), ui.Button(), ui.P(), ui.Select(opt))
+	d.Layout(geom.V2(800, 600))
+	nodes := append(d.Body().Children(), opt)
+	for i, n := range nodes {
+		s := dom.Data(n).Style
+		lh := "normal"
+		if !s.LineHeight.Normal {
+			lh = compared["line-height"](s)
+		}
+		got := [6]string{compared["font-family"](s), compared["font-size"](s),
+			compared["font-weight"](s) + " " + compared["font-style"](s) + " " + compared["font-stretch"](s), lh,
+			compared["color"](s), compared["white-space"](s)}
+		if !same("font-size", got[1], chromes[i][1]) {
+			t.Errorf("%s: font-size ember %s, Chrome %s", n.Tag(), got[1], chromes[i][1])
+		}
+		got[1] = chromes[i][1]
 		if got != chromes[i] {
 			typ, _ := n.Attr("type")
 			t.Errorf("%s %s: ember %v, Chrome %v", n.Tag(), typ, got, chromes[i])

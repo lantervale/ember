@@ -31,6 +31,18 @@ const formStates = dom.Indeterminate | dom.PlaceholderShown | dom.Default | dom.
 // of it is checked, and one required.
 type radioSet struct{ checked, required bool }
 
+// radioKey names a radio group: its radios' form owner and name.
+type radioKey struct {
+	form *Node
+	name string
+}
+
+// radioKeyOf is the group of the named radio n.
+func radioKeyOf(n *Node) radioKey {
+	name, _ := n.Attr("name")
+	return radioKey{formOwner(n), name}
+}
+
 // validity is what validate keeps from one frame to the next.
 type validity struct {
 	// forms are the forms and fieldsets the last walk of the tree found,
@@ -40,7 +52,7 @@ type validity struct {
 	// patterns are the pattern attributes compiled, nil for one Go cannot
 	// read, which then constrains nothing.
 	patterns map[string]*regexp.Regexp
-	groups   map[string]radioSet
+	groups   map[radioKey]radioSet
 	invalid  map[*Node]bool
 	defaults map[*Node]bool
 }
@@ -59,17 +71,18 @@ func (d *Document) used(n *Node, u fieldUse) {
 // fieldset's :disabled.
 func (d *Document) validate() {
 	if d.groups == nil {
-		d.groups, d.invalid, d.defaults = map[string]radioSet{}, map[*Node]bool{}, map[*Node]bool{}
+		d.groups, d.invalid, d.defaults = map[radioKey]radioSet{}, map[*Node]bool{}, map[*Node]bool{}
 	}
 	clear(d.groups)
 	clear(d.invalid)
 	clear(d.defaults)
 	for _, n := range d.controls {
 		if r, ok := d.machines[n].(*control.Radio); ok {
-			if name, _ := n.Attr("name"); name != "" {
-				g := d.groups[name]
+			if has(n, "name") {
+				k := radioKeyOf(n)
+				g := d.groups[k]
 				g.checked, g.required = g.checked || r.Checked, g.required || has(n, "required")
-				d.groups[name] = g
+				d.groups[k] = g
 			}
 		}
 	}
@@ -77,11 +90,14 @@ func (d *Document) validate() {
 		s := d.fieldStates(n, d.machines[n], d.groupOf)
 		if s&dom.Invalid != 0 {
 			for p := n.Parent(); p != nil; p = p.Parent() {
-				d.invalid[p] = true
+				d.invalid[p] = p.Tag() != dom.Form || d.invalid[p]
+			}
+			if f := formOwner(n); f != nil {
+				d.invalid[f] = true
 			}
 		}
 		if submits(n) {
-			if f := formOf(n); f != nil && !d.defaults[f] {
+			if f := formOwner(n); f != nil && !d.defaults[f] {
 				d.defaults[f] = true
 				s |= dom.Default
 			}
@@ -98,15 +114,17 @@ func (d *Document) validate() {
 	}
 }
 
-// groupOf is the named radio group validate gathered.
-func (d *Document) groupOf(name string) radioSet { return d.groups[name] }
+// groupOf is the group of the named radio n as validate gathered it.
+func (d *Document) groupOf(n *Node) radioSet { return d.groups[radioKeyOf(n)] }
 
-// groupNow is the named radio group as it stands, read from the tree.
-func (d *Document) groupNow(name string) radioSet {
+// groupNow is the group of the named radio n as it stands, read from the
+// tree.
+func (d *Document) groupNow(n *Node) radioSet {
 	var g radioSet
+	k := radioKeyOf(n)
 	d.html.Walk(func(c *Node) bool {
 		if r, ok := d.machine(c).(*control.Radio); ok {
-			if cn, _ := c.Attr("name"); cn == name {
+			if has(c, "name") && radioKeyOf(c) == k {
 				g.checked, g.required = g.checked || r.Checked, g.required || has(c, "required")
 			}
 		}
@@ -118,7 +136,7 @@ func (d *Document) groupNow(name string) radioSet {
 // fieldStates are the states the value of the control n, of machine m,
 // gives it, but :default for a submit button; group reads a named radio
 // group.
-func (d *Document) fieldStates(n *Node, m any, group func(string) radioSet) dom.State {
+func (d *Document) fieldStates(n *Node, m any, group func(*Node) radioSet) dom.State {
 	var s dom.State
 	kind := inputType(n)
 	switch m := m.(type) {
@@ -131,8 +149,8 @@ func (d *Document) fieldStates(n *Node, m any, group func(string) radioSet) dom.
 		}
 	case *control.Radio:
 		checked := m.Checked
-		if name, _ := n.Attr("name"); name != "" {
-			checked = group(name).checked
+		if has(n, "name") {
+			checked = group(n).checked
 		}
 		if !checked {
 			s |= dom.Indeterminate
@@ -186,7 +204,7 @@ func (d *Document) validates(n *Node, kind string) bool {
 
 // mismatch reports whether the value of n, a field constraint validation
 // reads, breaks one of its constraints.
-func (d *Document) mismatch(n *Node, m any, kind string, group func(string) radioSet) bool {
+func (d *Document) mismatch(n *Node, m any, kind string, group func(*Node) radioSet) bool {
 	req := has(n, "required")
 	switch m := m.(type) {
 	case *control.Button, *control.Range:
@@ -194,8 +212,8 @@ func (d *Document) mismatch(n *Node, m any, kind string, group func(string) radi
 	case *control.Checkbox:
 		return req && !m.Checked
 	case *control.Radio:
-		if name, _ := n.Attr("name"); name != "" {
-			g := group(name)
+		if has(n, "name") {
+			g := group(n)
 			return g.required && !g.checked
 		}
 		return req && !m.Checked
@@ -365,7 +383,30 @@ func firstLegend(f *Node) *Node {
 	return nil
 }
 
-// formOf is the form n belongs to, the nearest above it.
+// formOwner is the form n belongs to: the one its form attribute names,
+// none when that is no form, else the nearest above it.
+func formOwner(n *Node) *Node {
+	if id, ok := n.Attr("form"); ok {
+		root := n
+		for root.Parent() != nil {
+			root = root.Parent()
+		}
+		var owner *Node
+		root.Walk(func(c *Node) bool {
+			if owner == nil && !c.IsText() && c.ID() == id {
+				owner = c
+			}
+			return owner == nil
+		})
+		if owner != nil && owner.Tag() == dom.Form {
+			return owner
+		}
+		return nil
+	}
+	return formOf(n)
+}
+
+// formOf is the form above n, the nearest.
 func formOf(n *Node) *Node {
 	for p := n.Parent(); p != nil; p = p.Parent() {
 		if p.Tag() == dom.Form {
