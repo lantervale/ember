@@ -976,6 +976,60 @@ div { width: 100px; height: 10px; position: relative; color: #000; background-co
 	}
 }
 
+// TestLogicalAnimationsMatchChrome has keyframes and transitions of
+// logical properties run on elements of either direction, which move
+// their right side under rtl.
+func TestLogicalAnimationsMatchChrome(t *testing.T) {
+	src := `
+@keyframes in { from { margin-inline-start: 40px; padding-inline-end: 0 } to { margin-inline-start: 0; padding-inline-end: 20px } }
+@keyframes ink { to { border-inline-start-color: #f00; inset-inline-end: 30px } }
+@keyframes both { to { margin-inline: 10px 50px } }
+div { width: 100px; height: 10px; position: relative; left: 0; right: 0; border: 2px solid #000; margin: 0;
+  padding: 0; }
+.rtl { direction: rtl; }
+.a { animation: in 1s linear }
+.b { animation: ink 1s linear }
+.c { animation: both 1s linear }
+.t { transition: margin-inline-start 1s linear, padding-inline 1s linear, border-inline-end-color 1s linear; }
+.t.on { margin-inline-start: 60px; padding-left: 20px; padding-right: 30px; border-right-color: #0f0; }
+`
+	props := map[string]func(*style.Computed) string{
+		"margin-left":        everything["margin-left"],
+		"margin-right":       compared["margin-right"],
+		"padding-left":       compared["padding-left"],
+		"padding-right":      everything["padding-right"],
+		"left":               func(s *style.Computed) string { return lengthCSS(s.Inset.Left) },
+		"right":              func(s *style.Computed) string { return lengthCSS(s.Inset.Right) },
+		"border-left-color":  compared["border-left-color"],
+		"border-right-color": func(s *style.Computed) string { return rgb(s.BorderColor.Right) },
+	}
+	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"a.css": {Data: []byte(src)}}, "a.css"))
+	for _, dir := range []string{"ltr", "rtl"} {
+		for _, c := range []string{"a", "b", "c", "t"} {
+			d.Body().Append(ui.Div(ui.Class(c, dir)))
+		}
+		d.Body().Append(ui.Div(ui.Class("rtl"), ui.Div(ui.Class("t", dir))))
+	}
+	tr := css.NewTransitions()
+	tr.Compute(d.HTML(), d.Sheets())
+	script := `els.forEach(e => getComputedStyle(e).marginLeft);
+	document.querySelectorAll(".t").forEach(e => e.classList.add("on"));
+	els.forEach(e => getComputedStyle(e).marginLeft);
+	document.getAnimations().forEach(a => { a.pause(); a.currentTime = 350; });`
+	then := func() {
+		d.HTML().Walk(func(n *dom.Node) bool {
+			if n.HasClass("t") {
+				n.AddClass("on")
+			}
+			return true
+		})
+		tr.Compute(d.HTML(), d.Sheets())
+		tr.Step(0.35)
+		tr.Compute(d.HTML(), d.Sheets())
+	}
+	matchChromeShown(t, d, props, 2, script, then, func(n *dom.Node) *style.Computed { return dom.Data(n).Shown })
+}
+
 // positionCSS is a background-position axis as Chrome computes it: an offset from the end
 // edge is calc(100% - offset).
 func positionCSS(l style.Length, fromEnd bool) string {

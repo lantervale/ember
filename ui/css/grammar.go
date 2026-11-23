@@ -486,6 +486,7 @@ func timeTerm(nonNeg bool) term {
 // knows, as Chrome keeps any; one that doesn't interpolate runs none.
 func transitionTarget(c Component) error {
 	name := strings.ToLower(c.Text)
+	name = physical(name, false)
 	if _, long := properties[name]; c.Kind == Ident && (long || shorthands[name] != nil) {
 		return nil
 	}
