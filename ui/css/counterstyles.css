@@ -7,7 +7,7 @@
 @counter-style bengali { system: numeric; symbols: "\9E6" "\9E7" "\9E8" "\9E9" "\9EA" "\9EB" "\9EC" "\9ED" "\9EE" "\9EF"; }
 @counter-style cambodian { system: numeric; symbols: "\17E0" "\17E1" "\17E2" "\17E3" "\17E4" "\17E5" "\17E6" "\17E7" "\17E8" "\17E9"; }
 @counter-style khmer { system: extends cambodian; }
-@counter-style cjk-decimal { system: numeric; range: 0 infinite; symbols: \3007 \4E00 \4E8C \4E09 \56DB \4E94 \516D \4E03 \516B \4E5D; suffix: "\3001"; }
+@counter-style cjk-decimal { system: numeric; range: 0 infinite; symbols: "\3007" "\4E00" "\4E8C" "\4E09" "\56DB" "\4E94" "\516D" "\4E03" "\516B" "\4E5D"; suffix: "\3001"; }
 @counter-style devanagari { system: numeric; symbols: "\966" "\967" "\968" "\969" "\96A" "\96B" "\96C" "\96D" "\96E" "\96F"; }
 @counter-style georgian { system: additive; range: 1 19999; additive-symbols: 10000 \10F5, 9000 \10F0, 8000 \10EF, 7000 \10F4, 6000 \10EE, 5000 \10ED, 4000 \10EC, 3000 \10EB, 2000 \10EA, 1000 \10E9, 900 \10E8, 800 \10E7, 700 \10E6, 600 \10E5, 500 \10E4, 400 \10F3, 300 \10E2, 200 \10E1, 100 \10E0, 90 \10DF, 80 \10DE, 70 \10DD, 60 \10F2, 50 \10DC, 40 \10DB, 30 \10DA, 20 \10D9, 10 \10D8, 9 \10D7, 8 \10F1, 7 \10D6, 6 \10D5, 5 \10D4, 4 \10D3, 3 \10D2, 2 \10D1, 1 \10D0; }
 @counter-style gujarati { system: numeric; symbols: "\AE6" "\AE7" "\AE8" "\AE9" "\AEA" "\AEB" "\AEC" "\AED" "\AEE" "\AEF"; }
@@ -42,3 +42,14 @@
 @counter-style disclosure-closed { system: cyclic; symbols: \25B8; suffix: " "; }
 @counter-style cjk-earthly-branch { system: fixed; symbols: "\5B50" "\4E11" "\5BC5" "\536F" "\8FB0" "\5DF3" "\5348" "\672A" "\7533" "\9149" "\620C" "\4EA5"; suffix: "、"; }
 @counter-style cjk-heavenly-stem { system: fixed; symbols: "\7532" "\4E59" "\4E19" "\4E01" "\620A" "\5DF1" "\5E9A" "\8F9B" "\58EC" "\7678"; suffix: "、"; }
+@counter-style japanese-informal { system: -ember-japanese-informal; range: -9999 9999; negative: "\30DE\30A4\30CA\30B9"; suffix: "\3001"; fallback: cjk-decimal; }
+@counter-style japanese-formal { system: -ember-japanese-formal; range: -9999 9999; negative: "\30DE\30A4\30CA\30B9"; suffix: "\3001"; fallback: cjk-decimal; }
+@counter-style korean-hangul-formal { system: -ember-korean-hangul-formal; negative: "\B9C8\C774\B108\C2A4  "; suffix: ", "; fallback: cjk-decimal; }
+@counter-style korean-hanja-informal { system: -ember-korean-hanja-informal; negative: "\B9C8\C774\B108\C2A4  "; suffix: ", "; fallback: cjk-decimal; }
+@counter-style korean-hanja-formal { system: -ember-korean-hanja-formal; negative: "\B9C8\C774\B108\C2A4  "; suffix: ", "; fallback: cjk-decimal; }
+@counter-style simp-chinese-informal { system: -ember-simp-chinese-informal; negative: "\8D1F"; suffix: "\3001"; fallback: cjk-decimal; }
+@counter-style simp-chinese-formal { system: -ember-simp-chinese-formal; negative: "\8D1F"; suffix: "\3001"; fallback: cjk-decimal; }
+@counter-style trad-chinese-informal { system: -ember-trad-chinese-informal; negative: "\8CA0"; suffix: "\3001"; fallback: cjk-decimal; }
+@counter-style trad-chinese-formal { system: -ember-trad-chinese-formal; negative: "\8CA0"; suffix: "\3001"; fallback: cjk-decimal; }
+@counter-style cjk-ideographic { system: extends trad-chinese-informal; }
+@counter-style ethiopic-numeric { system: -ember-ethiopic-numeric; range: 1 infinite; suffix: "/ "; }

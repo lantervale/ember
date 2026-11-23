@@ -126,8 +126,10 @@ type Box struct {
 	// Lines is a TextRun's text, laid out.
 	Lines []Fragment
 	// Picture is the address of the picture a Marker shows, its item's
-	// list-style-image, "" for its text or its bullet.
-	Picture string
+	// list-style-image, "" for its text or its bullet; Gradient the
+	// gradient it shows in its place.
+	Picture  string
+	Gradient *style.Gradient
 	// Fragments is an inline element's border box on each line it spans,
 	// in the box's space: the first holds its left edge and the last its
 	// right, as Chrome's getClientRects. With Broken they are a block's
