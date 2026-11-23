@@ -36,10 +36,11 @@ A Document shown in another: the element holds a `*ui.Document` the program buil
 | the focus | a click in the frame, or `Focus` on an element in it, gives the frame the page's focus; the keys then go to the framed Document. Tab walks from the page into the frame, through it and out the other side, backwards too; the arrows and a pad's stick walk out of the frame where nothing of it lies that way, and into a frame they reach, to its element nearest the side they came in by |
 | keys and Back | a key or a Back no callback of the framed Document stopped goes on to the page round it, its `OnKey` and `OnBack` hearing it on the iframe, as an event retargeted ([decision 0141](../../99-decisions/0141-keys-and-the-arrows-cross-a-frame-the-frame-fades-and-moves-with-its-iframe.md)): one `OnBack` on a screen's root hears an Escape pressed in a frame on it. The World event is the framed Document's alone |
 | a modal dialog | of the framed Document holds that Document's input, as Chrome's; the page round it still takes the pointer and the keys |
+| a select's list | shows whole over the page, inside the window rather than the frame, as Chrome's ([decision 0166](../../99-decisions/0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md)): the pointer over it is the framed Document's, and a press anywhere else closes it. A menu, a tooltip or a dialog stay inside the frame, the top layer being each Document's own |
 | `opacity` | below 1 on the iframe or round it fades the frame with what it shows, drawn as one picture |
 | the selection | each Document selects its own text; selecting in one clears the others |
 | automation | the framed elements are recorded under the frame's id: `help/got-it` |
-| drawing | a frame out of view is not drawn; one nothing changed in replays, and a change inside it paints the frame, not the page |
+| drawing | a frame out of view is not drawn; one nothing changed in replays, and a change inside it paints the frame, not the page, with an element over the frame, turned or faded too: the page replays round it ([decision 0166](../../99-decisions/0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md)) |
 | not yet | see [What is missing](../10-missing.md#frames) |
 
 Frames nest: a framed Document holds iframes of its own.

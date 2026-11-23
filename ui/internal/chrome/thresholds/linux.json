@@ -54,7 +54,9 @@
   "iframe": 0.004,
   "iframe-borders": 0.0005,
   "iframe-faded": 0.002,
+  "initial-letter": 0.016,
   "joined": 0.01,
+  "syllables": 0.011,
   "list-inside": 0.0135,
   "lists": 0.0065,
   "m0": 0.0003,
@@ -72,6 +74,7 @@
   "rounded-dashes": 0.0024,
   "rounded-styles": 0.002,
   "scrollbar-parts": 0.0005,
+  "control-parts": 0.002,
   "scrolled": 0.0153,
   "selection": 0.008,
   "selection-marks": 0.013,
@@ -84,8 +87,10 @@
   "text-stroke": 0.017,
   "top-layer": 0.0045,
   "translated": 0.007,
+  "url-filters": 0.009,
   "vertical-align": 0.0099,
   "viewport-end": 0.0079,
   "viewport-top": 0.0071,
+  "webkit-masks": 0.002,
   "word-spacing": 0.0133
 }

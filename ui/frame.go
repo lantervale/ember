@@ -349,14 +349,15 @@ func (d *Document) keyed() bool {
 
 // shielded reports whether the pointer is kept from d this frame: d is
 // in an iframe that is not what its Document finds under the pointer,
-// and holds nothing a press began.
+// and holds nothing a press began nor an open list, which a press
+// outside it closes.
 func (d *Document) shielded() bool {
 	f := d.framed
 	if f == nil {
 		return false
 	}
 	if len(d.pressed) > 0 || d.capture != nil || d.dragging != nil || d.drag != nil || d.held != nil || d.sel.held ||
-		d.sel.rightArmed {
+		d.sel.rightArmed || d.selectOpen() {
 		return false
 	}
 	return f.host.shield || firstOf(f.host.hovered) != f.n

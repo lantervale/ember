@@ -10,6 +10,17 @@ import (
 const (
 	propMaskComposite = "mask-composite"
 	propMaskPosition  = "mask-position"
+	// The longhands of mask-position, Chrome's own under their prefixed
+	// names, as Chrome keeps them.
+	propMaskPositionX = "-webkit-mask-position-x"
+	propMaskPositionY = "-webkit-mask-position-y"
+	// -webkit-mask-box-image and its longhands, Chrome's own.
+	shortMaskBox      = "-webkit-mask-box-image"
+	propMaskBoxSource = shortMaskBox + "-source"
+	propMaskBoxSlice  = shortMaskBox + "-slice"
+	propMaskBoxWidth  = shortMaskBox + "-width"
+	propMaskBoxOutset = shortMaskBox + "-outset"
+	propMaskBoxRepeat = shortMaskBox + "-repeat"
 )
 
 // legacyComposite is the prefix the compositing words of
@@ -144,4 +155,73 @@ func fourValues(v []Component) []Component {
 		return append(edge(v[0], v[1]), v[1], v[2])
 	}
 	return append([]Component{v[0], v[1]}, edge(v[2], v[0])...)
+}
+
+// checkMaskAxis takes one axis of a mask's position, as Chrome's
+// -webkit-mask-position-x and -y do: center, an edge of the axis, an
+// offset, or an edge and its offset.
+func checkMaskAxis(edge func(Component) bool) func([]Component) error {
+	return func(v []Component) error {
+		switch {
+		case len(v) == 1 && (isWord(v[0], kwCenter) || edge(v[0])):
+			return nil
+		case len(v) == 1:
+			return lengthPercent(v[0])
+		case len(v) == 2 && edge(v[0]):
+			return lengthPercent(v[1])
+		}
+		return fmt.Errorf("expected center, an edge, an offset or an edge and its offset")
+	}
+}
+
+// expandMaskPosition splits mask-position's layers by axis.
+func expandMaskPosition(v []Component, out map[string][]Component) error {
+	for i, layer := range splitOn(v, func(c Component) bool { return c.Kind == Comma }) {
+		if err := checkMaskPosition(layer); err != nil {
+			return err
+		}
+		x, y := maskAxes(layer)
+		for _, axis := range []struct {
+			name  string
+			value []Component
+		}{{propMaskPositionX, x}, {propMaskPositionY, y}} {
+			if i > 0 {
+				out[axis.name] = append(out[axis.name], Component{Token: Token{Kind: Comma, Text: ","}})
+			}
+			out[axis.name] = append(out[axis.name], axis.value...)
+		}
+	}
+	return nil
+}
+
+// maskAxes is a checked position's value along each axis, as
+// -webkit-mask-position-x and -y read it: an end edge and its offset, or
+// the offset from the start.
+func maskAxes(v []Component) ([]Component, []Component) {
+	p, _ := parsePosition(v)
+	x, y := []Component{p.x}, []Component{p.y}
+	if p.right {
+		x = []Component{{Token: Token{Kind: Ident, Text: kwRight}}, p.x}
+	}
+	if p.bot {
+		y = []Component{{Token: Token{Kind: Ident, Text: kwBottom}}, p.y}
+	}
+	return x, y
+}
+
+// maskAxis is one layer of -webkit-mask-position-x or -y: an offset from
+// the axis's start, or from its end.
+func (x *ctx) maskAxis(v []Component) (style.Length, bool) {
+	v = items(v)
+	switch {
+	case len(v) == 2:
+		return x.length(v[1]), isWord(v[0], kwRight, kwBottom)
+	case isWord(v[0], kwCenter):
+		return x.length(fifty), false
+	case isWord(v[0], kwRight, kwBottom):
+		return x.length(hundredPct), false
+	case isWord(v[0], kwLeft, kwTop):
+		return x.length(zeroPct), false
+	}
+	return x.length(v[0]), false
 }

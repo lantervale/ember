@@ -37,7 +37,8 @@ func silhouetted(b *box.Box, st *style.Computed) bool {
 	inContent := func(c style.BackgroundBox) bool {
 		return b.Padding != (box.Edges{}) && (c == style.UnderContent || c == style.FillBox)
 	}
-	return l.Image.Source != "" && l.Mode != style.MaskLuminance && l.Clip != style.NoClip && !inContent(l.Clip) &&
+	return l.Image.Source != "" && st.MaskBoxImage.Image.Source == "" && l.Mode != style.MaskLuminance &&
+		l.Clip != style.NoClip && !inContent(l.Clip) &&
 		!inContent(st.BackgroundLayer(0).Clip) && len(b.Children) == 0 && !marked(b) && !tracked(b) &&
 		!outlined(b) && !paintsCells(st) && len(st.Shadows) == 0 && b.Border == (box.Edges{}) &&
 		st.BorderImage.Source == "" && st.BorderImage.Gradient == nil && !st.HasBackgroundImage()
@@ -109,6 +110,7 @@ func (p *painter) endMask(m *masking, e entry, st *style.Computed) {
 	content := m.on.EndPicture(0)
 	m.on.BeginPicture()
 	p.maskFrom(m.on, e, st, 0)
+	p.maskBoxImage(e, st)
 	mask := m.on.EndPicture(0)
 	p.use(m.show)
 	m.on.PushClipPicture(mask)
@@ -256,4 +258,43 @@ func (p *painter) maskLayer(on Pictures, e entry, st *style.Computed, l *style.M
 	if lum {
 		on.DrawPicture(on.EndPicture(0), on.Effect(luminanceShader))
 	}
+}
+
+// maskBoxImage draws st's -webkit-mask-box-image over each piece of e's
+// box, as a border image is drawn, over the border box grown by its
+// outset: a slice of none draws the picture whole, unless the middle is
+// left out.
+func (p *painter) maskBoxImage(e entry, st *style.Computed) {
+	mb := &st.MaskBoxImage
+	if mb.Image.Source == "" {
+		return
+	}
+	tex, k := p.borderImage(mb.Image, st)
+	if tex == nil {
+		return
+	}
+	s := mb.Image.Slice
+	if s == (style.Sides[float32]{}) && !mb.Image.Fill {
+		return
+	}
+	slice := style.Sides[float32]{Top: s.Top * k, Right: s.Right * k, Bottom: s.Bottom * k, Left: s.Left * k}
+	for _, pc := range p.pieces(e.b, e.at) {
+		out := outsets(mb.Outset, st.Border)
+		r := p.snap(geom.Rect{X: pc.rect.X - out.Left, Y: pc.rect.Y - out.Top, W: pc.rect.W + out.Left + out.Right,
+			H: pc.rect.H + out.Top + out.Bottom})
+		p.picture(r, tex, slice, imageWidths(r, mb.Width, st.Border, s), mb.Repeat, mb.Image.Fill, 1)
+	}
+}
+
+// outsets is how far a border image is drawn past each side of the
+// border box, the border's widths b times its numbers.
+func outsets(w style.Sides[style.ImageWidth], b style.Sides[float32]) style.Sides[float32] {
+	side := func(iw style.ImageWidth, border float32) float32 {
+		if iw.Kind == style.WidthLength {
+			return iw.V
+		}
+		return iw.V * border
+	}
+	return style.Sides[float32]{Top: side(w.Top, b.Top), Right: side(w.Right, b.Right), Bottom: side(w.Bottom, b.Bottom),
+		Left: side(w.Left, b.Left)}
 }

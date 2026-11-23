@@ -349,6 +349,10 @@ func (s *Set) advance(f style.Font, text string) float32 {
 	var other float32
 	run := s.run[:0]
 	for i, r := range text {
+		if sc, ok := shape.ScriptOf(r); ok && sc != script {
+			w += s.shaped(c, script, f.Features, run, nil)
+			run, script = run[:0], sc
+		}
 		g, err := c.font.GlyphIndex(&s.buf, r)
 		if err != nil {
 			continue

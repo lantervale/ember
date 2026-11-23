@@ -215,3 +215,35 @@ func TestAnOpenListShowsTheOptionsAsThePlayerReadsThem(t *testing.T) {
 	require.Len(t, texts, 2)
 	assert.Equal(t, []string{"Rouge", "Blue"}, []string{texts[0].Text, texts[1].Text})
 }
+
+func TestAListKeptInARectPassesTheViewport(t *testing.T) {
+	tr, _, m, find := selectPage(20, 260, three()...)
+	m.Do(control.Activate)
+	within := Lists(geom.Rect{X: -100, Y: -100, W: 700, H: 700}, false)
+	r := newRecorder()
+	Paint(r, tr, find, Fonts(ahem{}), within)
+	assert.Equal(t, float32(284), listBg(r).Rect.Y, "under the select, past the root's bottom")
+
+	h := rowHeight(ahem{}, style.Font{Size: 16})
+	pick := PickOption(tr, geom.V2(30, 285+2*h+h/2), find, Fonts(ahem{}), within)
+	assert.Equal(t, 2, pick.Index, "picked where it is drawn")
+}
+
+func TestAListApartIsLeftForDrawLists(t *testing.T) {
+	tr, _, m, find := selectPage(20, 260, three()...)
+	m.Do(control.Activate)
+	var live LiveSet
+	page := newRecorder()
+	Paint(page, tr, find, Fonts(ahem{}), Live(&live, false), Lists(geom.Rect{W: 400, H: 300}, true))
+	assert.Empty(t, page.of("text"), "the page alone")
+	require.True(t, live.ListsApart())
+	PaintLive(page, &live, 0, find, Fonts(ahem{}))
+	assert.Empty(t, page.of("text"), "nor drawn with the live parts on top")
+
+	over := newRecorder()
+	rects := DrawLists(over, &live, geom.Rect{W: 400, H: 600}, 0, nil, find, Fonts(ahem{}))
+	assert.Len(t, over.of("text"), 3)
+	require.Len(t, rects, 1)
+	assert.Equal(t, float32(284), rects[0].Y, "below, in the larger rect")
+	assert.Equal(t, listBg(over).Rect, rects[0])
+}

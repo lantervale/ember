@@ -161,6 +161,31 @@ func (x *index) indexHas(sel Selector, ri int) {
 	})
 }
 
+// indexScope notes in x what the @scope rules r, the rule ri, stands in
+// read: their roots and ends stand above the elements r styles, so a
+// change of what they read restyles those under it.
+func (x *index) indexScope(r Rule, ri int) {
+	for _, s := range r.scoped.chain() {
+		for _, sel := range slices.Concat(s.start, s.end) {
+			sel.walk(func(c *Compound) {
+				c.keys(func(k string) { x.above[k] = true })
+				var states dom.State
+				for i := range c.pseudos {
+					states |= c.pseudos[i].reads()
+				}
+				if states == 0 {
+					return
+				}
+				x.aboveStates |= states
+				for i := range r.Selectors {
+					subject := &r.Selectors[i].Compounds[len(r.Selectors[i].Compounds)-1]
+					x.reads = append(x.reads, stateRead{states: states, on: []*Compound{c}, subject: subject, rule: ri})
+				}
+			})
+		}
+	}
+}
+
 type entry struct {
 	rule, sel int
 }
@@ -197,6 +222,7 @@ func (s *Sheet) indexed() *index {
 				}
 				into.add(sel, e)
 			}
+			x.indexScope(r, ri)
 			for _, d := range r.Decls {
 				p, ok := properties[d.Name]
 				if ok && p.inherited ||
@@ -235,8 +261,22 @@ type applied struct {
 	// stands: 0 in none, 1 the last layer named.
 	layer int32
 	spec  Specificity
+	// near ranks an @scope rule's declaration by how close to its root the
+	// element is, higher the closer; 0 out of any @scope.
+	near  int32
 	order int
 }
+
+// ranked is how a rule's most specific selector matching an element
+// weighs: its specificity, then how near its @scope's root it matched.
+type ranked struct {
+	spec Specificity
+	near int32
+}
+
+// rankOf is the near of an element n generations under its @scope's
+// root.
+func rankOf(n int) int32 { return math.MaxInt32 - int32(min(n, math.MaxInt32-1)) } //nolint:gosec // bounded above
 
 func (a applied) less(b applied) bool {
 	if a.level != b.level {
@@ -253,13 +293,16 @@ func (a applied) less(b applied) bool {
 	if a.spec != b.spec {
 		return a.spec.Less(b.spec)
 	}
+	if a.near != b.near {
+		return a.near < b.near
+	}
 	return a.order < b.order
 }
 
 // matcher keeps the buffers matching and cascading use from one element
 // to the next, so a restyle allocates per changed style, not per step.
 type matcher struct {
-	best   map[int]Specificity
+	best   map[int]ranked
 	rules  []int
 	out    []applied
 	long   []*Declaration
@@ -284,6 +327,9 @@ type matcher struct {
 	// part is the state of the scrollbar part being matched: a selector
 	// asking for states it is not in holds nothing.
 	part partState
+	// bare leaves out the rules of a control's own look, for one whose
+	// appearance is none; native is set once such a rule matched.
+	bare, native bool
 }
 
 // matched lists the declarations that apply to e, least important first.
@@ -299,9 +345,9 @@ func (m *matcher) matchedFor(e *dom.Node, sheets []*Sheet, inline []Declaration,
 		inline = nil
 	}
 	if m.best == nil {
-		m.best = map[int]Specificity{}
+		m.best = map[int]ranked{}
 	}
-	m.out, m.self = m.out[:0], pseudo != ""
+	m.out, m.self, m.native = m.out[:0], pseudo != "", false
 	order := 0
 	if pseudo == "" {
 		for i := range m.hints {
@@ -344,7 +390,7 @@ func (m *matcher) matchedFor(e *dom.Node, sheets []*Sheet, inline []Declaration,
 			for di := range s.Rules[r].Decls {
 				d := &s.Rules[r].Decls[di]
 				m.out = append(m.out, applied{decl: d, level: levelOf(si == 0, d.Important), layer: layer,
-					spec: m.best[r], order: order})
+					spec: m.best[r].spec, near: m.best[r].near, order: order})
 				order++
 			}
 		}
@@ -373,19 +419,33 @@ func (m *matcher) try(s *Sheet, es []entry, e *dom.Node, off []bool) {
 	for _, en := range es {
 		r := &s.Rules[en.rule]
 		sel := r.Selectors[en.sel]
-		if off != nil && off[en.rule] || !m.active(sel) || !sel.Matches(e) || len(r.containers) > 0 && !m.contained(r, e) {
+		if off != nil && off[en.rule] || !m.active(sel) {
 			continue
 		}
-		if sp, ok := m.best[en.rule]; !ok || sp.Less(sel.Specificity) {
-			m.best[en.rule] = sel.Specificity
+		rank := ranked{spec: sel.Specificity}
+		if r.scoped != nil {
+			n, ok := r.scoped.matchesScoped(sel, e)
+			if !ok {
+				continue
+			}
+			rank.near = rankOf(n)
+		} else if !sel.Matches(e) {
+			continue
 		}
+		if len(r.containers) > 0 && !m.contained(r, e) {
+			continue
+		}
+		if was, ok := m.best[en.rule]; !ok || was.spec.Less(rank.spec) || was.spec == rank.spec && was.near < rank.near {
+			m.best[en.rule] = rank
+		}
+		m.native = m.native || sel.native
 	}
 }
 
 // active reports whether sel holds as the window stands: one with
 // :window-inactive only while it is inactive, which the cascade then reads.
 func (m *matcher) active(sel Selector) bool {
-	if sel.part&^m.part != 0 {
+	if sel.part&^m.part != 0 || sel.native && m.bare {
 		return false
 	}
 	if !sel.inactive {

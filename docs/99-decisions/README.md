@@ -162,9 +162,14 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0157 | [Arabic is joined, and marks attached, by HarfBuzz's stages and masks](0157-arabic-is-joined-and-marks-attached-by-harfbuzzs-stages-and-masks.md) | rendering |
 | 0158 | [Styled scrollbars are boxes of their parts, as Chrome's](0158-styled-scrollbars-are-boxes-of-their-parts-as-chromes.md) | api |
 | 0159 | [A pattern is read as JavaScript, and a form is submitted by its button](0159-a-pattern-is-read-as-javascript-and-a-form-is-submitted-by-its-button.md) | api |
+| 0160 | [A control of appearance: none is drawn from its CSS and its parts](0160-a-control-of-appearance-none-is-drawn-from-its-css-and-its-parts.md) | api |
 | 0161 | [SVG filters run in the element's own space, with every primitive Chrome draws](0161-svg-filters-run-in-the-elements-own-space-with-every-primitive-chrome-draws.md) | assets |
 | 0162 | [A copy puts the selection's markup beside its text](0162-a-copy-puts-the-selections-markup-beside-its-text.md) | api |
 | 0163 | [Scrolls snap and glide as Chrome's strategies, on the Document's clock](0163-scrolls-snap-and-glide-as-chromes-strategies-on-the-documents-clock.md) | api |
+| 0164 | [Indic, Khmer, Myanmar and USE scripts are shaped by HarfBuzz's syllabic shapers](0164-indic-khmer-myanmar-and-use-scripts-are-shaped-by-harfbuzzs-syllabic-shapers.md) | rendering |
+| 0165 | [A filter element runs on the GPU over an element's picture, and a drop cap is a trimmed float](0165-a-filter-element-runs-on-the-gpu-over-an-elements-picture-and-a-drop-cap-is-a-trimmed-float.md) | rendering |
+| 0166 | [A page replays round its covered live parts, and a framed list shows over the window](0166-a-page-replays-round-its-covered-live-parts-and-a-framed-list-shows-over-the-window.md) | rendering |
+| 0168 | [Nested rules and @scope rules are read as flat rules of the sheet](0168-nested-rules-and-scope-rules-are-read-as-flat-rules-of-the-sheet.md) | api |
 | 0170 | [What columns cut and a line clamp hides follow Chrome's ends](0170-what-columns-cut-and-a-line-clamp-hides-follow-chromes-ends.md) | rendering |
 
 ## Writing one

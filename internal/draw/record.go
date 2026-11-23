@@ -94,33 +94,42 @@ func (r *Recording) Ok() bool { return r.ok }
 // picture (drawn only in the frame that made it) or one drawn alone (a
 // pass's picture, a render texture): r then replays nothing.
 func (c *List) Record(m Mark, r *Recording) bool {
-	r.ok = false
-	r.vertices, r.indices, r.batches = r.vertices[:0], r.indices[:0], r.batches[:0]
 	if c.state() != m.state {
+		r.ok = false
+		r.vertices, r.indices, r.batches = r.vertices[:0], r.indices[:0], r.batches[:0]
 		return false
 	}
-	for _, v := range c.Vertices[m.vertices:] {
+	return c.RecordRange(m, c.Mark(), r)
+}
+
+// RecordRange copies what c drew from one mark to a later one into r, as
+// Record does, under the state at from whatever the state at to: a range
+// of a drawing that leaves gaps for ReplayAround to fill. No draw call
+// straddles either mark.
+func (c *List) RecordRange(from, to Mark, r *Recording) bool {
+	r.ok = false
+	r.vertices, r.indices, r.batches = r.vertices[:0], r.indices[:0], r.batches[:0]
+	for _, v := range c.Vertices[from.vertices:to.vertices] {
 		if v.LightSpread != (geom.Vec2{}) {
 			return false
 		}
 	}
-	first := max(m.batches-1, 0)
-	for _, b := range c.Batches[first:] {
-		end := b.First + b.Count
-		if end <= m.indices {
+	first := max(from.batches-1, 0)
+	for _, b := range c.Batches[first:to.batches] {
+		start, end := max(b.First, from.indices), min(b.First+b.Count, to.indices)
+		if end <= start {
 			continue
 		}
 		if b.Mask != nil || b.alone || b.Cut.Mask != nil && b.Cut.Mask.Image == nil {
 			return false
 		}
-		start := max(b.First, m.indices)
-		b.First, b.Count = start-m.indices, end-start
+		b.First, b.Count = start-from.indices, end-start
 		r.batches = append(r.batches, b)
 	}
-	r.vertices = append(r.vertices, c.Vertices[m.vertices:]...)
-	r.indices = append(r.indices, c.Indices[m.indices:]...)
-	r.base = vertexIndex(m.vertices)
-	r.state, r.ok = m.state, true
+	r.vertices = append(r.vertices, c.Vertices[from.vertices:to.vertices]...)
+	r.indices = append(r.indices, c.Indices[from.indices:to.indices]...)
+	r.base = vertexIndex(from.vertices)
+	r.state, r.ok = from.state, true
 	return true
 }
 
@@ -134,6 +143,51 @@ func (c *List) Replay(r *Recording) bool {
 	if !r.ok || c.state() != r.state {
 		return false
 	}
+	c.replay(r)
+	return true
+}
+
+// ReplayAround replays parts in turn, the ranges of one drawing recorded
+// around its gaps, calling fill with a gap's number between two, and
+// reports whether it did: not when a part holds nothing replayable or c's
+// state is not the one the first part was recorded under. A fill leaves
+// c's state as it found it; where one does not, what the replay drew is
+// taken back.
+func (c *List) ReplayAround(parts []Recording, fill func(gap int)) bool {
+	if len(parts) == 0 {
+		return false
+	}
+	for i := range parts {
+		if !parts[i].ok {
+			return false
+		}
+	}
+	want := parts[0].state
+	if c.state() != want {
+		return false
+	}
+	vertices, indices, batches := len(c.Vertices), len(c.Indices), len(c.Batches)
+	var open Batch
+	if batches > 0 {
+		open = c.Batches[batches-1]
+	}
+	for i := range parts {
+		if i > 0 {
+			fill(i - 1)
+			if c.state() != want {
+				c.Vertices, c.Indices, c.Batches = c.Vertices[:vertices], c.Indices[:indices], c.Batches[:batches]
+				if batches > 0 {
+					c.Batches[batches-1] = open
+				}
+				return false
+			}
+		}
+		c.replay(&parts[i])
+	}
+	return true
+}
+
+func (c *List) replay(r *Recording) {
 	base, at := vertexIndex(len(c.Vertices)), len(c.Indices)
 	c.Vertices = append(c.Vertices, r.vertices...)
 	if base == r.base {
@@ -158,7 +212,6 @@ func (c *List) Replay(r *Recording) bool {
 		}
 		c.Batches = append(c.Batches, b)
 	}
-	return true
 }
 
 // merges reports whether b can extend c's open batch: drawn right after
@@ -177,3 +230,6 @@ func (c *List) merges(b Batch) bool {
 		open.Blend == b.Blend && open.Clipped == b.Clipped && open.Clip == b.Clip && open.Round == b.Round &&
 		open.Cut == b.Cut
 }
+
+// SameState reports whether c's state is the one it had at m.
+func (c *List) SameState(m Mark) bool { return c.state() == m.state }

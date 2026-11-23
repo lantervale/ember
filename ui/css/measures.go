@@ -13,13 +13,16 @@ import (
 // FontUnits are what the units that read a font stand for in one, in
 // points: its x-height (ex), the advance of its zero (ch), the height of
 // its capitals (cap), the advance of its 水 (ic) and the height of its
-// normal line (lh).
-type FontUnits struct{ Ex, Ch, Cap, Ic, Line float32 }
+// normal line (lh); and its ascent and descent, which place a drop cap.
+type FontUnits struct{ Ex, Ch, Cap, Ic, Line, Ascent, Descent float32 }
 
 // measures are what lengths are measured against besides font sizes:
 // the fonts, the viewport and the root's style.
 type measures struct {
-	font          func(style.Font) FontUnits
+	font func(style.Font) FontUnits
+	// ink is where a text's glyphs draw across in a font: from left of
+	// the pen's start, width wide; ok false for none.
+	ink           func(f style.Font, text string) (left, width float32, ok bool)
 	width, height float32
 	root          *dom.Node
 	// used are the relative units read since the tree was last styled whole.
@@ -104,7 +107,8 @@ func (m *measures) variable(name string) ([]Component, bool) {
 // an em for ex and ch, an em for cap and ic, and lines 1.2 em apart.
 func (m *measures) fontUnits(f style.Font) FontUnits {
 	if m == nil || m.font == nil {
-		return FontUnits{Ex: f.Size / 2, Ch: f.Size / 2, Cap: f.Size, Ic: f.Size, Line: 1.2 * f.Size}
+		return FontUnits{Ex: f.Size / 2, Ch: f.Size / 2, Cap: f.Size, Ic: f.Size, Line: 1.2 * f.Size, Ascent: f.Size,
+			Descent: 0.2 * f.Size}
 	}
 	return m.font(f)
 }

@@ -43,6 +43,9 @@ type Match struct {
 	// Containers are the @container rules it stands in, the outermost
 	// first, as written.
 	Containers []string
+	// Scopes are the preludes of the @scope rules it stands in, the
+	// outermost first, as written.
+	Scopes []string
 	// Declarations are what it declares, in the order written.
 	Declarations []MatchedDeclaration
 }
@@ -94,7 +97,7 @@ func (t *Transitions) ready(n *dom.Node) bool {
 }
 
 func (t *Transitions) inspect(n *dom.Node) *inspection {
-	in := &inspection{t: t, m: matcher{off: t.off, ranks: t.ranks, env: &t.env, best: map[int]Specificity{}}}
+	in := &inspection{t: t, m: matcher{off: t.off, ranks: t.ranks, env: &t.env, best: map[int]ranked{}}}
 	if src := n.Style(); src != "" {
 		p := parser{toks: Tokenize(src), browser: t.browser}
 		in.inline, _ = p.inline()
@@ -139,7 +142,8 @@ func (in *inspection) found(n *dom.Node) []found {
 			}
 			for di := range s.Rules[r].Decls {
 				d := &s.Rules[r].Decls[di]
-				add(found{applied: applied{decl: d, level: levelOf(si == 0, d.Important), layer: layer, spec: m.best[r]},
+				add(found{applied: applied{decl: d, level: levelOf(si == 0, d.Important), layer: layer, spec: m.best[r].spec,
+					near: m.best[r].near},
 					sheet: s, rule: r})
 			}
 		}
@@ -164,7 +168,7 @@ func (in *inspection) found(n *dom.Node) []found {
 // other.
 const hintLayer = int32(1<<31 - 1)
 
-func mapKeys(m map[int]Specificity) func(yield func(int) bool) {
+func mapKeys(m map[int]ranked) func(yield func(int) bool) {
 	return func(yield func(int) bool) {
 		for k := range m {
 			if !yield(k) {
@@ -260,6 +264,9 @@ func (t *Transitions) match(f found) Match {
 	}
 	for _, c := range r.containers {
 		m.Containers = append(m.Containers, c.text)
+	}
+	for _, sc := range r.scoped.chain() {
+		m.Scopes = append(m.Scopes, sc.text)
 	}
 	if r.layer > 0 && !strings.Contains(s.layers[r.layer-1], anonymous) {
 		m.Layer = s.layers[r.layer-1]

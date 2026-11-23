@@ -474,7 +474,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 	d.platform = currentPlatform()
 	d.drawnBy(c)
 	d.syncFrames()
-	d.shield = d.shielded()
+	d.shield = d.shielded() || d.overlaid(c)
 	d.claimed(c)
 	if d.replay.repaint || d.retargeting || !d.targeted {
 		d.retarget()
@@ -878,7 +878,11 @@ func (d *Document) pickAt(at geom.Vec2) paint.Pick {
 	if !d.replay.quiet {
 		pick = paint.Pick{Index: -1}
 		if d.tree != nil && d.selectOpen() {
-			pick = paint.PickOption(d.inked(), at, paint.Controls(d.machine), paint.Fonts(d.fonts), paint.Viewport(d.viewport))
+			opts := []paint.Option{paint.Controls(d.machine), paint.Fonts(d.fonts), paint.Viewport(d.viewport)}
+			if d.framed != nil {
+				opts = append(opts, paint.Lists(d.lists.in, true))
+			}
+			pick = paint.PickOption(d.inked(), at, opts...)
 		}
 		d.replay.pick = pick
 	}
