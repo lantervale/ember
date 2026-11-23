@@ -189,7 +189,9 @@ func setupUSESyllables(p *Plan, b *buffer) {
 			}
 		})
 	}
-	b.topographical(p)
+	if !p.joins {
+		b.topographical(p)
+	}
 }
 
 // topographical gives the glyphs of each cluster the mask of the form

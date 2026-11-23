@@ -262,7 +262,14 @@ func round(v float32) float32 { return float32(int(v + 0.5)) }
 
 // Advance is the width of text in f, kerning included; a character f's
 // face lacks takes the Fallback face's advance.
-func (s *Set) Advance(f style.Font, text string) float32 {
+func (s *Set) Advance(f style.Font, text string) float32 { return s.AdvanceIn(f, text, "", "") }
+
+// AdvanceIn is Advance for text between before and after, which shape
+// it where its letters join with theirs (box.ContextFonts).
+func (s *Set) AdvanceIn(f style.Font, text, before, after string) float32 {
+	if !shape.JoinsAcross(before, after) {
+		before, after = "", ""
+	}
 	f = s.Caps(f, text)
 	if runs := f.SmallCaps(text); runs != nil {
 		var w float32
@@ -272,7 +279,7 @@ func (s *Set) Advance(f style.Font, text string) float32 {
 		return w
 	}
 	if s.emoji == nil || isASCII(text) {
-		return s.advance(f, text)
+		return s.advance(f, text, before, after)
 	}
 	var w float32
 	start := 0
@@ -281,12 +288,12 @@ func (s *Set) Advance(f style.Font, text string) float32 {
 	for at := 0; len(rest) > 0; {
 		c, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
 		if len(c) > 1 && s.emoji(c) {
-			w += s.advance(f, text[start:at]) + f.Size
+			w += s.advance(f, text[start:at], before+text[:start], text[at:]+after) + f.Size
 			start = at + len(c)
 		}
 		at += len(c)
 	}
-	return w + s.advance(f, text[start:])
+	return w + s.advance(f, text[start:], before+text[:start], after)
 }
 
 // SetEmoji has Advance measure each grapheme cluster has reports, and
@@ -337,11 +344,11 @@ func (s *Set) spaceAdvance(c *Face, r rune, size float32) (float32, bool) {
 	})
 }
 
-// advance is text's width in f's face, shaped with f's features, the
-// fallback's characters in it.
-func (s *Set) advance(f style.Font, text string) float32 {
+// advance is text's width in f's face, shaped with f's features between
+// before and after, the fallback's characters in it.
+func (s *Set) advance(f style.Font, text, before, after string) float32 {
 	if ch := s.chained(f); ch != nil {
-		return s.chainAdvance(ch, f, text)
+		return s.chainAdvance(ch, f, text, before, after)
 	}
 	c := s.Face(f)
 	script := shape.Script(text)
@@ -350,7 +357,7 @@ func (s *Set) advance(f style.Font, text string) float32 {
 	run := s.run[:0]
 	for i, r := range text {
 		if sc, ok := shape.ScriptOf(r); ok && sc != script {
-			w += s.shaped(c, script, f.Features, run, nil)
+			w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after))
 			run, script = run[:0], sc
 		}
 		g, err := c.font.GlyphIndex(&s.buf, r)
@@ -364,7 +371,7 @@ func (s *Set) advance(f style.Font, text string) float32 {
 			}
 			if ok {
 				other += a
-				w += s.shaped(c, script, f.Features, run, nil)
+				w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after))
 				run = run[:0]
 				continue
 			}
@@ -372,7 +379,7 @@ func (s *Set) advance(f style.Font, text string) float32 {
 		//nolint:gosec // a glyph index and a text offset
 		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r})
 	}
-	w += s.shaped(c, script, f.Features, run, nil)
+	w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after))
 	s.run = run
 	return w*f.Size/c.upem + other
 }
@@ -462,7 +469,7 @@ func (s *Set) Draws(f style.Font, text string) bool {
 		if s.emoji != nil && s.emoji(g) {
 			continue
 		}
-		bare := strings.ReplaceAll(g, "\ufe0f", "")
+		bare := presentation.Replace(g)
 		if utf8.RuneCountInString(bare) != 1 {
 			return false
 		}
@@ -478,3 +485,7 @@ func (s *Set) hasGlyph(c *Face, r rune) bool {
 	g, err := c.font.GlyphIndex(&s.buf, r)
 	return err == nil && g != 0
 }
+
+// presentation removes the selectors of text and emoji presentation
+// (VS15, VS16), which a single character's glyph draws with it.
+var presentation = strings.NewReplacer("\ufe0f", "", "\ufe0e", "") //nolint:gochecknoglobals // a Replacer built once

@@ -213,7 +213,7 @@ func (f *Face) Draws(text string) bool {
 				return
 			}
 		}
-		if utf8.RuneCountInString(strings.ReplaceAll(c, "\ufe0f", "")) > 1 {
+		if utf8.RuneCountInString(presentation.Replace(c)) > 1 {
 			ok = false
 			return
 		}
@@ -461,14 +461,14 @@ func (f *Font) LineHeight() float32 { return f.lineHeight }
 func (f *Font) Ascent() float32 { return f.ascent }
 
 // Measure returns the size of a single- or multi-line string.
-func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0) }
+func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0, "", "") }
 
-// measure is the size of s shaped with features, with tracking after
-// each cluster.
-func (f *Font) measure(s, features string, tracking float32) geom.Vec2 {
+// measure is the size of s shaped with features between before and
+// after, with tracking after each cluster.
+func (f *Font) measure(s, features string, tracking float32, before, after string) geom.Vec2 {
 	var w, line float32
 	lines := 1
-	f.items(s, features, false, func(it item) {
+	f.items(s, features, false, before, after, func(it item) {
 		if it.newline {
 			w = max(w, line)
 			line = 0
@@ -684,3 +684,7 @@ func eachCluster(s string, fn func(cluster string, first rune)) {
 		fn(c, r)
 	}
 }
+
+// presentation removes the selectors of text and emoji presentation
+// (VS15, VS16), which a single character's glyph draws with it.
+var presentation = strings.NewReplacer("\ufe0f", "", "\ufe0e", "") //nolint:gochecknoglobals // a Replacer built once

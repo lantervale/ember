@@ -1056,6 +1056,10 @@ type Style struct {
 	// it is read, is shaped so and laid out from the right, its brackets
 	// turned round.
 	RightToLeft bool
+	// Before and After are the text round the text drawn, which it is
+	// shaped between as HarfBuzz's context: a letter that joins takes
+	// the form the letters beside it give it.
+	Before, After string
 }
 
 type Align int
@@ -1106,7 +1110,7 @@ func (s Style) over(f *Font) float32 {
 func (s Style) Measure(text string) geom.Vec2 {
 	f := s.Font()
 	k := s.over(f)
-	return f.measure(text, s.Features, s.Tracking*k).Scale(1 / k)
+	return f.measure(text, s.Features, s.Tracking*k, s.Before, s.After).Scale(1 / k)
 }
 
 // Measure returns the size the text would occupy.
@@ -1171,7 +1175,7 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 	y := float32(math.Round(float64((top+f.ascent/k)*px))) / px
 	x := p.X
 	shape := geom.Vec4{X: KindText}
-	f.items(text, s.Features, s.RightToLeft, func(it item) {
+	f.items(text, s.Features, s.RightToLeft, s.Before, s.After, func(it item) {
 		if it.newline {
 			x = p.X
 			y += f.lineHeight / k

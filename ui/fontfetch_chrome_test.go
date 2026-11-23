@@ -44,6 +44,13 @@ func foundry(t *testing.T) ui.FontFetcher {
 	devanagari, err := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", "noto-devanagari.ttf"))
 	require.NoError(t, err)
 	files["devanagari.ttf"] = devanagari
+	for served, name := range map[string]string{"thai.ttf": "noto-thai.ttf", "lao.ttf": "noto-lao.ttf",
+		"hangul.ttf": "noto-hangul.ttf", "hebrew.ttf": "noto-hebrew.ttf", "old-thai.ttf": "go-thai.ttf",
+		"old-hebrew.ttf": "go-hebrew.ttf"} {
+		b, rerr := os.ReadFile(filepath.Join("..", "internal", "shape", "testdata", name))
+		require.NoError(t, rerr)
+		files[served] = b
+	}
 	return func(url, _ string) ([]byte, error) {
 		if b, ok := files[url]; ok {
 			return b, nil

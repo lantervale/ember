@@ -175,20 +175,95 @@ func (p *Plan) compose(a, b rune) (rune, bool) {
 	}
 	s := norm.NFC.String(string([]rune{a, b}))
 	if utf8.RuneCountInString(s) != 1 {
+		if p.shaper == hebrewShaper && !p.marks {
+			return hebrewForm(a, b)
+		}
 		return 0, false
 	}
 	r, _ := utf8.DecodeRuneInString(s)
 	return r, true
 }
 
+// dageshForms are the presentation forms of the letters from alef to
+// tav with a dagesh, 0 for those Unicode has none of.
+//
+//nolint:gochecknoglobals // a fixed table
+var dageshForms = [...]rune{
+	0xFB30, 0xFB31, 0xFB32, 0xFB33, 0xFB34, 0xFB35, 0xFB36, 0, 0xFB38, 0xFB39, 0xFB3A, 0xFB3B, 0xFB3C, 0, 0xFB3E,
+	0, 0xFB40, 0xFB41, 0, 0xFB43, 0xFB44, 0, 0xFB46, 0xFB47, 0xFB48, 0xFB49, 0xFB4A,
+}
+
+// hebrewForm is the presentation form a Hebrew letter and point make,
+// which normalisation leaves out but old fonts without mark positioning
+// draw them with, as HarfBuzz's Hebrew shaper composes them.
+func hebrewForm(a, b rune) (rune, bool) {
+	var r rune
+	switch b {
+	case 0x05B4:
+		if a == 0x05D9 {
+			r = 0xFB1D
+		}
+	case 0x05B7:
+		switch a {
+		case 0x05F2:
+			r = 0xFB1F
+		case 0x05D0:
+			r = 0xFB2E
+		}
+	case 0x05B8:
+		if a == 0x05D0 {
+			r = 0xFB2F
+		}
+	case 0x05B9:
+		if a == 0x05D5 {
+			r = 0xFB4B
+		}
+	case 0x05BC:
+		switch {
+		case a >= 0x05D0 && a <= 0x05EA:
+			r = dageshForms[a-0x05D0]
+		case a == 0xFB2A:
+			r = 0xFB2C
+		case a == 0xFB2B:
+			r = 0xFB2D
+		}
+	case 0x05BF:
+		switch a {
+		case 0x05D1:
+			r = 0xFB4C
+		case 0x05DB:
+			r = 0xFB4D
+		case 0x05E4:
+			r = 0xFB4E
+		}
+	case 0x05C1:
+		switch a {
+		case 0x05E9:
+			r = 0xFB2A
+		case 0xFB49:
+			r = 0xFB2C
+		}
+	case 0x05C2:
+		switch a {
+		case 0x05E9:
+			r = 0xFB2B
+		case 0xFB49:
+			r = 0xFB2D
+		}
+	}
+	return r, r != 0
+}
+
 // normalize decomposes the characters the font lacks, and those of
 // syllabic scripts even where it has them, into the ones it has, sorts
 // each sequence of marks by their combining classes, and composes the
 // marks that compose with their base into a character the font has,
-// as HarfBuzz's normalisation does before shaping.
+// as HarfBuzz's normalisation does before shaping. Hangul's composes
+// nothing and decomposes only what the font lacks; a cluster with a
+// variation selector is left as it is (variationCluster).
 func (b *buffer) normalize() {
 	p := b.plan
-	shortCircuit := p.shaper <= arabicShaper
+	shortCircuit := p.shaper < indicShaper
 	in := b.glyphs
 	out := make([]Glyph, 0, len(in))
 	simple := true
@@ -211,8 +286,12 @@ func (b *buffer) normalize() {
 		for end < len(in) && isMarkChar(in[end].Char) {
 			end++
 		}
+		if slices.ContainsFunc(in[i:end], func(g Glyph) bool { return VariationSelector(g.Char) }) {
+			out, i = b.variationCluster(out, in[i:end]), end
+			continue
+		}
 		for ; i < end; i++ {
-			out = b.decomposeChar(out, in[i], false)
+			out = b.decomposeChar(out, in[i], p.shaper == hangulShaper)
 		}
 	}
 	if len(out) != len(in) {
@@ -231,12 +310,84 @@ func (b *buffer) normalize() {
 		for end < len(b.glyphs) && b.glyphs[end].cc != 0 {
 			end++
 		}
-		if end-i <= 32 {
+		if end-i <= maxCombiningMarks {
 			b.sort(i, end, func(x, y *Glyph) int { return int(x.cc) - int(y.cc) })
+			switch p.shaper { //nolint:exhaustive // the shapers that reorder marks
+			case arabicShaper:
+				b.reorderArabicMarks(i, end)
+			case hebrewShaper:
+				b.reorderHebrewMarks(i, end)
+			}
 		}
 		i = end
 	}
-	b.compose()
+	if p.shaper != hangulShaper {
+		b.compose()
+	}
+}
+
+// maxCombiningMarks is the longest sequence of marks normalisation
+// sorts, as HarfBuzz bounds it.
+const maxCombiningMarks = 32
+
+// modifierMarks are the marks Arabic's shaper moves before the others
+// of their class, which modify the letter rather than sit on it.
+//
+//nolint:gochecknoglobals // a fixed list
+var modifierMarks = []rune{
+	0x0654, 0x0655, 0x0658, 0x06DC, 0x06E3, 0x06E7, 0x06E8, 0x08CA, 0x08CB, 0x08CD, 0x08CE, 0x08CF, 0x08D3, 0x08F3,
+}
+
+// reorderArabicMarks moves the modifier marks of classes 220 and 230
+// in the sorted marks from start to end before the others, renumbered
+// so the sequence stays sorted, as HarfBuzz's Arabic shaper does.
+func (b *buffer) reorderArabicMarks(start, end int) {
+	g := b.glyphs
+	i := start
+	for cc := uint8(220); cc <= 230; cc += 10 {
+		for i < end && g[i].cc < cc {
+			i++
+		}
+		if i == end {
+			break
+		}
+		if g[i].cc > cc {
+			continue
+		}
+		j := i
+		for j < end && g[j].cc == cc && slices.Contains(modifierMarks, g[j].Char) {
+			j++
+		}
+		if i == j {
+			continue
+		}
+		b.mergeClusters(start, j)
+		moved := slices.Clone(g[i:j])
+		copy(g[start+j-i:j], g[start:i])
+		copy(g[start:], moved)
+		renumbered := uint8(25)
+		if cc == 230 {
+			renumbered = 26
+		}
+		for moved := start + j - i; start < moved; start++ {
+			g[start].cc = renumbered
+		}
+	}
+}
+
+// reorderHebrewMarks puts a meteg or a mark below before the sheva or
+// hiriq it follows after a patah or qamats, the order fonts expect, as
+// HarfBuzz's Hebrew shaper does.
+func (b *buffer) reorderHebrewMarks(start, end int) {
+	g := b.glyphs
+	for i := start + 2; i < end; i++ {
+		c0, c1, c2 := g[i-2].cc, g[i-1].cc, g[i].cc
+		if (c0 == 20 || c0 == 21) && (c1 == 22 || c1 == 23) && (c2 == 25 || c2 == 220) {
+			b.mergeClusters(i-1, i+1)
+			g[i-1], g[i] = g[i], g[i-1]
+			return
+		}
+	}
 }
 
 // decomposeChar appends g to out, or what it decomposes to: the

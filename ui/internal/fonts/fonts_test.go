@@ -108,8 +108,17 @@ func TestDrawsSaysWhatShowsWhole(t *testing.T) {
 	assert.False(t, s.Draws(f, "3\uFE0F\u20E3"), "a keycap needs its picture, as twod says")
 	assert.False(t, s.Draws(f, "👍\U0001F3FD"), "and so does a toned emoji")
 	assert.True(t, s.Draws(f, "\u2764\uFE0F"), "a single character with a variation selector stands on its glyph")
+	assert.True(t, s.Draws(f, "\u2764\uFE0E"), "so does one asking for its text presentation")
 	s.SetEmoji(func(c string) bool { return c == "🔥" })
 	assert.True(t, s.Draws(f, "hot 🔥"))
+}
+
+func TestVariationSelectorsChooseTheGlyphOrThePicture(t *testing.T) {
+	s := Builtin()
+	f := style.Font{Weight: 400, Size: 16}
+	s.SetEmoji(func(c string) bool { return c == "\u2764\uFE0F" })
+	assert.Equal(t, s.Advance(f, "\u2764"), s.Advance(f, "\u2764\uFE0E"), "the text presentation is the glyph")
+	assert.InDelta(t, f.Size, s.Advance(f, "\u2764\uFE0F"), 0.01, "the emoji presentation the picture, an em wide")
 }
 
 func TestASpaceGoLacksIsMeasuredAsChromeFallsBackForIt(t *testing.T) {
