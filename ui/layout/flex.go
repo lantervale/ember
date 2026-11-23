@@ -525,7 +525,7 @@ func automaticMinSize(o style.Size[style.Overflow]) size {
 	return s
 }
 
-//nolint:gocognit,nestif // Taffy's determine_flex_base_size, kept in its shape
+//nolint:cyclop,funlen,gocognit,gocyclo,nestif // Taffy's determine_flex_base_size, kept in its shape
 func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) {
 	d := c.dir
 	for _, it := range items {

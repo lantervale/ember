@@ -79,7 +79,8 @@ func TestWebkitsOwnPropertiesStayAsWritten(t *testing.T) {
 			t.Errorf("ui's own: %s", got)
 		}
 	}
-	if got := read("-webkit-box-reflect: below", Browser()); !strings.Contains(got, `"-webkit-box-reflect" is not supported`) {
+	got := read("-webkit-box-reflect: below", Browser())
+	if !strings.Contains(got, `"-webkit-box-reflect" is not supported`) {
 		t.Errorf("Chrome's own keeps its warning: %s", got)
 	}
 }

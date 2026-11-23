@@ -1862,7 +1862,7 @@ var props = func() map[string]prop {
 			func(_ *ctx, v []Component) bool { return isWord(v[0], "vertical", "block-axis") }, flips[bool]()),
 		"-webkit-box-pack": keyword(func(c *style.Computed) *style.Align { return &c.BoxPack },
 			map[string]style.Align{"start": style.AlignFlexStart, "end": style.AlignFlexEnd,
-				"center": style.AlignCenter, "justify": style.AlignSpaceBetween}),
+				"center": style.AlignCenter, kwJustify: style.AlignSpaceBetween}),
 		"-webkit-box-align": keyword(func(c *style.Computed) *style.Align { return &c.BoxAlign },
 			map[string]style.Align{"start": style.AlignFlexStart, "end": style.AlignFlexEnd,
 				"center": style.AlignCenter, "baseline": style.AlignBaseline, "stretch": style.AlignStretch}),

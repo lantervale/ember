@@ -17,7 +17,8 @@ body { margin: 0; padding: 10px; font-size: 12px; line-height: 16px; color: #2b2
 p { margin: 0; }
 .m { columns: 2; column-gap: 24px; column-rule: 2px solid #b0493c; margin-bottom: 12px; padding: 6px;
 	background-color: #f4f1ec; }
-table { border-collapse: separate; border-spacing: 0; width: 100%; background-color: #dfe9f6; border: 2px solid #3c5a8a; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; background-color: #dfe9f6;
+	border: 2px solid #3c5a8a; }
 td { padding: 2px 6px; }
 tr:nth-child(even) td { background-color: #c8d8ee; }
 .f { display: flex; gap: 8px; }

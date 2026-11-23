@@ -26,6 +26,7 @@ const (
 	kwMaxContent    = "max-content"
 	kwFitContent    = "fit-content"
 	kwStretch       = "stretch"
+	kwJustify       = "justify"
 	kwContent       = "content"
 	kwAuto          = "auto"
 	kwMiddle        = "middle"

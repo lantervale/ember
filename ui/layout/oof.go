@@ -280,7 +280,8 @@ func (t *tree) layoutOOFBox(c oofCandidate, area size, offset point,
 		t: resolve(st.Inset.Top, area.h), b: resolve(st.Inset.Bottom, area.h),
 	}
 	styleSize := resolveSize(st.Size, area).withAspectRatio(ratio).mAdd(adj)
-	minSize := stretched(resolveSize(st.MinSize, area).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, area).or(pbSum).mMax(pbSum)
+	minSize := stretched(resolveSize(st.MinSize, area).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, area).
+		or(pbSum).mMax(pbSum)
 	maxSize := stretched(resolveMax(st.MaxSize, area).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, area)
 	known := styleSize.mClamp(minSize, maxSize)
 

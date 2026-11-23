@@ -874,14 +874,6 @@ func keepFlow(n, m *node, flow, moved point) {
 				keepFlow(c, m, at, moved)
 			}
 		}
-		for _, c := range n.hoisted {
-			if c.st.Position == style.Absolute {
-				keepFlow(c, m, at, moved)
-			} else {
-				keepIn(c, n.absolute, false)
-			}
-		}
-		return
 	default:
 		for _, c := range n.kids {
 			if !outOfFlow(c.st.Position) || c.st.Display == style.DisplayNone {
@@ -889,8 +881,19 @@ func keepFlow(n, m *node, flow, moved point) {
 			}
 		}
 	}
+	keepPositioned(n, m, at, moved, breaks)
+}
+
+// keepPositioned places the boxes n positions: when columns cut n, an absolutely
+// positioned one through the flow, at flow less the relative offsets moved, as keepFlow
+// does; the others as keepIn.
+func keepPositioned(n, m *node, flow, moved point, cut bool) {
 	for _, c := range n.hoisted {
-		keepIn(c, n.absolute, false)
+		if cut && c.st.Position == style.Absolute {
+			keepFlow(c, m, flow, moved)
+		} else {
+			keepIn(c, n.absolute, false)
+		}
 	}
 }
 

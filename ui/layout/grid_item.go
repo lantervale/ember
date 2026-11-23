@@ -170,7 +170,8 @@ func (it *gridItem) computeKnownDimensions(area size) size {
 	pbSize := it.paddingBorderSize(area.w)
 	adj := boxSizingAdjustment(st, pbSize)
 	inherent := resolveSize(st.Size, area).withAspectRatio(ratio).mAdd(adj)
-	minSize := stretched(resolveSize(st.MinSize, area).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, area).or(pbSize).mMax(pbSize)
+	minSize := stretched(resolveSize(st.MinSize, area).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, area).
+		or(pbSize).mMax(pbSize)
 	maxSize := stretched(resolveMax(st.MaxSize, area).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, area)
 	inner := area.mSub(margins).mMax(size{})
 	w := inherent.w

@@ -371,7 +371,7 @@ var checks = map[string]check{
 	"line-clamp":                checkLineClamp,
 	"-webkit-line-clamp":        single(either(positiveInteger, words("none"))),
 	"-webkit-box-orient":        single(words("horizontal", "vertical", "inline-axis", "block-axis")),
-	"-webkit-box-pack":          single(words("start", "end", "center", "justify")),
+	"-webkit-box-pack":          single(words("start", "end", "center", kwJustify)),
 	"-webkit-box-align":         single(words("start", "end", "center", "baseline", "stretch")),
 	"-webkit-box-direction":     single(words("normal", "reverse")),
 	"-webkit-box-flex":          single(number),

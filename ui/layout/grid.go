@@ -377,7 +377,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	inherent := resolveSize(st.Size, cb).withAspectRatio(ratio).mAdd(adj)
-	minSize := stretched(resolveSize(st.MinSize, cb).mAdd(adj), st.MinSize, st, cb).or(pbSize).mMax(pbSize).withAspectRatio(ratio)
+	minSize := stretched(resolveSize(st.MinSize, cb).mAdd(adj), st.MinSize, st, cb).or(pbSize).mMax(pbSize).
+		withAspectRatio(ratio)
 	maxSize := stretched(resolveMax(st.MaxSize, cb).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, cb)
 	if it.subgrid[horizontal] {
 		justify, inherent.w, minSize.w, maxSize.w = style.AlignStretch, none, none, none
