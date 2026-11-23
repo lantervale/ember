@@ -19,6 +19,7 @@ func (p *painter) verticalText(e entry, alpha float32) {
 	saved := p.s.Transform()
 	defer p.s.SetTransform(saved)
 	mode, parts := shown(e.b).Mode, p.selected(e.b)
+	p.emptyLines(e, parts, alpha)
 	for i := range e.b.Lines {
 		f := e.b.Lines[i]
 		r := f.Rect
@@ -74,6 +75,27 @@ func (p *painter) verticalText(e entry, alpha float32) {
 		p.lineDecorated, p.lineSelecting = false, false
 		p.s.SetTransform(saved.Mul(turn))
 		p.lineDecorations(along, st, style.LineThrough, alpha)
+	}
+}
+
+// emptyLines draws the selection over the parts of the vertical run e on no line of
+// it: the empty lines its kept line breaks leave between them.
+func (p *painter) emptyLines(e entry, parts []Selected, alpha float32) {
+	st := shown(e.b)
+	if !st.Visible {
+		return
+	}
+	var back color.Color
+	for _, s := range parts {
+		if s.Line >= 0 {
+			continue
+		}
+		if back.A == 0 {
+			if back, _ = p.selectionColors(st, fade(st.Fill(), alpha), alpha); back.A <= 0 {
+				return
+			}
+		}
+		p.s.Rect(p.snap(geom.Rect{X: e.at.X + s.Rect.X, Y: e.at.Y + s.Rect.Y, W: s.Rect.W, H: s.Rect.H}), back)
 	}
 }
 

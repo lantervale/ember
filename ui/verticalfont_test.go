@@ -1,11 +1,13 @@
 package ui_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/sfnt"
 
@@ -88,4 +90,27 @@ func TestUprightGlyphsTakeTheirVerticalAdvances(t *testing.T) {
 	r, ok = d.BoxOf(turned)
 	require.True(t, ok)
 	assert.Greater(t, r.H, float32(0))
+}
+
+func TestAGlyphStandingInAFallbackFaceTakesItsMetrics(t *testing.T) {
+	vertical, tall := verticalFont(t, false), pages.Tall(gomono.TTF, 2500, 900)
+	d := ui.NewDocument(ui.FetchFonts(func(url, _ string) ([]byte, error) {
+		if strings.HasSuffix(url, "tall.ttf") {
+			return tall, nil
+		}
+		return vertical, nil
+	}), ui.CSS(`@font-face { font-family: Vertical; src: url(vertical.ttf); }
+@font-face { font-family: Tall; src: url(tall.ttf); }
+p { writing-mode: vertical-rl; font: 20px Vertical, Tall; margin: 0; }`))
+	shape := ui.Span(ui.Text("▲"))
+	d.Body().Append(ui.P(ui.Span(ui.Text("一")), shape))
+	size := geom.V2(400, 300)
+	require.Eventually(t, func() bool {
+		d.Layout(size)
+		return d.FontsLoading() == 0
+	}, 5*time.Second, 5*time.Millisecond, "the fonts never landed")
+	d.Layout(size)
+	r, ok := d.BoxOf(shape)
+	require.True(t, ok)
+	assert.InDelta(t, float32(2500+900)*20/2048, r.H, 1, "the triangle takes Tall's ascent and descent, which has no vmtx")
 }

@@ -468,6 +468,13 @@ func flowRect(m style.WritingMode, r geom.Rect) geom.Rect {
 	return geom.Rect{X: min(a.X, b.X), Y: min(a.Y, b.Y), W: abs(b.X - a.X), H: abs(b.Y - a.Y)}
 }
 
+// unflowRect is r, in the frame of the lines of writing mode m, in the
+// Document's space.
+func unflowRect(m style.WritingMode, r geom.Rect) geom.Rect {
+	a, b := unflow(m, geom.V2(r.X, r.Y)), unflow(m, geom.V2(r.X+r.W, r.Y+r.H))
+	return geom.Rect{X: min(a.X, b.X), Y: min(a.Y, b.Y), W: abs(b.X - a.X), H: abs(b.Y - a.Y)}
+}
+
 // fragRect is fragment k of b in the Document's space, in the flow of its
 // lines.
 func fragRect(b *box.Box, k int) geom.Rect {
@@ -957,19 +964,25 @@ func (d *Document) aloneOnLine(b *box.Box) bool {
 	if container(prev) != container(b) {
 		return true
 	}
-	at, f := prev.Rect(), prev.Lines[len(prev.Lines)-1]
-	r := b.Rect()
-	return at.Y+f.Rect.Y >= r.Y+r.H || r.Y >= at.Y+f.Rect.Y+f.Rect.H
+	line, r := fragRect(prev, len(prev.Lines)-1), flowRect(b.Style.Mode, b.Rect())
+	return line.Y >= r.Y+r.H || r.Y >= line.Y+line.H
 }
 
 // breakMark is the mark of the empty line the br b holds, in its box's
 // space: a space wide from the line's start, as high as the line, as
-// Chrome draws a selected line break.
+// Chrome draws a selected line break; across a vertical line, centred on
+// the br's box as the line's central baseline centres it.
 func (d *Document) breakMark(b *box.Box) paint.Selected {
 	m := d.fonts.Metrics(b.Style.Font)
 	h, base := layout.LineHeight(m, b.Style)
-	top := m.Ascent - base
-	return paint.Selected{Rect: geom.Rect{Y: top, W: d.fonts.Advance(b.Style.Font, " "), H: h}}
+	space := d.fonts.Advance(b.Style.Font, " ")
+	switch mode := b.Style.Mode; {
+	case mode.Upward():
+		return paint.Selected{Rect: geom.Rect{X: (b.Size.X - h) / 2, Y: -space, W: h, H: space}}
+	case mode.Vertical():
+		return paint.Selected{Rect: geom.Rect{X: (b.Size.X - h) / 2, W: h, H: space}}
+	}
+	return paint.Selected{Rect: geom.Rect{Y: m.Ascent - base, W: space, H: h}}
 }
 
 // letter is the part of a text node a ::first-letter box shows: the
@@ -1018,7 +1031,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 	metrics := d.fonts.Metrics(b.Style.Font)
 	mode := b.Style.Mode
 	ws := b.Style.WhiteSpace
-	keeps := ws.KeepsBreaks() && !mode.Vertical()
+	keeps := ws.KeepsBreaks()
 	var out []paint.Selected
 	for k, f := range b.Lines {
 		if k > 0 && keeps {
@@ -1069,18 +1082,22 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 }
 
 // tabRoom is the room the tabs from to to take between fragment k of b
-// and the next on its line, in the fragment's space, when tabs alone
-// stand between them in text that keeps them: each reaches the next tab
-// stop, the first from the fragment's end.
+// and the next on its line, along it from the fragment's start, when tabs
+// alone stand between them in text that keeps them: each reaches the next
+// tab stop, the first from the fragment's end.
 func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float32, float32) {
 	st, f := b.Style, b.Lines[k]
-	if m == nil || f.RTL || !st.WhiteSpace.KeepsSpaces() || st.Mode.Vertical() {
+	if m == nil || f.RTL || !st.WhiteSpace.KeepsSpaces() {
 		return false, 0, 0
 	}
+	fr := flowRect(st.Mode, f.Rect)
 	var after *box.Fragment
+	var ar geom.Rect
 	for j := range b.Lines {
-		if g := &b.Lines[j]; g.Start > f.Start && abs(g.Rect.Y-f.Rect.Y) < 0.5 && (after == nil || g.Start < after.Start) {
-			after = g
+		g := &b.Lines[j]
+		r := flowRect(st.Mode, g.Rect)
+		if g.Start > f.Start && abs(r.Y-fr.Y) < 0.5 && (after == nil || g.Start < after.Start) {
+			after, ar = g, r
 		}
 	}
 	offs := m.frags[k].offs
@@ -1099,8 +1116,8 @@ func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float3
 		return false, 0, 0
 	}
 	stop := st.TabStop(d.fonts.Advance(st.Font, " "))
-	end := after.Rect.X - f.Rect.X
-	edge := func(j int) float32 { return max(f.Rect.W, end-float32(n-j)*stop) }
+	end := ar.X - fr.X
+	edge := func(j int) float32 { return max(fr.W, end-float32(n-j)*stop) }
 	return true, edge(a), edge(z)
 }
 
@@ -1120,13 +1137,14 @@ func (d *Document) emptyLines(n *Node, b *box.Box, k, from, to int) []paint.Sele
 	if len(breaks) < 2 {
 		return nil
 	}
-	above, below := b.Lines[k-1].Rect, b.Lines[k].Rect
+	mode := b.Style.Mode
+	above, below := flowRect(mode, b.Lines[k-1].Rect), flowRect(mode, b.Lines[k].Rect)
 	step := (below.Y - above.Y) / float32(len(breaks))
 	var out []paint.Selected
 	for j := 1; j < len(breaks); j++ {
 		if breaks[j] >= from && breaks[j] < to {
-			out = append(out, paint.Selected{Line: -1, Rect: geom.Rect{X: below.X, Y: above.Y + step*float32(j),
-				W: d.fonts.Advance(b.Style.Font, " "), H: step}})
+			out = append(out, paint.Selected{Line: -1, Rect: unflowRect(mode, geom.Rect{X: below.X,
+				Y: above.Y + step*float32(j), W: d.fonts.Advance(b.Style.Font, " "), H: step})})
 		}
 	}
 	return out

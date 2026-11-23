@@ -49,9 +49,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `letter-spacing` on Arabic text | spaced, where Chrome leaves its letters unspaced |
 | a line whose ends, shaped again ([decision 0190](../99-decisions/0190-line-ends-are-shaped-again-and-carets-share-a-ligature.md)), fit differently | broken where the text shaped whole fits, then its ends reshaped, where Chrome fits the line again with them |
 | a ligature that draws a space (a face with `liga` across one) | a shrink-to-fit box measures it whole at a line's end where Chrome measures its characters' shares; a line may break at the space before it where Chrome takes a later break; a chain of such ligatures is shaped with five characters on either side and may pair them otherwise |
-| a selection of vertical lines going past an empty line of preformatted text, a br alone on its line or a tab kept between fragments ([decision 0193](../99-decisions/0193-vertical-lines-are-selected-in-the-flow-of-their-lines.md)) | the empty line and the br unmarked and the tab's room left out, where Chrome marks them as on horizontal lines |
+| a selection over a tab that starts a line of kept white space, horizontal or vertical ([decision 0210](../99-decisions/0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md)) | the tab's room unmarked, the line's part and an empty line's mark before it starting where its text starts, where Chrome marks from the line's start |
 | a double click on ideographs | takes one ideograph, where Chrome takes the word ICU's dictionary finds (一丁) |
-| a character standing in a vertical line that a fallback face draws (an emoji of the system's colour font, a symbol of Go Mono) | it takes the first face's ascent and descent, or its vertical advance, where Chrome takes the fallback face's |
+| an emoji standing in a vertical line that an emoji picture or the system's colour font draws | not checked against Chrome: it takes the first face's ascent and descent, a face's that draws it its own ([decision 0210](../99-decisions/0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md)) |
 
 ## Generated content
 

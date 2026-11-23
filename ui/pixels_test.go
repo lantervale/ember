@@ -144,6 +144,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/break-spaces", 420, 520, 0.0035},
 		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
 		{"./internal/pages/vertical-selection", 420, 240, 0.011},
+		{"./internal/pages/vertical-selection-marks", 520, 240, 0.008},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
