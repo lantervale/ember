@@ -480,8 +480,8 @@ func (t *tree) inFlowRoot(n *node, avail spaces) (placed, []oofCandidate) {
 		padding := edges(st.Padding, parent.w)
 		pb := padding.add(n.borders()).sum()
 		adj := boxSizingAdjustment(st, pb)
-		minSize := resolveSize(st.MinSize, parent).withAspectRatio(ratio).mAdd(adj)
-		maxSize := resolveMax(st.MaxSize, parent).withAspectRatio(ratio).mAdd(adj)
+		minSize := stretched(resolveSize(st.MinSize, parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, parent)
+		maxSize := stretched(resolveMax(st.MaxSize, parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, parent)
 		clamped := resolveSize(st.Size, parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)
 		minMax := size{definiteMinMax(minSize.w, maxSize.w), definiteMinMax(minSize.h, maxSize.h)}
 		known = known.or(minMax).or(clamped).or(size{rootAvail.w.value(), none}).mMax(pb)

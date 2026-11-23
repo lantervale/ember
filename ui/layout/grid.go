@@ -19,8 +19,8 @@ func (t *tree) grid(n *node, in input) output {
 	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	preferred := noSize
 	if in.sizing == inherentSize {
 		preferred = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
@@ -377,8 +377,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
 	inherent := resolveSize(st.Size, cb).withAspectRatio(ratio).mAdd(adj)
-	minSize := resolveSize(st.MinSize, cb).mAdd(adj).or(pbSize).mMax(pbSize).withAspectRatio(ratio)
-	maxSize := resolveMax(st.MaxSize, cb).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, cb).mAdd(adj), st.MinSize, st, cb).or(pbSize).mMax(pbSize).withAspectRatio(ratio)
+	maxSize := stretched(resolveMax(st.MaxSize, cb).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, cb)
 	if it.subgrid[horizontal] {
 		justify, inherent.w, minSize.w, maxSize.w = style.AlignStretch, none, none, none
 	}
@@ -423,6 +423,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		switch {
 		case outOfFlow(pos) && some(insetH.start) && some(insetH.end):
 			w = fmax(inner.w-insetH.start-insetH.end, 0)
+		case kw == keywordExact:
+			w = kwSpace.v
 		case kw == keywordMeasure:
 			w = keywordMeasured.w
 			if !some(w) {
@@ -439,6 +441,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		switch {
 		case outOfFlow(pos) && some(insetV.start) && some(insetV.end):
 			s.h = fmax(inner.h-insetV.start-insetV.end, 0)
+		case kh == keywordExact:
+			s.h = khSpace.v
 		case kh == keywordMeasure:
 			s.h = keywordMeasured.h
 			if !some(s.h) {

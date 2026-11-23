@@ -170,12 +170,14 @@ func (it *gridItem) computeKnownDimensions(area size) size {
 	pbSize := it.paddingBorderSize(area.w)
 	adj := boxSizingAdjustment(st, pbSize)
 	inherent := resolveSize(st.Size, area).withAspectRatio(ratio).mAdd(adj)
-	minSize := resolveSize(st.MinSize, area).withAspectRatio(ratio).mAdd(adj).or(pbSize).mMax(pbSize)
-	maxSize := resolveMax(st.MaxSize, area).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, area).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, area).or(pbSize).mMax(pbSize)
+	maxSize := stretched(resolveMax(st.MaxSize, area).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, area)
 	inner := area.mSub(margins).mMax(size{})
 	w := inherent.w
 	if !some(w) {
 		switch {
+		case st.Size.Width.Kind == style.Stretch:
+			w = inner.w
 		case isSizingKeyword(st.Size.Width):
 		case st.Margin.Left.Kind != style.Auto && st.Margin.Right.Kind != style.Auto && isSelfStretch(it.justifySelf):
 			w = inner.w
@@ -184,6 +186,8 @@ func (it *gridItem) computeKnownDimensions(area size) size {
 	s := size{w, inherent.h}.withAspectRatio(ratio)
 	if !some(s.h) {
 		switch {
+		case st.Size.Height.Kind == style.Stretch:
+			s.h = inner.h
 		case isSizingKeyword(st.Size.Height):
 		case st.Margin.Top.Kind != style.Auto && st.Margin.Bottom.Kind != style.Auto && isSelfStretch(it.alignSelf):
 			s.h = inner.h

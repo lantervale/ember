@@ -178,8 +178,8 @@ func (t *tree) columns(n *node, in input) output {
 	pbSize := padding.add(border).sum()
 	inset := padding.add(border).add(gutter)
 	adj := boxSizingAdjustment(st, pbSize)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	clamped := noSize
 	if in.sizing == inherentSize {
 		clamped = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)

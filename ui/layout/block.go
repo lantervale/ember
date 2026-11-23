@@ -52,8 +52,8 @@ func (t *tree) block(n *node, in input, ctx *blockContext) output {
 	border := n.borders()
 	pbSize := padding.add(border).sum()
 	adj := boxSizingAdjustment(st, pbSize)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	clamped := noSize
 	if in.sizing == inherentSize {
 		clamped = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)
@@ -96,8 +96,8 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	ctx.setContentInset(inset.l, inset.r)
 	adj := boxSizingAdjustment(st, pbSize)
 	sz := resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	derived := in.known.withAspectRatio(ratio).mClamp(minSize, maxSize)
 	known := in.known.or(derived)
 	percentBasis := size{known.w, none}
@@ -331,8 +331,8 @@ func (t *tree) blockItems(n *node, inner size) []*blockItem {
 			clear:          st.Clear,
 			sizeStyle:      st.Size,
 			size:           resolveSize(st.Size, inner).withAspectRatio(ratio).mAdd(adj),
-			minSize:        resolveSize(st.MinSize, inner).withAspectRatio(ratio).mAdd(adj),
-			maxSize:        resolveMax(st.MaxSize, inner).withAspectRatio(ratio).mAdd(adj),
+			minSize:        stretched(resolveSize(st.MinSize, inner).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, inner),
+			maxSize:        stretched(resolveMax(st.MaxSize, inner).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, inner),
 			overflow:       st.Overflow,
 			scrollbarWidth: st.ScrollbarWidth,
 			position:       st.Position,

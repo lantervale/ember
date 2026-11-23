@@ -318,7 +318,7 @@ var checks = map[string]check{
 	"column-gap":     single(either(sizeLP, words("normal"))),
 	"flex-grow":      single(number),
 	"flex-shrink":    single(number),
-	"flex-basis":     single(either(sizeLP, words("auto", "content"), intrinsic)),
+	"flex-basis":     single(either(sizeLP, words("auto", "content"), boxSizes)),
 	"flex-wrap":      single(words("nowrap", "wrap", "wrap-reverse")),
 	"flex-direction": single(words("row", "row-reverse", "column", "column-reverse")),
 	"align-items":    single(words(alignWords...)),

@@ -155,7 +155,7 @@ A card's text cut after a few lines, its last ending in an ellipsis, is the web'
 .title { line-clamp: 1; }
 ```
 
-`width: stretch` and `height: stretch` fill the containing block less the box's margins, where `auto` would shrink a table, a float, an inline block or an absolutely positioned box to its content; a height stretches only in a containing block whose height is known. Under [browser sheets](#browser-sheets) Chrome's `-webkit-fill-available` is read as `stretch`.
+`width: stretch` and `height: stretch` fill the containing block less the box's margins, where `auto` would shrink a table, a float, an inline block or an absolutely positioned box to its content; a height stretches only in a containing block whose height is known. So do `stretch` in `min-width`, `max-width`, `min-height`, `max-height` and `flex-basis`, a flex item's stretch filling its container (then growing and shrinking as any item), a grid item's its area; on a table cell or a column, `stretch` is `auto`, as in Chrome. Under [browser sheets](#browser-sheets) Chrome's `-webkit-fill-available` is read as `stretch`.
 
 ### Logical properties
 

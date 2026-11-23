@@ -208,8 +208,8 @@ func (t *tree) flex(n *node, in input) output {
 	border := n.borders()
 	pbSum := padding.sum().add(border.sum())
 	adj := boxSizingAdjustment(st, pbSum)
-	minSize := resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj)
-	maxSize := resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj)
+	minSize := stretched(resolveSize(st.MinSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MinSize, st, in.parent)
+	maxSize := stretched(resolveMax(st.MaxSize, in.parent).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, in.parent)
 	clamped := noSize
 	if in.sizing == inherentSize {
 		clamped = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj).mClamp(minSize, maxSize)
@@ -460,12 +460,13 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 		adj := boxSizingAdjustment(st, padding.add(border).sum())
 		it := &all[i]
 		*it = flexItem{
-			node:           k,
-			order:          uint32(i),
-			size:           resolveSize(st.Size, percentBasis).withAspectRatio(ratio).mAdd(adj),
+			node:  k,
+			order: uint32(i),
+			size: stretched(resolveSize(st.Size, percentBasis).withAspectRatio(ratio).mAdd(adj), st.Size, st,
+				percentBasis),
 			sizeStyle:      st.Size,
-			minSize:        resolveSize(st.MinSize, percentBasis).mAdd(adj),
-			maxSize:        resolveMax(st.MaxSize, percentBasis).mAdd(adj),
+			minSize:        stretched(resolveSize(st.MinSize, percentBasis).mAdd(adj), st.MinSize, st, percentBasis),
+			maxSize:        stretched(resolveMax(st.MaxSize, percentBasis).mAdd(adj), st.MaxSize, st, percentBasis),
 			aspectRatio:    ratio,
 			margin:         edges(st.Margin, c.nodeInnerSize.w),
 			marginIsAuto:   autoMargins(st),
@@ -573,6 +574,9 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 				b := basis
 				if !some(b) && basisStyle.Kind == style.Auto {
 					b = mainSize
+				}
+				if basisStyle.Kind == style.Stretch {
+					b = stretch
 				}
 				if some(b) {
 					it.basisIsDefinite = true
