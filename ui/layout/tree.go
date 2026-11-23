@@ -43,6 +43,9 @@ type Retained struct {
 	// the room its overflow: auto bars took in the last layout.
 	viewport       *box.Box
 	viewportGutter size
+	// barsOn is the viewport's style barsView with its styled bars.
+	barsView, barsOn *style.Computed
+	bars             *style.StyledBars
 	// anchors are the anchors of the elements placed by them, where the
 	// last layout placed them.
 	anchors *anchoring
@@ -142,7 +145,7 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 	if r == nil {
 		return t.out, nil, t
 	}
-	port := viewportOf(root)
+	port := t.viewportOf(root)
 	if !avail.values().both() || frameOf(r).Vertical() {
 		port = nil
 	}
@@ -1135,8 +1138,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Margin = box.Edges{Top: f.margin.t, Right: f.margin.r, Bottom: f.margin.b, Left: f.margin.l}
 	b.Border = box.Edges{Top: f.border.t, Right: f.border.r, Bottom: f.border.b, Left: f.border.l}
 	b.Padding = box.Edges{Top: f.padding.t, Right: f.padding.r, Bottom: f.padding.b, Left: f.padding.l}
-	b.Content = geom.Vec2{X: f.overflow.rect.r - f.overflow.rect.l, Y: f.overflow.rect.b - f.overflow.rect.t}
-	b.ScrollStart = geom.Vec2{X: fmin(f.overflow.rect.l, 0), Y: fmin(f.overflow.rect.t, 0)}
+	b.Content, b.ScrollStart = scrollRange(n.st, f)
 	b.Scrollbar = geom.Vec2{X: f.scrollbar.w - fmin(startGutter(n.st), f.scrollbar.w), Y: f.scrollbar.h}
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
@@ -1166,6 +1168,43 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	t.atomsIntoSpans(n)
 	t.listMarker(n)
 	n.placeCuts(t.out.Of)
+}
+
+// scrollRange is the size of what a box of style st, placed as f, scrolls
+// and its least offset: its scrollable overflow, but across a box that
+// keeps a stable gutter, the range Chrome gives it once its content
+// overflows that way: as long as the content less the padding box but
+// the vertical bar that stands, whatever gutter is empty, a right-to-left
+// box starting scrolled by its empty gutters (decision 0198).
+func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
+	o := f.overflow.rect
+	content := geom.Vec2{X: o.r - o.l, Y: o.b - o.t}
+	start := geom.Vec2{X: fmin(o.l, 0), Y: fmin(o.t, 0)}
+	if !st.GutterStable || !scrollContainer(st.Overflow.Height) || st.Overflow.Width == style.Hidden {
+		return content, start
+	}
+	g := gutterEdges(st, point{x: f.scrollbar.w, y: f.scrollbar.h})
+	w := f.size.w - f.border.l - f.border.r
+	bar := float32(0)
+	if h := st.Overflow.Height; h == style.Scroll ||
+		h == style.OverflowAuto && content.Y > f.size.h-f.border.t-f.border.b-f.scrollbar.h {
+		bar = st.ScrollbarWidth
+	}
+	port := w - (f.scrollbar.w - fmin(startGutter(st), f.scrollbar.w))
+	over := content.X - (w - bar)
+	if over <= 0 {
+		return content, start
+	}
+	lo, hi := float32(0), over
+	switch {
+	case st.Mode.BlockFromRight():
+		lo, hi = -over, 0
+	case st.Mode.Vertical():
+	case st.Dir == style.RTL:
+		shift := g.l + g.r - bar
+		lo, hi = -(shift + over), -shift
+	}
+	return geom.Vec2{X: hi - lo + port, Y: content.Y}, geom.Vec2{X: lo, Y: start.Y}
 }
 
 // markerGap is how far a bullet stands from its item's content, past its own offset, as

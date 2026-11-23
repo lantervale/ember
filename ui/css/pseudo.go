@@ -92,13 +92,13 @@ var pseudoElements = map[string]pseudoElement{
 
 	// A scroll container's bars, as Chrome draws them once its
 	// ::-webkit-scrollbar is styled (decision 0158).
-	webkitScrollbar:            {},
-	scrollbarTrack:             {},
-	scrollbarTrackPiece:        {},
-	scrollbarThumb:             {},
-	scrollbarCorner:            {},
-	"-webkit-scrollbar-button": {status: pseudoUnmatched},
-	"-webkit-resizer":          {status: pseudoUnmatched},
+	webkitScrollbar:     {},
+	scrollbarTrack:      {},
+	scrollbarTrackPiece: {},
+	scrollbarThumb:      {},
+	scrollbarCorner:     {},
+	scrollbarButton:     {},
+	webkitResizer:       {},
 
 	// The parts of a range, a progress and a meter, as Chrome lays them
 	// out once the control's appearance is none (decision 0160).
@@ -169,6 +169,8 @@ const (
 	scrollbarTrackPiece = "-webkit-scrollbar-track-piece"
 	scrollbarThumb      = "-webkit-scrollbar-thumb"
 	scrollbarCorner     = "-webkit-scrollbar-corner"
+	scrollbarButton     = "-webkit-scrollbar-button"
+	webkitResizer       = "-webkit-resizer"
 )
 
 // The parts of the controls drawn from their CSS.
@@ -199,17 +201,18 @@ const (
 	partCornerPresent
 	partEnabled
 	partNoButton
-	// A hovered and a pressed part: a control's, from under the pointer;
-	// no part of ui's bars is ever in them.
+	// A hovered and a pressed part, a bar's or a control's, from under
+	// the pointer.
 	partHover
 	partActive
-	// The states no part of ui's bars is ever in: buttons, an inactive
-	// window's bars.
 	partDecrement
 	partIncrement
+	// The states no part of ui's bars is ever in: the buttons Chrome on
+	// macOS never places itself, and a bar that can't scroll.
 	partSingleButton
 	partDoubleButton
 	partDisabled
+	// partWindowInactive is read as the selector's :window-inactive.
 	partWindowInactive
 )
 
@@ -247,7 +250,7 @@ func ownPart(name string) bool {
 // scrollbarPart reports whether name is a part of a scrollbar, which
 // takes the pseudo-classes of partStates.
 func scrollbarPart(name string) bool {
-	return strings.HasPrefix(name, webkitScrollbar) || name == "-webkit-resizer"
+	return strings.HasPrefix(name, webkitScrollbar) || name == webkitResizer
 }
 
 // controlPart reports whether name is a part of a range, a progress or a

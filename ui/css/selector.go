@@ -827,6 +827,7 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 	cs, s.native = nativeOf(cs)
 	cs, s.part = partStatesOf(cs)
 	cs, s.inactive = windowInactive(cs)
+	s.part, s.inactive = s.part&^partWindowInactive, s.inactive || s.part&partWindowInactive != 0
 	name, n, err := pseudoElementAt(cs)
 	if err != nil {
 		return Selector{}, err

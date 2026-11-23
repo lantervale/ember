@@ -3187,6 +3187,10 @@ func (t *tree) writeText(n *node) {
 	f := n.final
 	inset := f.padding.add(f.border)
 	content := f.size.w - inset.horizontal() - f.scrollbar.w
+	if !frameOf(n).Vertical() {
+		ge := gutterEdges(n.st, point{x: f.scrollbar.w, y: f.scrollbar.h})
+		inset.l, inset.r = inset.l+ge.l, inset.r+ge.r
+	}
 	if cs := n.columns; cs != nil {
 		content = cs.width
 	}

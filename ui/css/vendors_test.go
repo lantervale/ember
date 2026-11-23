@@ -171,7 +171,7 @@ func TestWebkitSelectors(t *testing.T) {
 		"::-webkit-scrollbar { width: 8px }":               "*::-webkit-scrollbar { width: 8px; }\n",
 		"p, ::-webkit-scrollbar-thumb:vertical, a { color: #f00 }": "p, *::-webkit-scrollbar-thumb:vertical, " +
 			"a { color: #f00; }\n",
-		"::-webkit-scrollbar-button, p { color: #f00 }":  "p { color: #f00; }\n",
+		"::-webkit-scrollbar-button, p { color: #f00 }":  "*::-webkit-scrollbar-button, p { color: #f00; }\n",
 		"::-webkit-search-decoration, p { color: #f00 }": "p { color: #f00; }\n",
 		"input:-webkit-autofill, p { color: #f00 }":      "p { color: #f00; }\n",
 		"p:-webkit-full-screen { color: #f00 }":          "",

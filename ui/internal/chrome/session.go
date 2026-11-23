@@ -84,9 +84,10 @@ func Serve(t testing.TB, d *ui.Document, files map[string][]byte,
 }
 
 // Open opens url, served from this machine, in a viewport of size points
-// at scale device pixels a point, and waits for its load event. It skips
-// the test where Go can't hand Chrome its pipe (Windows).
-func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
+// at scale device pixels a point, Chrome run with flags besides its own,
+// and waits for its load event. It skips the test where Go can't hand
+// Chrome its pipe (Windows).
+func Open(t testing.TB, url string, size geom.Vec2, scale float32, flags ...string) *Session {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("chrome: no DevTools pipe on Windows")
@@ -107,12 +108,12 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32) *Session {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	//nolint:gosec // the Chrome found on this machine, run on our own page
-	cmd := exec.CommandContext(ctx, browser(), "--headless=new", "--remote-debugging-pipe",
+	cmd := exec.CommandContext(ctx, browser(), append(flags, "--headless=new", "--remote-debugging-pipe",
 		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
 		"--user-data-dir="+filepath.Join(dir, "profile"),
 		// Headless Chrome loads lazy pictures at once unless told.
 		"--blink-settings=lazyLoadEnabled=true",
-		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)), "about:blank")
+		fmt.Sprintf("--window-size=%d,%d", int(size.X), int(size.Y)), "about:blank")...)
 	cmd.ExtraFiles = []*os.File{toChrome, fromChrome}
 	if err = cmd.Start(); err != nil {
 		cancel()

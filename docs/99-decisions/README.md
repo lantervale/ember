@@ -200,6 +200,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0195 | [line-break strictness reclasses characters before UAX #14](0195-line-break-strictness-reclasses-characters-before-uax-14.md) | rendering |
 | 0196 | [Two ASCII characters break by Chrome's table, measured in Chrome](0196-two-ascii-characters-break-by-chromes-table-measured-in-chrome.md) | rendering |
 | 0197 | [Text right to left and sideways is shaped as one, and a reshaped end keeps its joins](0197-text-right-to-left-and-sideways-is-shaped-as-one-and-a-reshaped-end-keeps-its-joins.md) | api |
+| 0198 | [Scrollbar parts take the pointer's states, and gutters scroll as Chrome's](0198-scrollbar-parts-take-the-pointers-states-and-gutters-scroll-as-chromes.md) | api |
 | 0199 | [A control's parts are hovered and pressed as Chrome's shadow elements](0199-a-controls-parts-are-hovered-and-pressed-as-chromes-shadow-elements.md) | api |
 | 0201 | [An optgroup is a label row of a select's list](0201-an-optgroup-is-a-label-row-of-a-selects-list.md) | api |
 | 0202 | [A select with multiple or a size is a listbox of rows in the page](0202-a-select-with-multiple-or-a-size-is-a-listbox-of-rows-in-the-page.md) | api |

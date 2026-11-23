@@ -405,7 +405,7 @@ const (
 // marks writes the attributes standing for what ui's sheets read of n
 // that Chrome's can't: scrollbars of its own, appearance: none, a listbox.
 func marks(n *dom.Node, write func(name, value string)) {
-	if st := dom.Data(n).Style; st != nil && st.Scrollbar != nil {
+	if styledBars(n) {
 		write("data-ember-bars", "")
 	}
 	if bare(n) {
@@ -674,9 +674,22 @@ var pseudoClasses = regexp.MustCompile(`:(hover|active|focus-visible|focus-withi
 // states makes css's :hover, :active, :focus, :focus-visible,
 // :focus-within and :target also match the elements export marks as in
 // that state, so Chrome draws a pointer's or the focus's look, or a
-// fragment's, in a still page.
+// fragment's, in a still page. Those of a scrollbar's part are its own,
+// which Chrome's pointer alone puts it in, and stay as they are.
 func states(css string) string {
-	return pseudoClasses.ReplaceAllString(css, ":is(:$1, [data-ember-$1])")
+	var b strings.Builder
+	last := 0
+	for _, m := range pseudoClasses.FindAllStringSubmatchIndex(css, -1) {
+		b.WriteString(css[last:m[0]])
+		last = m[1]
+		compound := css[strings.LastIndexAny(css[:m[0]], " ,{}>+~\t\n")+1 : m[0]]
+		if strings.Contains(compound, "::-webkit-") {
+			b.WriteString(css[m[0]:m[1]])
+			continue
+		}
+		b.WriteString(":is(:" + css[m[2]:m[3]] + ", [data-ember-" + css[m[2]:m[3]] + "])")
+	}
+	return b.String() + css[last:]
 }
 
 // showModals opens with showModal the dialogs the Document has open modal,
@@ -799,6 +812,26 @@ const thumbs = ownBars + "::-webkit-scrollbar-thumb { background-color: rgba(255
 	ownBars + "::-webkit-scrollbar-thumb:horizontal { border-width: 7px 4px 2px 4px; " +
 	"border-radius: 7px / 10px 10px 5px 5px; }\n" +
 	ownBars + "::-webkit-scrollbar-corner { background: transparent; }\n"
+
+// styledBars reports whether n's bars are drawn from its sheets, or n is
+// the root or body of a Document whose viewport's bars their rules
+// style: both then go without ui's look, so Chrome takes the viewport's
+// from body's rules, else the root's.
+func styledBars(n *ui.Node) bool {
+	st := dom.Data(n).Style
+	if st == nil {
+		return false
+	}
+	if st.Scrollbar != nil || st.ViewportBars != nil {
+		return true
+	}
+	if p := n.Parent(); n.Tag() == dom.Body && p != nil {
+		if ps := dom.Data(p).Style; ps != nil && ps.ViewportBars != nil {
+			return true
+		}
+	}
+	return false
+}
 
 // ownBars keeps ui's look off the bars an element's sheets style
 // (data-ember-bars), which Chrome draws from those sheets alone, as paint does.

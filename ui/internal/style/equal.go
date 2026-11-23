@@ -57,8 +57,9 @@ func (b *Box) equal(o *Box) bool {
 		b.GutterStable == o.GutterStable &&
 		b.GutterBothEdges == o.GutterBothEdges &&
 		b.ScrollbarNone == o.ScrollbarNone &&
+		b.ScrollbarThin == o.ScrollbarThin &&
 		b.ScrollbarOverlay == o.ScrollbarOverlay &&
-		b.Viewport.Equal(o.Viewport) &&
+		b.Viewport.Equal(o.Viewport) && b.ViewportBars.Equal(o.ViewportBars) &&
 		b.OverflowPropagated == o.OverflowPropagated &&
 		b.ZIndex == o.ZIndex &&
 		b.ZAuto == o.ZAuto &&
@@ -221,6 +222,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Scrollbar.Equal(o.Scrollbar) &&
 		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
 		l.ScrollbarColored == o.ScrollbarColored &&
+		l.Resizable == o.Resizable && l.Resizer.Equal(o.Resizer) &&
 		sameSliceFunc(l.BackgroundImages, o.BackgroundImages, (*Image).equal) &&
 		sameSlice(l.BackgroundSizes, o.BackgroundSizes) &&
 		sameSlice(l.BackgroundRepeats, o.BackgroundRepeats) &&
