@@ -17,7 +17,7 @@ func wrapped(w float32, ws style.WrapStyle) func(*style.Computed) {
 	}
 }
 
-func trimmed(ls []string) []string {
+func spaceless(ls []string) []string {
 	for i, l := range ls {
 		ls[i] = strings.TrimSpace(l)
 	}
@@ -27,14 +27,14 @@ func trimmed(ls []string) []string {
 func TestBalanceEvensTheLines(t *testing.T) {
 	p := el(dom.P, wrapped(150, style.WrapBalance), text("aa bb cc dd ee ff gg hh"))
 	tr := lay(el(dom.Div, block, p), 200)
-	assert.Equal(t, []string{"aa bb cc dd", "ee ff gg hh"}, trimmed(lines(tr.Of[p])),
+	assert.Equal(t, []string{"aa bb cc dd", "ee ff gg hh"}, spaceless(lines(tr.Of[p])),
 		"greedy breaks after ee, two lines of 140 and 80; balanced, two of 110")
 }
 
 func TestBalanceBisectsAFewBreaks(t *testing.T) {
 	p := el(dom.P, wrapped(150, style.WrapBalance), text("aaaaaa bbbbbb cc"))
 	tr := lay(el(dom.Div, block, p), 200)
-	assert.Equal(t, []string{"aaaaaa", "bbbbbb cc"}, trimmed(lines(tr.Of[p])),
+	assert.Equal(t, []string{"aaaaaa", "bbbbbb cc"}, spaceless(lines(tr.Of[p])),
 		"two places to break are too few to score: the narrowest width keeping two lines")
 }
 
@@ -49,14 +49,14 @@ func TestBalanceLeavesLongParagraphs(t *testing.T) {
 func TestPrettyAvoidsAShortLastLine(t *testing.T) {
 	p := el(dom.P, wrapped(100, style.WrapPretty), text("aaaaa bbb cccc ddd ee"))
 	tr := lay(el(dom.Div, block, p), 200)
-	assert.Equal(t, []string{"aaaaa", "bbb cccc", "ddd ee"}, trimmed(lines(tr.Of[p])),
+	assert.Equal(t, []string{"aaaaa", "bbb cccc", "ddd ee"}, spaceless(lines(tr.Of[p])),
 		"greedy leaves ee alone on the last line")
 }
 
 func TestPrettyKeepsALongEnoughLastLine(t *testing.T) {
 	p := el(dom.P, wrapped(100, style.WrapPretty), text("aaaa bbbb cccc ddd"))
 	tr := lay(el(dom.Div, block, p), 200)
-	assert.Equal(t, []string{"aaaa bbbb", "cccc ddd"}, trimmed(lines(tr.Of[p])))
+	assert.Equal(t, []string{"aaaa bbbb", "cccc ddd"}, spaceless(lines(tr.Of[p])))
 }
 
 func TestSoftHyphensBreakWithAHyphen(t *testing.T) {
@@ -73,6 +73,37 @@ func TestHyphensNoneKeepsWordsWhole(t *testing.T) {
 	p := el(dom.P, func(st *style.Computed) { width(50)(st); st.Hyphens = style.HyphensNone }, text("aaa­bbb"))
 	tr := lay(el(dom.Div, block, p), 200)
 	assert.Equal(t, []string{"aaabbb"}, lines(tr.Of[p]))
+}
+
+func exToBaseline(st *style.Computed) {
+	st.TextBoxTrim = style.TrimBoth
+	st.TextBoxEdge = style.TextBoxEdge{Over: style.EdgeEx, Under: style.EdgeAlphabetic, Named: true}
+}
+
+func TestTextBoxTrimCutsTheLinesToTheirEdges(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) { block(st); exToBaseline(st) }, text("HH"))
+	q := el(dom.P, func(st *style.Computed) { block(st); st.TextBoxTrim = style.TrimEnd }, text("HH"))
+	tr := lay(el(dom.Div, block, p, q), 200)
+	assert.InDelta(t, 8, tr.Of[p].Size.Y, 0.001, "an x-height of 8 above the baseline, nothing below")
+	assert.InDelta(t, 10, tr.Of[q].Size.Y, 0.001, "auto trims to the text's edges: no leading to trim")
+	run := tr.Of[p].Children[0]
+	assert.InDelta(t, 8, run.Pos.Y+run.Lines[0].Baseline, 0.001, "the baseline at the trimmed bottom")
+}
+
+func TestTextBoxTrimReachesTheFirstAndLastBlocks(t *testing.T) {
+	capToBaseline := func(st *style.Computed) {
+		exToBaseline(st)
+		st.TextBoxEdge.Over = style.EdgeCap
+	}
+	first, middle, last := el(dom.P, block, text("HH")), el(dom.P, block, text("HH")), el(dom.P, block, text("HH"))
+	padded := el(dom.P, func(st *style.Computed) { block(st); st.Padding.Top = style.Px(1) }, text("HH"))
+	div := el(dom.Div, func(st *style.Computed) { block(st); capToBaseline(st) }, first, middle, last)
+	other := el(dom.Div, func(st *style.Computed) { block(st); st.TextBoxTrim = style.TrimStart }, padded)
+	tr := lay(el(dom.Div, block, div, other), 200)
+	assert.InDelta(t, 2, tr.Of[first].Size.Y, 0.001, "the first line, in the first block, trimmed to its cap height")
+	assert.InDelta(t, 10, tr.Of[middle].Size.Y, 0.001)
+	assert.InDelta(t, 8, tr.Of[last].Size.Y, 0.001, "the last line, in the last block, trimmed to its baseline")
+	assert.InDelta(t, 11, tr.Of[padded].Size.Y, 0.001, "the padding keeps the first block's top")
 }
 
 func TestHyphenateCharacterIsShown(t *testing.T) {

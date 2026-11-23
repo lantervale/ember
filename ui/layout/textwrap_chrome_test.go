@@ -175,3 +175,53 @@ func TestSoftHyphensBreakAsChrome(t *testing.T) {
 		})
 	}
 }
+
+func TestTextBoxTrimsAsChrome(t *testing.T) {
+	box := "background: #eee; margin: 4px 0; "
+	cases := map[string]*ui.Document{
+		"edges": page(
+			ui.P(ui.Style(box+"text-box: trim-both cap alphabetic"), ui.Text("Cap to baseline")),
+			ui.P(ui.Style(box+"text-box: trim-both ex alphabetic"), ui.Text("Ex to baseline")),
+			ui.P(ui.Style(box+"text-box: trim-both text"), ui.Text("Text to text")),
+			ui.P(ui.Style(box+"text-box-trim: trim-both"), ui.Text("Auto")),
+			ui.P(ui.Style(box+"text-box: trim-both cap text"), ui.Text("Cap to text")),
+		),
+		"one end": page(
+			ui.P(ui.Style(box+"text-box: trim-start cap alphabetic"), ui.Text("Start only")),
+			ui.P(ui.Style(box+"text-box: trim-end cap alphabetic"), ui.Text("End only")),
+		),
+		"line heights and lines": page(
+			ui.P(ui.Style(box+"line-height: 2; width: 120px; text-box: trim-both cap alphabetic"), ui.Text(sentence)),
+			ui.P(ui.Style(box+"line-height: 10px; text-box: trim-both cap alphabetic"), ui.Text("Tight")),
+			ui.H1(ui.Style(box+"text-box: trim-both cap alphabetic"), ui.Text("A heading")),
+			ui.P(ui.Style(box+"font-size: 30px; line-height: 1.5; text-box: trim-both ex alphabetic"),
+				ui.Text("Big "), ui.Span(ui.Style("font-size: 12px"), ui.Text("small"))),
+		),
+		"padding and borders": page(
+			ui.Div(ui.Style(box+"padding: 10px; border: 2px solid; text-box: trim-both cap alphabetic"),
+				ui.Text("Padded")),
+			ui.Button(ui.Style("text-box: trim-both cap alphabetic; padding: 8px 12px"), ui.Text("Button")),
+		),
+		"blocks inside": page(
+			ui.Div(ui.Style(box+"text-box: trim-both cap alphabetic"),
+				ui.P(ui.Style("margin: 0"), ui.Text("First child")), ui.P(ui.Style("margin: 0"), ui.Text("Last child"))),
+			ui.Div(ui.Style(box+"text-box: trim-both cap alphabetic"),
+				ui.Div(ui.Style("padding-top: 1px"), ui.Text("Padded child")), ui.Div(ui.Text("Last"))),
+		),
+		"inline boxes": page(
+			ui.P(ui.Text("A "), ui.Span(ui.Style("background: #ccc; text-box: trim-both cap alphabetic"),
+				ui.Text("trimmed span")), ui.Text(" in a line")),
+		),
+		"inherited edge, trim not": page(
+			ui.Div(ui.Style("text-box-edge: cap alphabetic"),
+				ui.P(ui.Style(box+"text-box-trim: trim-both"), ui.Text("Edge from the parent"))),
+		),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) {
+			r := chrome.Match(t, d, geom.V2(800, 600))
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+			matchText(t, d, geom.V2(800, 600))
+		})
+	}
+}

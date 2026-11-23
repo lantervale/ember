@@ -2204,10 +2204,113 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, 
 		last = h + lb
 		h += lh
 	}
+	shown := ls
+	if clamp > 0 && clamp < len(ls) {
+		shown = ls[:clamp]
+	}
+	if top, end := t.trims(c, shown); top != 0 || end != 0 {
+		h -= top + end
+		first, last = first-top, last-top
+	}
 	if some(known.h) {
 		h = known.h
 	}
 	return size{w, h}, first, last, len(ls)
+}
+
+// trims is how far text-box-trim moves the owner's content edges in, past the half-leading
+// and the room above and below the text-box-edge its first line's and its last line's
+// root inline boxes keep: off the top of the first line and the bottom of the last.
+func (t *tree) trims(c *inlineContent, ls []line) (top, bottom float32) {
+	if c == nil || len(ls) == 0 {
+		return 0, 0
+	}
+	start, end := trimmed(c.owner)
+	if start == nil && end == nil {
+		return 0, 0
+	}
+	st := c.owner.st
+	m := t.metricsOf(c, st)
+	if start != nil {
+		_, lb := t.lineBox(c, ls[0])
+		top = lb - overEdge(m, start.st.TextBoxEdge)
+	}
+	if end != nil {
+		lh, lb := t.lineBox(c, ls[len(ls)-1])
+		bottom = lh - lb - underEdge(m, end.st.TextBoxEdge)
+	}
+	return top, bottom
+}
+
+// overEdge is how far above the baseline text-box-edge's edge over the text stands in
+// a face of metrics m, and underEdge how far below it its edge under the text does.
+func overEdge(m box.Metrics, e style.TextBoxEdge) float32 {
+	switch {
+	case e.Named && e.Over == style.EdgeCap:
+		return m.CapHeight
+	case e.Named && e.Over == style.EdgeEx:
+		return m.XHeight
+	}
+	return m.Ascent
+}
+
+func underEdge(m box.Metrics, e style.TextBoxEdge) float32 {
+	if e.Named && e.Under == style.EdgeAlphabetic {
+		return 0
+	}
+	return m.Descent
+}
+
+// trimmed is the block whose text-box-trim trims the first line of n's lines, and the
+// one trimming their last, nil for none: n's own, or one round it that n is the first
+// (or the last) block in the flow of, no padding nor border between, as Chrome's first
+// formatted line.
+func trimmed(n *node) (start, end *node) {
+	for k, first, last := n, true, true; k != nil && (first || last); k = k.parent {
+		trim := k.st.TextBoxTrim
+		if first && (trim == style.TrimStart || trim == style.TrimBoth) && start == nil {
+			start = k
+		}
+		if last && (trim == style.TrimEnd || trim == style.TrimBoth) && end == nil {
+			end = k
+		}
+		p := k.parent
+		if p == nil || !flowsBlocks(p) || !inFlow(k) {
+			break
+		}
+		first = first && k.st.Padding.Top.Px == 0 && k.st.Border.Top == 0 && firstInFlow(p) == k
+		last = last && k.st.Padding.Bottom.Px == 0 && k.st.Border.Bottom == 0 && lastInFlow(p) == k
+	}
+	return start, end
+}
+
+// flowsBlocks reports whether n lays its children out as blocks in a flow.
+func flowsBlocks(n *node) bool {
+	d := n.st.Display
+	return n.inline == nil && (d == style.Block || d == style.InlineBlock) && !n.st.Table && n.st.TablePart == 0
+}
+
+func inFlow(n *node) bool {
+	return n.st.Float == style.FloatNone && !outOfFlow(n.st.Position)
+}
+
+// firstInFlow and lastInFlow are n's first and last children in its flow.
+func firstInFlow(n *node) *node {
+	for _, k := range n.kids {
+		if inFlow(k) {
+			return k
+		}
+	}
+	return nil
+}
+
+func lastInFlow(n *node) *node {
+	for i := len(n.kids) - 1; i >= 0; i-- {
+		if inFlow(n.kids[i]) {
+			return n.kids[i]
+		}
+	}
+	return nil
 }
 
 // placeText lays the text out at the owner's content width and places its atomic inlines.
@@ -2653,8 +2756,18 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, 
 			right -= sp.margin.r
 		}
 		m := t.metricsOf(c, sp.st)
-		top := y + lb + sp.shift - m.Ascent - sp.padding.t - sp.border.t
-		bottom := y + lb + sp.shift + m.Descent + sp.padding.b + sp.border.b
+		over, under := m.Ascent, m.Descent
+		switch e := sp.st.TextBoxEdge; sp.st.TextBoxTrim {
+		case style.TrimStart:
+			over = overEdge(m, e)
+		case style.TrimEnd:
+			under = underEdge(m, e)
+		case style.TrimBoth:
+			over, under = overEdge(m, e), underEdge(m, e)
+		case style.TrimNone:
+		}
+		top := y + lb + sp.shift - over - sp.padding.t - sp.border.t
+		bottom := y + lb + sp.shift + under + sp.padding.b + sp.border.b
 		r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
 		if l.phantom {
 			r = geom.Rect{X: left, Y: y}
