@@ -438,6 +438,9 @@ func (t *tree) retireInline(old *node) {
 	for _, s := range c.spans {
 		t.replaced = append(t.replaced, keyed{s.box.Node, s.box})
 	}
+	if c.back != nil {
+		t.replaced = append(t.replaced, keyed{c.back.Node, c.back})
+	}
 }
 
 // sweep takes out of the tree's Of and nodes, once the layout is written, what it no
@@ -836,6 +839,9 @@ func elementBlockLevel(e *dom.Node) bool { return isBlockLevel(styleOf(e)) }
 // that is block-level, as a float is, or an inline element with a float inside.
 func hasBlockChild(items []item) bool {
 	for _, it := range items {
+		if it.text != nil && floatedLetter(it.text) {
+			return true
+		}
 		if it.element != nil {
 			st := styleOf(it.element)
 			if st.Display == style.DisplayNone || outOfFlow(st.Position) {
@@ -850,11 +856,20 @@ func hasBlockChild(items []item) bool {
 	return false
 }
 
+// floatedLetter reports a text node whose first letter a floated ::first-letter takes.
+func floatedLetter(text *dom.Node) bool {
+	g, _ := letterOf(text)
+	return g != nil && styleOf(g).Float != style.FloatNone
+}
+
 // floatInside reports a float under the inline element e, through the inline elements
 // it holds.
 func floatInside(e *dom.Node) bool {
 	for _, c := range e.Flow() {
 		if c.IsText() {
+			if floatedLetter(c) {
+				return true
+			}
 			continue
 		}
 		st := styleOf(c)

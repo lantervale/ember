@@ -86,7 +86,11 @@ func inkOf(e entry, st *style.Computed) geom.Rect {
 // line boxes by up to an em, its shadows included.
 func textInk(e entry, st *style.Computed) geom.Rect {
 	var r geom.Rect
+	reach := max(st.Font.Size, decorationReach(st)) + shadowReach(st.TextShadows)
 	for i, f := range e.b.Lines {
+		if s := f.Style; s != nil {
+			reach = max(reach, max(s.Font.Size, decorationReach(s))+shadowReach(s.TextShadows))
+		}
 		l := geom.Rect{X: e.at.X + f.Rect.X, Y: e.at.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}
 		if i == 0 {
 			r = l
@@ -94,7 +98,7 @@ func textInk(e entry, st *style.Computed) geom.Rect {
 			r = union(r, l)
 		}
 	}
-	return grow(r, max(st.Font.Size, decorationReach(st))+shadowReach(st.TextShadows))
+	return grow(r, reach)
 }
 
 // shadowReach is how far outer shadows reach past their box.

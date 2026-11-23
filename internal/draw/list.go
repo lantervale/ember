@@ -149,6 +149,10 @@ type Batch struct {
 	// Mask, when set, is a pass whose alpha the batch shows through. A
 	// batch with a Mask has no Cut.
 	Mask *render.Texture
+	// Mix, when set, mixes the batch's picture with a backdrop, its second
+	// image, which ToBackdrop takes the List's points to 0–1 of.
+	Mix        Mix
+	ToBackdrop geom.Transform2D
 	// alone keeps the batch to itself: a pass's picture or a render
 	// texture, which the presenter must draw apart.
 	alone bool
@@ -1196,8 +1200,12 @@ func (c *List) Shift(d geom.Vec2) {
 			c.Batches[i].Round.Rect.X += d.X
 			c.Batches[i].Round.Rect.Y += d.Y
 		}
+		back := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: d.Scale(-1)}
 		if cut := &c.Batches[i].Cut; !cut.IsZero() {
-			cut.ToMask = cut.ToMask.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: d.Scale(-1)})
+			cut.ToMask = cut.ToMask.Mul(back)
+		}
+		if b := &c.Batches[i]; b.Mix != 0 {
+			b.ToBackdrop = b.ToBackdrop.Mul(back)
 		}
 	}
 }

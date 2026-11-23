@@ -112,3 +112,50 @@ func TestAPicturesPassesAndEffectsAreKeptFromFrameToFrame(t *testing.T) {
 	assert.Equal(t, targets, []*render.Texture{after[0].Target, after[1].Target}, "the GPU keeps their textures")
 	assert.Equal(t, fx, p.fx, "and the effects their shaders")
 }
+
+// mixing draws a square, splits the picture it is in where a second
+// square is mixed over it, and goes on in the picture's continuation.
+type mixing struct {
+	Item
+	back, front, rest *Picture
+}
+
+func (m *mixing) Draw(c *Canvas) {
+	c.BeginPicture()
+	c.Rect(geom.Rect{X: 10, Y: 10, W: 20, H: 20}, color.White)
+	m.back = c.EndPicture(0)
+	c.BeginPicture()
+	c.DrawPicture(m.back)
+	c.BeginPicture()
+	c.Rect(geom.Rect{X: 20, Y: 20, W: 20, H: 20}, color.White)
+	m.front = c.EndPicture(0)
+	c.DrawPictureOver(m.front, m.back, MixMultiply)
+	m.rest = c.EndPicture(0)
+	c.DrawPicture(m.rest)
+}
+
+func TestAPictureMixedOverAnotherReadsItAsItsBackdrop(t *testing.T) {
+	w, win, front := app()
+	m := &mixing{Item: Base()}
+	win.Add(Build(m, "mixing"))
+	w.RunFrames(1)
+
+	passes := draw.PassesFor(w, win)
+	require.Len(t, passes, 3)
+	assert.Equal(t, []*draw.Pass{m.back.pass, m.front.pass, m.rest.pass}, passes,
+		"each picture after those it shows and mixes with")
+	shown := m.rest.pass.List.Batches
+	require.Len(t, shown, 2)
+	b := shown[1]
+	assert.Equal(t, draw.Mix(MixMultiply), b.Mix)
+	assert.Equal(t, m.front.pass.Target, b.Images[0])
+	assert.Equal(t, m.back.pass.Target, b.Images[1], "the backdrop, its second image")
+	at := m.rest.Rect()
+	corner := b.ToBackdrop.Xform(geom.V2(m.back.Rect().X-at.X, m.back.Rect().Y-at.Y))
+	assert.InDelta(t, 0, corner.X, 1e-5, "the backdrop's corner, in the cropped continuation's space")
+	assert.InDelta(t, 0, corner.Y, 1e-5)
+	far := b.ToBackdrop.Xform(geom.V2(m.back.Rect().X+m.back.Rect().W-at.X, m.back.Rect().Y+m.back.Rect().H-at.Y))
+	assert.InDelta(t, 1, far.X, 1e-5)
+	assert.InDelta(t, 1, far.Y, 1e-5)
+	assert.Equal(t, m.rest.pass.Target, front.Batches[0].Image())
+}
