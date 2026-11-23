@@ -183,6 +183,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0179 | [A collapsed column narrows a stretched table, but a flex row's](0179-a-collapsed-column-narrows-a-stretched-table-but-a-flex-rows.md) | api |
 | 0181 | [scrollbar-color's bars lie over the content, and both-edges keeps two gutters](0181-scrollbar-color-bars-lie-over-the-content-and-both-edges-keep-two-gutters.md) | api |
 | 0186 | [A variable font's layout is shaped at its instance](0186-a-variable-fonts-layout-is-shaped-at-its-instance.md) | rendering |
+| 0188 | [A styled first line measures its whole block](0188-a-styled-first-line-measures-its-whole-block.md) | api |
 
 ## Writing one
 

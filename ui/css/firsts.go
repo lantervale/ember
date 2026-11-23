@@ -128,10 +128,10 @@ func (r *restyler) setLine(k, block *dom.Node, line *style.Computed) {
 }
 
 // backOf keeps the node of the box behind n's first line while line has a
-// background: the line's style less what Chrome draws of none of it there,
-// its opacity and its shadows.
+// background or a box-shadow: the line's style less its opacity, which
+// Chrome draws nothing by there.
 func (r *restyler) backOf(n *dom.Node, data *dom.Pipeline, line *style.Computed) {
-	if line == nil || line.Background.A <= 0 && len(line.BackgroundImages) == 0 {
+	if line == nil || line.Background.A <= 0 && len(line.BackgroundImages) == 0 && len(line.Shadows) == 0 {
 		if data.LineBack != nil {
 			data.LineBack = nil
 			relayout(n)
@@ -139,7 +139,7 @@ func (r *restyler) backOf(n *dom.Node, data *dom.Pipeline, line *style.Computed)
 		return
 	}
 	st := *line
-	st.Opacity, st.Shadows = 1, nil
+	st.Opacity = 1
 	g := data.LineBack
 	if g == nil {
 		g = dom.NewGenerated(n, dom.FirstLine)

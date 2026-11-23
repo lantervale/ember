@@ -50,6 +50,7 @@
   "field-case": 0.0082,
   "field-selection": 0.008,
   "first-letter-line": 0.0145,
+  "first-line-more": 0.01,
   "font-smoothing": 0.0064,
   "font-synthesis": 0.02,
   "font-variations": 0.019,

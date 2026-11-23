@@ -458,9 +458,8 @@ func (t *tree) gatherText(c *inlineContent, parent *box.Box, n *dom.Node) {
 	if g, end := letterOf(n, text); g != nil {
 		t.gather(c, parent, []item{{element: g}})
 		skip = int32(utf8.RuneCountInString(text[:end])) //nolint:gosec // a text node's length
-		if text = text[end:]; text == "" {
-			return
-		}
+		// a node of its letter alone keeps a run of no text, which selection finds it by
+		text = text[end:]
 	}
 	b := &box.Box{Kind: box.TextRun, Node: n, Style: st}
 	r := &textRun{box: b, parent: parent, st: st, span: -1, skip: skip, lineSt: st,
@@ -1132,6 +1131,18 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 	}
 }
 
+// measured are the content's lines where nothing wraps, every one in the first line's
+// styles while those stand (useFirst).
+func (c *inlineContent) measured() []line {
+	if !c.firstOn {
+		return c.lines(unbounded)
+	}
+	c.allFirst = true
+	defer func() { c.allFirst = false }()
+	b := breaker{c: c}
+	return b.breakAll(unbounded)
+}
+
 // compress takes the pictures whose width or max-width is a percentage down to their
 // margins: such a picture asks its container for no width at its narrowest, as in CSS
 // Sizing 3 (compressible replaced elements).
@@ -1159,23 +1170,14 @@ func (t *tree) contentWidths(c *inlineContent, parent size) (float32, float32) {
 	// line's styles.
 	was := c.useFirst(true)
 	defer c.useFirst(was)
-	unbroken := func() []line {
-		if !c.firstOn {
-			return c.lines(unbounded)
-		}
-		c.allFirst = true
-		defer func() { c.allFirst = false }()
-		b := breaker{c: c}
-		return b.breakAll(unbounded)
-	}
 	t.sizeAtomics(c, maxContentSpace, parent)
-	for _, l := range unbroken() {
+	for _, l := range c.measured() {
 		maxW = max(maxW, l.x+l.width)
 	}
 	t.sizeAtomics(c, minContentSpace, parent)
 	c.compress()
 	if !c.anyWraps() {
-		for _, l := range unbroken() {
+		for _, l := range c.measured() {
 			minW = max(minW, l.x+l.width)
 		}
 		return minW, maxW

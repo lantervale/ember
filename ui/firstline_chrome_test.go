@@ -186,7 +186,7 @@ p::first-letter { font-size: 32px; }
 .line { white-space: pre-line; }
 .boxed::first-letter { padding: 0 4px; border: 2px solid #357; }
 .drop::first-letter { float: left; font-size: 40px; line-height: 1; }
-`), ui.WithTranslator(firstWords))
+`), ui.WithTranslator(translator{"greeting": "Willkommen", "quote": "«Ça va»", "night": "Úlfur"}))
 	d.Body().Append(
 		ui.P(ui.Class("pre"), ui.Text("   Lantern "), ui.Span(ui.Text("light"))),
 		ui.P(ui.Class("pre"), ui.Text("  “Well” "), ui.Span(ui.Text("said"))),
@@ -204,9 +204,7 @@ p::first-letter { font-size: 32px; }
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
-// firstWords says a few words otherwise, some starting with punctuation.
-var firstWords = translator{"greeting": "Willkommen", "quote": "«Ça va»", "night": "Úlfur"}
-
+// translator says a few words otherwise.
 type translator map[string]string
 
 func (tr translator) Tr(m string) string {

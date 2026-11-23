@@ -20,11 +20,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `text-spacing-trim` and `text-autospace: normal` | read and computed as Chrome's, laid out as `normal` and `no-autospace`: the full-width punctuation and the space between ideographs and letters are left as the face draws them |
 | `text-box-trim` on a flex or grid container, a table cell and columns, and a first line the block's first float or inline block holds | not compared with Chrome: trimmed as a block container's own lines, the propagation going into blocks of a block flow alone | read, and lines break as `auto`: they differ only on the small kana and the punctuation of Chinese and Japanese |
 | a drag's scroll sideways | a drag past an edge scrolls up and down only |
-| a press or a drag on a `::first-letter`, and a text node that is its first letter alone | the letter is no place the pointer reaches: a press there takes the nearest character of the text beside it; a node of one letter is neither selected nor copied |
 | `initial-letter` on an element (the first inline child of a block), `initial-letter-align`, and a drop cap in vertical text | not read: only a `::first-letter` is made a drop cap, its letter's ink measured in its first face |
-| `::first-line`'s `opacity`, `box-shadow`, `visibility`, `vertical-align` | read, and they change nothing |
-| a first letter in text a translation changes; one after spaces `white-space` keeps | none is taken; the spaces are dropped |
-| a block's min-content width under a `::first-line`, and the padding of inline elements in `em` on it | measured in the elements' own styles |
 | `text-decoration-skip-ink: all` | as `auto`: line-throughs go through the ink, where `all` skips it there too |
 | small capitals in a text field, a select's list and a broken picture's alt text | drawn as `normal` there |
 | a face with its own small capitals (`smcp`) | synthesised from its capitals all the same, where Chrome draws the face's own ([decision 0135](../99-decisions/0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md)) |
