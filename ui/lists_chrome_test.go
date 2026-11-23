@@ -181,13 +181,15 @@ body { margin: 8px; font-size: 16px; }
 // TestCheckboxesAndRadiosTakeBeforeAndAfterAsChromes gives a checkbox
 // and a radio inline ::before and ::after boxes, laid out in their box and
 // past it as in Chrome; a range, a progress bar, a meter and a text field
-// take none.
+// take none. The text field has a width: left to itself it is as wide as
+// the machine's system font makes Chrome's.
 func TestCheckboxesAndRadiosTakeBeforeAndAfterAsChromes(t *testing.T) {
 	for _, display := range []string{"inline", "inline-block; width: 10px; height: 6px"} {
 		t.Run(display, func(t *testing.T) {
 			d := ui.NewDocument(ui.CSS(`
 body { margin: 8px; font-size: 16px; }
 p { margin: 0 0 10px; }
+input[type=text] { width: 120px; }
 input::before { content: "B"; display: ` + display + `; }
 input::after { content: "A"; display: ` + display + `; }
 input:checked::after { content: "checked"; }
