@@ -712,14 +712,17 @@ type Look struct {
 	// BackgroundBlends are background-blend-mode's: how each layer mixes
 	// with the layers and the colour under it.
 	BackgroundBlends []BlendMode
-	// MaskImage is mask-image: the picture whose alpha is the shape the
-	// background colour is painted through (decision 0093), sized, tiled
-	// and placed in the border box by MaskSize, MaskRepeat and
-	// MaskPosition as a background image is by its own.
-	MaskImage    Image
-	MaskSize     BackgroundSize
-	MaskRepeat   BackgroundRepeat
-	MaskPosition BackgroundPosition
+	// MaskImages are mask-image's layers, the first on top, and the other
+	// lists their longhands', read as the background's are (MaskLayer):
+	// the pictures whose alpha, or luminance, the element and all it holds
+	// show through (decision 0133).
+	MaskImages             []Image
+	MaskSizes              []BackgroundSize
+	MaskRepeats            []BackgroundRepeat
+	MaskPositions          []BackgroundPosition
+	MaskOrigins, MaskClips []BackgroundBox
+	MaskModes              []MaskMode
+	MaskComposites         []MaskComposite
 	// ClipPath is clip-path: the shape the element and all it holds are
 	// painted and hit in (decision 0119).
 	ClipPath ClipPath
@@ -952,6 +955,43 @@ const (
 	UnderBorder
 	UnderPadding
 	UnderContent
+	// FillBox, StrokeBox and ViewBox are an SVG shape's boxes a mask may
+	// name: an element's content box for the first, its border box for
+	// the others.
+	FillBox
+	StrokeBox
+	ViewBox
+	// NoClip is mask-clip: no-clip, a mask shown wherever the element
+	// draws.
+	NoClip
+)
+
+// MaskMode is mask-mode: what of a mask layer's picture the element
+// shows through.
+type MaskMode uint8
+
+const (
+	// MaskMatchSource is a picture's alpha, as no layer of ui is an SVG
+	// mask element.
+	MaskMatchSource MaskMode = iota
+	MaskAlpha
+	// MaskLuminance is its colours' luminance times their alpha.
+	MaskLuminance
+)
+
+// MaskComposite is mask-composite: how a mask layer joins the layers
+// under it.
+type MaskComposite uint8
+
+const (
+	// CompositeAdd lays it over them.
+	CompositeAdd MaskComposite = iota
+	// CompositeSubtract keeps it where they are clear.
+	CompositeSubtract
+	// CompositeIntersect keeps it where they are opaque.
+	CompositeIntersect
+	// CompositeExclude keeps it and them where the other is clear.
+	CompositeExclude
 )
 
 // BackgroundPosition is background-position: X from the left edge, or from
@@ -1053,6 +1093,45 @@ func (l *Look) BackgroundLayer(i int) BackgroundLayer {
 		Clip:       layerItem(l.BackgroundClips, i, InitialBox),
 		Blend:      layerItem(l.BackgroundBlends, i, BlendNormal),
 	}
+}
+
+// MaskLayer is one layer of a mask: its picture placed as a background
+// layer's is, in the border box by default, what of it shows and how it
+// joins the layers under it.
+type MaskLayer struct {
+	BackgroundLayer
+	Mode      MaskMode
+	Composite MaskComposite
+}
+
+// MaskLayers is how many layers the mask has, one for mask-image: none.
+func (l *Look) MaskLayers() int { return max(len(l.MaskImages), 1) }
+
+// MaskLayer is the mask's layer i, 0 on top.
+func (l *Look) MaskLayer(i int) MaskLayer {
+	return MaskLayer{
+		BackgroundLayer: BackgroundLayer{
+			Image:    layerItem(l.MaskImages, i, Image{}),
+			Size:     layerItem(l.MaskSizes, i, BackgroundSize{}),
+			Repeat:   layerItem(l.MaskRepeats, i, BackgroundRepeat{}),
+			Position: layerItem(l.MaskPositions, i, TopLeft),
+			Origin:   layerItem(l.MaskOrigins, i, InitialBox),
+			Clip:     layerItem(l.MaskClips, i, InitialBox),
+		},
+		Mode:      layerItem(l.MaskModes, i, MaskMatchSource),
+		Composite: layerItem(l.MaskComposites, i, CompositeAdd),
+	}
+}
+
+// Masked reports whether the element is masked: a layer of its mask has
+// a picture, there or not.
+func (l *Look) Masked() bool {
+	for i := range l.MaskImages {
+		if img := &l.MaskImages[i]; img.Source != "" || img.Gradient != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // HasBackgroundImage reports whether a layer has a picture.

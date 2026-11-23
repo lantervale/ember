@@ -17,11 +17,11 @@ func isolates(st *style.Computed) bool { return startsContext(st) || st.Isolate 
 
 // backdropRoot reports whether an element of style st is where the
 // backdrop its descendants' backdrop filters read stops, as Chrome's
-// Backdrop Root: filtered, translucent, clipped by a clip-path, mixed, or
-// filtering its own backdrop.
+// Backdrop Root: filtered, translucent, clipped by a clip-path, masked,
+// mixed, or filtering its own backdrop.
 func backdropRoot(st *style.Computed) bool {
-	return len(st.Filters) > 0 || st.Opacity < 1 || !st.ClipPath.None() || st.BlendMode != style.BlendNormal ||
-		len(st.BackdropFilters) > 0
+	return len(st.Filters) > 0 || st.Opacity < 1 || !st.ClipPath.None() || st.Masked() ||
+		st.BlendMode != style.BlendNormal || len(st.BackdropFilters) > 0
 }
 
 // grouping is an element drawn as a picture of its own, whole: shown at
@@ -33,12 +33,14 @@ type grouping struct {
 	mix      twod.Mix
 	backdrop *twod.Picture
 	floor    *clip
+	// filters is set while the backdrop is still to be shown filtered.
+	filters bool
 }
 
 // beginGroup opens what e needs drawn apart before its filters do: for a
 // blend mode or a backdrop filter, the picture of its group so far, the
 // backdrop, ended and shown again at the start of the group's next
-// picture, and the backdrop shown filtered in e's border box; and one
+// picture, to be shown filtered in e's border box by showBackdrop; and one
 // picture round e and all it holds when e mixes, is a group, or is
 // translucent and drawn as a picture, which then shows at alpha, its
 // content at 1. None when the surface draws no pictures or a scan is
@@ -73,11 +75,19 @@ func (p *painter) beginGroup(e entry, st *style.Computed, alpha *float32) *group
 		g.alpha, *alpha = *alpha, 1
 		p.floor = e.clip
 	}
-	if filters {
-		p.s.SetTransform(xf)
-		p.backdropFilter(on, e, st, g.backdrop)
-	}
+	g.filters = filters
 	return g
+}
+
+// showBackdrop shows the backdrop g ended, filtered by st's backdrop
+// filters, in e's border box: after beginMask, so e's mask cuts it too.
+func (p *painter) showBackdrop(g *grouping, e entry, st *style.Computed) {
+	if g == nil || !g.filters {
+		return
+	}
+	g.filters = false
+	p.use(nil)
+	p.backdropFilter(g.on, e, st, g.backdrop)
 }
 
 // endGroup shows the picture g drew e in, in the clip c.

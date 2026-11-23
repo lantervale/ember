@@ -48,6 +48,10 @@ func TestALinearGradientsStopsKeepTheirPositions(t *testing.T) {
 	assert.Equal(t, hex("#0f0"), g.Stops[2].Color)
 	assert.Equal(t, float32(90), g.Stops[3].At.Percent)
 	assert.False(t, g.Stops[4].Placed)
+
+	g = gradientOf(t, "background-image: linear-gradient(#000 0 0)")
+	require.Len(t, g.Stops, 2, "one colour with two positions is the two stops a gradient needs")
+	assert.Equal(t, g.Stops[0].Color, g.Stops[1].Color)
 }
 
 func TestABadLinearGradientIsDropped(t *testing.T) {

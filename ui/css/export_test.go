@@ -1,6 +1,7 @@
 package css
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
@@ -19,7 +20,9 @@ func WebkitTable() (map[string]string, map[string]string) {
 	for name, as := range webkit.renamed {
 		plain[name] = as
 	}
-	return plain, webkit.own
+	own := maps.Clone(webkit.own)
+	maps.Copy(own, webkit.legacy)
+	return plain, own
 }
 
 // WebkitValues are the -webkit- values read as a plain one.
