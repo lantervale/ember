@@ -6,12 +6,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 
 | Missing | Today |
 |---|---|
-| a selected empty line | not drawn, where Chrome draws a space-wide mark at its start |
-| a double click on a word cut by an element (`wo<b>rd</b>`) | takes the part in the text node pressed |
-| the selection of an unfocused window | drawn as a focused one's, where Chrome greys it; `::selection:window-inactive` is refused |
-| `::selection` with `text-decoration`, `text-shadow`, `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning; Chrome reads them |
-| `::selection`'s `color` in a text field | the field's text keeps its colour; only `background-color` applies |
-| the default selection colour on Windows and Linux | macOS's blue everywhere |
+| `::selection` with `-webkit-text-stroke`, `-webkit-text-fill-color` | refused with a warning, as ui draws neither on any text; Chrome reads them |
+| the default selection colour on Windows and Linux, focused or not | macOS's blue everywhere, and its grey in an inactive window: the machines here run Chrome on macOS only, which can't say what the others draw |
+| a focused field's caret beside its selection | drawn at the selection's moving end, where Chrome draws none while characters are selected |
 | selecting by touch, dragging selected text, a rich (HTML) copy | none: the pointer and the keys select, and the clipboard gets plain text |
 | text of a size between two whole ones (13.44px) | measured and placed at its size, drawn from the glyphs of the nearest whole size scaled to it: a little softer than Chrome's |
 | a selected tab or carriage return in text that keeps them | the selection is drawn on the text around it, not over the tab's room |
@@ -213,7 +210,9 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 Things built and tested, with a part no test against Chrome covers yet.
 
 - `background-size: cover` and `contain` under a Document `Zoom`.
-- Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press, a double click and Shift with a key reach are tested in ember alone; the copied text, the rectangles and the picture are compared with Chrome's.
+- Selecting with the pointer and the keys: Chrome cannot be driven headless, so the places a press and Shift with a key reach are tested in ember alone, a double click's word against the one Chrome's `Selection.modify` reaches; the copied text, the rectangles and the picture are compared with Chrome's.
+- A selection in an inactive window: headless Chrome's page is neither focused nor not, its `::selection:window-inactive` holding in one run and not in the next, so the grey and the rules are tested in ember alone, with Chrome asked only which selectors it reads.
+- The Linux and Windows thresholds of the `selection-marks` and `field-selection` pages: measured on macOS only.
 - `user-select: auto` set inside `user-select: all`, read as `text`.
 - `app-region`: headless Chrome has no window to drag, so drag regions are tested in ember alone; the computed values are compared with Chrome's.
 - Pointer and key callbacks, `doc.Blur()`, the title tooltip and `env(titlebar-area-*)` with a title bar: headless Chrome is not driven by input and has no window controls overlay, so they are tested in ember alone; `env()` without an overlay is compared with Chrome.

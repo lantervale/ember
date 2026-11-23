@@ -29,6 +29,10 @@ type measures struct {
 	// dark is whether the Document prefers the dark scheme, and
 	// prefersRead whether an element took its scheme from it since then.
 	dark, prefersRead bool
+	// inactive is whether the Document's window is inactive, and
+	// inactiveRead whether a :window-inactive was matched since the tree
+	// was last styled whole.
+	inactive, inactiveRead bool
 	// containers are the elements styled as size containers, sizes the
 	// content boxes of those laid out, read those a container unit
 	// measured, and requery those whose descendants the next Compute

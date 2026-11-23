@@ -1533,6 +1533,10 @@ func (t *tree) lineHeight(c *inlineContent, st *style.Computed) (float32, float3
 	return lineHeightOf(t.metricsOf(c, st), st)
 }
 
+// LineHeight is the line height a face with metrics m takes in a run of style st, and the
+// baseline's place in it.
+func LineHeight(m box.Metrics, st *style.Computed) (float32, float32) { return lineHeightOf(m, st) }
+
 // lineHeightOf is the line height a face with metrics m takes in a run of style st, and
 // the baseline's place in it.
 func lineHeightOf(m box.Metrics, st *style.Computed) (float32, float32) {

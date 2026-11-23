@@ -168,6 +168,9 @@ type Selector struct {
 	PseudoElement string
 	// pseudoArgs is what a functional pseudo-element was given, as written.
 	pseudoArgs string
+	// inactive is a ::selection's :window-inactive: it matches only while
+	// the Document's window is not the active one.
+	inactive bool
 }
 
 func (s Selector) String() string {
@@ -183,6 +186,9 @@ func (s Selector) String() string {
 		if s.pseudoArgs != "" {
 			b.WriteString("(" + s.pseudoArgs + ")")
 		}
+	}
+	if s.inactive {
+		b.WriteString(":window-inactive")
 	}
 	return b.String()
 }
@@ -781,6 +787,7 @@ func matched(cs []Component) []Component {
 
 func parseComplex(cs []Component) (Selector, *SelectorError) {
 	var s Selector
+	cs, s.inactive = windowInactive(cs)
 	name, n, err := pseudoElementAt(cs)
 	if err != nil {
 		return Selector{}, err
@@ -836,16 +843,27 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 		}
 		s.Combinators = append(s.Combinators, comb)
 	}
+	s.Specificity = s.specificity()
+	return s, nil
+}
+
+// specificity is the selector's: its compounds', a pseudo-element's, and
+// a ::selection's :window-inactive.
+func (s *Selector) specificity() Specificity {
+	var sp Specificity
 	for _, c := range s.Compounds {
-		s.Specificity = s.Specificity.add(c.specificity())
+		sp = sp.add(c.specificity())
 	}
 	if s.PseudoElement != "" {
-		s.Specificity[2]++
+		sp[2]++
+	}
+	if s.inactive {
+		sp[1]++
 	}
 	if s.PseudoElement == beforeMarker || s.PseudoElement == afterMarker {
-		s.Specificity[2]++
+		sp[2]++
 	}
-	return s, nil
+	return sp
 }
 
 func cs0Pos(cs []Component) Pos {
@@ -1011,7 +1029,9 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoRequired}, 2, nil
 	case "optional":
 		return pseudo{kind: pseudoOptional}, 2, nil
-	case "autofill", "-webkit-autofill":
+	case "autofill", "-webkit-autofill", "window-inactive":
+		// matching nothing: no field is filled in, and an element is never
+		// inactive, only its ::selection
 		return pseudo{kind: pseudoVisited}, 2, nil
 	}
 	return pseudo{}, 0, selErr(t, "the :%s pseudo-class is not supported", name)

@@ -183,7 +183,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	}
 	r.env.root = root
 	if stale {
-		r.env.used, r.env.prefersRead, r.env.titleBarRead = 0, false, false
+		r.env.used, r.env.prefersRead, r.env.titleBarRead, r.env.inactiveRead = 0, false, false, false
 	} else if r.anchors && dom.Data(root).Style != nil {
 		r.anchor(root)
 	}
@@ -327,6 +327,8 @@ func paintOnly(c *style.Computed) {
 	c.Color, c.PlaceholderColor, c.SelectionColor, c.AccentColor, c.CaretColor = zero, zero, zero, zero, zero
 	c.HasPlaceholder, c.HasSelection, c.AccentAuto, c.CaretAuto, c.ColorInherited = false, false, false, false, false
 	c.SelectionText, c.HasSelectionText, c.UserSelect = zero, false, 0
+	c.SelectionShadows, c.HasSelectionShadows = nil, false
+	c.SelectionDecoration, c.HasSelectionDecoration = style.TextDecoration{}, false
 	c.TextShadows, c.CurrentColor, c.Vars, c.Backdrop = nil, 0, nil, color.Color{}
 	c.TextDecoration, c.Decorations = style.TextDecoration{}, nil
 	c.ColorScheme, c.Dark = 0, false
@@ -532,6 +534,8 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	// property, as Chrome's highlight pseudo-elements do.
 	c.SelectionColor, c.HasSelection = parent.SelectionColor, parent.HasSelection
 	c.SelectionText, c.HasSelectionText = parent.SelectionText, parent.HasSelectionText
+	c.SelectionShadows, c.HasSelectionShadows = parent.SelectionShadows, parent.HasSelectionShadows
+	c.SelectionDecoration, c.HasSelectionDecoration = parent.SelectionDecoration, parent.HasSelectionDecoration
 	if r.may(n, "selection") {
 		r.selection(x, n)
 	}
@@ -581,6 +585,12 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 	}
 	if r.pm.declared("color") {
 		x.c.SelectionText, x.c.HasSelectionText = sel.Color, true
+	}
+	if r.pm.declared("text-shadow") {
+		x.c.SelectionShadows, x.c.HasSelectionShadows = sel.TextShadows, true
+	}
+	if slices.ContainsFunc(shorthands[shortDecoration], r.pm.declared) {
+		x.c.SelectionDecoration, x.c.HasSelectionDecoration = sel.TextDecoration, true
 	}
 }
 
@@ -686,6 +696,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	}
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
+	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, rtl: casc.rtl}
 	px.customs(casc.custom)
 	for i := range longhands {
