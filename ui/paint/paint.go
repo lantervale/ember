@@ -612,7 +612,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	see := p.sight(inner)
 	for _, c := range run {
 		at := origin.Add(c.Pos)
-		if see.misses(c, at) {
+		if c.Discarded || see.misses(c, at) {
 			continue
 		}
 		p.reached++
@@ -714,7 +714,7 @@ const inkMargin = 48
 func inkReach(st *style.Computed) float32 {
 	r := max(shadowReach(st.Shadows), st.Font.Size+shadowReach(st.TextShadows)) + filterReach(st.Filters)
 	if st.OutlineStyle != style.BorderNone {
-		r = max(r, st.OutlineWidth+max(st.OutlineOffset, 0))
+		r = max(r, outlineReach(st)-st.OutlineOffset+max(st.OutlineOffset, 0))
 	}
 	return r
 }

@@ -22,6 +22,9 @@ type clipShape struct {
 	// boxed is set for a rectangle, inset()'s or a box's, whose right and
 	// bottom edges are out as a box's are.
 	boxed bool
+	// parts, when set, are outlines the mask covers where each of them
+	// does, in place of path: a border's band cut to its side.
+	parts []maskPart
 }
 
 // holds reports whether q is inside the outline, as Chrome hits it: on a
@@ -203,7 +206,12 @@ func (m *maskCache) mask(s *clipShape, k float32) *twod.Texture {
 		c.used = m.tick
 		return c.tex
 	}
-	tex := twod.NewTexture(s.path.Mask(s.bounds, w, h, s.evenOdd))
+	var tex *twod.Texture
+	if len(s.parts) > 0 {
+		tex = twod.NewTexture(partsMask(s.parts, s.bounds, w, h))
+	} else {
+		tex = twod.NewTexture(s.path.Mask(s.bounds, w, h, s.evenOdd))
+	}
 	if m.of == nil {
 		m.of = map[string]*cachedMask{}
 	}
@@ -237,12 +245,22 @@ func (m *maskCache) keyOf(s *clipShape, w, h int) []byte {
 		b = append(b, 1)
 	}
 	f := func(v float32) { b = binary.LittleEndian.AppendUint32(b, math.Float32bits(v)) }
-	for _, c := range s.path.Contours {
-		b = binary.LittleEndian.AppendUint32(b, uint32(len(c))) //nolint:gosec // a contour's length
-		for _, q := range c {
-			f(q.X - s.bounds.X)
-			f(q.Y - s.bounds.Y)
+	path := func(p outline.Path) {
+		for _, c := range p.Contours {
+			b = binary.LittleEndian.AppendUint32(b, uint32(len(c))) //nolint:gosec // a contour's length
+			for _, q := range c {
+				f(q.X - s.bounds.X)
+				f(q.Y - s.bounds.Y)
+			}
 		}
+	}
+	path(s.path)
+	for _, m := range s.parts {
+		b = append(b, 2)
+		if m.evenOdd {
+			b = append(b, 1)
+		}
+		path(m.path)
 	}
 	f(s.bounds.W)
 	f(s.bounds.H)

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <filter id="classic" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+      <feOffset in="blur" dx="3" dy="3" result="moved"/>
+      <feFlood flood-color="#000" flood-opacity=".5"/>
+      <feComposite in2="moved" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="2" dy="4" stdDeviation="2" flood-color="#036" flood-opacity=".7"/></filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="outline" x="-20%" y="-20%" width="140%" height="140%">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="2" result="fat"/>
+      <feFlood flood-color="#fc0"/>
+      <feComposite in2="fat" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="thin"><feMorphology operator="erode" radius="1.5 0"/></filter>
+    <filter id="inner">
+      <feFlood flood-color="#000"/>
+      <feComposite in2="SourceAlpha" operator="out"/>
+      <feGaussianBlur stdDeviation="2"/>
+      <feOffset dx="2" dy="2" result="edge"/>
+      <feComposite in2="SourceAlpha" operator="in"/>
+      <feComposite in2="SourceGraphic" operator="over"/>
+    </filter>
+  </defs>
+  <rect width="120" height="120" fill="#fff"/>
+  <rect x="8" y="8" width="28" height="28" rx="4" fill="#c33" filter="url(#classic)"/>
+  <circle cx="60" cy="22" r="14" fill="#2a7" filter="url(#drop)"/>
+  <path d="M86 34 L100 8 L114 34 Z" fill="#36c" filter="url(#glow)"/>
+  <rect x="10" y="50" width="24" height="20" fill="#333" filter="url(#outline)"/>
+  <g filter="url(#thin)"><rect x="46" y="48" width="28" height="4" fill="#93c"/><rect x="46" y="56" width="4" height="20" fill="#93c"/><rect x="58" y="56" width="16" height="16" fill="#93c"/></g>
+  <circle cx="100" cy="62" r="14" fill="#e60" filter="url(#inner)"/>
+  <g filter="url(#drop)" opacity=".8"><rect x="20" y="90" width="80" height="20" rx="10" fill="#06c"/></g>
+</svg>

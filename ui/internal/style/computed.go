@@ -161,6 +161,10 @@ type Box struct {
 	TablePart TablePart
 	BoxSizing BoxSizing
 	Position  Position
+	// StaticInline is set on an absolutely or fixed positioned box that was
+	// inline-level before it left the flow: its static position is where
+	// it would stand on its line, not below it.
+	StaticInline bool
 	// Float and Clear are float and clear; a float applies to a box in the
 	// flow of a block container, not to a flex or grid item or a box
 	// position takes out of the flow.
@@ -220,6 +224,29 @@ type Box struct {
 	// nil for none: the names an @container rule picks the element by.
 	ContainerType  ContainerType
 	ContainerNames []string
+	// LineClamp is line-clamp: the lines a block container shows, 0 for
+	// none, an ellipsis ending the last when more follows, the content
+	// after it not drawn.
+	LineClamp int
+	// WebkitBox is display: -webkit-box or -webkit-inline-box, laid out
+	// as flex, or as flow-root clamped to WebkitLineClamp lines when
+	// BoxVertical (-webkit-box-orient: vertical) and that is set: Chrome's
+	// line clamp, which draws the content after the clamp.
+	WebkitBox       bool
+	BoxVertical     bool
+	WebkitLineClamp int
+}
+
+// Clamp is how many lines the box shows, 0 for all, and whether the
+// content after them is still drawn.
+func (b *Box) Clamp() (int, bool) {
+	switch {
+	case b.LineClamp > 0:
+		return b.LineClamp, false
+	case b.WebkitBox && b.BoxVertical && b.WebkitLineClamp > 0:
+		return b.WebkitLineClamp, true
+	}
+	return 0, false
 }
 
 // ContainerType is container-type: whether an element is a query
@@ -386,6 +413,16 @@ type Font struct {
 	// Caps is font-variant-caps, which measuring and drawing synthesise
 	// (SmallCaps).
 	Caps FontCaps
+	// Variations are font-variation-settings' axes, in order, a later
+	// one of a tag winning; none for normal.
+	Variations []FontVariation
+}
+
+// FontVariation is a place on one axis of a variable font: a tag, such
+// as "wght", and a value in the axis's units.
+type FontVariation struct {
+	Tag   string
+	Value float32
 }
 
 // FontSynthesis is the faces font-synthesis forbids making up from
@@ -398,6 +435,9 @@ const (
 	NoSyntheticBold FontSynthesis = 1 << iota
 	// NoSyntheticItalic leaves an italic the family lacks upright.
 	NoSyntheticItalic
+	// NoSyntheticSmallCaps leaves the small capitals font-variant-caps
+	// asks for drawn as the letters are.
+	NoSyntheticSmallCaps
 )
 
 // LineHeight is normal, a factor of the font size, or points.
@@ -776,6 +816,9 @@ const (
 	// BorderDouble draws a side as two solid lines, each about a third of
 	// its width, and solid where it is too thin to show the gap.
 	BorderDouble
+	// BorderAuto is outline-style: auto, the focus ring; a border never
+	// takes it.
+	BorderAuto
 )
 
 // Shadow is one box-shadow.

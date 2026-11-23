@@ -3,13 +3,16 @@ package fonts
 import (
 	"fmt"
 	"hash/maphash"
+	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/rivo/uniseg"
 
 	"github.com/lantervale/ember/internal/draw"
+	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 	"golang.org/x/image/font"
@@ -28,6 +31,12 @@ type File struct {
 	state fileState
 	ttf   []byte
 	font  *sfnt.Font
+	// vf is the font's axes and variations, nil for a font that has
+	// none, or no TrueType outlines.
+	vf *varfont.Font
+	// asked is the set's clock when text first needed the file, -1
+	// before the set had one.
+	asked float32
 }
 
 type fileState uint8
@@ -60,6 +69,9 @@ type webFonts struct {
 	chains  map[chainKey]*Chain
 	// gen counts the changes that make every chain stale.
 	gen uint64
+	// now is the clock the faces' periods are timed on, once clocked.
+	now     float32
+	clocked bool
 }
 
 // AddWeb adds a face of family whose file comes later: for the weights
@@ -77,8 +89,12 @@ type Descriptors struct {
 	Italic            bool
 	// Stretch is the width the face is of, a percentage, to StretchMax.
 	Stretch, StretchMax float32
-	Ranges              []Range
-	Look                Look
+	// AutoWeight and AutoStretch are a face that gives no weight or no
+	// width: normal, or a variable font's own.
+	AutoWeight, AutoStretch bool
+	Ranges                  []Range
+	Look                    Look
+	Display                 Display
 }
 
 // Look is how an @font-face has its face measured and drawn: scaled by
@@ -120,6 +136,7 @@ func (s *Set) AddFace(d Descriptors, file *File) *Face {
 	for _, c := range s.known {
 		if c.web == file && c.Family == d.Family && c.Weight == d.Weight && c.WeightMax == d.WeightMax &&
 			c.Italic == d.Italic && c.Stretch == d.Stretch && c.StretchMax == d.StretchMax && c.Look == d.Look &&
+			c.AutoWeight == d.AutoWeight && c.AutoStretch == d.AutoStretch && c.Display == d.Display &&
 			slices.Equal(c.Ranges, d.Ranges) {
 			if !slices.Contains(s.web, c) {
 				s.web = append(s.web, c)
@@ -129,7 +146,8 @@ func (s *Set) AddFace(d Descriptors, file *File) *Face {
 		}
 	}
 	c := &Face{Family: d.Family, Weight: d.Weight, WeightMax: d.WeightMax, Italic: d.Italic, Stretch: d.Stretch,
-		StretchMax: d.StretchMax, Ranges: d.Ranges, Look: d.Look, web: file}
+		StretchMax: d.StretchMax, AutoWeight: d.AutoWeight, AutoStretch: d.AutoStretch, Ranges: d.Ranges, Look: d.Look,
+		Display: d.Display, web: file}
 	if file.state == fileLoaded {
 		c.TTF, c.font, c.upem = file.ttf, file.font, float32(file.font.UnitsPerEm())
 	}
@@ -179,8 +197,13 @@ func (s *Set) Want(file *File) {
 		return
 	}
 	file.state = fileWanted
+	file.asked = -1
+	if s.clocked {
+		file.asked = s.now
+	}
 	s.loading++
 	s.wanted = append(s.wanted, file)
+	s.stale()
 }
 
 // Parse reads a font file and checks it draws, off the frame: what
@@ -216,10 +239,18 @@ func Parse(ttf []byte) (*sfnt.Font, error) {
 func (s *Set) Loaded(file *File, ttf []byte, f *sfnt.Font) {
 	s.settle(file, fileLoaded)
 	file.ttf, file.font = ttf, f
+	if vf, err := varfont.Parse(ttf); err == nil && vf.Variable() {
+		file.vf = vf
+	}
 	for _, c := range s.known {
-		if c.web == file {
-			c.TTF, c.font, c.upem = ttf, f, float32(f.UnitsPerEm())
+		if c.web != file || c.expired {
+			continue
 		}
+		if s.late(c) {
+			c.expired = true
+			continue
+		}
+		c.TTF, c.font, c.upem = ttf, f, float32(f.UnitsPerEm())
 	}
 }
 
@@ -242,18 +273,29 @@ func (c *Face) Web() bool { return c.web != nil }
 // File is the file a face of the web draws from, nil for another.
 func (c *Face) File() *File { return c.web }
 
+// gone reports whether c draws nothing, ever: its file failed, or
+// landed or would land past its swap period.
+func (c *Face) gone() bool { return c.web != nil && (c.web.state == fileFailed || c.expired) }
+
 // covers reports whether c draws r when it has it.
 func (c *Face) covers(r rune) bool { return draw.Covers(c.Ranges, r) }
 
 // Descriptors are the face's descriptors as an @font-face writes them:
 // "font-weight: 400;", and its width, unicode-range, size-adjust,
-// metrics and kerning when it has them.
+// metrics and kerning when it has them; a variable font's weight or
+// width left auto when it gives none.
 func (c *Face) Descriptors() string {
-	out := fmt.Sprintf("font-weight: %d;", c.Weight)
-	if c.WeightMax > c.Weight {
+	var out string
+	_, _, weighs := c.axis("wght")
+	_, _, widens := c.axis("wdth")
+	switch {
+	case c.AutoWeight && weighs:
+	case c.WeightMax > c.Weight:
 		out = fmt.Sprintf("font-weight: %d %d;", c.Weight, c.WeightMax)
+	default:
+		out = fmt.Sprintf("font-weight: %d;", c.Weight)
 	}
-	if lo, hi := c.stretches(); lo != 100 || hi != 100 {
+	if lo, hi := c.stretches(); (lo != 100 || hi != 100) && (!c.AutoStretch || !widens) {
 		out += fmt.Sprintf(" font-stretch: %g%% %g%%;", lo, hi)
 	}
 	if c.Look.SizeAdjust != 0 {
@@ -271,22 +313,94 @@ func (c *Face) Descriptors() string {
 		out += ` font-feature-settings: "kern" 0;`
 	}
 	if len(c.Ranges) == 0 {
-		return out
+		return strings.TrimSpace(out)
 	}
 	ranges := make([]string, len(c.Ranges))
 	for i, r := range c.Ranges {
 		ranges[i] = fmt.Sprintf("U+%X-%X", r.Lo, r.Hi)
 	}
-	return out + " unicode-range: " + strings.Join(ranges, ", ") + ";"
+	return strings.TrimSpace(out + " unicode-range: " + strings.Join(ranges, ", ") + ";")
 }
 
-// stretches are the widths the face covers, 100 for one that says none.
+// stretches are the widths the face covers, 100 for one that says none
+// and a variable font's own for one whose width is auto.
 func (c *Face) stretches() (float32, float32) {
+	if c.AutoStretch {
+		if lo, hi, ok := c.axis("wdth"); ok {
+			return lo, hi
+		}
+	}
 	lo, hi := c.Stretch, c.StretchMax
 	if lo == 0 {
 		lo = 100
 	}
 	return lo, max(lo, hi)
+}
+
+// weights are the weights the face covers, a variable font's own for
+// one whose weight is auto.
+func (c *Face) weights() (int, int) {
+	if c.AutoWeight {
+		if lo, hi, ok := c.axis("wght"); ok {
+			return int(lo), int(hi)
+		}
+	}
+	return c.Weight, max(c.Weight, c.WeightMax)
+}
+
+// axis is the range of the face's axis tag, when its file has landed
+// and is a variable font with one.
+func (c *Face) axis(tag string) (float32, float32, bool) {
+	if c.web == nil || c.web.vf == nil {
+		return 0, 0, false
+	}
+	vf := c.web.vf
+	if i := vf.Tag(tag); i >= 0 {
+		return vf.Axes[i].Min, vf.Axes[i].Max, true
+	}
+	return 0, 0, false
+}
+
+// Variable is the face's file as a variable font, nil for one that is
+// not or has not landed.
+func (c *Face) Variable() *varfont.Font {
+	if c.web == nil {
+		return nil
+	}
+	return c.web.vf
+}
+
+// Instance is the place on the face's axes text in f is drawn at: its
+// weight and width, kept within the face's, on wght and wdth, then
+// font-variation-settings' axes; nil for the default instance or a
+// face that is no variable font.
+func (c *Face) Instance(f style.Font) varfont.Coords {
+	vf := c.Variable()
+	if vf == nil {
+		return nil
+	}
+	user := make([]float32, len(vf.Axes))
+	for i, a := range vf.Axes {
+		user[i] = a.Default
+	}
+	if i := vf.Tag("wght"); i >= 0 {
+		lo, hi := c.weights()
+		user[i] = min(max(f.Weight, float32(lo)), float32(hi))
+	}
+	if i := vf.Tag("wdth"); i >= 0 {
+		stretch := f.Stretch
+		if stretch == 0 {
+			stretch = 100
+		}
+		lo, hi := c.stretches()
+		user[i] = min(max(stretch, lo), hi)
+	}
+	for _, v := range f.Variations {
+		if i := vf.Tag(v.Tag); i >= 0 {
+			user[i] = v.Value
+		}
+	}
+	return vf.Normalize(user)
 }
 
 // stretchThreshold puts a width on the side of normal not asked for
@@ -315,9 +429,9 @@ func (c *Face) distance(stretch float32, weight int, italic bool) float64 {
 		ds = lo - stretch + stretchThreshold
 	}
 	d := 0
-	switch hi := max(c.Weight, c.WeightMax); {
-	case weight < c.Weight:
-		d = c.Weight - weight
+	switch lo, hi := c.weights(); {
+	case weight < lo:
+		d = lo - weight
 	case weight > hi:
 		d = weight - hi
 	}
@@ -336,7 +450,8 @@ const boldThreshold = 600
 // least 600 and c lighter than that, an italic one where f is italic
 // and c is not, unless font-synthesis forbids it.
 func (c *Face) Synthetic(f style.Font) (bool, bool) {
-	bold := f.Weight >= boldThreshold && max(c.Weight, c.WeightMax) < boldThreshold &&
+	_, heaviest := c.weights()
+	bold := f.Weight >= boldThreshold && heaviest < boldThreshold &&
 		f.Synthesis&style.NoSyntheticBold == 0
 	italic := f.Italic && !c.Italic && f.Synthesis&style.NoSyntheticItalic == 0
 	return bold, italic
@@ -356,6 +471,25 @@ type Chain struct {
 	base *Face
 	// web is whether one of the families is an @font-face's.
 	web bool
+	// instances are where each variable face of the chain draws it.
+	instances map[*Face]varfont.Coords
+}
+
+// Instance is where on c's axes the chain draws, nil for c's default
+// instance or a face that is no variable font.
+func (ch *Chain) Instance(c *Face) varfont.Coords {
+	if c.Variable() == nil {
+		return nil
+	}
+	if v, ok := ch.instances[c]; ok {
+		return v
+	}
+	v := c.Instance(ch.font)
+	if ch.instances == nil {
+		ch.instances = map[*Face]varfont.Coords{}
+	}
+	ch.instances[c] = v
+	return v
 }
 
 // chainKey is a list of families by what it says, not by the slice that
@@ -379,6 +513,11 @@ func keyOf(f style.Font) chainKey {
 		h.WriteString(name)
 		h.WriteByte(0)
 	}
+	for _, v := range f.Variations {
+		h.WriteString(v.Tag)
+		h.WriteString(strconv.FormatFloat(float64(v.Value), 'g', -1, 32))
+		h.WriteByte(1)
+	}
 	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic,
 		stretch: f.Stretch, synthesis: f.Synthesis}
 }
@@ -386,7 +525,7 @@ func keyOf(f style.Font) chainKey {
 // Chain is the faces f draws with.
 func (s *Set) Chain(f style.Font) *Chain {
 	key := keyOf(f)
-	if ch, ok := s.chains[key]; ok && slices.Equal(ch.family, f.Family) {
+	if ch, ok := s.chains[key]; ok && slices.Equal(ch.family, f.Family) && slices.Equal(ch.font.Variations, f.Variations) {
 		return ch
 	}
 	ch := s.chain(f)
@@ -489,7 +628,7 @@ func (ch *Chain) Faces() []*Face {
 func (ch *Chain) Loading() []Range {
 	var out []Range
 	for _, c := range ch.entries {
-		if c.font != nil || c.web == nil || c.web.state == fileFailed {
+		if c.font != nil || c.web == nil || c.gone() {
 			continue
 		}
 		if len(c.Ranges) == 0 {
@@ -515,7 +654,7 @@ func (ch *Chain) glyph(s *Set, r rune) (*Face, sfnt.GlyphIndex, bool) {
 			if c.web.state == fileIdle && !waiting {
 				s.Want(c.web)
 			}
-			waiting = waiting || c.web.state != fileFailed
+			waiting = waiting || !c.gone()
 			continue
 		}
 		if g, err := c.font.GlyphIndex(&s.buf, r); err == nil && g != 0 {
@@ -570,7 +709,9 @@ func (s *Set) chainAdvance(ch *Chain, size float32, text string) float32 {
 				run += k
 			}
 		}
-		if a, err := c.font.GlyphAdvance(&s.buf, g, ppem, font.HintingNone); err == nil {
+		if v := ch.Instance(c); v != nil {
+			run += fixed.Int26_6(math.Round(float64(c.web.vf.Advance(uint16(g), v)) * 64))
+		} else if a, err := c.font.GlyphAdvance(&s.buf, g, ppem, font.HintingNone); err == nil {
 			run += a
 		}
 		prev = g
@@ -716,7 +857,7 @@ func (s *Set) Ready(f style.Font, text string, ask bool) bool {
 				continue
 			}
 			if c.font == nil {
-				if c.web.state == fileFailed {
+				if c.gone() {
 					continue
 				}
 				ready = false

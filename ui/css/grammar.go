@@ -132,6 +132,7 @@ var (
 	sizeLP        = dimTerm(allowPercent | nonNegative)
 	number        = dimTerm(allowNumber | nonNegative | noLength)
 	intrinsic     = words("min-content", "max-content", "fit-content")
+	boxSizes      = words("min-content", "max-content", "fit-content", "stretch")
 	colorTerm     = term(func(c Component) error {
 		if isWord(c, "currentcolor") {
 			return nil
@@ -272,14 +273,15 @@ var checks = map[string]check{
 	"container-name": checkContainerName,
 	"display": single(words("block", "inline", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "none",
 		"contents", "list-item", "flow-root", "table", "inline-table", "table-row", "table-cell", "table-row-group",
-		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption")),
+		"table-header-group", "table-footer-group", "table-column", "table-column-group", "table-caption",
+		"-webkit-box", "-webkit-inline-box")),
 	"box-sizing": single(words("content-box", "border-box")),
-	"width":      single(either(sizeLP, words("auto"), intrinsic)),
-	"height":     single(either(sizeLP, words("auto"), intrinsic)),
-	"min-width":  single(either(sizeLP, words("auto"), intrinsic)),
-	"min-height": single(either(sizeLP, words("auto"), intrinsic)),
-	"max-width":  single(either(sizeLP, words("none"), intrinsic)),
-	"max-height": single(either(sizeLP, words("none"), intrinsic)),
+	"width":      single(either(sizeLP, words("auto"), boxSizes)),
+	"height":     single(either(sizeLP, words("auto"), boxSizes)),
+	"min-width":  single(either(sizeLP, words("auto"), boxSizes)),
+	"min-height": single(either(sizeLP, words("auto"), boxSizes)),
+	"max-width":  single(either(sizeLP, words("none"), boxSizes)),
+	"max-height": single(either(sizeLP, words("none"), boxSizes)),
 
 	"margin-top":     single(either(lengthPercent, words("auto"))),
 	"margin-right":   single(either(lengthPercent, words("auto"))),
@@ -350,6 +352,9 @@ var checks = map[string]check{
 	"break-before":          single(words(breakWords...)),
 	"break-after":           single(words(breakWords...)),
 	"orphans":               single(positiveInteger),
+	"line-clamp":            single(either(positiveInteger, words("none"))),
+	"-webkit-line-clamp":    single(either(positiveInteger, words("none"))),
+	"-webkit-box-orient":    single(words("horizontal", "vertical", "inline-axis", "block-axis")),
 	"widows":                single(positiveInteger),
 	"aspect-ratio":          checkAspectRatio,
 	"overflow-x":            single(words("visible", "hidden", "clip", "auto", "scroll")),
@@ -374,6 +379,12 @@ var checks = map[string]check{
 		"extra-condensed", "condensed", "semi-condensed", "semi-expanded", "expanded", "extra-expanded",
 		"ultra-expanded"))),
 	"font-synthesis": checkFontSynthesis,
+	propFontVariations: func(v []Component) error {
+		if _, ok := fontVariations(v); !ok {
+			return fmt.Errorf(`font-variation-settings: expected normal, or "tag" and a number, with commas between`)
+		}
+		return nil
+	},
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller",
 			"larger"))),
@@ -451,7 +462,7 @@ var checks = map[string]check{
 	"object-position":       checkPosition,
 	"box-shadow":            checkBoxShadow,
 	"outline-width":         single(borderWidth),
-	"outline-style":         single(borderStyle),
+	"outline-style":         single(either(borderStyle, words("auto"))),
 	"outline-color":         single(colorTerm),
 	"outline-offset":        single(length),
 	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),

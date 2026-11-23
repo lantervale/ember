@@ -7,6 +7,8 @@ import (
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/vector"
+
+	"github.com/lantervale/ember/internal/varfont"
 )
 
 // obliqueSkew is how far a made-up italic leans: a quarter of a point to
@@ -28,12 +30,19 @@ func fakeBold(size float32) float32 {
 const boldRing = 16
 
 // synthetic rasterizes glyph idx of source face at x, a fraction of a
-// pixel to the right, slanted and grown as l has it: the glyph's
-// rectangle about the origin and its coverage from (0, 0).
+// pixel to the right, at l's instance of a variable font, slanted and
+// grown as l has it: the glyph's rectangle about the origin and its
+// coverage from (0, 0).
 func (f *Font) synthetic(face int, idx sfnt.GlyphIndex, x fixed.Int26_6, l Look) (image.Rectangle, *image.Alpha, bool) {
 	size := f.size * l.scale()
 	ppem := fixed.Int26_6(math.Round(float64(size * oversample * 64)))
-	segs, err := f.sources[face].LoadGlyph(&f.buf, idx, ppem, nil)
+	var segs sfnt.Segments
+	var err error
+	if v := l.varied(); v != nil {
+		segs, err = varied(v, idx, ppem)
+	} else {
+		segs, err = f.sources[face].LoadGlyph(&f.buf, idx, ppem, nil)
+	}
 	if err != nil || len(segs) == 0 {
 		return image.Rectangle{}, nil, false
 	}
@@ -123,4 +132,32 @@ func segmentArgs(op sfnt.SegmentOp) int {
 	case sfnt.SegmentOpMoveTo, sfnt.SegmentOpLineTo:
 	}
 	return 1
+}
+
+// varied is glyph idx of v's instance as sfnt's segments at ppem, y
+// down, as LoadGlyph gives a glyph of the default instance.
+func varied(v *Variation, idx sfnt.GlyphIndex, ppem fixed.Int26_6) (sfnt.Segments, error) {
+	points, ends, err := v.Font.Outline(uint16(idx), v.Coords)
+	if err != nil {
+		return nil, err
+	}
+	scale := float64(ppem) / float64(v.Font.UnitsPerEm())
+	at := func(x, y float32) fixed.Point26_6 {
+		return fixed.Point26_6{
+			X: fixed.Int26_6(math.Round(float64(x) * scale)),
+			Y: fixed.Int26_6(math.Round(-float64(y) * scale)),
+		}
+	}
+	var segs sfnt.Segments
+	varfont.Contours(points, ends,
+		func(x, y float32) {
+			segs = append(segs, sfnt.Segment{Op: sfnt.SegmentOpMoveTo, Args: [3]fixed.Point26_6{at(x, y)}})
+		},
+		func(x, y float32) {
+			segs = append(segs, sfnt.Segment{Op: sfnt.SegmentOpLineTo, Args: [3]fixed.Point26_6{at(x, y)}})
+		},
+		func(cx, cy, x, y float32) {
+			segs = append(segs, sfnt.Segment{Op: sfnt.SegmentOpQuadTo, Args: [3]fixed.Point26_6{at(cx, cy), at(x, y)}})
+		})
+	return segs, nil
 }
