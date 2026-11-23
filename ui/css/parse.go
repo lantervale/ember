@@ -153,6 +153,7 @@ type Sheet struct {
 	Keyframes     []Keyframes
 	CounterStyles []CounterStyle
 	faces         []FontFace
+	palettes      []FontPaletteValues
 	once          sync.Once
 	index         *index
 	// media are its @media rules' queries, in the order they open.
@@ -220,6 +221,9 @@ func (s *Sheet) String() string {
 		return s.src
 	}
 	var b strings.Builder
+	for _, v := range s.palettes {
+		b.WriteString(v.String())
+	}
 	for _, r := range s.Rules {
 		for _, m := range r.media {
 			b.WriteString("@media " + s.media[m].text + " { ")
@@ -454,6 +458,8 @@ func (p *parser) atRule(t Token, in scope) {
 		if f, ok := p.fontFace(t.Pos); ok {
 			p.sheet.faces = append(p.sheet.faces, f)
 		}
+	case name == "font-palette-values":
+		p.fontPaletteValues(t)
 	case name == "media":
 		p.media(t, in)
 	case name == kwContainer:
@@ -697,6 +703,9 @@ func supportedIn(c Component) bool {
 		}
 		_, err := parseSelectors(sels)
 		return err == nil
+	case c.Kind == Function && strings.EqualFold(c.Text, "font-tech"):
+		tech := items(trim(c.Args))
+		return len(tech) == 1 && tech[0].Kind == Ident && colourTech(tech[0].Text)
 	case c.Kind != LParen:
 		return false
 	}

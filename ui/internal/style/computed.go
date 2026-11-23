@@ -446,6 +446,9 @@ type Font struct {
 	// Variations are font-variation-settings' axes, in order, a later
 	// one of a tag winning; none for normal.
 	Variations []FontVariation
+	// Palette is font-palette's: "" for normal, "light", "dark" or an
+	// @font-palette-values' --name.
+	Palette string
 }
 
 // FontVariation is a place on one axis of a variable font: a tag, such

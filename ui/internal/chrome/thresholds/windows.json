@@ -52,6 +52,7 @@
   "font-smoothing": 0.0064,
   "font-synthesis": 0.02,
   "font-variations": 0.019,
+  "colour-fonts": 0.006,
   "generated": 0.0057,
   "glyphs": 0.0044,
   "iframe": 0.0044,

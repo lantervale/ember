@@ -45,6 +45,12 @@ var compared = map[string]func(s *style.Computed) string{
 	},
 	"font-family":  func(s *style.Computed) string { return strings.Join(s.Font.Family, ", ") },
 	"font-stretch": func(s *style.Computed) string { return num(s.Font.Stretch) + "%" },
+	"font-palette": func(s *style.Computed) string {
+		if s.Font.Palette == "" {
+			return "normal"
+		}
+		return s.Font.Palette
+	},
 	"font-variation-settings": func(s *style.Computed) string {
 		if len(s.Font.Variations) == 0 {
 			return "normal"
@@ -781,7 +787,9 @@ func TestComputedValuesMatchChrome(t *testing.T) {
   line-height: 20px; letter-spacing: -1px; color: oklch(70% 0.1 200); text-align: right;
   white-space: pre-wrap; overflow-wrap: break-word; text-overflow: ellipsis; visibility: hidden; cursor: grab;
   text-transform: capitalize; font-stretch: semi-condensed; font-variation-settings: "wght" 650, 'wdth' 75.5;
+  font-palette: --brand;
 }
+.t span { font-palette: DARK; }
 .l {
   background-color: rgb(1 2 3 / 0.25); border: 2px dashed steelblue; border-left: 4px dotted;
   border-right-color: transparent; border-radius: 3px 10% 0 1em; outline: 1px solid Lime; outline-offset: -2px;

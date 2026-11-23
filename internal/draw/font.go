@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/colourfont"
 	"github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/internal/varfont"
 	"github.com/lantervale/ember/render"
@@ -45,7 +46,9 @@ type Face struct {
 	name string
 	font *opentype.Font
 	// layout is the file's OpenType layout tables, which shape its text.
-	layout    *shape.Font
+	layout *shape.Font
+	// colour is the file's colour glyphs, nil without any.
+	colour    *colourfont.Font
 	fallbacks []*Face
 	emoji     Emoji
 	// only are the characters the face draws of those it has (Only), all
@@ -90,7 +93,8 @@ func ParseFace(name string, ttf []byte) (*Face, error) {
 	if err != nil {
 		return nil, fmt.Errorf("twod: parse font %s: %w", name, err)
 	}
-	return &Face{name: name, font: f, layout: shape.Parse(f, ttf), sizes: map[float32]*Font{}}, nil
+	return &Face{name: name, font: f, layout: shape.Parse(f, ttf), colour: colourfont.Parse(ttf, f),
+		sizes: map[float32]*Font{}}, nil
 }
 
 func mustFace(name string, ttf []byte) *Face {
@@ -104,7 +108,7 @@ func mustFace(name string, ttf []byte) *Face {
 // With is f drawing what it lacks with fallbacks, in order, and the
 // clusters emoji has as pictures.
 func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
-	return &Face{name: f.name, font: f.font, layout: f.layout,
+	return &Face{name: f.name, font: f.font, layout: f.layout, colour: f.colour,
 		only: f.only, blank: f.blank, hidden: f.hidden, look: f.look,
 		fallbacks: fallbacks, emoji: emoji, sizes: map[float32]*Font{}}
 }
@@ -114,12 +118,16 @@ func (f *Face) With(fallbacks []*Face, emoji Emoji) *Face {
 // scaled by Scale (0 for 1), made bold or slanted where its family has
 // no such face, shaped with Features (HarfBuzz's, comma separated)
 // before the text's own, and a variable font's at the instance
-// Variation places it.
+// Variation places it; a colour font's glyphs in Palette (its first
+// when nil), those of its SVG table drawn by their outlines when NoSVG,
+// as Chrome draws them.
 type Look struct {
 	Scale         float32
 	Bold, Oblique bool
 	Features      string
 	Variation     *Variation
+	Palette       *Palette
+	NoSVG         bool
 }
 
 // Variation is an instance of a variable font: the face's file read by
@@ -146,7 +154,7 @@ func (l Look) scale() float32 {
 
 // Styled is f drawn with look.
 func (f *Face) Styled(look Look) *Face {
-	return &Face{name: f.name, font: f.font, layout: f.layout,
+	return &Face{name: f.name, font: f.font, layout: f.layout, colour: f.colour,
 		only: f.only, blank: f.blank, hidden: f.hidden, look: look,
 		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
@@ -168,7 +176,7 @@ func Covers(ranges []Range, r rune) bool {
 // Only is f drawing only the characters in ranges, as an @font-face's
 // unicode-range has it: another is left to the faces after it.
 func (f *Face) Only(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, layout: f.layout,
+	return &Face{name: f.name, font: f.font, layout: f.layout, colour: f.colour,
 		only: ranges, blank: f.blank, hidden: f.hidden, look: f.look,
 		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
@@ -177,7 +185,7 @@ func (f *Face) Only(ranges []Range) *Face {
 // that neither it nor its fallbacks have, where another shows as '?':
 // what a face still on its way may draw.
 func (f *Face) Blank(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, layout: f.layout,
+	return &Face{name: f.name, font: f.font, layout: f.layout, colour: f.colour,
 		only: f.only, blank: ranges, hidden: f.hidden, look: f.look,
 		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
@@ -185,7 +193,7 @@ func (f *Face) Blank(ranges []Range) *Face {
 // Hidden is f drawing the characters in ranges invisible, in the room
 // they take: those of a face in its font-display block period.
 func (f *Face) Hidden(ranges []Range) *Face {
-	return &Face{name: f.name, font: f.font, layout: f.layout,
+	return &Face{name: f.name, font: f.font, layout: f.layout, colour: f.colour,
 		only: f.only, blank: f.blank, hidden: ranges, look: f.look,
 		fallbacks: f.fallbacks, emoji: f.emoji, sizes: map[float32]*Font{}}
 }
@@ -382,8 +390,11 @@ type Font struct {
 	// as nothing when no source has them (Face.Only, Face.Blank).
 	only          [][]Range
 	blank, hidden []Range
-	// looks are how each source is drawn (Face.Styled).
-	looks      []Look
+	// looks are how each source is drawn (Face.Styled), and colours
+	// each one's colour glyphs, colourGlyphs those drawn so far.
+	looks        []Look
+	colours      []*colourfont.Font
+	colourGlyphs map[colourKey]colourGlyph
 	emoji      Emoji
 	buf        sfnt.Buffer
 	cell       int
@@ -424,7 +435,7 @@ func newFont(f *Face, px float32, how smoothing, stroke float32) (*Font, error) 
 		}
 		out.faces, out.sources = append(out.faces, face), append(out.sources, src.font)
 		out.only, out.looks = append(out.only, src.only), append(out.looks, src.look)
-		out.layouts = append(out.layouts, src.layout)
+		out.layouts, out.colours = append(out.layouts, src.layout), append(out.colours, src.colour)
 	}
 	m := out.faces[0].Metrics()
 	out.ascent = float32(m.Ascent.Ceil()) / oversample
