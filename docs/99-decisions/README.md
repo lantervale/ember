@@ -130,6 +130,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0125 | [A subgrid's items size its grid's tracks, hoisted to its lines](0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md) | rendering |
 | 0126 | [An element is drawn in the scheme its color-scheme allows](0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md) | api |
 | 0132 | [Border sides are mitered pieces smoothed by their own geometry](0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md) | rendering |
+| 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
 
 ## Writing one
 

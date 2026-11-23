@@ -21,14 +21,18 @@ const bare = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="
 
 // samples are a sheet and pictures of each kind: sized.svg asks for
 // 200×100, shaped.svg has a view box of 48×24 alone, plain.svg asks for
-// 60×40 with no view box, bare.svg for nothing, and text.svg and
-// clip.svg use what is not drawn.
+// 60×40 with no view box, bare.svg for nothing, and filter.svg and
+// object.svg use what is not drawn.
 func samples(t *testing.T, css string) fstest.MapFS {
 	t.Helper()
-	files := fstest.MapFS{"page.css": {Data: []byte(css)}, "bare.svg": {Data: []byte(bare)}}
+	files := fstest.MapFS{
+		"page.css": {Data: []byte(css)}, "bare.svg": {Data: []byte(bare)},
+		"filter.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><filter id="f"/>` +
+			`<rect width="24" height="24" filter="url(#f)"/></svg>`)},
+		"object.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><foreignObject/></svg>`)},
+	}
 	for name, file := range map[string]string{
 		"sized.svg": "own-fill-rules.svg", "shaped.svg": "own-joins.svg", "plain.svg": "own-no-viewbox.svg",
-		"text.svg": "own-text.svg", "clip.svg": "own-clip.svg",
 	} {
 		data, err := os.ReadFile("../../svg/testdata/" + file)
 		require.NoError(t, err)
@@ -58,8 +62,8 @@ func TestAnSVGImgTakesTheSizeItsFileAsksFor(t *testing.T) {
 }
 
 func TestWhatAnSVGUsesThatIsNotDrawnIsAWarningNamingTheFile(t *testing.T) {
-	d := ui.NewDocument(ui.Stylesheet(samples(t, `body { background: url(clip.svg); }`), "page.css"))
-	for _, src := range []string{"text.svg", "text.svg", "sized.svg"} {
+	d := ui.NewDocument(ui.Stylesheet(samples(t, `body { background: url(object.svg); }`), "page.css"))
+	for _, src := range []string{"filter.svg", "filter.svg", "sized.svg"} {
 		d.Body().Append(ui.Img(ui.Attr("src", src)))
 	}
 	win := platform.NewWindow(platform.Size(400, 300))
@@ -70,8 +74,8 @@ func TestWhatAnSVGUsesThatIsNotDrawnIsAWarningNamingTheFile(t *testing.T) {
 		texts = append(texts, w.Error())
 	}
 	assert.ElementsMatch(t, []string{
-		"ui: image text.svg: image/svg+xml is not drawn: text",
-		"ui: image clip.svg: image/svg+xml is not drawn: clip-path",
+		"ui: image filter.svg: image/svg+xml is not drawn: filter",
+		"ui: image object.svg: image/svg+xml is not drawn: foreignObject",
 	}, texts)
 }
 

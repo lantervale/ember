@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 120 120">
+  <defs>
+    <symbol id="leaf" viewBox="0 0 20 20"><path d="M2 18C2 6 8 2 18 2C18 12 12 18 2 18z" fill="#2a7"/><path d="M2 18L14 6" stroke="#063"/></symbol>
+    <symbol id="raw"><circle cx="10" cy="10" r="12" fill="#c33"/></symbol>
+    <symbol id="tall" viewBox="0 0 10 20" preserveAspectRatio="xMinYMax meet"><rect width="10" height="20" fill="#36c"/></symbol>
+  </defs>
+  <svg x="2" y="2" width="36" height="36" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fed"/><circle cx="5" cy="5" r="6" fill="#e60"/></svg>
+  <svg x="42" y="2" width="36" height="36" viewBox="0 0 20 10" preserveAspectRatio="xMidYMax slice"><circle cx="10" cy="5" r="5" fill="#93c"/><rect width="20" height="10" fill="none" stroke="#333"/></svg>
+  <svg x="82" y="2" width="36" height="36" overflow="visible"><circle cx="18" cy="18" r="22" fill="#06c" fill-opacity=".6"/></svg>
+  <use href="#leaf" x="2" y="42" width="36" height="36"/>
+  <use href="#leaf" x="42" y="42"/>
+  <use href="#raw" x="82" y="42" width="20" height="20"/>
+  <use href="#tall" x="2" y="82" width="36" height="36"/>
+  <svg x="42" y="82" width="36" height="36" viewBox="0 0 10 10" preserveAspectRatio="none"><circle cx="5" cy="5" r="5" fill="#c06"/><svg x="2" y="2" width="6" height="6"><circle cx="3" cy="3" r="5" fill="#fc0"/></svg></svg>
+  <svg x="82" y="82" width="25%" height="20" style="overflow: hidden"><rect width="100" height="100" fill="#333"/></svg>
+</svg>

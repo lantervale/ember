@@ -15,15 +15,18 @@ const (
 	none      = "none"
 )
 
-// node is an element of the file, as read.
+// node is an element of the file, as read, or a run of the characters
+// of a text element.
 type node struct {
 	name    string
 	attr    map[string]string
 	kids    []*node
 	parent  *node
 	classes []string
-	// text is a style element's sheet.
+	// text is a style element's sheet, or a run's characters.
 	text string
+	// chars marks a run of characters, which has no name.
+	chars bool
 }
 
 // entities are the <!ENTITY name "value"> declarations of a DOCTYPE,
@@ -195,10 +198,33 @@ func (r *reader) token(tok xml.Token) error {
 	case xml.EndElement:
 		return r.end()
 	case xml.CharData:
-		if len(r.stack) > 0 && r.stack[len(r.stack)-1].name == elemStyle {
-			r.stack[len(r.stack)-1].text += string(t)
+		if len(r.stack) == 0 {
+			return nil
+		}
+		top := r.stack[len(r.stack)-1]
+		if top.name == elemStyle {
+			top.text += string(t)
+			return nil
+		}
+		for _, n := range r.stack {
+			if n.name == elemText {
+				return r.chars(top, string(t))
+			}
 		}
 	}
+	return nil
+}
+
+// chars appends a run of characters to an element of a text element.
+func (r *reader) chars(parent *node, s string) error {
+	if n := len(parent.kids); n > 0 && parent.kids[n-1].chars {
+		parent.kids[n-1].text += s
+		return nil
+	}
+	if r.elements++; r.elements > MaxElements {
+		return ErrTooComplex
+	}
+	parent.kids = append(parent.kids, &node{text: s, chars: true, parent: parent})
 	return nil
 }
 
