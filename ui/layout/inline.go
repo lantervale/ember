@@ -2804,9 +2804,9 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 	switch st.VerticalAlign {
 	case style.AlignBaselineText:
 	case style.AlignSub:
-		return parent.Font.Size/5 + 1, true
+		return scriptShift(parent.Font.Size, 5, PixelsPerPoint(t.fonts)), true
 	case style.AlignSuper:
-		return -(parent.Font.Size/3 + 1), true
+		return -scriptShift(parent.Font.Size, 3, PixelsPerPoint(t.fonts)), true
 	case style.AlignLength:
 		h, _ := t.lineHeight(c, st)
 		return -st.VerticalShift.At(h), true
@@ -2818,6 +2818,13 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 		return 0, false
 	}
 	return 0, true
+}
+
+// scriptShift is how far sub (by 5) or super (by 3) moves a box from its parent's
+// baseline, as Blink works it out in device pixels: a share of the font size and one
+// pixel more, cut to the layout unit.
+func scriptShift(size, by, px float32) float32 {
+	return float32(math.Trunc(float64((size*px/by+1)*64))) / 64 / px
 }
 
 // aligner is the box that places a box of style st inside span up once sized: its parent

@@ -568,3 +568,9 @@ func TestALeadingOfLessThanAUnitBelowNoneTakesNothingAbove(t *testing.T) {
 	_, base = LineHeight(box.Metrics{Ascent: 29, Descent: 8}, &st, 1)
 	assert.InDelta(t, 28, base, 1e-6, "half of -1 floors to -1")
 }
+
+func TestSubAndSuperShiftByADevicePixelMoreCutToTheLayoutUnit(t *testing.T) {
+	assert.InDelta(t, 405.0/64, scriptShift(16, 3, 1), 1e-6, "16/3 + 1 is 6.333, cut to 405/64")
+	assert.InDelta(t, 746.0/128, scriptShift(16, 3, 2), 1e-6, "32/3 + 1 device pixels, cut to 746/64 of them")
+	assert.InDelta(t, 473.0/128, scriptShift(16, 5, 2), 1e-6, "7.4 device pixels")
+}
