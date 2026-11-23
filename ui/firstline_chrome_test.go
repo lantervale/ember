@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -91,7 +92,13 @@ p { margin: 0 0 12px; }
 	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "half", "large"} {
 		d.Body().Append(ui.P(append([]ui.Arg{ui.Class(c), ui.Text("Down ")}, words(prose+" "+prose)...)...))
 	}
-	r := chrome.Match(t, d, geom.V2(400, 1400))
+	// Chrome on Linux rounds a letter's ink out to whole pixels, so its
+	// box is up to a pixel wider on each side than ui's and macOS's.
+	within := float32(chrome.Tolerance)
+	if runtime.GOOS == "linux" {
+		within = 2
+	}
+	r := chrome.MatchWithin(t, d, geom.V2(400, 1400), within)
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
