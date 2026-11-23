@@ -326,8 +326,9 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 			t.lineBreak(c, parent, it.element, st)
 			continue
 		}
-		if isAtomicDisplay(st.Display) || st.Display == style.Inline && (pictured(it.element) || st.Mode != frameOf(c.owner)) {
-			// an inline element of another writing mode than its line is laid out as an inline-block
+		// an inline element of another writing mode than its line is laid out as an inline-block
+		if isAtomicDisplay(st.Display) ||
+			st.Display == style.Inline && (pictured(it.element) || st.Mode != frameOf(c.owner)) {
 			n := t.build(it.element, c.owner)
 			n.atomic = true
 			c.runs = append(c.runs,
@@ -505,7 +506,14 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 			c.closeSpans(i)
 			continue
 		}
-		afterSpace = c.cutRun(fonts, i, r, soft[i], afterSpace, lv)
+		if r.st.Combine && r.st.Mode.Vertical() {
+			// text-combine-upright: the run is one piece, set across one em of the line
+			c.pieces = append(c.pieces, piece{kind: word, run: i, text: collapsedBlanks(r.text, r.st.WhiteSpace),
+				width: r.st.Font.Size})
+			afterSpace = false
+		} else {
+			afterSpace = c.cutRun(fonts, i, r, soft[i], afterSpace, lv)
+		}
 		c.closeSpans(i)
 	}
 	c.joinRuns(fonts)
@@ -672,12 +680,6 @@ func (c *inlineContent) first() bool {
 func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]bool, afterSpace bool,
 	levels []bidi.Level) bool {
 	ws := r.st.WhiteSpace
-	if r.st.Combine && r.st.Mode.Vertical() {
-		// text-combine-upright: the run is one piece, set across one em of the line
-		c.pieces = append(c.pieces, piece{kind: word, run: i, text: collapsedBlanks(r.text, ws),
-			width: r.st.Font.Size})
-		return false
-	}
 	defer c.tieSpaces(fonts, r.st, len(c.pieces))
 	var b strings.Builder
 	// n counts the characters read, and from is where the text in b starts; level is the

@@ -47,8 +47,8 @@ var logical = func() map[string]string {
 //nolint:gochecknoglobals // a fixed set
 var flowShorthands = func() map[string]bool {
 	m := map[string]bool{shortPaddingInline: true, shortMarginInline: true, shortInsetInline: true,
-		shortScrollPaddingInline: true, shortScrollMarginInline: true, "padding-block": true, "margin-block": true,
-		"inset-block": true, "scroll-padding-block": true, "scroll-margin-block": true}
+		shortScrollPaddingInline: true, shortScrollMarginInline: true, shortPaddingBlock: true, shortMarginBlock: true,
+		shortInsetBlock: true, shortScrollPaddingBlock: true, shortScrollMarginBlock: true}
 	for name := range shorthands {
 		if strings.HasPrefix(name, "border-inline") || strings.HasPrefix(name, "border-block") {
 			m[name] = true

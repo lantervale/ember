@@ -75,27 +75,19 @@ func frameSide(s style.AnchorSide, mode style.WritingMode) style.AnchorSide {
 	if !mode.Vertical() {
 		return s
 	}
-	switch s {
-	case style.AnchorWidth:
-		return style.AnchorHeight
-	case style.AnchorHeight:
-		return style.AnchorWidth
-	case style.AnchorTop, style.AnchorRight, style.AnchorBottom, style.AnchorLeft:
-	default:
-		return s
+	if s == style.AnchorWidth || s == style.AnchorHeight {
+		return style.AnchorWidth + style.AnchorHeight - s
 	}
 	page := style.Sides[style.AnchorSide]{Top: style.AnchorTop, Right: style.AnchorRight, Bottom: style.AnchorBottom,
 		Left: style.AnchorLeft}
 	framed := turnSides(page, mode)
-	switch s {
-	case framed.Top:
-		return style.AnchorTop
-	case framed.Right:
-		return style.AnchorRight
-	case framed.Bottom:
-		return style.AnchorBottom
+	sides := [4]style.AnchorSide{style.AnchorTop, style.AnchorRight, style.AnchorBottom, style.AnchorLeft}
+	for i, side := range [4]style.AnchorSide{framed.Top, framed.Right, framed.Bottom, framed.Left} {
+		if s == side {
+			return sides[i]
+		}
 	}
-	return style.AnchorLeft
+	return s
 }
 
 // turnArea is the page's position-area a in the frame of mode.
@@ -355,26 +347,18 @@ func turnPlaced(p placed, from, to style.WritingMode) placed {
 	return q
 }
 
-// turnBox turns b, written in the frame of mode inside a box of size in of that frame,
-// onto the page: its place and size, its edges, its scrollable overflow and its scroll.
-func turnBox(b *box.Box, in size, mode style.WritingMode, posSet bool) {
-	if !mode.Vertical() {
+// turnBroken turns b, a box columns cut written at at in the frame of mode, inside a box
+// of size in of that frame, onto the page: its place, the union of its parts, and them.
+func turnBroken(b *box.Box, at geom.Vec2, in size, mode style.WritingMode) {
+	if !mode.Vertical() || !b.Broken {
 		return
 	}
-	r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: b.Size.X, H: b.Size.Y}, in, mode)
-	if posSet {
-		b.Pos = geom.Vec2{X: r.X, Y: r.Y}
+	u := size{b.Size.X, b.Size.Y}
+	r := turnRect(geom.Rect{X: at.X, Y: at.Y, W: u.w, H: u.h}, in, mode)
+	b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
+	for i, p := range b.Fragments {
+		b.Fragments[i] = turnRect(p, u, mode)
 	}
-	b.Size = geom.Vec2{X: r.W, Y: r.H}
-	b.Margin = pageBoxEdges(b.Margin, mode)
-	b.Border = pageBoxEdges(b.Border, mode)
-	b.Padding = pageBoxEdges(b.Padding, mode)
-	b.Scrollbar = geom.Vec2{X: b.Scrollbar.Y, Y: b.Scrollbar.X}
-}
-
-func pageBoxEdges(e box.Edges, mode style.WritingMode) box.Edges {
-	p := pageEdges(rect{l: e.Left, r: e.Right, t: e.Top, b: e.Bottom}, mode)
-	return box.Edges{Top: p.t, Right: p.r, Bottom: p.b, Left: p.l}
 }
 
 // turnLines turns the lines of c, written in the frame of mode inside its owner's box of

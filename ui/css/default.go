@@ -117,7 +117,8 @@ q::before { content: open-quote; }
 q::after { content: close-quote; }
 big { font-size: larger; }
 center { text-align: -webkit-center; }
-fieldset { margin-inline: 2px; padding-block: 0.35em 0.625em; padding-inline: 0.75em; border: 2px groove ThreeDFace; min-width: min-content; }
+fieldset { margin-inline: 2px; padding-block: 0.35em 0.625em; padding-inline: 0.75em; border: 2px groove ThreeDFace;
+  min-width: min-content; }
 fieldset { display: flow-root; }
 fieldset > legend { width: fit-content; }
 legend { padding-inline: 2px; }

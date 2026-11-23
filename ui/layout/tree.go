@@ -1091,14 +1091,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Discarded = n.discarded
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
-		if outer.Vertical() && b.Broken {
-			u := size{b.Size.X, b.Size.Y}
-			r := turnRect(geom.Rect{X: framed.X, Y: framed.Y, W: u.w, H: u.h}, in, outer)
-			b.Pos, b.Size = geom.Vec2{X: r.X, Y: r.Y}, geom.Vec2{X: r.W, Y: r.H}
-			for i, p := range b.Fragments {
-				b.Fragments[i] = turnRect(p, u, outer)
-			}
-		}
+		turnBroken(b, framed, in, outer)
 	}
 	n.final = turnPlaced(n.final, outer, frameOf(n))
 	if !rewrite {

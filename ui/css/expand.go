@@ -64,10 +64,10 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	case "margin", "padding", kwInset, "border-width", "border-style", propBorderColor, "border-radius",
 		"scroll-padding", "scroll-margin":
 		err = expandBox(long, v, out)
-	case "gap", "overflow", "place-items", "place-content", "place-self", shortMarginInline, "margin-block",
-		shortPaddingInline, "padding-block", shortInsetInline, "inset-block", "border-inline-width", "border-inline-style",
-		"border-inline-color", "border-block-width", "border-block-style", "border-block-color",
-		shortScrollPaddingInline, "scroll-padding-block", shortScrollMarginInline, "scroll-margin-block",
+	case "gap", "overflow", "place-items", "place-content", "place-self", shortMarginInline, shortMarginBlock,
+		shortPaddingInline, shortPaddingBlock, shortInsetInline, shortInsetBlock, "border-inline-width",
+		"border-inline-style", "border-inline-color", "border-block-width", "border-block-style", "border-block-color",
+		shortScrollPaddingInline, shortScrollPaddingBlock, shortScrollMarginInline, shortScrollMarginBlock,
 		"overscroll-behavior":
 		err = expandPair(long, v, out)
 	case kwFlex:

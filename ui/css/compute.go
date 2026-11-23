@@ -463,8 +463,8 @@ type ctx struct {
 //
 //nolint:gochecknoglobals,goconst // a fixed list
 var leading = []string{
-	propWritingMode, propDirection, propColorScheme, "font-family", "font-style", "font-weight", "font-stretch", propFontSize,
-	"line-height", "color",
+	propWritingMode, propDirection, propColorScheme, "font-family", "font-style", "font-weight", "font-stretch",
+	propFontSize, "line-height", "color",
 }
 
 // colored are the longhands whose values take colours, where a system
