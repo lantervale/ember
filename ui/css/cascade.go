@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 )
 
 // buckets hold selectors by their rightmost compound's id, else a class,
@@ -391,15 +392,20 @@ func levelOf(agent, important bool) level {
 type cascaded struct {
 	longhands []*Declaration
 	custom    []*Declaration
+	// rtl is set when the element's direction is rtl: its declarations
+	// of an inline side stand for the other physical one.
+	rtl bool
 }
 
-// cascade puts each longhand's winner at its place in order. The result
-// lives until the next call.
-func (m *matcher) cascade(list []applied) cascaded { return m.cascadeFor(list, "") }
+// cascade puts each longhand's winner at its place in order, under a
+// parent of direction dir. The result lives until the next call.
+func (m *matcher) cascade(list []applied, dir style.Direction) cascaded {
+	return m.cascadeFor(list, "", dir)
+}
 
 // cascadeFor is cascade for a pseudo-element, which leaves out the
 // declarations of the properties it doesn't take.
-func (m *matcher) cascadeFor(list []applied, pseudo string) cascaded {
+func (m *matcher) cascadeFor(list []applied, pseudo string, dir style.Direction) cascaded {
 	if m.long == nil {
 		m.long = make([]*Declaration, len(order))
 	}
@@ -408,6 +414,7 @@ func (m *matcher) cascadeFor(list []applied, pseudo string) cascaded {
 		m.at = make([]int, len(order))
 	}
 	m.custom = m.custom[:0]
+	rtl := directionIn(list, dir) == style.RTL
 	reverts := false
 	for k, a := range list {
 		d := a.decl
@@ -416,16 +423,24 @@ func (m *matcher) cascadeFor(list []applied, pseudo string) cascaded {
 			continue
 		}
 		reverts = reverts || revertOf(d) != ""
+		mirror := rtl && d.inline
 		if long, ok := shorthands[d.Name]; ok {
 			for _, l := range long {
+				if mirror {
+					l = mirrored(l)
+				}
 				if pseudo == "" || takesProperty(pseudo, l) {
 					m.long[orderIndex[l]], m.at[orderIndex[l]] = d, k
 				}
 			}
 			continue
 		}
-		if pseudo == "" || takesProperty(pseudo, d.Name) {
-			m.long[orderIndex[d.Name]], m.at[orderIndex[d.Name]] = d, k
+		name := d.Name
+		if mirror {
+			name = mirrored(name)
+		}
+		if pseudo == "" || takesProperty(pseudo, name) {
+			m.long[orderIndex[name]], m.at[orderIndex[name]] = d, k
 		}
 	}
 	if reverts {
@@ -435,7 +450,28 @@ func (m *matcher) cascadeFor(list []applied, pseudo string) cascaded {
 			}
 		}
 	}
-	return cascaded{longhands: m.long, custom: m.custom}
+	return cascaded{longhands: m.long, custom: m.custom, rtl: rtl}
+}
+
+// directionIn is the direction the last declaration of list sets, dir
+// where none does or it inherits; a var() in it reads as inherit.
+func directionIn(list []applied, dir style.Direction) style.Direction {
+	for i := len(list) - 1; i >= 0; i-- {
+		d := list[i].decl
+		if d.Name != propDirection {
+			continue
+		}
+		if len(d.vals) == 1 && isWord(d.vals[0], "initial") {
+			return style.LTR
+		}
+		if len(d.vals) == 1 {
+			if v, ok := directions[strings.ToLower(d.vals[0].Text)]; ok {
+				return v
+			}
+		}
+		return dir
+	}
+	return dir
 }
 
 // revertOf is revert or revert-layer when d's value is that keyword

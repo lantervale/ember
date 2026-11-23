@@ -129,8 +129,16 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0124 | [A field's validity is a state ui keeps](0124-a-fields-validity-is-a-state-ui-keeps.md) | api |
 | 0125 | [A subgrid's items size its grid's tracks, hoisted to its lines](0125-a-subgrids-items-size-its-grids-tracks-hoisted-to-its-lines.md) | rendering |
 | 0126 | [An element is drawn in the scheme its color-scheme allows](0126-an-element-is-drawn-in-the-scheme-its-color-scheme-allows.md) | api |
+| 0127 | [A first line is laid out in its own styles](0127-a-first-line-is-laid-out-in-its-own-styles.md) | api |
+| 0128 | [Right to left is a mirror of the layout, and bidi orders each line](0128-right-to-left-is-a-mirror-of-the-layout-and-bidi-orders-each-line.md) | api |
+| 0129 | [Spanners cut the flow in parts, each laid out alone](0129-spanners-cut-the-flow-in-parts-each-laid-out-alone.md) | api |
+| 0130 | [A mixed element reads its group so far as a picture](0130-a-mixed-element-reads-its-group-so-far-as-a-picture.md) | rendering |
+| 0131 | [Discrete values and composition move as Chrome's](0131-discrete-values-and-composition-move-as-chromes.md) | rendering |
 | 0132 | [Border sides are mitered pieces smoothed by their own geometry](0132-border-sides-are-mitered-pieces-smoothed-by-their-own-geometry.md) | rendering |
+| 0133 | [A masked element is a picture cut by the picture of its mask](0133-a-masked-element-is-a-picture-cut-by-the-picture-of-its-mask.md) | rendering |
+| 0134 | [Counter styles are rules, the predefined ones a sheet of them](0134-counter-styles-are-rules-the-predefined-ones-a-sheet.md) | api |
 | 0135 | [Small capitals and skipped ink are synthesised from the face's outlines](0135-small-capitals-and-skipped-ink-are-synthesised-from-the-faces-outlines.md) | rendering |
+| 0136 | [SVG pictures draw clips, masks, patterns, markers, images and text](0136-svg-pictures-draw-clips-masks-patterns-markers-images-and-text.md) | assets |
 
 ## Writing one
 

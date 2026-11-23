@@ -39,7 +39,7 @@ var compared = map[string]func(s *style.Computed) string{
 		return []string{"none", "solid", "dashed", "dotted", "inset", "outset"}[s.BorderStyle.Bottom]
 	},
 	"font-size":   func(s *style.Computed) string { return px(s.Font.Size) },
-	"font-weight": func(s *style.Computed) string { return strconv.Itoa(s.Font.Weight) },
+	"font-weight": func(s *style.Computed) string { return num(s.Font.Weight) },
 	"font-style": func(s *style.Computed) string {
 		return map[bool]string{true: "italic", false: "normal"}[s.Font.Italic]
 	},
@@ -123,7 +123,16 @@ var compared = map[string]func(s *style.Computed) string{
 	"flex-shrink": func(s *style.Computed) string { return num(s.Shrink) },
 	"order":       func(s *style.Computed) string { return strconv.Itoa(s.Order) },
 	"visibility": func(s *style.Computed) string {
+		if s.Collapse {
+			return "collapse"
+		}
 		return map[bool]string{true: "visible", false: "hidden"}[s.Visible]
+	},
+	"empty-cells": func(s *style.Computed) string {
+		return map[bool]string{true: "hide", false: "show"}[s.EmptyCellsHide]
+	},
+	"column-span": func(s *style.Computed) string {
+		return map[bool]string{true: "all", false: "none"}[s.ColumnSpanAll]
 	},
 	"pointer-events": func(s *style.Computed) string {
 		return map[bool]string{true: "none", false: "auto"}[s.PointerNone]
@@ -249,13 +258,21 @@ func matchChromeProps(t *testing.T, d *ui.Document, props map[string]func(*style
 func matchChromeShown(t *testing.T, d *ui.Document, props map[string]func(*style.Computed) string, skip int,
 	script string, then func(), read func(*dom.Node) *style.Computed) {
 	t.Helper()
+	matchChromeScaled(t, d, 1, props, skip, script, then, read)
+}
+
+// matchChromeScaled is matchChromeShown on a display of scale device
+// pixels per point.
+func matchChromeScaled(t *testing.T, d *ui.Document, scale float32, props map[string]func(*style.Computed) string,
+	skip int, script string, then func(), read func(*dom.Node) *style.Computed) {
+	t.Helper()
 	size := geom.V2(800, 600)
 	names := make([]string, 0, len(props))
 	for p := range props {
 		names = append(names, p)
 	}
 	slices.Sort(names)
-	want, err := chrome.StylesAfter(d, size, names, script)
+	want, err := chrome.StylesAfterScaled(d, size, scale, names, script)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,6 +342,7 @@ span { font-size: 1.5em; padding-left: 1rem; border-left-color: currentcolor; }
 }
 .cycle { --a: var(--b); --b: var(--a); color: var(--a, #123456); }
 .hidden { visibility: hidden; }
+.folded { visibility: collapse; empty-cells: hide; column-span: all; }
 input[type="checkbox"] { background-color: tomato; }
 input[type=range][title] { background-color: RebeccaPurple; border-top: 2px solid currentColor; color: darkslategray; }
 [title="tip"] { outline-color: currentColor; outline-style: dotted; }
@@ -344,6 +362,7 @@ input[type=range][title] { background-color: RebeccaPurple; border-top: 2px soli
 			ui.Button(ui.Text("button inherits")),
 		),
 		ui.Div(ui.Class("vars", "cycle"), ui.Span(ui.Class("hidden"), ui.Text("vars"))),
+		ui.Div(ui.Class("folded"), ui.Span(ui.Text("inherits collapse and hide, not the span"))),
 		ui.Div(ui.Style("font-size: 20px; --ink: #0ff"), ui.P(ui.Style("color: var(--ink)"), ui.Text("inline var"))),
 		ui.Div(
 			ui.Input(ui.Type("checkbox")),

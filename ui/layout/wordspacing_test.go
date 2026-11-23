@@ -167,8 +167,8 @@ func TestAnEllipsisCutsWordSpacedTextWhereItFits(t *testing.T) {
 }
 
 func TestANumberedMarkerIsAsWideAsItsWordSpacedText(t *testing.T) {
-	li := el(dom.Li, wordSpaced(5, listItem(style.ListDecimal)), text("HH"))
-	dom.Data(li).Ordinal = 1
+	li := el(dom.Li, wordSpaced(5, listItem(style.ListCounter)), text("HH"))
+	dom.Data(li).MarkerText, dom.Data(li).HasMarkerText = "1. ", true
 	tr := lay(el(dom.Div, width(100), el(dom.Ol, block, li)), 200)
 	m := markerOfBox(tr.Of[li])
 	require.NotNil(t, m)

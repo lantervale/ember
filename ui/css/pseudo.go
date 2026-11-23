@@ -48,6 +48,19 @@ var (
 	markerProps = append([]string{"color", "content", "cursor", "letter-spacing", "overflow-wrap", "quotes",
 		"text-shadow", "text-transform", "white-space", "transition", "transition-property", "transition-duration",
 		"transition-timing-function", "transition-delay", "-webkit-font-smoothing", "word-spacing"}, fontProps...)
+	// Longhands only: a shorthand is taken where one of its longhands is.
+	firstLineProps = append([]string{"color", "opacity", "visibility", "vertical-align", "box-shadow",
+		"-webkit-font-smoothing", "text-shadow", "text-transform", "letter-spacing", "word-spacing",
+		"text-decoration-line", "text-decoration-style", "text-decoration-color", "text-decoration-thickness",
+		"background-color", "background-image", "background-repeat", "background-size", "background-position",
+		"background-attachment", "background-origin", "background-clip"}, fontProps...)
+	firstLetterProps = append([]string{"float", "margin-top", "margin-right", "margin-bottom", "margin-left",
+		"padding-top", "padding-right", "padding-bottom", "padding-left", "border-top-width", "border-right-width",
+		"border-bottom-width", "border-left-width", "border-top-style", "border-right-style", "border-bottom-style",
+		"border-left-style", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+		"border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius",
+		"border-image-source", "border-image-slice", "border-image-width", "border-image-outset",
+		"border-image-repeat"}, firstLineProps...)
 	placeholderProps = []string{"color", "opacity"}
 	selectionProps   = []string{"color", "background-color", "background"}
 	backdropProps    = []string{"background-color", "background", "opacity"}
@@ -59,16 +72,14 @@ var (
 //
 //nolint:gochecknoglobals,goconst // lookup table
 var pseudoElements = map[string]pseudoElement{
-	"before": {legacy: true},
-	"after":  {legacy: true},
-	"marker": {takes: markerProps},
-	"first-line": {status: pseudoRefused, legacy: true,
-		why: "::first-line is not supported: ui styles no line of a block apart"},
-	"first-letter": {status: pseudoRefused, legacy: true,
-		why: "::first-letter is not supported: ui styles no letter of a block apart"},
-	"placeholder": {takes: placeholderProps},
-	"selection":   {takes: selectionProps},
-	"backdrop":    {takes: backdropProps},
+	"before":       {legacy: true},
+	"after":        {legacy: true},
+	"marker":       {takes: markerProps},
+	"first-line":   {legacy: true, takes: firstLineProps},
+	"first-letter": {legacy: true, takes: firstLetterProps},
+	"placeholder":  {takes: placeholderProps},
+	"selection":    {takes: selectionProps},
+	"backdrop":     {takes: backdropProps},
 	"file-selector-button": {status: pseudoRefused,
 		why: "::file-selector-button is not supported: ui has no file input"},
 	"details-content": {status: pseudoRefused,
@@ -101,7 +112,7 @@ var pseudoElements = map[string]pseudoElement{
 // takesProperty reports whether the pseudo-element name takes the
 // property, a longhand or a shorthand.
 func takesProperty(name, property string) bool {
-	pe := pseudoElements[name]
+	pe := pseudoElements[tableName(name)]
 	if pe.takes == nil || strings.HasPrefix(property, "--") {
 		return true
 	}
@@ -112,6 +123,22 @@ func takesProperty(name, property string) bool {
 	}
 	return false
 }
+
+// tableName is the name pseudoElements has name under: marker for a
+// generated box's ::marker.
+func tableName(name string) string {
+	if name == beforeMarker || name == afterMarker {
+		return kwMarker
+	}
+	return name
+}
+
+// beforeMarker and afterMarker name the ::marker of a ::before or an
+// ::after that is a list item, as a selector's PseudoElement.
+const (
+	beforeMarker = "before::marker"
+	afterMarker  = "after::marker"
+)
 
 // takesDeclared is takesProperty for a declaration's name, a shorthand
 // being taken when one of its longhands is.
@@ -153,6 +180,10 @@ func pseudoElementAt(cs []Component) (string, int, *SelectorError) {
 		return "", 0, selErr(last, "::%s takes an argument in ( )", name)
 	case last.Kind == Function && len(trim(last.Args)) == 0:
 		return "", 0, selErr(last, "::%s() is empty", name)
+	}
+	if name == kwMarker && colons == 3 && n >= 6 && cs[n-4].Kind == Ident && cs[n-5].Kind == Colon &&
+		cs[n-6].Kind == Colon && isWord(cs[n-4], "before", "after") {
+		return strings.ToLower(cs[n-4].Text) + "::marker", 6, nil
 	}
 	return name, colons, nil
 }

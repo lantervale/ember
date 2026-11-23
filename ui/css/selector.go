@@ -842,6 +842,9 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 	if s.PseudoElement != "" {
 		s.Specificity[2]++
 	}
+	if s.PseudoElement == beforeMarker || s.PseudoElement == afterMarker {
+		s.Specificity[2]++
+	}
 	return s, nil
 }
 

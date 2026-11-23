@@ -99,3 +99,27 @@ func TestACollapsedDoubleEdgeIsTwoLines(t *testing.T) {
 	assert.Equal(t, []geom.Rect{{X: 10, Y: 10, W: 2, H: 22}, {X: 13, Y: 10, W: 2, H: 22}}, rectsOf(r, blue), "down")
 	assert.Equal(t, []geom.Rect{{X: 47, Y: 10, W: 2, H: 22}}, rectsOf(r, red), "solid, too thin for a gap")
 }
+
+func TestAnEmptyCellDrawsNoBorderNorBackgroundWhereEmptyCellsHides(t *testing.T) {
+	cell := func(x float32, hide bool, kids ...*box.Box) *box.Box {
+		return el(x, 0, 40, 20, func(st *style.Computed) {
+			tablePart(style.TableCell, white)(st)
+			st.Border, st.BorderStyle, st.BorderColor = style.All[float32](2), style.All(style.BorderSolid), style.All(red)
+			st.EmptyCellsHide = hide
+		}, kids...)
+	}
+	st := style.Initial()
+	space, word := text(0, 0, "", &st), text(0, 0, "a", &st)
+	space.Lines = nil
+	row := el(0, 0, 166, 20, tablePart(style.TableRow, color.Color{}),
+		cell(0, true), cell(42, true, space), cell(84, true, word), cell(126, false))
+	table := el(10, 10, 166, 20, func(st *style.Computed) { st.Table = true }, row)
+	r := newRecorder()
+	Paint(r, tree(table))
+	assert.Equal(t, []geom.Rect{{X: 94, Y: 10, W: 40, H: 20}, {X: 136, Y: 10, W: 40, H: 20}}, rectsOf(r, white),
+		"none behind a cell with nothing in it, white space aside")
+	r = newRecorder()
+	table.Collapsed = []box.Edge{}
+	Paint(r, tree(table))
+	assert.Len(t, rectsOf(r, white), 4, "a table that collapses its borders draws every cell")
+}

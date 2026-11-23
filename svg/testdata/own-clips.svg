@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 120 120">
+  <defs>
+    <clipPath id="disc"><circle cx="20" cy="20" r="16"/></clipPath>
+    <clipPath id="box" clipPathUnits="objectBoundingBox"><rect x=".1" y=".05" width=".8" height=".4"/><circle cx=".5" cy=".7" r=".25"/></clipPath>
+    <clipPath id="ring"><path clip-rule="evenodd" d="M100 4a16 16 0 1 0 .01 0zM100 13a7 7 0 1 0 .01 0z"/></clipPath>
+    <clipPath id="turned" transform="rotate(30 20 60)"><rect x="8" y="48" width="24" height="24"/></clipPath>
+    <clipPath id="half"><rect x="40" y="40" width="20" height="40"/></clipPath>
+    <clipPath id="both" clip-path="url(#half)"><circle cx="60" cy="60" r="17"/></clipPath>
+    <path id="tri" d="M100 42L118 76H82z"/>
+    <clipPath id="used"><use href="#tri" stroke="#000" stroke-width="20"/></clipPath>
+    <clipPath id="star"><path d="M20 82l5 12h13l-10 8 4 13-12-8-12 8 4-13-10-8h13z"/></clipPath>
+    <clipPath id="styled"><rect x="44" y="84" width="32" height="32" rx="10"/></clipPath>
+    <clipPath id="bar"><rect x="80" y="56" width="40" height="10"/></clipPath>
+    <linearGradient id="g"><stop stop-color="#fc0"/><stop offset="1" stop-color="#c06"/></linearGradient>
+  </defs>
+  <g clip-path="url(#disc)"><rect width="40" height="40" fill="#c33"/><rect x="14" width="8" height="40" fill="#fc0"/></g>
+  <rect x="44" y="2" width="32" height="36" fill="url(#g)" clip-path="url(#box)"/>
+  <rect x="80" width="40" height="40" fill="#36c" clip-path="url(#ring)"/>
+  <rect x="2" y="42" width="36" height="36" fill="#2a7" stroke="#063" stroke-width="6" clip-path="url(#turned)" transform="translate(2 2)"/>
+  <rect x="40" y="40" width="40" height="40" fill="#93c" clip-path="url(#both)"/>
+  <rect x="80" y="40" width="40" height="40" fill="#e60" clip-path="url(#used)"/>
+  <g clip-path="url(#star)" opacity=".7"><circle cx="20" cy="100" r="20" fill="#06c"/><circle cx="26" cy="94" r="8" fill="#fff"/></g>
+  <rect x="40" y="80" width="40" height="40" fill="#c06" style="clip-path: url(#styled)"/>
+  <use href="#tri" transform="translate(0 40)" fill="#333" clip-path="url(#bar)"/>
+</svg>

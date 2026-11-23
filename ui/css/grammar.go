@@ -166,6 +166,8 @@ var (
 	alignWords = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
 		"self-start", "self-end"}
 	// textAlign has Chrome's -webkit- values, which place blocks as well as lines.
+	blendMode = words("normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn",
+		"hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity")
 	textAlign = words("start", "end", "left", "right", "center", "justify", "-webkit-left", "-webkit-right",
 		"-webkit-center")
 )
@@ -205,15 +207,6 @@ func checkBackgroundSize(v []Component) error {
 	return repeated(either(sizeLP, words("auto")), 2)(v)
 }
 
-// checkMaskImage takes none or one picture: a mask is the alpha of a
-// picture, and a gradient's is not drawn.
-func checkMaskImage(v []Component) error {
-	if len(v) == 1 && (isWord(v[0], kwNone) || urlTerm(v[0]) == nil) {
-		return nil
-	}
-	return fmt.Errorf("mask-image takes none or one url(): a gradient or several layers are not supported")
-}
-
 // checkMaskPosition takes a position of one, two or four values: the
 // three of a background's ("right 6px center") are not a mask's.
 func checkMaskPosition(v []Component) error {
@@ -221,14 +214,6 @@ func checkMaskPosition(v []Component) error {
 		return fmt.Errorf("mask-position takes one, two or four values")
 	}
 	return checkPosition(v)
-}
-
-// checkColumnSpan takes none: an element spanning every column is not laid out.
-func checkColumnSpan(v []Component) error {
-	if len(v) == 1 && isWord(v[0], kwAll) {
-		return fmt.Errorf("column-span: all is not supported; put the element before the columns")
-	}
-	return single(words("none"))(v)
 }
 
 // checkContainerType takes normal, size or inline-size: a container of
@@ -357,7 +342,7 @@ var checks = map[string]check{
 	"column-count":          single(either(positiveInteger, words("auto"))),
 	"column-width":          single(either(dimTerm(nonNegative), words("auto"))),
 	"column-fill":           single(words("balance", "auto")),
-	"column-span":           checkColumnSpan,
+	"column-span":           single(words("none", kwAll)),
 	"column-rule-width":     single(borderWidth),
 	"column-rule-style":     single(borderStyle),
 	"column-rule-color":     single(colorTerm),
@@ -392,17 +377,21 @@ var checks = map[string]check{
 	"letter-spacing": single(either(lengthPercent, words("normal"))),
 	propCaps: single(words("normal", "small-caps", "all-small-caps", "petite-caps", "all-petite-caps",
 		"unicase", "titling-caps")),
-	propLigatures:              checkVariant(propLigatures),
-	propNumeric:                checkVariant(propNumeric),
-	propEastAsian:              checkVariant(propEastAsian),
-	propAlternates:             checkVariant(propAlternates),
-	propPosition:               checkVariant(propPosition),
-	"word-spacing":             single(either(lengthPercent, words("normal"))),
-	"border-spacing":           repeated(length, 2),
-	"border-collapse":          single(words("separate", "collapse")),
-	"caption-side":             single(words("top", "bottom")),
-	"table-layout":             single(words("auto", "fixed")),
-	"text-align":               single(textAlign),
+	propLigatures:     checkVariant(propLigatures),
+	propNumeric:       checkVariant(propNumeric),
+	propEastAsian:     checkVariant(propEastAsian),
+	propAlternates:    checkVariant(propAlternates),
+	propPosition:      checkVariant(propPosition),
+	"word-spacing":    single(either(lengthPercent, words("normal"))),
+	"border-spacing":  repeated(length, 2),
+	"border-collapse": single(words("separate", "collapse")),
+	"caption-side":    single(words("top", "bottom")),
+	"empty-cells":     single(words("show", "hide")),
+	"table-layout":    single(words("auto", "fixed")),
+	"text-align":      single(textAlign),
+	"direction":       single(words("ltr", "rtl")),
+	"unicode-bidi": single(words("normal", "embed", "isolate", "bidi-override", "isolate-override",
+		"plaintext")),
 	"text-indent":              single(lengthPercent),
 	"text-transform":           single(words("none", "uppercase", "lowercase", "capitalize")),
 	"-webkit-font-smoothing":   single(words("auto", "none", "antialiased", "subpixel-antialiased")),
@@ -419,6 +408,7 @@ var checks = map[string]check{
 	"text-overflow":     single(words("clip", "ellipsis")),
 	"scrollbar-width":   single(words("auto", "thin", "none")),
 	"list-style-type":   checkListStyle,
+	"list-style-image":  checkListImage,
 	"content":           checkContent,
 	"counter-reset":     checkCounters,
 	"counter-increment": checkCounters,
@@ -437,10 +427,14 @@ var checks = map[string]check{
 	"background-clip":       commaList(single(backgroundBox)),
 	"background-size":       commaList(checkBackgroundSize),
 	"background-position":   commaList(checkPosition),
-	"mask-image":            checkMaskImage,
-	"mask-repeat":           single(words("repeat", "no-repeat", "repeat-x", "repeat-y")),
-	"mask-size":             checkBackgroundSize,
-	"mask-position":         checkMaskPosition,
+	"mask-image":            commaList(single(either(words("none"), imageTerm))),
+	"mask-repeat":           commaList(checkTiling),
+	"mask-size":             commaList(checkBackgroundSize),
+	"mask-position":         commaList(checkMaskPosition),
+	"mask-origin":           commaList(single(maskBox)),
+	"mask-clip":             commaList(single(either(words("no-clip"), maskBox))),
+	"mask-mode":             commaList(single(words("alpha", "luminance", "match-source"))),
+	"mask-composite":        commaList(single(words("add", "subtract", "intersect", "exclude"))),
 	"clip-path":             checkClipPath,
 	"text-shadow":           checkTextShadow,
 	"image-rendering":       single(words("auto", "pixelated")),
@@ -456,6 +450,10 @@ var checks = map[string]check{
 	"opacity":               single(dimTerm(allowNumber | allowPercent | noLength)),
 	"transform":             checkTransform,
 	"filter":                checkFilter,
+	"backdrop-filter":       checkFilter,
+	"mix-blend-mode":        single(blendMode),
+	"isolation":             single(words("auto", "isolate")),
+	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,
 	"appearance":            single(words("none", "auto", "textfield")),
 	"resize":                single(words("none", "both", "horizontal", "vertical")),
@@ -464,6 +462,7 @@ var checks = map[string]check{
 	"transition-duration":        commaList(single(timeTerm(true))),
 	"transition-delay":           commaList(single(timeTerm(false))),
 	"transition-timing-function": commaList(single(timingFunction)),
+	"transition-behavior":        commaList(single(words(kwNormal, kwAllowDiscrete))),
 	"animation-name":             commaList(single(either(words(kwNone), keyframesName))),
 	"animation-duration":         commaList(single(timeTerm(true))),
 	"animation-delay":            commaList(single(timeTerm(false))),
@@ -472,6 +471,7 @@ var checks = map[string]check{
 	"animation-direction":        commaList(single(words(animationDirections...))),
 	"animation-fill-mode":        commaList(single(words(animationFills...))),
 	"animation-play-state":       commaList(single(words(kwRunning, kwPaused))),
+	"animation-composition":      commaList(single(words("replace", "add", "accumulate"))),
 
 	"text-decoration-line":      checkDecorationLine,
 	"text-decoration-style":     single(decorationStyle),
@@ -1211,6 +1211,12 @@ func checkTiling(v []Component) error {
 func repeatAxis(c Component) error { return words("repeat", "no-repeat", "space", "round")(c) }
 
 func backgroundBox(c Component) error { return words("border-box", "padding-box", "content-box")(c) }
+
+// maskBox is a box a mask is placed or shown in: a background's, or an
+// SVG shape's.
+func maskBox(c Component) error {
+	return words("border-box", "padding-box", "content-box", "fill-box", "stroke-box", "view-box")(c)
+}
 
 // pair is v's two components when it has just two.
 func pair(v []Component) (Component, Component, bool) {

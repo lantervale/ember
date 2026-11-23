@@ -143,3 +143,17 @@ func TestAThumbIsSizedOnTheWholeBarAndInsetByItsEnds(t *testing.T) {
 	assert.Equal(t, float32(4), top.VThumb.Y, "at the top, its border's 4 in")
 	assert.Equal(t, float32(100-25+4), bottom.VThumb.Y, "at the bottom, the box's 75 down plus 4")
 }
+
+func TestARightToLeftScrollersBarStandsOnItsLeft(t *testing.T) {
+	b := el(0, 0, 100, 100, func(s *style.Computed) {
+		s.Overflow = style.Size[style.Overflow]{Width: style.Scroll, Height: style.Scroll}
+		s.Dir = style.RTL
+	})
+	b.Content, b.Scrollbar = geom.V2(400, 400), geom.V2(barSize, barSize)
+	l := BarsOf(b, geom.Vec2{})
+	assert.Less(t, l.VTrack.X+l.VTrack.W, float32(barSize), "within the left gutter")
+	assert.GreaterOrEqual(t, l.HTrack.X, float32(barSize), "past the corner, on the left")
+	assert.GreaterOrEqual(t, l.HThumb.X, float32(barSize))
+	clip, _ := clipRect(b, geom.Vec2{})
+	assert.Equal(t, geom.Rect{X: barSize, W: 100 - barSize, H: 100 - barSize}, clip, "the content right of the bar")
+}

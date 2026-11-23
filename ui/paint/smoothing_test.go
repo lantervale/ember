@@ -24,7 +24,7 @@ func TestTextIsDrawnWithItsFontSmoothing(t *testing.T) {
 			st.Color = white
 			st.Font.Size = 10
 			st.WordSpacing = style.Spacing{Px: 5}
-			st.ListItem, st.ListStyle = true, style.ListDecimal
+			st.ListItem, st.ListStyle = true, style.ListCounter
 			st.TextShadows = []style.Shadow{{X: 1, Y: 1, Color: white}}
 			c.edit(st)
 		})
