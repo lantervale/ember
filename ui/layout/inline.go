@@ -1212,6 +1212,9 @@ func (c *inlineContent) cutGraphemes(wf box.WholeFonts, st *style.Computed, s st
 // after a letter or a digit, before another or a hyphen, as Chrome breaks it, but before a
 // letter strictness s keeps off a line's start.
 func breaksAll(a, b string, s style.Strictness) bool {
+	if len(a) > 0 && len(b) > 0 && printableASCII(a[len(a)-1]) && printableASCII(b[0]) {
+		return tableBreak(&asciiBreaksAll, a[len(a)-1], b[0])
+	}
 	ra, _ := utf8.DecodeLastRuneInString(a)
 	rb, _ := utf8.DecodeRuneInString(b)
 	return letterLike(ra) && (letterLike(rb) && !startsNoLine(rb, s) || rb == '-' || rb == '\u2010')
@@ -1304,7 +1307,7 @@ func (c *inlineContent) closeSpans(i int) {
 // softBreaks finds UAX #14's line break opportunities inside words, run by run: soft[i][at]
 // is set when a line may break before byte at of run i's text. The runs are read as one text,
 // atoms as U+FFFC, so the rules see across run boundaries; breaks at spaces and newlines are
-// cut's own. As in Chrome, a path such as a/b doesn't break after its slash.
+// cut's own. As in Chrome, two printable ASCII characters break by its table instead.
 func (c *inlineContent) softBreaks() []map[int]bool {
 	var all, classes strings.Builder
 	starts := make([]int, len(c.runs))
@@ -1325,6 +1328,20 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 	if classed {
 		classedText = classes.String()
 	}
+	runAt := func(pos int) int {
+		k := 0
+		for k+1 < len(c.runs) && starts[k+1] <= pos {
+			k++
+		}
+		return k
+	}
+	mark := func(pos int) {
+		k := runAt(pos)
+		if soft[k] == nil {
+			soft[k] = map[int]bool{}
+		}
+		soft[k][pos-starts[k]] = true
+	}
 	rest, pos, state := classedText, 0, -1
 	run := 0
 	for len(rest) > 0 {
@@ -1337,10 +1354,8 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		for run+1 < len(c.runs) && starts[run+1] <= pos {
 			run++
 		}
-		if r, _ := utf8.DecodeLastRuneInString(text[:pos]); r == '/' {
-			if next, _ := utf8.DecodeRuneInString(rest); unicode.IsLetter(next) || unicode.IsDigit(next) {
-				continue
-			}
+		if asciiPair(text, pos) {
+			continue
 		}
 		if c.runs[run].atomic != nil || c.runs[run].st.WordBreak == style.KeepAll && keeps(text[:pos], rest) {
 			continue
@@ -1348,28 +1363,14 @@ func (c *inlineContent) softBreaks() []map[int]bool {
 		if r, _ := utf8.DecodeLastRuneInString(text[:pos]); r == softHyphenChar && c.hyphensOff(starts, pos-1) {
 			continue
 		}
-		if soft[run] == nil {
-			soft[run] = map[int]bool{}
-		}
-		soft[run][pos-starts[run]] = true
-	}
-	runAt := func(pos int) int {
-		k := 0
-		for k+1 < len(c.runs) && starts[k+1] <= pos {
-			k++
-		}
-		return k
+		mark(pos)
 	}
 	add := func(pos int) {
-		k := runAt(pos)
-		if c.runs[k].atomic != nil || c.runs[k].st.WordBreak == style.KeepAll {
-			return
+		if k := runAt(pos); c.runs[k].atomic == nil && c.runs[k].st.WordBreak != style.KeepAll {
+			mark(pos)
 		}
-		if soft[k] == nil {
-			soft[k] = map[int]bool{}
-		}
-		soft[k][pos-starts[k]] = true
 	}
+	asciiBreaksIn(text, mark)
 	quoteBreaks(text, add)
 	c.anywhereEnds(add, starts)
 	looseBreaks(text, classedText, func(pos int) style.Strictness {

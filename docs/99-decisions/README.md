@@ -195,6 +195,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0191 | [Markers are numbered apart from the list-item counter](0191-markers-are-numbered-apart-from-the-list-item-counter.md) | rendering |
 | 0192 | [text-box-trim follows Chrome's lines into columns and floats](0192-text-box-trim-follows-chromes-lines-into-columns-and-floats.md) | rendering |
 | 0195 | [line-break strictness reclasses characters before UAX #14](0195-line-break-strictness-reclasses-characters-before-uax-14.md) | rendering |
+| 0196 | [Two ASCII characters break by Chrome's table, measured in Chrome](0196-two-ascii-characters-break-by-chromes-table-measured-in-chrome.md) | rendering |
 
 ## Writing one
 
