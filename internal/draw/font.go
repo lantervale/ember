@@ -395,13 +395,13 @@ type Font struct {
 	looks        []Look
 	colours      []*colourfont.Font
 	colourGlyphs map[colourKey]colourGlyph
-	emoji      Emoji
-	buf        sfnt.Buffer
-	cell       int
-	penX, penY int
-	ascent     float32
-	lineHeight float32
-	size       float32
+	emoji        Emoji
+	buf          sfnt.Buffer
+	cell         int
+	penX, penY   int
+	ascent       float32
+	lineHeight   float32
+	size         float32
 	// smoothing is how glyphs are rasterized.
 	smoothing smoothing
 	// stroke is how wide the glyphs' outlines are stroked, in pixels of

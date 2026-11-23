@@ -1,4 +1,4 @@
-package css
+package css //nolint:testpackage // reads the parser and the test helpers (computed, componentsOf)
 
 import (
 	"testing"

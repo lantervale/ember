@@ -52,29 +52,43 @@ func strike(ppems []int, ppem float32) int {
 
 func (f *Font) drawBitmap(gid uint16, req Request) (*image.RGBA, image.Point, bool) {
 	if f.sbix != nil {
-		var ppems, strikes []int
-		for i := range int(f.sbix.u32(4)) {
-			if _, _, _, ok := f.sbixGlyph(i, gid, 0); ok {
-				ppems = append(ppems, int(f.sbix.u16(int(f.sbix.u32(8+4*i)))))
-				strikes = append(strikes, i)
-			}
-		}
-		if s := strike(ppems, req.PPEM); s >= 0 {
-			data, x, y, _ := f.sbixGlyph(strikes[s], gid, 0)
-			img := decode(data)
-			if img == nil {
-				return nil, image.Point{}, false
-			}
-			k := req.PPEM / float32(ppems[s])
-			h := img.Bounds().Dy()
-			out, at, ok := scaled(img, k, float32(x)*k, -float32(y+h)*k)
-			if ok {
-				em := req.PPEM / f.upem
-				clipTo(out, at, f.outlineBox(gid, scale(em, -em)))
-			}
+		if out, at, ok, struck := f.drawSbix(gid, req); struck {
 			return out, at, ok
 		}
 	}
+	return f.drawCBDT(gid, req)
+}
+
+// drawSbix draws glyph gid from its sbix strike; struck is false when
+// none has it.
+func (f *Font) drawSbix(gid uint16, req Request) (*image.RGBA, image.Point, bool, bool) {
+	var ppems, strikes []int
+	for i := range int(f.sbix.u32(4)) {
+		if _, _, _, ok := f.sbixGlyph(i, gid, 0); ok {
+			ppems = append(ppems, int(f.sbix.u16(int(f.sbix.u32(8+4*i)))))
+			strikes = append(strikes, i)
+		}
+	}
+	s := strike(ppems, req.PPEM)
+	if s < 0 {
+		return nil, image.Point{}, false, false
+	}
+	data, x, y, _ := f.sbixGlyph(strikes[s], gid, 0)
+	img := decode(data)
+	if img == nil {
+		return nil, image.Point{}, false, true
+	}
+	k := req.PPEM / float32(ppems[s])
+	h := img.Bounds().Dy()
+	out, at, ok := scaled(img, k, float32(x)*k, -float32(y+h)*k)
+	if ok {
+		em := req.PPEM / f.upem
+		clipTo(out, at, f.outlineBox(gid, scale(em, -em)))
+	}
+	return out, at, ok, true
+}
+
+func (f *Font) drawCBDT(gid uint16, req Request) (*image.RGBA, image.Point, bool) {
 	if f.cblc != nil {
 		var ppems, sizes []int
 		for i := range int(f.cblc.u32(4)) {
@@ -224,6 +238,8 @@ func (f *Font) cbdtGlyph(i int, gid uint16) (cbdtBitmap, bool) {
 
 // cbdtSub finds gid in the index subtable at sub, whose glyphs start
 // at first.
+//
+//nolint:funlen // a case for each index and image format
 func (f *Font) cbdtSub(sub int, gid, first uint16) (cbdtBitmap, bool) {
 	t := f.cblc
 	indexFormat, imageFormat, data := t.u16(sub), t.u16(sub+2), int(t.u32(sub+4))
@@ -267,7 +283,7 @@ func (f *Font) cbdtSub(sub int, gid, first uint16) (cbdtBitmap, bool) {
 	if end <= start {
 		return cbdtBitmap{}, false
 	}
-	g := table(f.cbdt)
+	g := f.cbdt
 	at := data + start
 	if !g.in(at, end-start) {
 		return cbdtBitmap{}, false

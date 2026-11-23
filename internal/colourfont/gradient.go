@@ -121,8 +121,8 @@ func (c *colrCtx) gradient(m affine, line colourLine, pos position) *layer {
 	for y := range c.h {
 		for x := range c.w {
 			gx, gy := inv.apply(float32(x)+0.5, float32(y)+0.5)
-			t, ok := pos(gx, gy)
-			if !ok {
+			t, on := pos(gx, gy)
+			if !on {
 				continue
 			}
 			col := line.at(t)

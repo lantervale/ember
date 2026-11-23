@@ -37,6 +37,15 @@ func (v FontPaletteValues) For(family string) bool {
 	return false
 }
 
+// paletteRules writes rules back as CSS.
+func paletteRules(rules []FontPaletteValues) string {
+	var b strings.Builder
+	for _, v := range rules {
+		b.WriteString(v.String())
+	}
+	return b.String()
+}
+
 // String writes the rule back as CSS.
 func (v FontPaletteValues) String() string {
 	var b strings.Builder

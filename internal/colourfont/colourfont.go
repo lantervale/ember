@@ -156,7 +156,7 @@ type Request struct {
 // Draw draws glyph gid in colour as req has it: the picture, alpha
 // premultiplied, and where its top-left is in pixels from the glyph's
 // origin, y down; ok is false for a glyph drawn by its outline.
-func (f *Font) Draw(gid uint16, req Request) (img *image.RGBA, at image.Point, ok bool) {
+func (f *Font) Draw(gid uint16, req Request) (*image.RGBA, image.Point, bool) {
 	if f == nil || !(req.PPEM > 0) || req.PPEM > maxPPEM {
 		return nil, image.Point{}, false
 	}
@@ -179,8 +179,8 @@ const maxPPEM = 4096
 // colour is entry i of the palette req draws with, alpha times alpha.
 func (f *Font) colour(i uint16, alpha float32, req Request) [4]float32 {
 	var c color.NRGBA
-	switch {
-	case i == 0xFFFF:
+	switch i {
+	case 0xFFFF:
 		c = req.Foreground
 	default:
 		for _, o := range req.Overrides {
@@ -284,11 +284,3 @@ func (t table) f2dot14(at int) float32 { return float32(t.i16(at)) / 16384 }
 
 // fixed is the 16.16 number at at.
 func (t table) fixed(at int) float32 { return float32(int32(t.u32(at))) / 65536 } //nolint:gosec // a signed field
-
-// from is the part of t from off, nil past its end.
-func (t table) from(off int) table {
-	if off <= 0 || off >= len(t) {
-		return nil
-	}
-	return t[off:]
-}

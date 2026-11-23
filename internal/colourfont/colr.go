@@ -182,6 +182,8 @@ func (c *colrCtx) solid(col [4]float32) *layer {
 }
 
 // paint draws the paint at at in COLR through m, nil for nothing.
+//
+//nolint:funlen // a case for each kind of paint
 func (c *colrCtx) paint(at int, m affine, depth int) *layer {
 	if depth > maxDepth || at <= 0 || at >= len(c.f.colr) {
 		return nil

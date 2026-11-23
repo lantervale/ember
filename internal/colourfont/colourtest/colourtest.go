@@ -122,7 +122,7 @@ func Build(opts Options) []byte {
 func Collection(fonts ...[]byte) []byte {
 	be := binary.BigEndian
 	head := 12 + 4*len(fonts)
-	out := make([]byte, head)
+	out := make([]byte, head, head+len(fonts)*1024)
 	copy(out, "ttcf")
 	be.PutUint32(out[4:], 0x00010000)
 	be.PutUint32(out[8:], uint32(len(fonts))) //nolint:gosec // a few fonts
@@ -172,7 +172,7 @@ func Assemble(tables map[string][]byte) []byte {
 	n := len(tags)
 	be := binary.BigEndian
 	head := 12 + 16*n
-	out := make([]byte, head)
+	out := make([]byte, head, head+1024)
 	be.PutUint32(out, 0x00010000)
 	if _, ok := tables["CFF "]; ok {
 		copy(out, "OTTO")
@@ -245,14 +245,14 @@ func utf16BE(s string) []byte {
 		if r > 0xffff {
 			r = '?'
 		}
-		out = binary.BigEndian.AppendUint16(out, uint16(r)) //nolint:gosec // under 0x10000
+		out = binary.BigEndian.AppendUint16(out, uint16(r))
 	}
 	return out
 }
 
 func put8(b *bytes.Buffer, v uint8)   { b.WriteByte(v) }
 func put16(b *bytes.Buffer, v uint16) { b.Write(binary.BigEndian.AppendUint16(nil, v)) }
-func put24(b *bytes.Buffer, v uint32) { b.Write([]byte{byte(v >> 16), byte(v >> 8), byte(v)}) }
+func put24(b *bytes.Buffer, v uint32) { b.Write([]byte{byte(v >> 16), byte(v >> 8), byte(v)}) } //nolint:gosec // its bytes
 func put32(b *bytes.Buffer, v uint32) { b.Write(binary.BigEndian.AppendUint32(nil, v)) }
 
 func f2dot14(v float32) uint16 { return uint16(int16(math.Round(float64(v) * 16384))) } //nolint:gosec // -2 to 2
@@ -276,9 +276,9 @@ func cpal(palettes [][]color.NRGBA, types []uint32) []byte {
 	}
 	entries := len(palettes[0])
 	put16(&b, version)
-	put16(&b, uint16(entries))                 //nolint:gosec // a few
-	put16(&b, uint16(len(palettes)))           //nolint:gosec // a few
-	put16(&b, uint16(entries*len(palettes)))   //nolint:gosec // a few
+	put16(&b, uint16(entries))               //nolint:gosec // a few
+	put16(&b, uint16(len(palettes)))         //nolint:gosec // a few
+	put16(&b, uint16(entries*len(palettes))) //nolint:gosec // a few
 	head := 12 + 2*len(palettes)
 	if version == 1 {
 		head += 12
@@ -335,9 +335,9 @@ func colr(opts Options) []byte {
 	if v1 {
 		list, layerList = paintLists(opts.Paints)
 		clips = clipList(opts.Clips)
-		put32(&b, uint32(listAt))                                       //nolint:gosec // small
-		put32(&b, uint32(listAt+len(list)))                             //nolint:gosec // small
-		put32(&b, offsetOr(listAt+len(list)+len(layerList), len(clips))) //nolint:gosec // small
+		put32(&b, uint32(listAt))           //nolint:gosec // small
+		put32(&b, uint32(listAt+len(list))) //nolint:gosec // small
+		put32(&b, offsetOr(listAt+len(list)+len(layerList), len(clips)))
 		put32(&b, 0)
 		put32(&b, 0)
 	}
@@ -456,7 +456,7 @@ func sbix(strikes map[int]map[rune]Bitmap, numGlyphs int) []byte {
 		at := 4 + 4*(numGlyphs+1)
 		var data bytes.Buffer
 		for g := range numGlyphs + 1 {
-			put32(&s, uint32(at+data.Len())) //nolint:gosec // small
+			put32(&s, uint32(at+data.Len()))                       //nolint:gosec // small
 			if bm, ok := byGlyph[uint16(g)]; ok && g < numGlyphs { //nolint:gosec // under numGlyphs
 				put16(&data, uint16(int16(bm.X))) //nolint:gosec // small
 				put16(&data, uint16(int16(bm.Y))) //nolint:gosec // small
@@ -496,12 +496,12 @@ func cblc(bitmaps map[rune]Bitmap, ppem int) ([]byte, []byte) {
 		if err != nil {
 			panic(err)
 		}
-		at := uint32(cbdt.Len()) //nolint:gosec // small
-		put8(&cbdt, uint8(cfg.Height)) //nolint:gosec // under 256
-		put8(&cbdt, uint8(cfg.Width))  //nolint:gosec // under 256
-		put8(&cbdt, uint8(int8(bm.X))) //nolint:gosec // small
-		put8(&cbdt, uint8(int8(bm.Y))) //nolint:gosec // small
-		put8(&cbdt, uint8(ppem))       //nolint:gosec // the advance, one em
+		at := uint32(cbdt.Len())          //nolint:gosec // small
+		put8(&cbdt, uint8(cfg.Height))    //nolint:gosec // under 256
+		put8(&cbdt, uint8(cfg.Width))     //nolint:gosec // under 256
+		put8(&cbdt, uint8(int8(bm.X)))    //nolint:gosec // small
+		put8(&cbdt, uint8(int8(bm.Y)))    //nolint:gosec // small
+		put8(&cbdt, uint8(ppem))          //nolint:gosec // the advance, one em
 		put32(&cbdt, uint32(len(bm.PNG))) //nolint:gosec // small
 		cbdt.Write(bm.PNG)
 		entries = append(entries, entry{GlyphID(r), at, uint32(cbdt.Len()) - at}) //nolint:gosec // small
@@ -511,12 +511,13 @@ func cblc(bitmaps map[rune]Bitmap, ppem int) ([]byte, []byte) {
 	put16(&b, 0)
 	put32(&b, 1)
 	arrayAt := 8 + 48
-	put32(&b, uint32(arrayAt)) //nolint:gosec // small
+	put32(&b, uint32(arrayAt))
 	arraySize := 8*len(entries) + 16*len(entries)
 	put32(&b, uint32(arraySize))    //nolint:gosec // small
 	put32(&b, uint32(len(entries))) //nolint:gosec // a few
 	put32(&b, 0)
-	line := []byte{byte(int8(ppem * 4 / 5)), byte(int8(-ppem / 5)), byte(ppem), 1, 0, 0, 0, 0, 0, 0, 0, 0} //nolint:gosec // small
+	//nolint:gosec // a ppem's metrics, small
+	line := []byte{byte(int8(ppem * 4 / 5)), byte(int8(-ppem / 5)), byte(ppem), 1, 0, 0, 0, 0, 0, 0, 0, 0}
 	b.Write(line)
 	b.Write(line)
 	put16(&b, entries[0].gid)

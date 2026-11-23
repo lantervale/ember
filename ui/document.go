@@ -8,8 +8,8 @@ import (
 
 	"github.com/lantervale/ember/automation"
 	"github.com/lantervale/ember/geom"
-	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/input"
+	"github.com/lantervale/ember/internal/draw"
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/control"

@@ -144,6 +144,8 @@ func (v Var) format() uint8     { return v.Paint.format() + 1 }
 
 // encode writes p with the paints it points to after it, and the
 // paints of its Layers appended to layers.
+//
+//nolint:funlen // a case for each kind of paint
 func encode(p Paint, layers *[]Paint) []byte {
 	var b bytes.Buffer
 	variable := false
@@ -174,7 +176,7 @@ func encode(p Paint, layers *[]Paint) []byte {
 	}
 	switch p := p.(type) {
 	case Layers:
-		put8(&b, uint8(len(p)))   //nolint:gosec // a few
+		put8(&b, uint8(len(p)))         //nolint:gosec // a few
 		put32(&b, uint32(len(*layers))) //nolint:gosec // a few
 		*layers = append(*layers, p...)
 	case Solid:
@@ -263,7 +265,7 @@ func encode(p Paint, layers *[]Paint) []byte {
 	out := b.Bytes()
 	for i, h := range holes {
 		at := len(out)
-		out[h], out[h+1], out[h+2] = byte(at>>16), byte(at>>8), byte(at)
+		out[h], out[h+1], out[h+2] = byte(at>>16), byte(at>>8), byte(at) //nolint:gosec // its bytes
 		out = append(out, children[i]...)
 	}
 	return out

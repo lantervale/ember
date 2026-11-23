@@ -464,7 +464,7 @@ var checks = map[string]check{
 	"font-size": single(either(sizeLP,
 		words("xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large", "smaller",
 			"larger"))),
-	"font-style":     single(words("normal", "italic", "oblique")),
+	"font-style": single(words("normal", "italic", "oblique")),
 	"font-palette": single(either(words("normal", "light", "dark"), func(c Component) error {
 		if c.Kind == Ident && strings.HasPrefix(c.Text, "--") {
 			return nil

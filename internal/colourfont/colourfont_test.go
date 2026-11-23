@@ -23,7 +23,7 @@ func parse(t *testing.T, ttf []byte) *colourfont.Font {
 	return cf
 }
 
-var ink = color.NRGBA{0x33, 0x33, 0x33, 0xff}
+var ink = color.NRGBA{0x33, 0x33, 0x33, 0xff} //nolint:gochecknoglobals // the fixtures' text colour
 
 // at is the colour drawn at x, y em from the glyph's origin, y up, at
 // 100 pixels an em.
@@ -33,7 +33,9 @@ func at(t *testing.T, cf *colourfont.Font, r rune, req colourfont.Request, x, y 
 	img, origin, ok := cf.Draw(colourtest.GlyphID(r), req)
 	require.True(t, ok, "%c is drawn in colour", r)
 	p := image.Pt(int(x*100)-origin.X, int(-y*100)-origin.Y)
-	return color.NRGBAModel.Convert(img.At(p.X, p.Y)).(color.NRGBA)
+	c, isNRGBA := color.NRGBAModel.Convert(img.At(p.X, p.Y)).(color.NRGBA)
+	require.True(t, isNRGBA)
+	return c
 }
 
 func near(t *testing.T, want, got color.NRGBA, msg string) {

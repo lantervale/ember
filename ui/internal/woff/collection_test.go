@@ -1,4 +1,4 @@
-package woff
+package woff //nolint:testpackage // tests First beside Sfnt
 
 import (
 	"testing"

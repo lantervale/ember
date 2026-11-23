@@ -221,9 +221,7 @@ func (s *Sheet) String() string {
 		return s.src
 	}
 	var b strings.Builder
-	for _, v := range s.palettes {
-		b.WriteString(v.String())
-	}
+	b.WriteString(paletteRules(s.palettes))
 	for _, r := range s.Rules {
 		for _, m := range r.media {
 			b.WriteString("@media " + s.media[m].text + " { ")
