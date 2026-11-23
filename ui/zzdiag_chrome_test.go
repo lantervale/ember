@@ -36,14 +36,15 @@ body { font-family: Hebrew; } select, button, input, div { display: block; margi
 	doc.Body().Append(nodes...)
 	out, err := chrome.Eval(doc, geom.V2(400, 700), `return [...document.body.children].map(e => {
   const s = getComputedStyle(e); const r = e.getBoundingClientRect();
-  return e.tagName + " h=" + r.height + " lh=" + s.lineHeight + " fs=" + s.fontSize + " ff=" + s.fontFamily + " pad=" + s.paddingTop + " app=" + s.appearance; })`)
+  return e.tagName + " h=" + r.height + " lh=" + s.lineHeight + " fs=" + s.fontSize +
+    " ff=" + s.fontFamily + " pad=" + s.paddingTop + " app=" + s.appearance; })`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("%s", out)
+	t.Errorf("%s", out)
 	doc.Layout(geom.V2(400, 700))
 	for _, n := range nodes {
 		r, _ := doc.BoxOf(n)
-		t.Logf("ember %v", r)
+		t.Errorf("ember %v", r)
 	}
 }
