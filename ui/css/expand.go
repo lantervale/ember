@@ -380,7 +380,7 @@ func expandTransition(v []Component, out map[string][]Component) error {
 			switch {
 			case timingFunction(c) == nil && one["transition-timing-function"].Kind == EOF:
 				one["transition-timing-function"] = c
-			case c.Kind == Dimension && timeTerm(false)(c) == nil:
+			case c.Kind != Ident && timeTerm(false)(c) == nil:
 				switch {
 				case one["transition-duration"].Kind == EOF:
 					if timeTerm(true)(c) != nil {
@@ -506,7 +506,7 @@ func expandAnimation(v []Component, out map[string][]Component) error {
 // which longhands are still free.
 func animationPart(c Component, free func(string) bool) (string, error) {
 	switch {
-	case c.Kind == Dimension && timeTerm(false)(c) == nil:
+	case c.Kind != Ident && timeTerm(false)(c) == nil:
 		switch {
 		case free(propAnimationDuration):
 			if timeTerm(true)(c) != nil {

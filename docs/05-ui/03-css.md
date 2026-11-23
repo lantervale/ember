@@ -48,7 +48,10 @@ The presentational attributes of old pages style their element as Chrome reads t
 | `min()`, `max()`, `clamp()` | the least, the greatest, a value between two (`none` for no bound), of lengths and percentages, of angles or of numbers, in each other and in `calc()`; over a percentage they are worked out by layout against what the percentage is of, as `width: min(100%, 500px)`, in a `line-height`, a `word-spacing`, a `vertical-align` and a gradient's stop too ([decision 0123](../99-decisions/0123-math-functions-over-percentages-are-a-program-layout-runs.md)) |
 | `round()` (`nearest`, `up`, `down`, `to-zero`), `mod()`, `rem()`, `abs()`, `sign()`, `hypot()` | stepped and signed values, over percentages too: `width: round(50%, 8px)`, `calc(10px * sign(50% - 100px))` |
 | `sin()`, `cos()`, `tan()`, `asin()`, `acos()`, `atan()`, `atan2()`, `pow()`, `sqrt()`, `exp()`, `log()`, and `e`, `pi`, `infinity`, `-infinity`, `NaN` | numbers and angles, as `rotate(atan2(1em, 20px))`; units multiply and divide as Chrome's (`calc(1em / 10px)` is a number), a declaration whose math ends in a type its property doesn't take is dropped with a warning; NaN at the top is 0, an infinity the longest length |
-| hex, `rgb()`, `oklch()`, named colours, `transparent`, `currentColor` | colours |
+| times in math (`transition: opacity calc(1s + 100ms)`, `animation-delay: max(2s, 300ms * 10)`) | worked out in seconds; a negative duration is 0, as Chrome clamps it. In a `line-height`, a percentage inside `sign()` is of 100 pixels, as Chrome reads it, where the rest are of the font size |
+| hex, named colours, `transparent`, `currentColor`, `rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color()` (`srgb`, `srgb-linear`, `display-p3`, `a98-rgb`, `prophoto-rgb`, `rec2020`, `xyz`, `xyz-d50`, `xyz-d65`) | colours, their channels numbers, percentages, `none` or math (`rgb(calc(255 / 2) 0 0)`); `rgb()` and `hsl()` take the legacy commas too. Whatever the space, a colour is drawn in sRGB, clipped to it as Chrome clips ([decision 0139](../99-decisions/0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md)) |
+| `rgb(from <colour> r g b / alpha)` and the other functions' (`hsl(from teal calc(h + 120) s l)`, `color(from red srgb r g b)`) | a relative colour: each channel's name is the origin's channel in the function's space, a number, in math too |
+| `color-mix(in <space> [shorter, longer, increasing or decreasing hue], <colour> [<%>], <colour> [<%>])` | the two mixed in any space above, premultiplied, a missing channel taking the other's; percentages under 100% in all fade the mix. `currentColor` in a mix or an origin is the element's colour |
 | `linear-gradient(<angle> or to <side or corner>, <colour> [<length or %> [<length or %>]], …)` | in `background-image` or `background`: two stops or more, two positions on one stop a hard edge; `deg`, `rad`, `grad` or `turn`; `to` a corner follows the box's shape; colours blend in encoded sRGB, as Chrome's |
 | `radial-gradient([circle or ellipse] [closest-side, closest-corner, farthest-side or farthest-corner] [at <position>], <colour> [<length or %>], …)` | an ellipse to the farthest corner from the middle by default; length stops measure along the horizontal radius |
 | `conic-gradient([from <angle>] [at <position>], <colour> [<angle or %> [<angle or %>]], …)` | stops at angles or percentages of a turn, two positions a hard stop: a cooldown sweep is `conic-gradient(transparent 0 70%, rgba(0,0,0,.72) 70% 100%)` |
@@ -348,14 +351,15 @@ An `@media` rule applies while its query holds for the Document's viewport: the 
 | Media queries | |
 |---|---|
 | `all`, `screen` | hold; `print` and any other type never do |
-| `width`, `height`, `aspect-ratio`, `resolution`, each with `min-` and `max-` | the viewport and the window's pixel ratio; lengths in `px`, `em` and `rem` (16px), the other absolute units too, the viewport's (`vw`, `vh`, `vmin`, `vmax`, and their `s`, `l` and `d` forms), and a `calc()`, `min()`, `max()` or `clamp()` of them, as `(max-width: calc(1120px - 1px))` or `(min-width: calc(50vh + 100px))`; ranges as `(width >= 600px)` and `(400px <= width < 900px)` |
+| `width`, `height`, `aspect-ratio`, `resolution`, each with `min-` and `max-` | the viewport and the window's pixel ratio; lengths in `px`, `em` and `rem` (16px), the other absolute units too, the viewport's (`vw`, `vh`, `vmin`, `vmax`, and their `s`, `l` and `d` forms), the initial font's (`ex`, `ch`, `cap`, `ic`, `lh` and their root ones, measured in the Document's `sans-serif` at 16px), and a `calc()`, `min()`, `max()` or `clamp()` of them, as `(max-width: calc(1120px - 1px))` or `(min-width: calc(50vh + 100px))`; ranges as `(width >= 600px)` and `(400px <= width < 900px)` |
 | `orientation` | `portrait` when the viewport is as high as wide or higher |
 | `device-width`, `device-height`, `device-aspect-ratio` | the viewport's: ui knows no screen |
 | `hover`, `pointer` | `hover` and `fine`: a mouse; `none` and `coarse` while the pointer last used is a finger on a touchscreen, until the mouse moves (a trackpad's fingers are the mouse's) |
-| `any-hover`, `any-pointer` | `hover` and `fine`, and `coarse` too after a finger on a touchscreen |
+| `any-hover`, `any-pointer` | `hover` and `fine`, and `coarse` too after a finger on a touchscreen; `none` and `coarse` alone on a Document with `ui.TouchOnly()` |
 | `prefers-color-scheme` | `light`; [the program's or the system's](#the-users-preferences) |
 | `prefers-reduced-motion` | `no-preference`; [the program's or the system's](#the-users-preferences) |
-| `prefers-contrast`, `forced-colors` | `no-preference`, `none` |
+| `prefers-contrast` | `no-preference`; the program's: `ui.PrefersContrast(ui.ContrastMore)` (`ContrastLess`, `ContrastCustom`, `doc.SetContrast`) |
+| `forced-colors` | `none`; `active` with `ui.ForcedColors()` (`doc.SetForcedColors`): the query only, ui forces no colour |
 | `color`, `monochrome`, `grid` | 8, 0, 0 |
 | `and`, `,`, `not`, `only`, `or` between conditions in parentheses, `@media` inside `@media` | as in Chrome |
 
@@ -380,6 +384,8 @@ w := ember.New().AddEntities(win, prefs)
 ```
 
 The program's own answer wins: `ui.ColorScheme(platform.AppearanceDark)` (`doc.SetColorScheme`, `platform.AppearanceUnknown` to follow the system again) for a game with a theme switch of its own, and `ui.ReducedMotion()` (`doc.SetReducedMotion`). `doc.ColorScheme()` and `doc.ReducedMotion()` read the answer; a Document in an iframe answers as its host unless it has its own. A test sets the system with `prefs.SyncAppearance` and `prefs.SyncMotion`.
+
+No system says its contrast, forced colours or mice yet, so those are the program's alone ([decision 0139](../99-decisions/0139-colours-in-any-space-are-worked-out-in-srgb-as-the-cascade-reads-them.md)): `ui.PrefersContrast(c)` for a game's high-contrast option, `ui.ForcedColors()`, and `ui.TouchOnly()` for a device with a touchscreen and no mouse (`any-hover: none`), each with its `doc.Set…` and getter, and an iframe's Document answering as its host where it says nothing.
 
 ### Colour schemes
 
@@ -414,7 +420,9 @@ A container's size doesn't come from what it holds, as in Chrome: an `inline-siz
 | `width`, `height`, `inline-size`, `block-size`, `aspect-ratio`, `orientation`, each size with `min-` and `max-` | the container's content box; ranges as `(400px <= width < 900px)`; lengths in any unit, a font's as the container's font measures it, `calc()` too |
 | `and`, `or`, `not`, `@container` inside `@container` or `@media` | as in Chrome; a container nobody has, or a size not laid out yet, is unknown, false under `not` too |
 | `style(--name: value)`, `style(--name)`, and `and`, `or`, `not` inside `style()` | the container's custom property, its text compared; every element is a container for these |
-| `scroll-state()`, `style()` on a standard property, `container-type: scroll-state` | refused with a warning |
+| `style()` on a standard property (`style(display: flex)`) | never holds, as Chrome reads it: the whole condition fails, whatever else it asks, with a warning |
+| `@keyframes` inside `@container` | apply whatever the container, as in Chrome, which never asks their condition |
+| `scroll-state()`, `container-type: scroll-state` | refused with a warning |
 
 A malformed condition (`@container none (…)`, a name after the query) drops the rule, as Chrome drops it. `doc.MatchedRules(n)` names the `@container` rules a match stands in.
 
@@ -506,9 +514,11 @@ A sheet written for browsers holds what a game's sheet never does: prefixes of f
 | an element ui has none of in a selector (`applet`, `object`, a custom element) | the selector matches nothing and goes without a word, its rule keeping the others: a reset that lists every element of HTML still applies. Inside `:not()` it keeps its warning and drops the rule |
 | vendor prefixes | read as the plain name where Chrome does, dropped without a word where Chrome drops them: the tables below |
 
+Chrome's legacy gradients are read as the plain ones it draws: `-webkit-linear-gradient()` gives where it starts, not where it goes, so `top` is `to bottom`, and its angle turns the other way (`30deg` is `60deg`); `-webkit-radial-gradient(<position>, <shape> <size>, …)` is `radial-gradient(<shape> <size> at <position>, …)`, `contain` and `cover` being `closest-side` and `farthest-corner`. A corner or a centre in a linear one keeps its warning, as Chrome draws it corner to corner of the box (`TestChromeDrawsTheLegacyGradientsAsTheirPlainOnes`).
+
 A prefixed name read as a plain one keeps its place in the cascade, so `-webkit-transform: rotate(3deg); transform: none` ends as `none` and the other order as the rotation. A warning about one names it as it was written.
 
-What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `-webkit-line-clamp`, `display: -webkit-box`, a `-webkit-linear-gradient()`), `@font-face` in a sheet given as text without `ui.FetchFonts`, `@import` without `ui.FetchSheets`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
+What ui can't do stays a warning with the option too: a property or value Chrome reads and ui doesn't (`columns`, `-webkit-line-clamp`, `display: -webkit-box`, `-webkit-fill-available`, a `-webkit-gradient()`), `@font-face` in a sheet given as text without `ui.FetchFonts`, `@import` without `ui.FetchSheets`. A declaration ui refuses whose value holds another engine's word (`transition: opacity 1s, -moz-transform 1s`) goes whole without a word.
 
 ### Vendor prefixes
 

@@ -81,12 +81,16 @@ func (s Sizes) Width(m Media, auto float32) float32 {
 }
 
 // initialUnits are what lengths stand for in a media query: the
-// initial font's units, by CSS's fallbacks off its size, and m's
+// initial font's units, m's or CSS's fallbacks off its size, and m's
 // viewport.
 func initialUnits(m Media) *Units {
 	const em = 16
 	u := &Units{Em: em, Rem: em}
 	in := [...]float64{unitEx: em / 2, unitCh: em / 2, unitCap: em, unitIc: em, unitLh: 1.2 * em}
+	if f := m.Font; f != (FontUnits{}) {
+		in = [...]float64{unitEx: float64(f.Ex), unitCh: float64(f.Ch), unitCap: float64(f.Cap), unitIc: float64(f.Ic),
+			unitLh: float64(f.Line)}
+	}
 	for i, v := range in {
 		u.Rel[i], u.Rel[unitRex+relUnit(i)] = v, v
 	}

@@ -133,9 +133,13 @@ func (p *mediaParser) containerRule(prelude []Component) (*containerRule, bool) 
 			return nil, false
 		}
 		if len(toks) > 0 {
+			p.standardStyle = false
 			cond, ok := p.condition(toks, true)
 			if !ok {
 				return nil, false
+			}
+			if p.standardStyle {
+				cond = &mediaCond{op: mediaOr}
 			}
 			c.query, c.axes = cond, cond.axes()
 			r.viewport = r.viewport || cond.readsViewport()
@@ -194,7 +198,8 @@ func (p *mediaParser) styleQuery(fn Component) mediaCond {
 func (p *mediaParser) styleFeature(at Component, args []Component) mediaCond {
 	toks := trim(args)
 	if len(toks) == 0 || toks[0].Kind != Ident || !strings.HasPrefix(toks[0].Text, "--") {
-		p.warn(at.Pos, "@container: style() reads custom properties alone, not %s; its query never holds",
+		p.standardStyle = true
+		p.warn(at.Pos, "@container: style() reads custom properties alone, not %s; the condition never holds",
 			strings.TrimSpace(join(args)))
 		return mediaCond{op: mediaUnknown}
 	}

@@ -88,11 +88,16 @@ type Document struct {
 	rightDragSelects bool
 	// prefs are the system's preferences the Document follows, scheme and
 	// motion the program's answers over them, unknown for none, and touch
-	// whether the pointer last used is a finger on the screen (media.go).
-	prefs  *platform.Preferences
-	scheme platform.Appearance
-	motion platform.Motion
-	touch  bool
+	// whether the pointer last used is a finger on the screen (media.go);
+	// contrast, forced and touchOnly are the program's answers to the
+	// features no system says.
+	prefs     *platform.Preferences
+	scheme    platform.Appearance
+	motion    platform.Motion
+	touch     bool
+	contrast  Contrast
+	forced    bool
+	touchOnly bool
 	// overlayBars is whether scrollbars lie over the content
 	// (OverlayScrollbars).
 	overlayBars bool
