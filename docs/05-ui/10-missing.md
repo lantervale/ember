@@ -280,4 +280,5 @@ Things built and tested, with a part no test against Chrome covers yet.
 - A float low in a column, at narrow widths.
 - A percentage `top` on a relative child inside columns.
 - The largest raster of an SVG (8192 pixels a side) against the device's own limit.
+- The `img-crisp-animated` page on Windows: headless Chrome on a Windows runner shoots some runs before the GIF's first 20 ms frame turns to its last (the whole first checker, a mean of 0.39), its virtual time budget spent before the real time the animation waits for, so the page is compared on macOS and Linux only.
 - The Linux and Windows thresholds of the pixel pages added since `word-spacing`: those of `iframe`, `table-model`, `background-boxes`, `word-spacing`, `vertical-align` and `font-smoothing` are what the runners measured once, their text drawn differently there.

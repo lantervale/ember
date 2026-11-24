@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/lantervale/ember/ui/internal/chrome"
@@ -155,6 +156,13 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/vertical-root", 400, 240, 0.004},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
+			if c.pkg == "./internal/pages/img-crisp-animated" && runtime.GOOS == "windows" {
+				// Headless Chrome on a Windows runner shoots some runs before
+				// the GIF's first 20 ms frame turns, its virtual time budget
+				// spent before the real time the animation waits for
+				// (docs/05-ui/10-missing.md).
+				t.Skip("Chrome on Windows may shoot the animated GIF still on its first frame")
+			}
 			if major, why := pageSince(c.pkg); major > 0 {
 				chrome.Since(t, major, why)
 			}
