@@ -14,30 +14,21 @@ import (
 	"github.com/lantervale/ember/ui"
 )
 
-var (
-	versionOnce  sync.Once
-	versionMajor int
-	versionErr   error
-)
-
 // Version is the major version of the Chrome the tests run against, read
 // from its user agent once.
-func Version() (int, error) {
-	versionOnce.Do(func() {
-		out, err := Eval(ui.NewDocument(), geom.V2(16, 16), "return navigator.userAgent")
-		if err != nil {
-			versionErr = err
-			return
-		}
-		var agent string
-		if err = json.Unmarshal(out, &agent); err != nil {
-			versionErr = err
-			return
-		}
-		versionMajor, versionErr = majorOf(agent)
-	})
-	return versionMajor, versionErr
-}
+func Version() (int, error) { return version() }
+
+var version = sync.OnceValues(func() (int, error) {
+	out, err := Eval(ui.NewDocument(), geom.V2(16, 16), "return navigator.userAgent")
+	if err != nil {
+		return 0, err
+	}
+	var agent string
+	if err = json.Unmarshal(out, &agent); err != nil {
+		return 0, err
+	}
+	return majorOf(agent)
+})
 
 var agentVersion = regexp.MustCompile(`Chrome/(\d+)\.`)
 
