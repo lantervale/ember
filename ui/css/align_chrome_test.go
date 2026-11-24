@@ -7,8 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/internal/chrome"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -92,6 +95,8 @@ return `+string(list)+`.map(d => {
 	const cs = getComputedStyle(e);
 	return `+string(longhands)+`.map(p => cs.getPropertyValue(p));
 });`, &want)
+	version, err := chrome.Version()
+	require.NoError(t, err)
 	d := ui.NewDocument()
 	for _, dc := range decls {
 		d.Body().Append(ui.Div(ui.Style(dc.Prop + ": " + dc.Value)))
@@ -101,9 +106,12 @@ return `+string(list)+`.map(d => {
 		st := dom.Data(n).Style
 		got := []string{alignWord(st.AlignItems), alignWord(st.AlignSelf), alignWord(st.AlignContent),
 			alignWord(st.JustifyContent), alignWord(st.JustifyItems), alignWord(st.JustifySelf)}
+		if version < 158 && strings.Contains(decls[i].Value, "flow-") {
+			continue // flow-start and flow-end are read since Chrome 158
+		}
 		for k, p := range alignLonghands {
-			w := strings.NewReplacer("self-start", "start", "self-end", "end", "left", "start", "right", "end").
-				Replace(want[i][k])
+			w := strings.NewReplacer("self-start", "start", "self-end", "end", "left", "start", "right", "end",
+				"flow-start", "flex-start", "flow-end", "flex-end").Replace(want[i][k])
 			if got[k] != w {
 				t.Errorf("%s: %s: %s computes to %q, Chrome's %q", decls[i].Prop, decls[i].Value, p, got[k], want[i][k])
 			}

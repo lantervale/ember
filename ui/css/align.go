@@ -18,7 +18,7 @@ type alignGrammar struct {
 
 //nolint:gochecknoglobals // the grammars
 var (
-	contentPositions = []string{kwCenter, kwStart, kwEnd, "flex-start", "flex-end"}
+	contentPositions = []string{kwCenter, kwStart, kwEnd, "flex-start", "flex-end", "flow-start", "flow-end"}
 	selfPositions    = append([]string{kwSelfStart, kwSelfEnd}, contentPositions...)
 	distributions    = []string{"space-between", "space-around", "space-evenly", kwStretch}
 	alignItems       = alignGrammar{alone: []string{kwNormal, kwStretch}, positions: selfPositions, baseline: true,

@@ -18,6 +18,8 @@ func TestAlignmentValuesCarryTheirBaselineAndOverflowPosition(t *testing.T) {
 		{"safe center", style.AlignCenter | style.AlignSafe},
 		{"unsafe flex-end", style.AlignFlexEnd | style.AlignUnsafe},
 		{"safe anchor-center", style.AlignAnchorCenter},
+		{"flow-start", style.AlignFlexStart},
+		{"safe flow-end", style.AlignFlexEnd | style.AlignSafe},
 	}
 	for _, c := range cases {
 		v := items(componentsOf(c.src))

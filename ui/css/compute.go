@@ -1790,7 +1790,8 @@ var (
 	alignWords4 = map[string]style.Align{
 		"normal": style.AlignNormal, "auto": style.AlignAuto, "stretch": style.AlignStretch,
 		"start": style.AlignStart, "end": style.AlignEnd, "flex-start": style.AlignFlexStart,
-		"flex-end": style.AlignFlexEnd, "center": style.AlignCenter, "baseline": style.AlignBaseline,
+		"flex-end": style.AlignFlexEnd, "flow-start": style.AlignFlexStart, "flow-end": style.AlignFlexEnd,
+		"center": style.AlignCenter, "baseline": style.AlignBaseline,
 		"space-between": style.AlignSpaceBetween, "space-around": style.AlignSpaceAround,
 		"space-evenly": style.AlignSpaceEvenly, "self-start": style.AlignStart, "self-end": style.AlignEnd,
 		"left": style.AlignStart, "right": style.AlignEnd, "legacy": style.AlignNormal,
