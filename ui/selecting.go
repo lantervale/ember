@@ -75,7 +75,13 @@ func (d *Document) pressSelection(at geom.Vec2, extend bool) {
 // placeUnder is the place nearest at in the text of the element under
 // the pointer, or of the nearest element round it holding some.
 func (d *Document) placeUnder(at geom.Vec2) (Position, bool) {
-	for b := d.tree.Of[firstOf(d.hovered)]; b != nil; b = b.Parent {
+	return d.placeIn(firstOf(d.hovered), at)
+}
+
+// placeIn is the place nearest at in the text of n, or of the nearest
+// element round it holding some.
+func (d *Document) placeIn(n *Node, at geom.Vec2) (Position, bool) {
+	for b := d.tree.Of[n]; b != nil; b = b.Parent {
 		if p, ok := d.positionNear(at, b); ok {
 			return p, true
 		}

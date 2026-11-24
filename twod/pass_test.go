@@ -109,13 +109,14 @@ func TestTheMouseMapsIntoAResolutionCamerasWorld(t *testing.T) {
 	w.RunFrames(1)
 	assert.Equal(t, geom.V2(160, 90), probe.mouse, "the middle of the window is the middle of the world")
 	assert.Equal(t, geom.V2(320, 180), probe.screen, "the screen is the pass's")
+	assert.Equal(t, geom.V2(160, 90), probe.local, "a window's point, a finger's, maps as the mouse")
 }
 
 type mouseProbe struct {
 	Item
-	mouse, screen geom.Vec2
+	mouse, screen, local geom.Vec2
 }
 
 func (p *mouseProbe) Draw(c *Canvas) {
-	p.mouse, p.screen = c.Mouse(), sizeOf(c.Screen())
+	p.mouse, p.screen, p.local = c.Mouse(), sizeOf(c.Screen()), c.Local(geom.V2(400, 300))
 }

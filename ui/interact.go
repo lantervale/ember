@@ -180,6 +180,12 @@ type interaction struct {
 	raisedZ int
 	// sel is the text selected outside the fields (decision 0090).
 	sel selecting
+	// textDrag is a press inside a selection and the drag of its text
+	// (decision 0222).
+	textDrag textDrag
+	// touchSel is a finger selecting on a touchscreen and the handles it
+	// shows.
+	touchSel touchSelecting
 	// title is the title attribute's tooltip.
 	title titleTip
 }
@@ -522,6 +528,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 		if d.shield {
 			d.pointer(c, d.idleInput())
 		} else {
+			d.touchSelection(c, in)
 			d.pointer(c, in)
 		}
 		if entered := d.framed != nil && d.framed.entered; entered {
@@ -842,7 +849,8 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 // window of the Document's own, the wheel over a number field, or the
 // scrollbars.
 func (d *Document) pointerTaken(c *twod.Canvas, in *input.State, at geom.Vec2, hit *box.Box) bool {
-	return d.appRegionPress(c, in) || d.dragPointer(c, in, at) || d.windowPointer(in, at) || d.wheelNumber(in) ||
+	return d.appRegionPress(c, in) || d.dragPointer(c, in, at) || d.textDragPointer(in, at) ||
+		d.windowPointer(in, at) || d.wheelNumber(in) ||
 		d.scrollPointer(c, in, hit)
 }
 
@@ -941,6 +949,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 	if d.resetField(takes) != nil || d.suggestingFor(takes) != nil {
 		return true
 	}
+	dragging := d.pressTextDrag(in, takes, at)
 	if len(d.modals) > 0 && (takes == nil || d.scopeOf(takes) != len(d.modals)) {
 		// a press on what a modal dialog makes inert leaves the focus in it
 		return true
@@ -952,7 +961,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		}
 		return d.focus.Set(takes, false)
 	})
-	if t := textOf(d.machine(takes)); t != nil {
+	if t := textOf(d.machine(takes)); t != nil && !dragging {
 		d.pressText(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	}
 	if r, ok := d.machine(takes).(*control.Range); ok {
@@ -964,7 +973,9 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 	if d.listBox(takes) != nil {
 		d.pressListBox(in, takes, at)
 	}
-	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
+	if !dragging {
+		d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
+	}
 	return false
 }
 
