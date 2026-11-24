@@ -238,6 +238,9 @@ func overflow(o style.Overflow) string {
 	return []string{"visible", "hidden", "clip", "scroll", "auto"}[o]
 }
 
+//nolint:gochecknoglobals // a fixed table
+var flowNames = strings.NewReplacer("flow-start", "flex-start", "flow-end", "flex-end")
+
 // same compares two computed values: numbers within 0.01 wherever they
 // stand, colours channel by channel within one step.
 func same(prop, ours, chrome string) bool {
@@ -246,6 +249,10 @@ func same(prop, ours, chrome string) bool {
 		p, _ := url.PathUnescape(pageURL.FindStringSubmatch(m)[1])
 		return "url(" + p + ")"
 	}))
+	if strings.HasPrefix(prop, "align-") || strings.HasPrefix(prop, "justify-") {
+		// Chrome 158 writes flex-start and flex-end as flow-start and flow-end.
+		chrome = flowNames.Replace(chrome)
+	}
 	if ours == chrome {
 		return true
 	}

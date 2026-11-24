@@ -156,8 +156,7 @@ func endBars(st *style.Computed, sc size) geom.Vec2 {
 // writing mode whose blocks start on the right, the page's vertical bar
 // stands at the block start, on the page's right as Chrome's.
 func gutterEdges(s *style.Computed, g point) rect {
-	start := fmin(startGutter(s), g.x)
-	r := rect{l: start, r: g.x - start, b: g.y}
+	r := mirroredGutterEdges(s, g)
 	if s.Dir == style.RTL {
 		r.l, r.r = r.r, r.l
 	}
@@ -165,6 +164,14 @@ func gutterEdges(s *style.Computed, g point) rect {
 		r.t, r.b = r.b, 0
 	}
 	return r
+}
+
+// mirroredGutterEdges is gutterEdges for flex and grid, which lay out a right-to-left
+// box as its mirror image (mirrored): the vertical bar at the image's end stands on
+// the box's start once mirrored back.
+func mirroredGutterEdges(s *style.Computed, g point) rect {
+	start := fmin(startGutter(s), g.x)
+	return rect{l: start, r: g.x - start, b: g.y}
 }
 
 func outOfFlow(p style.Position) bool { return p == style.Absolute || p == style.FixedPosition }

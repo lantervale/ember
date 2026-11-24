@@ -30,7 +30,7 @@ func (t *tree) grid(n *node, in input) output {
 		preferred = resolveSize(st.Size, in.parent).withAspectRatio(ratio).mAdd(adj)
 	}
 	g := n.ownGutter()
-	ge := gutterEdges(st, g)
+	ge := mirroredGutterEdges(st, g)
 	inset := padding.add(border).add(ge)
 	alignContent := gridAlignContent(st.AlignContent)
 	justifyContent := gridAlignContent(st.JustifyContent)
