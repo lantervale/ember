@@ -72,19 +72,3 @@ func TestASessionTellsTheVersionItHoldsTheLockFor(t *testing.T) {
 		t.Fatal("the version waited for the lock its own session holds")
 	}
 }
-
-func TestTheVersionAskedUnderTheLockFailsAtOnce(t *testing.T) {
-	forget(t)
-	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
-	t.Setenv("TMP", tmp)
-	t.Setenv("TEMP", tmp)
-	unlock, err := lockChrome()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unlock()
-	if _, err = Version(); err == nil {
-		t.Fatal("a version read under this process's own lock")
-	}
-}

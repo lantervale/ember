@@ -79,14 +79,15 @@ tasks:
       - go run ./ui/internal/emberdiff -base '{{.BASE}}'
 
   test:chrome:
-    desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome: EMBER_CHROME, else task chrome''s, else the system''s on macOS; task wgpu and a GPU). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
+    desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome: EMBER_CHROME, else task chrome''s, else the system''s on macOS; task wgpu and a GPU). The suites run in SHARDS shards at once (default: the Chrome slots, EMBER_CHROME_SLOTS or half the CPUs), each a go test per package, JOBS of them at once (default SHARDS); ONLY=i runs shard i alone, as CI''s jobs do; SPLIT names the tests whose subtests spread over the shards (chrome.Shard). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
     vars:
       REPORT: '{{.EMBER_CHROME_REPORTS | default (print (coalesce (env "TMPDIR") (env "TEMP") "/tmp") "/ember-ui-report")}}'
+      SPLIT: '{{.SPLIT | default "TestPagesLookLikeChrome"}}'
     cmds:
       - go run ./ui/internal/parity -dir '{{.REPORT}}' -reset
       - |
         tests=0; table=0
-        EMBER_UI_RESULTS='{{.REPORT}}' EMBER_UI_REPORTS='{{.REPORT}}' go test -tags 'chrome gpu' -p 2 -count=1 -timeout 90m ./ui/... || tests=1
+        EMBER_UI_RESULTS='{{.REPORT}}' EMBER_UI_REPORTS='{{.REPORT}}' go run ./ui/internal/shard/run -tags 'chrome gpu' -timeout 40m -split '{{.SPLIT}}' {{if .SHARDS}}-shards {{.SHARDS}}{{end}} {{if .ONLY}}-only {{.ONLY}}{{end}} {{if .JOBS}}-p {{.JOBS}}{{end}} -json '{{.REPORT}}/tests.jsonl' ./ui/... || tests=1
         go run ./ui/internal/parity -dir '{{.REPORT}}' -json '{{.REPORT}}/report.json' -summary '{{.REPORT}}/summary.md' {{if .DOCS}}-docs docs/05-ui{{end}} || table=1
         exit $(( tests || table ))
 

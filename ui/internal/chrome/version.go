@@ -3,6 +3,7 @@
 package chrome
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,12 +14,15 @@ import (
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
+	"github.com/lantervale/ember/ui/css"
+	"github.com/lantervale/ember/ui/export"
 )
 
 // Version is the major version of the Chrome the tests run against, read
 // from its user agent once: from the first Session's page, or a page of
-// its own when none has opened. Asked while this process holds the Chrome
-// lock and no Session has told it, it fails rather than wait on itself.
+// its own when none has opened. Asked while this process holds a Chrome
+// slot and no Session has told it, it reads it in another slot only if
+// one is free, and fails rather than wait, maybe on itself.
 func Version() (int, error) { return version() }
 
 //nolint:gochecknoglobals // one Chrome per process, its version read once
@@ -42,24 +46,55 @@ func knowAgent(agent string) {
 
 func version() (int, error) {
 	known.Lock()
-	defer known.Unlock()
-	if known.set {
-		return known.major, known.err
+	set, major, err := known.set, known.major, known.err
+	known.Unlock()
+	if set {
+		return major, err
 	}
-	if lockHeld.Load() > 0 {
-		return 0, errors.New("chrome: the version asked while this process holds the Chrome lock")
-	}
-	out, err := Eval(ui.NewDocument(), geom.V2(16, 16), "return navigator.userAgent")
+	agent, err := readAgent()
 	if err != nil {
 		return 0, err
 	}
-	var agent string
-	if err = json.Unmarshal(out, &agent); err != nil {
-		return 0, err
-	}
-	known.major, known.err = majorOf(agent)
-	known.set = true
+	knowAgent(agent)
+	known.Lock()
+	defer known.Unlock()
 	return known.major, known.err
+}
+
+// readAgent reads Chrome's user agent from a page of its own, in a slot
+// of its own.
+func readAgent() (string, error) {
+	var unlock func()
+	var err error
+	if slotsHeld.Load() > 0 {
+		if unlock, err = takeSlot(false); errors.Is(err, errNoSlot) {
+			return "", errors.New("chrome: the version asked while this process holds a Chrome slot and none is free")
+		}
+	} else {
+		unlock, err = lockChrome()
+	}
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	var page bytes.Buffer
+	if err = export.Write(&page, ui.NewDocument(), export.Head(EvalScript("return navigator.userAgent"))); err != nil {
+		return "", err
+	}
+	out, err := runRaw(page.Bytes(), geom.V2(minWidth, minWidth), dumpDOM, css.Media{})
+	if err != nil {
+		out, err = runRaw(page.Bytes(), geom.V2(minWidth, minWidth), dumpDOM, css.Media{})
+	}
+	if err != nil {
+		return "", err
+	}
+	res, err := evalResult(out)
+	if err != nil {
+		return "", err
+	}
+	var agent string
+	err = json.Unmarshal(res, &agent)
+	return agent, err
 }
 
 var agentVersion = regexp.MustCompile(`Chrome/(\d+)\.`)
@@ -73,8 +108,9 @@ func majorOf(agent string) (int, error) {
 }
 
 // Since skips t on a Chrome older than major, whose behaviour ui doesn't
-// follow: ui tracks the newest stable Chrome, while CI may pin an older
-// one. why says what major changed.
+// follow: ui tracks the newest stable Chrome, which CI pins
+// (ui/internal/chrome/VERSION) and task chrome fetches; a machine running
+// an older one skips. why says what major changed.
 func Since(t testing.TB, major int, why string) {
 	t.Helper()
 	v, err := Version()

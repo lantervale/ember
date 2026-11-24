@@ -156,6 +156,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/vertical-root", 400, 240, 0.004},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
+			chrome.Shard(t)
 			if c.pkg == "./internal/pages/img-crisp-animated" && runtime.GOOS == "windows" {
 				// Headless Chrome on a Windows runner shoots some runs before
 				// the GIF's first 20 ms frame turns, its virtual time budget
