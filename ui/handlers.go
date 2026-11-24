@@ -59,11 +59,16 @@ type Event struct {
 	// Column and Descending are a sort's (Sort).
 	Column     int
 	Descending bool
-	// Key, Text and Command are a key's (Key); Pad is a pad button's,
-	// Key then KeyUnknown.
+	// Key, Text, the modifiers held and Command, the platform's shortcut
+	// modifier, are a key's (Key), as KeyPressed says; Pad is a pad
+	// button's, Key then KeyUnknown.
 	Key     input.Key
 	Text    string
 	Command bool
+	Shift   bool
+	Alt     bool
+	Control bool
+	Super   bool
 	Pad     input.GamepadButton
 	// At is a window's top-left once moved (Move), or the pointer's place
 	// in the Document's points (Context, PointerDown, PointerMove,
@@ -377,7 +382,10 @@ func eventOf(raw any) (Event, bool) {
 	case Sorted:
 		return Event{Type: EventSort, Node: e.Node, Column: e.Column, Descending: e.Descending}, true
 	case KeyPressed:
-		return Event{Type: EventKey, Node: e.Node, Key: e.Key, Text: e.Text, Command: e.Command, Pad: e.Pad}, true
+		return Event{
+			Type: EventKey, Node: e.Node, Key: e.Key, Text: e.Text, Command: e.Command,
+			Shift: e.Shift, Alt: e.Alt, Control: e.Control, Super: e.Super, Pad: e.Pad,
+		}, true
 	case BackPressed:
 		return Event{Type: EventBack, Node: e.Node}, true
 	case PointerEntered:

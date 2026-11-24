@@ -83,7 +83,7 @@ func TestAGridTakesItsArrowsButNotCommandUp(t *testing.T) {
 	got := k.got[0]
 	assert.Same(t, grid, got.Node)
 	got.Node = nil
-	assert.Equal(t, ui.KeyPressed{Key: input.KeyUp, Command: true}, got)
+	assert.Equal(t, ui.KeyPressed{Key: input.KeyUp, Command: true, Super: true}, got)
 }
 
 func TestAKeyInAModalWithNothingFocusedIsTheDialogs(t *testing.T) {

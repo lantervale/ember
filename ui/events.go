@@ -31,16 +31,21 @@ type Toggled struct{ Node *Node }
 
 // KeyPressed is a key pressed that no control, menu, grid, listbox or focus move took:
 // on Node, the focused element, else the open modal dialog. Text is what it typed, ""
-// for none, and Command reports the platform's shortcut modifier held (Command on macOS,
-// Control elsewhere). With nothing focused and no modal dialog the keys are the game's,
-// and none is reported. A pad button focus navigation leaves (West, North, the
-// shoulders and triggers, Back, Start) comes the same way, as Pad with Key
-// KeyUnknown.
+// for none. Shift, Alt, Control and Super report either side's modifier held, read
+// even while a text field captures the keyboard from the window's input, and Command
+// the platform's shortcut modifier (Super on macOS, Control elsewhere). With nothing
+// focused and no modal dialog the keys are the game's, and none is reported. A pad
+// button focus navigation leaves (West, North, the shoulders and triggers, Back,
+// Start) comes the same way, as Pad with Key KeyUnknown.
 type KeyPressed struct {
 	Node    *Node
 	Key     input.Key
 	Text    string
 	Command bool
+	Shift   bool
+	Alt     bool
+	Control bool
+	Super   bool
 	Pad     input.GamepadButton
 }
 
