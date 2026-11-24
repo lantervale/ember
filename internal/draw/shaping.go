@@ -38,8 +38,9 @@ type item struct {
 	// points.
 	advance float32
 	offset  geom.Vec2
-	// clusters is how many grapheme clusters the item draws.
-	clusters int
+	// spaced is how many of the grapheme clusters the item draws
+	// letter-spacing follows (shape.SpacedIn).
+	spaced int
 	// at is where the first character of its cluster is in the text, in bytes.
 	at int
 }
@@ -53,7 +54,9 @@ type pending struct {
 	idx     sfnt.GlyphIndex
 	cluster int32
 	first   bool
-	at      int
+	// spaced is whether letter-spacing follows the cluster it starts.
+	spaced bool
+	at     int
 }
 
 // planMemo is the plan a face shapes with last asked for.
@@ -123,7 +126,7 @@ func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 	run := f.pending[:0]
 	face := -1
 	var clusters int32
-	script := shape.Script(s)
+	script, spacing := shape.Script(s), shape.ScriptAfter(before, s)
 	at, start, end := 0, 0, 0
 	flush := func() {
 		if len(run) > 0 {
@@ -141,7 +144,7 @@ func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 		}
 		if tex, ok := f.picture(c); ok {
 			flush()
-			fn(item{pic: tex, advance: f.size, clusters: 1, at: from})
+			fn(item{pic: tex, advance: f.size, spaced: 1, at: from})
 			return
 		}
 		for _, r := range c {
@@ -150,15 +153,17 @@ func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 					flush()
 					script = sc
 				}
+				spacing = sc
 				break
 			}
 		}
+		spaced := shape.SpacedIn(spacing, first)
 		g := f.glyph(first)
 		if g.idx == 0 && len(f.layouts) > 0 && f.layouts[0].Decomposes(first) {
 			g.face = 0
 		} else if g.idx == 0 || f.plan(g.face, script, features).Inert() {
 			flush()
-			fn(item{r: first, g: g, advance: g.advance, clusters: 1, at: from})
+			fn(item{r: first, g: g, advance: g.advance, spaced: count(spaced), at: from})
 			return
 		}
 		if g.face != face {
@@ -169,8 +174,8 @@ func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 			start = from
 		}
 		end = at
-		run = f.cluster(append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true, at: from}), face,
-			c[utf8.RuneLen(first):], clusters)
+		run = f.cluster(append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true, spaced: spaced,
+			at: from}), face, c[utf8.RuneLen(first):], clusters)
 		clusters++
 	})
 	flush()
@@ -271,7 +276,7 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 	if !p.Touches(glyphs) {
 		for _, c := range run {
 			if c.first {
-				fn(item{r: c.r, g: c.g, advance: c.g.advance, clusters: 1, at: c.at})
+				fn(item{r: c.r, g: c.g, advance: c.g.advance, spaced: count(c.spaced), at: c.at})
 			}
 		}
 		return
@@ -285,12 +290,16 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 		if i+1 < len(shaped) {
 			next = shaped[i+1].Cluster
 		}
+		spaced := 0
+		for k := sg.Cluster; k < next; k++ {
+			spaced += count(run[starts[k]].spaced)
+		}
 		fn(item{
 			r: c.r, g: c.g, shaped: sg.ID != uint16(c.g.idx), idx: sfnt.GlyphIndex(sg.ID),
-			advance:  advance * scale,
-			offset:   geom.V2(float32(sg.XOffset)*scale, -float32(sg.YOffset)*scale),
-			clusters: max(int(next-sg.Cluster), 0),
-			at:       c.at,
+			advance: advance * scale,
+			offset:  geom.V2(float32(sg.XOffset)*scale, -float32(sg.YOffset)*scale),
+			spaced:  spaced,
+			at:      c.at,
 		})
 	}
 }
@@ -339,4 +348,12 @@ func (f *Font) drawn(it item, phase int) glyph {
 	g := f.rasterIndex(it.g.face, it.idx, -1, phase)
 	f.indexed[key] = g
 	return g
+}
+
+// count is 1 for true, 0 for false.
+func count(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

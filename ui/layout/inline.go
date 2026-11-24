@@ -626,7 +626,7 @@ func (c *inlineContent) joinRuns(fonts box.Fonts) {
 			lead, before := beside(c.pieces, k, -1, p.whole)
 			trail, after := beside(c.pieces, k, 1, p.whole)
 			w := wf.AdvanceAmid(r.st.Font, text, lead, trail, before, after)
-			p.width = w + r.st.Spacing(text)
+			p.width = w + r.st.SpacingAfter(c.textBefore(k), text)
 			if p.unspaced {
 				p.width -= r.st.WordGap()
 			}
@@ -1022,7 +1022,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 		}
 		p := piece{kind: kind, run: i, text: s, at: from, level: level}
 		if kind == word || kind == gap {
-			p.width = advance(fonts, r.st, unshown(s)) + r.st.Spacing(unshown(s))
+			p.width = advance(fonts, r.st, unshown(s)) + r.st.SpacingAfter(c.textBefore(len(c.pieces)), unshown(s))
 		}
 		c.unspace(&p, r.st)
 		c.pieces = append(c.pieces, p)
@@ -1190,6 +1190,7 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		xs, starts = cf.Carets(st.Font, s, "", "", "", "")
 	}
 	first := len(c.pieces)
+	spaced := spacedEnds(c.textBefore(first), s)
 	rest, state := s, -1
 	var g, last string
 	prev := float32(0)
@@ -1201,10 +1202,10 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 		n += utf8.RuneCountInString(g)
 		var w float32
 		if carets {
-			w = xs[n] - xs[start] + st.Spacing(g)
+			w = xs[n] - xs[start] + st.SpacingOf(g, spaced[at])
 		} else {
 			adv := advance(fonts, st, unshown(s[:at]))
-			w = adv - prev + st.Spacing(unshown(g))
+			w = adv - prev + st.SpacingOf(unshown(g), spaced[at])
 			prev = adv
 		}
 		switch {
@@ -1236,11 +1237,33 @@ func (c *inlineContent) graphemes(fonts box.Fonts, st *style.Computed, i int, s 
 	}
 }
 
+// textBefore is the text of the pieces before the k-th back to the last
+// with a character of a script, whose script the digits and punctuation
+// after it take: what letter-spacing follows reads it
+// (style.Text.SpacingAfter).
+func (c *inlineContent) textBefore(k int) string {
+	for k--; k >= 0; k-- {
+		if t := c.pieces[k].text; strings.ContainsFunc(t, func(r rune) bool { _, ok := shape.ScriptOf(r); return ok }) {
+			return t
+		}
+	}
+	return ""
+}
+
+// spacedEnds are the ends, in bytes, of the grapheme clusters of s after
+// before that letter-spacing follows.
+func spacedEnds(before, s string) map[int]bool {
+	out := map[int]bool{}
+	shape.EachSpaced(before, s, func(end int) { out[end] = true })
+	return out
+}
+
 // cutGraphemes gives the pieces of word s from first on what their widths gain where a
 // line starts at one, shaped without the text before it, or ends inside the word after
 // one, shaped without the rest of the word: that text stays its context, which a joining
 // script's letters join across, as Chrome reshapes them.
 func (c *inlineContent) cutGraphemes(wf box.WholeFonts, st *style.Computed, s string, first int) {
+	before := c.textBefore(first)
 	at := 0
 	for k := first; k < len(c.pieces); k++ {
 		p := &c.pieces[k]
@@ -1249,7 +1272,7 @@ func (c *inlineContent) cutGraphemes(wf box.WholeFonts, st *style.Computed, s st
 		}
 		end := at + len(p.text)
 		if at > 0 || end < len(s) {
-			w := p.width - st.Spacing(p.text)
+			w := p.width - st.SpacingAfter(before+s[:at], p.text)
 			if at > 0 {
 				p.cutStart = wf.AdvanceAmid(st.Font, p.text, "", s[end:], s[:at], "") - w
 			}

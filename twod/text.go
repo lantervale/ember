@@ -28,7 +28,8 @@ type Text struct {
 	pivot  geom.Vec2   `node:"prop"`
 	shadow color.Color `node:"prop"`
 	expand bool        `node:"prop"`
-	// tracking is room added after each grapheme cluster, in points.
+	// tracking is room added after each grapheme cluster but a cursive
+	// script's letters, in points.
 	tracking float32 `node:"prop"`
 	// baseline takes the text's origin as its first baseline.
 	baseline bool `node:"prop"`
@@ -83,7 +84,10 @@ func FontSize(size float32) TextOption {
 }
 
 // Tracking adds points of room after each character (each grapheme
-// cluster), as letter spacing; negative tightens the text.
+// cluster), as letter spacing; negative tightens the text. The letters,
+// digits and punctuation of a script whose letters join (Arabic, Syriac,
+// Mongolian, N'Ko, Mandaic, Phags-pa, Hanifi Rohingya) take none, as
+// Chrome leaves them, but their spaces do.
 func Tracking(points float32) TextOption { return textOption(func(t *Text) { t.tracking = points }) }
 
 // Baseline places a text by its first baseline: the origin, or a Canvas

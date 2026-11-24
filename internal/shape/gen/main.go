@@ -4,7 +4,9 @@
 // ArabicShaping.txt, the categories and positions HarfBuzz's Indic,
 // Khmer and Myanmar shapers read (gen-indic-table.py), the categories
 // of the Universal Shaping Engine (gen-use-table.py), and the vowel
-// sequences that take a dotted circle (gen-vowel-constraints.py).
+// sequences that take a dotted circle (gen-vowel-constraints.py), and
+// the presentation forms and ligatures HarfBuzz's Arabic fallback
+// shaping reads (gen-arabic-table.py).
 package main
 
 import (
@@ -47,6 +49,7 @@ func main() {
 	write("indic_gen.go", source, indicTable(files))
 	write("use_gen.go", source, useTable(files))
 	write("vowels_gen.go", source, vowelTable(files["IndicShapingInvalidCluster.txt"]))
+	write("fallback_gen.go", source, arabicFallbackTable(files["UnicodeData.txt"]))
 }
 
 func write(name, source, body string) {
@@ -582,5 +585,184 @@ func vowelTable(data []byte) string {
 		fmt.Fprintf(&b, "\t{%s},\n", strings.Join(parts, ", "))
 	}
 	b.WriteString("}\n")
+	return b.String()
+}
+
+// arabicLigatureChars are the ligatures gen-arabic-table.py keeps, three
+// of them in the Private Use Area as old Arabic faces have them.
+//
+//nolint:gochecknoglobals // a fixed list
+var arabicLigatureChars = []rune{
+	0xF201, 0xF211, 0xF2EE, 0xFC08, 0xFC0E, 0xFC12, 0xFC32, 0xFC3F, 0xFC40, 0xFC41, 0xFC42, 0xFC44, 0xFC4E,
+	0xFC5E, 0xFC60, 0xFC61, 0xFC62, 0xFC6A, 0xFC6D, 0xFC6F, 0xFC70, 0xFC73, 0xFC75, 0xFC86, 0xFC8F, 0xFC91,
+	0xFC94, 0xFC9C, 0xFC9D, 0xFC9E, 0xFC9F, 0xFCA1, 0xFCA2, 0xFCA3, 0xFCA4, 0xFCA8, 0xFCAA, 0xFCAC, 0xFCB0,
+	0xFCC9, 0xFCCA, 0xFCCB, 0xFCCC, 0xFCCD, 0xFCCE, 0xFCCF, 0xFCD0, 0xFCD1, 0xFCD2, 0xFCD3, 0xFCD5, 0xFCDA,
+	0xFCDB, 0xFCDC, 0xFCDD, 0xFD30, 0xFD88, 0xFEF5, 0xFEF6, 0xFEF7, 0xFEF8, 0xFEF9, 0xFEFA, 0xFEFB, 0xFEFC,
+}
+
+// arabicFallbackTable is HarfBuzz's gen-arabic-table.py: each letter's
+// presentation forms, initial, medial, final and isolated, and the
+// ligatures of letters (of their forms) and of a shadda and a mark.
+//
+//nolint:funlen,gocognit,gocyclo,cyclop // gen-arabic-table.py's steps
+func arabicFallbackTable(unicodeData []byte) string {
+	const (
+		initial = iota
+		medial
+		final
+		isolated
+		markLigature
+	)
+	shapeOf := map[string]int{"<initial>": initial, "<medial>": medial, "<final>": final, "<isolated>": isolated}
+	forms := map[rune]*[4]rune{}
+	ligatures := map[string]map[int]rune{}
+	lines := strings.Split(string(unicodeData), "\n")
+	lines = append(lines,
+		"F201;PUA ARABIC LIGATURE LELLAH ISOLATED FORM;Lo;0;AL;<isolated> 0644 0644 0647;;;;N;;;;;",
+		"F211;PUA ARABIC LIGATURE LAM WITH MEEM WITH JEEM INITIAL FORM;Lo;0;AL;<initial> 0644 0645 062C;;;;N;;;;;",
+		"F2EE;PUA ARABIC LIGATURE SHADDA WITH FATHATAN ISOLATED FORM;Lo;0;AL;<isolated> 0020 064B 0651;;;;N;;;;;")
+	for _, line := range lines {
+		fields := strings.Split(line, ";")
+		if len(fields) < 6 {
+			continue
+		}
+		items := strings.Fields(fields[5])
+		if len(items) < 2 {
+			continue
+		}
+		shape, ok := shapeOf[items[0]]
+		if !ok {
+			continue
+		}
+		c, err := strconv.ParseUint(fields[0], 16, 21)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var chars []rune
+		for _, it := range items[1:] {
+			r, perr := strconv.ParseUint(it, 16, 21)
+			if perr != nil {
+				log.Fatal(perr)
+			}
+			chars = append(chars, rune(r))
+		}
+		if len(chars) == 1 {
+			if forms[chars[0]] == nil {
+				forms[chars[0]] = &[4]rune{}
+			}
+			forms[chars[0]][shape] = rune(c)
+			continue
+		}
+		if chars[0] == ' ' {
+			chars = chars[1:]
+			slices.Reverse(chars)
+			shape = markLigature
+		}
+		if !slices.Contains(arabicLigatureChars, rune(c)) {
+			continue
+		}
+		key := string(chars)
+		if ligatures[key] == nil {
+			ligatures[key] = map[int]rune{}
+		}
+		ligatures[key][shape] = rune(c)
+	}
+	first, last := rune(0x10FFFF), rune(0)
+	for r := range forms {
+		first, last = min(first, r), max(last, r)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "// arabicFormsFirst is the first letter of arabicForms.\nconst arabicFormsFirst = 0x%04X\n\n", first)
+	b.WriteString("// arabicForms are the presentation forms of the letters from\n" +
+		"// arabicFormsFirst: initial, medial, final and isolated, 0 for none.\n")
+	b.WriteString("var arabicForms = [...][4]uint16{\n")
+	for r := first; r <= last; r++ {
+		f := forms[r]
+		if f == nil {
+			f = &[4]rune{}
+		}
+		fmt.Fprintf(&b, "\t{0x%04X, 0x%04X, 0x%04X, 0x%04X},\n", f[0], f[1], f[2], f[3])
+	}
+	b.WriteString("}\n")
+	var three, two, marks []string
+	keys := make([]string, 0, len(ligatures))
+	for k := range ligatures {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	form := func(r rune, shape int) rune {
+		if f := forms[r]; f != nil {
+			return f[shape]
+		}
+		return 0
+	}
+	type lig struct {
+		parts []rune
+		c     rune
+	}
+	var threes, twos, markLigs []lig
+	for _, k := range keys {
+		chars := []rune(k)
+		for shape := initial; shape <= markLigature; shape++ {
+			c, ok := ligatures[k][shape]
+			if !ok {
+				continue
+			}
+			var shapes []int
+			switch {
+			case shape == markLigature:
+				markLigs = append(markLigs, lig{chars, c})
+				continue
+			case len(chars) == 3 && shape == isolated:
+				shapes = []int{initial, medial, final}
+			case len(chars) == 3 && shape == final:
+				shapes = []int{medial, medial, final}
+			case len(chars) == 3 && shape == initial:
+				shapes = []int{initial, medial, medial}
+			case len(chars) == 2 && shape == isolated:
+				shapes = []int{initial, final}
+			case len(chars) == 2 && shape == final:
+				shapes = []int{medial, final}
+			case len(chars) == 2 && shape == initial:
+				shapes = []int{initial, medial}
+			default:
+				log.Fatalf("U+%04X: a ligature of %d characters in form %d", c, len(chars), shape)
+			}
+			parts := make([]rune, len(chars))
+			for i, r := range chars {
+				parts[i] = form(r, shapes[i])
+			}
+			if len(chars) == 3 {
+				threes = append(threes, lig{parts, c})
+			} else {
+				twos = append(twos, lig{parts, c})
+			}
+		}
+	}
+	write := func(ligs []lig, out *[]string) {
+		slices.SortStableFunc(ligs, func(a, b lig) int { return slices.Compare(a.parts, b.parts) })
+		for _, l := range ligs {
+			parts := make([]string, 3)
+			for i := range parts {
+				parts[i] = "0"
+				if i < len(l.parts) {
+					parts[i] = fmt.Sprintf("0x%04X", l.parts[i])
+				}
+			}
+			*out = append(*out, fmt.Sprintf("\t{[3]rune{%s}, 0x%04X},\n", strings.Join(parts, ", "), l.c))
+		}
+	}
+	write(threes, &three)
+	write(twos, &two)
+	write(markLigs, &marks)
+	b.WriteString("\n// arabicLigatures3, arabicLigatures and arabicMarkLigatures are the\n" +
+		"// ligatures of three letters' forms, of two, and of a shadda and a mark,\n" +
+		"// HarfBuzz's three rlig lookups in its order.")
+	for _, t := range []struct {
+		name string
+		rows []string
+	}{{"arabicLigatures3", three}, {"arabicLigatures", two}, {"arabicMarkLigatures", marks}} {
+		fmt.Fprintf(&b, "\nvar %s = [...]arabicLigature{\n%s}\n", t.name, strings.Join(t.rows, ""))
+	}
 	return b.String()
 }

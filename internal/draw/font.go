@@ -475,7 +475,7 @@ func (f *Font) Ascent() float32 { return f.ascent }
 func (f *Font) Measure(s string) geom.Vec2 { return f.measure(s, "", 0, round{}) }
 
 // measure is the size of s shaped with features between before and
-// after, with tracking after each cluster.
+// after, with tracking after each cluster it follows (shape.SpacedIn).
 func (f *Font) measure(s, features string, tracking float32, ctx round) geom.Vec2 {
 	var w, line float32
 	lines := 1
@@ -486,7 +486,7 @@ func (f *Font) measure(s, features string, tracking float32, ctx round) geom.Vec
 			lines++
 			return
 		}
-		line += it.advance + tracking*float32(it.clusters)
+		line += it.advance + tracking*float32(it.spaced)
 	})
 	return geom.V2(max(w, line), float32(lines)*f.lineHeight)
 }
