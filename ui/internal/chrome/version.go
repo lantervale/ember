@@ -4,6 +4,7 @@ package chrome
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"sync"
@@ -13,43 +14,42 @@ import (
 	"github.com/lantervale/ember/ui"
 )
 
-// Major is the major version of the Chrome the tests run, read once
-// from its user agent.
-//
-//nolint:gochecknoglobals // read once per test process
-var Major = sync.OnceValues(func() (int, error) {
-	raw, err := Eval(ui.NewDocument(), geom.V2(100, 100), "return navigator.userAgent")
+// Version is the major version of the Chrome the tests run against, read
+// from its user agent once.
+func Version() (int, error) { return version() }
+
+var version = sync.OnceValues(func() (int, error) {
+	out, err := Eval(ui.NewDocument(), geom.V2(16, 16), "return navigator.userAgent")
 	if err != nil {
 		return 0, err
 	}
 	var agent string
-	if err = json.Unmarshal(raw, &agent); err != nil {
+	if err = json.Unmarshal(out, &agent); err != nil {
 		return 0, err
 	}
-	return majorOf(agent), nil
+	return majorOf(agent)
 })
 
-var chromeVersion = regexp.MustCompile(`Chrome/(\d+)\.`)
+var agentVersion = regexp.MustCompile(`Chrome/(\d+)\.`)
 
-// majorOf is the major version a Chrome user agent names, 0 for none.
-func majorOf(agent string) int {
-	m := chromeVersion.FindStringSubmatch(agent)
+func majorOf(agent string) (int, error) {
+	m := agentVersion.FindStringSubmatch(agent)
 	if m == nil {
-		return 0
+		return 0, fmt.Errorf("no Chrome version in %q", agent)
 	}
-	v, _ := strconv.Atoi(m[1])
-	return v
+	return strconv.Atoi(m[1])
 }
 
-// Since skips t where Chrome is older than version, the one that
-// brought what t compares; why says what that version changed.
-func Since(t testing.TB, version int, why string) {
+// Since skips t on a Chrome older than major, whose behaviour ui doesn't
+// follow: ui tracks the newest stable Chrome, while CI may pin an older
+// one. why says what major changed.
+func Since(t testing.TB, major int, why string) {
 	t.Helper()
-	v, err := Major()
+	v, err := Version()
 	if err != nil {
-		t.Fatalf("reading Chrome's version: %v", err)
+		t.Fatalf("Chrome's version: %v", err)
 	}
-	if v < version {
-		t.Skipf("Chrome %d: %s since Chrome %d", v, why, version)
+	if v < major {
+		t.Skipf("Chrome %d: %s since Chrome %d", v, why, major)
 	}
 }

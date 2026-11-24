@@ -151,6 +151,12 @@ var rtlCases = map[string]func() []*ui.Node{
 				ui.Div(ui.Style("height: 80px")), ui.Div(ui.Style("width: 50px; height: 10px"))),
 			ui.Div(rtl, ui.Style("overflow-y: scroll; width: 200px; height: 50px; display: flex"),
 				ui.Div(ui.Style("width: 50px; height: 80px"))),
+			ui.Div(rtl, ui.Style("overflow-y: scroll; width: 200px; height: 50px; display: grid; "+
+				"grid-template-columns: 50px 30px"),
+				ui.Div(ui.Style("height: 80px")), ui.Div(ui.Style("height: 10px"))),
+			ui.Div(rtl, ui.Style("overflow-y: auto; scrollbar-gutter: stable both-edges; width: 200px; "+
+				"height: 50px; display: flex"),
+				ui.Div(ui.Style("width: 50px; height: 80px"))),
 		}
 	},
 	"atoms and spans reordered": func() []*ui.Node {

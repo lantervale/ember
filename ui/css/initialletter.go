@@ -26,13 +26,13 @@ func checkInitialLetter(v []Component) error {
 }
 
 // initialLetterOf is initial-letter: no sink, or drop, is the size
-// rounded up, as Chrome sinks it, and raise is 1.
+// rounded down, as Chrome sinks it, and raise is 1.
 func initialLetterOf(_ *ctx, v []Component) style.InitialLetter {
 	if isWord(v[0], kwNormal) {
 		return style.InitialLetter{}
 	}
 	size := float32(v[0].Num)
-	sink := max(int(math.Ceil(float64(size))), 1)
+	sink := max(int(math.Floor(float64(size))), 1)
 	switch {
 	case len(v) < 2 || isWord(v[1], "drop"):
 	case isWord(v[1], "raise"):
@@ -80,7 +80,7 @@ func (r *restyler) dropCap(st, block *style.Computed, letter string) {
 		}
 	}
 	firstBaseline := (lh-para.Ascent-para.Descent)/2 + para.Ascent
-	st.InitialLetter.Raise = float32(max(int(math.Ceil(float64(il.Size)))-il.Sink, 0)) * lh
+	st.InitialLetter.Raise = max(il.Size-float32(il.Sink), 0) * lh
 	top := firstBaseline + float32(il.Sink-1)*lh - own.Cap
 	st.Margin.Top = style.Px(top - st.Padding.Top.Px - st.Border.Top)
 }

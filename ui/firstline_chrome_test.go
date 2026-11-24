@@ -85,11 +85,10 @@ p { margin: 0 0 12px; }
 .boxed::first-letter { initial-letter: 2; padding: 2px 4px; margin-right: 4px; border: 2px solid #357; }
 .tall { line-height: 26px; }
 .tall::first-letter { initial-letter: 3 drop; }
-.half::first-letter { initial-letter: 2.5; }
 .large { font-size: 20px; line-height: 1.5; }
 .large::first-letter { initial-letter: 4; }
 `))
-	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "half", "large"} {
+	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "large"} {
 		d.Body().Append(ui.P(append([]ui.Arg{ui.Class(c), ui.Text("Down ")}, words(prose+" "+prose)...)...))
 	}
 	// Chrome on Linux and Windows rounds a letter's ink out to whole
@@ -101,6 +100,28 @@ p { margin: 0 0 12px; }
 	}
 	r := chrome.MatchWithin(t, d, geom.V2(400, 1400), within)
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// A drop cap of a fractional size sinks its size rounded down and rises
+// over the first line by the rest, pushing the lines down, as Chrome 158.
+func TestFractionalInitialLettersMatchChrome(t *testing.T) {
+	chrome.Since(t, 158, "a fractional initial-letter sinks its size rounded down, no longer up")
+	for _, size := range []string{"1.5", "2.3", "2.5", "2.7", "3.5", "2.5 drop", "2.5 raise", "2.5 3"} {
+		t.Run(size, func(t *testing.T) {
+			d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; width: 360px; }
+p { margin: 0 0 12px; }
+.x::first-letter { initial-letter: ` + size + `; }
+`))
+			d.Body().Append(ui.P(append([]ui.Arg{ui.Class("x"), ui.Text("Down ")}, words(prose+" "+prose)...)...))
+			within := float32(chrome.Tolerance)
+			if runtime.GOOS != "darwin" {
+				within = 2
+			}
+			r := chrome.MatchWithin(t, d, geom.V2(400, 600), within)
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
 }
 
 func TestFirstLinesMatchChrome(t *testing.T) {
