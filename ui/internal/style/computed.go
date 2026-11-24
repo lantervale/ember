@@ -2,10 +2,10 @@ package style
 
 import (
 	"math"
-	"unicode/utf8"
 
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/shape"
 )
 
 // Computed is one node's computed style. The zero value is CSS's initial
@@ -826,23 +826,44 @@ func (t *Text) LetterGap() float32 {
 }
 
 // Spacing is the room letter-spacing and word-spacing add to s: the one
-// after each character, the other after each word separator.
-func (t *Text) Spacing(s string) float32 {
-	word, letter := t.WordGap(), t.LetterGap()
-	if word == 0 {
-		if letter == 0 {
-			return 0
-		}
-		return letter * float32(utf8.RuneCountInString(s))
+// after each grapheme cluster but a cursive script's letters
+// (shape.LetterSpaced), the other after each word separator.
+func (t *Text) Spacing(s string) float32 { return t.SpacingAfter("", s) }
+
+// SpacingAfter is Spacing for s after the text before, whose script the
+// digits and punctuation at s's start take.
+func (t *Text) SpacingAfter(before, s string) float32 {
+	letters := 0
+	if t.LetterGap() != 0 {
+		letters = shape.LetterSpaced(before, s)
 	}
-	n, seps := 0, 0
-	for _, r := range s {
-		n++
-		if WordSeparator(r) {
-			seps++
-		}
+	return t.spacing(s, letters)
+}
+
+// SpacingOf is Spacing for s, a grapheme cluster, that letter-spacing
+// follows or not.
+func (t *Text) SpacingOf(s string, spaced bool) float32 {
+	letters := 0
+	if spaced {
+		letters = 1
 	}
-	return letter*float32(n) + word*float32(seps)
+	return t.spacing(s, letters)
+}
+
+// spacing is the room letter-spacing adds after letters clusters of s and
+// word-spacing after its word separators.
+func (t *Text) spacing(s string, letters int) float32 {
+	out := t.LetterGap() * float32(letters)
+	if word := t.WordGap(); word != 0 {
+		seps := 0
+		for _, r := range s {
+			if WordSeparator(r) {
+				seps++
+			}
+		}
+		out += word * float32(seps)
+	}
+	return out
 }
 
 // FontCaps is font-variant-caps.

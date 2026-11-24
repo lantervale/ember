@@ -158,7 +158,7 @@ func TestAMarkIsDrawnOnItsBase(t *testing.T) {
 	f.items("é", "", false, round{}, func(it item) { its = append(its, it) })
 	require.Len(t, its, 2, "the mark is drawn, not left out with its cluster")
 	assert.Zero(t, its[1].advance)
-	assert.Equal(t, 1, its[0].clusters+its[1].clusters)
+	assert.Equal(t, 1, its[0].spaced+its[1].spaced)
 	assert.InDelta(t, -690.0/2048*24, its[1].offset.X, 0.01)
 	assert.InDelta(t, -1200.0/2048*24, its[1].offset.Y, 0.01)
 }
@@ -189,4 +189,17 @@ func TestShapedRunsAreKept(t *testing.T) {
 	f.measure("office office", "", 0, round{})
 	assert.Len(t, f.shapedRuns, n, "the same run is shaped once")
 	assert.Positive(t, n)
+}
+
+func TestTrackingLeavesACursiveScriptsLettersUnspaced(t *testing.T) {
+	f := arabicFace(t).Size(24)
+	for _, c := range []struct {
+		text   string
+		spaced int
+	}{{"بتب", 0}, {"ب ب", 1}, {"ab", 2}, {"ab بتب", 3}, {"áb", 2}} {
+		plain := f.measure(c.text, "", 0, round{}).X
+		assert.InDelta(t, plain+float32(10*c.spaced), f.measure(c.text, "", 10, round{}).X, 0.01, "%q", c.text)
+	}
+	assert.InDelta(t, f.measure("1", "", 0, round{}).X, f.measure("1", "", 10, round{before: "ب "}).X, 0.01,
+		"a digit after Arabic is of its run")
 }

@@ -316,10 +316,11 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	var room float32
 	last := rune(-1)
 	han := b.Lines[k].Spacing
+	spaced := spacedAfter(frag.Before+frag.Lead, text)
 	n := 0
 	for i, r := range text {
 		if i > 0 {
-			room += sp.after(last)
+			room += sp.after(last, spaced[n-1])
 			for len(han) > 0 && han[0].At < i {
 				room += han[0].Space
 				han = han[1:]
