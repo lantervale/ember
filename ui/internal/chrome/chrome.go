@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -236,6 +237,12 @@ var (
 	waitAfter = 5 * time.Second
 )
 
+// lockHeld counts the Chrome locks this process holds: a run asking for
+// another while it holds one would wait on itself.
+//
+//nolint:gochecknoglobals // the process's own count of the lock it holds
+var lockHeld atomic.Int32
+
 // lockChrome takes the Chrome lock and writes who holds it into the file:
 // full suites in several sessions queue on it for an hour, and a run
 // waiting behind them says whom it waits for instead of seeming to hang.
@@ -276,7 +283,9 @@ func lockChrome() (func(), error) {
 		time.Now().Format(time.TimeOnly),
 	)
 	_, _ = f.WriteAt([]byte(note), 0)
+	lockHeld.Add(1)
 	return func() {
+		lockHeld.Add(-1)
 		_ = f.Truncate(0)
 		// Closing the file releases the lock too, should unlocking fail.
 		_ = unlockFile(f)

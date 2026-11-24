@@ -162,6 +162,9 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32, flags ...stri
 		var ready string
 		s.Eval(`document.readyState`, &ready)
 		if ready == "complete" {
+			var agent string
+			s.Eval(`navigator.userAgent`, &agent)
+			knowAgent(agent)
 			return s
 		}
 		time.Sleep(10 * time.Millisecond)
