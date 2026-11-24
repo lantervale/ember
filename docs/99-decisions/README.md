@@ -224,6 +224,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0221 | [A vertical root scrolls its viewport along its blocks](0221-a-vertical-root-scrolls-its-viewport-along-its-blocks.md) | api |
 | 0222 | [A press inside the selection drags its text, and a long press selects a word](0222-a-press-inside-the-selection-drags-its-text-and-a-long-press-selects-a-word.md) | api |
 | 0223 | [A vertical drop cap is the horizontal one turned, and an element is never one](0223-a-vertical-drop-cap-is-the-horizontal-one-turned-and-an-element-is-never-one.md) | rendering |
+| 0224 | [A rich copy writes Chrome's markup](0224-a-rich-copy-writes-chromes-markup.md) | api |
 | 0225 | [Letter-spacing leaves cursive scripts unspaced, and old Arabic faces join](0225-letter-spacing-leaves-cursive-scripts-unspaced-and-old-arabic-faces-join.md) | rendering |
 
 ## Writing one

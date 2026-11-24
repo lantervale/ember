@@ -572,7 +572,8 @@ func (w *Window) SetClipboard(text string) {
 }
 
 // HTMLClipboard is a Backend whose system clipboard takes HTML beside
-// plain text, as macOS's and Windows' do (decision 0162).
+// plain text, as macOS's, Windows' and a browser's do (decisions 0162,
+// 0224).
 type HTMLClipboard interface {
 	ClipboardHTML() string
 	SetClipboardHTML(html, text string)

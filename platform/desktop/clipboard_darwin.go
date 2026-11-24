@@ -40,7 +40,7 @@ import (
 )
 
 func setClipboardHTML(html, text string) bool {
-	h, t := C.CString(strings.ReplaceAll(html, "\x00", "")), C.CString(strings.ReplaceAll(text, "\x00", ""))
+	h, t := C.CString(pasteboardHTML(html)), C.CString(strings.ReplaceAll(text, "\x00", ""))
 	defer C.free(unsafe.Pointer(h))
 	defer C.free(unsafe.Pointer(t))
 	C.emberSetClipboardHTML(h, t)
@@ -54,4 +54,10 @@ func clipboardHTML() string {
 	}
 	defer C.free(unsafe.Pointer(h))
 	return C.GoString(h)
+}
+
+// pasteboardHTML is html as Chrome puts it on the pasteboard: marked
+// UTF-8, which public.html says nothing of.
+func pasteboardHTML(html string) string {
+	return "<meta charset='utf-8'>" + strings.ReplaceAll(html, "\x00", "")
 }

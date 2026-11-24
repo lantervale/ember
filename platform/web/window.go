@@ -20,9 +20,10 @@ import (
 type canvas struct {
 	el js.Value
 	in *input.State
-	// pasted is the text of the page's last paste, which Clipboard gives:
-	// a page reads the clipboard only when the player pastes.
-	pasted string
+	// pasted and pastedHTML are the text and the HTML of the page's last
+	// paste, which Clipboard and ClipboardHTML give: a page reads the
+	// clipboard only when the player pastes.
+	pasted, pastedHTML string
 }
 
 //nolint:gochecknoglobals // a lookup table
@@ -41,6 +42,7 @@ func newCanvas(ls *listeners, el js.Value, in *input.State) *canvas {
 	ls.on(js.Global(), "paste", func(e js.Value) {
 		if data := e.Get("clipboardData"); !data.IsNull() && !data.IsUndefined() {
 			c.pasted = data.Call("getData", "text/plain").String()
+			c.pastedHTML = data.Call("getData", "text/html").String()
 		}
 	})
 	return c
@@ -81,7 +83,26 @@ func (c *canvas) SetClipboard(text string) {
 	if cb := js.Global().Get("navigator").Get("clipboard"); !cb.IsUndefined() {
 		cb.Call("writeText", text)
 	}
-	c.pasted = text
+	c.pasted, c.pastedHTML = text, ""
+}
+
+func (c *canvas) ClipboardHTML() string { return c.pastedHTML }
+
+// SetClipboardHTML writes html beside text as one clipboard item, as a
+// browser's copy does; a browser without ClipboardItem gets the text.
+func (c *canvas) SetClipboardHTML(html, text string) {
+	g := js.Global()
+	cb, item := g.Get("navigator").Get("clipboard"), g.Get("ClipboardItem")
+	if cb.IsUndefined() || item.IsUndefined() {
+		c.SetClipboard(text)
+		return
+	}
+	blob := func(data, kind string) js.Value {
+		return g.Get("Blob").New([]any{data}, map[string]any{"type": kind})
+	}
+	cb.Call("write", []any{item.New(map[string]any{
+		"text/html": blob(html, "text/html"), "text/plain": blob(text, "text/plain")})})
+	c.pasted, c.pastedHTML = text, html
 }
 
 func (c *canvas) SetPosition(_, _ int)         {}
@@ -115,4 +136,7 @@ func (c *canvas) SetFullscreen(on bool) {
 	}
 }
 
-var _ platform.Backend = (*canvas)(nil)
+var (
+	_ platform.Backend       = (*canvas)(nil)
+	_ platform.HTMLClipboard = (*canvas)(nil)
+)

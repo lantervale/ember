@@ -1,6 +1,6 @@
 # 0162. A copy puts the selection's markup beside its text
 
-- Status: Accepted
+- Status: Superseded by [0224](0224-a-rich-copy-writes-chromes-markup.md) for its markup; its clipboard API stays
 - Date: 2026-11-23
 - Area: api
 - Owner: engine
