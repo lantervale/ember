@@ -11,9 +11,10 @@ import (
 )
 
 // WPT css/css-grid/subgrid/auto-track-sizing-002.html: text in subgrids of rows nested in
-// subgrids of rows, in one or both axes, sizing the grid's auto row.
+// subgrids of rows, in one or both axes, sizing the grid's auto row; in Go Mono for
+// monospace, the face ui and Chrome share on every system.
 func TestWPTSubgridAutoTrackSizing002MatchesChrome(t *testing.T) {
-	const sheet = `html, body { color: black; background-color: white; font: 16px/1 monospace; padding: 0; margin: 0 }
+	const sheet = `html, body { color: black; background-color: white; font: 16px/1 "Go Mono"; padding: 0; margin: 0 }
 .grid { display: inline-grid; max-width: 260px; padding: 1px 5px; border: 1px solid; grid-template-columns: 100px }
 .subgrid { display: grid; grid-template-rows: subgrid; grid-template-columns: 100%; margin: 0px 5px 0px 10px }
 .inner { margin: 0px 5px 0px 0px; background: grey }`
@@ -66,9 +67,9 @@ div > div { display: grid; grid-column: 1 / span 3; grid: auto / subgrid; border
 
 // WPT css/css-grid/subgrid/orthogonal-writing-mode-001.html: subgrids of a vertical writing
 // mode in a horizontal grid, their subgridded axes the grid's other ones. Its x elements are
-// spans.
+// spans, in Go Mono for monospace, the face ui and Chrome share on every system.
 func TestWPTSubgridOrthogonalWritingMode001MatchesChrome(t *testing.T) {
-	const sheet = `html, body { color: black; background-color: white; font: 12px/1 monospace }
+	const sheet = `html, body { color: black; background-color: white; font: 12px/1 "Go Mono" }
 .grid { display: grid; grid: repeat(4, auto) / repeat(5, auto); place-content: start; border: 1px solid }
 .subgrid { display: grid; grid: subgrid / auto; background: lightgrey; grid-column: 2 / span 5;
 grid-row: 2 / span 5; min-width: 10px; min-height: 0; border: 0 solid lightblue; border-bottom-width: 40px }

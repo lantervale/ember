@@ -24,9 +24,9 @@ func el(style string, kids ...any) *ui.Node {
 	return ui.Div(args...)
 }
 
-const alignSheet = `body { font: 12px/15px sans-serif; margin: 8px }
+const alignSheet = `body { font: 12px/15px Go; margin: 8px }
 body > div { margin-bottom: 10px; border: 1px solid; }
-.a { line-height: 21px } .b { font: 32px/40px sans-serif; padding: 3px 0 7px } .c { line-height: 30px; margin-top: 5px }
+.a { line-height: 21px } .b { font: 32px/40px Go; padding: 3px 0 7px } .c { line-height: 30px; margin-top: 5px }
 .w { width: 60px } .n { width: 40px; height: 30px; background: #ccc }`
 
 func matchAll(t *testing.T, cases map[string]*ui.Document, size geom.Vec2) {
@@ -57,7 +57,7 @@ func TestLastBaselineFlexItemsMatchChrome(t *testing.T) {
 		"first and last baselines in one line": styled(alignSheet+` .f > :nth-child(odd) { align-self: last baseline }`,
 			el("display: flex; align-items: baseline", items()...),
 			ui.Div(ui.Class("f"), ui.Style("display: flex; align-items: baseline; height: 150px"),
-				el("", "a"), el("font: 32px/45px sans-serif", "b"), el("width: 50px", "c d e f"), el("", "g"))),
+				el("", "a"), el("font: 32px/45px Go", "b"), el("width: 50px", "c d e f"), el("", "g"))),
 		"wrapped lines": styled(alignSheet, row("align-items: last baseline; flex-wrap: wrap; width: 160px"),
 			row("align-items: last baseline; flex-wrap: wrap-reverse; width: 160px")),
 		"a column": styled(alignSheet, row("flex-direction: column; align-items: last baseline; width: 200px"),
@@ -72,12 +72,12 @@ func TestLastBaselineFlexItemsMatchChrome(t *testing.T) {
 		"row-reverse": styled(alignSheet, row("flex-direction: row-reverse; align-items: last baseline")),
 		"auto margins and stretch": styled(alignSheet,
 			el("display: flex; align-items: last baseline; height: 120px",
-				el("margin-top: auto", "auto"), el("font: 32px/40px sans-serif", "Box"), el("align-self: stretch", "s"))),
+				el("margin-top: auto", "auto"), el("font: 32px/40px Go", "Box"), el("align-self: stretch", "s"))),
 		"nested containers": styled(alignSheet,
 			el("display: flex; align-items: last baseline",
 				el("display: flex; flex-direction: column", el("", "row 1"), el("line-height: 25px", "row 2")),
 				el("display: grid; grid-template-columns: auto auto", el("", "g1"), el("line-height: 21px", "g2"),
-					el("font: 32px/40px sans-serif", "g3")),
+					el("font: 32px/40px Go", "g3")),
 				el("display: flex; flex-wrap: wrap; width: 50px", el("", "w1"), el("", "w2"), el("line-height: 30px", "w3")),
 				el("", "four"))),
 		"items without a baseline": styled(alignSheet,
@@ -98,7 +98,7 @@ func TestLastBaselineGridItemsMatchChrome(t *testing.T) {
 			grid("align-items: last baseline; grid-auto-rows: 120px")),
 		"mixed in a row": styled(alignSheet+` .g > :nth-child(2n) { align-self: last baseline }`,
 			ui.Div(ui.Class("g"), ui.Style("display: grid; grid-template-columns: repeat(4, 60px); align-items: baseline"),
-				el("", "a"), el("font: 32px/45px sans-serif", "b"), el("", "c d e f g h"), el("line-height: 21px", "i j k l m"))),
+				el("", "a"), el("font: 32px/45px Go", "b"), el("", "c d e f g h"), el("line-height: 21px", "i j k l m"))),
 		"spanning rows": styled(alignSheet,
 			el("display: grid; grid-template-columns: 60px 60px; align-items: last baseline",
 				el("grid-row: span 2", "two rows of text"), el("", "x"), el("line-height: 25px", "y"))),
@@ -108,7 +108,7 @@ func TestLastBaselineGridItemsMatchChrome(t *testing.T) {
 			el("display: grid; grid-template-columns: 120px; justify-items: last baseline",
 				el("width: 50px", "a"), el("width: 30px; margin-right: 7px", "b")),
 			el("display: grid; grid-template-columns: 120px; justify-items: last baseline",
-				el("writing-mode: vertical-lr", "a b c"), el("writing-mode: vertical-lr; font: 32px/40px sans-serif", "d"))),
+				el("writing-mode: vertical-lr", "a b c"), el("writing-mode: vertical-lr; font: 32px/40px Go", "d"))),
 	}
 	matchAll(t, cases, geom.V2(600, 1000))
 }
@@ -193,10 +193,10 @@ func TestBaselineAlignmentInVerticalModesMatchesChrome(t *testing.T) {
 				el("writing-mode: vertical-lr; line-height: 25px; height: 60px", "lr"))),
 		"inline-blocks on vertical-lr lines": styled(alignSheet+` .i { display: inline-block }`,
 			el("writing-mode: vertical-lr; height: 300px",
-				ui.Text("x "), el("display: inline-block; font: 32px/40px sans-serif", "A"),
+				ui.Text("x "), el("display: inline-block; font: 32px/40px Go", "A"),
 				ui.Text(" y "), el("display: inline-block; height: 60px; line-height: 21px", "two lines here"),
 				ui.Text(" z "), el("display: inline-block; writing-mode: vertical-rl; line-height: 25px; height: 20px", "rl")),
-			el("writing-mode: vertical-lr; font: 32px sans-serif",
+			el("writing-mode: vertical-lr; font: 32px Go",
 				el("display: inline-block", "V")),
 			el("writing-mode: vertical-rl; height: 300px",
 				ui.Text("x "), el("display: inline-block; writing-mode: vertical-lr; height: 60px; line-height: 21px",
