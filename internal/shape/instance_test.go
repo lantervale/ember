@@ -118,6 +118,7 @@ func TestVariableFontsShapeAtEachInstanceAsHarfBuzzShapesThem(t *testing.T) {
 	if err != nil {
 		t.Skip("no hb-shape")
 	}
+	harfBuzz1421(t, "the rounding of varied mark offsets differs by a unit between releases")
 	dir := t.TempDir()
 	test := dir + "/layout.ttf"
 	require.NoError(t, os.WriteFile(test, varfonttest.Build(varfonttest.Options{Layout: true}), 0o600))
