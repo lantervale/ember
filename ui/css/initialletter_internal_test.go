@@ -12,8 +12,9 @@ import (
 
 func TestInitialLetterTakesASizeAndASink(t *testing.T) {
 	for v, want := range map[string]style.InitialLetter{
-		"normal": {}, "3": {Size: 3, Sink: 3}, "2.5": {Size: 2.5, Sink: 2}, "2.7 drop": {Size: 2.7, Sink: 2}, "3 2": {Size: 3, Sink: 2},
-		"3 drop": {Size: 3, Sink: 3}, "2 raise": {Size: 2, Sink: 1}, "1.5 4": {Size: 1.5, Sink: 4},
+		"normal": {}, "3": {Size: 3, Sink: 3}, "2.5": {Size: 2.5, Sink: 2}, "3 2": {Size: 3, Sink: 2},
+		"2.7 drop": {Size: 2.7, Sink: 2}, "3 drop": {Size: 3, Sink: 3}, "2 raise": {Size: 2, Sink: 1},
+		"1.5 4": {Size: 1.5, Sink: 4},
 	} {
 		_, warns := Parse("t.css", "p { initial-letter: "+v+" }")
 		require.Empty(t, warns, v)
