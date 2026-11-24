@@ -168,7 +168,7 @@ func pageSince(pkg string) (int, string) {
 	switch pkg {
 	case "./internal/pages/scrollbar-gutter":
 		return 158, "scrollbar-color's bars lie over the content, and a short styled thumb is at least 26 points long"
-	case "./internal/pages/scrollbar-buttons":
+	case "./internal/pages/scrollbar-buttons", "./internal/pages/scrollbar-resizer":
 		return 157, "a short styled thumb is at least 26 points long"
 	}
 	return 0, ""
