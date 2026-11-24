@@ -69,20 +69,21 @@ func listBoxColours(t *testing.T, scheme string) {
 	}
 }
 
-// linuxFocusedSelection is the colour Chrome on Linux gives property p
-// of a selected option n of the focused listbox in the light scheme,
-// where macOS's (and ui's) differ: its own active selection, white on
-// #1967d2, and #c8c8c8 under a disabled one (docs/05-ui/10-missing.md).
+// linuxFocusedSelection is the colour Chrome on Linux and Windows gives
+// property p of a selected option n of the focused listbox in the light
+// scheme, where macOS's (and ui's) differ: white on its own active
+// selection, #1967d2, or on #c8c8c8 for a disabled one
+// (docs/05-ui/10-missing.md).
 func linuxFocusedSelection(scheme string, n, focused *ui.Node, p string) ([4]int, bool) {
 	if runtime.GOOS == "darwin" || scheme != "light" || n.Parent() != focused {
 		return [4]int{}, false
 	}
 	switch kids := focused.Children(); {
-	case n == kids[0] && p == "color":
+	case (n == kids[0] || n == kids[2]) && p == "color":
 		return [4]int{255, 255, 255, 100}, true
 	case n == kids[0]:
 		return [4]int{25, 103, 210, 100}, true
-	case n == kids[2] && p == "background-color":
+	case n == kids[2]:
 		return [4]int{200, 200, 200, 100}, true
 	}
 	return [4]int{}, false

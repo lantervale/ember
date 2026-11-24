@@ -5,7 +5,6 @@ package ui_test
 import (
 	"encoding/json"
 	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -66,11 +65,8 @@ func TestAScrolledViewportMatchesChrome(t *testing.T) {
 		"body's gutter, not the root's": {700, "body { scrollbar-gutter: stable both-edges; }", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if runtime.GOOS != "darwin" && strings.Contains(c.sheet, "html { scrollbar-gutter") {
-				// Chrome 156 on Linux keeps the root's stable gutter with no
-				// bar in it, and both its edges; ui keeps the end gutter of
-				// the bar alone, as Chrome on macOS (docs/05-ui/10-missing.md).
-				t.Skip("the root's scrollbar-gutter is laid out as Chrome on macOS's")
+			if strings.Contains(c.sheet, "html { scrollbar-gutter") {
+				chrome.Since(t, 158, "the root keeps no stable gutter without a bar, nor a start one")
 			}
 			r := chrome.Match(t, chromeDoc(c.y, c.sheet, c.opts...), geom.V2(640, 400))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)

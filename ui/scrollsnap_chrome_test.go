@@ -225,7 +225,7 @@ const wait = () => new Promise(r => setTimeout(r, 150));
 	// after the script on a loaded machine: asked again until it says
 	// some section is snapped.
 	var want [][]json.RawMessage
-	for range 4 {
+	for range 10 {
 		raw, err := chrome.Eval(d, size, script)
 		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(raw, &want))
