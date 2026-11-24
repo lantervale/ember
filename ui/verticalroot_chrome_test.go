@@ -119,7 +119,8 @@ func TestAVerticalRootScrollsByKeysAndWheelAsChromes(t *testing.T) {
 		wheel geom.Vec2
 	}
 	steps := []step{{key: "PageDown"}, {key: "PageDown"}, {key: "PageUp"}, {key: "End"}, {key: "Home"},
-		{key: " "}, {key: "Home"}, {key: " "}, {key: "ArrowLeft"}, {key: "ArrowLeft"}, {key: "ArrowRight"}, {key: "ArrowDown"},
+		{key: " "}, {key: "Home"}, {key: " "}, {key: "ArrowLeft"}, {key: "ArrowLeft"}, {key: "ArrowRight"},
+		{key: "ArrowDown"},
 		{wheel: geom.V2(0, 100)}, {wheel: geom.V2(-100, 0)}, {wheel: geom.V2(60, 0)}}
 	at := geom.V2(300, 330)
 	for name, sheet := range map[string]string{"vertical-rl": rlRoot, "vertical-lr": lrRoot,
