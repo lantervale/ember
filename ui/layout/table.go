@@ -1114,7 +1114,7 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 		}
 		cw := cellW(c)
 		out := t.probeChildLayout(c.cell, size{cw, none}, size{content, none},
-			spaces{def(cw), maxContentSpace}, inherentSize)
+			spaces{def(cw), maxContentSpace})
 		own[i] = out.firstBaseline - c.cell.lowered
 		if !some(out.firstBaseline) {
 			own[i] = out.size.h - edges(c.cell.st.Padding, content).b - c.cell.borders().b

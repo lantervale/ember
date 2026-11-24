@@ -539,6 +539,6 @@ func (t *tree) layOutOwners(items, rowItems []*gridItem, columns, rows []gridTra
 		if !some(w) {
 			w = mSub(area.w, it.marginSums(area.w).w)
 		}
-		t.probeChildLayout(it.node, size{w, none}, area, spaces{spaceOr(w, maxContentSpace), maxContentSpace}, inherentSize)
+		t.probeChildLayout(it.node, size{w, none}, area, spaces{spaceOr(w, maxContentSpace), maxContentSpace})
 	}
 }

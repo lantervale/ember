@@ -216,7 +216,7 @@ func (t *tree) itemInlineReach(it *gridItem, last bool, inner size) float32 {
 	m := it.st.Margin
 	w, b := it.knownDimensions(noSize).w, float32(0)
 	if it.node.across {
-		out := t.probeChildLayout(it.node, size{w, none}, inner, maxContentSpaces, inherentSize)
+		out := t.probeChildLayout(it.node, size{w, none}, inner, maxContentSpaces)
 		w, b = out.size.w, or(out.across[0], 0)
 		if last {
 			b = or(out.across[1], b)
@@ -240,7 +240,7 @@ func (t *tree) itemBaselineReach(it *gridItem, last bool, rows, columns []gridTr
 	if some(area.w) {
 		avail.w = def(fmax(area.w-it.marginSums(area.w).w, 0))
 	}
-	out := t.probeChildLayout(it.node, size{known.w, none}, inner, avail, inherentSize)
+	out := t.probeChildLayout(it.node, size{known.w, none}, inner, avail)
 	h := out.size.h
 	m := it.st.Margin
 	if last {

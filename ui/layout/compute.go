@@ -313,10 +313,10 @@ func (t *tree) performChildLayout(n *node, known, parent size, avail spaces, mod
 
 // probeChildLayout is performChildLayout run only for n's first baseline,
 // cached in n's probe slot so its final layout keeps its own.
-func (t *tree) probeChildLayout(n *node, known, parent size, avail spaces, mode sizingMode) output {
+func (t *tree) probeChildLayout(n *node, known, parent size, avail spaces) output {
 	return t.computeChild(n, input{
 		run:             performLayout,
-		sizing:          mode,
+		sizing:          inherentSize,
 		axis:            axisBoth,
 		known:           known,
 		knownIsDefinite: bools{true, true},
