@@ -175,8 +175,9 @@ func (t *Transitions) MeasureFonts(font func(style.Font) FontUnits) { t.env.font
 
 // MeasureInk has a drop cap (initial-letter) ask ink where its glyphs
 // draw, as Chrome sizes the box round their ink; without it the box is
-// as wide as the letters' advance.
-func (t *Transitions) MeasureInk(ink func(f style.Font, text string) (left, width float32, ok bool)) {
+// as long as the letters' advance.
+func (t *Transitions) MeasureInk(ink func(f style.Font, text string, o style.TextOrientation) (start, length float32,
+	ok bool)) {
 	t.env.ink = ink
 }
 

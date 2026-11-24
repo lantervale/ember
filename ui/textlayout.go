@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/ui/control"
 	"github.com/lantervale/ember/ui/internal/bidi"
 	"github.com/lantervale/ember/ui/internal/box"
@@ -43,12 +44,32 @@ func spacingOf(st *style.Computed) spacing {
 	return spacing{st.LetterGap(), st.WordGap(), st.SpacingTrim, st.Autospace}
 }
 
-// after is the room s adds after r.
-func (s spacing) after(r rune) float32 {
-	if s.word != 0 && style.WordSeparator(r) {
-		return s.letter + s.word
+// after is the room s adds after r, the last character of a grapheme
+// cluster letter-spacing follows or not (spacedAfter).
+func (s spacing) after(r rune, spaced bool) float32 {
+	var room float32
+	if spaced {
+		room = s.letter
 	}
-	return s.letter
+	if s.word != 0 && style.WordSeparator(r) {
+		room += s.word
+	}
+	return room
+}
+
+// spacedAfter says, for each character of text after before, whether it
+// ends a grapheme cluster letter-spacing follows (shape.EachSpaced).
+func spacedAfter(before, text string) []bool {
+	out := make([]bool, utf8.RuneCountInString(text))
+	n, at := 0, 0
+	shape.EachSpaced(before, text, func(end int) {
+		for ; at < end; n++ {
+			_, size := utf8.DecodeRuneInString(text[at:])
+			at += size
+		}
+		out[n-1] = true
+	})
+	return out
 }
 
 func newLine(text []rune, st *style.Computed, fonts box.Fonts) *line {
@@ -64,10 +85,11 @@ func newLine(text []rune, st *style.Computed, fonts box.Fonts) *line {
 func measureLine(text []rune, st *style.Computed, fonts box.Fonts, han []box.Spacing) ([]float32, [][2]float32) {
 	xs := make([]float32, len(text)+1)
 	sp := spacingOf(st)
+	spaced := spacedAfter("", string(text))
 	var room float32
 	at := 0
 	for i, r := range text {
-		room += sp.after(r)
+		room += sp.after(r, spaced[i])
 		for len(han) > 0 && han[0].At <= at {
 			if han[0].At == at {
 				room += han[0].Space

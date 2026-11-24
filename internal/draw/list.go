@@ -1101,7 +1101,8 @@ type Style struct {
 	Color  color.Color
 	Shadow bool
 	Align  Align
-	// Tracking is room added after each grapheme cluster, in points.
+	// Tracking is room added after each grapheme cluster but the letters
+	// of a cursive script (shape.SpacedIn), in points.
 	Tracking float32
 	// Baseline takes the text's origin as its first baseline's left end,
 	// not its top-left: text placed by a layout's metrics.
@@ -1291,7 +1292,7 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 					color.RGBA(1, 1, 1, col.A),
 				)
 			}
-			x += it.advance/k + s.Tracking*float32(it.clusters)
+			x += it.advance/k + s.Tracking*float32(it.spaced)
 			return
 		}
 		if gp := f.drawn(it, phase); gp.size.X > 0 {
@@ -1308,7 +1309,7 @@ func (c *List) glyphs(f *Font, k, grid float32, p geom.Vec2, text string, col co
 				f,
 			)
 		}
-		x += it.advance/k + s.Tracking*float32(it.clusters)
+		x += it.advance/k + s.Tracking*float32(it.spaced)
 	})
 }
 

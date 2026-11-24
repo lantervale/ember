@@ -29,7 +29,7 @@ func (s *Settings) Update(f world.Frame) {
 | `ui.OnToggle` | `ui.Toggled{Node}` | a details element opened or closed |
 | `ui.OnClose` | `ui.Closed{Node, Value}` | a dialog closed, with its return value, "" for Escape |
 | `ui.OnSort` | `ui.Sorted{Node, Column, Descending}` | a table's column header pressed |
-| `ui.OnKey` | `ui.KeyPressed{Node, Key, Text, Command, Pad}` | a key nothing took, on the focused element or the open modal dialog; also a pad button focus navigation leaves (West, North, shoulders, triggers, Back, Start), as `Pad` with `Key` `input.KeyUnknown`. In a focused text field the callback hears every key before the field, as a keydown, and `e.PreventDefault()` keeps it from the field; those emit no World event |
+| `ui.OnKey` | `ui.KeyPressed{Node, Key, Text, Command, Shift, Alt, Control, Super, Pad}` | a key nothing took, on the focused element or the open modal dialog, with the modifiers held (either side's; `Command` is Super on macOS, Control elsewhere); also a pad button focus navigation leaves (West, North, shoulders, triggers, Back, Start), as `Pad` with `Key` `input.KeyUnknown`. In a focused text field the callback hears every key before the field, as a keydown, and `e.PreventDefault()` keeps it from the field; those emit no World event |
 | `ui.OnBack` | `ui.BackPressed{Node}` | Escape or the pad's East that nothing took: a screen's way back |
 | `ui.OnPointerEnter` | `ui.PointerEntered{Node}` | the pointer coming over it, once, not again for its children (mouseenter) |
 | `ui.OnPointerLeave` | `ui.PointerLeft{Node}` | the pointer leaving it and all its children (mouseleave) |
@@ -48,7 +48,7 @@ func (s *Settings) Update(f world.Frame) {
 | A callback is | |
 |---|---|
 | `func()` | told nothing |
-| `func(ui.Event)` | told the event: `Type` (`ui.EventClick`…), `Node`, and what its World event carries (`Clicks`, `Value`, `Column`, `Descending`, `Key`, `Text`, `Command`, `At`, `Size`, `Folded`, `Dragged`, `Dropped`, `Button`) |
+| `func(ui.Event)` | told the event: `Type` (`ui.EventClick`…), `Node`, and what its World event carries (`Clicks`, `Value`, `Column`, `Descending`, `Key`, `Text`, `Command`, `Shift`, `Alt`, `Control`, `Super`, `At`, `Size`, `Folded`, `Dragged`, `Dropped`, `Button`) |
 | `func(*world.World, ui.Event)` | told the World too |
 
 ```go
@@ -72,6 +72,9 @@ Text whose `user-select` allows it ([CSS](03-css.md#selecting-text)) is selected
 | a double click, a triple click | the word, the block; a drag then goes on by words or blocks |
 | Shift and a click | moves the selection's end there |
 | a click in text or beside it | clears the selection |
+| a press inside the selection, moved 3 points | drags its text; let go over a text field, the text goes in where the pointer is, selected, the field focused: copied from the page, moved out of a field, copied with Option (macOS) or Control held. Let go elsewhere it does nothing, and Escape cancels it. On macOS the press must be held 0.15 s first, as Chrome; a quicker move selects |
+| a press inside the selection let go | clears it, as a click elsewhere |
+| a finger held half a second on a touchscreen | selects the word under it, in the page or a field; the page's selection shows a handle at each end that a finger drags along, and a tap clears it |
 | a press on a button, a link, a control, a `summary`, a `label`, an element with a `tabindex`, or on `user-select: none` text | selects nothing and keeps the selection, as Chrome; the click does what it does |
 | Cmd+C, Ctrl+C elsewhere | copies it, while no field has the focus |
 | Cmd+A, Ctrl+A elsewhere | selects all the Document's text that can be, while no field has the focus |
@@ -89,6 +92,7 @@ Over text a press would select, the pointer is `platform.CursorText` while the e
 | `doc.SelectAll()`, `doc.SelectContents(n)` | all the selectable text of the Document, or of an element; false when there is none |
 | `doc.ClearSelection()` | selects nothing |
 | `doc.SelectionRects()` | the rectangles it is drawn in, in the Document's space |
+| `doc.TextDragImage()`, `doc.SelectionHandles()` | the ghost of the text a drag carries (`.ember-drag-image`) and the touch selection's handles (`.ember-selection-handle`, `data-side` `start` or `end`), nil while none shows; a sheet restyles them ([decision 0222](../99-decisions/0222-a-press-inside-the-selection-drags-its-text-and-a-long-press-selects-a-word.md)) |
 | automation's `select-all` | on a recorded label whose text takes a selection, selects it; on a text field, its text, as before |
 
 Only the left button selects, as in Chrome. A Document made with `ui.RightDragSelects()` also selects with the right one ([decision 0109](../99-decisions/0109-a-right-drag-selects-text-only-where-a-document-asks.md)): pressed where a left press would begin a selection and held 4 points away, it selects by characters from the press to the pointer, scrolling as a left drag does. Let go with text selected, it emits `ui.RightDragSelected` (`ui.OnRightDragSelect` on `body`) and no `ContextClicked`, in the Document and in those showing it through an iframe; let go where it fell, or with nothing selected, it is the right click it is without the option, and leaves the selection alone. So a program can answer a selection made that way, with a card of what to do with it, and leave the left button's a plain one:

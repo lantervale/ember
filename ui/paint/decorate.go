@@ -10,6 +10,7 @@ import (
 	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/internal/draw"
+	textshape "github.com/lantervale/ember/internal/shape"
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -2249,7 +2250,7 @@ func (p *painter) advance(st *style.Computed, f style.Font, s string, opts []two
 	case joins && ctx != shaping{}:
 		w = cf.AdvanceIn(f, s, ctx.before, ctx.after)
 	}
-	return w + st.LetterGap()*float32(utf8.RuneCountInString(s))
+	return w + st.LetterGap()*float32(textshape.LetterSpaced(ctx.before+ctx.lead, s))
 }
 
 // selectionColors are the ::selection of the element st styles: its

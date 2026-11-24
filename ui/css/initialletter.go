@@ -47,8 +47,10 @@ func initialLetterOf(_ *ctx, v []Component) style.InitialLetter {
 // Chrome does in its block of style block: a float at the line's start
 // whose capitals reach from the cap height of the first line to the
 // baseline of the size-th, its own baseline on that of the sink-th line,
-// its content box trimmed to its capitals' height.
+// its content box trimmed to its capitals' height. It reads the fonts'
+// capitals, so a font landing styles it again.
 func (r *restyler) dropCap(st, block *style.Computed, letter string) {
+	r.env.used |= 1 << unitCap
 	para := r.env.fontUnits(block.Font)
 	lh := para.Line
 	switch l := block.LineHeight; {
@@ -71,16 +73,41 @@ func (r *restyler) dropCap(st, block *style.Computed, letter string) {
 		st.Float = style.FloatRight
 	}
 	st.BoxSizing = style.ContentBox
-	st.Size.Height = style.Px(own.Cap)
+	side := blockStart(st, block.Mode)
+	*side.across = style.Px(own.Cap)
 	st.LineHeight = style.LineHeight{Px: max(2*own.Cap-own.Ascent+own.Descent, 0)}
 	if r.env.ink != nil {
-		if left, width, ok := r.env.ink(st.Font, letter); ok {
-			st.Size.Width = style.Px(width)
-			st.TextIndent = style.Px(-left)
+		o := st.Orientation
+		if !block.Mode.Vertical() || block.Mode == style.SidewaysRL || block.Mode == style.SidewaysLR {
+			o = style.OrientSideways
+		}
+		if start, length, ok := r.env.ink(st.Font, letter, o); ok {
+			*side.along = style.Px(length)
+			st.TextIndent = style.Px(-start)
 		}
 	}
 	firstBaseline := (lh-para.Ascent-para.Descent)/2 + para.Ascent
 	st.InitialLetter.Raise = max(il.Size-float32(il.Sink), 0) * lh
 	top := firstBaseline + float32(il.Sink-1)*lh - own.Cap
-	st.Margin.Top = style.Px(top - st.Padding.Top.Px - st.Border.Top)
+	*side.margin = style.Px(top - side.padding.Px - *side.border)
+}
+
+// startSide is where a box has its size across its lines and along them,
+// and its margin, padding and border on the side its blocks start from.
+type startSide struct {
+	across, along, margin, padding *style.Length
+	border                         *float32
+}
+
+// blockStart is st's startSide in a block of writing mode mode: a
+// vertical drop cap is the horizontal one turned.
+func blockStart(st *style.Computed, mode style.WritingMode) startSide {
+	switch {
+	case !mode.Vertical():
+		return startSide{&st.Size.Height, &st.Size.Width, &st.Margin.Top, &st.Padding.Top, &st.Border.Top}
+	case mode.BlockFromRight():
+		return startSide{&st.Size.Width, &st.Size.Height, &st.Margin.Right, &st.Padding.Right, &st.Border.Right}
+	default:
+		return startSide{&st.Size.Width, &st.Size.Height, &st.Margin.Left, &st.Padding.Left, &st.Border.Left}
+	}
 }

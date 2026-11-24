@@ -180,6 +180,12 @@ type interaction struct {
 	raisedZ int
 	// sel is the text selected outside the fields (decision 0090).
 	sel selecting
+	// textDrag is a press inside a selection and the drag of its text
+	// (decision 0222).
+	textDrag textDrag
+	// touchSel is a finger selecting on a touchscreen and the handles it
+	// shows.
+	touchSel touchSelecting
 	// title is the title attribute's tooltip.
 	title titleTip
 }
@@ -522,6 +528,7 @@ func (d *Document) interact(c *twod.Canvas) bool {
 		if d.shield {
 			d.pointer(c, d.idleInput())
 		} else {
+			d.touchSelection(c, in)
 			d.pointer(c, in)
 		}
 		if entered := d.framed != nil && d.framed.entered; entered {
@@ -842,7 +849,8 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 // window of the Document's own, the wheel over a number field, or the
 // scrollbars.
 func (d *Document) pointerTaken(c *twod.Canvas, in *input.State, at geom.Vec2, hit *box.Box) bool {
-	return d.appRegionPress(c, in) || d.dragPointer(c, in, at) || d.windowPointer(in, at) || d.wheelNumber(in) ||
+	return d.appRegionPress(c, in) || d.dragPointer(c, in, at) || d.textDragPointer(in, at) ||
+		d.windowPointer(in, at) || d.wheelNumber(in) ||
 		d.scrollPointer(c, in, hit)
 }
 
@@ -941,6 +949,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 	if d.resetField(takes) != nil || d.suggestingFor(takes) != nil {
 		return true
 	}
+	dragging := d.pressTextDrag(in, takes, at)
 	if len(d.modals) > 0 && (takes == nil || d.scopeOf(takes) != len(d.modals)) {
 		// a press on what a modal dialog makes inert leaves the focus in it
 		return true
@@ -952,7 +961,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		}
 		return d.focus.Set(takes, false)
 	})
-	if t := textOf(d.machine(takes)); t != nil {
+	if t := textOf(d.machine(takes)); t != nil && !dragging {
 		d.pressText(takes, t, at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	}
 	if r, ok := d.machine(takes).(*control.Range); ok {
@@ -964,7 +973,9 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 	if d.listBox(takes) != nil {
 		d.pressListBox(in, takes, at)
 	}
-	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
+	if !dragging {
+		d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
+	}
 	return false
 }
 
@@ -1545,16 +1556,12 @@ func (d *Document) keysLeft(in *input.State, n *Node, taken *keySet) {
 	if n == nil {
 		return
 	}
-	command := input.KeyControl
-	if d.platform == textedit.Mac {
-		command = input.KeySuper
-	}
 	text := string(in.Text())
 	for k := input.Key(0); k <= input.KeyMenu; k++ {
 		if taken.has(k) || modifier(k) || !f.RawPressed(int(k)) {
 			continue
 		}
-		d.events = append(d.events, KeyPressed{Node: n, Key: k, Text: text, Command: f.RawDown(int(command))})
+		d.events = append(d.events, d.keyPressed(f, n, k, text))
 		text = ""
 	}
 	for _, b := range keyPad {
@@ -1562,6 +1569,25 @@ func (d *Document) keysLeft(in *input.State, n *Node, taken *keySet) {
 			d.events = append(d.events, KeyPressed{Node: n, Key: input.KeyUnknown, Pad: b})
 		}
 	}
+}
+
+// keyPressed is k pressed on n with the modifiers held, read from the feed
+// since a focused field captures them from the window's input.
+func (d *Document) keyPressed(f inputfeed.Feed, n *Node, k input.Key, text string) KeyPressed {
+	e := KeyPressed{
+		Node:    n,
+		Key:     k,
+		Text:    text,
+		Shift:   f.RawDown(int(input.KeyShift)),
+		Alt:     f.RawDown(int(input.KeyAlt)),
+		Control: f.RawDown(int(input.KeyControl)),
+		Super:   f.RawDown(int(input.KeySuper)),
+	}
+	e.Command = e.Control
+	if d.platform == textedit.Mac {
+		e.Command = e.Super
+	}
+	return e
 }
 
 func modifier(k input.Key) bool { return k >= input.KeyLeftShift && k <= input.KeyRightSuper }
@@ -1703,16 +1729,12 @@ func (d *Document) fieldKeys(c *twod.Canvas, in *input.State, n *Node, t *contro
 		return prevented, typed, true
 	}
 	f := inputfeed.Of(in)
-	command := input.KeyControl
-	if d.platform == textedit.Mac {
-		command = input.KeySuper
-	}
 	text := string(typed)
 	for k := input.Key(0); k <= input.KeyMenu; k++ {
 		if modifier(k) || !f.RawPressed(int(k)) && !f.RawRepeated(int(k)) {
 			continue
 		}
-		e := KeyPressed{Node: n, Key: k, Text: text, Command: f.RawDown(int(command))}
+		e := d.keyPressed(f, n, k, text)
 		if d.dispatch(w, e) {
 			prevented.add(k)
 			if text != "" {

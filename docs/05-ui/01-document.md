@@ -40,7 +40,7 @@ win.Add(doc)
 | `doc.AddSheet(text, opts…)`, `doc.InsertSheet(before, text, opts…)`, `doc.StyleSheets()` | a stylesheet added while the Document shows, after the others or before one of them, and all of them in cascade order, each a `*ui.Sheet` to change ([CSS](03-css.md#sheets-changed-while-a-document-shows)) |
 | `doc.SelectionRange(field)`, `doc.SetSelectionRange(field, from, to)` | a text field's own selection in characters of its value, as `selectionStart`, `selectionEnd` and `setSelectionRange`; with `doc.Value` and `doc.SetValue`, a menu's Cut, Copy, Paste and Select all |
 | `doc.Selection()`, `doc.Select(anchor, focus)`, `doc.SelectAll()`, `doc.ClearSelection()` | the text selected outside the fields, read and set ([Events](04-events.md#selected-text)) |
-| `doc.SelectionHTML()`, `win.SetClipboardHTML(html, text)`, `win.ClipboardHTML()` | the selection's markup, which a copy puts on the clipboard beside its text where the system's takes HTML |
+| `doc.SelectionHTML()`, `win.SetClipboardHTML(html, text)`, `win.ClipboardHTML()` | the selection's markup as Chrome's copy writes it, the styles its text shows in inline (decision 0224), which a copy puts on the clipboard beside its text where the system's takes HTML: macOS, Windows, the web |
 | `doc.Layout(size)` | lays it out now, as each frame does; for tests |
 
 One Document per window: added to it, it lays out at the window's size and draws over the 2D world each frame.

@@ -160,3 +160,10 @@ func (b *buffer) join(masks *[len(formTags)]uint32) {
 		}
 	}
 }
+
+// arabicLigature is a ligature HarfBuzz's Arabic fallback shaping forms
+// of the characters parts, the last 0 for a ligature of two.
+type arabicLigature struct {
+	parts [3]rune
+	lig   rune
+}

@@ -79,7 +79,7 @@ tasks:
       - go run ./ui/internal/parity -dir '{{.REPORT}}' -reset
       - |
         tests=0; table=0
-        EMBER_UI_RESULTS='{{.REPORT}}' EMBER_UI_REPORTS='{{.REPORT}}' go test -tags 'chrome gpu' -p 2 -count=1 -timeout 60m ./ui/... || tests=1
+        EMBER_UI_RESULTS='{{.REPORT}}' EMBER_UI_REPORTS='{{.REPORT}}' go test -tags 'chrome gpu' -p 2 -count=1 -timeout 90m ./ui/... || tests=1
         go run ./ui/internal/parity -dir '{{.REPORT}}' -json '{{.REPORT}}/report.json' -summary '{{.REPORT}}/summary.md' {{if .DOCS}}-docs docs/05-ui{{end}} || table=1
         exit $(( tests || table ))
 

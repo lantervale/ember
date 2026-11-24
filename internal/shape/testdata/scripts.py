@@ -1,11 +1,14 @@
-"""Adds to a subset of Go Regular stand-ins for Thai and for Hebrew, as
-old fonts have them, with no layout tables: go-thai.ttf has Thai's
+"""Adds to a subset of Go Regular stand-ins for Thai, Hebrew and Arabic,
+as old fonts have them, with no layout tables: go-thai.ttf has Thai's
 letters and marks and the glyphs Windows and the Mac put in the Private
 Use Area for marks moved down or left and letters without their
 descender, and two variation sequences (cmap format 14); go-hebrew.ttf has Hebrew's letters and points and the
-presentation forms of letters with points. Each letter is a Latin one,
-each mark a small one above or below, each moved form the same shifted.
-Run by make.sh."""
+presentation forms of letters with points; go-old-arabic.ttf has Arabic
+letters and marks and, in the presentation forms' blocks, most of their
+joined forms and a few ligatures, as faces made before OpenType draw
+them. Each letter is a Latin one, each mark a small one above or below,
+each moved form the same shifted, each joined form the letter with a
+stroke on the sides it joins. Run by make.sh."""
 import sys
 
 from fontTools.ttLib import TTFont
@@ -46,7 +49,7 @@ def build(src, out, add):
     def mark(code, ch, above, dx=0, dy=0):
         composite(code, [(ch, -500 + dx, (1100 if above else -500) + dy, 0.4)], 0)
 
-    uvs = add(letter, mark, composite)
+    uvs = add(letter, mark, composite, lambda ch: hmtx[name(ch)][0])
     font.setGlyphOrder(order)
     for table in font["cmap"].tables:
         if table.isUnicode():
@@ -56,7 +59,7 @@ def build(src, out, add):
     font.save(out)
 
 
-def thai(letter, mark, composite):
+def thai(letter, mark, composite, _):
     latin = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV"
     for i, code in enumerate(range(0x0E01, 0x0E2F)):
         letter(code, latin[i % len(latin)])
@@ -92,7 +95,7 @@ def thai(letter, mark, composite):
     return uvs
 
 
-def hebrew(letter, mark, composite):
+def hebrew(letter, mark, composite, _):
     latin = "abcdefghijklmnopqrstuvwxyzABC"
     for i, code in enumerate(range(0x05D0, 0x05EB)):
         letter(code, latin[i % len(latin)])
@@ -107,5 +110,54 @@ def hebrew(letter, mark, composite):
         composite(code, [(ch, 0, 0, 1), (".", 300, 300, 1)], 1300)
 
 
+def arabic(letter, mark, composite, advance_of):
+    conn = 260
+
+    def forms(code, ch, isol, fina, init=None, medi=None):
+        letter(code, ch)
+        adv = advance_of(ch)
+        composite(isol, [(ch, 0, 0, 1), (".", adv, 0, 1)], adv + 280)
+        composite(fina, [(ch, 0, 0, 1), ("_", adv, 0, 0.25)], adv + conn)
+        if init:
+            composite(init, [("_", 0, 0, 0.25), (ch, conn, 0, 1)], adv + conn)
+        if medi:
+            composite(medi, [("_", 0, 0, 0.25), (ch, conn, 0, 1), ("_", conn + adv, 0, 0.25)], adv + 2 * conn)
+
+    letter(0x0621, "q")
+    composite(0xFE80, [("q", 0, 0, 1), (".", advance_of("q"), 0, 1)], advance_of("q") + 280)
+    letter(0x0623, "A")
+    forms(0x0627, "I", 0xFE8D, 0xFE8E)
+    forms(0x0628, "b", 0xFE8F, 0xFE90, 0xFE91, 0xFE92)
+    forms(0x062A, "t", 0xFE95, 0xFE96, 0xFE97, 0xFE98)
+    forms(0x062D, "H", 0xFEA1, 0xFEA2, 0xFEA3, 0xFEA4)
+    forms(0x062F, "d", 0xFEA9, 0xFEAA)
+    forms(0x0631, "r", 0xFEAD, 0xFEAE)
+    forms(0x0633, "s", 0xFEB1, 0xFEB2, 0xFEB3, 0xFEB4)
+    forms(0x0644, "l", 0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0)
+    forms(0x0645, "m", 0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4)
+    # Noon without its medial form, heh without its initial.
+    forms(0x0646, "n", 0xFEE5, 0xFEE6, 0xFEE7)
+    forms(0x0647, "h", 0xFEE9, 0xFEEA, None, 0xFEEC)
+    forms(0x0648, "w", 0xFEED, 0xFEEE)
+    forms(0x064A, "y", 0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4)
+    composite(0x0640, [("_", 0, 0, 0.5)], 2 * conn)
+    lam, alef = advance_of("l"), advance_of("I")
+    lig = lam + alef + 80
+    composite(0xFEFB, [("l", 0, 0, 1), ("I", lam + 80, 0, 1)], lig)
+    composite(0xFEFC, [("l", 0, 0, 1), ("I", lam + 80, 0, 1), ("_", lig, 0, 0.25)], lig + conn)
+    # Lam with alef with hamza above, whose alef has no final form here.
+    composite(0xFEF7, [("l", 0, 0, 1), ("A", lam + 80, 0, 1)], lam + advance_of("A") + 80)
+    b, m = advance_of("b"), advance_of("m")
+    composite(0xFC08, [("b", 0, 0, 1), ("m", b - 60, 0, 1)], b + m - 60)
+    mm, hh = advance_of("m"), advance_of("H")
+    composite(0xFD88, [("_", 0, 0, 0.25), ("H", conn, 0, 1), ("m", conn + hh, 0, 1), ("l", conn + hh + mm, 0, 1)],
+              conn + hh + mm + lam)
+    for code, ch, above in [(0x064E, "'", True), (0x064F, "9", True), (0x0650, ",", False), (0x0651, "w", True),
+                            (0x0652, "o", True)]:
+        mark(code, ch, above)
+    composite(0xFC60, [("w", -500, 1100, 0.4), ("'", -500, 1500, 0.4)], 0)
+
+
 build(sys.argv[1], sys.argv[2], thai)
 build(sys.argv[1], sys.argv[3], hebrew)
+build(sys.argv[1], sys.argv[4], arabic)

@@ -17,6 +17,7 @@ var (
 	hebr = MakeTag("hebr")
 	mong = MakeTag("mong")
 	mark = MakeTag("mark")
+	rlig = MakeTag("rlig")
 )
 
 // shaper is the HarfBuzz shaper a run is shaped with.
@@ -303,7 +304,11 @@ func requests(script Tag, sh shaper, features []Feature) ([]request, map[int]pau
 		}
 		c.pause(nil)
 		c.add(true, manualZWJ, "rlig")
-		c.pause(nil)
+		if script == arab {
+			c.pause(arabicFallbackStage)
+		} else {
+			c.pause(nil)
+		}
 		c.add(true, manualZWJ, "rclt", "calt")
 		c.pause(nil)
 		c.on("mset")

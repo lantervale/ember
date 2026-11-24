@@ -1,6 +1,7 @@
 package ui_test
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -491,19 +492,55 @@ func TestASelectedTabIsCopiedAndDrawnInItsRoom(t *testing.T) {
 	assert.InDelta(t, both[0].X+both[0].W, second[0].X+second[0].W, 0.01, "both end at the second's stop")
 }
 
-func TestTheCopiedHTMLKeepsTheInlineElementsRoundTheSelection(t *testing.T) {
+// unstyled is html without its style attributes.
+func unstyled(html string) string {
+	return regexp.MustCompile(` style="[^"]*"`).ReplaceAllString(html, "")
+}
+
+func TestTheCopiedHTMLKeepsWhatAPasteNeedsRoundTheSelection(t *testing.T) {
 	link := ui.A(ui.Attr("href", `a"b`), ui.B(ui.Text("bold & <brave>")))
 	p := ui.P(ui.Text("a "), link, ui.Text(" end"))
 	l := selectableDoc(t, "", p)
 	word := textOf(link.Children()[0])
 	assert.Empty(t, l.doc.SelectionHTML(), "nothing selected")
 	l.doc.Select(ui.Position{Node: word, Offset: 0}, ui.Position{Node: word, Offset: 4})
-	assert.Equal(t, `<a href="a&quot;b"><b>bold</b></a>`, l.doc.SelectionHTML(), "a word of a bold link")
+	assert.Equal(t, `<a href="a&quot;b"><b>bold</b></a>`, unstyled(l.doc.SelectionHTML()), "a word of a bold link")
 	l.doc.Select(ui.Position{Node: word, Offset: 5}, ui.Position{Node: textOf(p), Offset: 1})
-	assert.Equal(t, ` <a href="a&quot;b"><b>bold </b></a>`, l.doc.SelectionHTML(),
-		"backwards, out of it: the paragraph's own text, the link cut to it")
+	assert.Equal(t, "<span><span>\u00a0</span></span><a href=\"a&quot;b\"><b>bold<span>\u00a0</span></b></a>",
+		unstyled(l.doc.SelectionHTML()), "backwards, out of it: the spaces at its ends kept")
 	l.doc.Select(ui.Position{Node: word, Offset: 5}, ui.Position{Node: word, Offset: 14})
-	assert.Equal(t, `<a href="a&quot;b"><b>&amp; &lt;brave&gt;</b></a>`, l.doc.SelectionHTML(), "escaped")
+	assert.Equal(t, `<a href="a&quot;b"><b>&amp; &lt;brave&gt;</b></a>`, unstyled(l.doc.SelectionHTML()), "escaped")
+}
+
+func TestTheCopiedHTMLWritesTheStylesTheTextShowsIn(t *testing.T) {
+	p := ui.P(ui.Class("p"), ui.Text("plain "), ui.Span(ui.Class("hot"), ui.Text("hot")), ui.Text(" end"))
+	l := selectableDoc(t, ".p { color: #102030; letter-spacing: 2px; } .hot { color: red; font-size: 150%; }", p)
+	l.doc.Select(ui.Position{Node: textOf(p), Offset: 2}, ui.Position{Node: p.Children()[2], Offset: 2})
+	got := l.doc.SelectionHTML()
+	assert.Contains(t, got, `<span style="color: rgb(16, 32, 48); font-family: Go, sans-serif; font-size: 16px;`,
+		"the paragraph's text styles round its own text")
+	assert.Contains(t, got, `letter-spacing: 2px;`)
+	assert.Contains(t, got, `display: inline !important; float: none;">ain </span>`)
+	assert.Contains(t, got, `<span class="hot" style="box-sizing: border-box; color: red; font-size: 24px; `,
+		"its rules first, a percentage as computed, the wrapping styles after")
+}
+
+func TestTheCopiedHTMLEndsWithANewlineAtAParagraphsStart(t *testing.T) {
+	first, second := ui.P(ui.Text("first")), ui.P(ui.Text("second"))
+	l := selectableDoc(t, "", first, second)
+	l.doc.Select(ui.Position{Node: textOf(first), Offset: 0}, ui.Position{Node: textOf(second), Offset: 0})
+	assert.Equal(t, `<p>first</p><br class="Apple-interchange-newline">`, unstyled(l.doc.SelectionHTML()))
+	l.doc.Select(ui.Position{Node: textOf(first), Offset: 5}, ui.Position{Node: textOf(second), Offset: 3})
+	assert.Equal(t, `<br class="Apple-interchange-newline"><span>sec</span>`, unstyled(l.doc.SelectionHTML()))
+}
+
+func TestTheCopiedHTMLKeepsTheListOfAWholeItem(t *testing.T) {
+	item := ui.Li(ui.Text("one item"))
+	l := selectableDoc(t, "", ui.Ul(item, ui.Li(ui.Text("two"))))
+	require.True(t, l.doc.SelectContents(item))
+	assert.Equal(t, `<ul><li>one item</li></ul>`, unstyled(l.doc.SelectionHTML()))
+	l.doc.Select(ui.Position{Node: textOf(item), Offset: 1}, ui.Position{Node: textOf(item), Offset: 5})
+	assert.Equal(t, `<span>ne i</span>`, unstyled(l.doc.SelectionHTML()), "part of it")
 }
 
 func TestACopyPutsTheSelectionsHTMLBesideItsText(t *testing.T) {
@@ -513,7 +550,7 @@ func TestACopyPutsTheSelectionsHTMLBesideItsText(t *testing.T) {
 	require.True(t, l.doc.SelectContents(p))
 	l.held(input.KeyLeftSuper, input.KeyC)
 	assert.Equal(t, "plain bold", l.win.Clipboard())
-	assert.Equal(t, "plain <b>bold</b>", l.win.ClipboardHTML())
+	assert.Equal(t, "<span>plain </span><b>bold</b>", unstyled(l.win.ClipboardHTML()))
 }
 
 func TestAFirstLetterIsSelectedWithItsText(t *testing.T) {

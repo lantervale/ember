@@ -50,3 +50,34 @@ func TestAnInitialLetterIsAFloatAsTallAsItsLines(t *testing.T) {
 	assert.Equal(t, float32(10), h.InitialLetter.Raise, "half a line over the first, sunk two")
 	assert.InDelta(t, 20+(20-12)/2+10-40, h.Margin.Top.Px, 1e-4, "its baseline on the second line's")
 }
+
+func TestAFontLandingSizesADropCapAgain(t *testing.T) {
+	p := with(el(dom.P, ""), txt("Down the stairs"))
+	root := page(p)
+	tr := measured()
+	sheets := []*Sheet{sheet(t, `p { font-size: 10px; line-height: 20px; }`)}
+	tr.Compute(root, sheets)
+	assert.False(t, tr.FontsChanged())
+
+	sheets = []*Sheet{sheet(t, `p { font-size: 10px; line-height: 20px; } p::first-letter { initial-letter: 2; }`)}
+	tr.Compute(root, sheets)
+	assert.True(t, tr.FontsChanged(), "the drop cap is sized by its capitals")
+}
+
+func TestAVerticalInitialLetterIsTheHorizontalOneTurned(t *testing.T) {
+	rl := with(el(dom.P, "", "rl"), txt("Down the stairs"))
+	lr := with(el(dom.P, "", "lr"), txt("Down the stairs"))
+	Compute(page(rl, lr), []*Sheet{sheet(t, `p { font-size: 10px; line-height: 20px; }
+		p::first-letter { initial-letter: 3; padding: 1px 2px 3px 4px; }
+		.rl { writing-mode: vertical-rl; } .lr { writing-mode: vertical-lr; }`)})
+	top := float32(2*20 + (20-12)/2 + 10 - 50)
+	st := dom.Data(dom.Data(rl).FirstLetter).Style
+	assert.Equal(t, style.Px(50), st.Size.Width, "its capitals across the lines")
+	assert.Zero(t, st.Size.Height.Px)
+	assert.InDelta(t, top-2, st.Margin.Right.Px, 1e-4, "its baseline on the third line's, from the right")
+	assert.Zero(t, st.Margin.Top.Px)
+
+	st = dom.Data(dom.Data(lr).FirstLetter).Style
+	assert.Equal(t, style.Px(50), st.Size.Width)
+	assert.InDelta(t, top-4, st.Margin.Left.Px, 1e-4, "from the left")
+}

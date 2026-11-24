@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,13 +41,10 @@ func verticalSelectionPage(t *testing.T) (*live, []*ui.Node) {
 	}
 	l := liveDocWith(t, []ui.DocumentOption{ui.FetchFonts(func(_, _ string) ([]byte, error) { return font, nil }),
 		ui.CSS(verticalSelectionSheet)}, ps...)
-	for range 200 {
-		if l.doc.FontsLoading() == 0 {
-			break
-		}
+	require.Eventually(t, func() bool {
 		l.frames(1)
-	}
-	require.Zero(t, l.doc.FontsLoading())
+		return l.doc.FontsLoading() == 0
+	}, 5*time.Second, 5*time.Millisecond, "the font never landed")
 	l.frames(2)
 	return l, ps
 }

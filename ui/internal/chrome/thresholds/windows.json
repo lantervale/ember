@@ -71,6 +71,7 @@
   "transformed-gradients": 0.005,
   "slanted-edges": 0.0024,
   "initial-letter": 0.05,
+  "initial-letter-vertical": 0.05,
   "joined": 0.026,
   "syllables": 0.012,
   "scripts": 0.008,
