@@ -153,6 +153,9 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32, flags ...stri
 	if s.session == "" {
 		t.Fatal("chrome: no page to drive")
 	}
+	// Blink hovers nothing in a page whose window isn't active, as
+	// headless Chrome's on Linux is: the page is told it has the focus.
+	s.call("Emulation.setFocusEmulationEnabled", map[string]any{"enabled": true}, nil)
 	s.Resize(size, scale)
 	s.call("Page.navigate", map[string]any{"url": url}, nil)
 	for range 500 {
