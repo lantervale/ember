@@ -160,6 +160,15 @@ func gutterEdges(s *style.Computed, g point) rect {
 	if s.Dir == style.RTL {
 		r.l, r.r = r.r, r.l
 	}
+	return r
+}
+
+// mirroredGutterEdges is gutterEdges for flex and grid, which lay out a right-to-left
+// box as its mirror image (mirrored): the vertical bar at the image's end stands on
+// the box's start once mirrored back.
+func mirroredGutterEdges(s *style.Computed, g point) rect {
+	start := fmin(startGutter(s), g.x)
+	r := rect{l: start, r: g.x - start, b: g.y}
 	if s.Mode.BlockFromRight() {
 		r.t, r.b = r.b, 0
 	}
