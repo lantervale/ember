@@ -108,8 +108,8 @@ type uprightSet struct{ advance, origin float32 }
 // Upright is how text, one grapheme cluster standing in a vertical line, is set by the
 // vertical metrics (vhea, vmtx, VORG) of the face of f drawing it, in its glyphs for
 // vertical lines (vert): how far it takes down the line, and how far below the top of
-// that room its glyphs' baseline stands. ok is false when that face has none, where the
-// cluster takes the face's ascent and descent.
+// that room its glyphs' baseline stands. A face without them sets it by its own ascent
+// and descent, a fallback's as Chrome's. ok is false when no face draws it.
 func (s *Set) Upright(f style.Font, text string) (float32, float32, bool) {
 	r, _ := utf8.DecodeRuneInString(text)
 	var c *Face
@@ -117,9 +117,16 @@ func (s *Set) Upright(f style.Font, text string) (float32, float32, bool) {
 		c, _, _ = ch.glyph(s, r)
 	} else if c = s.Face(f); c != nil && !s.hasGlyph(c, r) {
 		c = nil
+		if fb := s.Fallback(); fb != nil && s.hasGlyph(fb, r) {
+			c = fb
+		}
 	}
-	if c == nil || c.verticalOf() == nil {
+	if c == nil {
 		return 0, 0, false
+	}
+	if c.verticalOf() == nil {
+		m := s.metricsOf(c, f.Size)
+		return m.Ascent + m.Descent, m.Ascent, true
 	}
 	key := uprightKey{c, f.Features, text}
 	set, seen := s.uprights[key]

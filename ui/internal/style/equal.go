@@ -222,7 +222,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Scrollbar.Equal(o.Scrollbar) &&
 		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
 		l.ScrollbarColored == o.ScrollbarColored &&
-		l.Resizable == o.Resizable && l.Resizer.Equal(o.Resizer) &&
+		l.Resize == o.Resize && l.Resizer.Equal(o.Resizer) &&
 		sameSliceFunc(l.BackgroundImages, o.BackgroundImages, (*Image).equal) &&
 		sameSlice(l.BackgroundSizes, o.BackgroundSizes) &&
 		sameSlice(l.BackgroundRepeats, o.BackgroundRepeats) &&
@@ -271,6 +271,9 @@ func (l *Look) equal(o *Look) bool {
 		l.UserSelect == o.UserSelect &&
 		sameSlice(l.Transform, o.Transform) &&
 		l.TransformOrigin == o.TransformOrigin &&
+		l.Translate == o.Translate &&
+		l.Rotate == o.Rotate &&
+		l.Scale == o.Scale &&
 		sameSlice(l.Filters, o.Filters) &&
 		sameSlice(l.BackdropFilters, o.BackdropFilters) &&
 		l.BlendMode == o.BlendMode &&

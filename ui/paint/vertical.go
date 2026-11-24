@@ -19,6 +19,7 @@ func (p *painter) verticalText(e entry, alpha float32) {
 	saved := p.s.Transform()
 	defer p.s.SetTransform(saved)
 	mode, parts := shown(e.b).Mode, p.selected(e.b)
+	p.emptyLines(e, parts, alpha)
 	for i := range e.b.Lines {
 		f := e.b.Lines[i]
 		r := f.Rect
@@ -74,6 +75,27 @@ func (p *painter) verticalText(e entry, alpha float32) {
 		p.lineDecorated, p.lineSelecting = false, false
 		p.s.SetTransform(saved.Mul(turn))
 		p.lineDecorations(along, st, style.LineThrough, alpha)
+	}
+}
+
+// emptyLines draws the selection over the parts of the vertical run e on no line of
+// it: the empty lines its kept line breaks leave between them.
+func (p *painter) emptyLines(e entry, parts []Selected, alpha float32) {
+	st := shown(e.b)
+	if !st.Visible {
+		return
+	}
+	var back color.Color
+	for _, s := range parts {
+		if s.Line >= 0 {
+			continue
+		}
+		if back.A == 0 {
+			if back, _ = p.selectionColors(st, fade(st.Fill(), alpha), alpha); back.A <= 0 {
+				return
+			}
+		}
+		p.s.Rect(p.snap(geom.Rect{X: e.at.X + s.Rect.X, Y: e.at.Y + s.Rect.Y, W: s.Rect.W, H: s.Rect.H}), back)
 	}
 }
 
@@ -196,7 +218,7 @@ func (p *painter) orientedParts(f box.Fragment, st *style.Computed) []orientedPa
 		return []orientedPart{{Fragment: f}}
 	}
 	var out []orientedPart
-	x := f.Rect.X
+	x, at := f.Rect.X, 0
 	style.Oriented(f.Text, st.Orientation, func(s string, upright bool) {
 		w := p.fonts.Advance(st.Font, s)
 		var base float32
@@ -205,9 +227,35 @@ func (p *painter) orientedParts(f box.Fragment, st *style.Computed) []orientedPa
 		}
 		w += st.Spacing(s)
 		part := f
-		part.Text, part.Rect.X, part.Rect.W = s, x, w
+		part.Text, part.Rect.X, part.Rect.W, part.Spacing = s, x, w, partSpacing(f.Spacing, at, len(s))
+		room := w
+		for _, sp := range part.Spacing {
+			room += sp.Space
+		}
+		if upright && len(part.Spacing) > 0 {
+			// the cluster's glyphs moved along the line as text-spacing-trim
+			// moves them, over the room it leaves them
+			part.Rect.X += part.Spacing[0].Shift
+			part.Spacing = nil
+		} else {
+			part.Rect.W = room
+		}
 		out = append(out, orientedPart{Fragment: part, upright: upright, baseline: base})
-		x += w
+		x += room
+		at += len(s)
 	})
+	return out
+}
+
+// partSpacing is the entries of spacing within the n bytes from at of
+// its fragment's text, by their bytes in that part.
+func partSpacing(spacing []box.Spacing, at, n int) []box.Spacing {
+	var out []box.Spacing
+	for _, s := range spacing {
+		if s.At >= at && s.At < at+n {
+			s.At -= at
+			out = append(out, s)
+		}
+	}
 	return out
 }

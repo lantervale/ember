@@ -47,10 +47,12 @@ type Bars struct {
 	// VButtons and HButtons are the bars' styled buttons, in the order of
 	// style.BarParts.Buttons, empty where none shows.
 	VButtons, HButtons [4]geom.Rect
-	// Resizer is the ::-webkit-resizer of a box the user may resize,
-	// drawn in ResizerAt, the corner Chrome keeps for it.
-	Resizer   *style.Computed
-	ResizerAt geom.Rect
+	// ResizerAt is the corner of a box the user may resize, where a press
+	// drags its size, and Resizer its ::-webkit-resizer, drawn there; nil
+	// where no rule styles it, for Chrome's grip.
+	Resizer     *style.Computed
+	ResizerAt   geom.Rect
+	ResizerLeft bool
 	// Thumb and Track are scrollbar-color's, Thumb nil for auto: the
 	// thumbs drawn in it, the gutters filled with Track.
 	Thumb *color.Color
@@ -156,7 +158,7 @@ func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
 	l.V, l.H = l.V && w > 0, l.H && h > 0
 	port := geom.V2(view.W-b.Scrollbar.X, view.H-b.Scrollbar.Y)
 	rtl := st.Dir == style.RTL
-	cw, ch := l.corner(st.Resizable, w, h)
+	cw, ch := l.corner(st.Resizable(), w, h)
 	margin := func(m style.Length) float32 { v, _ := m.Resolve(0); return v }
 	if l.V {
 		l.VBar = geom.Rect{X: view.X + view.W - w, Y: view.Y, W: w, H: view.H - ch}
@@ -222,7 +224,7 @@ func (l Bars) styled(b *box.Box, st *style.Computed) Bars {
 // bars meet, square beside a lone bar, and as thick as Chrome's own bars
 // with none.
 func (l Bars) resizer(st *style.Computed, w, h float32) Bars {
-	if !st.Resizable || st.Resizer == nil {
+	if !st.Resizable() {
 		return l
 	}
 	if w, h = l.corner(true, w, h); w == 0 {
@@ -231,7 +233,7 @@ func (l Bars) resizer(st *style.Computed, w, h float32) Bars {
 	l.Resizer = st.Resizer
 	l.ResizerAt = geom.Rect{X: l.View.X + l.View.W - w, Y: l.View.Y + l.View.H - h, W: w, H: h}
 	if st.Dir == style.RTL {
-		l.ResizerAt.X = l.View.X
+		l.ResizerAt.X, l.ResizerLeft = l.View.X, true
 	}
 	return l
 }
@@ -328,7 +330,32 @@ func (p *painter) bars(l Bars, alpha float32) {
 	} else {
 		l.paint(p.s, alpha)
 	}
-	p.part(l.Resizer, l.ResizerAt, alpha)
+	if l.Resizer != nil {
+		p.part(l.Resizer, l.ResizerAt, alpha)
+	} else if l.ResizerAt.W > 0 {
+		p.grip(l.ResizerAt, l.ResizerLeft, alpha)
+	}
+}
+
+// grip draws Chrome's own resizer in the corner r, as Chrome on macOS
+// draws it whatever the corner's size: two diagonal strokes a point wide
+// near its bottom-right corner, dark over light a point below, to show on
+// any background; mirrored in the bottom-left corner.
+func (p *painter) grip(r geom.Rect, left bool, alpha float32) {
+	if p.probing {
+		return
+	}
+	at := func(dx, dy float32) geom.Vec2 {
+		if left {
+			return geom.V2(r.X-dx, r.Y+r.H+dy)
+		}
+		return geom.V2(r.X+r.W+dx, r.Y+r.H+dy)
+	}
+	for i, ink := range []color.Color{color.RGBA(0, 0, 0, 0.6), color.RGBA(1, 1, 1, 0.6)} {
+		dy := float32(i)
+		p.s.Line(at(-1.75, -9.5+dy), at(-9.25, -2+dy), 1, fade(ink, alpha))
+		p.s.Line(at(-1.75, -6.25+dy), at(-6, -2+dy), 1, fade(ink, alpha))
+	}
 }
 
 // styledBars paints l's parts as boxes of their styles: each bar's own

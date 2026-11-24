@@ -82,15 +82,21 @@ func (t *tree) buildControl(n *node, kind controlKind) {
 // caretWidth is the point a field's caret takes after its text.
 const caretWidth = 1
 
-// inputText is how wide an input's text runs as shown (a password's bullets), its caret
-// after it: what it scrolls along, as Chrome's inner editor does, though its text never
-// widens it. A placeholder scrolls nothing.
+// inputText is how wide an input's text runs as shown (a password's bullets), spaced
+// by text-spacing-trim and text-autospace, its caret after it: what it scrolls along,
+// as Chrome's inner editor does, though its text never widens it. A placeholder
+// scrolls nothing.
 func (t *tree) inputText(n *node) float32 {
 	d := dom.Data(n.box.Node)
 	if d.Placeholder {
 		return 0
 	}
-	return t.fonts.Advance(styleOf(d.Shadow).Font, Translated(d.Shadow, t.translate)) + caretWidth
+	st, text := styleOf(d.Shadow), Translated(d.Shadow, t.translate)
+	w := t.fonts.Advance(st.Font, text) + caretWidth
+	for _, s := range LineSpacing(t.fonts, st, text) {
+		w += s.Space
+	}
+	return w
 }
 
 // centresContent reports a button, input, select or cell, which place their content in
@@ -172,10 +178,10 @@ func contentShare(n *node) float32 {
 	if !centresContent(n) {
 		return 0
 	}
-	switch contentAlign(n) {
+	switch contentAlign(n).Position() {
 	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline:
 		return 0
-	case style.AlignEnd, style.AlignFlexEnd:
+	case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 		return 1
 	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignCenter, style.AlignAnchorCenter,
 		style.AlignSpaceBetween,

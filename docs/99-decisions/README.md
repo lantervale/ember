@@ -205,6 +205,24 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0200 | [Positioned boxes are lanes beside the flow, and forced breaks in lanes start Chrome's runs](0200-positioned-boxes-and-forced-breaks-in-lanes-follow-chromes-runs.md) | rendering |
 | 0201 | [An optgroup is a label row of a select's list](0201-an-optgroup-is-a-label-row-of-a-selects-list.md) | api |
 | 0202 | [A select with multiple or a size is a listbox of rows in the page](0202-a-select-with-multiple-or-a-size-is-a-listbox-of-rows-in-the-page.md) | api |
+| 0204 | [A positioned box is laid out in its containing block's frame](0204-a-positioned-box-is-laid-out-in-its-containing-blocks-frame.md) | rendering |
+| 0206 | [A select's type-ahead and a listbox's autoscroll follow Chrome's](0206-a-selects-type-ahead-and-a-listboxs-autoscroll-follow-chromes.md) | api |
+| 0207 | [A resizer writes the box's size into its style, and parts restyle as Chrome's bars](0207-a-resizer-writes-the-boxs-size-into-its-style-and-parts-restyle-as-chromes-bars.md) | api |
+| 0208 | [Custom properties in a cycle compute as invalid, as Chrome's cascade finds them](0208-custom-properties-in-a-cycle-compute-as-invalid-as-chromes-cascade-finds-them.md) | api |
+| 0209 | [Last baselines and safe alignment share groups as Chrome's](0209-last-baselines-and-safe-alignment-share-groups-as-chromes.md) | api |
+| 0210 | [Marks of vertical lines are measured in their flow, and a fallback stands by its own metrics](0210-marks-of-vertical-lines-are-measured-in-their-flow-and-a-fallback-stands-by-its-own-metrics.md) | rendering |
+| 0211 | [A face's chws spaces its pairs, and vertical text trims by vhal](0211-a-faces-chws-spaces-its-pairs-and-vertical-text-trims-by-vhal.md) | rendering |
+| 0212 | [A picture takes its natural size in its own writing mode](0212-a-picture-takes-its-natural-size-in-its-own-writing-mode.md) | rendering |
+| 0213 | [A page's textarea resizes, and sideways lines are spaced as horizontal ones](0213-a-pages-textarea-resizes-and-sideways-lines-are-spaced-as-horizontal-ones.md) | api |
+| 0214 | [translate, rotate and scale are their own values before transform](0214-translate-rotate-and-scale-are-their-own-values-before-transform.md) | rendering |
+| 0215 | [A subgrid's axes are its grid's by their frames](0215-a-subgrids-axes-are-its-grids-by-their-frames.md) | rendering |
+| 0216 | [A clip under a rotation or a skew cuts in its own space](0216-a-clip-under-a-rotation-or-a-skew-cuts-in-its-own-space.md) | rendering |
+| 0217 | [Line metrics round to device pixels as Chrome's](0217-line-metrics-round-to-device-pixels-as-chromes.md) | api |
+| 0218 | [A br clears from the end of its line, and blocks follow the floats where they were laid out](0218-a-br-clears-from-the-end-of-its-line-and-blocks-follow-the-floats-where-they-were-laid-out.md) | rendering |
+| 0219 | [A transform holds fixed boxes, and a point hits through it as its pixel square](0219-a-transform-holds-fixed-boxes-and-a-point-hits-through-it-as-its-pixel-square.md) | rendering |
+| 0220 | [A turned picture's and border's edges are covered by their distance](0220-a-turned-pictures-and-borders-edges-are-covered-by-their-distance.md) | rendering |
+| 0221 | [A vertical root scrolls its viewport along its blocks](0221-a-vertical-root-scrolls-its-viewport-along-its-blocks.md) (superseded by 0226 for the keys) | api |
+| 0226 | [The page keys scroll as they point, and Space along the blocks](0226-the-page-keys-scroll-as-they-point-and-space-along-the-blocks.md) | api |
 
 ## Writing one
 

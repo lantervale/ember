@@ -148,9 +148,20 @@ func TestADragSelectsTheRunItCrosses(t *testing.T) {
 func TestTypingSelectsTheOptionStartingSoAlone(t *testing.T) {
 	s := gear(true)
 	s.SetPicked(0, 1)
-	assert.Equal(t, control.Input|control.Changed, s.TypeAhead("w"))
+	assert.Equal(t, control.Changed, s.Type('w', 0), "a change alone, as Chrome's")
 	assert.Equal(t, []int{2}, picked(s))
 	assert.Equal(t, 2, s.Active)
+	s.SetPicked(1, 4)
+	s.Type('s', 2)
+	assert.Equal(t, []int{4}, picked(s), "from the first option selected")
+	s.Type('b', 4)
+	assert.Equal(t, control.Changed, s.Type('b', 6), "the same option found again")
+	assert.Equal(t, control.Events(0), s.Type('x', 8), "nothing found")
+
+	s.Press(0, false, false)
+	s.Release()
+	assert.Equal(t, control.Input|control.Changed, s.Type('w', 10), "after a press, input and change")
+	assert.Equal(t, control.Events(0), s.Type('w', 12), "for a new selection only")
 }
 
 func TestSetPickedHoldsOneWithoutMultiple(t *testing.T) {

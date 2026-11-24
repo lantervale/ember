@@ -2,6 +2,7 @@ package draw //nolint:testpackage // white-box: reaches draw's unexported state
 
 import (
 	"image"
+	"slices"
 	"testing"
 
 	"github.com/lantervale/ember/color"
@@ -307,7 +308,7 @@ func TestARoundedClipRoundsItsBatchesAndTheClipsInsideIt(t *testing.T) {
 	}
 }
 
-func TestARoundedClipFollowsAScaleButNotARotation(t *testing.T) {
+func TestARoundedClipFollowsAScale(t *testing.T) {
 	var c List
 	c.SetTransform(geom.Transform2D{X: geom.V2(2, 0), Y: geom.V2(0, 2), Origin: geom.V2(5, 5)})
 	c.PushClipRounded(geom.Rect{W: 10, H: 10}, [4]float32{3, 3, 3, 3})
@@ -329,12 +330,54 @@ func TestARoundedClipFollowsAScaleButNotARotation(t *testing.T) {
 	if r := flipped.Batches[0].Round.Radii; r != [4]float32{4, 3, 2, 1} {
 		t.Fatalf("flipped upside down, too: %v", r)
 	}
+}
+
+func TestAClipUnderARotationOrASkewCutsInItsOwnSpace(t *testing.T) {
+	turn := geom.Transform2DFrom(geom.V2(40, 10), 0.3, 0, geom.V2(2, 2))
 	var turned List
-	turned.SetTransform(geom.Transform2DFrom(geom.Vec2{}, 0.3, 0, geom.V2(1, 1)))
-	turned.PushClipRounded(geom.Rect{W: 10, H: 10}, [4]float32{3, 3, 3, 3})
+	turned.SetTransform(turn)
+	r := geom.Rect{X: 1, Y: 2, W: 10, H: 10}
+	turned.PushClipRounded(r, [4]float32{3, 3, 3, 3})
 	turned.Rect(geom.Rect{W: 1, H: 1}, color.White)
-	if b := turned.Batches[0]; !b.Clipped || !b.Round.IsZero() {
-		t.Fatalf("turned, it clips to its bounds, square: %+v", b)
+	b := turned.Batches[0]
+	if !b.Clipped || b.Clip != Bounds(turn, r) {
+		t.Fatalf("its scissor is the rect round the turned clip: %+v", b.Clip)
+	}
+	want := Rounded{Rect: r, Radii: [4]float32{3, 3, 3, 3}, ToLocal: turn.Inverse(), Scale: 2}
+	if b.Round != want {
+		t.Fatalf("it is rounded in its own space, the points it cuts taken back there: %+v", b.Round)
+	}
+	var square List
+	skew := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0.4, 1)}
+	square.SetTransform(skew)
+	square.PushClip(r)
+	square.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if got := square.Batches[0].Round; got != (Rounded{Rect: r, ToLocal: skew.Inverse(), Scale: 1}) {
+		t.Fatalf("a square clip under a skew cuts as its rect skewed: %+v", got)
+	}
+	square.PushClip(geom.Rect{W: 4, H: 4})
+	square.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if got := square.Batches[1].Round; got.Rect != (geom.Rect{X: 1, Y: 2, W: 3, H: 2}) {
+		t.Fatalf("one inside, skewed alike, cuts their overlap: %+v", got)
+	}
+	var nested List
+	nested.SetTransform(turn)
+	nested.PushClipRounded(r, [4]float32{3, 3, 3, 3})
+	nested.PushClip(geom.Rect{W: 4, H: 4})
+	nested.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if got := nested.Batches[0].Round; got.Rect != r || got.Radii[0] != 3 {
+		t.Fatalf("one inside a rounded clip leaves it cutting: %+v", got)
+	}
+	square.Shift(geom.V2(5, 7))
+	if got := square.Batches[0].Round; got.Rect != r || got.ToLocal.Xform(geom.V2(5, 7)) != (geom.Vec2{}) {
+		t.Fatalf("shifted, its rect stays and the points are taken back past the shift: %+v", got)
+	}
+	var scaled List
+	scaled.SetTransform(geom.Transform2D{X: geom.V2(2, 0), Y: geom.V2(0, 3)})
+	scaled.PushClip(r)
+	scaled.Rect(geom.Rect{W: 1, H: 1}, color.White)
+	if !scaled.Batches[0].Round.IsZero() {
+		t.Fatalf("scaled, a square clip is its scissor alone: %+v", scaled.Batches[0].Round)
 	}
 }
 
@@ -352,5 +395,39 @@ func TestARoundedClipSplitsBatchesAndShiftsWithTheList(t *testing.T) {
 	c.Shift(geom.V2(7, 3))
 	if r := c.Batches[2].Round.Rect; r.X != 7 || r.Y != 3 {
 		t.Fatalf("shifting moves the rounded rect with the clip: %+v", r)
+	}
+}
+
+func TestASmoothImageReachesPastItsEdgesOnlyWhenTurned(t *testing.T) {
+	tex := &render.Texture{Image: image.NewRGBA(image.Rect(0, 0, 8, 8))}
+	r, uv := geom.Rect{X: 10, Y: 20, W: 40, H: 20}, geom.Rect{X: 0.5, Y: 0, W: -0.5, H: 1}
+	var plain, smooth List
+	plain.Image(r, tex, uv, color.White)
+	smooth.SmoothImage(r, tex, uv, color.White)
+	smooth.SetTransform(geom.Transform2DFrom(geom.V2(3, 4), 0, 0, geom.V2(2, 0.5)))
+	plain.SetTransform(smooth.Transform())
+	plain.Image(r, tex, uv, color.White)
+	smooth.SmoothImage(r, tex, uv, color.White)
+	if !slices.Equal(plain.Vertices, smooth.Vertices) {
+		t.Fatal("drawn square, a smooth image is an image")
+	}
+	var c List
+	c.SetTransform(geom.Transform2DFrom(geom.V2(100, 100), 0.5, 0, geom.V2(2, 2)))
+	c.SmoothImage(r, tex, uv, color.White)
+	v := c.Vertices
+	if len(v) != 4 || Kind(v[0].Shape.X) != KindSmoothImage {
+		t.Fatalf("one quad of a smooth image: %+v", v)
+	}
+	if v[0].Shape.Y != 0 || v[0].Shape.Z != 0 || v[0].Shape.W != 0.5 || v[0].Extra != 1 {
+		t.Fatalf("its uv's bounds ride on its shape: %+v", v[0])
+	}
+	back := c.transform.Inverse()
+	tl, br := back.Xform(v[0].Pos), back.Xform(v[2].Pos)
+	if tl.X >= r.X || tl.Y >= r.Y || br.X <= r.X+r.W || br.Y <= r.Y+r.H {
+		t.Fatalf("it reaches past r for its edges' coverage: %v %v", tl, br)
+	}
+	at := float32(uv.X + (tl.X-r.X)/r.W*uv.W)
+	if d := v[0].UV.X - at; d > 1e-4 || d < -1e-4 {
+		t.Fatalf("its uv carries on past r: %v, want %v", v[0].UV.X, at)
 	}
 }

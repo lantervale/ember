@@ -351,7 +351,7 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 	c := *dom.Data(n).Style
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: dom.Data(root).Style.Font.Size, env: &t.env,
 		root: root == n, node: n, flow: casc.flow}
-	x.customs(casc.custom)
+	x.customs(casc)
 	x.em, x.sized, x.lined = c.Font.Size, true, true
 
 	out := make(map[string]cascadedValue, len(names))

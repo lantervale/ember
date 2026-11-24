@@ -59,6 +59,9 @@ type inlineContent struct {
 	flow              *blockContext
 	flowTop, flowLeft float32
 	flowed            bool
+	// clearedAfter is how far below the last of those lines a br ending them clears the
+	// floats, which the owner's content holds, as Chrome's.
+	clearedAfter float32
 	// lineFloats are the floats after content in the lines, in order, and floatsFrom
 	// the context they are placed from while pending.
 	lineFloats []*lineFloat
@@ -1563,17 +1566,27 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		switch {
 		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl,
 			a.node.slider:
-		case some(out.lastBaseline):
-			a.baseline = out.lastBaseline
+		case some(out.lastBaseline) && st.Display != style.InlineFlex && st.Display != style.InlineGrid:
+			a.baseline = lineBaseline(st, out.lastBaseline, a.height)
 		case out.synthetic > 0 && c.owner.st.Stands():
 			// a central line synthesizes it across the middle of the item, as Chrome
 			h := out.synthetic
 			a.baseline = out.firstBaseline - float32(math.Floor(float64(h*c.unit)/2))/c.unit
 		case some(out.firstBaseline):
-			a.baseline = out.firstBaseline
+			a.baseline = lineBaseline(st, out.firstBaseline, a.height)
 		}
 		c.resize(i, a.width+a.margin.horizontal())
 	}
+}
+
+// lineBaseline is where a line's baseline b, measured from the frame's top of a box h tall
+// written in st, stands from the box's over side, as the line holding it aligns it: a
+// vertical-lr box's lines measure theirs from the frame's top, their over side its bottom.
+func lineBaseline(st *style.Computed, b, h float32) float32 {
+	if st.Mode == style.VerticalLR {
+		return h - b
+	}
+	return b
 }
 
 // measured are the content's lines where nothing wraps, every one in the first line's
@@ -1901,7 +1914,7 @@ func (c *inlineContent) hangEnd(pending, i, end int) (int, bool) {
 }
 
 // shown is line l's pieces as they are placed: the collapsible spaces before its first
-// content and after its last, whatever span edges stand between, are breaks of no width,
+// content and after its last, whatever span edges and the break ending it stand between, are breaks of no width,
 // and the spaces break-spaces keeps after its last content are text, which neither
 // justify widens nor the bidi algorithm takes to the paragraph's level, as Chrome's.
 func (c *inlineContent) shown(l line) []piece {
@@ -1922,7 +1935,7 @@ func (c *inlineContent) shown(l line) []piece {
 		drop(i)
 	}
 	i := len(pieces) - 1
-	for ; i >= 0 && c.passes(pieces[i]); i-- {
+	for ; i >= 0 && (c.passes(pieces[i]) || pieces[i].kind == newline); i-- {
 		drop(i)
 	}
 	for ; i >= 0 && (pieces[i].kind == edge || pieces[i].kind == anchor || c.held(l.from+i)); i-- {
@@ -2114,9 +2127,10 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 	for i < len(c.pieces) {
 		p := c.pieces[i]
 		if p.kind == newline {
+			end := b.closingAfter(i)
 			b.cur.forced = true
-			b.finish(i + 1)
-			return i + 1, true
+			b.finish(end)
+			return end, true
 		}
 		if b.between(i) {
 			i++
@@ -2164,6 +2178,26 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 		i = end
 	}
 	return i, false
+}
+
+// closingAfter takes the newline at i and the span ends right after it onto the open
+// line, as Chrome's line ends with the elements the break closes, and returns where the
+// next line begins.
+func (b *breaker) closingAfter(i int) int {
+	c := b.c
+	end := i + 1
+	for end < len(c.pieces) && c.edgeAt(end, false) {
+		end++
+	}
+	if end == i+1 {
+		return end
+	}
+	for k := i; k < end; k++ {
+		b.at.step(c.pieces[k], 0)
+		b.kept.step(c.pieces[k], 0)
+	}
+	b.cur.to = end
+	return end
 }
 
 // ligatureOpens reports whether the space pending is inside a ligature the line's first
@@ -2380,7 +2414,7 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			}
 			floats = floats[len(on):]
 			bottom = y
-			if side := c.brClear(after - 1); side != style.ClearNone {
+			if side := c.brClear(l); side != style.ClearNone {
 				if below := c.flow.clearedThreshold(side); some(below) && below > y {
 					y = below
 				}
@@ -2388,6 +2422,7 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			break
 		}
 	}
+	c.clearedAfter = y - bottom
 	return c.reshaped(b.close())
 }
 
@@ -2433,16 +2468,19 @@ func (c *inlineContent) besideLine(f *lineFloat, l line, y, room float32, first 
 	return true
 }
 
-// brClear is the clear of the br whose break is piece i, none for any other piece: the
-// line after it starts below the floats it names, as Chrome's.
-func (c *inlineContent) brClear(i int) style.Clear {
-	if i < 0 || i >= len(c.pieces) || c.pieces[i].kind != newline {
+// brClear is the clear of the br line l ends with, none where it ends otherwise, the end
+// of an element the br is in included: the line after it starts below the floats it
+// names, as Chrome's.
+func (c *inlineContent) brClear(l line) style.Clear {
+	i := l.to - 2
+	if !l.forced || i < l.from || c.pieces[i].kind != newline || !c.edgeAt(i+1, false) {
 		return style.ClearNone
 	}
-	if b := c.runs[c.pieces[i].run].parent; b != nil && b.Node != nil && b.Node.Tag() == dom.Br {
-		return b.Style.Clear
+	b := c.runs[c.pieces[i].run].parent
+	if b == nil || b.Node == nil || b.Node.Tag() != dom.Br || c.spans[c.pieces[i+1].span].box != b {
+		return style.ClearNone
 	}
-	return style.ClearNone
+	return b.Style.Clear
 }
 
 // lines breaks the pieces greedily into lines no wider than width where they may wrap.
@@ -2578,26 +2616,24 @@ func (t *tree) alphabetic(c *inlineContent, st *style.Computed) float32 {
 // lineHeight is one run's line height and the baseline's place in it (half-leading above
 // the ascent).
 func (t *tree) lineHeight(c *inlineContent, st *style.Computed) (float32, float32) {
-	return lineHeightOf(t.metricsOf(c, st), st)
+	return LineHeight(t.metricsOf(c, st), st, PixelsPerPoint(t.fonts))
 }
 
-// LineHeight is the line height a face with metrics m takes in a run of style st, and the
-// baseline's place in it.
-func LineHeight(m box.Metrics, st *style.Computed) (float32, float32) { return lineHeightOf(m, st) }
-
-// lineHeightOf is the line height a face with metrics m takes in a run of style st, and
-// the baseline's place in it.
-func lineHeightOf(m box.Metrics, st *style.Computed) (float32, float32) {
+// LineHeight is the line height a face with metrics m takes in a run of style st, and
+// the baseline's place in it, on a display of px device pixels per point.
+func LineHeight(m box.Metrics, st *style.Computed, px float32) (float32, float32) {
 	h := m.Ascent + m.Descent + m.LineGap
 	switch {
 	case st.LineHeight.Normal:
 	case st.LineHeight.Factor != 0:
-		h = st.LineHeight.Factor * st.Font.Size
+		h = floorToUnit(st.LineHeight.Factor*st.Font.Size, 64*px)
 	default:
-		h = st.LineHeight.Px
+		h = floorToUnit(st.LineHeight.Px, 64*px)
 	}
-	// Chrome puts the floor of half the leading above the glyphs, the rest below.
-	return h, m.Ascent + float32(math.Floor(float64(h-m.Ascent-m.Descent)/2))
+	// Chrome puts half the leading above the glyphs, the rest below: halved in layout
+	// units, truncated as C++ divides, then floored to device pixels.
+	half := int64(math.Round(float64((h-m.Ascent-m.Descent)*64*px))) / 2
+	return h, m.Ascent + float32(math.Floor(float64(half)/64))/px
 }
 
 // extent is what a box takes above and below a baseline.
@@ -2773,7 +2809,7 @@ func (t *tree) openBoxes(c *inlineContent, l line, root *extent) (int, int) {
 					pendingAlign{span: -1, run: p.run, by: c.aligner(r.st, k), at: r.st.VerticalAlign, extent: e})
 			}
 		} else if m, ok := t.fallbackMetrics(c, p, r.st); ok {
-			fh, fb := lineHeightOf(m, r.st)
+			fh, fb := LineHeight(m, r.st, PixelsPerPoint(t.fonts))
 			*into = into.with(extent{fb, fh - fb}, 0)
 		}
 	}
@@ -2806,9 +2842,9 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 	switch st.VerticalAlign {
 	case style.AlignBaselineText:
 	case style.AlignSub:
-		return parent.Font.Size/5 + 1, true
+		return scriptShift(parent.Font.Size, 5, PixelsPerPoint(t.fonts)), true
 	case style.AlignSuper:
-		return -(parent.Font.Size/3 + 1), true
+		return -scriptShift(parent.Font.Size, 3, PixelsPerPoint(t.fonts)), true
 	case style.AlignLength:
 		h, _ := t.lineHeight(c, st)
 		return -st.VerticalShift.At(h), true
@@ -2820,6 +2856,13 @@ func (t *tree) shiftOf(c *inlineContent, st, parent *style.Computed, e extent) (
 		return 0, false
 	}
 	return 0, true
+}
+
+// scriptShift is how far sub (by 5) or super (by 3) moves a box from its parent's
+// baseline, as Blink works it out in device pixels: a share of the font size and one
+// pixel more, cut to the layout unit.
+func scriptShift(size, by, px float32) float32 {
+	return float32(math.Trunc(float64((size*px/by+1)*64))) / 64 / px
 }
 
 // aligner is the box that places a box of style st inside span up once sized: its parent
@@ -2935,8 +2978,10 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, 
 		parent.w = w
 	}
 	t.sizeAtomics(c, def(lineW), parent)
+	var cleared float32
 	if c.flow != nil {
 		c.broken, c.brokenAt = t.flowLines(c, lineW), lineW
+		cleared = c.clearedAfter
 	}
 	var h float32
 	first, last := none, none
@@ -2946,6 +2991,10 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, 
 			break
 		}
 		lh, lb := t.lineBox(c, l)
+		if c.owner.st.Mode == style.VerticalLR {
+			// the line's over side is the frame's bottom, as turnLines mirrors it
+			lb = lh - lb
+		}
 		h += l.push
 		if i == 0 {
 			first = h + lb
@@ -2956,6 +3005,8 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, 
 	shown := ls
 	if clamp > 0 && clamp < len(ls) {
 		shown = ls[:clamp]
+	} else {
+		h += cleared
 	}
 	if top, end := t.trims(c, shown); top != 0 || end != 0 {
 		h -= top + end
@@ -3092,7 +3143,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			if p.kind == anchor {
 				k := c.anchors[p.span].node
 				c.oofs[k].static = point{x, y}
-				if c.anchors[p.span].top && !k.st.StaticInline && isBlockDisplay(k.st.Display) {
+				if c.anchors[p.span].top && !k.st.StaticInline {
 					// a block-level one starts a line: below this one when text is before it
 					c.oofs[k].static = point{inset.l, y}
 					if x > start {
@@ -3357,7 +3408,7 @@ func (t *tree) writeRuns(c *inlineContent, pieces []piece, at geom.Rect, lb, ind
 	walk := line{indent: indent}.pen(c.unit, at.X)
 	for i := 0; i < len(pieces); {
 		run := pieces[i].run
-		if k := pieces[i].kind; k == atomic || k == edge || k == marker || k == anchor || k == tab ||
+		if k := pieces[i].kind; k == atomic || k == edge || k == marker || k == anchor || k == tab || k == newline ||
 			k == gap && perGap > 0 {
 			x := walk.step(pieces[i], perGap)
 			if k == marker {

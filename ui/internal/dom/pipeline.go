@@ -63,6 +63,16 @@ type Pipeline struct {
 	// under the pointer and the one the left button holds, which its
 	// styled parts' :hover and :active read: the viewport's on the root.
 	BarHover, BarPressed style.BarPart
+	// BarsShown are its styled bars as last shown, BarsStale the parts
+	// a change of BarHover or BarPressed has to restyle, BarsInactive
+	// whether the window was inactive then and BarsOwn its
+	// ::-webkit-scrollbar in no part's state: Chrome restyles the other
+	// parts only once the element's own style changes, that style of its
+	// bars with it, or the window's focus.
+	BarsShown    *style.StyledBars
+	BarsStale    style.BarStale
+	BarsInactive bool
+	BarsOwn      *style.Computed
 	// Shadow is the text an input, textarea or select shows: its value,
 	// the selected option's label, or its placeholder when Placeholder is
 	// set. The Document keeps it; layout lays it out as the element's only

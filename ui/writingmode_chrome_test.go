@@ -7,15 +7,19 @@ import (
 	"encoding/base64"
 	"image"
 	"image/png"
+	"path"
 	"runtime"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/sfnt"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
+	"github.com/lantervale/ember/ui/internal/pages"
 )
 
 // cjkFont is Go Regular with the ideographs from 一 drawn by its Latin capitals, 一 as
@@ -109,7 +113,31 @@ func TestVerticalGlyphsMatchChrome(t *testing.T) {
 			d.Body().Append(ui.Div(ui.Class("v"), ui.P(wordSpans("「一丁」", "丂七。")...)))
 			return d
 		},
+		"a fallback face's metrics set what it draws standing": fallbackStanding,
 	})
+}
+
+// fallbackStanding is a page of vertical lines whose first face, cjkFont, lacks the
+// geometric shapes its fallbacks draw standing: Go Mono of a taller ascent and descent
+// and no vertical metrics, and Go Mono of vertical metrics (pages.VerticalFont).
+func fallbackStanding(t *testing.T) *ui.Document {
+	t.Helper()
+	cjk := cjkFont(t)
+	vertical, err := pages.VerticalFont(gomono.TTF, nil, 0)
+	require.NoError(t, err)
+	files := map[string][]byte{"cjk.ttf": cjk, "mono.ttf": pages.Tall(gomono.TTF, 2500, 900), "vertical.ttf": vertical}
+	d := ui.NewDocument(ui.FetchFonts(func(url, _ string) ([]byte, error) { return files[path.Base(url)], nil }),
+		ui.CSS(`@font-face { font-family: CJK; src: url(cjk.ttf); }
+@font-face { font-family: Tall; src: url(mono.ttf); }
+@font-face { font-family: Vertical; src: url(vertical.ttf); }
+.v { writing-mode: vertical-rl; height: 220px; font-size: 20px; }
+.tall { font-family: CJK, Tall; } .vertical { font-family: CJK, Vertical; } .lr { writing-mode: vertical-lr; }`))
+	d.Body().Append(
+		ui.Div(ui.Class("v", "tall"), ui.P(wordSpans("一▲丁", "ab●", "■丂", "七♠▼")...)),
+		ui.Div(ui.Class("v", "tall", "lr"), ui.P(wordSpans("一▲丁", "ab●", "■丂")...)),
+		ui.Div(ui.Class("v", "vertical"), ui.P(wordSpans("一▲丁", "ab●", "■丂")...)),
+	)
+	return d
 }
 
 func TestVerticalLinesAlignAsChrome(t *testing.T) {

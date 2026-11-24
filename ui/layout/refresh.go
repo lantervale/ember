@@ -62,14 +62,14 @@ func scrollsItself(b *box.Box) bool {
 
 // held is the scrolling viewport a fixed box stays put in, nil for any
 // other box: one in no such viewport, inside a fixed box, which holds it
-// already, or inside a filtered one, its containing block.
+// already, or inside a transformed or filtered one, its containing block.
 func held(b *box.Box) *box.Box {
 	if !isFixed(b) {
 		return nil
 	}
 	top := b.Parent
 	for ; top != nil && top.Parent != nil; top = top.Parent {
-		if isFixed(top) || top.Kind == box.Element && top.Style != nil && top.Style.Filtered() {
+		if isFixed(top) || top.Kind == box.Element && top.Style != nil && top.Style.HoldsFixed() {
 			return nil
 		}
 	}
@@ -95,7 +95,7 @@ func scrolledPast(b *box.Box) (geom.Vec2, bool) {
 		if st == nil {
 			continue
 		}
-		if st.Filtered() || isFixed(a) || b.Style.Position == style.Absolute && st.Position != style.Static {
+		if st.HoldsFixed() || isFixed(a) || b.Style.Position == style.Absolute && st.Position != style.Static {
 			break
 		}
 		if isScrollContainer(st) {

@@ -4,14 +4,16 @@ import "github.com/lantervale/ember/ui/internal/style"
 
 // gridItem is an in-flow grid item, Taffy's GridItem.
 type gridItem struct {
-	node                      *node
-	st                        *style.Computed
-	sourceOrder               int
-	row, column               lineSpan
-	alignSelf                 style.Align
-	justifySelf               style.Align
-	baseline                  float32
-	baselineShim              float32
+	node                   *node
+	st                     *style.Computed
+	sourceOrder            int
+	row, column            lineSpan
+	alignSelf              style.Align
+	justifySelf            style.Align
+	baseline, lastBaseline float32
+	// shim is the more margin baseline alignment gives the item in each axis: before it
+	// in a first-baseline group, after it in a last.
+	shim                      [2]float32
 	rowIndexes, columnIndexes lineSpan
 
 	crossesFlexibleRow, crossesFlexibleColumn   bool
@@ -34,6 +36,14 @@ type gridItem struct {
 	loose   [2]bool
 	owner   *node
 	local   lineSpan
+	// localAxis is the axis of owner's own tracks local is on, and frame the writing mode the
+	// item is sized in when it isn't that of its parent's content: a subgrid's item hoisted
+	// to a grid of another.
+	localAxis axis
+	frame     *style.WritingMode
+	hoisted   bool
+	// fixed is the extent of local where owner's tracks there are of fixed sizes.
+	fixed float32
 }
 
 func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *gridItem {
@@ -52,8 +62,20 @@ func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *grid
 	}
 	return &gridItem{
 		node: n, st: st, sourceOrder: order, alignSelf: self, justifySelf: justify,
-		baseline: none, minContentCache: noSize, minimumCache: noSize, maxContentCache: noSize,
+		baseline: none, lastBaseline: none, minContentCache: noSize, minimumCache: noSize, maxContentCache: noSize,
 	}
+}
+
+// baselineFallback is a, or where a is a baseline the alignment it falls back to: start
+// for the first, end for the last.
+func baselineFallback(a style.Align) style.Align {
+	if a == style.AlignLastBaseline {
+		return style.AlignEnd
+	}
+	if a == style.AlignBaseline {
+		return style.AlignStart
+	}
+	return a
 }
 
 func normalAsStart(a style.Align) style.Align {
@@ -67,9 +89,40 @@ func (it *gridItem) hasAutoBlockMargin() bool {
 	return it.st.Margin.Top.Kind == style.Auto || it.st.Margin.Bottom.Kind == style.Auto
 }
 
-func (it *gridItem) baselineAligned() bool {
+func (it *gridItem) baselineAligned() bool { return it.baselineAlignedIn(vertical) }
+
+// baselineAlignedIn reports whether the item shares a baseline with others in axis a: with
+// its row by align-self, or its column by justify-self.
+func (it *gridItem) baselineAlignedIn(a axis) bool {
+	if a == horizontal {
+		m := it.st.Margin
+		return it.justifySelf.Baseline() && m.Left.Kind != style.Auto && m.Right.Kind != style.Auto
+	}
 	cyclic := hasPercent(it.st.Size.Height) && (it.crossesIntrinsicRow || it.crossesFlexibleRow)
-	return it.alignSelf == style.AlignBaseline && !it.hasAutoBlockMargin() && !cyclic
+	return it.alignSelf.Baseline() && !it.hasAutoBlockMargin() && !cyclic && !it.subgrid[vertical]
+}
+
+// sharesItsGrids reports whether the item, of a subgrid of rows, aligned on its baseline with
+// the grid round it, hoisted there: it keeps the shim it took there.
+func (it *gridItem) sharesItsGrids() bool {
+	k := it.node
+	return !it.hoisted && k != nil && k.sharing && it.baselineAligned() && k.parent.handed()[vertical] != nil
+}
+
+// lastIn reports whether the item aligns on its last baseline in a.
+func (it *gridItem) lastIn(a axis) bool {
+	if a == horizontal {
+		return it.justifySelf == style.AlignLastBaseline
+	}
+	return it.alignSelf == style.AlignLastBaseline
+}
+
+// shimSpan is the item's shim in a before and after it.
+func (it *gridItem) shimSpan(a axis) span {
+	if it.lastIn(a) {
+		return span{0, it.shim[a]}
+	}
+	return span{it.shim[a], 0}
 }
 
 func (it *gridItem) placement(a axis) lineSpan {
@@ -143,6 +196,9 @@ func (it *gridItem) spannedLimit(a axis, tracks []gridTrack,
 func (it *gridItem) paddingBorderSize(basis float32) size {
 	if it.node == nil {
 		return size{}
+	}
+	if it.frame != nil {
+		return edges(it.st.Padding, basis).add(borders(it.st)).sum()
 	}
 	return edges(it.st.Padding, basis).add(it.node.borders()).sum()
 }
@@ -220,8 +276,11 @@ func (it *gridItem) gridAreaSize(a axis, tracks, other []gridTrack,
 	}
 	s.set(a, sum)
 	if it.loose[a.other()] {
-		if it.owner != nil && it.owner.grid != nil {
-			s.set(a.other(), it.owner.grid.axis(a.other()).extent(it.local))
+		switch {
+		case some(it.fixed):
+			s.set(a.other(), it.fixed)
+		case it.owner != nil && it.owner.grid != nil:
+			s.set(a.other(), it.owner.grid.axis(it.localAxis).extent(it.local))
 		}
 		return s
 	}
@@ -252,8 +311,9 @@ func (it *gridItem) gridAreaSizeCached(a axis, tracks, other []gridTrack,
 func (it *gridItem) marginSums(innerWidth float32) size {
 	m := it.st.Margin
 	return size{
-		w: resolveOrZero(m.Left, 0) + resolveOrZero(m.Right, 0) + it.extra[horizontal].start + it.extra[horizontal].end,
-		h: resolveOrZero(m.Top, innerWidth) + it.baselineShim + resolveOrZero(m.Bottom, innerWidth) +
+		w: resolveOrZero(m.Left, 0) + resolveOrZero(m.Right, 0) + it.extra[horizontal].start + it.extra[horizontal].end +
+			it.shim[horizontal],
+		h: resolveOrZero(m.Top, innerWidth) + it.shim[vertical] + resolveOrZero(m.Bottom, innerWidth) +
 			it.extra[vertical].start + it.extra[vertical].end,
 	}
 }
@@ -267,8 +327,8 @@ func (it *gridItem) availMinusMargins(area, avail size) size {
 		t: it.extra[vertical].start, b: it.extra[vertical].end,
 	})
 	return size{
-		w: mMax(mSub(avail.w, margin.horizontal()), 0),
-		h: mMax(mSub(mSub(avail.h, margin.vertical()), it.baselineShim), 0),
+		w: mMax(mSub(mSub(avail.w, margin.horizontal()), it.shim[horizontal]), 0),
+		h: mMax(mSub(mSub(avail.h, margin.vertical()), it.shim[vertical]), 0),
 	}
 }
 
@@ -310,6 +370,9 @@ func (t *tree) gridContribution(it *gridItem, a axis, area, avail size, fallback
 	}
 	am := it.availMinusMargins(area, avail)
 	space := spaces{spaceOr(am.w, fallback), spaceOr(am.h, fallback)}
+	if it.frame != nil {
+		defer t.reframe(it.node, *it.frame)()
+	}
 	return t.measureChildSize(it.node, known, area, it.keywordAdjustedSpace(area, space), inherentSize, a, [2]bool{})
 }
 

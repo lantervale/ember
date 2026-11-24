@@ -27,7 +27,9 @@ func DefaultImages() map[string][]byte {
 // textarea's monospace) at a normal line height, where a game's takes
 // its parent's (TestChromeFontsTheControlsAsABrowsersSheetDoes); a
 // text field takes its parent's white-space, a button's or a select's
-// keeps it as written, and an option's on one line.
+// keeps it as written, and an option's on one line. A textarea takes
+// resize: auto, Chrome's grip the user drags, where a game's takes none
+// but where its sheet asks (decision 0213).
 const BrowserDefault = `* { box-sizing: content-box; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
@@ -40,7 +42,7 @@ button, input, select, textarea {
   letter-spacing: normal; word-spacing: normal; text-transform: none; text-shadow: none;
 }
 button, input, select, textarea { font: 13.333333px Arial; }
-textarea { font-family: monospace; }
+textarea { font-family: monospace; resize: auto; }
 input { white-space: inherit; }
 input[type="button"], input[type="submit"], input[type="reset"], select { white-space: pre; }
 select:-ember-listbox, option { white-space: nowrap; }
@@ -216,6 +218,15 @@ select:-ember-listbox option:checked:disabled, select:-ember-listbox:disabled op
 select:-ember-listbox:focus option:checked:disabled {
   background-color: light-dark(#dcdcdc, rgba(59, 59, 59, 0.3)); color: light-dark(black, #3b3b3b);
 }
+@media (forced-colors: active) {
+  select:-ember-listbox option:checked, select:-ember-listbox:focus option:checked {
+    background-color: Highlight; color: HighlightText;
+  }
+  select:-ember-listbox option:checked:disabled, select:-ember-listbox:disabled option:checked,
+  select:-ember-listbox:focus option:checked:disabled {
+    background-color: GrayText; color: Canvas;
+  }
+}
 input[type="checkbox"], input[type="radio"] { padding: 0; }
 input[type="checkbox"]:-ember-native { width: 13px; height: 13px; border-radius: 2px; }
 input[type="checkbox"]:checked:-ember-native {
@@ -257,9 +268,8 @@ input[type="checkbox"][switch]:checked:disabled:-ember-native {
   color: light-dark(#f8f8f8, #3b3b3b);
 }
 input[type="range"] {
-  inline-size: 129px; padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff); overflow: visible;
+  padding: 0; border: 0; background: none; color: light-dark(#0075ff, #99c8ff); overflow: visible;
 }
-input[type="range"]:-ember-native { block-size: 16px; }
 progress { width: 160px; height: 16px; color: light-dark(#0075ff, #99c8ff); vertical-align: -0.2em; }
 meter { width: 80px; height: 16px; vertical-align: -0.2em; }
 /* The parts of a range, a progress and a meter drawn from their CSS, as Chrome's sheet styles them. */

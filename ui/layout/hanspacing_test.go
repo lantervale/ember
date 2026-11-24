@@ -17,7 +17,7 @@ import (
 // half an em wide, an opening one moved half an em left.
 type hanFonts struct{ ahemFonts }
 
-func (hanFonts) HanGlyph(f style.Font, r rune) box.HanGlyph {
+func (hanFonts) HanGlyph(f style.Font, r rune, _ bool) box.HanGlyph {
 	g := box.HanGlyph{Halt: true, Full: true}
 	switch {
 	case unicode.Is(unicode.Ps, r):
@@ -123,6 +123,73 @@ func TestAutospaceAddsAnEighthOfTheSizeBetweenIdeographsAndLetters(t *testing.T)
 	assert.Equal(t, []string{"漢漢", "A"}, lines(b), "a line ending between them drops the room")
 	assert.Equal(t, float32(20), frags[0].Rect.W)
 	assert.Nil(t, frags[0].Spacing)
+}
+
+// chwsFonts is hanFonts whose face has a chws of its own: a closing
+// bracket before an opening one set half wide, where the rules trim the
+// opening one.
+type chwsFonts struct{ hanFonts }
+
+func (chwsFonts) HanPair(fa style.Font, a rune, _ style.Font, b rune) (box.HanAdjust, box.HanAdjust, bool) {
+	if a == '」' && b == '「' {
+		return box.HanAdjust{Narrow: -fa.Size / 2}, box.HanAdjust{}, true
+	}
+	return box.HanAdjust{}, box.HanAdjust{}, true
+}
+
+func chwsText(edit func(*style.Computed), w float32, s string) (*box.Box, []box.Fragment) {
+	p := el(dom.P, func(st *style.Computed) {
+		width(w)(st)
+		if edit != nil {
+			edit(st)
+		}
+	}, text(s))
+	tr := Layout(el(dom.Div, block, p), geom.V2(200, 600), chwsFonts{})
+	b := tr.Of[p]
+	return b, b.Children[0].Lines
+}
+
+func TestAFacesChwsSpacesThePairsInPlaceOfTheRules(t *testing.T) {
+	_, frags := chwsText(nil, 200, "漢」「。「")
+	require.Len(t, frags, 1)
+	assert.Equal(t, []box.Spacing{{At: 3, Space: -5}}, frags[0].Spacing,
+		"the closing bracket its chws trims, not the opening one, nor the one after a dot it leaves")
+	assert.Equal(t, float32(45), frags[0].Rect.W)
+
+	_, frags = chwsText(func(st *style.Computed) { st.SpacingTrim = style.SpaceAll }, 200, "漢」「")
+	assert.Nil(t, frags[0].Spacing, "space-all spaces none")
+}
+
+func TestALineEndingInAPairOfAFacesChwsDropsItsTrim(t *testing.T) {
+	b, frags := chwsText(nil, 50, "字字字字」「字")
+	assert.Equal(t, []string{"字字字字」", "「字"}, lines(b))
+	assert.Equal(t, float32(50), frags[0].Rect.W, "the closing bracket whole where the line parts it from the opening one")
+	assert.Nil(t, frags[0].Spacing)
+
+	b, _ = chwsText(nil, 45, "字字字字」「字")
+	assert.Equal(t, []string{"字字字", "字」「字"}, lines(b), "nor trimmed to fit, as Chrome leaves the pair to the face")
+	b, frags = chwsText(nil, 45, "字字字字」字")
+	assert.Equal(t, []string{"字字字字」", "字"}, lines(b), "a closing bracket before an ideograph is")
+	assert.Equal(t, float32(45), frags[0].Rect.W)
+}
+
+func TestVerticalLinesTrimTheirPunctuationAndAutospaceTheirTurnedLetters(t *testing.T) {
+	vertical := func(o style.TextOrientation) func(*style.Computed) {
+		return func(st *style.Computed) { st.Mode, st.Orientation, st.Autospace = style.VerticalRL, o, true }
+	}
+	_, frags := hanText(vertical(style.OrientMixed), 200, "」「漢A")
+	require.Len(t, frags, 1)
+	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}, {At: 6, Space: 1.25}}, frags[0].Spacing)
+
+	_, frags = hanText(vertical(style.OrientUpright), 200, "」「漢A")
+	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}}, frags[0].Spacing, "no room beside upright letters")
+
+	_, frags = hanText(vertical(style.OrientSideways), 200, "」「漢A")
+	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}, {At: 6, Space: 1.25}}, frags[0].Spacing,
+		"sideways lines spaced as horizontal ones")
+
+	_, frags = hanText(func(st *style.Computed) { st.Mode, st.Autospace = style.SidewaysLR, true }, 200, "」「漢A")
+	assert.Equal(t, []box.Spacing{{At: 3, Shift: -5, Space: -5}, {At: 6, Space: 1.25}}, frags[0].Spacing)
 }
 
 func TestTextSpacingClasses(t *testing.T) {

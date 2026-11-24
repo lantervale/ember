@@ -242,7 +242,10 @@ type output struct {
 	// synthetic is the height of the item whose block-end edge firstBaseline is made up
 	// from, as a flex or grid container whose first item has no line makes it; 0 where
 	// it is a line's.
-	synthetic               float32
+	synthetic float32
+	// across are an orthogonal flow's first and last baselines in its parent's frame,
+	// from its left border edge there: lines running down its parent's lines.
+	across                  [2]float32
 	topMargin, bottomMargin marginSet
 	collapsesThrough        bool
 	oof                     []oofCandidate
@@ -254,7 +257,7 @@ type output struct {
 }
 
 func sizeOutput(s size) output {
-	return output{size: s, firstBaseline: none, lastBaseline: none}
+	return output{size: s, firstBaseline: none, lastBaseline: none, across: [2]float32{none, none}}
 }
 
 // placed is a node's layout, Taffy's Layout.
@@ -284,8 +287,7 @@ func (t *tree) measureChildSize(n *node, known, parent size,
 	return out.size.get(a)
 }
 
-func (t *tree) measureChildSizeBoth(n *node, known, parent size,
-	avail spaces, mode sizingMode, collapsible [2]bool) size {
+func (t *tree) measureChildSizeBoth(n *node, known, parent size, avail spaces, mode sizingMode) size {
 	return t.computeChild(n, input{
 		run:             computeSize,
 		sizing:          mode,
@@ -294,7 +296,6 @@ func (t *tree) measureChildSizeBoth(n *node, known, parent size,
 		knownIsDefinite: bools{true, true},
 		parent:          parent,
 		avail:           avail,
-		collapsible:     collapsible,
 	}).size
 }
 
@@ -312,10 +313,10 @@ func (t *tree) performChildLayout(n *node, known, parent size, avail spaces, mod
 
 // probeChildLayout is performChildLayout run only for n's first baseline,
 // cached in n's probe slot so its final layout keeps its own.
-func (t *tree) probeChildLayout(n *node, known, parent size, avail spaces, mode sizingMode) output {
+func (t *tree) probeChildLayout(n *node, known, parent size, avail spaces) output {
 	return t.computeChild(n, input{
 		run:             performLayout,
-		sizing:          mode,
+		sizing:          inherentSize,
 		axis:            axisBoth,
 		known:           known,
 		knownIsDefinite: bools{true, true},
@@ -373,7 +374,7 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 }
 
 func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
-	in = t.listBox(n, n.contain(in))
+	in = t.listBox(n, n.sliderRow(n.contain(in)))
 	if n.st.Multicol() && n.columnar() {
 		return t.columns(n, in)
 	}
@@ -398,6 +399,22 @@ func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
 func (n *node) ownGutter() point {
 	g := scrollbarGutter(n.st)
 	return point{g.x + n.gutter.w, g.y + n.gutter.h}
+}
+
+// barRoom is the room n's bars take in its parent's frame: placed, what
+// its parent's layout gave them, and the gutter it chose, or for a node
+// in a frame of its own, its own style's and the gutter it chose there,
+// turned.
+func (n *node) barRoom(placed size) size {
+	if n.inner == nil {
+		return placed.add(n.gutter)
+	}
+	g := scrollbarGutter(n.inner)
+	room := size{g.x + n.gutter.w, g.y + n.gutter.h}
+	if n.across {
+		return room.across()
+	}
+	return room
 }
 
 // regutterOf notes n's element, or its nearest one, for layoutIn to build
@@ -568,7 +585,8 @@ func roundIn(n *node, cumulative point, hidden bool) {
 	l := u
 	l.location = point{round(x) - round(cumulative.x), round(y) - round(cumulative.y)}
 	l.size = size{round(x+u.size.w) - round(x), round(y+u.size.h) - round(y)}
-	l.scrollbar = size{round(u.scrollbar.w + n.gutter.w), round(u.scrollbar.h + n.gutter.h)}
+	g := n.barRoom(u.scrollbar)
+	l.scrollbar = size{round(g.w), round(g.h)}
 	l.border = roundEdges(u.border, x, y, u.size)
 	l.padding = roundEdges(u.padding, x, y, u.size)
 	r := u.overflow.rect

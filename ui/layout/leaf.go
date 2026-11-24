@@ -54,7 +54,7 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		}
 		if n.replaced && !some(nodeSize.w) && !some(nodeSize.h) {
 			n.intrinsic = true
-			nodeSize = replacedSize(n.naturalIn(room, pbSum).add(pbSum), ratio, minSize, maxSize)
+			nodeSize = replacedSize(n.preferredIn(room, pbSum, st), ratio, minSize, maxSize)
 		}
 	}
 
@@ -119,6 +119,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		})
 	}
 	measured, first, last, lines := t.measureContent(n, known, avail, basis, clamp.lines)
+	if !n.replaced {
+		measured = size{max(measured.w, n.natural.w), max(measured.h, n.natural.h)}
+	}
 	content := measured.add(inset.sum())
 	if in.sizing != contentSize {
 		content.h = sizedHeight(st, content.h, adj.h, in.parent.h)
@@ -139,8 +142,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		measured.w = max(measured.w, t.inputText(n))
 	}
 	scroll := isScrollContainer(st)
+	ge := gutterEdges(st, gutter)
 	end := padding.l + measured.w
-	bottom := padding.t + measured.h
+	bottom := ge.t + padding.t + measured.h
 	if scroll {
 		end += padding.r
 		bottom += padding.b
@@ -167,15 +171,33 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		out.lastBaseline = pb.t + shift + last
 	}
 	if in.run == performLayout && n.inline != nil {
-		ge := gutterEdges(st, gutter)
 		text := pb
-		text.l, text.r, text.b = text.l+ge.l, text.r+ge.r, text.b+ge.b
+		text.l, text.t, text.r, text.b = text.l+ge.l, text.t+ge.t, text.r+ge.r, text.b+ge.b
 		t.placeText(n, s, text)
 	}
 	if in.run == performLayout && len(n.kids) > 0 {
 		t.leafChildren(n, &out, pb, border, gutter)
+		container := overflowContainer{scroll: scroll, size: port, padding: padding, reversed: fromEnd(st)}
+		out.overflow = finalizeOverflow(atomicsOverflow(n, out.overflow.rect, border, ge, container),
+			port, fromEnd(st), scroll)
 	}
 	return out
+}
+
+// atomicsOverflow is r, n's scrollable overflow, grown by what its atomic inlines
+// add, placed, their own overflow and transforms with them; as a block's, it counts
+// from past the bar at the start of the lines and from the bar before the blocks.
+func atomicsOverflow(n *node, r, border, gutter rect, c overflowContainer) rect {
+	for _, k := range n.kids {
+		if !k.atomic {
+			continue
+		}
+		l := k.unrounded
+		loc := point{l.location.x - border.l - gutter.l, l.location.y - border.t}
+		r = r.union(overflowContribution(loc, l.size, l.overflow.rect, l.border, k.st.Overflow, k, c,
+			negativeEdges(l.margin)))
+	}
+	return r
 }
 
 // leafChildren places what an inline formatting context holds besides its text: hidden

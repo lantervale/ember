@@ -578,3 +578,30 @@ func TestTextOfVerticalLinesIsSelectedDownThem(t *testing.T) {
 	l.held(input.KeyLeftShift, input.KeyLeft)
 	assert.Greater(t, l.doc.Selection().Focus.Offset, 9, "the arrow towards the next line goes on to it")
 }
+
+func TestTheMarksOfVerticalLinesGoAcrossThem(t *testing.T) {
+	pre := ui.Pre(ui.Text("ab\n\ncd\ta"))
+	br := ui.P(ui.Text("ab"), ui.Br(), ui.Br(), ui.Text("cd"))
+	l := selectableDoc(t, `pre, p { writing-mode: vertical-rl; height: 100px; margin: 0; font: inherit; }`, pre, br)
+	n := textOf(pre)
+	l.doc.Select(ui.Position{Node: n, Offset: 1}, ui.Position{Node: n, Offset: 6})
+	rects := l.doc.SelectionRects()
+	require.Len(t, rects, 3)
+	empty := rects[1]
+	assert.Greater(t, rects[0].X, empty.X, "the empty line is the next line, on the left")
+	assert.Greater(t, empty.X, rects[2].X, "before the line after it")
+	assert.InDelta(t, 20, empty.W, 0.01, "as wide as its line")
+	assert.Less(t, empty.H, empty.W, "a space long, down the line")
+
+	l.doc.Select(ui.Position{Node: n, Offset: 6}, ui.Position{Node: n, Offset: 7})
+	rects = l.doc.SelectionRects()
+	require.Len(t, rects, 1, "the tab alone is selected")
+	assert.Greater(t, rects[0].H, float32(10), "its room down the line, up to the tab stop")
+
+	l.doc.Select(ui.Position{Node: textOf(br), Offset: 1}, ui.Position{Node: br.Children()[3], Offset: 1})
+	rects = l.doc.SelectionRects()
+	require.Len(t, rects, 3, "the br ending a line of text marks nothing, the one alone on its line its empty line")
+	assert.Greater(t, rects[0].X, rects[1].X)
+	assert.InDelta(t, 20, rects[1].W, 0.01, "the empty line's mark goes across it")
+	assert.Less(t, rects[1].H, rects[1].W)
+}

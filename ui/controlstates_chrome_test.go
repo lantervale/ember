@@ -38,6 +38,104 @@ func TestVerticalRangesAreSizedAsChromes(t *testing.T) {
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
+// Ranges of their own look whose size across their track is auto are
+// sized as Chrome's own: as thick as its thumb, and one of appearance
+// slider-vertical in horizontal lines as tall as its track is long.
+// Chrome draws its own ranges here, which an exported page wouldn't.
+func TestRangesOfAnAutoSizeAreChromes(t *testing.T) {
+	styles := []string{
+		"appearance: slider-vertical",
+		"appearance: slider-vertical; width: 20px",
+		"appearance: slider-vertical; max-height: 60px",
+		"appearance: slider-vertical; min-height: 140px",
+		"appearance: slider-vertical; padding: 3px 5px",
+		"appearance: slider-vertical; height: 50%",
+		"appearance: slider-vertical; width: auto; border: 2px solid",
+		"appearance: slider-vertical; box-sizing: border-box; padding: 4px",
+		"box-sizing: border-box; padding: 0 5px",
+		"display: block",
+		"display: block; appearance: slider-vertical",
+		"appearance: slider-vertical; writing-mode: vertical-lr",
+		"appearance: slider-vertical; writing-mode: vertical-rl; height: auto",
+		"height: auto",
+		"writing-mode: vertical-rl; block-size: auto",
+		"max-height: 10px",
+		"appearance: none; height: auto",
+		"appearance: none; width: auto",
+		"width: auto; padding: 0 6px",
+		"writing-mode: vertical-lr; inline-size: auto",
+		"tall: ",
+		"tall: width: 120px",
+		"tall: width: 120px; height: 10px",
+		"tall: width: 120px; appearance: slider-vertical",
+	}
+	// a tall range has a ::before and an ::after taller than its thumb
+	const sheet = `body { margin: 0; } div { height: 200px; }
+.tall::before, .tall::after { content: ""; display: inline-block; width: 4px; height: 30px; }`
+	var page strings.Builder
+	page.WriteString(`<!DOCTYPE html><html><head><style>` + sheet + `</style></head><body>`)
+	d := ui.NewDocument(ui.CSS(sheet))
+	ranges := make([]*ui.Node, len(styles))
+	for i, s := range styles {
+		class := ""
+		if rest, ok := strings.CutPrefix(s, "tall: "); ok {
+			class, s = "tall", rest
+		}
+		fmt.Fprintf(&page, `<div><input type="range" class="%s" style="%s"></div>`, class, s)
+		ranges[i] = ui.Input(ui.Type("range"), ui.Class(class), ui.Style(s))
+		d.Body().Append(ui.Div(ranges[i]))
+	}
+	page.WriteString("</body></html>")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(page.String()))
+	}))
+	defer srv.Close()
+	size := geom.V2(400, 300)
+	s := chrome.Open(t, srv.URL, size, 1)
+	var want [][2]float32
+	s.Eval(`[...document.querySelectorAll("input")].map(e => { const r = e.getBoundingClientRect(); `+
+		`return [r.width, r.height]; })`, &want)
+	d.Layout(size)
+	v, err := chrome.Version()
+	if err != nil {
+		t.Fatalf("Chrome's version: %v", err)
+	}
+	for i, n := range ranges {
+		if v < 158 && strings.Contains(styles[i], "slider-vertical") {
+			t.Logf("%q: Chrome %d sizes slider-vertical as a horizontal range, since Chrome 158 as tall as its track",
+				styles[i], v)
+			continue
+		}
+		if got := [2]float32{n.Box().W, n.Box().H}; got != want[i] {
+			t.Errorf("%q: ui's %v, Chrome's %v", styles[i], got, want[i])
+		}
+	}
+}
+
+// Ranges of ui's look whose sizes are auto stretch in a grid and a flexbox
+// past their natural size as Chrome's own, exported or not.
+func TestRangesOfAnAutoSizeStretchAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; }
+.g { display: grid; grid-template-columns: 100px minmax(0, 1fr); width: 320px; }
+.g input { width: auto; justify-self: stretch; }
+.c { display: flex; flex-direction: column; width: 300px; }
+.r { display: flex; width: 300px; height: 40px; }
+.v { writing-mode: vertical-lr; display: flex; height: 200px; }
+`))
+	d.Body().Append(
+		ui.Div(ui.Class("g"), ui.Span(ui.Text("a")), ui.Input(ui.Type("range"))),
+		ui.Div(ui.Class("g"), ui.Span(ui.Text("a")), ui.Input(ui.Type("range"), ui.Style("height: auto"))),
+		ui.Div(ui.Class("c"), ui.Input(ui.Type("range"))),
+		ui.Div(ui.Class("r"), ui.Input(ui.Type("range"), ui.Style("flex-grow: 1"))),
+		ui.Div(ui.Class("v"), ui.Input(ui.Type("range"))),
+		ui.Div(ui.Input(ui.Type("range"), ui.Style("display: block"))),
+	)
+	r := chrome.Match(t, d, geom.V2(400, 500))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
 // unhovered is s with its hover left out.
 func unhovered(s style.Shade) style.Shade {
 	if s == style.ShadeHovered {

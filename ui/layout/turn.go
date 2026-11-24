@@ -245,6 +245,18 @@ func (t *tree) frame(n *node, physical *style.Computed, outer style.WritingMode)
 	}
 }
 
+// reframe has n stand in the frame mode, as though its parent's content were in it, until
+// the function it returns puts it back.
+func (t *tree) reframe(n *node, mode style.WritingMode) func() {
+	st, inner, acrossed := n.st, n.inner, n.across
+	t.frame(n, n.box.Style, mode)
+	n.cache.clear()
+	return func() {
+		n.st, n.inner, n.across = st, inner, acrossed
+		n.cache.clear()
+	}
+}
+
 // turnedLayout lays out n, whose content is in another frame than its parent's: in its
 // own, with its own style, the space it is given and the size it takes turned across
 // when the two frames' lines run on other axes.
@@ -253,6 +265,9 @@ func (t *tree) turnedLayout(n *node, in input) output {
 	n.st, n.inside = n.inner, true
 	defer func() { n.st, n.inside = outer, false }()
 	from, to := frameOf(n), frameOf(n.parent)
+	if n.placer != nil {
+		to = frameOf(n.placer)
+	}
 	if !n.across {
 		out := t.computeChildIn(n, in, nil)
 		out.overflow = t.reframeOverflow(n, out, from, to)
@@ -284,6 +299,12 @@ func (t *tree) turnedLayout(n *node, in input) output {
 	turnedOut.size = out.size.across()
 	turnedOut.overflow = t.reframeOverflow(n, out, from, to)
 	turnedOut.firstBaseline, turnedOut.lastBaseline = none, none
+	for i, b := range [2]float32{out.firstBaseline, out.lastBaseline} {
+		turnedOut.across[i] = none
+		if some(b) {
+			turnedOut.across[i] = reframe(rect{t: b, b: b}, out.size, from, to).l
+		}
+	}
 	turnedOut.topMargin = marginFrom(resolveOrZero(outer.Margin.Top, in.parent.w))
 	turnedOut.bottomMargin = marginFrom(resolveOrZero(outer.Margin.Bottom, in.parent.w))
 	turnedOut.collapsesThrough, turnedOut.lines, turnedOut.clamped = false, 0, false
@@ -315,7 +336,20 @@ func (t *tree) reframeOverflow(n *node, out output, from, to style.WritingMode) 
 	}
 	g := n.ownGutter()
 	port := out.size.sub(n.borders().sum()).sub(size{g.x, g.y})
-	return overflowRect{rect: reframe(o.rect, port, from, to), reversed: reversedIn(o.reversed, from, to)}
+	r := o.rect
+	if e := gutterEdges(n.st, g); !n.st.GutterStable && (e.l > 0 || e.t > 0) {
+		// o counts from inside the border, the bars on the frame's starting sides
+		// included, which are no overflow: the page's starts past them (a stable
+		// gutter's range is found from it as it is, verticalScrollRange)
+		r = rect{l: r.l - e.l, r: r.r - e.l, t: r.t - e.t, b: r.b - e.t}
+		if o.rect.l >= 0 {
+			r.l = 0
+		}
+		if o.rect.t >= 0 {
+			r.t = 0
+		}
+	}
+	return overflowRect{rect: reframe(r, port, from, to), reversed: reversedIn(o.reversed, from, to)}
 }
 
 // turnCandidate is c, an out-of-flow box placed in a box of size in of the frame from,
@@ -327,8 +361,32 @@ func turnCandidate(c oofCandidate, in size, from, to style.WritingMode) oofCandi
 		x, y = y, x
 	}
 	x.area, y.area = span{r.l, r.r}, span{r.t, r.b}
+	flip := reversedIn([2]bool{}, from, to)
+	if flip[0] {
+		x.align = x.align.flipped()
+	}
+	if flip[1] {
+		y.align = y.align.flipped()
+	}
 	c.x, c.y = x, y
 	return c
+}
+
+// flipped is a, aligned in an area whose axis runs the other way.
+func (a staticAlign) flipped() staticAlign {
+	a.keyword, a.fallback = a.keyword.flipped(), a.fallback.flipped()
+	return a
+}
+
+func (e staticEdge) flipped() staticEdge {
+	switch e {
+	case edgeStart:
+		return edgeEnd
+	case edgeEnd:
+		return edgeStart
+	case edgeCenter:
+	}
+	return e
 }
 
 // turnPlaced is p, a node's layout in the frame from, in the frame to: its place left as
@@ -428,10 +486,10 @@ func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geo
 	}
 }
 
-// turnPicture turns the natural size and proportions of a replaced node into the frame
-// its style is in.
+// turnPicture turns the natural size and proportions of a replaced node into its own
+// frame, the one it is sized in whatever its parent's or its containing block's.
 func (n *node) turnPicture() {
-	n.natural, n.shape = turnPicture(n.natural, n.shape, outerFrame(n.parent, n.box.Style))
+	n.natural, n.shape = turnPicture(n.natural, n.shape, n.box.Style.Mode)
 }
 
 // turnPicture is a picture's natural size and proportions in the frame of mode.

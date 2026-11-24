@@ -38,6 +38,7 @@ type Surface interface {
 	TrianglesColored(points []geom.Vec2, colors []color.Color, indices []int)
 	Text(at geom.Vec2, text string, opts ...twod.TextOption) geom.Vec2
 	Image(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color)
+	SmoothImage(r geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color)
 	NinePatch(r geom.Rect, tex *twod.Texture, left, top, right, bottom float32, tint color.Color)
 	PushClip(r geom.Rect)
 	PushClipRounded(r geom.Rect, radii [4]float32)
@@ -139,11 +140,11 @@ type Selected struct {
 // by, in the root's space, false when it has none.
 func TransformOf(b *box.Box) (geom.Transform2D, bool) {
 	st := shown(b)
-	if b.Kind != box.Element || st == nil || len(st.Transform) == 0 {
+	if b.Kind != box.Element || st == nil || !st.Transformed() {
 		return geom.Transform2D{}, false
 	}
 	r := b.Rect()
-	return transform(st, geom.V2(r.X, r.Y), b.Size), true
+	return st.TransformAt(geom.V2(r.X, r.Y), b.Size), true
 }
 
 // Each has every paint take f as it stands when the paint starts, as
@@ -617,8 +618,8 @@ func (p *painter) stack(e entry, alpha float32, pseudo bool) {
 		p.s.Rect(p.viewport, fade(st.Backdrop, alpha))
 	}
 	saved, around := p.s.Transform(), e.clip
-	if b.Kind == box.Element && len(st.Transform) > 0 {
-		p.s.SetTransform(saved.Mul(transform(st, e.at, b.Size)))
+	if b.Kind == box.Element && st.Transformed() {
+		p.s.SetTransform(saved.Mul(st.TransformAt(e.at, b.Size)))
 	}
 	e, shows := p.shaped(e, st)
 	if !shows {
@@ -690,7 +691,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 	if r, ok := clipRect(b, e.at); ok {
 		round, rr := clipRound(b, e.at)
 		inner = p.newClip(clip{rect: r, round: round, radii: rr, xf: p.s.Transform(), parent: e.clip, by: b})
-		if scrolls(shown(b)) {
+		if st := shown(b); scrolls(st) || st.Resizable() {
 			own.scrollers = append(own.scrollers, e)
 		}
 	}
@@ -769,7 +770,7 @@ func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
 		return inner
 	}
 	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
-		if as := shown(a); as.Filtered() || st.Position == style.Absolute && as.Position != style.Static {
+		if as := shown(a); as.HoldsFixed() || st.Position == style.Absolute && as.Position != style.Static {
 			break
 		}
 		if inner.by == a {
@@ -795,7 +796,7 @@ func (p *painter) reachable(b *box.Box, origin geom.Vec2, c *clip) ([]*box.Box, 
 	prev, reach := float32(math.Inf(-1)), float32(0)
 	for _, k := range kids {
 		st := shown(k)
-		if k.Kind != box.Element || k.Escapes || k.Pos.Y < prev || st.Position != style.Static || len(st.Transform) > 0 ||
+		if k.Kind != box.Element || k.Escapes || k.Pos.Y < prev || st.Position != style.Static || st.Transformed() ||
 			k.Content.X > k.Size.X || k.Content.Y > k.Size.Y {
 			return kids, nil
 		}
@@ -837,7 +838,7 @@ func inkReach(st *style.Computed) float32 {
 // positioned one with a z-index, or one less than opaque, transformed,
 // clipped by a clip-path, filtered, masked, mixed or isolated.
 func startsContext(st *style.Computed) bool {
-	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || len(st.Transform) > 0 ||
+	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || st.Transformed() ||
 		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 || st.Masked() ||
 		st.BlendMode != style.BlendNormal || st.Isolate
 }

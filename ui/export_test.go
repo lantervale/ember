@@ -50,6 +50,13 @@ func ShownAccent(n *Node) color.Color { return dom.Data(n).Shown.AccentColor }
 // the viewport's for the root of a Document whose viewport scrolls.
 func ScrollSize(d *Document, n *Node) geom.Vec2 { return d.scroller(n).Content }
 
+// ClientSize is the size of n's scrollport from the last layout, as the
+// DOM's clientWidth and clientHeight, the viewport's as ScrollSize's.
+func ClientSize(d *Document, n *Node) geom.Vec2 {
+	b := d.scroller(n)
+	return b.Size.Sub(geom.V2(b.Border.Horizontal(), b.Border.Vertical())).Sub(b.Scrollbar)
+}
+
 // SetPlatform makes every Document follow p's key conventions until t ends.
 func SetPlatform(t testing.TB, p textedit.Platform) {
 	was := currentPlatform
@@ -219,4 +226,28 @@ func FieldCaretRect(d *Document, n *Node) geom.Rect {
 	i := t.Editor.Caret()
 	row := fieldLine(d, n, t.Layout, t.Layout.Line(i))
 	return geom.Rect{X: row.X + t.Layout.X(i), Y: row.Y, W: 1, H: row.H}
+}
+
+// TransformedBox is the rect round n's border box as its transforms and
+// its ancestors' turn it, as getBoundingClientRect has it on a page that
+// doesn't scroll; false while n has no box.
+func TransformedBox(d *Document, n *Node) (geom.Rect, bool) {
+	b := d.tree.Of[n]
+	if b == nil {
+		return geom.Rect{}, false
+	}
+	r := b.Rect()
+	corners := [4]geom.Vec2{{X: r.X, Y: r.Y}, {X: r.X + r.W, Y: r.Y}, {X: r.X, Y: r.Y + r.H}, {X: r.X + r.W, Y: r.Y + r.H}}
+	for a := b; a != nil; a = a.Parent {
+		if xf, ok := paint.TransformOf(a); ok {
+			for i, c := range corners {
+				corners[i] = xf.Xform(c)
+			}
+		}
+	}
+	lo, hi := corners[0], corners[0]
+	for _, c := range corners[1:] {
+		lo, hi = geom.V2(min(lo.X, c.X), min(lo.Y, c.Y)), geom.V2(max(hi.X, c.X), max(hi.Y, c.Y))
+	}
+	return geom.Rect{X: lo.X, Y: lo.Y, W: hi.X - lo.X, H: hi.Y - lo.Y}, true
 }

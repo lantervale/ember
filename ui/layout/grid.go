@@ -1,9 +1,13 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"slices"
+
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 func gridAlignContent(a style.Align) alignment {
-	if a == style.AlignNormal {
+	if a.Position() == style.AlignNormal {
 		return align(style.AlignStretch)
 	}
 	return align(a)
@@ -84,8 +88,8 @@ func (t *tree) grid(n *node, in input) output {
 	gaps := [2]float32{usedGap(n, horizontal, basis), usedGap(n, vertical, basis)}
 	columns := p.tracks(n, horizontal, gaps[horizontal], in.parent.w)
 	rows := p.tracks(n, vertical, gaps[vertical], in.parent.w)
-	colItems := t.sizingItems(items, horizontal, gaps[horizontal], basis)
-	rowItems := t.sizingItems(items, vertical, gaps[vertical], basis)
+	colItems := t.sizingItems(n, items, horizontal, gaps, basis)
+	rowItems := t.sizingItems(n, items, vertical, gaps, basis)
 	resolveItemTrackIndexes(items, finalCols, finalRows)
 	resolveItemTrackIndexes(colItems, finalCols, finalRows)
 	resolveItemTrackIndexes(rowItems, finalCols, finalRows)
@@ -94,7 +98,7 @@ func (t *tree) grid(n *node, in input) output {
 	markCrossings(items, columns, rows)
 	hasBaseline := false
 	for _, it := range items {
-		if it.baselineAligned() {
+		if it.baselineAlignedIn(horizontal) || it.baselineAlignedIn(vertical) {
 			hasBaseline = true
 		}
 	}
@@ -113,8 +117,9 @@ func (t *tree) grid(n *node, in input) output {
 	for _, it := range rowItems {
 		it.areaCache = nil
 	}
+	rowBaseline := hasBaseline || slices.ContainsFunc(rowItems, (*gridItem).baselineAligned)
 	t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
+		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, rowBaseline)
 	handTracks(items, vertical, rows, gaps[vertical], false)
 	rowSum := sumBaseSizes(rows)
 	borderBox := size{
@@ -191,7 +196,7 @@ func (t *tree) grid(n *node, in input) output {
 	}
 	if rerunRows {
 		t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
+			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, rowBaseline)
 		handTracks(items, vertical, rows, gaps[vertical], false)
 	}
 	if columnChanged && !hasPercentColumn {
@@ -226,9 +231,9 @@ func (t *tree) grid(n *node, in input) output {
 			l: columns[it.columnIndexes.start+1].offset,
 			r: columns[it.columnIndexes.end].offset,
 		}
-		contribution, y, h, baseline := t.alignAndPositionItem(it, uint32(i), area,
+		contribution, y, h, baseline, last := t.alignAndPositionItem(it, uint32(i), area,
 			size{area.r - area.l, area.b - area.t}, alignItems, justifyItems, paddingBoxInset, container)
-		it.yPosition, it.height, it.baseline = y, h, baseline
+		it.yPosition, it.height, it.baseline, it.lastBaseline = y, h, baseline, last
 		overflow = overflow.union(contribution)
 	}
 
@@ -280,6 +285,9 @@ func (t *tree) grid(n *node, in input) output {
 		order++
 	}
 	n.grid = newGridInfo(colLines, finalCols, columns, rowLines, finalRows, rows)
+	if st.Dir == style.RTL {
+		n.grid.mirror = borderBox.w
+	}
 	area := oofArea{size: borderBox.sub(paddingBoxInset.sum()), offset: point{paddingBoxInset.l, paddingBoxInset.t}}
 	if isScrollContainer(st) {
 		overflow = overflow.union(rect{r: padding.r, b: padding.b})
@@ -319,8 +327,32 @@ func (t *tree) grid(n *node, in input) output {
 		if !some(first.baseline) {
 			out.synthetic = first.height
 		}
+		out.lastBaseline = gridLastBaseline(items)
 	}
 	return out
+}
+
+// gridLastBaseline is a grid's last baseline: that of the items of its last row on their
+// last baseline, else the last baseline of the last item there.
+func gridLastBaseline(items []*gridItem) float32 {
+	lastRow := 0
+	for _, it := range items {
+		lastRow = max(lastRow, it.rowIndexes.end)
+	}
+	var last *gridItem
+	for _, it := range items {
+		if it.rowIndexes.end != lastRow {
+			continue
+		}
+		if it.baselineAligned() && it.lastIn(vertical) {
+			last = it
+			break
+		}
+		if last == nil || it.columnIndexes.start >= last.columnIndexes.start {
+			last = it
+		}
+	}
+	return last.yPosition + or(last.lastBaseline, last.height)
 }
 
 func sumBaseSizes(tracks []gridTrack) float32 {
@@ -367,7 +399,7 @@ func alignTracks(contentBox float32, padding, border span, tracks []gridTrack, a
 //
 //nolint:cyclop,funlen,gocognit,gocyclo // Taffy's align_and_position_item, kept in its shape
 func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb size, _, _ style.Align,
-	paddingBoxInset rect, container overflowContainer) (rect, float32, float32, float32) {
+	paddingBoxInset rect, container overflowContainer) (rect, float32, float32, float32, float32) {
 	n := it.node
 	st := n.st
 	areaSize := size{area.r - area.l, area.b - area.t}
@@ -400,7 +432,10 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	vAlign := self
 	if vAlign == style.AlignNormal {
-		if some(inherent.h) || isSizingKeyword(st.Size.Height) || some(ratio) {
+		// an item of an aspect ratio stretches in one axis, its other following: across, unless
+		// it fills its row or has a width
+		if some(inherent.h) || isSizingKeyword(st.Size.Height) ||
+			some(ratio) && (hAlign == style.AlignStretch || some(inherent.w) || n.replaced) {
 			vAlign = style.AlignStart
 		} else {
 			vAlign = style.AlignStretch
@@ -408,8 +443,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	margin := optionalEdges(st.Margin, cb.w)
 	inner := size{
-		w: fmax(mSub(mSub(areaSize.w, margin.l), margin.r), 0),
-		h: fmax(mSub(mSub(areaSize.h, margin.t), margin.b)-it.baselineShim, 0),
+		w: fmax(mSub(mSub(areaSize.w, margin.l), margin.r)-it.shim[horizontal], 0),
+		h: fmax(mSub(mSub(areaSize.h, margin.t), margin.b)-it.shim[vertical], 0),
 	}
 	kw, kwSpace := keywordNone, space{}
 	if !some(inherent.w) && !it.subgrid[horizontal] {
@@ -421,7 +456,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	keywordMeasured := noSize
 	if kw == keywordMeasure && kh == keywordMeasure && !outOfFlow(pos) {
-		keywordMeasured = t.measureChildSizeBoth(n, noSize, cb, spaces{kwSpace, khSpace}, inherentSize, [2]bool{})
+		keywordMeasured = t.measureChildSizeBoth(n, noSize, cb, spaces{kwSpace, khSpace}, inherentSize)
 	}
 	w := inherent.w
 	if !some(w) {
@@ -466,7 +501,7 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	s = s.withAspectRatio(ratio).mClamp(minSize, maxSize)
 	innerSpaces := spaces{def(inner.w), def(inner.h)}
 	if outOfFlow(pos) && !s.both() {
-		s = t.measureChildSizeBoth(n, s, cb, innerSpaces, inherentSize, [2]bool{})
+		s = t.measureChildSizeBoth(n, s, cb, innerSpaces, inherentSize)
 	}
 	out := t.performChildLayout(n, s, cb, innerSpaces, inherentSize)
 	final := s.or(out.size).mClamp(minSize, maxSize)
@@ -476,9 +511,9 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		final = out.size
 	}
 	x, xMargin := alignItemWithinArea(span{area.l, area.r},
-		align(hAlign), final.w, pos, insetH, span{margin.l, margin.r}, 0)
+		align(hAlign), final.w, pos, insetH, span{margin.l, margin.r}, it.shimSpan(horizontal))
 	y, yMargin := alignItemWithinArea(span{area.t, area.b}, align(vAlign),
-		final.h, pos, insetV, span{margin.t, margin.b}, it.baselineShim)
+		final.h, pos, insetV, span{margin.t, margin.b}, it.shimSpan(vertical))
 	x += gridRelativeOffset(pos, insetH)
 	yWithout := y
 	y += gridRelativeOffset(pos, insetV)
@@ -499,13 +534,14 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		margin:    resolvedMargin,
 	}
 	contribution := overflowContribution(point{x - paddingBoxInset.l, y - paddingBoxInset.t},
-		final, out.overflow.rect, border, st.Overflow, container, resolvedMargin)
-	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height)
+		final, out.overflow.rect, border, st.Overflow, n, container, resolvedMargin)
+	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height),
+		childLastAlignedBaseline(out, final.h, st.Overflow.Height)
 }
 
 func alignItemWithinArea(area span, a alignment, s float32,
-	pos style.Position, inset, margin span, shim float32) (float32, span) {
-	nonAuto := span{or(margin.start, 0) + shim, or(margin.end, 0)}
+	pos style.Position, inset, margin, shim span) (float32, span) {
+	nonAuto := span{or(margin.start, 0) + shim.start, or(margin.end, 0) + shim.end}
 	areaSize := fmax(area.end-area.start, 0)
 	free := fmax(areaSize-s-nonAuto.start-nonAuto.end, 0)
 	autos := 0
@@ -519,11 +555,11 @@ func alignItemWithinArea(area span, a alignment, s float32,
 	if autos > 0 {
 		autoSize = free / float32(autos)
 	}
-	resolved := span{or(margin.start, autoSize) + shim, or(margin.end, autoSize)}
+	resolved := span{or(margin.start, autoSize) + shim.start, or(margin.end, autoSize) + shim.end}
 	overflows := s+nonAuto.start+nonAuto.end > areaSize
 	var offset float32
 	switch resolveSelfAlignmentSafety(a, overflows) {
-	case style.AlignEnd, style.AlignFlexEnd:
+	case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 		offset = areaSize - s - resolved.end
 	case style.AlignCenter, style.AlignAnchorCenter:
 		offset = (areaSize - s + resolved.start - resolved.end) / 2
@@ -605,9 +641,11 @@ type gridAxisInfo struct {
 	emptyLine float32
 }
 
-// gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo.
+// gridInfo is a grid container's tracks after layout, Taffy's DetailedGridInfo. A right to
+// left grid's columns are laid out in its mirror image, mirror its border box's width.
 type gridInfo struct {
 	columns, rows gridAxisInfo
+	mirror        float32
 }
 
 func newGridAxisInfo(lines gridLines, counts trackCounts, tracks []gridTrack) gridAxisInfo {
@@ -720,7 +758,13 @@ func (g *gridAxisInfo) resolve(lines [2]style.GridLine, paddingStart, paddingEnd
 // absoluteArea is the containing block an absolutely positioned child's grid lines give it
 // inside the padding box.
 func (g *gridInfo) absoluteArea(st *style.Computed, paddingBox rect) rect {
-	c := g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	var c span
+	if w := g.mirror; w > 0 {
+		c = g.columns.resolve(st.Column, w-paddingBox.r, w-paddingBox.l)
+		c = span{w - c.end, w - c.start}
+	} else {
+		c = g.columns.resolve(st.Column, paddingBox.l, paddingBox.r)
+	}
 	r := g.rows.resolve(st.Row, paddingBox.t, paddingBox.b)
 	return rect{l: c.start, r: c.end, t: r.start, b: r.end}
 }

@@ -1,7 +1,6 @@
 package control
 
 import (
-	"slices"
 	"strings"
 	"unicode"
 )
@@ -66,8 +65,8 @@ func (o Option) FormValue() string {
 // Select is a select element, shown as a pop-up list: Activate or a
 // click opens it on the selected option, the arrows walk its enabled
 // options, Activate or a click chooses one, and Back or a click outside
-// closes it as it was. Typing jumps to the next option starting with
-// that letter, open or closed.
+// closes it as it was. Typing finds an option by what was typed, open or
+// closed (Type).
 type Select struct {
 	Options []Option
 	// Groups are its optgroups, in order.
@@ -89,6 +88,14 @@ type Select struct {
 	// on an option not let go yet.
 	picked, was, base []bool
 	held              bool
+	// last is a listbox's selection as the player's last press or key
+	// left it, nil before any.
+	last []bool
+	// typed is what type-ahead has, lowered, its last letter at typedAt;
+	// repeat the letter it cycles on, 0 for none.
+	typed   []rune
+	typedAt float32
+	repeat  rune
 }
 
 func NewSelect(options ...Option) *Select {
@@ -197,34 +204,53 @@ func (s *Select) ClickOption(i int) Events {
 // ClickOutside closes the list as it was.
 func (s *Select) ClickOutside() { s.Open = false }
 
-// TypeAhead goes to the next enabled option after the current one whose
-// label starts with text, any case, wrapping: the highlight while open,
-// the choice while closed, a listbox's selection, which it holds alone.
-func (s *Select) TypeAhead(text string) Events {
-	if s.Disabled || text == "" {
+// typeAheadTime is how long, in seconds, a letter typed after another
+// goes on with it, as Chrome's kTypeAheadTimeout.
+const typeAheadTime = 1
+
+// Type finds an option by r typed at now, in seconds, as Chrome's
+// type-ahead: the letters typed within a second of each other are a
+// prefix the selected option or the next enabled one after it starts
+// with, any case and leading spaces passed over, while one letter typed
+// again goes on to the next option starting with it, wrapping. What it
+// finds is the highlight while open, the choice while closed, a
+// listbox's selection, which it holds alone (typedChange).
+func (s *Select) Type(r rune, now float32) Events {
+	if s.Disabled {
 		return 0
 	}
-	from := s.Selected
-	switch {
-	case s.Open:
-		from = s.Highlight
-	case s.ListBox:
-		from = s.Active
+	r = unicode.ToLower(r)
+	if now-s.typedAt > typeAheadTime {
+		s.typed = s.typed[:0]
 	}
-	n := len(s.Options)
-	for k := 1; k <= n; k++ {
-		i := (from + k + n) % n
-		if s.enabled(i) && strings.HasPrefix(strings.ToLower(s.Options[i].Text()), strings.Map(unicode.ToLower, text)) {
+	s.typed, s.typedAt = append(s.typed, r), now
+	prefix, start := s.typed, 1
+	switch {
+	case r == s.repeat:
+		prefix = s.typed[len(s.typed)-1:]
+	case len(s.typed) > 1:
+		s.repeat, start = 0, 0
+	default:
+		s.repeat = r
+	}
+	from := s.Selected
+	if s.Open {
+		from = s.Highlight
+	}
+	want, n := string(prefix), len(s.Options)
+	for k := range n {
+		i := (max(from, 0) + start + k) % n
+		label := strings.ToLower(strings.TrimLeftFunc(s.Options[i].Text(), unicode.IsSpace))
+		if s.enabled(i) && strings.HasPrefix(label, want) {
 			switch {
 			case s.Open:
 				s.Highlight = i
 				return 0
 			case s.ListBox:
-				was := slices.Clone(s.picked)
 				s.Active, s.Anchor = i, i
 				s.only(i)
 				s.settle()
-				return s.changed(was)
+				return s.typedChange()
 			}
 			return s.pick(i)
 		}

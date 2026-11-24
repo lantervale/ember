@@ -1,9 +1,11 @@
 package style
 
 import (
+	"math"
 	"unicode/utf8"
 
 	"github.com/lantervale/ember/color"
+	"github.com/lantervale/ember/geom"
 )
 
 // Computed is one node's computed style. The zero value is CSS's initial
@@ -373,7 +375,30 @@ const (
 	// AlignAnchorCenter centres an absolutely positioned box on its
 	// default anchor.
 	AlignAnchorCenter
+	// AlignLastBaseline is last baseline: the last line's baseline shared, the box
+	// otherwise at the end.
+	AlignLastBaseline
 )
+
+// The overflow position an alignment may carry, or-ed into its keyword: safe puts a box
+// bigger than its space at the start, unsafe lets it overflow both ways. Neither is the
+// property's own default.
+const (
+	AlignSafe   = 1 << 6
+	AlignUnsafe = 1 << 7
+)
+
+// Position is a without its overflow position.
+func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe) }
+
+// Safe reports whether a is safe.
+func (a Align) Safe() bool { return a&AlignSafe != 0 }
+
+// Unsafe reports whether a is unsafe.
+func (a Align) Unsafe() bool { return a&AlignUnsafe != 0 }
+
+// Baseline reports whether a is first or last baseline.
+func (a Align) Baseline() bool { return a == AlignBaseline || a == AlignLastBaseline }
 
 // Flex holds the flex and box-alignment properties.
 type Flex struct {
@@ -1262,11 +1287,12 @@ type Look struct {
 	// ScrollbarColored.
 	ScrollbarThumb, ScrollbarTrack color.Color
 	ScrollbarColored               bool
-	// Resizable is resize other than none on a box that clips: Chrome
-	// keeps its bars' corner for the resizer, which Resizer, its
-	// ::-webkit-resizer, draws where a rule styles it.
-	Resizable bool
-	Resizer   *Computed
+	// Resize is the axes resize lets the user drag on a box that clips,
+	// none on one that doesn't: Chrome keeps its bars' corner for the
+	// resizer, which Resizer, its ::-webkit-resizer, draws where a rule
+	// styles it, its own grip otherwise.
+	Resize  Resize
+	Resizer *Computed
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
 	Background color.Color
@@ -1357,6 +1383,11 @@ type Look struct {
 	// TransformOrigin (percentages of the border box).
 	Transform       []TransformOp
 	TransformOrigin Size[Length]
+	// Translate, Rotate and Scale are the individual transform
+	// properties, applied in that order before Transform.
+	Translate Translation
+	Rotate    Rotation
+	Scale     Scaling
 	// Filters is filter's functions in order, none when empty, and
 	// BackdropFilters backdrop-filter's.
 	Filters         []Filter
@@ -1387,6 +1418,79 @@ type TransformOp struct {
 	Kind TransformKind
 	X, Y Length
 	A    [6]float32
+}
+
+// Translation is translate: X and Y, lengths of the border box; none
+// unless Set.
+type Translation struct {
+	X, Y Length
+	Set  bool
+}
+
+// Rotation is rotate about the z axis by Deg degrees; none unless Set.
+type Rotation struct {
+	Deg float32
+	Set bool
+}
+
+// Scaling is scale: X and Y factors; none unless Set.
+type Scaling struct {
+	X, Y float32
+	Set  bool
+}
+
+// Transformed reports whether transform, translate, rotate or scale is
+// other than none: the box is then drawn through TransformAt, and stacks
+// on its own.
+func (s *Computed) Transformed() bool {
+	return len(s.Transform) > 0 || s.Translate.Set || s.Rotate.Set || s.Scale.Set
+}
+
+// HoldsFixed reports whether the element is the containing block of its
+// fixed descendants, and of its absolute ones even unpositioned: when it
+// is transformed, or filters itself or its backdrop.
+func (s *Computed) HoldsFixed() bool { return s.Transformed() || s.Filtered() }
+
+// TransformAt is the transform of a border box of size at at: translate,
+// rotate, scale, then transform's functions, about the transform origin.
+func (s *Computed) TransformAt(at, size geom.Vec2) geom.Transform2D {
+	ox, _ := s.TransformOrigin.Width.Resolve(size.X)
+	oy, _ := s.TransformOrigin.Height.Resolve(size.Y)
+	o := at.Add(geom.V2(ox, oy))
+	m := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o}
+	if t := s.Translate; t.Set {
+		m = m.Mul(TransformOp{Kind: Translate, X: t.X, Y: t.Y}.At(size))
+	}
+	if r := s.Rotate; r.Set {
+		m = m.Mul(TransformOp{Kind: Rotate, A: [6]float32{r.Deg * math.Pi / 180}}.At(size))
+	}
+	if k := s.Scale; k.Set {
+		m = m.Mul(TransformOp{Kind: ScaleOp, A: [6]float32{k.X, k.Y}}.At(size))
+	}
+	for _, op := range s.Transform {
+		m = m.Mul(op.At(size))
+	}
+	return m.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o.Scale(-1)})
+}
+
+// At is op on a border box of size.
+func (op TransformOp) At(size geom.Vec2) geom.Transform2D {
+	a := op.A
+	switch op.Kind {
+	case Translate:
+		x, _ := op.X.Resolve(size.X)
+		y, _ := op.Y.Resolve(size.Y)
+		return geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(x, y)}
+	case ScaleOp:
+		return geom.Transform2D{X: geom.V2(a[0], 0), Y: geom.V2(0, a[1])}
+	case Rotate:
+		return geom.Transform2DFrom(geom.Vec2{}, a[0], 0, geom.V2(1, 1))
+	case Skew:
+		return geom.Transform2D{X: geom.V2(1, geom.Tan(a[1])), Y: geom.V2(geom.Tan(a[0]), 1)}
+	case Matrix:
+		return geom.Transform2D{X: geom.V2(a[0], a[1]), Y: geom.V2(a[2], a[3]), Origin: geom.V2(a[4], a[5])}
+	}
+	return geom.Identity2D()
 }
 
 // BlendMode is how colours mix with those under them, as the
@@ -1912,3 +2016,37 @@ func (s ColorScheme) Dark(prefersDark bool) bool {
 	}
 	return s&SchemeDark != 0
 }
+
+// Resize is the axes along which the user may drag a box's size by its
+// resizer: block and inline as written, until the writing mode turns them
+// into the page's.
+type Resize uint8
+
+// The values of resize.
+const (
+	ResizeNone Resize = iota
+	ResizeBoth
+	ResizeHorizontal
+	ResizeVertical
+	ResizeBlock
+	ResizeInline
+)
+
+// Resizable reports a resizer on the box: resize other than none on one
+// that clips.
+func (s *Computed) Resizable() bool { return s.Resize != ResizeNone }
+
+// Physical is r along the page's axes in writing mode m.
+func (r Resize) Physical(m WritingMode) Resize {
+	switch {
+	case r == ResizeBlock && m.Vertical() || r == ResizeInline && !m.Vertical():
+		return ResizeHorizontal
+	case r == ResizeBlock || r == ResizeInline:
+		return ResizeVertical
+	}
+	return r
+}
+
+// Width and Height report whether r lets the user drag that size.
+func (r Resize) Width() bool  { return r == ResizeBoth || r == ResizeHorizontal }
+func (r Resize) Height() bool { return r == ResizeBoth || r == ResizeVertical }

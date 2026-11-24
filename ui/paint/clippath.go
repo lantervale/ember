@@ -270,6 +270,18 @@ func (m *maskCache) keyOf(s *clipShape, w, h int) []byte {
 
 // maskScale is how many device pixels a point of what is drawn now
 // takes: the paint's Scale, by the surface's transform.
+// slant is how far past an edge, in the space drawn in, a point on the
+// screen can lie when the transform turns or skews it: one over its
+// smallest stretch, or less. It is 0 drawn square.
+func (p *painter) slant() float32 {
+	t := p.s.Transform()
+	det := abs(t.X.X*t.Y.Y - t.X.Y*t.Y.X)
+	if t.X.Y == 0 && t.Y.X == 0 || det == 0 {
+		return 0
+	}
+	return float32(math.Sqrt(float64(t.X.Dot(t.X)+t.Y.Dot(t.Y)))) / det
+}
+
 func (p *painter) maskScale() float32 {
 	k := p.scale
 	if k <= 0 {

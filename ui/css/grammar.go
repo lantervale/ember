@@ -185,8 +185,6 @@ var (
 	borderWidth = either(dimTerm(nonNegative), words("thin", "medium", "thick"))
 	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge",
 		"double")
-	alignWords = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
-		"self-start", "self-end"}
 	// textAlign has Chrome's -webkit- values, which place blocks as well as lines.
 	blendMode = words("normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn",
 		"hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity")
@@ -424,21 +422,19 @@ var checks = map[string]check{
 	"border-image-outset":        repeated(dimTerm(allowNumber|nonNegative), 4),
 	"border-image-repeat":        repeated(words("stretch", "repeat", "round", "space"), 2),
 
-	"row-gap":        single(either(sizeLP, words("normal"))),
-	"column-gap":     single(either(sizeLP, words("normal"))),
-	"flex-grow":      single(number),
-	"flex-shrink":    single(number),
-	"flex-basis":     single(either(sizeLP, words("auto", "content"), boxSizes)),
-	"flex-wrap":      single(words("nowrap", "wrap", "wrap-reverse")),
-	"flex-direction": single(words("row", "row-reverse", "column", "column-reverse")),
-	"align-items":    single(words(alignWords...)),
-	"align-self":     single(words(append([]string{"auto", "anchor-center"}, alignWords...)...)),
-	"align-content": single(words("normal", "stretch", "center", "start", "end", "flex-start", "flex-end",
-		"space-between", "space-around", "space-evenly", "baseline")),
-	"justify-content": single(words("normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "left",
-		"right", "space-between", "space-around", "space-evenly")),
-	"justify-items": single(words(append([]string{"legacy", "left", "right"}, alignWords...)...)),
-	"justify-self":  single(words(append([]string{"auto", "left", "right", "anchor-center"}, alignWords...)...)),
+	"row-gap":         single(either(sizeLP, words("normal"))),
+	"column-gap":      single(either(sizeLP, words("normal"))),
+	"flex-grow":       single(number),
+	"flex-shrink":     single(number),
+	"flex-basis":      single(either(sizeLP, words("auto", "content"), boxSizes)),
+	"flex-wrap":       single(words("nowrap", "wrap", "wrap-reverse")),
+	"flex-direction":  single(words("row", "row-reverse", "column", "column-reverse")),
+	"align-items":     alignItems.check,
+	"align-self":      alignSelf.check,
+	"align-content":   alignContent.check,
+	"justify-content": justifyContent.check,
+	"justify-items":   justifyItems.check,
+	"justify-self":    justifySelf.check,
 
 	"grid-template-columns":     checkTracks,
 	"grid-template-rows":        checkTracks,
@@ -638,9 +634,12 @@ var checks = map[string]check{
 	"isolation":             single(words("auto", "isolate")),
 	"background-blend-mode": commaList(single(blendMode)),
 	"transform-origin":      checkTransformOrigin,
+	"translate":             checkTranslate,
+	"rotate":                checkRotate,
+	"scale":                 checkScale,
 	"appearance": single(words("none", "auto", "textfield", "menulist-button", "checkbox", "radio", "button", "listbox",
 		"menulist", "meter", "progress-bar", "slider-vertical", "searchfield", "textarea", "base-select")),
-	"resize": single(words("none", "both", "horizontal", "vertical")),
+	"resize": single(words("none", "both", "horizontal", "vertical", "block", "inline", "auto")),
 
 	"transition-property":        commaList(single(either(words("none", "all"), transitionTarget))),
 	"transition-duration":        commaList(single(timeTerm(true))),
@@ -713,7 +712,7 @@ func iterationCount(c Component) error {
 
 //nolint:gochecknoglobals // the keywords of two animation longhands
 var (
-	animationDirections = []string{"normal", "reverse", "alternate", "alternate-reverse"}
+	animationDirections = []string{kwNormal, "reverse", "alternate", "alternate-reverse"}
 	animationFills      = []string{kwNone, "forwards", "backwards", kwBoth}
 )
 
@@ -1190,6 +1189,106 @@ func checkTransform(v []Component) error {
 			if err := arg(a[0]); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// errThreeD refuses what moves a box along the z axis or turns it out of
+// the page, which ui doesn't draw, as it refuses the 3D transform
+// functions.
+var errThreeD = errors.New("a 3D transform is not drawn")
+
+func zeroLiteral(c Component) bool {
+	return (c.Kind == Number || c.Kind == Dimension) && c.Num == 0
+}
+
+func checkTranslate(v []Component) error {
+	if len(v) == 1 && isWord(v[0], kwNone) {
+		return nil
+	}
+	if len(v) > 3 {
+		return fmt.Errorf("translate takes up to three lengths")
+	}
+	for i, c := range v {
+		if i < 2 {
+			if err := lengthPercent(c); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := length(c); err != nil {
+			return err
+		}
+		if !zeroLiteral(c) {
+			return errThreeD
+		}
+	}
+	return nil
+}
+
+// rotation is rotate's angle and the sign its axis gives it, -1 about
+// 0 0 -1; errThreeD about an axis other than z.
+func rotation(v []Component) (Component, float32, error) {
+	isAngle := func(c Component) bool {
+		_, err := angle(c)
+		return err == nil && c.Kind != Number
+	}
+	var deg Component
+	var axis []Component
+	if len(v) == 1 || len(v) == 2 || len(v) == 4 {
+		if isAngle(v[0]) {
+			deg, axis = v[0], v[1:]
+		} else if last := v[len(v)-1]; isAngle(last) {
+			deg, axis = last, v[:len(v)-1]
+		}
+	}
+	if deg.Kind == 0 {
+		return deg, 0, fmt.Errorf("rotate takes an angle, an axis or none")
+	}
+	switch {
+	case len(axis) == 0 || len(axis) == 1 && isWord(axis[0], "z"):
+		return deg, 1, nil
+	case len(axis) == 1 && isWord(axis[0], "x", "y"):
+		return deg, 0, errThreeD
+	case len(axis) == 1:
+		return deg, 0, fmt.Errorf("rotate's axis is x, y, z or three numbers, found %q", axis[0].String())
+	}
+	for _, c := range axis {
+		if c.Kind != Number {
+			return deg, 0, fmt.Errorf("rotate's axis is x, y, z or three numbers, found %q", c.String())
+		}
+	}
+	if axis[0].Num != 0 || axis[1].Num != 0 || axis[2].Num == 0 {
+		return deg, 0, errThreeD
+	}
+	if axis[2].Num < 0 {
+		return deg, -1, nil
+	}
+	return deg, 1, nil
+}
+
+func checkRotate(v []Component) error {
+	if len(v) == 1 && isWord(v[0], kwNone) {
+		return nil
+	}
+	_, _, err := rotation(v)
+	return err
+}
+
+func checkScale(v []Component) error {
+	if len(v) == 1 && isWord(v[0], kwNone) {
+		return nil
+	}
+	if len(v) > 3 {
+		return fmt.Errorf("scale takes up to three numbers")
+	}
+	for i, c := range v {
+		if err := dimTerm(allowNumber | allowPercent | noLength)(c); err != nil {
+			return err
+		}
+		if i == 2 && !(c.Kind == Number && c.Num == 1 || c.Kind == Percentage && c.Num == 100) {
+			return errThreeD
 		}
 	}
 	return nil

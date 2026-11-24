@@ -5,6 +5,9 @@ package fonts
 
 import (
 	"fmt"
+	"math"
+	"runtime"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -55,9 +58,11 @@ type Face struct {
 	// character, -1 once known not to.
 	ascii int8
 	// shaper is the face's layout tables, read when it is first shaped;
-	// han what text-spacing-trim reads of its glyphs, by character.
+	// han what text-spacing-trim reads of its glyphs, by character, and
+	// pairs what its chws does to two side by side.
 	shaper *shape.Font
-	han    map[rune]hanGlyph
+	han    map[hanKey]hanGlyph
+	pairs  map[[2]rune]hanPair
 	// vertical is the face's vertical metrics, read when it first sets a
 	// character upright in a vertical line.
 	vertical *vertical
@@ -244,8 +249,8 @@ func (s *Set) has(family string) bool {
 	return false
 }
 
-// Metrics are the face's hhea metrics at f.Size, ascent and descent
-// rounded to whole device pixels as Chrome rounds them.
+// Metrics are the face's hhea metrics at f.Size, ascent, descent and
+// line gap each rounded to whole device pixels as Chrome rounds them.
 func (s *Set) Metrics(f style.Font) box.Metrics { return s.metricsOf(s.Face(f), f.Size) }
 
 // metricsOf are c's metrics at size: its own, or those its @font-face
@@ -267,7 +272,11 @@ func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 	if px <= 0 {
 		px = 1
 	}
-	out := box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
+	ascent, descent = round(ascent*px), round(descent*px)
+	if appleAscent && c.file != nil && slices.Contains(widenedAscent[:], c.Family) {
+		ascent += float32(math.Floor(float64((ascent+descent)*0.15 + 0.5)))
+	}
+	out := box.Metrics{Ascent: ascent / px, Descent: descent / px, LineGap: round(max(gap, 0)*px) / px,
 		XHeight: float32(m.XHeight) / 64 * scale, CapHeight: float32(m.CapHeight) / 64 * scale}
 	c.underlined(&out, scale)
 	return out
@@ -277,6 +286,17 @@ func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 func (s *Set) Has(f style.Font, r rune) bool { return s.hasGlyph(s.Face(f), r) }
 
 func round(v float32) float32 { return float32(int(v + 0.5)) }
+
+// appleAscent is whether the machine's Times, Helvetica and Courier
+// stand taller than their files say, as Chrome on macOS has them
+// (FontMetrics::AscentDescentWithHacks, after Safari): 15% of their
+// height, in whole device pixels, added to their ascent.
+//
+//nolint:gochecknoglobals // the platform's, set apart by tests
+var appleAscent = runtime.GOOS == "darwin"
+
+//nolint:gochecknoglobals // a lookup table
+var widenedAscent = [...]string{"Times", "Helvetica", "Courier"}
 
 // Advance is the width of text in f, kerning included; a character f's
 // face lacks takes the Fallback face's advance.

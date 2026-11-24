@@ -44,7 +44,7 @@ func PixelsUnderMouse(t testing.TB, pkg, name string, w, h int, mouse string, ac
 	}))
 	t.Cleanup(srv.Close)
 	flags := []string{"--disable-gpu"}
-	if runtime.GOOS != "darwin" {
+	if runtime.GOOS != darwin {
 		// as runAt: the system's bars lie over the content (decision 0181)
 		flags = append(flags, "--enable-features=OverlayScrollbar")
 	}

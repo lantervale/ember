@@ -18,8 +18,66 @@ type subgridAxis struct {
 	tracks []span
 }
 
-// subgridAxes reports the axes n takes its grid's tracks in: a grid that is an in-flow item of
-// a grid, no query container, with subgrid as that axis's template.
+// gridFrame is the frame a grid lays its tracks out in: its writing mode's, mirrored under
+// direction rtl.
+type gridFrame struct {
+	mode style.WritingMode
+	rtl  bool
+}
+
+func frameOfGrid(n *node) gridFrame {
+	st := n.box.Style
+	if st == nil {
+		st = n.st
+	}
+	return gridFrame{st.Mode, st.Dir == style.RTL}
+}
+
+// page is the page's axis a of the frame runs along, and whether it runs up or leftwards.
+func (f gridFrame) page(a axis) (axis, bool) {
+	if a == horizontal {
+		if !f.mode.Vertical() {
+			return horizontal, f.rtl
+		}
+		return vertical, f.rtl != f.mode.Upward()
+	}
+	if !f.mode.Vertical() {
+		return vertical, false
+	}
+	return horizontal, f.mode.BlockFromRight()
+}
+
+// from is the axis of the frame along the axis a of the frame o, and whether the two run
+// opposite ways.
+func (f gridFrame) from(o gridFrame, a axis) (axis, bool) {
+	pa, back := o.page(a)
+	for _, b := range [2]axis{horizontal, vertical} {
+		if pb, bb := f.page(b); pb == pa {
+			return b, bb != back
+		}
+	}
+	return a, false
+}
+
+// edges are the margin, border and padding of a box of physical style st on each side of
+// the frame f.
+func (f gridFrame) edges(st *style.Computed, basis float32) rect {
+	e := frameEdges(edges(st.Margin, basis).add(edges(st.Padding, basis)).add(borders(st)), f.mode)
+	if f.rtl {
+		e.l, e.r = e.r, e.l
+	}
+	return e
+}
+
+// toOwn is the axis of n's own grid along its grid's axis a, and whether it runs the other
+// way: its grid's frame and its own differ.
+func (n *node) toOwn(a axis) (axis, bool) {
+	return frameOfGrid(n).from(frameOfGrid(n.parent), a)
+}
+
+// subgridAxes reports the axes, its grid's, n takes its grid's tracks in: a grid that is an
+// in-flow item of a grid, no query container, with subgrid as the template of its own axis
+// along it.
 func (n *node) subgridAxes() [2]bool {
 	st := n.st
 	switch {
@@ -28,19 +86,27 @@ func (n *node) subgridAxes() [2]bool {
 		st.ContainerType != style.ContainerNormal, n.context() != contextGrid && (len(n.kids) > 0 || n.inline != nil):
 		return [2]bool{}
 	}
-	return [2]bool{st.Subgrid.Width, st.Subgrid.Height}
+	own := [2]bool{st.Subgrid.Width, st.Subgrid.Height}
+	var out [2]bool
+	for a := range out {
+		k, _ := n.toOwn(axis(a))
+		out[a] = own[k]
+	}
+	return out
 }
 
-// handed is what n's grid handed it in each axis it is a subgrid in, nil in the others.
+// handed is what n's grid handed it in each axis of its own it is a subgrid in, nil in the
+// others.
 func (n *node) handed() [2]*subgridAxis {
 	var out [2]*subgridAxis
 	for a, on := range n.subgridAxes() {
 		if !on {
 			continue
 		}
-		out[a] = n.subgrid[a]
-		if out[a] == nil {
-			out[a] = &subgridAxis{span: 1}
+		k, _ := n.toOwn(axis(a))
+		out[k] = n.subgrid[a]
+		if out[k] == nil {
+			out[k] = &subgridAxis{span: 1}
 		}
 	}
 	return out
@@ -68,6 +134,9 @@ func hand(items []*gridItem, a axis, lines gridLines) {
 		}
 		at := it.placement(a)
 		names := lines.within(at)
+		if _, back := k.toOwn(a); back {
+			names = reverseNames(names, at.span())
+		}
 		if prev := k.subgrid[a]; prev != nil && prev.span == at.span() &&
 			maps.EqualFunc(prev.names, names, slices.Equal[[]int]) {
 			continue
@@ -97,6 +166,9 @@ func handTracks(items []*gridItem, a axis, tracks []gridTrack, gap float32, alig
 				spans = append(spans, span{at, at + tr.baseSize})
 			}
 			at += tr.baseSize
+		}
+		if _, back := it.node.toOwn(a); back {
+			spans = reverseSpans(spans)
 		}
 		if sub.gap == gap && slices.Equal(sub.tracks, spans) {
 			continue
@@ -167,9 +239,30 @@ func edgesAlong(r rect, a axis) span {
 	return span{r.t, r.b}
 }
 
-// subgridEdges are the margin, border and padding of a subgrid's start and end in a.
-func subgridEdges(n *node, a axis, basis float32) span {
-	return edgesAlong(edges(n.st.Margin, basis).add(edges(n.st.Padding, basis)).add(n.borders()), a)
+// reverseNames are the names of the lines of a span of n tracks counted from its other end.
+func reverseNames(names map[string][]int, n int) map[string][]int {
+	out := make(map[string][]int, len(names))
+	for name, lines := range names {
+		r := make([]int, len(lines))
+		for i, l := range lines {
+			r[len(lines)-1-i] = n - l
+		}
+		out[name] = r
+	}
+	return out
+}
+
+// reverseSpans are tracks laid from the margin box start of a subgrid, from its other end.
+func reverseSpans(tracks []span) []span {
+	if len(tracks) == 0 {
+		return tracks
+	}
+	w := tracks[len(tracks)-1].end
+	out := make([]span, len(tracks))
+	for i, tr := range tracks {
+		out[len(tracks)-1-i] = span{w - tr.end, w - tr.start}
+	}
+	return out
 }
 
 // gridPlan is a grid's explicit grid in each axis and its in-flow items placed on it.
@@ -253,19 +346,19 @@ func (t *tree) planGrid(n *node, autoFit, strategies size) *gridPlan {
 // tracks are n's tracks in a: those its grid handed it where it is a subgrid, else its own.
 func (p *gridPlan) tracks(n *node, a axis, gap, basis float32) []gridTrack {
 	if s := n.handed()[a]; s != nil && len(s.tracks) > 0 {
-		content := subgridEdges(n, a, basis)
+		content := edgesAlong(frameOfGrid(n).edges(n.box.Style, basis), a)
 		return subgridTracks(s, span{content.start, s.tracks[len(s.tracks)-1].end - content.end}, gap)
 	}
 	return initializeGridTracks(p.counts[a], n.st, a, p.reps[a], func(i int) bool { return p.occupancy.occupied(a, i) })
 }
 
-// sizingItems are the items whose contributions size a grid's tracks of a: its own, but each
-// subgrid in a gives way to the items it holds, hoisted to the grid's lines.
-func (t *tree) sizingItems(items []*gridItem, a axis, gap, basis float32) []*gridItem {
+// sizingItems are the items whose contributions size the tracks of a of the grid g: its own,
+// but each subgrid in a gives way to the items it holds, hoisted to the grid's lines.
+func (t *tree) sizingItems(g *node, items []*gridItem, a axis, gaps [2]float32, basis float32) []*gridItem {
 	var out []*gridItem
 	for _, it := range items {
 		if it.subgrid[a] {
-			out = t.hoist(it, a, gap, gap, basis, out)
+			out = t.hoist(g, it, a, gaps, gaps, basis, out)
 			continue
 		}
 		out = append(out, it)
@@ -273,71 +366,160 @@ func (t *tree) sizingItems(items []*gridItem, a axis, gap, basis float32) []*gri
 	return out
 }
 
-// hoist appends the items that size the tracks of a in place of the subgrid s, an item at
-// lines of the grid sizing them: its own at their lines there, those of its subgrids in a in
-// turn, and an empty item on each of its edge tracks. Each item takes as more margin the
-// margin, border and padding of the subgrids whose edge it stands on, and beside a gutter
-// half what the subgrid's gap differs from the sizing grid's.
-func (t *tree) hoist(s *gridItem, a axis, gap, parentGap, basis float32, out []*gridItem) []*gridItem {
+// hoisting is a subgrid s whose items size the tracks of the grid g: the axis of its own
+// along each of g's, whether it runs the other way, its own gap, half what that differs from
+// g's, and the margin, border and padding at its edges with those of the subgrids round it.
+type hoisting struct {
+	g, n    *node
+	s       *gridItem
+	ownAxis [2]axis
+	back    [2]bool
+	own     [2]float32
+	half    [2]float32
+	edge    [2]span
+	// fixed is the subgrid's own tracks in an axis it doesn't share with g, and counts theirs.
+	fixed  []gridTrack
+	counts trackCounts
+}
+
+func newHoisting(g *node, s *gridItem, gaps, parentGaps [2]float32, basis float32) *hoisting {
 	n := s.node
-	own := parentGap
-	if _, _, g := templateOf(n.st, a); g.Kind != style.Auto {
-		own = resolveOrZero(g, basis)
+	h := &hoisting{g: g, n: n, s: s}
+	gf, nf := frameOfGrid(g), frameOfGrid(n)
+	box := gf.edges(n.box.Style, 0)
+	for ax := range 2 {
+		h.ownAxis[ax], h.back[ax] = nf.from(gf, axis(ax))
+		h.own[ax] = parentGaps[ax]
+		if _, _, gap := templateOf(n.st, h.ownAxis[ax]); gap.Kind != style.Auto {
+			h.own[ax] = resolveOrZero(gap, basis)
+		}
+		h.half[ax] = (h.own[ax] - gaps[ax]) / 2
+		h.edge[ax] = edgesAlong(box, axis(ax))
+		h.edge[ax].start += s.extra[ax].start
+		h.edge[ax].end += s.extra[ax].end
 	}
-	half := (own - gap) / 2
-	edge := subgridEdges(n, a, 0)
-	edge.start += s.extra[a].start
-	edge.end += s.extra[a].end
-	at := s.placement(a)
+	return h
+}
+
+// place puts the subgrid's item it at g's lines in a, and in the other axis at them where
+// the subgrid shares it with g, else loose on the tracks of the subgrid owning them.
+func (h *hoisting) place(t *tree, it *gridItem, a axis) {
+	s := h.s
+	ownLines := [2]lineSpan{it.column, it.row}
+	local, sub := ownLines, it.subgrid
+	for ax := range 2 {
+		l := ownLines[h.ownAxis[ax]]
+		if span := s.placement(axis(ax)).span(); h.back[ax] {
+			l = lineSpan{span - l.end, span - l.start}
+		}
+		local[ax], it.subgrid[ax] = l, sub[h.ownAxis[ax]]
+	}
+	if mode, gm := frameOf(h.n), frameOf(h.g); mode != gm {
+		it.st, it.frame = t.turned(it.node.box.Style, gm), &gm
+		if across(mode, gm) {
+			it.alignSelf, it.justifySelf = it.justifySelf, it.alignSelf
+		}
+	}
+	toGrid := func(ax axis) {
+		l, from := local[ax], s.placement(ax)
+		extra := span{h.half[ax], h.half[ax]}
+		if l.start == 0 {
+			extra.start = h.edge[ax].start
+		}
+		if l.end == from.span() {
+			extra.end = h.edge[ax].end
+		}
+		it.extra[ax] = extra
+		it.setPlacement(ax, lineSpan{from.start + l.start, from.start + l.end})
+	}
+	toGrid(a)
 	o := a.other()
-	p := t.planGrid(n, noSize, noSize)
+	l := ownLines[h.ownAxis[o]]
+	switch {
+	case !s.subgrid[o]:
+		it.owner, it.local, it.localAxis = h.n, l, h.ownAxis[o]
+		it.fixed = fixedExtent(h.fixed, h.counts, l)
+		it.setPlacement(o, s.placement(o))
+		it.loose[o] = true
+	case s.loose[o]:
+		it.owner, it.local, it.localAxis = s.owner, lineSpan{s.local.start + l.start, s.local.start + l.end}, s.localAxis
+		it.fixed = none
+		it.setPlacement(o, s.placement(o))
+		it.loose[o] = true
+	default:
+		toGrid(o)
+	}
+	it.hoisted = true
+	if a == vertical {
+		it.node.sharing = false
+	} else {
+		it.alignSelf, it.justifySelf = baselineFallback(it.alignSelf), baselineFallback(it.justifySelf)
+	}
+}
+
+// fixedExtent is how far the tracks between lines l reach where each is of a fixed size, none
+// where one isn't: an item's height in a subgrid of columns alone, known before its rows are.
+func fixedExtent(tracks []gridTrack, counts trackCounts, l lineSpan) float32 {
+	s, okS := counts.trackVecIndex(l.start)
+	e, okE := counts.trackVecIndex(l.end)
+	if !okS || !okE || e >= len(tracks) {
+		return none
+	}
+	sum := float32(0)
+	for i := s + 1; i < e; i++ {
+		lo, hi := definiteValue(tracks[i].min, none), definiteValue(tracks[i].max, none)
+		if !some(lo) || lo != hi {
+			return none
+		}
+		sum += lo
+	}
+	return sum
+}
+
+// edgeItems are empty items on the subgrid's first and last tracks in a, holding its edges.
+func (h *hoisting) edgeItems(a axis) [2]*gridItem {
+	var out [2]*gridItem
+	at, o := h.s.placement(a), a.other()
+	for i := range out {
+		e := &gridItem{st: &style.Computed{}, baseline: none, minContentCache: noSize, minimumCache: noSize,
+			maxContentCache: noSize, loose: [2]bool{a == vertical, a == horizontal}}
+		e.setPlacement(o, h.s.placement(o))
+		if i == 0 {
+			e.setPlacement(a, lineSpan{at.start, at.start + 1})
+			e.extra[a].start = h.edge[a].start
+		} else {
+			e.setPlacement(a, lineSpan{at.end - 1, at.end})
+			e.extra[a].end = h.edge[a].end
+		}
+		out[i] = e
+	}
+	return out
+}
+
+// hoist appends the items that size the tracks of a of the grid g in place of the subgrid s,
+// an item at lines of g: its own at their lines there, those of its subgrids in a in turn, and
+// an empty item on each of its edge tracks. Each item takes as more margin, in each axis s
+// shares with g, the margin, border and padding of the subgrids whose edge it stands on, and
+// beside a gutter half what the subgrid's gap differs from g's. Lines, axes and sides are g's:
+// a subgrid of another writing mode or direction has its own along g's that lie with them,
+// maybe the other way round, and its items are sized in g's frame.
+func (t *tree) hoist(g *node, s *gridItem, a axis, gaps, parentGaps [2]float32, basis float32,
+	out []*gridItem) []*gridItem {
+	h := newHoisting(g, s, gaps, parentGaps, basis)
+	p := t.planGrid(s.node, noSize, noSize)
+	if o := h.ownAxis[a.other()]; !s.subgrid[a.other()] {
+		h.fixed, h.counts = p.tracks(s.node, o, usedGap(s.node, o, basis), 0), p.counts[o]
+	}
 	for _, it := range p.items {
-		local := it.placement(a)
-		extra := span{half, half}
-		if local.start == 0 {
-			extra.start = edge.start
-		}
-		if local.end == at.span() {
-			extra.end = edge.end
-		}
-		it.extra[a] = extra
-		it.setPlacement(a, lineSpan{at.start + local.start, at.start + local.end})
-		l := it.placement(o)
-		switch {
-		case !s.subgrid[o]:
-			it.owner, it.local = n, l
-			it.setPlacement(o, s.placement(o))
-			it.loose[o] = true
-		case s.loose[o]:
-			it.owner, it.local = s.owner, lineSpan{s.local.start + l.start, s.local.start + l.end}
-			it.setPlacement(o, s.placement(o))
-			it.loose[o] = true
-		default:
-			it.setPlacement(o, lineSpan{s.placement(o).start + l.start, s.placement(o).start + l.end})
-		}
-		if it.alignSelf == style.AlignBaseline {
-			it.alignSelf = style.AlignStart
-		}
+		h.place(t, it, a)
 		if it.subgrid[a] {
-			out = t.hoist(it, a, gap, own, basis, out)
+			out = t.hoist(g, it, a, gaps, h.own, basis, out)
 			continue
 		}
 		out = append(out, it)
 	}
-	for _, e := range [2]bool{true, false} {
-		edgeItem := &gridItem{st: &style.Computed{}, baseline: none, minContentCache: noSize, minimumCache: noSize,
-			maxContentCache: noSize, loose: [2]bool{a == vertical, a == horizontal}}
-		edgeItem.setPlacement(o, s.placement(o))
-		if e {
-			edgeItem.setPlacement(a, lineSpan{at.start, at.start + 1})
-			edgeItem.extra[a].start = edge.start
-		} else {
-			edgeItem.setPlacement(a, lineSpan{at.end - 1, at.end})
-			edgeItem.extra[a].end = edge.end
-		}
-		out = append(out, edgeItem)
-	}
-	return out
+	e := h.edgeItems(a)
+	return append(out, e[0], e[1])
 }
 
 // layOutOwners lays out each subgrid in rows among items, at the width its columns give it,
@@ -357,6 +539,6 @@ func (t *tree) layOutOwners(items, rowItems []*gridItem, columns, rows []gridTra
 		if !some(w) {
 			w = mSub(area.w, it.marginSums(area.w).w)
 		}
-		t.probeChildLayout(it.node, size{w, none}, area, spaces{spaceOr(w, maxContentSpace), maxContentSpace}, inherentSize)
+		t.probeChildLayout(it.node, size{w, none}, area, spaces{spaceOr(w, maxContentSpace), maxContentSpace})
 	}
 }

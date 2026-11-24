@@ -413,8 +413,12 @@ func (t *tree) table(n *node, in input) output {
 	var candidates []oofCandidate
 	y := above + inset.t + sy
 	ri := 0
+	first := none
 	placeRow := func(r *node, origin point) {
 		h := heights[ri]
+		if ri == 0 {
+			first = contentBottom(r, y+h, content)
+		}
 		ri++
 		r.unrounded = placed{location: point{inset.l + sx - origin.x, y - origin.y}, size: size{rowW, h}}
 		tr := r.row
@@ -464,11 +468,21 @@ func (t *tree) table(n *node, in input) output {
 	return output{
 		size:          s,
 		overflow:      finalizeOverflow(padded, s.sub(border.sum()), [2]bool{}, false),
-		firstBaseline: none,
+		firstBaseline: first,
 		lastBaseline:  none,
 		oof:           candidates,
 		area:          &oofArea{size: s.sub(border.sum()), offset: point{border.l, border.t}},
 	}
+}
+
+// contentBottom is the baseline of row r, whose cells stand on none and end at bottom:
+// its lowest cell's content box's bottom, as Chrome's; none without cells.
+func contentBottom(r *node, bottom, content float32) float32 {
+	b := none
+	for _, c := range r.kids {
+		b = fmax(or(b, 0), bottom-edges(c.st.Padding, content).b-c.borders().b)
+	}
+	return b
 }
 
 // tableRow is what a table keeps of a row across its passes, and across layouts while the
@@ -1100,7 +1114,7 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 		}
 		cw := cellW(c)
 		out := t.probeChildLayout(c.cell, size{cw, none}, size{content, none},
-			spaces{def(cw), maxContentSpace}, inherentSize)
+			spaces{def(cw), maxContentSpace})
 		own[i] = out.firstBaseline - c.cell.lowered
 		if !some(out.firstBaseline) {
 			own[i] = out.size.h - edges(c.cell.st.Padding, content).b - c.cell.borders().b

@@ -4,7 +4,7 @@
 // side set half wide, an opening bracket starting a wrapped line as each
 // value has it, a closing bracket trimmed to fit a line's end, and the
 // room between ideographs and letters, across elements, decorated and
-// selected.
+// selected; and in sideways lines, spaced as horizontal ones.
 package main
 
 import (
@@ -32,6 +32,9 @@ p { margin: 0 0 6px; white-space: nowrap; }
 .box { border: 1px solid #3a6fd8; padding: 0 2px; }
 .under { text-decoration: underline #3a6fd8; }
 .clear { clear: left; }
+.side { writing-mode: vertical-rl; text-orientation: sideways; height: 170px; float: left; margin: 0 6px 0 0; }
+.rl { writing-mode: sideways-rl; }
+.lr { writing-mode: sideways-lr; }
 `
 
 func main() {
@@ -54,6 +57,10 @@ func main() {
 		ui.P(ui.Class("wrap", "first"), ui.Text(wrapped)),
 		ui.P(ui.Class("wrap", "start", "auto"), ui.Text("字字漢字（字」字字字字Kanji字字")),
 		ui.P(ui.Class("clear"), ui.Text("")),
+		ui.P(ui.Class("side"), ui.Text(pairs)),
+		ui.P(ui.Class("side", "rl", "auto"), ui.Text("漢Ember字」「か 1966")),
+		ui.P(ui.Class("side", "lr"), ui.Text("漢」"), ui.Span(ui.Class("red"), ui.Text("「字」")), ui.Text("「か")),
+		ui.P(ui.Class("side", "lr", "auto", "under"), ui.Text("漢Line字 字1字")),
 	)
-	pages.Run(d, 560, 300)
+	pages.Run(d, 560, 480)
 }

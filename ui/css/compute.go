@@ -334,8 +334,9 @@ func (r *restyler) restyle(n *dom.Node, data *dom.Pipeline, parent *style.Comput
 }
 
 // layoutChanged reports whether a and b differ in what layout reads: not
-// in colours, backgrounds, borders' looks, shadows, opacity or
-// transforms, which paint reads through Shown.
+// in colours, backgrounds, borders' looks, shadows or opacity, which
+// paint reads through Shown. Transforms are read by both: their own
+// values grow a scroller's overflow, and their animations repaint.
 func (r *restyler) layoutChanged(a, b *style.Computed) bool {
 	r.la, r.lb = *a, *b
 	paintOnly(&r.la)
@@ -344,7 +345,8 @@ func (r *restyler) layoutChanged(a, b *style.Computed) bool {
 }
 
 func paintOnly(c *style.Computed) {
-	c.Look = style.Look{}
+	c.Look = style.Look{Transform: c.Transform, TransformOrigin: c.TransformOrigin, Translate: c.Translate,
+		Rotate: c.Rotate, Scale: c.Scale}
 	var zero color.Color
 	c.Color, c.PlaceholderColor, c.SelectionColor, c.AccentColor, c.CaretColor = zero, zero, zero, zero, zero
 	c.HasPlaceholder, c.HasSelection, c.AccentAuto, c.CaretAuto, c.ColorInherited = false, false, false, false, false
@@ -415,9 +417,9 @@ type ctx struct {
 	// the parent's. root is set for the root, whose root units are its own.
 	sized, lined, root bool
 	// fontRead is set once a registered custom property read a unit of
-	// the element's font.
-	fontRead bool
-	vars     map[string][]Component
+	// the element's font, lineRead once one read lh.
+	fontRead, lineRead bool
+	vars               map[string][]Component
 	// frames are the custom functions being called, the innermost last.
 	frames []*frame
 	// inContent is set while content's value is substituted, whose attr()
@@ -426,6 +428,11 @@ type ctx struct {
 	// inherited are the custom properties the element starts from.
 	inherited map[string]string
 	resolving map[string]bool
+	// stack are the custom properties being resolved, the innermost last,
+	// after font-size or line-height while their var()s are; cyclic are
+	// those found in a cycle, which compute as invalid.
+	stack     []string
+	cyclic    map[string]bool
 	raw       map[string]*Declaration
 	trans     [5][]Component
 	anims     [8][]Component
@@ -601,7 +608,7 @@ func (x *ctx) appearance(casc cascaded) style.Appearance {
 	c := initial
 	y := *x
 	y.c = &c
-	y.customs(casc.custom)
+	y.customs(casc)
 	i := orderIndex["appearance"]
 	y.apply(&longhands[i], casc.longhands[i])
 	return c.Appearance
@@ -673,7 +680,7 @@ func (r *restyler) selection(x *ctx, n *dom.Node) {
 // cascaded applies every longhand's winner, then what depends on several.
 func (x *ctx) cascaded(casc cascaded, root bool) {
 	x.flow = casc.flow
-	x.customs(casc.custom)
+	x.customs(casc)
 	x.fontFirst(casc, root)
 	if !x.transitioning(casc) {
 		x.longhands(casc, root, x.over)
@@ -687,7 +694,7 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 	if x.afterParent != nil {
 		y, yc := start, c
 		y.c, y.parent, y.em = &yc, x.afterParent, x.afterParent.Font.Size
-		y.customs(casc.custom)
+		y.customs(casc)
 		y.longhands(casc, root, y.over)
 		y.finish(root)
 		next = y.c
@@ -697,7 +704,7 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 		all := append(slices.Clip(x.over), over...)
 		if slices.ContainsFunc(over, func(o override) bool { return o.custom != "" }) {
 			x.over = all
-			x.customs(casc.custom)
+			x.customs(casc)
 		}
 		x.longhands(casc, root, all)
 		x.finish(root)
@@ -705,8 +712,9 @@ func (x *ctx) cascaded(casc cascaded, root bool) {
 }
 
 // fontFirst works the element's font out before its custom properties
-// again when a registered one read a unit of it, so that unit is the
-// element's own, as in Chrome.
+// again when a registered one read a unit of it, and then its line
+// height when one read lh, so that unit is the element's own, as in
+// Chrome.
 func (x *ctx) fontFirst(casc cascaded, root bool) {
 	if !x.fontRead || x.sized {
 		return
@@ -720,11 +728,19 @@ func (x *ctx) fontFirst(casc cascaded, root bool) {
 	if root {
 		x.rem = c.Font.Size
 	}
-	saved := x.c.Font
+	saved, savedLine := x.c.Font, x.c.LineHeight
 	x.c.Font = c.Font
-	x.customs(casc.custom)
-	x.c.Font = saved
-	x.em, x.sized, x.fontRead = x.parent.Font.Size, false, false
+	x.customs(casc)
+	if x.lineRead {
+		y = *x
+		y.c = &c
+		i := orderIndex[propLineHeight]
+		y.apply(&longhands[i], casc.longhands[i])
+		x.c.LineHeight, x.lined = c.LineHeight, true
+		x.customs(casc)
+	}
+	x.c.Font, x.c.LineHeight = saved, savedLine
+	x.em, x.sized, x.lined, x.fontRead, x.lineRead = x.parent.Font.Size, false, false, false, false
 	if root {
 		x.rem = initial.Font.Size
 	}
@@ -807,7 +823,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
 	ps.ColorInherited = true
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, flow: casc.flow}
-	px.customs(casc.custom)
+	px.customs(casc)
 	for i := range longhands {
 		l := &longhands[i]
 		if d := casc.longhands[i]; d != nil {
@@ -870,9 +886,11 @@ var (
 // its animations and transitions set. A cycle or a missing reference
 // without fallback leaves an unregistered property unset; a registered
 // one computes as its syntax says.
-func (x *ctx) customs(decls []*Declaration) {
+func (x *ctx) customs(casc cascaded) {
+	decls := casc.custom
 	x.inherited = x.env.props.inherited(x.parent.Vars, x.root)
 	x.c.Vars = x.inherited
+	x.cyclic = nil
 	if len(decls) > 0 {
 		x.raw = map[string]*Declaration{}
 		for _, d := range decls {
@@ -880,6 +898,8 @@ func (x *ctx) customs(decls []*Declaration) {
 		}
 		x.vars = map[string][]Component{}
 		x.resolving = map[string]bool{}
+		x.stack = x.stack[:0]
+		x.unitCycles(casc)
 		vars := make(map[string]string, len(x.inherited)+len(decls))
 		for k, v := range x.inherited {
 			vars[k] = v
@@ -929,12 +949,22 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 		return nil, false
 	}
 	if x.resolving[name] {
+		x.cycle(name)
 		return nil, false
 	}
 	x.resolving[name] = true
+	x.stack = append(x.stack, name)
 	v, ok := x.substitute(d.Value)
+	r := x.env.props.get(name)
+	if ok && r != nil && len(x.stack) > 1 {
+		x.unitCycle(v)
+	}
+	x.stack = x.stack[:len(x.stack)-1]
 	x.resolving[name] = false
-	if r := x.env.props.get(name); r != nil {
+	if x.cyclic[name] {
+		v, ok = nil, false
+	}
+	if r != nil {
 		var text string
 		text, ok = x.registered(r, v, ok)
 		v = nil
@@ -948,9 +978,10 @@ func (x *ctx) lookup(name string) ([]Component, bool) {
 	return v, ok
 }
 
-// customKeyword handles inherit, initial and unset on a custom property.
+// customKeyword handles inherit, initial and unset on a custom property,
+// and an invalid value, which is the guaranteed-invalid value.
 func (x *ctx) customKeyword(name string, v []Component, ok bool) ([]Component, bool) {
-	if ok && globalKeyword(v) == kwInitial {
+	if !ok || globalKeyword(v) == kwInitial {
 		return nil, false
 	}
 	if text, has := x.parent.Vars[name]; has {
@@ -1073,7 +1104,7 @@ func (x *ctx) apply(l *longhand, d *Declaration) {
 	v, ok := x.valueOf(name, d)
 	if ok {
 		v = items(v)
-		ok = len(v) > 0
+		ok = len(v) > 0 && !x.cyclic[name]
 	}
 	kw := ""
 	if ok {
@@ -1256,7 +1287,10 @@ func (x *ctx) finish(root bool) {
 			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
-	c.Resizable = c.Resizable && (scrolls(ox) || scrolls(oy))
+	if !scrolls(ox) && !scrolls(oy) {
+		c.Resize = style.ResizeNone
+	}
+	c.Resize = c.Resize.Physical(c.Mode)
 	if scrolls(ox) && !scrolls(oy) {
 		c.Overflow.Height = fix(oy)
 	} else if scrolls(oy) && !scrolls(ox) {
@@ -1756,7 +1790,8 @@ var (
 	alignWords4 = map[string]style.Align{
 		"normal": style.AlignNormal, "auto": style.AlignAuto, "stretch": style.AlignStretch,
 		"start": style.AlignStart, "end": style.AlignEnd, "flex-start": style.AlignFlexStart,
-		"flex-end": style.AlignFlexEnd, "center": style.AlignCenter, "baseline": style.AlignBaseline,
+		"flex-end": style.AlignFlexEnd, "flow-start": style.AlignFlexStart, "flow-end": style.AlignFlexEnd,
+		"center": style.AlignCenter, "baseline": style.AlignBaseline,
 		"space-between": style.AlignSpaceBetween, "space-around": style.AlignSpaceAround,
 		"space-evenly": style.AlignSpaceEvenly, "self-start": style.AlignStart, "self-end": style.AlignEnd,
 		"left": style.AlignStart, "right": style.AlignEnd, "legacy": style.AlignNormal,
@@ -2037,12 +2072,12 @@ var props = func() map[string]prop {
 		"flex-basis":      lengthField(func(c *style.Computed) *style.Length { return &c.Basis }, sizeLength),
 		"row-gap":         lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Height }, sizeLength),
 		"column-gap":      lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Width }, sizeLength),
-		"align-items":     keyword(func(c *style.Computed) *style.Align { return &c.AlignItems }, alignWords4),
-		"align-self":      keyword(func(c *style.Computed) *style.Align { return &c.AlignSelf }, alignWords4),
-		"align-content":   keyword(func(c *style.Computed) *style.Align { return &c.AlignContent }, alignWords4),
-		"justify-content": keyword(func(c *style.Computed) *style.Align { return &c.JustifyContent }, alignWords4),
-		"justify-items":   keyword(func(c *style.Computed) *style.Align { return &c.JustifyItems }, alignWords4),
-		"justify-self":    keyword(func(c *style.Computed) *style.Align { return &c.JustifySelf }, alignWords4),
+		"align-items":     alignField(func(c *style.Computed) *style.Align { return &c.AlignItems }),
+		"align-self":      alignField(func(c *style.Computed) *style.Align { return &c.AlignSelf }),
+		"align-content":   alignField(func(c *style.Computed) *style.Align { return &c.AlignContent }),
+		"justify-content": alignField(func(c *style.Computed) *style.Align { return &c.JustifyContent }),
+		"justify-items":   alignField(func(c *style.Computed) *style.Align { return &c.JustifyItems }),
+		"justify-self":    alignField(func(c *style.Computed) *style.Align { return &c.JustifySelf }),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
 			func(x *ctx, v []Component) int { return x.whole(v[0]) }, integers(math.MinInt)),
 
@@ -2512,9 +2547,19 @@ var props = func() map[string]prop {
 			wordOf(blendModes), flips[[]style.BlendMode]()),
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
+		"translate": field(func(c *style.Computed) *style.Translation { return &c.Translate },
+			(*ctx).translate, translations).painted(),
+		"rotate": field(func(c *style.Computed) *style.Rotation { return &c.Rotate },
+			(*ctx).rotate, rotations).painted(),
+		"scale": field(func(c *style.Computed) *style.Scaling { return &c.Scale },
+			(*ctx).scale, scalings).painted(),
 		"appearance": keyword(func(c *style.Computed) *style.Appearance { return &c.Appearance }, appearances),
-		"resize": keyword(func(c *style.Computed) *bool { return &c.Resizable },
-			map[string]bool{"none": false, "both": true, "horizontal": true, "vertical": true}),
+		"resize": keyword(func(c *style.Computed) *style.Resize { return &c.Resize },
+			map[string]style.Resize{"none": style.ResizeNone, "both": style.ResizeBoth,
+				"horizontal": style.ResizeHorizontal, "vertical": style.ResizeVertical, "block": style.ResizeBlock,
+				"inline": style.ResizeInline,
+				// Chrome computes auto as both, on any box
+				"auto": style.ResizeBoth}),
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
 			cornerOf, pairs(sizeLength)),
@@ -3247,6 +3292,37 @@ func (x *ctx) transformOp(name string, a []Component) style.TransformOp {
 		}
 	}
 	return op
+}
+
+func (x *ctx) translate(v []Component) style.Translation {
+	if isWord(v[0], kwNone) {
+		return style.Translation{}
+	}
+	t := style.Translation{X: x.length(v[0]), Y: style.Px(0), Set: true}
+	if len(v) > 1 {
+		t.Y = x.length(v[1])
+	}
+	return t
+}
+
+func (x *ctx) rotate(v []Component) style.Rotation {
+	if isWord(v[0], kwNone) {
+		return style.Rotation{}
+	}
+	deg, sign, _ := rotation(v)
+	return style.Rotation{Deg: sign * float32(x.angle(deg)), Set: true}
+}
+
+func (x *ctx) scale(v []Component) style.Scaling {
+	if isWord(v[0], kwNone) {
+		return style.Scaling{}
+	}
+	s := style.Scaling{X: x.num(v[0]), Set: true}
+	s.Y = s.X
+	if len(v) > 1 {
+		s.Y = x.num(v[1])
+	}
+	return s
 }
 
 func (x *ctx) origin(v []Component) style.Size[style.Length] {

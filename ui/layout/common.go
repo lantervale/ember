@@ -1,6 +1,11 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"math"
+
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 // alignment is an align-* or justify-* value with its overflow safety.
 type alignment struct {
@@ -9,13 +14,44 @@ type alignment struct {
 	unsafe  bool
 }
 
-func align(k style.Align) alignment { return alignment{keyword: k} }
+// align is k's position and its overflow position.
+func align(k style.Align) alignment {
+	return alignment{keyword: k.Position(), safe: k.Safe(), unsafe: k.Unsafe()}
+}
 
 func childFirstBaseline(first, height float32, overflowY style.Overflow) float32 {
 	if scrollContainer(overflowY) {
 		return fmax(fmin(or(first, height), height), 0)
 	}
 	return first
+}
+
+// childLastAlignedBaseline is the last baseline a child laid out as out aligns by, its
+// first where it reports no last: a scroll container's held within its box, as Chrome's.
+func childLastAlignedBaseline(out output, height float32, overflowY style.Overflow) float32 {
+	last := out.lastBaseline
+	if !some(last) {
+		last = out.firstBaseline
+	}
+	return childFirstBaseline(last, height, overflowY)
+}
+
+// synthesizedBaseline is where the baseline of a box h tall that has none is made up,
+// aligning in container: at its bottom, or across its middle where the container's text
+// may stand on a central baseline, as Chrome rounds it.
+func (t *tree) synthesizedBaseline(h float32, container *node) float32 {
+	if container == nil || !container.st.Stands() {
+		return h
+	}
+	u := unitsPerPoint(t.fonts)
+	return h - float32(math.Floor(float64(h*u)/2))/u
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // childLastBaseline is the baseline of the last line in a child laid out as out, its first
@@ -53,7 +89,7 @@ func applyAlignmentFallback(free float32, items int, a alignment) style.Align {
 		case style.AlignSpaceAround, style.AlignSpaceEvenly:
 			k, safe = style.AlignCenter, true
 		case style.AlignNormal, style.AlignAuto, style.AlignStart, style.AlignEnd, style.AlignFlexStart, style.AlignFlexEnd,
-			style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline: // no fallback needed
+			style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline, style.AlignLastBaseline: // no fallback needed
 		}
 	}
 	if free <= 0 && safe {
@@ -91,7 +127,8 @@ func computeAlignmentOffset(free float32, items int, gap float32, k style.Align,
 				return free / float32(items+1)
 			}
 			return free / 2
-		case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignBaseline, style.AlignSpaceBetween:
+		case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignBaseline, style.AlignLastBaseline,
+			style.AlignSpaceBetween:
 		}
 		return 0
 	}
@@ -104,7 +141,8 @@ func computeAlignmentOffset(free float32, items int, gap float32, k style.Align,
 	case style.AlignSpaceEvenly:
 		return gap + free/float32(items+1)
 	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignEnd, style.AlignFlexStart,
-		style.AlignFlexEnd, style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline: // only the gap
+		style.AlignFlexEnd, style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline,
+		style.AlignLastBaseline: // only the gap
 	}
 	return gap
 }
@@ -117,8 +155,11 @@ type overflowContainer struct {
 	padding  rect
 }
 
+// overflowContribution is what a child n of border box s at loc adds to
+// its container's scrollable overflow: its box and, where it lets it
+// show, its own overflow, turned by its transforms.
 func overflowContribution(loc point, s size, childOverflow rect, border rect,
-	overflow style.Size[style.Overflow], c overflowContainer, margin rect) rect {
+	overflow style.Size[style.Overflow], n *node, c overflowContainer, margin rect) rect {
 	childOverflow = rect{
 		l: childOverflow.l + border.l, r: childOverflow.r + border.l,
 		t: childOverflow.t + border.t, b: childOverflow.b + border.t,
@@ -143,7 +184,11 @@ func overflowContribution(loc point, s size, childOverflow rect, border rect,
 	if propY {
 		startY = fmin(0, childOverflow.t)
 	}
-	r := rect{l: loc.x + startX, r: loc.x + endW, t: loc.y + startY, b: loc.y + endH}
+	r := rect{l: startX, r: endW, t: startY, b: endH}
+	if n != nil && n.st.Transformed() {
+		r = transformedBounds(n.st, standsIn(n), r, s)
+	}
+	r = rect{l: loc.x + r.l, r: loc.x + r.r, t: loc.y + r.t, b: loc.y + r.b}
 	unreachableX := r.r <= 0
 	if c.reversed[0] {
 		unreachableX = r.l >= c.size.w
@@ -169,6 +214,32 @@ func overflowContribution(loc point, s size, childOverflow rect, border rect,
 		r.b = fmax(r.b, loc.y+s.h+fmax(0, c.padding.b+margin.b))
 	}
 	return r
+}
+
+// transformedBounds is the rect round r, in the space of a border box of
+// size s in the frame of mode, once st's transforms turn it on the page.
+func transformedBounds(st *style.Computed, mode style.WritingMode, r rect, s size) rect {
+	page := s
+	if mode.Vertical() {
+		page = s.across()
+	}
+	r = fromRect(turnRect(rectOf(r), s, mode))
+	m := st.TransformAt(geom.Vec2{}, geom.V2(page.w, page.h))
+	out := rect{l: float32(math.Inf(1)), r: float32(math.Inf(-1)), t: float32(math.Inf(1)), b: float32(math.Inf(-1))}
+	for _, p := range [4]geom.Vec2{{X: r.l, Y: r.t}, {X: r.r, Y: r.t}, {X: r.l, Y: r.b}, {X: r.r, Y: r.b}} {
+		q := m.Xform(p)
+		out = rect{l: fmin(out.l, q.X), r: fmax(out.r, q.X), t: fmin(out.t, q.Y), b: fmax(out.b, q.Y)}
+	}
+	return fromRect(unturnRect(rectOf(out), page, mode))
+}
+
+// standsIn is the frame n is laid out and placed in: its parent's
+// content's, or that of the containing block that placed it.
+func standsIn(n *node) style.WritingMode {
+	if n.placer != nil {
+		return frameOf(n.placer)
+	}
+	return outerFrame(n.parent, n.box.Style)
 }
 
 func finalizeOverflow(r rect, s size, reversed [2]bool, scroll bool) overflowRect {

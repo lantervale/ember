@@ -24,6 +24,9 @@ func (p *painter) culled(e entry, ink geom.Rect) bool {
 // a live part.
 func (p *painter) missed(e entry, ink geom.Rect) bool {
 	if p.probing {
+		if xf := p.s.Transform(); !shifted(xf) {
+			return p.pointless || !reaches(ink, xf.Inverse(), p.point)
+		}
 		return p.pointless || !ink.Contains(p.s.Transform().Inverse().Xform(p.point))
 	}
 	view, bounded := p.view(e.clip)

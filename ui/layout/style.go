@@ -1,6 +1,9 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"github.com/lantervale/ember/geom"
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 // resolve is a length against a basis, as Taffy's maybe_resolve: none for auto and sizing
 // keywords, and for a percentage of a basis that is none.
@@ -130,9 +133,28 @@ func startGutter(s *style.Computed) float32 {
 	return s.ScrollbarWidth
 }
 
+// endBars is the room of a box of style st, its own on the page, its bars
+// take on the page, sc, less the gutter both-edges keeps at the start:
+// the vertical bar's, or in a vertical writing mode the horizontal one's.
+func endBars(st *style.Computed, sc size) geom.Vec2 {
+	if st == nil {
+		return geom.Vec2{X: sc.w, Y: sc.h}
+	}
+	if st.Mode.Vertical() {
+		start := float32(0)
+		if st.GutterBothEdges && scrollContainer(st.Overflow.Width) {
+			start = st.ScrollbarHeight
+		}
+		return geom.Vec2{X: sc.w, Y: sc.h - fmin(start, sc.h)}
+	}
+	return geom.Vec2{X: sc.w - fmin(startGutter(st), sc.w), Y: sc.h}
+}
+
 // gutterEdges is g, a box of style s's scrollbarGutter, on the edges it
 // stands at: the vertical bar's at the end, or the start under direction
-// rtl, as Chrome's, and both-edges' across from it.
+// rtl, as Chrome's, and both-edges' across from it; in the frame of a
+// writing mode whose blocks start on the right, the page's vertical bar
+// stands at the block start, on the page's right as Chrome's.
 func gutterEdges(s *style.Computed, g point) rect {
 	r := mirroredGutterEdges(s, g)
 	if s.Dir == style.RTL {
@@ -146,7 +168,11 @@ func gutterEdges(s *style.Computed, g point) rect {
 // the box's start once mirrored back.
 func mirroredGutterEdges(s *style.Computed, g point) rect {
 	start := fmin(startGutter(s), g.x)
-	return rect{l: start, r: g.x - start, b: g.y}
+	r := rect{l: start, r: g.x - start, b: g.y}
+	if s.Mode.BlockFromRight() {
+		r.t, r.b = r.b, 0
+	}
+	return r
 }
 
 func outOfFlow(p style.Position) bool { return p == style.Absolute || p == style.FixedPosition }

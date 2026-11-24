@@ -171,7 +171,9 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		innerH := outerH - rInset.vertical()
 		contentH := res.height - rInset.vertical()
 		free := innerH - contentH
-		k := applyAlignmentFallback(free, 1, align(alignContent))
+		a := align(alignContent)
+		a.safe = !a.unsafe
+		k := applyAlignmentFallback(free, 1, a)
 		offset := computeAlignmentOffset(free, 1, 0, k, false, true) + n.lowered
 		if some(res.firstBaseline) {
 			res.firstBaseline += offset
@@ -204,7 +206,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 				l := it.final
 				loc := point{l.location.x - rBorder.l - gutter.l, l.location.y - rBorder.t}
 				res.overflow = res.overflow.union(overflowContribution(loc, l.size,
-					l.overflow.rect, l.border, it.overflow, container, negativeEdges(l.margin)))
+					l.overflow.rect, l.border, it.overflow, it.node, container, negativeEdges(l.margin)))
 			}
 		}
 	}
@@ -315,7 +317,7 @@ func staticFromAlignment(a alignment, area span) staticPosition {
 		switch k {
 		case style.AlignCenter, style.AlignAnchorCenter:
 			return edgeCenter
-		case style.AlignEnd, style.AlignFlexEnd:
+		case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 			return edgeEnd
 		// they sit at the start
 		case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
@@ -602,7 +604,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			}
 			contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 			overflow = overflow.union(overflowContribution(contributionLoc, lo.size,
-				lo.overflow.rect, it.border, it.overflow, container, negativeEdges(nonAuto)))
+				lo.overflow.rect, it.border, it.overflow, it.node, container, negativeEdges(nonAuto)))
 			floats++
 			continue
 		}
@@ -635,7 +637,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
-		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across
+		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across ||
+			it.node.ranged()
 		if shrinks && widthStyle.Kind == style.Auto {
 			widthStyle = style.Length{Kind: style.FitContent}
 		}
@@ -680,6 +683,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		// childFloats is how far down the floats under a block of this context reach,
 		// from its border top.
 		childFloats := negInf
+		// childTop is where the block's border top stood in the context as it was laid
+		// out, and laidTop where it ended up there, its own blocks' margins collapsed.
+		var childTop, laidTop float32
 		var lo output
 		if it.inSameBFC {
 			// Where the block's border box stands in the context, its auto margins
@@ -702,6 +708,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				overflow)
 			inLines = nil
 			childFloats = child.floatHeight
+			childTop, laidTop = ctx.y+childY, child.y
 			top := child.topAdjoiningFloats()
 			ctx.adjoining = [2]bool{ctx.adjoining[0] || top[0], ctx.adjoining[1] || top[1]}
 		} else {
@@ -773,6 +780,13 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			loc = point{avoid.x + extra + insetOffset.x, avoid.y + insetOffset.y}
 		}
 		if it.inSameBFC {
+			// Floats stand where the block was laid out: what follows goes from there, the
+			// margins its first block collapsed out through this one's top, or its own
+			// blocks', placed again where it settled.
+			if moved := laidTop - (loc.y - insetOffset.y) - ctx.y; moved != 0 &&
+				(laidTop != childTop || collapsingWithFirst && ownCollapse[0]) {
+				ctx.y += moved
+			}
 			ctx.floatHeight = fmax(ctx.floatHeight, loc.y-insetOffset.y+childFloats)
 		}
 		hasAutoX := !some(margin.l) || !some(margin.r)
@@ -783,21 +797,26 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				start, free = avoid.x-resolved.l, avoidW-finalSize.w
 			}
 			off := float32(0)
-			switch justify {
+			pos := justify.Position()
+			if justify.Safe() && free < 0 {
+				pos = style.AlignStart
+			}
+			switch pos {
 			case style.AlignCenter, style.AlignAnchorCenter:
 				off = free / 2
 			case style.AlignEnd, style.AlignFlexEnd:
 				off = free
 			// they stay at the start
 			case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignFlexStart,
-				style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround, style.AlignSpaceEvenly:
+				style.AlignBaseline, style.AlignLastBaseline, style.AlignSpaceBetween, style.AlignSpaceAround,
+				style.AlignSpaceEvenly:
 			}
-			if st.Dir == style.RTL && justify != style.AlignCenter {
+			if st.Dir == style.RTL && pos != style.AlignCenter {
 				off = free - off
 			}
 			loc.x = start + nonAuto.l + insetOffset.x + off
 		}
-		if !some(firstBaseline) {
+		if !some(firstBaseline) && !it.legend {
 			if b := childFirstBaseline(lo.firstBaseline, finalSize.h, it.overflow.Height); some(b) {
 				firstBaseline = loc.y - insetOffset.y + b
 			}
@@ -825,7 +844,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, finalSize,
-			lo.overflow.rect, it.border, it.overflow, container, negativeEdges(resolved)))
+			lo.overflow.rect, it.border, it.overflow, it.node, container, negativeEdges(resolved)))
 		if run == performLayout && floats > 0 {
 			t.raiseFloats(items[:i], floats, it.node, finalSize.w)
 		}
@@ -990,7 +1009,7 @@ func (t *tree) placeLineFloats(ctx *blockContext, floats []lineFloatItem, corner
 		f.it.final.location = loc
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, f.out.size,
-			f.out.overflow.rect, f.it.border, f.it.overflow, container, negativeEdges(f.margin)))
+			f.out.overflow.rect, f.it.border, f.it.overflow, f.it.node, container, negativeEdges(f.margin)))
 	}
 	return overflow
 }

@@ -162,6 +162,9 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32, flags ...stri
 		var ready string
 		s.Eval(`document.readyState`, &ready)
 		if ready == "complete" {
+			var agent string
+			s.Eval(`navigator.userAgent`, &agent)
+			knowAgent(agent)
 			return s
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -312,6 +315,18 @@ func (s *Session) Mouse(kind string, at geom.Vec2, clicks int) {
 	s.call("Input.dispatchMouseEvent", ev, nil)
 }
 
+// darwin is macOS's GOOS.
+const darwin = "darwin"
+
+// Wheel turns the wheel over at, in the viewport's points, by delta
+// points, as a mouse's wheel: a y above zero scrolls down, an x above
+// zero right.
+func (s *Session) Wheel(at, delta geom.Vec2) {
+	s.t.Helper()
+	s.call("Input.dispatchMouseEvent", map[string]any{kindField: "mouseWheel", "x": at.X, "y": at.Y,
+		"deltaX": delta.X, "deltaY": delta.Y}, nil)
+}
+
 // ShiftArrow presses and lets go the arrow key named key (ArrowDown…)
 // with Shift held, as extending a selection by the keyboard does.
 func (s *Session) ShiftArrow(key string) {
@@ -393,17 +408,20 @@ func (s *Session) mouse(kind string, x, y float32, mods, buttons int) {
 }
 
 // keyCodes are the named keys Key presses, by the DOM's key, with their
-// Windows virtual key codes and DOM codes.
+// Windows virtual key codes and DOM codes, and for the keys that scroll a
+// page the editing command macOS's key bindings send Chrome with them,
+// which a key DevTools sends lacks (PageKey).
 //
 //nolint:gochecknoglobals // a fixed table
 var keyCodes = map[string]struct {
-	vk   int
-	code string
+	vk        int
+	code, mac string
 }{
-	"ArrowUp": {38, "ArrowUp"}, "ArrowDown": {40, "ArrowDown"}, "ArrowLeft": {37, "ArrowLeft"},
-	"ArrowRight": {39, "ArrowRight"}, "Home": {36, "Home"}, "End": {35, "End"}, "PageUp": {33, "PageUp"},
-	"PageDown": {34, "PageDown"}, "Enter": {13, "Enter"}, "Escape": {27, "Escape"}, "Tab": {9, "Tab"},
-	" ": {32, "Space"},
+	"ArrowUp": {38, "ArrowUp", ""}, "ArrowDown": {40, "ArrowDown", ""}, "ArrowLeft": {37, "ArrowLeft", ""},
+	"ArrowRight": {39, "ArrowRight", ""}, "Home": {36, "Home", "scrollToBeginningOfDocument"},
+	"End": {35, "End", "scrollToEndOfDocument"}, "PageUp": {33, "PageUp", "scrollPageUp"},
+	"PageDown": {34, "PageDown", "scrollPageDown"}, "Enter": {13, "Enter", ""}, "Escape": {27, "Escape", ""},
+	"Tab": {9, "Tab", ""}, " ": {32, "Space", ""},
 }
 
 // Key presses and lets go the key the DOM's KeyboardEvent.key names,
@@ -411,7 +429,34 @@ var keyCodes = map[string]struct {
 // types itself unless a modifier other than Shift is held.
 func (s *Session) Key(key string, mods int) {
 	s.t.Helper()
+	s.KeyAt(key, mods, time.Time{})
+}
+
+// KeyAt is Key with the events stamped at, what the page reads as their
+// time where it times keys apart (a select's type-ahead); now when zero.
+func (s *Session) KeyAt(key string, mods int, at time.Time) {
+	s.t.Helper()
+	s.key(key, mods, at, nil)
+}
+
+// PageKey is Key for a key that scrolls the page: PageUp, PageDown, Home
+// or End, sent on macOS with the command its key bindings give it, by
+// which Chrome there scrolls what nothing focused takes the key for.
+func (s *Session) PageKey(key string) {
+	s.t.Helper()
+	var commands []string
+	if k := keyCodes[key]; k.mac != "" && runtime.GOOS == darwin {
+		commands = []string{k.mac}
+	}
+	s.key(key, 0, time.Time{}, commands)
+}
+
+func (s *Session) key(key string, mods int, at time.Time, commands []string) {
+	s.t.Helper()
 	down := map[string]any{kindField: "rawKeyDown", "key": key, modifiers: mods}
+	if !at.IsZero() {
+		down["timestamp"] = float64(at.UnixMicro()) / 1e6
+	}
 	if k, ok := keyCodes[key]; ok {
 		down["windowsVirtualKeyCode"], down["code"] = k.vk, k.code
 	} else if len(key) == 1 {
@@ -424,9 +469,12 @@ func (s *Session) Key(key string, mods int) {
 	if len(key) == 1 && mods&^Shift == 0 {
 		down[kindField], down["text"] = "keyDown", key
 	}
+	if len(commands) > 0 {
+		down["commands"] = commands
+	}
 	s.call("Input.dispatchKeyEvent", down, nil)
 	up := map[string]any{kindField: "keyUp", "key": key, modifiers: mods}
-	for _, f := range []string{"windowsVirtualKeyCode", "code"} {
+	for _, f := range []string{"windowsVirtualKeyCode", "code", "timestamp"} {
 		if v, ok := down[f]; ok {
 			up[f] = v
 		}

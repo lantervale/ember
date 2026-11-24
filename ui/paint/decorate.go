@@ -328,7 +328,7 @@ func (p *painter) backgroundLayer(b *box.Box, r, strip geom.Rect, edges box.Edge
 // as a scrolling one.
 func transformed(b *box.Box) bool {
 	for ; b != nil; b = b.Parent {
-		if st := shown(b); b.Kind == box.Element && st != nil && len(st.Transform) > 0 {
+		if st := shown(b); b.Kind == box.Element && st != nil && st.Transformed() {
 			return true
 		}
 	}
@@ -629,12 +629,17 @@ func (p *painter) tiled(view, area geom.Rect, radius radii, l *style.BackgroundL
 	if shape {
 		tex = silhouette(tex)
 	}
-	backgroundTiles(view, first, rep, gap, func(tile geom.Rect) {
-		if g != nil {
-			p.gradient(tile, radii{}, g, alpha)
-			return
+	// Turned or skewed, tiles reach a point past the view for its clip to
+	// anti-alias their edges; a picture alone smooths its own.
+	backgroundTiles(grow(view, p.slant()), first, rep, gap, func(tile geom.Rect) {
+		switch {
+		case g != nil:
+			p.gradientIn(tile, radii{}, g, alpha, 0)
+		case alone:
+			p.s.SmoothImage(tile, tex, texels(tex), tint)
+		default:
+			p.s.Image(tile, tex, texels(tex), tint)
 		}
-		p.s.Image(tile, tex, texels(tex), tint)
 	})
 }
 
@@ -800,7 +805,7 @@ func (p *painter) picture(
 ) {
 	tint := fade(color.White, alpha)
 	if slice == (style.Sides[float32]{}) {
-		p.s.Image(r, tex, whole, tint)
+		p.s.SmoothImage(r, tex, whole, tint)
 		return
 	}
 	p.ninePatch(r, tex, slice, widths, repeat, tint, fill)
@@ -1426,7 +1431,8 @@ func (p *painter) border(r geom.Rect, w box.Edges, radius radii, st *style.Compu
 		}
 		return
 	}
-	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) {
+	if mitered([4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle) ||
+		p.slant() > 0 && !dashed([4]float32{tw, rw, bw, lw}, st.BorderStyle) {
 		p.bevel(r, [4]float32{tw, rw, bw, lw}, [4]color.Color{tc, rc, bc, lc}, st.BorderStyle)
 		return
 	}
@@ -1473,6 +1479,16 @@ func mitered(w [4]float32, c [4]color.Color, s style.Sides[style.BorderStyle]) b
 		sides++
 	}
 	return differ && sides > 1
+}
+
+// dashed reports whether a side of width w is dashed or dotted.
+func dashed(w [4]float32, s style.Sides[style.BorderStyle]) bool {
+	for i, x := range [4]style.BorderStyle{s.Top, s.Right, s.Bottom, s.Left} {
+		if w[i] > 0 && (x == style.BorderDashed || x == style.BorderDotted) {
+			return true
+		}
+	}
+	return false
 }
 
 // beveled reports whether a side is inset, outset, groove or ridge.
@@ -2525,36 +2541,4 @@ func placeholder(run *box.Box) bool {
 		}
 	}
 	return false
-}
-
-// transform is the element's transform in the root's space: its
-// functions in order, about its origin.
-func transform(st *style.Computed, at, size geom.Vec2) geom.Transform2D {
-	ox, _ := st.TransformOrigin.Width.Resolve(size.X)
-	oy, _ := st.TransformOrigin.Height.Resolve(size.Y)
-	o := at.Add(geom.V2(ox, oy))
-	m := geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o}
-	for _, op := range st.Transform {
-		m = m.Mul(transformOp(op, size))
-	}
-	return m.Mul(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: o.Scale(-1)})
-}
-
-func transformOp(op style.TransformOp, size geom.Vec2) geom.Transform2D {
-	a := op.A
-	switch op.Kind {
-	case style.Translate:
-		x, _ := op.X.Resolve(size.X)
-		y, _ := op.Y.Resolve(size.Y)
-		return geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(x, y)}
-	case style.ScaleOp:
-		return geom.Transform2D{X: geom.V2(a[0], 0), Y: geom.V2(0, a[1])}
-	case style.Rotate:
-		return geom.Transform2DFrom(geom.Vec2{}, a[0], 0, geom.V2(1, 1))
-	case style.Skew:
-		return geom.Transform2D{X: geom.V2(1, geom.Tan(a[1])), Y: geom.V2(geom.Tan(a[0]), 1)}
-	case style.Matrix:
-		return geom.Transform2D{X: geom.V2(a[0], a[1]), Y: geom.V2(a[2], a[3]), Origin: geom.V2(a[4], a[5])}
-	}
-	return geom.Identity2D()
 }

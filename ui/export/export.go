@@ -45,8 +45,9 @@ func Snapshots(of func(n *ui.Node) ([]byte, bool)) Option {
 }
 
 // generatedBoxes sizes Chrome's ::before and ::after boxes by their
-// border box as ui's are, which the user-agent sheet's * rule leaves out.
-const generatedBoxes = "::before, ::after { box-sizing: border-box; }\n"
+// border box as ui's are, which the user-agent sheet's * rule leaves out,
+// and takes Chrome's resizer off a game's textareas, as ui gives them none.
+const generatedBoxes = "::before, ::after { box-sizing: border-box; }\ntextarea { resize: none; }\n"
 
 // Write writes d as a self-contained HTML page: the user-agent sheet,
 // the fonts as data URLs, the document's sheets, then its tree.
@@ -301,6 +302,9 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 	if accent := accentLook(d, n); accent != "" {
 		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+accent), "; ")
 	}
+	if sized := controlSized(n); sized != "" {
+		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+sized), "; ")
+	}
 	if bar := barLook(d, n); bar != "" {
 		style = strings.TrimPrefix(strings.TrimSpace(style+"; "+bar), "; ")
 	}
@@ -309,6 +313,34 @@ func liveStyle(d *ui.Document, n *dom.Node) string {
 		style = strings.TrimPrefix(style, "; ")
 	}
 	return style
+}
+
+// controlSized is the sizes of a range of ui's own look its sheets leave auto, its
+// natural ones: Chrome's range of no look of its own has no thickness.
+func controlSized(n *dom.Node) string {
+	st := dom.Data(n).Style
+	if t, _ := n.Attr("type"); st == nil || bare(n) || n.Tag() != dom.Input || !strings.EqualFold(t, "range") {
+		return ""
+	}
+	s := layout.RangeNatural(st)
+	if st.BoxSizing == style.BorderBox {
+		pad := func(l style.Length) float32 { v, _ := l.Resolve(0); return v }
+		s.X += st.Border.Left + st.Border.Right + pad(st.Padding.Left) + pad(st.Padding.Right)
+		s.Y += st.Border.Top + st.Border.Bottom + pad(st.Padding.Top) + pad(st.Padding.Bottom)
+	}
+	// Chrome's track keeps its length along the inline axis whatever its look; across
+	// it, the look export gives it has no thickness. Both are floors, as a grid or a
+	// flexbox stretches a range past them, and generated content makes it taller.
+	generated := dom.Data(n).Before != nil || dom.Data(n).After != nil
+	vertical := st.Mode.Vertical()
+	var sized []string
+	if st.Size.Width.Kind == style.Auto && (vertical || generated) {
+		sized = append(sized, fmt.Sprintf("min-width: %gpx", s.X))
+	}
+	if st.Size.Height.Kind == style.Auto && (!vertical || generated) {
+		sized = append(sized, fmt.Sprintf("min-height: %gpx", s.Y))
+	}
+	return strings.Join(sized, "; ")
 }
 
 // controlState is the attribute that says a control's state now: a

@@ -97,3 +97,16 @@ func TestHitTestingTakesABoxsRightAndBottomEdgesAsOutsideAsChromeDoes(t *testing
 	assert.Same(t, outer, HitTest(tree(outer), geom.V2(50, 20)), "a clip's right edge is out too")
 	assert.Same(t, clipped, HitTest(tree(outer), geom.V2(49, 20)))
 }
+
+func TestAPointHitsThroughATransformByItsPixelSquare(t *testing.T) {
+	r := geom.Rect{X: 0, Y: 0, W: 40, H: 20}
+	turned := geom.Transform2DFrom(geom.Vec2{}, geom.Pi/6, 0, geom.V2(1, 1))
+	back := turned.Inverse()
+	inside := turned.Xform(geom.V2(20, 10))
+	assert.True(t, reaches(r, back, inside), "a point inside")
+	before := turned.Xform(geom.V2(-0.5, 10))
+	assert.True(t, reaches(r, back, before), "half a pixel before the left edge, the square reaches in")
+	assert.False(t, reaches(r, back, turned.Xform(geom.V2(43, 10))), "three pixels past the right edge")
+	assert.True(t, shifted(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(3, -2)}))
+	assert.False(t, shifted(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(0.5, 0)}))
+}

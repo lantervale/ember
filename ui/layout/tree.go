@@ -51,6 +51,8 @@ type Retained struct {
 	anchors *anchoring
 	// turns are the styles the last layout turned into vertical frames.
 	turns map[turnKey]*style.Computed
+	// rootStyles is the root's style as the last layout took it.
+	rootStyles rootStyles
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -139,20 +141,21 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 		t.prevTurns = k.turns
 		defer func() { k.turns = t.turns }()
 	}
-	t.icb = avail.values()
+	t.icb, t.rootEl = avail.values(), root
 	r := t.build(root, nil)
 	defer t.sweep()
 	if r == nil {
 		return t.out, nil, t
 	}
 	port := t.viewportOf(root)
-	if !avail.values().both() || frameOf(r).Vertical() {
+	if !avail.values().both() {
 		port = nil
 	}
 	var gutter, content size
+	var start point
 	switch {
 	case port != nil:
-		gutter, content = t.viewport(r, avail.values(), port)
+		gutter, content, start = t.viewport(r, avail.values(), port)
 	case frameOf(r).Vertical():
 		// the initial containing block takes the root's writing mode
 		t.root(r, avail.across())
@@ -168,7 +171,7 @@ func layoutOnce(root *dom.Node, avail spaces, fonts box.Fonts, rounding bool, an
 	t.write(r, nil)
 	r.box.Parent = nil
 	if port != nil {
-		t.out.Root = t.viewportBox(r.box, port, avail.values(), gutter, content)
+		t.out.Root = t.viewportBox(r.box, port, avail.values(), gutter, content, start)
 	}
 	t.out.Live, t.out.Applied = t.out.Live[:0], t.out.Applied[:0]
 	collectLive(t.out.Root, t.out)
@@ -238,6 +241,10 @@ type tree struct {
 	// those of the last, which it takes again; icb is the initial containing block.
 	turns, prevTurns map[turnKey]*style.Computed
 	icb              size
+	// rootEl is the root element, and rootStyles its style with its body's
+	// writing mode and direction, outside a retained layout.
+	rootEl     *dom.Node
+	rootStyles rootStyles
 }
 
 type context uint8
@@ -272,9 +279,16 @@ type node struct {
 	absolute  point
 	hoisted   []*node
 	parent    *node
-	grid      *gridInfo
+	// placer is the containing block that placed n, an out-of-flow box, when its frame
+	// isn't the one of n's parent's content: n is laid out and written in placer's.
+	placer *node
+	grid   *gridInfo
 	// subgrid is what its grid hands it in each axis it is a subgrid in.
 	subgrid [2]*subgridAxis
+	// shim is the room above an item of a subgrid of rows aligned on its baseline, where the
+	// grid round it aligned it with its own, sharing is set.
+	shim    float32
+	sharing bool
 	// row is a table row's cells' widths and heights, kept with the row;
 	// captionRoom a table's captions' room above and below its grid.
 	row         *tableRow
@@ -299,7 +313,8 @@ type node struct {
 	// leaves the table or one of its cells for borders, nil where borders are apart.
 	shared    *borderGrid
 	collapsed *rect
-	// replaced is an img, natural its picture's size (zero without one).
+	// replaced is an img, natural its picture's size (zero without one); a range's
+	// natural is the least content it takes, its track's (rangeNatural).
 	replaced bool
 	natural  size
 	// shape is what a picture that doesn't ask for a size of pixels asks
@@ -360,7 +375,7 @@ func (n *node) context() context {
 		return contextNone
 	case n.role == roleTable && len(n.kids) > 0:
 		return contextTable
-	case len(n.kids) == 0 || n.inline != nil:
+	case n.inline != nil, len(n.kids) == 0 && !n.isGrid():
 		return contextLeaf
 	case n.slider:
 		return contextFlex
@@ -392,6 +407,48 @@ func styleOf(n *dom.Node) *style.Computed {
 	return &s
 }
 
+// styleFor is e's style as layout takes it: the root's with the writing mode
+// and direction of its body, as CSS Writing Modes has the root use them, one
+// copy while the two styles are the same.
+func (t *tree) styleFor(e *dom.Node) *style.Computed {
+	st := styleOf(e)
+	if e != t.rootEl {
+		return st
+	}
+	body := bodyOf(e)
+	if body == nil {
+		return st
+	}
+	b := styleOf(body)
+	if b.Mode == st.Mode && b.Dir == st.Dir {
+		return st
+	}
+	k := &t.rootStyles
+	if t.keep != nil {
+		k = &t.keep.rootStyles
+	}
+	if k.own != st || k.on.Mode != b.Mode || k.on.Dir != b.Dir {
+		c := *st
+		c.Mode, c.Dir = b.Mode, b.Dir
+		k.own, k.on = st, &c
+	}
+	return k.on
+}
+
+// rootStyles holds the root's style own as on, with its body's writing mode and
+// direction.
+type rootStyles struct{ own, on *style.Computed }
+
+// bodyOf is root's first body child, nil for none.
+func bodyOf(root *dom.Node) *dom.Node {
+	for _, c := range root.Children() {
+		if !c.IsText() && c.Tag() == dom.Body {
+			return c
+		}
+	}
+	return nil
+}
+
 // build makes the node of an element and its subtree, nil for display: contents (whose
 // children the parent takes).
 func (t *tree) build(e *dom.Node, parent *node) *node {
@@ -400,6 +457,9 @@ func (t *tree) build(e *dom.Node, parent *node) *node {
 		return n
 	}
 	n := t.element(e, parent)
+	if isRange(e) {
+		n.natural = rangeNatural(n.box.Style)
+	}
 	if k := controlPartOf(e); k != noPart {
 		t.buildParts(n, k)
 		return n
@@ -441,8 +501,8 @@ func (t *tree) kept(e *dom.Node, parent *node) *node {
 		return nil
 	}
 	d := dom.Data(e)
-	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.box.Style != d.Style ||
-		n.st != t.turned(styleOf(e), outerFrame(parent, styleOf(e))) || !e.SameFlow(n.children) {
+	if d.Dirty&(dom.DirtyLayout|dom.DirtyDescendant) != 0 || n.box.Style != t.styleFor(e) ||
+		n.st != t.turned(t.styleFor(e), outerFrame(parent, t.styleFor(e))) || !e.SameFlow(n.children) {
 		return nil
 	}
 	return n
@@ -452,7 +512,7 @@ func (t *tree) kept(e *dom.Node, parent *node) *node {
 // again with its box and emptied, when e itself is unchanged and only something under it
 // did, else a new one.
 func (t *tree) element(e *dom.Node, parent *node) *node {
-	st := styleOf(e)
+	st := t.styleFor(e)
 	old := t.prevNodes[e]
 	if n := old; n != nil && n.box.Style == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
 		e.SameFlow(n.children) {
@@ -697,6 +757,11 @@ func (n *node) flexOrGrid() bool {
 	d := n.st.Display
 	return n.slider || d == style.FlexDisplay || d == style.InlineFlex || d == style.GridDisplay ||
 		d == style.InlineGrid
+}
+
+// isGrid reports a grid container, laid out by its tracks even when it holds nothing.
+func (n *node) isGrid() bool {
+	return !n.slider && (n.st.Display == style.GridDisplay || n.st.Display == style.InlineGrid)
 }
 
 // noteFloats sets holdsFloats where a float is among n's kids or under one of them.
@@ -1118,6 +1183,9 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	} else if outer = frameOf(n); outer.Vertical() {
 		in = t.icb.across()
 	}
+	if n.placer != nil {
+		outer = frameOf(n.placer)
+	}
 	f := turnPlaced(n.final, outer, style.HorizontalTB)
 	rewrite := t.keep == nil || n.fresh || n.performed == t.gen
 	n.fresh = false
@@ -1131,7 +1199,9 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 		at := n.absolute
 		b.Pos = geom.Vec2{X: at.x - origin.x, Y: at.y - origin.y}
 		framed = b.Pos
-		if outer.Vertical() {
+		if p := n.placer; p != nil {
+			b.Pos = placedPos(n, p)
+		} else if outer.Vertical() {
 			r := turnRect(geom.Rect{X: b.Pos.X, Y: b.Pos.Y, W: n.final.size.w, H: n.final.size.h}, in, outer)
 			b.Pos = geom.Vec2{X: r.X, Y: r.Y}
 		}
@@ -1141,7 +1211,7 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Border = box.Edges{Top: f.border.t, Right: f.border.r, Bottom: f.border.b, Left: f.border.l}
 	b.Padding = box.Edges{Top: f.padding.t, Right: f.padding.r, Bottom: f.padding.b, Left: f.padding.l}
 	b.Content, b.ScrollStart = scrollRange(n.st, f)
-	b.Scrollbar = geom.Vec2{X: f.scrollbar.w - fmin(startGutter(n.st), f.scrollbar.w), Y: f.scrollbar.h}
+	b.Scrollbar = endBars(b.Style, f.scrollbar)
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
 	b.Discarded = n.discarded
@@ -1178,12 +1248,31 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 // overflows that way: as long as the content less the padding box but
 // the vertical bar that stands, whatever gutter is empty, a right-to-left
 // box starting scrolled by its empty gutters (decision 0198).
+// placedPos is where n, an out-of-flow box p placed in its own frame, stands in its
+// parent's box on the page: its place in p turned onto the page, less the place of its
+// parent there, its ancestors up to p being written already.
+func placedPos(n, p *node) geom.Vec2 {
+	at := geom.Rect{X: n.absolute.x - p.absolute.x, Y: n.absolute.y - p.absolute.y, W: n.final.size.w,
+		H: n.final.size.h}
+	if mode := frameOf(p); mode.Vertical() {
+		at = turnRect(at, p.final.size, mode)
+	}
+	pos := geom.Vec2{X: at.X, Y: at.Y}
+	for a := n.parent; a != nil && a != p; a = a.parent {
+		pos = pos.Sub(a.box.Pos)
+	}
+	return pos
+}
+
 func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 	o := f.overflow.rect
 	content := geom.Vec2{X: o.r - o.l, Y: o.b - o.t}
 	start := geom.Vec2{X: fmin(o.l, 0), Y: fmin(o.t, 0)}
 	if !st.GutterStable || !scrollContainer(st.Overflow.Height) || st.Overflow.Width == style.Hidden {
 		return content, start
+	}
+	if st.Mode.Vertical() {
+		return verticalScrollRange(st, f, content, start)
 	}
 	g := gutterEdges(st, point{x: f.scrollbar.w, y: f.scrollbar.h})
 	w := f.size.w - f.border.l - f.border.r
@@ -1198,15 +1287,34 @@ func scrollRange(st *style.Computed, f placed) (geom.Vec2, geom.Vec2) {
 		return content, start
 	}
 	lo, hi := float32(0), over
-	switch {
-	case st.Mode.BlockFromRight():
-		lo, hi = -over, 0
-	case st.Mode.Vertical():
-	case st.Dir == style.RTL:
+	if st.Dir == style.RTL {
 		shift := g.l + g.r - bar
 		lo, hi = -(shift + over), -shift
 	}
 	return geom.Vec2{X: hi - lo + port, Y: content.Y}, geom.Vec2{X: lo, Y: start.Y}
+}
+
+// verticalScrollRange is scrollRange for a box of a vertical writing mode:
+// along its lines, the content less the padding box but the horizontal
+// bar that stands, whatever gutter is empty; a box whose blocks start on
+// the right starts scrolled to its end.
+func verticalScrollRange(st *style.Computed, f placed, content, start geom.Vec2) (geom.Vec2, geom.Vec2) {
+	w, h := f.size.w-f.border.l-f.border.r, f.size.h-f.border.t-f.border.b
+	bars := endBars(st, f.scrollbar)
+	port := geom.Vec2{X: w - bars.X, Y: h - bars.Y}
+	if content.X > port.X && st.Mode.BlockFromRight() {
+		// the overflow, from the right, takes in the vertical bar's room
+		over := fmax(content.X-w, 0)
+		content.X, start.X = over+port.X, -over
+	}
+	bar := float32(0)
+	if o := st.Overflow.Width; o == style.Scroll || o == style.OverflowAuto && content.X > port.X {
+		bar = st.ScrollbarHeight
+	}
+	if content.Y > port.Y {
+		content.Y = fmax(content.Y-(h-bar), 0) + port.Y
+	}
+	return content, start
 }
 
 // markerGap is how far a bullet stands from its item's content, past its own offset, as
@@ -1387,7 +1495,7 @@ func (t *tree) markerArea(mark markerContent, m *box.Box, baseline, x, w float32
 	if rtl {
 		x += rtlMarkerPull
 	}
-	h, above := lineHeightOf(t.fonts.Metrics(mark.st.Font), mark.st)
+	h, above := LineHeight(t.fonts.Metrics(mark.st.Font), mark.st, PixelsPerPoint(t.fonts))
 	return geom.Rect{X: x, Y: baseline - above - m.Pos.Y, W: w, H: h}
 }
 
@@ -1414,7 +1522,7 @@ func keepLayout(n *node, cumulative point) { keepIn(n, cumulative, false) }
 // boxes take their parent's place too, as no containing block places them.
 func keepIn(n *node, cumulative point, hidden bool) {
 	n.final = n.laid()
-	n.final.scrollbar = n.final.scrollbar.add(n.gutter)
+	n.final.scrollbar = n.barRoom(n.final.scrollbar)
 	n.absolute = point{cumulative.x + n.unrounded.location.x, cumulative.y + n.unrounded.location.y}
 	if n.frag != nil {
 		n.frag = nil

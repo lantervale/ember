@@ -2,7 +2,15 @@
 
 package chrome
 
-import "testing"
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/lantervale/ember/geom"
+)
 
 func TestMajorOfAUserAgent(t *testing.T) {
 	for agent, want := range map[string]int{
@@ -23,5 +31,60 @@ func TestVersionIsTheBrowsers(t *testing.T) {
 	v, err := Version()
 	if err != nil || v < 100 {
 		t.Fatalf("Chrome %d, %v", v, err)
+	}
+}
+
+// forget empties the known version until t ends, as at the process's start.
+func forget(t *testing.T) {
+	t.Helper()
+	known.Lock()
+	set, major, err := known.set, known.major, known.err
+	known.set, known.major, known.err = false, 0, nil
+	known.Unlock()
+	t.Cleanup(func() {
+		known.Lock()
+		known.set, known.major, known.err = set, major, err
+		known.Unlock()
+	})
+}
+
+func TestASessionTellsTheVersionItHoldsTheLockFor(t *testing.T) {
+	forget(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<!DOCTYPE html><p>x</p>"))
+	}))
+	defer srv.Close()
+	Open(t, srv.URL, geom.V2(100, 100), 1)
+	asked := make(chan error, 1)
+	go func() {
+		v, err := Version()
+		if err == nil && v < 100 {
+			err = fmt.Errorf("Chrome %d", v)
+		}
+		asked <- err
+	}()
+	select {
+	case err := <-asked:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the version waited for the lock its own session holds")
+	}
+}
+
+func TestTheVersionAskedUnderTheLockFailsAtOnce(t *testing.T) {
+	forget(t)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+	unlock, err := lockChrome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if _, err = Version(); err == nil {
+		t.Fatal("a version read under this process's own lock")
 	}
 }

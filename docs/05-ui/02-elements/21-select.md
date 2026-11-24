@@ -27,7 +27,7 @@ Its width is its widest option's, an option of a group behind four spaces, its p
 
 | Event | When |
 |---|---|
-| `ui.Edited{Node}`, `ui.Changed{Node}` | another option chosen: a click opens the list and a click chooses, or a press opens it and releasing over an option chooses |
+| `ui.Edited{Node}`, `ui.Changed{Node}` | another option chosen: a click opens the list and a click chooses, or a press opens it and releasing over an option chooses; or typed, as in a listbox below, which while the list is open moves its highlight |
 
 Automation: its `id`, else `data-name`, `aria-label`, its label's text, then its placeholder (`difficulty`); `press` opens it, `select` chooses an option by index, value or text.
 
@@ -45,14 +45,14 @@ With `multiple`, or a `size` above 1, the select is a listbox, as in a browser: 
 
 | | |
 |---|---|
-| a press | selects its option alone; with Command (Control off macOS) turns it on or off, with Shift selects the run from the last pressed; a drag selects the run it crosses |
-| the arrows, Home, End, Page Up and Down | select the enabled option they reach alone; with Shift the run from the anchor; with Command they move without selecting, and Space turns the option reached on or off |
-| typing a letter | selects the next option starting with it |
+| a press | selects its option alone; with Command (Control off macOS) turns it on or off, with Shift selects the run from the last pressed; a drag selects the run it crosses, and within 20 points of the top or bottom edge, or past it, scrolls the listbox on each frame, the faster the farther in |
+| the arrows, Home, End, Page Up and Down | select the enabled option they reach alone, scrolled into view at once; with Shift the run from the anchor; with Command they move without selecting, and Space turns the option reached on or off |
+| typing | letters typed within a second of each other select the option starting with them all, from the first selected on; one letter typed again goes on to the next option starting with it (decision 0206) |
 | `doc.SelectedOptions(n)`, `doc.SetSelectedOptions(n, is...)` | every selected option, as the DOM's `selectedOptions`; without `multiple` the last of `is` alone |
 | `doc.Values(n)` | what a form submits: each selected, enabled option's value |
 | `doc.Selected(n)`, `doc.Value(n)` | the first selected, as `selectedIndex` and `value` |
 
-A run passes over disabled options, and a group's label takes no press. `required` holds once an option is selected. Each change fires `ui.Edited` then `ui.Changed` (`OnInput`, `OnChange`), once a press lets go. Selected rows are grey, light blue while the listbox has the focus (`select:-ember-listbox option:checked` in the default sheet). Automation's `select` takes a list of options, which it selects alone, and a `multiple` listbox's value is the list of those selected.
+A run passes over disabled options, and a group's label takes no press. `required` holds once an option is selected. Each change fires `ui.Edited` then `ui.Changed` (`OnInput`, `OnChange`), once a press lets go. Selected rows are grey, light blue while the listbox has the focus (`select:-ember-listbox option:checked` in the default sheet); under forced colours `Highlight` under `HighlightText`, a disabled one's `GrayText`. Typing fires a change alone for each option found until a press or a key has moved the listbox, as Chrome's. Automation's `select` takes a list of options, which it selects alone, and a `multiple` listbox's value is the list of those selected.
 
 ```
 go run ./examples/93-html-elements -element select

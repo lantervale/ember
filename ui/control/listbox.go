@@ -86,6 +86,7 @@ func (s *Select) Key(i Intent, shift, command bool) Events {
 		return 0
 	}
 	was := slices.Clone(s.picked)
+	s.last = was
 	switch i {
 	case Activate:
 		if !s.enabled(s.Active) {
@@ -120,6 +121,7 @@ func (s *Select) Key(i Intent, shift, command bool) Events {
 		return 0
 	}
 	s.settle()
+	s.last = slices.Clone(s.picked)
 	return s.changed(was)
 }
 
@@ -127,6 +129,7 @@ func (s *Select) Key(i Intent, shift, command bool) Events {
 // events come once the pointer lets go (Release).
 func (s *Select) Press(i int, shift, command bool) {
 	s.held, s.was = false, slices.Clone(s.picked)
+	s.last = s.was
 	if s.Disabled || !s.ListBox || !s.enabled(i) {
 		return
 	}
@@ -168,6 +171,7 @@ func (s *Select) Release() Events {
 		return 0
 	}
 	s.held = false
+	s.last = slices.Clone(s.picked)
 	return s.changed(s.was)
 }
 
@@ -187,6 +191,19 @@ func (s *Select) run(base []bool, a, b int, on bool) {
 			s.picked[i] = on
 		}
 	}
+}
+
+// typedChange is what a listbox fires once typing selected an option, as
+// Chrome's ListBoxOnChange: input and change when the selection differs
+// from the one the player's last press or key left, else nothing; but
+// before any, a change alone, the same option found again too.
+func (s *Select) typedChange() Events {
+	if s.last == nil {
+		return Changed
+	}
+	e := s.changed(s.last)
+	s.last = slices.Clone(s.picked)
+	return e
 }
 
 func (s *Select) changed(was []bool) Events {

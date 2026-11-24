@@ -103,6 +103,8 @@ type interaction struct {
 	pinned   map[*Node]dom.State
 	scrolls  map[*Node]*paint.Scrolling
 	dragging *Node
+	// resizing is a box dragged by its resizer (resizer.go).
+	resizing *resizeDrag
 	// trackHeld is a click held on a scrollbar's track (scrollmotion.go).
 	trackHeld *trackHold
 	// barOn is the scroll container whose styled bars the pointer is on,
@@ -122,8 +124,9 @@ type interaction struct {
 	// on it.
 	pressOpened *Node
 	// listPressed is the listbox a press on one of its options began on,
-	// until its release.
+	// until its release, and listHeld how the pointer went since.
 	listPressed *Node
+	listHeld    listHold
 	// drag is a press on a Draggable element, a drag once past dragStart;
 	// rightPressed the element the right button went down on (decision 0062).
 	drag         *dragState
@@ -800,7 +803,7 @@ func (d *Document) pointer(c *twod.Canvas, in *input.State) {
 		inputfeed.Of(in).CapturePointer()
 		d.cover(c)
 	}
-	if !d.edgeCursor(c, at) {
+	if !d.edgeCursor(c, at) && !d.resizerCursor(c, at, hit) {
 		d.cssCursor(c, hit)
 		d.selectionCursor(c, hit, at)
 	}
@@ -858,7 +861,7 @@ func (d *Document) heldSelection(in *input.State, at geom.Vec2) {
 }
 
 // leftHeld moves what the held left button drags: the selection of the
-// text field pressed, a slider's thumb.
+// text field pressed, a slider's thumb, a listbox's run.
 func (d *Document) leftHeld(at geom.Vec2) {
 	if t := textOf(d.machine(d.pressed[0])); t != nil && d.focused() == d.pressed[0] {
 		d.dragText(d.pressed[0], t, at)
@@ -867,7 +870,7 @@ func (d *Document) leftHeld(at geom.Vec2) {
 		d.fire(held, r.Drag(d.along(held, at)))
 	}
 	if d.listPressed != nil {
-		d.dragListBox()
+		d.dragListBox(at)
 	}
 }
 
@@ -959,7 +962,7 @@ func (d *Document) leftPress(in *input.State, at geom.Vec2, open *control.Select
 		d.fire(takes, r.Press(d.along(takes, at)))
 	}
 	if d.listBox(takes) != nil {
-		d.pressListBox(in, takes)
+		d.pressListBox(in, takes, at)
 	}
 	d.pressSelection(at, inputfeed.Of(in).RawDown(int(input.KeyShift)))
 	return false
@@ -1408,14 +1411,14 @@ func (d *Document) keys(c *twod.Canvas, in *input.State) {
 	}
 }
 
-// typedIn hands the focused n what was typed: a listbox finds an option
+// typedIn hands the focused n what was typed: a select finds an option
 // by it. It reports a grid with a shortcut held, which leaves the keys.
 func (d *Document) typedIn(n *Node, f inputfeed.Feed, in *input.State) bool {
 	if n != nil && isGrid(n) && (f.RawDown(int(input.KeySuper)) || f.RawDown(int(input.KeyControl))) {
 		return true
 	}
-	if s := d.listBox(n); s != nil && !d.commandHeld(f) {
-		d.listBoxType(n, s, in.Text())
+	if s, ok := d.machine(n).(*control.Select); ok && !d.commandHeld(f) {
+		d.selectType(n, s, in.Text())
 	}
 	return false
 }
@@ -1834,6 +1837,10 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		return false
 	}
 	at := d.mouse(c)
+	if d.resizing != nil {
+		d.dragResize(in, at)
+		return true
+	}
 	if n := d.dragging; n != nil {
 		b := d.scroller(n)
 		s := d.scrolling(n)
@@ -1855,7 +1862,7 @@ func (d *Document) scrollPointer(c *twod.Canvas, in *input.State, hit *box.Box) 
 		return true
 	}
 	held := scrollContainers(hit)
-	if in.Pressed(input.MouseLeft) && d.pressBars(held, at) {
+	if in.Pressed(input.MouseLeft) && (d.pressResizer(hit, at) || d.pressBars(held, at)) {
 		return true
 	}
 	w, precise := in.Wheel(), in.WheelPrecise()
@@ -1936,22 +1943,22 @@ func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift
 		bars := paint.BarsOf(s, origin(s))
 		from := d.userAim(s)
 		off := from
+		dir := way
+		if kind == snapPage && k == input.KeySpace || kind == snapEnd && d.platform == textedit.Mac {
+			dir = alongBlocks(s, way)
+		}
 		switch kind {
 		case snapEnd:
-			if way.Y < 0 {
-				off.Y = bars.Start.Y
-			} else {
-				off.Y = math.MaxFloat32
-			}
+			off = toEnd(off, dir, bars.Start)
 		case snapPage:
 			port := snapportOf(s)
-			off = off.Add(geom.V2(way.X*pageStep(port.X), way.Y*pageStep(port.Y)))
+			off = off.Add(geom.V2(dir.X*pageStep(port.X), dir.Y*pageStep(port.Y)))
 		case snapAhead, snapNext:
-			off = off.Add(way.Scale(lineScroll))
+			off = off.Add(dir.Scale(lineScroll))
 		}
 		off = bars.Clamp(off)
 		if off == from {
-			if overscrollContained(s, way) {
+			if overscrollContained(s, dir) {
 				return true
 			}
 			continue
@@ -1960,6 +1967,50 @@ func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift
 		return true
 	}
 	return false
+}
+
+// alongBlocks is the way down, way, as Space, and Home and End on macOS,
+// scroll s: along its blocks, as Chrome's, leftwards in a writing mode
+// whose blocks start on the right. Page Up and Page Down, and Home and End
+// elsewhere, scroll the page as they point whatever its writing mode. A
+// viewport's blocks are its root's.
+func alongBlocks(s *box.Box, way geom.Vec2) geom.Vec2 {
+	mode := blocksOf(s)
+	if !mode.Vertical() {
+		return way
+	}
+	if mode.BlockFromRight() {
+		return geom.V2(-way.Y, 0)
+	}
+	return geom.V2(way.Y, 0)
+}
+
+// blocksOf is the writing mode the blocks of the scroller s run in: its
+// own, a viewport's its root's.
+func blocksOf(s *box.Box) style.WritingMode {
+	st := s.Style
+	if s.Kind == box.Viewport && len(s.Children) > 0 {
+		st = s.Children[0].Style
+	}
+	if st == nil {
+		return style.HorizontalTB
+	}
+	return st.Mode
+}
+
+// toEnd is off taken to the start or the end of a scroller that starts at
+// start, along the axis of way.
+func toEnd(off, way, start geom.Vec2) geom.Vec2 {
+	end := func(way, start, off float32) float32 {
+		switch {
+		case way < 0:
+			return start
+		case way > 0:
+			return math.MaxFloat32
+		}
+		return off
+	}
+	return geom.V2(end(way.X, start.X, off.X), end(way.Y, start.Y, off.Y))
 }
 
 // keyScroll is the way the key k of intent i scrolls and how, as Chrome
@@ -2046,8 +2097,9 @@ func (d *Document) pointed() *Node {
 
 // reveal scrolls each container holding n, innermost first, by the least
 // that brings n into its view: its nearest edge to the view's, or its
-// start when it is bigger than the view. With start its top goes to the
-// view's top, as far as the container scrolls.
+// start when it is bigger than the view. With start its block start goes
+// to the view's, the top, or the right or left side of a container whose
+// blocks run that way, as far as the container scrolls.
 func (d *Document) reveal(n *Node, start bool) {
 	if d.tree == nil {
 		return
@@ -2072,12 +2124,16 @@ func (d *Document) reveal(n *Node, start bool) {
 			top, left := p.Top.At(v.H), p.Left.At(v.W)
 			v = geom.Rect{X: v.X + left, Y: v.Y + top, W: v.W - left - p.Right.At(v.W), H: v.H - top - p.Bottom.At(v.H)}
 		}
-		off := bars.Scroll
-		off.X += nearest(r.X, r.W, v.X, v.W)
+		off := bars.Scroll.Add(geom.V2(nearest(r.X, r.W, v.X, v.W), nearest(r.Y, r.H, v.Y, v.H)))
 		if start {
-			off.Y += r.Y - v.Y
-		} else {
-			off.Y += nearest(r.Y, r.H, v.Y, v.H)
+			switch mode := blocksOf(s); {
+			case mode.BlockFromRight():
+				off.X = bars.Scroll.X + r.X + r.W - (v.X + v.W)
+			case mode.Vertical():
+				off.X = bars.Scroll.X + r.X - v.X
+			default:
+				off.Y = bars.Scroll.Y + r.Y - v.Y
+			}
 		}
 		from := s.Scroll
 		off = bars.Clamp(d.snap(s, from, bars.Clamp(off), snapEnd))

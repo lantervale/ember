@@ -9,5 +9,5 @@ import (
 )
 
 func TestTextAreaCard(t *testing.T) {
-	chrome.Card(t, "../internal/pages/kit-15-textarea", 560, 550, 0.012)
+	chrome.Card(t, "../internal/pages/kit-15-textarea", 560, 550, 0.0065)
 }

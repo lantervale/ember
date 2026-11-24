@@ -22,10 +22,10 @@ func (c claims) take(p style.Position) bool {
 
 // containingBlockClaims is which out-of-flow boxes a node of style st
 // lays out: the absolute ones when it is positioned, and the fixed ones
-// too when it is filtered or filters its backdrop, as Chrome does.
+// too when it holds them, as Chrome does.
 func containingBlockClaims(st *style.Computed) claims {
-	filtered := st.Filtered()
-	return claims{absolute: st.Position != style.Static || filtered, fixed: filtered}
+	holds := st.HoldsFixed()
+	return claims{absolute: st.Position != style.Static || holds, fixed: holds}
 }
 
 func alignInLine(container span, s float32, e staticEdge) float32 {
@@ -57,7 +57,7 @@ func oofAlignmentOf(a style.Align) oofAlignment {
 		return oofStretch
 	case style.AlignCenter, style.AlignAnchorCenter:
 		return oofCenter
-	case style.AlignEnd, style.AlignFlexEnd:
+	case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 		return oofEnd
 	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround,
 		style.AlignSpaceEvenly: // at the start
@@ -261,6 +261,30 @@ func (t *tree) oofLayout(n *node, out *output) {
 	out.overflow = finalizeOverflow(out.overflow.rect.union(r), area.size, out.overflow.reversed, scroll)
 }
 
+// layoutOOFBoxIn is layoutOOFBox for c placed by cb: a box whose parent's content is
+// in another frame than cb's is laid out and written in cb's, as Chrome places it in
+// its containing block's writing mode.
+func (t *tree) layoutOOFBoxIn(cb *node, c oofCandidate, area size, offset point,
+	containerOverflow style.Size[style.Overflow], gridOwner *node) oofBoxLayout {
+	n := c.node
+	mode := frameOf(cb)
+	if n.placer == nil && mode == frameOf(n.parent) {
+		return t.layoutOOFBox(c, area, offset, containerOverflow, gridOwner)
+	}
+	st, inner, acrossed := n.st, n.inner, n.across
+	n.placer = cb
+	if mode == frameOf(n.parent) {
+		n.placer = nil
+	}
+	t.frame(n, n.box.Style, mode)
+	n.cache.clear()
+	defer func() {
+		n.st, n.inner, n.across = st, inner, acrossed
+		n.cache.clear()
+	}()
+	return t.layoutOOFBox(c, area, offset, containerOverflow, gridOwner)
+}
+
 type oofBoxLayout struct {
 	layout   placed
 	surfaced []oofCandidate
@@ -298,13 +322,16 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 	h := oofAxis{
 		cbSize: area.w, inset: span{inset.l, inset.r}, margin: span{margin.l, margin.r},
 		static:    staticPosition{area: span{c.x.area.start - offset.x, c.x.area.end - offset.x}, align: c.x.align},
-		alignment: oofAlignmentOf(justifySelf), isInline: true,
+		alignment: oofAlignmentOf(justifySelf.Position()), safe: justifySelf.Safe(), unsafe: justifySelf.Unsafe(),
+		isInline:   true,
 		scrollAxis: scrollContainer(containerOverflow.Width), outer: p.outerSpan(true),
 	}
 	v := oofAxis{
 		cbSize: area.h, inset: span{inset.t, inset.b}, margin: span{margin.t, margin.b},
 		static:     staticPosition{area: span{c.y.area.start - offset.y, c.y.area.end - offset.y}, align: c.y.align},
-		alignment:  oofAlignmentOf(alignSelf),
+		alignment:  oofAlignmentOf(alignSelf.Position()),
+		safe:       alignSelf.Safe(),
+		unsafe:     alignSelf.Unsafe(),
 		scrollAxis: scrollContainer(containerOverflow.Height), outer: p.outerSpan(false),
 	}
 	stretchFit := size{h.stretchFitSize(), v.stretchFitSize()}
@@ -329,16 +356,7 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 		known.h = stretchFit.h
 		known = known.withAspectRatio(stretchRatio).mClamp(minSize, maxSize)
 	}
-	final := known
-	if !some(final.w) && !some(final.h) {
-		final.w = mClamp(t.measureChildSize(n, final, area, availSpace, contentSize, horizontal, [2]bool{}),
-			minSize.w, maxSize.w)
-	}
-	if !final.both() {
-		measured := t.measureChildSizeBoth(n, final, area, availSpace, contentSize, [2]bool{})
-		final = final.or(measured)
-	}
-	final = final.mClamp(minSize, maxSize)
+	final := t.oofMeasured(n, known, area, availSpace, minSize, maxSize)
 
 	out := t.computeChild(n, input{
 		run:             performLayout,
@@ -364,6 +382,24 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 	}
 	n.unrounded = layout
 	return oofBoxLayout{layout: layout, surfaced: out.oof, overflow: st.Overflow}, p.fits(layout, offset)
+}
+
+// oofMeasured is the size of n, an absolutely positioned box of the sizes known, where
+// its content gives those it lacks.
+func (t *tree) oofMeasured(n *node, known, area size, avail spaces, minSize, maxSize size) size {
+	final := known
+	if n.replaced && !some(final.w) && !some(final.h) {
+		// sized as an inline picture: its min and max sizes transfer through its ratio
+		final = t.measureChildSizeBoth(n, final, area, avail, inherentSize)
+	}
+	if !some(final.w) && !some(final.h) {
+		final.w = mClamp(t.measureChildSize(n, final, area, avail, contentSize, horizontal, [2]bool{}),
+			minSize.w, maxSize.w)
+	}
+	if !final.both() {
+		final = final.or(t.measureChildSizeBoth(n, final, area, avail, contentSize))
+	}
+	return final.mClamp(minSize, maxSize)
 }
 
 // performOOF lays out the candidates this containing block claims, and the ones they
@@ -401,7 +437,7 @@ func (t *tree) performOOF(n *node, candidates []oofCandidate, area size, offset 
 		if c.area != nil {
 			cbSize, cbAt, owner = c.area.size, c.area.offset, nil
 		}
-		lb := t.layoutOOFBox(c, cbSize, cbAt, containerOverflow, owner)
+		lb := t.layoutOOFBoxIn(n, c, cbSize, cbAt, containerOverflow, owner)
 		for _, s := range translateCandidates(lb.surfaced, lb.layout.location) {
 			if cl.take(s.position) {
 				work = append(work, s)
@@ -411,7 +447,7 @@ func (t *tree) performOOF(n *node, candidates []oofCandidate, area size, offset 
 		}
 		loc := point{lb.layout.location.x - offset.x, lb.layout.location.y - offset.y}
 		overflow = overflow.union(overflowContribution(loc, lb.layout.size,
-			lb.layout.overflow.rect, lb.layout.border, lb.overflow, container, rect{}))
+			lb.layout.overflow.rect, lb.layout.border, lb.overflow, c.node, container, rect{}))
 	}
 	return hoisted, unclaimed, overflow
 }
