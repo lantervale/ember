@@ -154,9 +154,24 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/vertical-root", 400, 240, 0.004},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
+			if major, why := pageSince(c.pkg); major > 0 {
+				chrome.Since(t, major, why)
+			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}
+}
+
+// pageSince is the Chrome version from which a page draws as ui does,
+// and what changed then; none for a page every version draws alike.
+func pageSince(pkg string) (int, string) {
+	switch pkg {
+	case "./internal/pages/scrollbar-gutter":
+		return 158, "scrollbar-color's bars lie over the content, and a short styled thumb is at least 26 points long"
+	case "./internal/pages/scrollbar-buttons":
+		return 157, "a short styled thumb is at least 26 points long"
+	}
+	return 0, ""
 }
 
 // TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of

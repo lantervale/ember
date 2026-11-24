@@ -4,6 +4,7 @@ package ui_test
 
 import (
 	"encoding/json"
+	"runtime"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -37,7 +38,13 @@ func groupedSelects() []*ui.Node {
 func TestASelectWithOptgroupsIsAsWideAsChromes(t *testing.T) {
 	d := ui.NewDocument()
 	d.Body().Append(groupedSelects()...)
-	r := chrome.Match(t, d, geom.V2(640, 200))
+	// Chrome on Linux makes a select of the system font a point shorter
+	// (21 for ui's and macOS's 22), the rows below it two higher.
+	within := float32(chrome.Tolerance)
+	if runtime.GOOS != "darwin" {
+		within = 2
+	}
+	r := chrome.MatchWithin(t, d, geom.V2(640, 200), within)
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 

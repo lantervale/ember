@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -126,6 +127,14 @@ body { margin: 8px; }
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
 
+// unhovered is s with its hover left out.
+func unhovered(s style.Shade) style.Shade {
+	if s == style.ShadeHovered {
+		return style.ShadeRest
+	}
+	return s
+}
+
 // TestAccentShadesAreChromes hovers and presses Chrome's own ranges and
 // checkboxes of several accents and reads the colours it fills them
 // with: the range's fill and thumb, the checkbox's box, each within a
@@ -179,6 +188,11 @@ input { position: absolute; margin: 0; } [type=checkbox] { width: 20px; height: 
 			{"over the checkbox", box, false, style.ShadeRest, style.ShadeRest, style.ShadeHovered},
 			{"a press on the checkbox", box, true, style.ShadeRest, style.ShadeRest, style.ShadePressed},
 		} {
+			if runtime.GOOS == "linux" {
+				// Chrome on Linux draws a hovered accent as at rest
+				// (docs/05-ui/10-missing.md).
+				c.thumb, c.fill, c.box = unhovered(c.thumb), unhovered(c.fill), unhovered(c.box)
+			}
 			s.Mouse("mouseMoved", away, 0)
 			s.Mouse("mouseMoved", c.pointer, 0)
 			if c.press {
