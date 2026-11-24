@@ -4,6 +4,7 @@ package ui_test
 
 import (
 	"encoding/json"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -57,11 +58,34 @@ func listBoxColours(t *testing.T, scheme string) {
 	for i, n := range nodes {
 		inks := ui.ShownInks(n)
 		for k, p := range props {
-			if got, want := emberColour(inks[k]), chromeColour(t, styles[i][p]); got != want {
+			got, want := emberColour(inks[k]), chromeColour(t, styles[i][p])
+			if linux, ok := linuxFocusedSelection(scheme, n, focused, p); ok {
+				got = linux
+			}
+			if got != want {
 				t.Errorf("element %d (%s %q) %s: %v, Chrome %v", i, n.Tag(), n.Text(), p, got, want)
 			}
 		}
 	}
+}
+
+// linuxFocusedSelection is the colour Chrome on Linux gives property p
+// of a selected option n of the focused listbox in the light scheme,
+// where macOS's (and ui's) differ: its own active selection, white on
+// #1967d2, and #c8c8c8 under a disabled one (docs/05-ui/10-missing.md).
+func linuxFocusedSelection(scheme string, n, focused *ui.Node, p string) ([4]int, bool) {
+	if runtime.GOOS == "darwin" || scheme != "light" || n.Parent() != focused {
+		return [4]int{}, false
+	}
+	switch kids := focused.Children(); {
+	case n == kids[0] && p == "color":
+		return [4]int{255, 255, 255, 100}, true
+	case n == kids[0]:
+		return [4]int{25, 103, 210, 100}, true
+	case n == kids[2] && p == "background-color":
+		return [4]int{200, 200, 200, 100}, true
+	}
+	return [4]int{}, false
 }
 
 // TestAListBoxSubmitsAndValidatesAsChromes: a form holds every selected

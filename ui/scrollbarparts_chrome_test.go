@@ -3,6 +3,7 @@
 package ui_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -72,6 +73,12 @@ func TestBothEdgesGuttersAsChromes(t *testing.T) {
 // over the content, keeping no gutter, whether ::-webkit-scrollbar styles
 // them or not; the bars it leaves alone keep theirs.
 func TestColouredScrollbarsTakeNoRoomAsChromes(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		// Chrome 156 on Linux draws scrollbar-color's bars as classic ones
+		// in a gutter, its OverlayScrollbar feature on or not
+		// (docs/05-ui/10-missing.md).
+		t.Skip("scrollbar-color's bars lie over the content as Chrome on macOS's")
+	}
 	const sheet = `.s { width: 120px; height: 80px; overflow: scroll; margin: 4px; }
 .s > div { width: 300px; height: 300px; }
 .c { scrollbar-color: #c33 #ddd; }
