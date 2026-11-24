@@ -90,9 +90,10 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | `line-clamp: auto` whose last line fits but the padding below it in its block doesn't | the blocks after the clamp laid out whole, where Chrome's keep the clamp it first tried, one line lower |
 | `-webkit-line-clamp` and `line-clamp` on one element | `line-clamp` wins whatever their order, where Chrome reads them as one property, the last declared winning |
 | past a `line-clamp`'s last line, a float inside its lines, an inline block | still drawn, where Chrome hides them |
-| a viewport that scrolls under a root of vertical writing mode | the viewport doesn't scroll: the root is laid out in the viewport as one that doesn't |
 | a percentage padding of an orthogonal flow | of its container's block size, where Chrome takes its inline size |
-| `position: sticky` in vertical writing modes | not checked against Chrome |
+| `position: sticky` in a scroll container of vertical writing mode other than the viewport | not checked against Chrome (in a vertical root's viewport it is) |
+| the content of a scroll container of vertical writing mode and `direction: rtl` with a horizontal bar | placed against its padding box's bottom, the bar's room in it, where Chrome places it at the scrollport's top |
+| the viewport's bars and corner under a root of vertical writing mode, as Chrome draws them | not compared in pixels: headless Chrome hides a window's own bars in a picture |
 | a size container query on a box of vertical lines: `width`, `height`, `inline-size` and `block-size` | read as in horizontal lines, the inline size the width |
 | the rules between columns of a multi-column box of vertical lines | drawn as if its columns stood side by side |
 | `first baseline`, `last baseline`, `safe` and `unsafe` in `align-self`, `align-items`, `justify-self`, `justify-items` and `align-content` | the declaration dropped: an item aligns by `auto`, where Chrome reads them (an absolutely positioned box's static place in a grid, which Chrome puts at the start for `last baseline`, lands there all the same) |

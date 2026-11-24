@@ -1943,22 +1943,22 @@ func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift
 		bars := paint.BarsOf(s, origin(s))
 		from := d.userAim(s)
 		off := from
+		dir := way
+		if kind == snapEnd || kind == snapPage && (k == input.KeySpace || d.platform != textedit.Mac) {
+			dir = alongBlocks(s, way)
+		}
 		switch kind {
 		case snapEnd:
-			if way.Y < 0 {
-				off.Y = bars.Start.Y
-			} else {
-				off.Y = math.MaxFloat32
-			}
+			off = toEnd(off, dir, bars.Start)
 		case snapPage:
 			port := snapportOf(s)
-			off = off.Add(geom.V2(way.X*pageStep(port.X), way.Y*pageStep(port.Y)))
+			off = off.Add(geom.V2(dir.X*pageStep(port.X), dir.Y*pageStep(port.Y)))
 		case snapAhead, snapNext:
-			off = off.Add(way.Scale(lineScroll))
+			off = off.Add(dir.Scale(lineScroll))
 		}
 		off = bars.Clamp(off)
 		if off == from {
-			if overscrollContained(s, way) {
+			if overscrollContained(s, dir) {
 				return true
 			}
 			continue
@@ -1967,6 +1967,49 @@ func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift
 		return true
 	}
 	return false
+}
+
+// alongBlocks is the way down, way, as the keys that page and end scroll s:
+// along its blocks, as Chrome's, leftwards in a writing mode whose blocks
+// start on the right; but for Space, Chrome on macOS pages down the page
+// whatever its writing mode. A viewport's blocks are its root's.
+func alongBlocks(s *box.Box, way geom.Vec2) geom.Vec2 {
+	mode := blocksOf(s)
+	if !mode.Vertical() {
+		return way
+	}
+	if mode.BlockFromRight() {
+		return geom.V2(-way.Y, 0)
+	}
+	return geom.V2(way.Y, 0)
+}
+
+// blocksOf is the writing mode the blocks of the scroller s run in: its
+// own, a viewport's its root's.
+func blocksOf(s *box.Box) style.WritingMode {
+	st := s.Style
+	if s.Kind == box.Viewport && len(s.Children) > 0 {
+		st = s.Children[0].Style
+	}
+	if st == nil {
+		return style.HorizontalTB
+	}
+	return st.Mode
+}
+
+// toEnd is off taken to the start or the end of a scroller that starts at
+// start, along the axis of way.
+func toEnd(off, way, start geom.Vec2) geom.Vec2 {
+	end := func(way, start, off float32) float32 {
+		switch {
+		case way < 0:
+			return start
+		case way > 0:
+			return math.MaxFloat32
+		}
+		return off
+	}
+	return geom.V2(end(way.X, start.X, off.X), end(way.Y, start.Y, off.Y))
 }
 
 // keyScroll is the way the key k of intent i scrolls and how, as Chrome
@@ -2053,8 +2096,9 @@ func (d *Document) pointed() *Node {
 
 // reveal scrolls each container holding n, innermost first, by the least
 // that brings n into its view: its nearest edge to the view's, or its
-// start when it is bigger than the view. With start its top goes to the
-// view's top, as far as the container scrolls.
+// start when it is bigger than the view. With start its block start goes
+// to the view's, the top, or the right or left side of a container whose
+// blocks run that way, as far as the container scrolls.
 func (d *Document) reveal(n *Node, start bool) {
 	if d.tree == nil {
 		return
@@ -2079,12 +2123,16 @@ func (d *Document) reveal(n *Node, start bool) {
 			top, left := p.Top.At(v.H), p.Left.At(v.W)
 			v = geom.Rect{X: v.X + left, Y: v.Y + top, W: v.W - left - p.Right.At(v.W), H: v.H - top - p.Bottom.At(v.H)}
 		}
-		off := bars.Scroll
-		off.X += nearest(r.X, r.W, v.X, v.W)
+		off := bars.Scroll.Add(geom.V2(nearest(r.X, r.W, v.X, v.W), nearest(r.Y, r.H, v.Y, v.H)))
 		if start {
-			off.Y += r.Y - v.Y
-		} else {
-			off.Y += nearest(r.Y, r.H, v.Y, v.H)
+			switch mode := blocksOf(s); {
+			case mode.BlockFromRight():
+				off.X = bars.Scroll.X + r.X + r.W - (v.X + v.W)
+			case mode.Vertical():
+				off.X = bars.Scroll.X + r.X - v.X
+			default:
+				off.Y = bars.Scroll.Y + r.Y - v.Y
+			}
 		}
 		from := s.Scroll
 		off = bars.Clamp(d.snap(s, from, bars.Clamp(off), snapEnd))

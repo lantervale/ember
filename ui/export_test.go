@@ -50,6 +50,13 @@ func ShownAccent(n *Node) color.Color { return dom.Data(n).Shown.AccentColor }
 // the viewport's for the root of a Document whose viewport scrolls.
 func ScrollSize(d *Document, n *Node) geom.Vec2 { return d.scroller(n).Content }
 
+// ClientSize is the size of n's scrollport from the last layout, as the
+// DOM's clientWidth and clientHeight, the viewport's as ScrollSize's.
+func ClientSize(d *Document, n *Node) geom.Vec2 {
+	b := d.scroller(n)
+	return b.Size.Sub(geom.V2(b.Border.Horizontal(), b.Border.Vertical())).Sub(b.Scrollbar)
+}
+
 // SetPlatform makes every Document follow p's key conventions until t ends.
 func SetPlatform(t testing.TB, p textedit.Platform) {
 	was := currentPlatform

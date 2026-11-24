@@ -119,6 +119,7 @@ func (p *listBoxDriver) drag(mods int, through ...geom.Vec2) {
 var keysOf = map[string]input.Key{ //nolint:gochecknoglobals // a test's table
 	"ArrowUp": input.KeyUp, "ArrowDown": input.KeyDown, "Home": input.KeyHome, "End": input.KeyEnd,
 	"PageUp": input.KeyPageUp, "PageDown": input.KeyPageDown, " ": input.KeySpace,
+	"ArrowLeft": input.KeyLeft, "ArrowRight": input.KeyRight,
 }
 
 func (p *listBoxDriver) key(name string, mods int) {
