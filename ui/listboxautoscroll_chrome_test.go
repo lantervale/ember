@@ -68,7 +68,9 @@ func TestAListBoxsKeysScrollItAtOnceAsChromes(t *testing.T) {
 // over a listbox, a pointer within 20 points of its top or bottom edge,
 // or past it, scrolls it each frame by how far it lies into that belt,
 // as Chrome's autoscroll; the options a still pointer comes over wait
-// for it to move. Chrome's frames are its own, so the pace a frame is
+// for it to move. The press scrolls its option into view, which Chrome
+// does at its next frame, so Chrome is given its frames before the
+// pointer moves on. Chrome's frames are its own, so the pace a frame is
 // compared, measured over Chrome's animation frames.
 func TestADragNearAListBoxsEdgeScrollsItAsChromes(t *testing.T) {
 	args := []ui.Arg{ui.ID("k"), multiple(), ui.Attr("size", "4")}
@@ -125,19 +127,20 @@ func TestADragNearAListBoxsEdgeScrollsItAsChromes(t *testing.T) {
 		in.SetMouseButton(input.MouseLeft, false)
 		w.RunFrames(2)
 
+		twoFrames(s)
 		s.Press(x, row, 0)
+		twoFrames(s)
 		s.Move(x, next, 0, true)
-		time.Sleep(100 * time.Millisecond)
+		twoFrames(s)
 		s.Eval(`(() => { const k = document.getElementById("k"); window.S = [];
 	(function f() { S.push(k.scrollTop); if (S.length < 12) requestAnimationFrame(f); })(); return 1; })()`, nil)
 		s.Move(x, c.at, 0, true)
-		time.Sleep(400 * time.Millisecond)
 		var tops []float32
-		s.Eval(`S`, &tops)
+		s.Eval(`new Promise(r => (function f() { S.length < 12 ? requestAnimationFrame(f) : r(S); })())`, &tops)
 		var chromes []int
 		s.Eval(`[...document.getElementById("k").options].flatMap((o, i) => o.selected ? [i] : [])`, &chromes)
 		s.Release(x, c.at, 0)
-		time.Sleep(100 * time.Millisecond)
+		twoFrames(s)
 		if start != tops[0] {
 			t.Errorf("%s: the press left ui at %v, Chrome at %v", c.name, start, tops[0])
 		}
@@ -154,4 +157,10 @@ func TestADragNearAListBoxsEdgeScrollsItAsChromes(t *testing.T) {
 			t.Errorf("%s: ui scrolls %v a frame, Chrome %v (%v)", c.name, got, want, tops)
 		}
 	}
+}
+
+// twoFrames waits for two of Chrome's animation frames, so the work of the
+// first, as a press's scroll to its option, is done.
+func twoFrames(s *chrome.Session) {
+	s.Eval(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`, nil)
 }
