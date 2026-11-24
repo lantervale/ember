@@ -41,6 +41,13 @@ tasks:
       GOOS: {sh: 'echo ${GOOS:-$(go env GOOS)}'}
       GOARCH: {sh: 'echo ${GOARCH:-$(go env GOARCH)}'}
 
+  chrome:
+    desc: 'Fetch the Chrome for Testing build CI checks ui against (ui/internal/chrome/VERSION) into ui/internal/chrome/lib, ignored by git; the ui Chrome tests then run against it rather than the system''s Chrome (EMBER_CHROME still wins). DRY_RUN=1 says what it would fetch; GOOS/GOARCH pick another platform''s'
+    cmds: ['sh ui/internal/chrome/scripts/fetch.sh {{.GOOS}} {{.GOARCH}}']
+    vars:
+      GOOS: {sh: 'echo ${GOOS:-$(go env GOOS)}'}
+      GOARCH: {sh: 'echo ${GOARCH:-$(go env GOARCH)}'}
+
   package:
     desc: 'Build a game with its wgpu-native library beside it into dist (a signed .app on macOS); PKG=<package> NAME=<name>, GOOS/GOARCH pick another platform'
     cmds: ['sh internal/wgpu/scripts/package.sh {{.PKG}} {{.NAME}} {{.GOOS}} {{.GOARCH}}']
@@ -72,7 +79,7 @@ tasks:
       - go run ./ui/internal/emberdiff -base '{{.BASE}}'
 
   test:chrome:
-    desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome, from EMBER_CHROME on other systems than macOS, task wgpu and a GPU). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
+    desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome: EMBER_CHROME, else task chrome''s, else the system''s on macOS; task wgpu and a GPU). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
     vars:
       REPORT: '{{.EMBER_CHROME_REPORTS | default (print (coalesce (env "TMPDIR") (env "TEMP") "/tmp") "/ember-ui-report")}}'
     cmds:

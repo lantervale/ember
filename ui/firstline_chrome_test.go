@@ -105,7 +105,6 @@ p { margin: 0 0 12px; }
 // A drop cap of a fractional size sinks its size rounded down and rises
 // over the first line by the rest, pushing the lines down, as Chrome 158.
 func TestFractionalInitialLettersMatchChrome(t *testing.T) {
-	chrome.Since(t, 158, "a fractional initial-letter sinks its size rounded down, no longer up")
 	for _, size := range []string{"1.5", "2.3", "2.5", "2.7", "3.5", "2.5 drop", "2.5 raise", "2.5 3"} {
 		t.Run(size, func(t *testing.T) {
 			d := ui.NewDocument(ui.CSS(`

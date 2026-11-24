@@ -149,7 +149,6 @@ func TestLineBreakAnywhereAsChrome(t *testing.T) {
 			)
 		},
 		"ideographs at the content's end": func(t *testing.T) *ui.Document {
-			chrome.Since(t, 158, "a closing bracket the content's last line would overflow by is trimmed")
 			return hanPage(t, "p { width: 100px; line-break: anywhere; }",
 				hanP("width: auto; display: inline-block; width: min-content", ui.Text("漢字。」")))
 		},

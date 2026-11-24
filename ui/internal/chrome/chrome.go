@@ -2,8 +2,9 @@
 
 // Package chrome is the layout tests' reference: it lays an exported
 // Document out in headless Google Chrome and compares every element's
-// getBoundingClientRect with its Node.Box. Tests run with -tags chrome;
-// EMBER_CHROME names the browser when it isn't in /Applications.
+// getBoundingClientRect with its Node.Box. Tests run with -tags chrome
+// against EMBER_CHROME, else the Chrome for Testing task chrome fetched
+// (the one CI pins, VERSION), else the system's Chrome on macOS.
 package chrome
 
 import (
@@ -102,13 +103,6 @@ type generatedBox struct {
 	element int
 	after   bool
 	rect    geom.Rect
-}
-
-func browser() string {
-	if p := os.Getenv("EMBER_CHROME"); p != "" {
-		return p
-	}
-	return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 }
 
 // Screenshot writes Chrome's picture of page in a viewport of size

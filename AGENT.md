@@ -71,6 +71,7 @@ go run ./games/flap
 go run ./examples/92-ui-kit -element button   # each ui kit component alone, its events logged (ui: HTML elements + a CSS subset, decision 0049; guide docs/05-ui)
 go run ./examples/93-html-elements -element p   # each ui element alone in its default look (div … canvas); its test runs align.Check on every one
 task test:all                       # vet + tests, GPU goldens, every ui Chrome suite/pixel page/card against its threshold (table last; reports in EMBER_CHROME_REPORTS)
+task chrome                         # the Chrome for Testing CI pins (ui/internal/chrome/VERSION, MD5SUMS) into the ignored ui/internal/chrome/lib; the ui Chrome tests prefer it to the system's (EMBER_CHROME still wins), so a machine compares with CI's Chrome; bump VERSION and MD5SUMS together
 task test:ember-diff BASE=wip        # ember against itself: every kit page, 92 page and the tileset start card at BASE vs the working tree, exact pixels; run it on any ui/kit refactor meant to change nothing
 go run ./tools/tileset -props props.json path/to/walls.tsj   # tile objects: collision and light-only shapes, lit preview, collision walker; saves back to the .tsj (engine tile properties only, a game passes its own -props)
 task web PKG=./examples/19-sprites  # the example built for the browser (js/wasm + WebGPU, decision 0054), page in dist/web

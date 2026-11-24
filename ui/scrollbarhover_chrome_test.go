@@ -31,9 +31,6 @@ func TestScrollbarPartsUnderTheMouseAsChromes(t *testing.T) {
 		{"viewport-thumb", viewport, geom.V2(313, 95), false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if c.pkg == hover {
-				chrome.Since(t, 157, "a short styled thumb is at least 26 points long")
-			}
 			mouse := fmt.Sprintf("%g,%g@0", c.at.X, c.at.Y)
 			if c.pressed {
 				mouse += ";left:4-30"

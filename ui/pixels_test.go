@@ -163,24 +163,9 @@ func TestPagesLookLikeChrome(t *testing.T) {
 				// (docs/05-ui/10-missing.md).
 				t.Skip("Chrome on Windows may shoot the animated GIF still on its first frame")
 			}
-			if major, why := pageSince(c.pkg); major > 0 {
-				chrome.Since(t, major, why)
-			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}
-}
-
-// pageSince is the Chrome version from which a page draws as ui does,
-// and what changed then; none for a page every version draws alike.
-func pageSince(pkg string) (int, string) {
-	switch pkg {
-	case "./internal/pages/scrollbar-gutter":
-		return 158, "scrollbar-color's bars lie over the content, and a short styled thumb is at least 26 points long"
-	case "./internal/pages/scrollbar-buttons", "./internal/pages/scrollbar-resizer":
-		return 157, "a short styled thumb is at least 26 points long"
-	}
-	return 0, ""
 }
 
 // TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of
