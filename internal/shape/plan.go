@@ -72,6 +72,9 @@ type Plan struct {
 	font *Font
 	gsub []planned
 	gpos []planned
+	// arabic are the lookups of HarfBuzz's Arabic fallback, applied after
+	// rlig's stage, for Arabic in a face without its joined forms.
+	arabic []planned
 	// first are the glyphs one of its lookups may start at.
 	first glyphSet
 	// kerns is whether the run is kerned.
@@ -139,6 +142,7 @@ func (f *Font) PlanAt(script Tag, features string, vf *varfont.Font, at varfont.
 	asked, pauses := requests(script, sh, ParseFeatures(features))
 	m := masks(asked)
 	marks := f.gsub.inLangSys(gsubLS, mark) || f.gpos.inLangSys(gposLS, mark)
+	fallback := sh == arabicShaper && f.arabicFallback(script, gsubLS, gposLS)
 	positions := f.gpos.scripts != nil && (sh != hebrewShaper || gposChosen == hebr)
 	if !positions {
 		gposLS = nil
@@ -154,6 +158,9 @@ func (f *Font) PlanAt(script Tag, features string, vf *varfont.Font, at varfont.
 			p.forms[i] = m[t]
 		}
 	}
+	if fallback {
+		p.arabic = f.arabicPlanned(m)
+	}
 	switch sh { //nolint:exhaustive // the shapers that do something here
 	case indicShaper:
 		p.indic = newIndicPlan(p)
@@ -162,11 +169,17 @@ func (f *Font) PlanAt(script Tag, features string, vf *varfont.Font, at varfont.
 	case useShaper:
 		p.use = &usePlan{rphf: m[MakeTag("rphf")]}
 	}
-	for _, l := range append(slices.Clip(p.gsub), p.gpos...) {
+	for _, l := range p.lookups() {
 		p.first.union(l.lk.first)
 	}
 	f.plans[key] = p
 	return p
+}
+
+// lookups are all of p's lookups: GSUB's, the Arabic fallback's and
+// GPOS's.
+func (p *Plan) lookups() []planned {
+	return slices.Concat(p.gsub, p.arabic, p.gpos)
 }
 
 // stageOf is the GSUB stage feature t applies at, -1 when the plan has
@@ -207,7 +220,7 @@ func (p *Plan) Mentions(g uint16) bool {
 	defer p.font.mu.Unlock()
 	if p.mentioned == nil {
 		p.mentioned = glyphSet{}
-		for _, l := range append(slices.Clip(p.gsub), p.gpos...) {
+		for _, l := range p.lookups() {
 			for _, s := range l.lk.subs {
 				l.lk.seconds(s, &p.mentioned)
 			}

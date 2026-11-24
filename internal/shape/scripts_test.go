@@ -174,6 +174,31 @@ func TestJoiningScriptsOfTheUSEAreShapedAsHarfBuzzShapesThem(t *testing.T) {
 	t.Logf("%d texts compared", n)
 }
 
+// TestArabicInAFaceOfPresentationFormsJoinsAsHarfBuzzJoinsIt compares
+// Arabic in a face with no layout tables but the presentation forms of
+// its cmap with HarfBuzz 14.2.1's fallback shaping: each letter takes its
+// joined form, a letter without one stays as it is, two or three forms
+// with a ligature take it, a shadda and a mark theirs, and the marks are
+// placed by their combining classes.
+func TestArabicInAFaceOfPresentationFormsJoinsAsHarfBuzzJoinsIt(t *testing.T) {
+	harfBuzz14(t)
+	n := compareFaces(t, []hbFace{{"testdata/go-old-arabic.ttf", 0, []string{
+		"بتب", "بمب", "لا", "بلا", "بن ن", "نبن", "هه", "ههه", "لأ", "لأب", "بم", "لمح", "لمحب", "ـبـ", "ء ب",
+		"بَّت", "بَتِ", "بْ", "بَّ", "لَا", "لاَ", "بّم", "ب\u200dب", "ب\u200cب", "أب", "دب", "سلام", "يمين",
+	}}})
+	t.Logf("%d texts compared", n)
+}
+
+// harfBuzz14 skips a test that ports HarfBuzz 14.2.1 where hb-shape is
+// another release.
+func harfBuzz14(t *testing.T) {
+	t.Helper()
+	if out, err := exec.Command("hb-shape", "--version").Output(); err == nil &&
+		!strings.HasPrefix(string(out), "hb-shape (HarfBuzz) 14.2.1\n") {
+		t.Skipf("hb-shape is not HarfBuzz 14.2.1: %s", strings.SplitN(string(out), "\n", 2)[0])
+	}
+}
+
 // TestVariationSequencesTakeTheirGlyphs compares characters followed by
 // variation selectors with HarfBuzz's: a sequence the face's cmap maps
 // is drawn with its glyph, one it does not as its character and the
@@ -203,10 +228,7 @@ func TestLongSyllablesAreShapedAsHarfBuzzShapesThem(t *testing.T) {
 	}
 	// HarfBuzz's handling of long syllables changes between releases;
 	// shape ports 14.2.1's.
-	if out, err := exec.Command("hb-shape", "--version").Output(); err == nil &&
-		!strings.HasPrefix(string(out), "hb-shape (HarfBuzz) 14.2.1\n") {
-		t.Skipf("hb-shape is not HarfBuzz 14.2.1: %s", strings.SplitN(string(out), "\n", 2)[0])
-	}
+	harfBuzz14(t)
 	n := compareFaces(t, []hbFace{{"testdata/noto-devanagari.ttf", 0, long}})
 	t.Logf("%d texts compared", n)
 }

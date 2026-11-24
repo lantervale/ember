@@ -3,8 +3,9 @@
 # capitals, figures, fractions and class kerning added (features.py),
 # go-arabic.ttf, the same ASCII with stand-ins for Arabic letters and
 # marks, their joining, attachment and superiors (arabic.py),
-# go-thai.ttf and go-hebrew.ttf, stand-ins for Thai and Hebrew as old
-# fonts have them, with no layout tables (scripts.py), go-spaced.ttf,
+# go-thai.ttf, go-hebrew.ttf and go-old-arabic.ttf, stand-ins for Thai,
+# Hebrew and Arabic as old fonts have them, with no layout tables
+# (scripts.py), go-spaced.ttf,
 # a ligature and contextual alternates reaching across a space (spaced.py),
 # go-han.ttf, stand-ins for ideographs and full-width punctuation with
 # halt (han.py), go-han-chws.ttf, the same with a chws of its own
@@ -18,7 +19,7 @@ set -e
 pyftsubset "$1" --unicodes="U+0020-007E" --output-file=ascii.ttf
 "$2" "$(dirname "$0")/features.py" ascii.ttf go-features.ttf
 "$2" "$(dirname "$0")/arabic.py" ascii.ttf go-arabic.ttf
-"$2" "$(dirname "$0")/scripts.py" ascii.ttf go-thai.ttf go-hebrew.ttf
+"$2" "$(dirname "$0")/scripts.py" ascii.ttf go-thai.ttf go-hebrew.ttf go-old-arabic.ttf
 "$2" "$(dirname "$0")/spaced.py" ascii.ttf go-spaced.ttf
 "$2" "$(dirname "$0")/han.py" ascii.ttf go-han.ttf
 "$2" "$(dirname "$0")/chws.py" go-han.ttf go-han-chws.ttf

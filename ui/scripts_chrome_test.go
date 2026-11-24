@@ -16,7 +16,8 @@ import (
 // scripted lays out spans in the fonts of internal/shape/testdata, each
 // with its declarations, against Chrome: Noto Sans Thai, Lao, Hebrew and
 // KR subsets (Thai, Lao, Hebrew, Hangul), and Go's stand-ins for old
-// Thai and Hebrew faces with no layout tables (OldThai, OldHebrew).
+// Thai, Hebrew and Arabic faces with no layout tables (OldThai,
+// OldHebrew, OldArabic).
 func scripted(t *testing.T, spans ...[2]string) {
 	t.Helper()
 	d := ui.NewDocument(ui.FetchFonts(foundry(t)), ui.CSS(`
@@ -26,6 +27,7 @@ func scripted(t *testing.T, spans ...[2]string) {
 @font-face { font-family: Hangul; src: url(hangul.ttf); }
 @font-face { font-family: OldThai; src: url(old-thai.ttf); }
 @font-face { font-family: OldHebrew; src: url(old-hebrew.ttf); }
+@font-face { font-family: OldArabic; src: url(old-arabic.ttf); }
 div { margin: 0 0 4px; }
 span { display: inline-block; font-size: 24px; }
 `))
@@ -67,6 +69,21 @@ func TestHebrewPointsAreShapedAsInChrome(t *testing.T) {
 		[2]string{"OldHebrew", "שׁ שּׁ בּ יִ אַ וֹ ײַ כֿ"},
 		[2]string{"OldHebrew", "שָׁלוֹם תּוֹרָה"},
 		[2]string{"Hebrew", "בְַֽ"},
+	)
+}
+
+// TestArabicInAFaceOfPresentationFormsJoinsAsInChrome lays out Arabic in
+// a face whose only joined forms are the presentation forms of its cmap
+// against Chrome, whose HarfBuzz joins the letters with them, forms the
+// ligatures it knows and places the marks by their combining classes.
+func TestArabicInAFaceOfPresentationFormsJoinsAsInChrome(t *testing.T) {
+	scripted(t,
+		[2]string{"OldArabic", "بتب سلام يمين"},
+		[2]string{"OldArabic", "لا بلا لأ لأب"},
+		[2]string{"OldArabic", "بن نبن هه ههه"},
+		[2]string{"OldArabic", "بم لمح لمحب ـبـ"},
+		[2]string{"OldArabic", "بَّت بَتِ بْ بَّ لَا"},
+		[2]string{"OldArabic", "أب دب ء ب"},
 	)
 }
 

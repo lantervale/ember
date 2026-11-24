@@ -56,6 +56,9 @@ type Font struct {
 	// feature, so kerning comes from the old table, as HarfBuzz falls
 	// back to it.
 	kernTable bool
+	// arabic are the lookups of HarfBuzz's Arabic fallback, made of the
+	// presentation forms of cmap when first asked.
+	arabic *[7]*lookup
 
 	// mu guards the plans and the lookups read, and the buffer.
 	mu    sync.Mutex
