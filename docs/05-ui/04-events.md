@@ -29,7 +29,7 @@ func (s *Settings) Update(f world.Frame) {
 | `ui.OnToggle` | `ui.Toggled{Node}` | a details element opened or closed |
 | `ui.OnClose` | `ui.Closed{Node, Value}` | a dialog closed, with its return value, "" for Escape |
 | `ui.OnSort` | `ui.Sorted{Node, Column, Descending}` | a table's column header pressed |
-| `ui.OnKey` | `ui.KeyPressed{Node, Key, Text, Command, Pad}` | a key nothing took, on the focused element or the open modal dialog; also a pad button focus navigation leaves (West, North, shoulders, triggers, Back, Start), as `Pad` with `Key` `input.KeyUnknown`. In a focused text field the callback hears every key before the field, as a keydown, and `e.PreventDefault()` keeps it from the field; those emit no World event |
+| `ui.OnKey` | `ui.KeyPressed{Node, Key, Text, Command, Shift, Alt, Control, Super, Pad}` | a key nothing took, on the focused element or the open modal dialog, with the modifiers held (either side's; `Command` is Super on macOS, Control elsewhere); also a pad button focus navigation leaves (West, North, shoulders, triggers, Back, Start), as `Pad` with `Key` `input.KeyUnknown`. In a focused text field the callback hears every key before the field, as a keydown, and `e.PreventDefault()` keeps it from the field; those emit no World event |
 | `ui.OnBack` | `ui.BackPressed{Node}` | Escape or the pad's East that nothing took: a screen's way back |
 | `ui.OnPointerEnter` | `ui.PointerEntered{Node}` | the pointer coming over it, once, not again for its children (mouseenter) |
 | `ui.OnPointerLeave` | `ui.PointerLeft{Node}` | the pointer leaving it and all its children (mouseleave) |
@@ -48,7 +48,7 @@ func (s *Settings) Update(f world.Frame) {
 | A callback is | |
 |---|---|
 | `func()` | told nothing |
-| `func(ui.Event)` | told the event: `Type` (`ui.EventClick`…), `Node`, and what its World event carries (`Clicks`, `Value`, `Column`, `Descending`, `Key`, `Text`, `Command`, `At`, `Size`, `Folded`, `Dragged`, `Dropped`, `Button`) |
+| `func(ui.Event)` | told the event: `Type` (`ui.EventClick`…), `Node`, and what its World event carries (`Clicks`, `Value`, `Column`, `Descending`, `Key`, `Text`, `Command`, `Shift`, `Alt`, `Control`, `Super`, `At`, `Size`, `Folded`, `Dragged`, `Dropped`, `Button`) |
 | `func(*world.World, ui.Event)` | told the World too |
 
 ```go

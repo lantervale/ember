@@ -1556,16 +1556,12 @@ func (d *Document) keysLeft(in *input.State, n *Node, taken *keySet) {
 	if n == nil {
 		return
 	}
-	command := input.KeyControl
-	if d.platform == textedit.Mac {
-		command = input.KeySuper
-	}
 	text := string(in.Text())
 	for k := input.Key(0); k <= input.KeyMenu; k++ {
 		if taken.has(k) || modifier(k) || !f.RawPressed(int(k)) {
 			continue
 		}
-		d.events = append(d.events, KeyPressed{Node: n, Key: k, Text: text, Command: f.RawDown(int(command))})
+		d.events = append(d.events, d.keyPressed(f, n, k, text))
 		text = ""
 	}
 	for _, b := range keyPad {
@@ -1573,6 +1569,25 @@ func (d *Document) keysLeft(in *input.State, n *Node, taken *keySet) {
 			d.events = append(d.events, KeyPressed{Node: n, Key: input.KeyUnknown, Pad: b})
 		}
 	}
+}
+
+// keyPressed is k pressed on n with the modifiers held, read from the feed
+// since a focused field captures them from the window's input.
+func (d *Document) keyPressed(f inputfeed.Feed, n *Node, k input.Key, text string) KeyPressed {
+	e := KeyPressed{
+		Node:    n,
+		Key:     k,
+		Text:    text,
+		Shift:   f.RawDown(int(input.KeyShift)),
+		Alt:     f.RawDown(int(input.KeyAlt)),
+		Control: f.RawDown(int(input.KeyControl)),
+		Super:   f.RawDown(int(input.KeySuper)),
+	}
+	e.Command = e.Control
+	if d.platform == textedit.Mac {
+		e.Command = e.Super
+	}
+	return e
 }
 
 func modifier(k input.Key) bool { return k >= input.KeyLeftShift && k <= input.KeyRightSuper }
@@ -1714,16 +1729,12 @@ func (d *Document) fieldKeys(c *twod.Canvas, in *input.State, n *Node, t *contro
 		return prevented, typed, true
 	}
 	f := inputfeed.Of(in)
-	command := input.KeyControl
-	if d.platform == textedit.Mac {
-		command = input.KeySuper
-	}
 	text := string(typed)
 	for k := input.Key(0); k <= input.KeyMenu; k++ {
 		if modifier(k) || !f.RawPressed(int(k)) && !f.RawRepeated(int(k)) {
 			continue
 		}
-		e := KeyPressed{Node: n, Key: k, Text: text, Command: f.RawDown(int(command))}
+		e := d.keyPressed(f, n, k, text)
 		if d.dispatch(w, e) {
 			prevented.add(k)
 			if text != "" {
