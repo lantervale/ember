@@ -5,6 +5,7 @@ package ui_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,9 @@ func TestAScrolledViewportMatchesChrome(t *testing.T) {
 		"body's gutter, not the root's": {700, "body { scrollbar-gutter: stable both-edges; }", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
+			if strings.Contains(c.sheet, "html { scrollbar-gutter") {
+				chrome.Since(t, 158, "the root keeps no stable gutter without a bar, nor a start one")
+			}
 			r := chrome.Match(t, chromeDoc(c.y, c.sheet, c.opts...), geom.V2(640, 400))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 		})

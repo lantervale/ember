@@ -30,6 +30,7 @@ func TestBarsRestyledByTheirBoxsHoverAsChromes(t *testing.T) {
 		{"own-style-and-out", []chrome.Pointer{out, at(170, 60), out}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			chrome.Since(t, 158, "a box's bars and border take the hover of the box under the pointer")
 			chrome.WithinPointing(t, page, c.name, 260, 140, c.path, 0.0004)
 		})
 	}

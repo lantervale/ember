@@ -584,6 +584,7 @@ func TestATextOfItsFirstLetterAloneIsPressedAndSelected(t *testing.T) {
 }
 
 func TestTextOfVerticalLinesIsSelectedDownThem(t *testing.T) {
+	ui.SetPlatform(t, textedit.Mac)
 	p := ui.P(ui.Text("The quick brown fox jumps"))
 	l := selectableDoc(t, `p { writing-mode: vertical-rl; height: 100px; }`, p)
 	n := textOf(p)

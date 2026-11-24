@@ -3,9 +3,7 @@
 package ui_test
 
 import (
-	"encoding/json"
 	"fmt"
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,16 +70,25 @@ func TestScrollStateQueriesAnswerAsChromes(t *testing.T) {
 		scrollers = append(scrollers, s)
 	}
 	d.Body().Append(scrollers...)
-	script := "const offs = ["
+	srv, _ := chrome.Serve(t, d, nil, 0)
+	script := "(async () => { await document.fonts.ready; const offs = ["
 	for _, at := range scrolls {
 		script += fmt.Sprintf("[%g, %g],", at.X, at.Y)
 	}
 	script += `];
 document.querySelectorAll(".scroller").forEach((s, i) => { s.scrollLeft = offs[i][0]; s.scrollTop = offs[i][1]; });
-await new Promise(r => setTimeout(r, 300));
+const first = document.querySelector(".scroller .k"), probes = [...document.querySelectorAll("i")];
+const widths = () => probes.map(e => e.getBoundingClientRect().width).join();
+const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+for (let i = 0, last = "", same = 0; i < 100 && same < 4; i++) {
+  await frame();
+  const now = widths();
+  same = first.getBoundingClientRect().width !== 19 && now === last ? same + 1 : 0;
+  last = now;
+}
 return {widths: [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().width),
   scrollers: [...document.querySelectorAll(".scroller")].map(s =>
-    [s.scrollLeft, s.scrollTop, s.scrollWidth, s.scrollHeight, s.clientWidth, s.clientHeight])};`
+    [s.scrollLeft, s.scrollTop, s.scrollWidth, s.scrollHeight, s.clientWidth, s.clientHeight])}; })()`
 	d.Layout(geom.V2(600, 800))
 	for i, s := range scrollers {
 		d.SetScroll(s, scrolls[i])
@@ -94,21 +101,16 @@ return {widths: [...document.querySelectorAll("i")].map(e => e.getBoundingClient
 		}
 		return true
 	})
-	// Headless Chrome answers scroll-state() from a snapshot it takes at
-	// a frame, which its virtual time sometimes runs after the script on a
-	// loaded machine: a run that answers otherwise is asked again.
+	// Chrome answers scroll-state() from a snapshot it takes at a frame:
+	// the page is opened in a session, whose frames run in real time, as
+	// a dumped page's virtual clock on a loaded runner sometimes ran
+	// none, and the script waits until the first scroller, which
+	// overflows, says it scrolls and the answers hold for a few frames.
 	var answer struct {
 		Widths    []float32    `json:"widths"`
 		Scrollers [][6]float32 `json:"scrollers"`
 	}
-	for range 4 {
-		raw, err := chrome.Eval(d, geom.V2(600, 800), script)
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(raw, &answer))
-		if slices.Equal(answer.Widths, got) {
-			break
-		}
-	}
+	chrome.Open(t, srv.URL, geom.V2(600, 800), 1).Eval(script, &answer)
 	want := answer.Widths
 	require.Len(t, got, len(want))
 	for i := range want {

@@ -4,6 +4,7 @@ package chrome
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -15,10 +16,39 @@ import (
 )
 
 // Version is the major version of the Chrome the tests run against, read
-// from its user agent once.
+// from its user agent once: from the first Session's page, or a page of
+// its own when none has opened. Asked while this process holds the Chrome
+// lock and no Session has told it, it fails rather than wait on itself.
 func Version() (int, error) { return version() }
 
-var version = sync.OnceValues(func() (int, error) {
+//nolint:gochecknoglobals // one Chrome per process, its version read once
+var known struct {
+	sync.Mutex
+	set   bool
+	major int
+	err   error
+}
+
+// knowAgent records the version a page's user agent says, unless one is
+// known already.
+func knowAgent(agent string) {
+	known.Lock()
+	defer known.Unlock()
+	if !known.set {
+		known.major, known.err = majorOf(agent)
+		known.set = true
+	}
+}
+
+func version() (int, error) {
+	known.Lock()
+	defer known.Unlock()
+	if known.set {
+		return known.major, known.err
+	}
+	if lockHeld.Load() > 0 {
+		return 0, errors.New("chrome: the version asked while this process holds the Chrome lock")
+	}
 	out, err := Eval(ui.NewDocument(), geom.V2(16, 16), "return navigator.userAgent")
 	if err != nil {
 		return 0, err
@@ -27,8 +57,10 @@ var version = sync.OnceValues(func() (int, error) {
 	if err = json.Unmarshal(out, &agent); err != nil {
 		return 0, err
 	}
-	return majorOf(agent)
-})
+	known.major, known.err = majorOf(agent)
+	known.set = true
+	return known.major, known.err
+}
 
 var agentVersion = regexp.MustCompile(`Chrome/(\d+)\.`)
 

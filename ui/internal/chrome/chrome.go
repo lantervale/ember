@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"image"
@@ -23,6 +24,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -236,6 +238,12 @@ var (
 	waitAfter = 5 * time.Second
 )
 
+// lockHeld counts the Chrome locks this process holds: a run asking for
+// another while it holds one would wait on itself.
+//
+//nolint:gochecknoglobals // the process's own count of the lock it holds
+var lockHeld atomic.Int32
+
 // lockChrome takes the Chrome lock and writes who holds it into the file:
 // full suites in several sessions queue on it for an hour, and a run
 // waiting behind them says whom it waits for instead of seeming to hang.
@@ -276,7 +284,9 @@ func lockChrome() (func(), error) {
 		time.Now().Format(time.TimeOnly),
 	)
 	_, _ = f.WriteAt([]byte(note), 0)
+	lockHeld.Add(1)
 	return func() {
+		lockHeld.Add(-1)
 		_ = f.Truncate(0)
 		// Closing the file releases the lock too, should unlocking fail.
 		_ = unlockFile(f)
@@ -448,6 +458,9 @@ func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]b
 			return out, nil
 		}
 		return nil, fmt.Errorf("chrome: %w: %s", err, stderr.String())
+	}
+	if action == dumpDOM && len(bytes.TrimSpace(out)) == 0 {
+		return nil, &quietError{stderr.String()}
 	}
 	return out, nil
 }
@@ -750,24 +763,57 @@ addEventListener("load", () => document.fonts.ready.then(() => (async () => { ` 
 // a viewport of size points, and returns the value of its EvalScript as
 // JSON: what it fetches comes as the server sends it, timed as Chrome
 // times it. A Chrome that exits printing no page, as Windows' sometimes
-// does, is run again.
+// does several times in a row, is run again a little later.
 func EvalPage(url string, size geom.Vec2) ([]byte, error) {
 	unlock, err := lockChrome()
 	if err != nil {
 		return nil, err
 	}
 	defer unlock()
-	var out []byte
-	for range 3 {
-		if out, err = evalPageOnce(url, size); err != nil || done(dumpDOM, out) {
-			break
-		}
-	}
+	out, err := untilPrinted(pageTries, time.Sleep, func() ([]byte, error) { return evalPageOnce(url, size) })
 	if err != nil {
 		return nil, err
 	}
 	return evalResult(out)
 }
+
+// pageTries is how many times EvalPage runs a Chrome that prints no page.
+const pageTries = 6
+
+// errNoPage is a Chrome that exited printing no page.
+var errNoPage = errors.New("chrome: exited printing no page")
+
+// untilPrinted runs try up to tries times while it prints no page,
+// sleeping a second more before each new run, and returns the first page
+// it prints, its error, or errNoPage with what the last run said on its
+// standard error.
+func untilPrinted(tries int, sleep func(time.Duration), try func() ([]byte, error)) ([]byte, error) {
+	var last error
+	for i := range tries {
+		if i > 0 {
+			sleep(time.Duration(i) * time.Second)
+		}
+		out, err := try()
+		if err == nil && done(dumpDOM, out) {
+			return out, nil
+		}
+		var quiet *quietError
+		if err != nil && !errors.As(err, &quiet) {
+			return nil, err
+		}
+		last = err
+	}
+	if last != nil {
+		return nil, fmt.Errorf("%w after %d runs: %w", errNoPage, tries, last)
+	}
+	return nil, fmt.Errorf("%w after %d runs", errNoPage, tries)
+}
+
+// quietError is a run of Chrome that printed no page, with what it said
+// on its standard error.
+type quietError struct{ stderr string }
+
+func (e *quietError) Error() string { return "chrome printed no page: " + e.stderr }
 
 func evalPageOnce(url string, size geom.Vec2) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "ember-chrome-")

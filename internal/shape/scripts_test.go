@@ -181,22 +181,12 @@ func TestJoiningScriptsOfTheUSEAreShapedAsHarfBuzzShapesThem(t *testing.T) {
 // with a ligature take it, a shadda and a mark theirs, and the marks are
 // placed by their combining classes.
 func TestArabicInAFaceOfPresentationFormsJoinsAsHarfBuzzJoinsIt(t *testing.T) {
-	harfBuzz14(t)
+	harfBuzz1421(t, "HarfBuzz's fallback shaping changes between releases")
 	n := compareFaces(t, []hbFace{{"testdata/go-old-arabic.ttf", 0, []string{
 		"بتب", "بمب", "لا", "بلا", "بن ن", "نبن", "هه", "ههه", "لأ", "لأب", "بم", "لمح", "لمحب", "ـبـ", "ء ب",
 		"بَّت", "بَتِ", "بْ", "بَّ", "لَا", "لاَ", "بّم", "ب\u200dب", "ب\u200cب", "أب", "دب", "سلام", "يمين",
 	}}})
 	t.Logf("%d texts compared", n)
-}
-
-// harfBuzz14 skips a test that ports HarfBuzz 14.2.1 where hb-shape is
-// another release.
-func harfBuzz14(t *testing.T) {
-	t.Helper()
-	if out, err := exec.Command("hb-shape", "--version").Output(); err == nil &&
-		!strings.HasPrefix(string(out), "hb-shape (HarfBuzz) 14.2.1\n") {
-		t.Skipf("hb-shape is not HarfBuzz 14.2.1: %s", strings.SplitN(string(out), "\n", 2)[0])
-	}
 }
 
 // TestVariationSequencesTakeTheirGlyphs compares characters followed by
@@ -226,9 +216,7 @@ func TestLongSyllablesAreShapedAsHarfBuzzShapesThem(t *testing.T) {
 		"क" + strings.Repeat("़", 40) + "ि", strings.Repeat("क्", 64) + "कि",
 		strings.Repeat("\u0930\u094D\u0915\u093F", 40),
 	}
-	// HarfBuzz's handling of long syllables changes between releases;
-	// shape ports 14.2.1's.
-	harfBuzz14(t)
+	harfBuzz1421(t, "HarfBuzz's handling of long syllables changes between releases")
 	n := compareFaces(t, []hbFace{{"testdata/noto-devanagari.ttf", 0, long}})
 	t.Logf("%d texts compared", n)
 }
@@ -263,5 +251,16 @@ func TestTheTextRoundARunJoinsItsLetters(t *testing.T) {
 		p := f.Plan(shape.Script(c.text+c.before), "")
 		assert.Equal(t, want, hb(p.ShapeIn(run(t, src, c.text), c.before, c.after), p.RightToLeft()),
 			"%q|%q|%q in %s", c.before, c.text, c.after, c.path)
+	}
+}
+
+// harfBuzz1421 skips a comparison whose expected output depends on the
+// HarfBuzz release, when the hb-shape installed is not 14.2.1, the
+// release shape ports.
+func harfBuzz1421(t *testing.T, why string) {
+	t.Helper()
+	if out, err := exec.Command("hb-shape", "--version").Output(); err == nil &&
+		!strings.HasPrefix(string(out), "hb-shape (HarfBuzz) 14.2.1\n") {
+		t.Skipf("hb-shape is not HarfBuzz 14.2.1 (%s): %s", why, strings.SplitN(string(out), "\n", 2)[0])
 	}
 }

@@ -1,6 +1,6 @@
 # 0221. A vertical root scrolls its viewport along its blocks
 
-- Status: Accepted
+- Status: Superseded by [0226](0226-the-page-keys-scroll-as-they-point-and-space-along-the-blocks.md) for the keys that page and end; the rest stands
 - Date: 2026-11-23
 - Area: api
 - Owner: engine

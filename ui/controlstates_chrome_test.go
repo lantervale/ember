@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -96,7 +97,16 @@ func TestRangesOfAnAutoSizeAreChromes(t *testing.T) {
 	s.Eval(`[...document.querySelectorAll("input")].map(e => { const r = e.getBoundingClientRect(); `+
 		`return [r.width, r.height]; })`, &want)
 	d.Layout(size)
+	v, err := chrome.Version()
+	if err != nil {
+		t.Fatalf("Chrome's version: %v", err)
+	}
 	for i, n := range ranges {
+		if v < 158 && strings.Contains(styles[i], "slider-vertical") {
+			t.Logf("%q: Chrome %d sizes slider-vertical as a horizontal range, since Chrome 158 as tall as its track",
+				styles[i], v)
+			continue
+		}
 		if got := [2]float32{n.Box().W, n.Box().H}; got != want[i] {
 			t.Errorf("%q: ui's %v, Chrome's %v", styles[i], got, want[i])
 		}
@@ -124,6 +134,14 @@ body { margin: 8px; }
 	)
 	r := chrome.Match(t, d, geom.V2(400, 500))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// unhovered is s with its hover left out.
+func unhovered(s style.Shade) style.Shade {
+	if s == style.ShadeHovered {
+		return style.ShadeRest
+	}
+	return s
 }
 
 // TestAccentShadesAreChromes hovers and presses Chrome's own ranges and
@@ -179,6 +197,11 @@ input { position: absolute; margin: 0; } [type=checkbox] { width: 20px; height: 
 			{"over the checkbox", box, false, style.ShadeRest, style.ShadeRest, style.ShadeHovered},
 			{"a press on the checkbox", box, true, style.ShadeRest, style.ShadeRest, style.ShadePressed},
 		} {
+			if runtime.GOOS == "linux" {
+				// Chrome on Linux draws a hovered accent as at rest
+				// (docs/05-ui/10-missing.md).
+				c.thumb, c.fill, c.box = unhovered(c.thumb), unhovered(c.fill), unhovered(c.box)
+			}
 			s.Mouse("mouseMoved", away, 0)
 			s.Mouse("mouseMoved", c.pointer, 0)
 			if c.press {

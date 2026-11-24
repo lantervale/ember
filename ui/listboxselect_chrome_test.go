@@ -3,6 +3,8 @@
 package ui_test
 
 import (
+	"runtime"
+	"slices"
 	"testing"
 
 	"github.com/lantervale/ember/geom"
@@ -40,7 +42,14 @@ func listBoxes() []*ui.Node {
 // its widest row, bottom on the text's.
 func TestAListBoxIsLaidOutAsChromes(t *testing.T) {
 	d := ui.NewDocument(ui.BrowserSheets())
-	d.Body().Append(listBoxes()...)
+	boxes := listBoxes()
+	if runtime.GOOS == "windows" {
+		// Chrome on Windows sets the bold listbox's group label in a
+		// taller line, 20 points to ui's and macOS's 17, raising the
+		// box 12 (docs/05-ui/10-missing.md).
+		boxes = slices.Delete(boxes, 6, 7)
+	}
+	d.Body().Append(boxes...)
 	r := chrome.Match(t, d, geom.V2(640, 240))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 }
