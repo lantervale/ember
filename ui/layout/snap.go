@@ -8,16 +8,25 @@ import (
 
 // unitsPerPoint is Chrome's layout unit, 1/64 of a device pixel, in points: with the
 // device scale zoomed into layout, a point holds 64 × scale units.
-func unitsPerPoint(fonts box.Fonts) float32 {
+func unitsPerPoint(fonts box.Fonts) float32 { return 64 * PixelsPerPoint(fonts) }
+
+// PixelsPerPoint is the device pixels per point fonts measure at, 1 when
+// they don't say.
+func PixelsPerPoint(fonts box.Fonts) float32 {
 	if s, ok := fonts.(interface{ Scale() float32 }); ok && s.Scale() > 0 {
-		return 64 * s.Scale()
+		return s.Scale()
 	}
-	return 64
+	return 1
 }
 
 // snapUp is w rounded up to the layout unit, Blink's LayoutUnit::FromFloatCeil.
 func snapUp(w, unit float32) float32 {
 	return float32(math.Ceil(float64(w*unit))) / unit
+}
+
+// floorToUnit is v rounded down to the layout unit, Blink's LayoutUnit::FromFloatFloor.
+func floorToUnit(v, unit float32) float32 {
+	return float32(math.Floor(float64(v*unit))) / unit
 }
 
 // pen walks a line's pieces as Chrome places them: one run's text on the line is one

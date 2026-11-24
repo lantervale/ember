@@ -217,6 +217,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0214 | [translate, rotate and scale are their own values before transform](0214-translate-rotate-and-scale-are-their-own-values-before-transform.md) | rendering |
 | 0215 | [A subgrid's axes are its grid's by their frames](0215-a-subgrids-axes-are-its-grids-by-their-frames.md) | rendering |
 | 0216 | [A clip under a rotation or a skew cuts in its own space](0216-a-clip-under-a-rotation-or-a-skew-cuts-in-its-own-space.md) | rendering |
+| 0217 | [Line metrics round to device pixels as Chrome's](0217-line-metrics-round-to-device-pixels-as-chromes.md) | api |
 | 0218 | [A br clears from the end of its line, and blocks follow the floats where they were laid out](0218-a-br-clears-from-the-end-of-its-line-and-blocks-follow-the-floats-where-they-were-laid-out.md) | rendering |
 
 ## Writing one

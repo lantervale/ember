@@ -173,7 +173,7 @@ func TestAlignmentNestsFromEachBoxsParent(t *testing.T) {
 	ib := slab(20, valign(style.AlignMiddle))
 	sup := el(dom.Span, valign(style.AlignSuper), text("XX"), ib)
 	tr, p := aligned(nil, text("HH"), sup)
-	up := float32(10.0/3 + 1)
+	up := float32(277.0 / 64)
 	// the box's middle 4 above the sup's baseline: 14 above it, 6 below
 	assert.InDelta(t, 14+up, baselineOf(t, tr.Of[p], "HH"), 0.001)
 	assert.InDelta(t, -up, baselineOf(t, tr.Of[p], "XX")-baselineOf(t, tr.Of[p], "HH"), 0.001)

@@ -59,6 +59,46 @@ func TestMetricsRoundToDevicePixels(t *testing.T) {
 	assert.InDelta(t, one.Ascent, two.Ascent, 0.5)
 }
 
+func TestALineGapRoundsToDevicePixelsAsTheAscentDoes(t *testing.T) {
+	s := Builtin()
+	c := s.Face(style.Font{Family: []string{"Go"}, Size: 16, Weight: 400})
+	c.Look.LineGap = Override{Set: true, Of: 0.0327}
+	f := style.Font{Family: []string{"Go"}, Size: 47.5, Weight: 400}
+	assert.InDelta(t, 2, s.Metrics(f).LineGap, 1e-6, "1.55 rounds to 2")
+	s.SetScale(2)
+	assert.InDelta(t, 1.5, s.Metrics(f).LineGap, 1e-6, "3.11 device pixels round to 3")
+	f.Size = 11.5
+	assert.InDelta(t, 0.5, s.Metrics(f).LineGap, 1e-6)
+	s.SetScale(1)
+	assert.Zero(t, s.Metrics(f).LineGap, "0.38 rounds to none")
+}
+
+func TestTheMachinesHelveticaTimesAndCourierStandTallerAsOnMacOS(t *testing.T) {
+	defer func(was bool) { appleAscent = was }(appleAscent)
+	s := Builtin()
+	f := style.Font{Family: []string{"Go"}, Size: 16, Weight: 400}
+	plain := s.Metrics(f)
+	c := s.Face(f)
+	c.file = &installedFace{}
+	for _, family := range []string{"Helvetica", "Times", "Courier"} {
+		c.Family = family
+		f.Family = []string{family}
+		appleAscent = false
+		assert.Equal(t, plain, s.Metrics(f), family)
+		appleAscent = true
+		m := s.Metrics(f)
+		assert.InDelta(t, plain.Ascent+3, m.Ascent, 1e-6, "%s: 15%% of 18 is 2.7, rounded to 3", family)
+		assert.Equal(t, plain.Descent, m.Descent)
+	}
+	c.Family, f.Family = "Arial", []string{"Arial"}
+	assert.Equal(t, plain, s.Metrics(f), "only those three")
+	c.file, c.Family, f.Family = nil, "Helvetica", []string{"Helvetica"}
+	assert.Equal(t, plain, s.Metrics(f), "a face of the program's or the page's keeps its metrics")
+	s.SetScale(2)
+	c.file = &installedFace{}
+	assert.InDelta(t, 15+3, s.Metrics(f).Ascent, 1e-6, "37 device pixels high: 6.05 rounds to 6")
+}
+
 func TestWhatGoLacksComesFromGoMono(t *testing.T) {
 	s := Builtin()
 	f := style.Font{Family: []string{"Go"}, Size: 16, Weight: 400}

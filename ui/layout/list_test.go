@@ -130,10 +130,11 @@ func TestSubAndSuperShiftTheirTextFromTheBaseline(t *testing.T) {
 	p := el(dom.P, block, text("HH"), sub, sup)
 	tr = lay(el(dom.Div, width(200), p), 200)
 	got := baselines(tr.Of[p])
-	// a fifth of the parent's 10px font and one more below, a third and one more above
+	// a fifth of the parent's 10px font and one more below, a third and one more above, cut
+	// to the layout unit
 	assert.InDelta(t, 3, got["HHH"]-got["HH"], 0.001)
-	assert.InDelta(t, -(10.0/3 + 1), got["HHHH"]-got["HH"], 0.001)
-	assert.InDelta(t, 10.0/3+1, got["HH"]-base, 0.001, "the line grows above for the sup")
-	assert.InDelta(t, 10+3+10.0/3+1, tr.Of[p].Size.Y, 0.001, "and below for the sub")
-	assert.InDelta(t, tr.Of[sup].Pos.Y+3+10.0/3+1, tr.Of[sub].Pos.Y, 0.001, "their boxes move with their text")
+	assert.InDelta(t, -277.0/64, got["HHHH"]-got["HH"], 0.001)
+	assert.InDelta(t, 277.0/64, got["HH"]-base, 0.001, "the line grows above for the sup")
+	assert.InDelta(t, 10+3+277.0/64, tr.Of[p].Size.Y, 0.001, "and below for the sub")
+	assert.InDelta(t, tr.Of[sup].Pos.Y+3+277.0/64, tr.Of[sub].Pos.Y, 0.001, "their boxes move with their text")
 }

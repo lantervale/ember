@@ -536,3 +536,41 @@ func TestALineEndsAtASpaceBeforeTextThatDoesNotWrap(t *testing.T) {
 	assert.Equal(t, []string{"HHH HHH@0", " -@0", "HH HHHH@10", " -@10", "HHH HH@20", " -@20"}, got,
 		"the space that ends a separator is a place to break, though the link after it does not wrap")
 }
+
+func TestHalfTheLeadingAboveTheGlyphsIsFlooredInDevicePixels(t *testing.T) {
+	st := style.Initial()
+	st.LineHeight = style.LineHeight{Px: 16.25}
+	m := box.Metrics{Ascent: 12.5, Descent: 2.5}
+	h, base := LineHeight(m, &st, 1)
+	assert.InDelta(t, 16.25, h, 1e-6)
+	assert.InDelta(t, 12.5, base, 1e-6, "0.625 floors to no point")
+	_, base = LineHeight(m, &st, 2)
+	assert.InDelta(t, 13, base, 1e-6, "1.25 device pixels floor to one")
+}
+
+func TestALineHeightIsFlooredToTheLayoutUnit(t *testing.T) {
+	st := style.Initial()
+	st.Font.Size = 8
+	st.LineHeight = style.LineHeight{Factor: 1.37}
+	h, _ := LineHeight(box.Metrics{Ascent: 8, Descent: 2}, &st, 1)
+	assert.InDelta(t, 701.0/64, h, 1e-6, "10.96 floors to 701/64")
+	st.LineHeight = style.LineHeight{Px: 10.99}
+	h, _ = LineHeight(box.Metrics{Ascent: 8, Descent: 2}, &st, 2)
+	assert.InDelta(t, 1406.0/128, h, 1e-6, "21.98 device pixels floor to 1406/64")
+}
+
+func TestALeadingOfLessThanAUnitBelowNoneTakesNothingAbove(t *testing.T) {
+	st := style.Initial()
+	st.LineHeight = style.LineHeight{Px: 2367.0 / 64}
+	_, base := LineHeight(box.Metrics{Ascent: 29, Descent: 8}, &st, 1)
+	assert.InDelta(t, 29, base, 1e-6, "half of -1/64 truncates to none, as Chrome's LayoutUnit divides")
+	st.LineHeight = style.LineHeight{Px: 36}
+	_, base = LineHeight(box.Metrics{Ascent: 29, Descent: 8}, &st, 1)
+	assert.InDelta(t, 28, base, 1e-6, "half of -1 floors to -1")
+}
+
+func TestSubAndSuperShiftByADevicePixelMoreCutToTheLayoutUnit(t *testing.T) {
+	assert.InDelta(t, 405.0/64, scriptShift(16, 3, 1), 1e-6, "16/3 + 1 is 6.333, cut to 405/64")
+	assert.InDelta(t, 746.0/128, scriptShift(16, 3, 2), 1e-6, "32/3 + 1 device pixels, cut to 746/64 of them")
+	assert.InDelta(t, 473.0/128, scriptShift(16, 5, 2), 1e-6, "7.4 device pixels")
+}
