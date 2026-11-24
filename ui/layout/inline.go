@@ -1567,16 +1567,26 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl,
 			a.node.slider:
 		case some(out.lastBaseline) && st.Display != style.InlineFlex && st.Display != style.InlineGrid:
-			a.baseline = out.lastBaseline
+			a.baseline = lineBaseline(st, out.lastBaseline, a.height)
 		case out.synthetic > 0 && c.owner.st.Stands():
 			// a central line synthesizes it across the middle of the item, as Chrome
 			h := out.synthetic
 			a.baseline = out.firstBaseline - float32(math.Floor(float64(h*c.unit)/2))/c.unit
 		case some(out.firstBaseline):
-			a.baseline = out.firstBaseline
+			a.baseline = lineBaseline(st, out.firstBaseline, a.height)
 		}
 		c.resize(i, a.width+a.margin.horizontal())
 	}
+}
+
+// lineBaseline is where a line's baseline b, measured from the frame's top of a box h tall
+// written in st, stands from the box's over side, as the line holding it aligns it: a
+// vertical-lr box's lines measure theirs from the frame's top, their over side its bottom.
+func lineBaseline(st *style.Computed, b, h float32) float32 {
+	if st.Mode == style.VerticalLR {
+		return h - b
+	}
+	return b
 }
 
 // measured are the content's lines where nothing wraps, every one in the first line's
