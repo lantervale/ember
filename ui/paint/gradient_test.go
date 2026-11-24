@@ -130,7 +130,7 @@ func TestATurnedGradientReachesPastItsBoxForItsClipToCut(t *testing.T) {
 	assert.Equal(t, area, r.ops[0].Rect, "and spans its box alone")
 }
 
-func TestTurnedGradientTilesMeetEdgeToEdgeInTheirViewsClip(t *testing.T) {
+func TestTurnedGradientTilesMeetEdgeToEdgeAndReachPastTheirViewsClip(t *testing.T) {
 	r := newRecorder()
 	r.xf = geom.Transform2DFrom(geom.Vec2{}, 0.5, 0, geom.V2(1, 1))
 	area := geom.Rect{W: 40, H: 20}
@@ -141,8 +141,15 @@ func TestTurnedGradientTilesMeetEdgeToEdgeInTheirViewsClip(t *testing.T) {
 	st := style.Initial()
 	(&painter{s: r, base: geom.Identity2D()}).backgroundImage(area, area, radii{}, &l, &st, 1)
 	tiles := r.of("gradient")
-	require.Len(t, tiles, 2)
-	assert.Equal(t, geom.Rect{W: 20, H: 20}, tiles[0].Rect, "each tile spans itself alone")
-	assert.Equal(t, geom.Rect{X: 20, W: 20, H: 20}, tiles[1].Rect)
-	assert.Equal(t, area, tiles[0].Clip, "cut by the view's clip")
+	require.Len(t, tiles, 12, "a row and a column of tiles past each side, for the clip to smooth its edges")
+	assert.Equal(t, geom.Rect{X: -20, Y: -20, W: 20, H: 20}, tiles[0].Rect, "each tile spans itself alone")
+	assert.Equal(t, geom.Rect{W: 20, H: 20}, tiles[5].Rect)
+	assert.Equal(t, geom.Rect{X: 20, W: 20, H: 20}, tiles[6].Rect)
+	for _, tile := range tiles {
+		assert.Equal(t, area, tile.Clip, "cut by the view's clip")
+	}
+
+	r = newRecorder()
+	(&painter{s: r, base: geom.Identity2D()}).backgroundImage(area, area, radii{}, &l, &st, 1)
+	assert.Len(t, r.of("gradient"), 2, "upright, the tiles cover the view alone")
 }

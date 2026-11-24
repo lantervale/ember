@@ -127,17 +127,28 @@ func (p *painter) mitres(r geom.Rect, w [4]float32, c [4]color.Color, stripes [4
 		if c[i].A <= 0 && len(ends) == 0 {
 			continue
 		}
+		// Turned or skewed, the side's edges along it are anti-aliased;
+		// its mitres stay as they meet the sides beside it.
+		along := side[1].Sub(side[0])
+		soft := func(a, b geom.Vec2) bool {
+			d := b.Sub(a)
+			return abs(d.X*along.Y-d.Y*along.X) <= 1e-3*d.Len()*along.Len()
+		}
 		for _, bd := range stripes[i] {
 			piece := clipConvex(side, stripeOf(r, i, bd))
 			for _, e := range ends {
 				var near []geom.Vec2
 				piece, near = splitAt(piece, func(q geom.Vec2) float32 { return e.normal.Dot(q.Sub(e.at)) - half })
-				p.fade(near, func(q geom.Vec2) color.Color {
+				p.feathered(near, func(q geom.Vec2) color.Color {
 					return e.mid.Lerp(e.own, min(max(e.normal.Dot(q.Sub(e.at))/half, 0), 1))
-				})
+				}, soft)
 			}
 			if len(piece) >= 3 && c[i].A > 0 {
-				p.s.Triangles(piece, fan(len(piece)), c[i])
+				if p.slant() > 0 {
+					p.feathered(piece, func(geom.Vec2) color.Color { return c[i] }, soft)
+				} else {
+					p.s.Triangles(piece, fan(len(piece)), c[i])
+				}
 			}
 		}
 	}
@@ -177,6 +188,92 @@ func (p *painter) fade(poly []geom.Vec2, at func(geom.Vec2) color.Color) {
 		cs[i] = at(q)
 	}
 	p.s.TrianglesColored(poly, cs, fan(len(poly)))
+}
+
+// feathered is fade, but where a rotation or a skew slants the edges soft
+// picks, they are anti-aliased over a device pixel, as Chrome's are
+// (decision 0220): the poly drawn from half a pixel inside them, and a
+// strip a pixel wide fading out across each. The edges it leaves hard meet
+// what is drawn beside them without a seam.
+func (p *painter) feathered(poly []geom.Vec2, at func(geom.Vec2) color.Color, soft func(a, b geom.Vec2) bool) {
+	if p.slant() == 0 {
+		p.fade(poly, at)
+		return
+	}
+	var kept []geom.Vec2
+	for i, q := range poly {
+		if q.Sub(poly[(i+1)%len(poly)]).Len() > 1e-4 {
+			kept = append(kept, q)
+		}
+	}
+	poly = kept
+	n := len(poly)
+	if n < 3 {
+		return
+	}
+	t := p.s.Transform()
+	det := abs(t.X.X*t.Y.Y - t.X.Y*t.Y.X)
+	k := p.scale
+	if k <= 0 {
+		k = 1
+	}
+	var centre geom.Vec2
+	for _, q := range poly {
+		centre = centre.Add(q)
+	}
+	centre = centre.Scale(1 / float32(n))
+	// Each edge's line as normal·q = d, the normal outward, and how far
+	// half a device pixel across it reaches here.
+	normals, ds, halves := make([]geom.Vec2, n), make([]float32, n), make([]float32, n)
+	anySoft := false
+	for i := range n {
+		a, b := poly[i], poly[(i+1)%n]
+		e := b.Sub(a)
+		if e.Len() == 0 {
+			continue
+		}
+		nv := geom.V2(e.Y, -e.X).Scale(1 / e.Len())
+		if nv.Dot(centre.Sub(a)) > 0 {
+			nv = nv.Scale(-1)
+		}
+		normals[i], ds[i] = nv, nv.Dot(a)
+		// An edge left level or upright on the screen, as a skew leaves
+		// two, stays as drawn square.
+		if on := t.X.Scale(e.X).Add(t.Y.Scale(e.Y)); soft(a, b) && abs(on.X) > 1e-4*on.Len() && abs(on.Y) > 1e-4*on.Len() {
+			halves[i] = 0.5 / k * on.Len() / (det * e.Len())
+			anySoft = true
+		}
+	}
+	if !anySoft {
+		p.fade(poly, at)
+		return
+	}
+	inner, outer := make([]geom.Vec2, n), make([]geom.Vec2, n)
+	for j := range n {
+		i, prev := j, (j+n-1)%n
+		inner[j] = meet(poly[j], normals[prev], ds[prev]-halves[prev], normals[i], ds[i]-halves[i])
+		outer[j] = meet(poly[j], normals[prev], ds[prev]+halves[prev], normals[i], ds[i]+halves[i])
+	}
+	p.fade(inner, at)
+	for i := range n {
+		if halves[i] == 0 {
+			continue
+		}
+		next := (i + 1) % n
+		strip := []geom.Vec2{inner[i], inner[next], outer[next], outer[i]}
+		cs := []color.Color{at(inner[i]), at(inner[next]), at(outer[next]).Alpha(0), at(outer[i]).Alpha(0)}
+		p.s.TrianglesColored(strip, cs, fan(4))
+	}
+}
+
+// meet is where the lines a·q = da and b·q = db cross, or near when they
+// are parallel: q moved onto the first.
+func meet(near, a geom.Vec2, da float32, b geom.Vec2, db float32) geom.Vec2 {
+	den := a.X*b.Y - a.Y*b.X
+	if abs(den) < 1e-6 {
+		return near.Add(a.Scale(da - a.Dot(near)))
+	}
+	return geom.V2((da*b.Y-db*a.Y)/den, (a.X*db-b.X*da)/den)
 }
 
 // fan is the triangles of a convex polygon of n corners.

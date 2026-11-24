@@ -2,6 +2,7 @@ package draw //nolint:testpackage // white-box: reaches draw's unexported state
 
 import (
 	"image"
+	"slices"
 	"testing"
 
 	"github.com/lantervale/ember/color"
@@ -394,5 +395,39 @@ func TestARoundedClipSplitsBatchesAndShiftsWithTheList(t *testing.T) {
 	c.Shift(geom.V2(7, 3))
 	if r := c.Batches[2].Round.Rect; r.X != 7 || r.Y != 3 {
 		t.Fatalf("shifting moves the rounded rect with the clip: %+v", r)
+	}
+}
+
+func TestASmoothImageReachesPastItsEdgesOnlyWhenTurned(t *testing.T) {
+	tex := &render.Texture{Image: image.NewRGBA(image.Rect(0, 0, 8, 8))}
+	r, uv := geom.Rect{X: 10, Y: 20, W: 40, H: 20}, geom.Rect{X: 0.5, Y: 0, W: -0.5, H: 1}
+	var plain, smooth List
+	plain.Image(r, tex, uv, color.White)
+	smooth.SmoothImage(r, tex, uv, color.White)
+	smooth.SetTransform(geom.Transform2DFrom(geom.V2(3, 4), 0, 0, geom.V2(2, 0.5)))
+	plain.SetTransform(smooth.Transform())
+	plain.Image(r, tex, uv, color.White)
+	smooth.SmoothImage(r, tex, uv, color.White)
+	if !slices.Equal(plain.Vertices, smooth.Vertices) {
+		t.Fatal("drawn square, a smooth image is an image")
+	}
+	var c List
+	c.SetTransform(geom.Transform2DFrom(geom.V2(100, 100), 0.5, 0, geom.V2(2, 2)))
+	c.SmoothImage(r, tex, uv, color.White)
+	v := c.Vertices
+	if len(v) != 4 || Kind(v[0].Shape.X) != KindSmoothImage {
+		t.Fatalf("one quad of a smooth image: %+v", v)
+	}
+	if v[0].Shape.Y != 0 || v[0].Shape.Z != 0 || v[0].Shape.W != 0.5 || v[0].Extra != 1 {
+		t.Fatalf("its uv's bounds ride on its shape: %+v", v[0])
+	}
+	back := c.transform.Inverse()
+	tl, br := back.Xform(v[0].Pos), back.Xform(v[2].Pos)
+	if tl.X >= r.X || tl.Y >= r.Y || br.X <= r.X+r.W || br.Y <= r.Y+r.H {
+		t.Fatalf("it reaches past r for its edges' coverage: %v %v", tl, br)
+	}
+	at := float32(uv.X + (tl.X-r.X)/r.W*uv.W)
+	if d := v[0].UV.X - at; d > 1e-4 || d < -1e-4 {
+		t.Fatalf("its uv carries on past r: %v, want %v", v[0].UV.X, at)
 	}
 }

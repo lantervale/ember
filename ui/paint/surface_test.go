@@ -122,6 +122,9 @@ func (r *recorder) Text(at geom.Vec2, text string, opts ...twod.TextOption) geom
 func (r *recorder) Image(b geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color) {
 	r.add(op{Kind: "image", Rect: b, Color: tint, Tex: tex, UV: uv})
 }
+func (r *recorder) SmoothImage(b geom.Rect, tex *twod.Texture, uv geom.Rect, tint color.Color) {
+	r.Image(b, tex, uv, tint)
+}
 func (r *recorder) NinePatch(b geom.Rect, tex *twod.Texture, left, _, _, _ float32, tint color.Color) {
 	r.add(op{Kind: "nine", Rect: b, Width: left, Color: tint, Tex: tex})
 }

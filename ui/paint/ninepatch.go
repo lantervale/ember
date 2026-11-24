@@ -101,6 +101,13 @@ func (p *painter) ninePatch(
 		}
 		return tiles(d[k], d[k+1], (s[k+1]-s[k])*scale, how, out)
 	}
+	// Turned or skewed, its outer edges, a texel's colour each, reach a
+	// point past r for r's clip to anti-alias them (decision 0220).
+	pad := p.slant()
+	if pad > 0 {
+		p.s.PushClip(r)
+		defer p.s.PopClip()
+	}
 	var colTiles, rowTiles [][2]float32
 	var cols, rows [9]sliceSpan
 	for j := range 3 {
@@ -119,7 +126,9 @@ func (p *painter) ninePatch(
 				for _, tx := range colTiles {
 					along := clamped(tx[0], tx[1], us[i], us[i+1], size.X, cols[:0])
 					for _, y := range across {
+						y = past(y, ys[0], ys[3], pad)
 						for _, x := range along {
+							x = past(x, xs[0], xs[3], pad)
 							p.s.Image(geom.Rect{X: x.from, Y: y.from, W: x.to - x.from, H: y.to - y.from}, tex,
 								geom.Rect{X: x.u0, Y: y.u0, W: x.u1 - x.u0, H: y.u1 - y.u0}, tint)
 						}
@@ -131,6 +140,21 @@ func (p *painter) ninePatch(
 			}
 		}
 	}
+}
+
+// past is s reaching pad beyond d0 or d1 where it starts or ends there,
+// one texel's colour along it.
+func past(s sliceSpan, d0, d1, pad float32) sliceSpan {
+	if s.u0 != s.u1 {
+		return s
+	}
+	if s.from == d0 {
+		s.from -= pad
+	}
+	if s.to == d1 {
+		s.to += pad
+	}
+	return s
 }
 
 // ratio is how much thicker an edge drawn w thick is than its slice s,

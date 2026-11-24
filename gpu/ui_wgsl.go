@@ -353,6 +353,10 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 	let slot = bits >> 4u;
 	var c = in.color;
 	let hs = in.shape.yz;
+	// how far the UV moves a pixel right and down, taken here in uniform
+	// control flow for a smooth image's edges
+	let uvX = dpdx(in.uv);
+	let uvY = dpdy(in.uv);
 	if (kind == 1u) {
 		c.a *= textureSampleLevel(atlas, atlasSampler, in.uv / vec2f(textureDimensions(atlas)), 0.0).r;
 	} else if (kind == 2u) {
@@ -362,8 +366,29 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 	} else if (kind == 4u) {
 		let t = in.shape.w;
 		c.a *= cover(abs(length(in.uv) - (hs.x - t * 0.5)) - t * 0.5);
-	} else if (kind == 6u) {
-		var t = image(slot, in.uv);
+	} else if (kind == 6u || kind == 8u) {
+		var uv = in.uv;
+		var edge = 1.0;
+		if (kind == 8u) {
+			// a smooth image: each pixel covered by its distance, in pixels,
+			// to the four edges of its UV's bounds, read at the nearest point
+			// inside them
+			let lo = in.shape.yz;
+			let hi = vec2f(in.shape.w, in.extra);
+			// in pixels, an edge left level or upright on the screen, as a
+			// skew leaves two, covers whole pixels as a square quad's does
+			let su = vec2f(uvX.x, uvY.x);
+			let sv = vec2f(uvX.y, uvY.y);
+			let px = 1.0 / max(vec2f(length(su), length(sv)), vec2f(1e-9));
+			let level = vec2f(f32(min(abs(su.x), abs(su.y)) <= 1e-4 * length(su)),
+				f32(min(abs(sv.x), abs(sv.y)) <= 1e-4 * length(sv)));
+			let ramp = mix(vec2f(1.0), vec2f(1e6), level);
+			let a = clamp((uv - lo) * px * ramp + 0.5, vec2f(0.0), vec2f(1.0));
+			let b = clamp((hi - uv) * px * ramp + 0.5, vec2f(0.0), vec2f(1.0));
+			edge = a.x * a.y * b.x * b.y;
+			uv = clamp(uv, lo, hi);
+		}
+		var t = image(slot, uv);
 		if (u.backU.w > 0.5) {
 			t = mixed(t, in.pos.xy);
 		}
@@ -373,8 +398,9 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 			if (t.a > 0.0) { t = vec4f(srgbDecode(srgbEncode(t.rgb) / t.a), t.a); } else { t = vec4f(0.0); }
 		}
 		c *= t;
+		c.a *= edge;
 		if (u.masked > 0.5) {
-			c.a *= textureSampleLevel(mask, maskSampler, in.uv, 0.0).a;
+			c.a *= textureSampleLevel(mask, maskSampler, uv, 0.0).a;
 		}
 	} else if (kind == 7u) {
 		let d = roundRect(in.uv, hs, in.shape.w);

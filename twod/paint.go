@@ -82,6 +82,15 @@ func (u *Canvas) Image(r geom.Rect, tex *Texture, uv geom.Rect, tint color.Color
 	}
 }
 
+// SmoothImage draws as Image, but where a rotation or a skew slants its
+// edges they are anti-aliased over a pixel, as a browser draws a turned
+// picture; Image keeps a turned sprite's edges as its pixels fall.
+func (u *Canvas) SmoothImage(r geom.Rect, tex *Texture, uv geom.Rect, tint color.Color) {
+	if tex != nil {
+		u.list.SmoothImage(r, &tex.Texture, uv, tint)
+	}
+}
+
 // NinePatch stretches tex over r but keeps its margins, in texture
 // pixels, unscaled: corners stay sharp, edges stretch along, the centre
 // both ways.

@@ -220,6 +220,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0217 | [Line metrics round to device pixels as Chrome's](0217-line-metrics-round-to-device-pixels-as-chromes.md) | api |
 | 0218 | [A br clears from the end of its line, and blocks follow the floats where they were laid out](0218-a-br-clears-from-the-end-of-its-line-and-blocks-follow-the-floats-where-they-were-laid-out.md) | rendering |
 | 0219 | [A transform holds fixed boxes, and a point hits through it as its pixel square](0219-a-transform-holds-fixed-boxes-and-a-point-hits-through-it-as-its-pixel-square.md) | rendering |
+| 0220 | [A turned picture's and border's edges are covered by their distance](0220-a-turned-pictures-and-borders-edges-are-covered-by-their-distance.md) | rendering |
 
 ## Writing one
 
