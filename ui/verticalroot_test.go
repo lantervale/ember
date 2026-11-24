@@ -109,25 +109,25 @@ func TestTheRootTakesItsBodysWritingModeAndDirection(t *testing.T) {
 	assert.Equal(t, geom.V2(400, 1200), ui.ScrollSize(p.doc, p.doc.HTML()))
 }
 
-func TestPagingKeysScrollAVerticalRootAlongItsBlocks(t *testing.T) {
+func TestSpaceScrollsAVerticalRootAlongItsBlocks(t *testing.T) {
 	ui.SetPlatform(t, textedit.Others)
 	p := newWidePage(t, "html { writing-mode: vertical-rl; }")
 	page := widePageStep()
 	p.key(input.KeyPageDown)
-	assert.Equal(t, geom.V2(-page, 0), p.scroll(), "a page left")
-	p.key(input.KeyPageUp)
-	assert.Equal(t, geom.V2(0, 0), p.scroll())
+	assert.Equal(t, geom.V2(0, 0), p.scroll(), "nothing below to page to")
 	p.key(input.KeyEnd)
-	assert.Equal(t, geom.V2(-800, 0), p.scroll(), "to the left end")
-	p.key(input.KeyHome)
-	assert.Equal(t, geom.V2(0, 0), p.scroll())
+	assert.Equal(t, geom.V2(0, 0), p.scroll(), "nothing below to end at")
 	p.key(input.KeySpace)
+	assert.Equal(t, geom.V2(-page, 0), p.scroll(), "a page left")
+	p.key(input.KeyHome)
+	assert.Equal(t, geom.V2(-page, 0), p.scroll(), "already at the top")
+	p.key(input.KeyPageUp)
 	assert.Equal(t, geom.V2(-page, 0), p.scroll())
 	p.key(input.KeyRight)
 	assert.Equal(t, geom.V2(-page+40, 0), p.scroll(), "the arrows scroll as they point")
 }
 
-func TestOnMacPageDownPagesDownWhateverTheWritingMode(t *testing.T) {
+func TestOnMacHomeAndEndScrollAVerticalRootAlongItsBlocks(t *testing.T) {
 	ui.SetPlatform(t, textedit.Mac)
 	p := newWidePage(t, "html { writing-mode: vertical-rl; }")
 	p.key(input.KeyPageDown)
@@ -135,7 +135,9 @@ func TestOnMacPageDownPagesDownWhateverTheWritingMode(t *testing.T) {
 	p.key(input.KeySpace)
 	assert.Equal(t, geom.V2(-widePageStep(), 0), p.scroll(), "Space pages along the blocks")
 	p.key(input.KeyEnd)
-	assert.Equal(t, geom.V2(-800, 0), p.scroll())
+	assert.Equal(t, geom.V2(-800, 0), p.scroll(), "to the left end")
+	p.key(input.KeyHome)
+	assert.Equal(t, geom.V2(0, 0), p.scroll())
 }
 
 func TestScrollToStartPutsAColumnAtAVerticalRootsBlockStart(t *testing.T) {

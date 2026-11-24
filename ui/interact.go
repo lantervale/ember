@@ -1944,7 +1944,7 @@ func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift
 		from := d.userAim(s)
 		off := from
 		dir := way
-		if kind == snapEnd || kind == snapPage && (k == input.KeySpace || d.platform != textedit.Mac) {
+		if kind == snapPage && k == input.KeySpace || kind == snapEnd && d.platform == textedit.Mac {
 			dir = alongBlocks(s, way)
 		}
 		switch kind {
@@ -1969,10 +1969,11 @@ func (d *Document) scrollKey(n *Node, i control.Intent, k input.Key, free, shift
 	return false
 }
 
-// alongBlocks is the way down, way, as the keys that page and end scroll s:
-// along its blocks, as Chrome's, leftwards in a writing mode whose blocks
-// start on the right; but for Space, Chrome on macOS pages down the page
-// whatever its writing mode. A viewport's blocks are its root's.
+// alongBlocks is the way down, way, as Space, and Home and End on macOS,
+// scroll s: along its blocks, as Chrome's, leftwards in a writing mode
+// whose blocks start on the right. Page Up and Page Down, and Home and End
+// elsewhere, scroll the page as they point whatever its writing mode. A
+// viewport's blocks are its root's.
 func alongBlocks(s *box.Box, way geom.Vec2) geom.Vec2 {
 	mode := blocksOf(s)
 	if !mode.Vertical() {

@@ -110,16 +110,16 @@ func TestAVerticalRootScrollsAsFarAsChromes(t *testing.T) {
 
 // TestAVerticalRootScrollsByKeysAndWheelAsChromes pages, ends and turns
 // the wheel over a vertical root's viewport in both browsers, with
-// nothing focused, and compares where each step lands: the keys that
-// page and end move along the root's blocks, the arrows and the wheel
-// as they point.
+// nothing focused, and compares where each step lands: Space moves
+// along the root's blocks, and Home and End on macOS; the page keys,
+// Home and End elsewhere, the arrows and the wheel as they point.
 func TestAVerticalRootScrollsByKeysAndWheelAsChromes(t *testing.T) {
 	type step struct {
 		key   string
 		wheel geom.Vec2
 	}
 	steps := []step{{key: "PageDown"}, {key: "PageDown"}, {key: "PageUp"}, {key: "End"}, {key: "Home"},
-		{key: " "}, {key: "ArrowLeft"}, {key: "ArrowLeft"}, {key: "ArrowRight"}, {key: "ArrowDown"},
+		{key: " "}, {key: "Home"}, {key: " "}, {key: "ArrowLeft"}, {key: "ArrowLeft"}, {key: "ArrowRight"}, {key: "ArrowDown"},
 		{wheel: geom.V2(0, 100)}, {wheel: geom.V2(-100, 0)}, {wheel: geom.V2(60, 0)}}
 	at := geom.V2(300, 330)
 	for name, sheet := range map[string]string{"vertical-rl": rlRoot, "vertical-lr": lrRoot,
