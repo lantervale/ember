@@ -306,6 +306,7 @@ What ui refuses on purpose is below; what it does not do yet is in [What is miss
 | `clip-path: url()` | a basic shape: `polygon()` or `path()` for an SVG `clipPath`'s outline |
 | `filter: url()`, `backdrop-filter: url()` to another file | a `filter` element in an `svg` element of the page, named `url(#id)` |
 | `mix-blend-mode: plus-darker`, as Chrome refuses it | the other blend modes |
+| `initial-letter-align`, as Chrome refuses it | the drop cap aligned on its capitals, as `initial-letter` sets it |
 | repeating gradients, colour hints | a gradient's plain stops |
 | at-rules but `@import`, `@font-face`, `@media`, `@container`, `@scope`, `@keyframes`, `@starting-style`, `@counter-style` and `@position-try` | not supported |
 
@@ -449,6 +450,8 @@ A list numbers its items with the same counters: `ol`, `ul` and `menu` reset `li
 `::first-letter` is a box round the first letter of a block's first line, with the punctuation before and after it (`"W` of `"Well,"`), wherever that letter is: in an inline element, in `::before`'s text, in the first child block. It takes what `::first-line` takes, and margins, padding, borders, their radii and `float`: a floated letter is a drop cap, the lines going round it. It inherits from the element its letter is in. Under `white-space: pre` or `pre-wrap` the spaces before the letter go into its box, at its size; a translated text gives the letter of what the translation says; and a press or a drag on the letter places the caret in its text, as on the rest of it. A picture, a control, an inline block or a `br` before any text leaves the block none, as in Chrome.
 
 `initial-letter` on a `::first-letter` makes the drop cap as Chrome does, without sizing it by hand: `initial-letter: 3` sizes the letter so its capitals reach from the cap height of the first line to the baseline of the third, floats it at the start of the line, its box as wide as the letter's ink and as tall as its capitals, and the lines beside it go round. A second value is the line its baseline sits on: `3 2` raises it a line above the first, which moves down to make room, `2 raise` is `2 1`, and `drop`, the default, is the size rounded down, as Chrome 158: `2.5` sinks two lines and rises half a line above the first. Its padding, borders and margins go round that box.
+
+In vertical text the drop cap is the horizontal one turned, in every writing mode: its capitals reach across the lines from the side the blocks start on, and its box runs down the line as far as its ink, a letter turned with the line by its width, one standing upright (an ideograph, or any letter under `text-orientation: upright`) by its height in its room ([decision 0223](../99-decisions/0223-a-vertical-drop-cap-is-the-horizontal-one-turned-and-an-element-is-never-one.md)). As in Chrome, `initial-letter` on an element, the first span or picture of a block included, is read and changes nothing: make the drop cap from the block's `::first-letter`. `initial-letter-align` is refused, as Chrome refuses it.
 
 ```css
 article p:first-of-type::first-letter { float: left; font-size: 3.2em; line-height: 1; margin: 2px 6px 0 0; }

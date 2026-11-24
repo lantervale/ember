@@ -20,9 +20,10 @@ type FontUnits struct{ Ex, Ch, Cap, Ic, Line, Ascent, Descent float32 }
 // the fonts, the viewport and the root's style.
 type measures struct {
 	font func(style.Font) FontUnits
-	// ink is where a text's glyphs draw across in a font: from left of
-	// the pen's start, width wide; ok false for none.
-	ink           func(f style.Font, text string) (left, width float32, ok bool)
+	// ink is where a text's glyphs draw along its line in a font, of a
+	// text-orientation: from past the pen's start, length long; ok false
+	// for none.
+	ink           func(f style.Font, text string, o style.TextOrientation) (start, length float32, ok bool)
 	width, height float32
 	root          *dom.Node
 	// used are the relative units read since the tree was last styled whole.
