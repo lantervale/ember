@@ -1204,6 +1204,9 @@ type copier struct {
 	// next text of the line.
 	space bool
 	last  rune
+	// source is the node's text cased as written, where it has as many
+	// characters as it shows: a rich copy writes it.
+	source []rune
 }
 
 func (d *Document) textBetween(start, end Position) string {
@@ -1301,9 +1304,7 @@ func (c *copier) text(n *Node) {
 			if c.space && c.last != 0 && !isBlank(c.last) {
 				c.put(' ')
 			}
-			for _, r := range m.src[a:z] {
-				c.put(r)
-			}
+			c.putFrom(m.src, a, z)
 		}
 		at = l.end
 	}
@@ -1315,13 +1316,27 @@ func (c *copier) text(n *Node) {
 			if c.space && c.last != 0 && !isBlank(c.last) {
 				c.put(' ')
 			}
-			for _, r := range runes[j0:j1] {
+			for j, r := range runes[j0:j1] {
+				if at := offs[j0+j]; c.source != nil && !isBlank(r) && int(at) < len(c.source) {
+					r = c.source[at]
+				}
 				c.put(r)
 			}
 		}
 		at = int(offs[len(offs)-1])
 	}
 	c.dropped(m.src, max(at, from), min(len(m.src), to), b.Style.WhiteSpace, false)
+}
+
+// putFrom writes text[a:z], from the node's text cased as written where
+// the copier has it.
+func (c *copier) putFrom(text []rune, a, z int) {
+	if c.source != nil {
+		text = c.source
+	}
+	for _, r := range text[a:z] {
+		c.put(r)
+	}
 }
 
 // dropped is the part from to to of a node's text that no fragment

@@ -475,3 +475,36 @@ func (s *Session) key(key string, mods int, at time.Time, commands []string) {
 	}
 	s.call("Input.dispatchKeyEvent", up, nil)
 }
+
+// CopiedHTML is the markup Chrome's copy writes of the page's selection,
+// read where no clipboard is: dragging a selection carries the same
+// markup, which a dragstart listener reads before calling the drag off.
+// The drag starts over the selection off any link where it can, as a
+// press makes a link :active; macOS starts a text drag only after a pause.
+func (s *Session) CopiedHTML() string {
+	s.t.Helper()
+	var at []float64
+	s.Eval(`(() => {
+	window.emberCopied = null;
+	addEventListener("dragstart", e => { window.emberCopied = e.dataTransfer.getData("text/html"); e.preventDefault(); },
+		{once: true});
+	const at = [...getSelection().getRangeAt(0).getClientRects()].filter(r => r.width > 2 && r.height > 2)
+		.map(r => [r.x + r.width / 2, r.y + r.height / 2]);
+	return at.find(([x, y]) => !document.elementFromPoint(x, y)?.closest("a")) ?? at[0] ?? null; })()`, &at)
+	if len(at) != 2 {
+		s.t.Fatal("chrome: no place to drag the selection from")
+	}
+	from := geom.V2(float32(at[0]), float32(at[1]))
+	s.Mouse("mousePressed", from, 1)
+	time.Sleep(250 * time.Millisecond)
+	for i := float32(1); i <= 8; i++ {
+		s.Mouse("mouseMoved", from.Add(geom.V2(5*i, 5*i)), 1)
+	}
+	s.Mouse("mouseReleased", from.Add(geom.V2(40, 40)), 1)
+	var html *string
+	s.Eval(`window.emberCopied`, &html)
+	if html == nil {
+		s.t.Fatal("chrome: the selection did not drag")
+	}
+	return *html
+}

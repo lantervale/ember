@@ -121,6 +121,10 @@ const (
 	shortMarginBlock         = "margin-block"
 	shortInsetBlock          = "inset-block"
 	shortPaddingBlock        = "padding-block"
+	shortMargin              = "margin"
+	shortPadding             = "padding"
+	shortBorderWidth         = "border-width"
+	shortBorderStyle         = "border-style"
 
 	propTextDecorationStyle     = "text-decoration-style"
 	propTextDecorationColor     = "text-decoration-color"
