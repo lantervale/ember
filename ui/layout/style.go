@@ -175,14 +175,6 @@ func mirroredGutterEdges(s *style.Computed, g point) rect {
 	return r
 }
 
-// mirroredGutterEdges is gutterEdges for flex and grid, which lay out a right-to-left
-// box as its mirror image (mirrored): the vertical bar at the image's end stands on
-// the box's start once mirrored back.
-func mirroredGutterEdges(s *style.Computed, g point) rect {
-	start := fmin(startGutter(s), g.x)
-	return rect{l: start, r: g.x - start, b: g.y}
-}
-
 func outOfFlow(p style.Position) bool { return p == style.Absolute || p == style.FixedPosition }
 
 // stretched is sz with each axis whose length in s is stretch the room cb leaves less

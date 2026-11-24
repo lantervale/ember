@@ -106,7 +106,48 @@ func (s *probe) holds(p geom.Vec2, r geom.Rect) bool {
 			return false
 		}
 	}
-	return hits(r, s.xf.Inverse().Xform(p))
+	back := s.xf.Inverse()
+	if shifted(s.xf) {
+		return hits(r, back.Xform(p))
+	}
+	return reaches(r, back, p)
+}
+
+// shifted reports whether t only moves by whole pixels, which Blink hits
+// through as it hits outside any transform: as a point.
+func shifted(t geom.Transform2D) bool {
+	return t.X == geom.V2(1, 0) && t.Y == geom.V2(0, 1) &&
+		t.Origin.X == geom.Floor(t.Origin.X) && t.Origin.Y == geom.Floor(t.Origin.Y)
+}
+
+// reaches is whether the pixel square from p, in the root's space, taken
+// back into r's space, overlaps r: how Blink hits a point through any
+// other transform, so a point up to the square's reach before a turned
+// box's edge hits it.
+func reaches(r geom.Rect, back geom.Transform2D, p geom.Vec2) bool {
+	q := [4]geom.Vec2{back.Xform(p), back.Xform(p.Add(geom.V2(1, 0))), back.Xform(p.Add(geom.V2(1, 1))),
+		back.Xform(p.Add(geom.V2(0, 1)))}
+	box := cornersOf(r)
+	for _, axis := range [4]geom.Vec2{geom.V2(1, 0), geom.V2(0, 1), perp(q[1].Sub(q[0])), perp(q[3].Sub(q[0]))} {
+		a0, a1 := spread(axis, q[:])
+		b0, b1 := spread(axis, box[:])
+		if a1 <= b0 || b1 <= a0 {
+			return false
+		}
+	}
+	return true
+}
+
+func perp(v geom.Vec2) geom.Vec2 { return geom.V2(-v.Y, v.X) }
+
+// spread is the least and the most of the points' projections on axis.
+func spread(axis geom.Vec2, pts []geom.Vec2) (float32, float32) {
+	lo, hi := pts[0].Dot(axis), pts[0].Dot(axis)
+	for _, v := range pts[1:] {
+		d := v.Dot(axis)
+		lo, hi = min(lo, d), max(hi, d)
+	}
+	return lo, hi
 }
 
 // hits is whether p is in r as Chrome hits a box: its left and top

@@ -219,6 +219,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0216 | [A clip under a rotation or a skew cuts in its own space](0216-a-clip-under-a-rotation-or-a-skew-cuts-in-its-own-space.md) | rendering |
 | 0217 | [Line metrics round to device pixels as Chrome's](0217-line-metrics-round-to-device-pixels-as-chromes.md) | api |
 | 0218 | [A br clears from the end of its line, and blocks follow the floats where they were laid out](0218-a-br-clears-from-the-end-of-its-line-and-blocks-follow-the-floats-where-they-were-laid-out.md) | rendering |
+| 0219 | [A transform holds fixed boxes, and a point hits through it as its pixel square](0219-a-transform-holds-fixed-boxes-and-a-point-hits-through-it-as-its-pixel-square.md) | rendering |
 
 ## Writing one
 
