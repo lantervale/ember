@@ -23,4 +23,4 @@ Chrome sets the full-width punctuation of Chinese and Japanese half wide where t
 
 ## Consequences
 
-Text without ideographs, curly quotes or middle dots costs one scan. Vertical text (`vhal`) and text fields are left untrimmed and unspaced, and where Chrome itself differs between equal cases (an opening bracket starting a block under `trim-start`) ui follows the specification.
+Text without ideographs, curly quotes or middle dots costs one scan. Vertical text (`vhal`) and text fields are left untrimmed and unspaced, and where Chrome itself differs between equal cases (an opening bracket starting a block under `trim-start`) ui follows the specification. A closing bracket the content's last line would overflow by is trimmed as Chrome 158 trims it, where Chrome 157 and older measure the line fitting by the trim but draw the bracket whole: the Chrome tests of it skip an older Chrome.

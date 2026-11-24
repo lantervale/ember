@@ -90,7 +90,24 @@ func TestAClosingBracketALineWouldOverflowIsTrimmedToFit(t *testing.T) {
 	assert.Equal(t, []string{"字字字", "字」字"}, lines(b), "nor under space-all")
 	b, frags = hanText(nil, 45, "字字字字」")
 	assert.Equal(t, []string{"字字字字」"}, lines(b), "the content's end fits it, as Chrome measures it")
-	assert.Equal(t, float32(50), frags[0].Rect.W, "and draws it whole")
+	assert.Equal(t, float32(45), frags[0].Rect.W, "and trims it, as Chrome 158 draws it")
+	assert.Equal(t, []box.Spacing{{At: 12, Space: -5}}, frags[0].Spacing)
+	b, _ = hanText(func(st *style.Computed) { st.TextAlign = style.Right }, 48, "字字字字」")
+	assert.Equal(t, geom.Rect{X: 3, W: 45, H: 10}, b.Children[0].Rect(), "aligned by its trimmed width")
+	_, frags = hanText(nil, 50, "字字字字」")
+	assert.Equal(t, float32(50), frags[0].Rect.W, "a closing bracket that fits stays whole")
+}
+
+func TestTheLastLineOfMinContentTrimsItsClosingBracket(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) {
+		st.Display = style.InlineBlock
+		st.Size.Width = style.Length{Kind: style.MinContent}
+		st.LineBreak = style.LineBreakAnywhere
+	}, text("漢字。」"))
+	tr := Layout(el(dom.Div, block, p), geom.V2(200, 600), hanFonts{})
+	frags := tr.Of[p].Children[0].Lines
+	require.Len(t, frags, 3)
+	assert.Equal(t, float32(10), frags[2].Rect.W, "。 set half before 」, and 」 trimmed to fit the min-content width")
 }
 
 func TestAutospaceAddsAnEighthOfTheSizeBetweenIdeographsAndLetters(t *testing.T) {

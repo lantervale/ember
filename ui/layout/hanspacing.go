@@ -328,8 +328,8 @@ func (c *inlineContent) endFit(from, end int, at, width float32) float32 {
 
 // lineEnd is the width of line l as its end sets it, and whether its
 // closing bracket is trimmed: where it overflows its room otherwise, a
-// wrap ending it before more text of the bracket's own, as Chrome trims
-// it.
+// wrap ending it before more text of the bracket's own or the end of
+// the content, as Chrome 158 trims it.
 func (c *inlineContent) lineEnd(l line, wrapped bool) (float32, bool) {
 	k := c.lastWord(l.from, l.to)
 	if k < 0 || c.pieces[k].han == nil {
@@ -337,7 +337,7 @@ func (c *inlineContent) lineEnd(l line, wrapped bool) (float32, bool) {
 	}
 	h, n := c.pieces[k].han, len(c.pieces[k].text)
 	w := l.width + h.endRoom(n, c.runGoesOn(k, l.to))
-	if wrapped && w > l.avail+layoutEpsilon && c.ownUnit(k) && c.runGoesOn(k, l.to) {
+	if w > l.avail+layoutEpsilon && c.ownUnit(k) && (wrapped && c.runGoesOn(k, l.to) || c.endsContent(l.to)) {
 		if trim, ok := h.closes(n); ok {
 			return w + trim, true
 		}
