@@ -112,12 +112,41 @@ func isScrollContainer(s *style.Computed) bool {
 func scrollbarGutter(s *style.Computed) point {
 	var g point
 	if s.Overflow.Height == style.Scroll || s.GutterStable && scrollContainer(s.Overflow.Height) {
-		g.x = s.ScrollbarWidth
+		g.x = s.ScrollbarWidth + startGutter(s)
 	}
 	if s.Overflow.Width == style.Scroll {
 		g.y = s.ScrollbarHeight
 	}
 	return g
+}
+
+// startGutter is the room scrollbar-gutter: stable both-edges keeps at the
+// inline start, across from the vertical bar, as wide as it; part of
+// scrollbarGutter's.
+func startGutter(s *style.Computed) float32 {
+	if !s.GutterBothEdges || !scrollContainer(s.Overflow.Height) {
+		return 0
+	}
+	return s.ScrollbarWidth
+}
+
+// gutterEdges is g, a box of style s's scrollbarGutter, on the edges it
+// stands at: the vertical bar's at the end, or the start under direction
+// rtl, as Chrome's, and both-edges' across from it.
+func gutterEdges(s *style.Computed, g point) rect {
+	r := mirroredGutterEdges(s, g)
+	if s.Dir == style.RTL {
+		r.l, r.r = r.r, r.l
+	}
+	return r
+}
+
+// mirroredGutterEdges is gutterEdges for flex and grid, which lay out a right-to-left
+// box as its mirror image (mirrored): the vertical bar at the image's end stands on
+// the box's start once mirrored back.
+func mirroredGutterEdges(s *style.Computed, g point) rect {
+	start := fmin(startGutter(s), g.x)
+	return rect{l: start, r: g.x - start, b: g.y}
 }
 
 func outOfFlow(p style.Position) bool { return p == style.Absolute || p == style.FixedPosition }

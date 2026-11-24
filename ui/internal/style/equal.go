@@ -55,9 +55,11 @@ func (b *Box) equal(o *Box) bool {
 		b.ScrollbarWidth == o.ScrollbarWidth &&
 		b.ScrollbarHeight == o.ScrollbarHeight &&
 		b.GutterStable == o.GutterStable &&
+		b.GutterBothEdges == o.GutterBothEdges &&
 		b.ScrollbarNone == o.ScrollbarNone &&
+		b.ScrollbarThin == o.ScrollbarThin &&
 		b.ScrollbarOverlay == o.ScrollbarOverlay &&
-		b.Viewport.Equal(o.Viewport) &&
+		b.Viewport.Equal(o.Viewport) && b.ViewportBars.Equal(o.ViewportBars) &&
 		b.OverflowPropagated == o.OverflowPropagated &&
 		b.ZIndex == o.ZIndex &&
 		b.ZAuto == o.ZAuto &&
@@ -177,6 +179,8 @@ func (t *Text) equal(o *Text) bool {
 		t.TextTransform == o.TextTransform &&
 		t.PixelText == o.PixelText &&
 		t.ExactText == o.ExactText &&
+		t.SubpixelText == o.SubpixelText &&
+		t.TextRendering == o.TextRendering &&
 		t.Ellipsis == o.Ellipsis &&
 		t.EllipsisStart == o.EllipsisStart &&
 		t.Orphans == o.Orphans &&
@@ -185,8 +189,11 @@ func (t *Text) equal(o *Text) bool {
 		t.BreakAnywhere == o.BreakAnywhere &&
 		t.WordBreak == o.WordBreak &&
 		t.LineBreak == o.LineBreak &&
+		t.Strictness == o.Strictness &&
 		t.TabSize == o.TabSize &&
-		t.InkThrough == o.InkThrough &&
+		t.SkipInk == o.SkipInk &&
+		t.UnderlineOffset == o.UnderlineOffset &&
+		t.UnderlinePosition == o.UnderlinePosition &&
 		t.WrapStyle == o.WrapStyle &&
 		t.Hyphens == o.Hyphens &&
 		t.HyphenChar == o.HyphenChar &&
@@ -199,7 +206,8 @@ func (t *Text) equal(o *Text) bool {
 }
 
 func (d *Decoration) equal(o *Decoration) bool {
-	return d.TextDecoration == o.TextDecoration && d.Font.Equal(o.Font)
+	return d.TextDecoration == o.TextDecoration && d.Font.Equal(o.Font) && d.Offset == o.Offset &&
+		d.Position == o.Position && d.RightInVertical == o.RightInVertical
 }
 
 func (c *Content) equal(o *Content) bool {
@@ -214,6 +222,7 @@ func (l *Look) equal(o *Look) bool {
 		l.Scrollbar.Equal(o.Scrollbar) &&
 		l.ScrollbarThumb == o.ScrollbarThumb && l.ScrollbarTrack == o.ScrollbarTrack &&
 		l.ScrollbarColored == o.ScrollbarColored &&
+		l.Resizable == o.Resizable && l.Resizer.Equal(o.Resizer) &&
 		sameSliceFunc(l.BackgroundImages, o.BackgroundImages, (*Image).equal) &&
 		sameSlice(l.BackgroundSizes, o.BackgroundSizes) &&
 		sameSlice(l.BackgroundRepeats, o.BackgroundRepeats) &&

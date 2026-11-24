@@ -1,8 +1,6 @@
 package layout
 
 import (
-	"unicode/utf8"
-
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -276,6 +274,11 @@ func (t *tree) turnedLayout(n *node, in input) output {
 		// Chrome's when nothing gives them a length.
 		tin.avail.w = def(t.icbAlong(from))
 	}
+	if !some(tin.known.h) {
+		// the room its parent's lines leave is no block size it fills: an orthogonal
+		// flow's blocks take their content's, as Chrome's
+		tin.avail.h = maxContentSpace
+	}
 	out := t.computeChildIn(n, tin, nil)
 	turnedOut := out
 	turnedOut.size = out.size.across()
@@ -425,34 +428,38 @@ func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geo
 	}
 }
 
+// turnPicture turns the natural size and proportions of a replaced node into the frame
+// its style is in.
+func (n *node) turnPicture() {
+	n.natural, n.shape = turnPicture(n.natural, n.shape, outerFrame(n.parent, n.box.Style))
+}
+
+// turnPicture is a picture's natural size and proportions in the frame of mode.
+func turnPicture(natural size, shape box.Intrinsic, mode style.WritingMode) (size, box.Intrinsic) {
+	if !mode.Vertical() {
+		return natural, shape
+	}
+	shape.Width, shape.Height = shape.Height, shape.Width
+	if shape.Ratio > 0 {
+		shape.Ratio = 1 / shape.Ratio
+	}
+	return natural.across(), shape
+}
+
 // advance is the length of text s of style st along its line: in vertical lines each
-// character standing upright takes its font's ascent and descent, as Chrome's when the
-// face has no vertical metrics.
+// cluster standing upright takes its vertical advance (box.Upright).
 func advance(fonts box.Fonts, st *style.Computed, s string) float32 {
 	if !st.Stands() {
 		return fonts.Advance(st.Font, s)
 	}
 	var w float32
-	from := 0
-	for i, r := range s {
-		if !style.Upright(r, st.Orientation) {
-			continue
+	style.Oriented(s, st.Orientation, func(part string, upright bool) {
+		if upright {
+			a, _ := box.Upright(fonts, st.Font, part)
+			w += a
+			return
 		}
-		if from < i {
-			w += fonts.Advance(st.Font, s[from:i])
-		}
-		w += uprightAdvance(fonts, st)
-		from = i + utf8.RuneLen(r)
-	}
-	if from < len(s) {
-		w += fonts.Advance(st.Font, s[from:])
-	}
+		w += fonts.Advance(st.Font, part)
+	})
 	return w
-}
-
-// uprightAdvance is how far a character standing upright in vertical lines of style st
-// takes along them.
-func uprightAdvance(fonts box.Fonts, st *style.Computed) float32 {
-	m := fonts.Metrics(st.Font)
-	return m.Ascent + m.Descent
 }

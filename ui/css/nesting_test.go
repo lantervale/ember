@@ -1,8 +1,10 @@
 package css //nolint:testpackage // reads the rules a nested sheet is read as, and computed styles off dom
 
 import (
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lantervale/ember/ui/internal/dom"
 )
@@ -188,6 +190,32 @@ div { color: #020202 }
 		if got := styleOf(c.n).Color; got != hex(c.want) {
 			t.Errorf("#%s: got %v, want %s", c.n.ID(), got, c.want)
 		}
+	}
+}
+
+func TestDeeplyNestedScopesMatchInLinearTime(t *testing.T) {
+	const depth = 90
+	span := el(dom.Span, "leaf")
+	src := "span { color: #0f0 }"
+	n := with(el(dom.Div, "", "s"+strconv.Itoa(depth-1)), span)
+	for i := depth - 1; i >= 0; i-- {
+		src = "@scope (.s" + strconv.Itoa(i) + ") { " + src + " }"
+		if i > 0 {
+			n = with(el(dom.Div, "", "s"+strconv.Itoa(i-1)), n)
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		Compute(page(n), []*Sheet{sheet(t, "span { color: #000 } "+src)})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("90 nested @scope rules did not match within 5 s")
+	}
+	if got := styleOf(span).Color; got != hex("#0f0") {
+		t.Errorf("the innermost scope's span: %v", got)
 	}
 }
 

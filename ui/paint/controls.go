@@ -105,6 +105,27 @@ func content(e entry) geom.Rect {
 	return c
 }
 
+// parted reports a control laid out round a ControlPart box.
+func parted(b *box.Box) bool {
+	for _, k := range b.Children {
+		if k.Kind == box.ControlPart {
+			return true
+		}
+	}
+	return false
+}
+
+// partRect is where e's ControlPart box lies, between its ::before and
+// its ::after, else its content box c.
+func partRect(e entry, c geom.Rect) geom.Rect {
+	for _, k := range e.b.Children {
+		if k.Kind == box.ControlPart {
+			return geom.Rect{X: e.at.X + k.Pos.X, Y: e.at.Y + k.Pos.Y, W: k.Size.X, H: k.Size.Y}
+		}
+	}
+	return c
+}
+
 func (p *painter) marks(e entry, alpha float32) {
 	n, st := e.b.Node, shown(e.b)
 	if !st.Visible {
@@ -134,9 +155,11 @@ func (p *painter) marks(e entry, alpha float32) {
 			if own {
 				p.radio(n, c, p.accented(e, st, alpha, ink))
 			}
-		case "range":
+		case rangeType:
 			if !own {
-				p.rangeParts(c, st, float32(p.rangeAt(n).Fraction()), alpha)
+				part := partRect(e, c)
+				c.X, c.W = part.X, part.W
+				p.rangeParts(c, st, n.State(), float32(p.rangeAt(n).Fraction()), alpha)
 				return
 			}
 			p.rangeMarks(n, c, st, alpha)
@@ -148,6 +171,9 @@ func (p *painter) marks(e entry, alpha float32) {
 	case dom.Progress:
 		p.progress(e, c, st, alpha)
 	case dom.Meter:
+		if !own {
+			c = partRect(e, c)
+		}
 		p.meter(n, c, st, alpha)
 	case dom.Img, dom.Svg:
 		p.img(e, alpha)
@@ -169,13 +195,14 @@ func (p *painter) marks(e entry, alpha float32) {
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source: // only marked controls come here
+		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source, dom.Optgroup: // only marked controls come here
 	}
 }
 
 // accented draws a checked checkbox or radio of e whose accent-color is
 // set as Chrome does: the checkbox filled with it, the radio's ring in
-// it, and returns the ink of its mark, a radio's dot in the accent, a
+// it, darker or lighter while hovered or pressed as Chrome shades its
+// accent, and returns the ink of its mark, a radio's dot in the accent, a
 // checkbox's tick white or dark as the accent contrasts more with each;
 // ink where the accent is auto or the control unchecked.
 func (p *painter) accented(e entry, st *style.Computed, alpha float32, ink color.Color) color.Color {
@@ -190,7 +217,8 @@ func (p *painter) accented(e entry, st *style.Computed, alpha float32, ink color
 	if st.AccentAuto || !checked {
 		return ink
 	}
-	accent := fade(st.AccentColor, alpha)
+	light := style.LightCheck(st.AccentColor)
+	accent := fade(style.AccentShade(st.AccentColor, n.State().Shade(dom.Hover, dom.Active), light), alpha)
 	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
 	if inputType(n) == "radio" {
 		p.s.Border(r, min(r.W, r.H)/2, st.Border.Top, accent)
@@ -198,21 +226,11 @@ func (p *painter) accented(e entry, st *style.Computed, alpha float32, ink color
 	}
 	radius, _ := st.Radius.TopLeft.Width.Resolve(r.W)
 	p.s.RoundRect(r, radius, accent)
-	return fade(tickOn(st.AccentColor), alpha)
-}
-
-// tickOn is the tick Chrome draws on a checkbox of accent a: white, or
-// its dark grey where that contrasts more.
-func tickOn(a color.Color) color.Color {
-	l := 0.2126*a.R + 0.7152*a.G + 0.0722*a.B
-	if (l+0.05)*(l+0.05) > 1.05*(darkTickLuminance+0.05) {
-		return darkTick
+	if light {
+		return fade(darkTick, alpha)
 	}
-	return color.White
+	return fade(color.White, alpha)
 }
-
-// darkTickLuminance is darkTick's relative luminance.
-const darkTickLuminance = 0.0437
 
 // progress draws a progress in its content box c: its parts where its
 // appearance is none, else its track filled to its value in its accent,
@@ -222,9 +240,9 @@ func (p *painter) progress(e entry, c geom.Rect, st *style.Computed, alpha float
 	f, known := progressOf(p.machine(n), n)
 	if !st.Appearance.Native() {
 		parts := partsOf(st)
+		c = partRect(e, c)
 		if !known {
-			p.barParts(c, parts.Inner, parts.Bar, nil, 0, st.Dir == style.RTL, false, alpha)
-			return
+			f = 0
 		}
 		p.barParts(c, parts.Inner, parts.Bar, parts.Value, f, st.Dir == style.RTL, false, alpha)
 		return
@@ -309,28 +327,43 @@ func (p *painter) switchThumb(c geom.Rect, on bool, ink color.Color) {
 	p.s.Circle(geom.V2(x, c.Y+r), max(r-2, 1), ink)
 }
 
-// rangeMarks draws a range as ember's convention has it: a track 6
-// high (or the box's height) along the middle in its background-color,
-// filled to the value in its accent-color, and a thumb 14 across centred
-// on the value, overhanging the ends as Chrome's does, in its color, in
-// its accent-color while hovered.
+// ownRange is where a range of its own look and style st draws its marks
+// in its content box c at value f: a track 6 thick (or the box's
+// thickness) along the middle, filled from its start to the value, and
+// a thumb 14 across centred on the value, overhanging the ends as
+// Chrome's does; down the box where it runs vertically.
+func ownRange(c geom.Rect, st *style.Computed, f float32) (geom.Rect, geom.Rect, geom.Rect) {
+	fl := flowOfRange(st)
+	fc := fl.in(c, c)
+	h := min(rangeTrack, fc.H)
+	cy := fc.Y + fc.H/2
+	t := geom.Rect{X: fc.X, Y: cy - h/2, W: fc.W, H: h}
+	at := min(max(f, 0), 1)
+	filled := t
+	filled.W *= at
+	if fl.reversed {
+		filled.X += t.W - filled.W
+		at = 1 - at
+	}
+	d := min(rangeThumb, fc.H)
+	th := geom.Rect{X: fc.X + at*fc.W - d/2, Y: cy - d/2, W: d, H: d}
+	return fl.out(c, t), fl.out(c, filled), fl.out(c, th)
+}
+
+// rangeMarks draws a range as ember's convention has it (ownRange): the
+// track in its background-color, filled in its accent-color, the thumb
+// in its accent where one is set, else its color; the fill darker or
+// lighter while the range is hovered or pressed, the thumb while it is,
+// as Chrome shades its accent.
 func (p *painter) rangeMarks(n *dom.Node, c geom.Rect, st *style.Computed, alpha float32) {
-	f := float32(p.rangeAt(n).Fraction())
-	h := min(rangeTrack, c.H)
-	cy := c.Y + c.H/2
-	track := geom.Rect{X: c.X, Y: cy - h/2, W: c.W, H: h}
-	p.s.RoundRect(track, h/2, trackInk(st, alpha))
-	accent := accentInk(st, alpha)
-	if f > 0 {
-		fill := track
-		fill.W *= f
-		p.s.RoundRect(fill, h/2, accent)
+	track, fill, thumb := ownRange(c, st, float32(p.rangeAt(n).Fraction()))
+	r := min(track.W, track.H) / 2
+	p.s.RoundRect(track, r, trackInk(st, alpha))
+	s := n.State()
+	if fill.W > 0 && fill.H > 0 {
+		p.s.RoundRect(fill, r, shaded(accentInk(st, 1), s.Shade(dom.Hover, dom.Active), alpha))
 	}
-	thumb := fade(st.Color, alpha)
-	if n.State().Has(dom.Hover) {
-		thumb = accent
-	}
-	p.s.Circle(geom.V2(c.X+f*c.W, cy), min(rangeThumb, c.H)/2, thumb)
+	p.s.Circle(thumb.Center(), thumb.W/2, shaded(accentInk(st, 1), s.Shade(dom.ThumbHover, dom.ThumbActive), alpha))
 }
 
 // rangeAt is n's range: its machine's, else as its attributes set it.
@@ -340,6 +373,9 @@ func (p *painter) rangeAt(n *dom.Node) *control.Range {
 	}
 	return rangeOf(n)
 }
+
+// rangeType is a range input's type.
+const rangeType = "range"
 
 // rangeTrack and rangeThumb are a range's track height and thumb size.
 const (
@@ -368,7 +404,7 @@ func tracked(b *box.Box) bool {
 	case dom.Progress, dom.Meter:
 		return true
 	case dom.Input:
-		return inputType(b.Node) == "range"
+		return inputType(b.Node) == rangeType
 	// Elements that track nothing.
 	case dom.TextTag, dom.HTML, dom.Body, dom.Div, dom.Section, dom.Header, dom.Footer, dom.Nav, dom.Main, dom.Aside,
 		dom.Article, dom.P, dom.H1, dom.H2, dom.H3, dom.H4, dom.Span, dom.Strong, dom.Em, dom.Code, dom.Label, dom.Button,
@@ -379,7 +415,7 @@ func tracked(b *box.Box) bool {
 		dom.Abbr, dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Br,
 		dom.Center, dom.Big, dom.Font, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend, dom.Iframe,
-		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source:
+		dom.Col, dom.Colgroup, dom.PictureElement, dom.Source, dom.Optgroup:
 	}
 	return false
 }
@@ -414,6 +450,18 @@ func markerShown(b *box.Box) *style.Computed {
 	return b.Style
 }
 
+// probeMarker has the marker take the pointer as its item's, with its own cursor, over
+// its box or its Area.
+func (p *painter) probeMarker(e entry, st *style.Computed) {
+	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
+	if a := e.b.Area; a.W > 0 {
+		r = geom.Rect{X: e.at.X + a.X, Y: e.at.Y + a.Y, W: a.W, H: a.H}
+	}
+	if st.Visible && !p.culled(e, union(inkOf(e, st), r)) {
+		p.probed(e.b, p.snap(r))
+	}
+}
+
 // marker draws a list item's bullet or number in its box, or a summary's
 // disclosure triangle as Chrome paints its
 // ::marker: Blink's canonical triangle in a square 0.657em wide whose
@@ -421,15 +469,14 @@ func markerShown(b *box.Box) *style.Computed {
 // right while closed and down while open, in the summary's colour.
 func (p *painter) marker(e entry, alpha float32) {
 	st := markerShown(e.b)
+	if p.probing {
+		p.probeMarker(e, st)
+		return
+	}
 	if !st.Visible || p.culled(e, inkOf(e, st)) {
 		return
 	}
 	r := geom.Rect{X: e.at.X, Y: e.at.Y, W: e.b.Size.X, H: e.b.Size.Y}
-	if p.probing {
-		// the marker is its item's to the pointer, with its own cursor
-		p.probed(e.b, p.snap(r))
-		return
-	}
 	if e.b.Picture != "" {
 		if tex := p.find(style.Image{Source: e.b.Picture}, st); tex != nil {
 			p.s.Image(p.snap(r), tex, texels(tex), fade(color.White, alpha))

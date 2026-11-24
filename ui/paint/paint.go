@@ -209,8 +209,9 @@ type painter struct {
 	control func(*dom.Node) any
 	sel     Selection
 	// around is the text round the fragment drawn, which its words are
-	// shaped between (box.Fragment's Before and After).
-	around [2]string
+	// shaped between (box.Fragment's Before and After), and amid the text
+	// beside it they are shaped as one with (its Lead and Trail).
+	around, amid [2]string
 	// inactive and system are Frame's Inactive and Highlight.
 	inactive bool
 	system   Highlight
@@ -256,6 +257,8 @@ type painter struct {
 	spread float32
 	// scratch holds pieces' parts.
 	scratch []piece
+	// standings are the styles of glyphs standing in vertical lines, by their own.
+	standings map[*style.Computed]*style.Computed
 	// base is the surface's transform as painting starts: the root's
 	// space, where the viewport culls.
 	base geom.Transform2D
@@ -276,6 +279,14 @@ type painter struct {
 	// glyphsOnly draws text as the shape of its glyphs and decorations,
 	// opaque white: the picture background-clip: text shows through.
 	glyphsOnly bool
+	// lineDecorated is set while the parts of a vertical line are drawn,
+	// whose text decorations are drawn along the whole line instead.
+	lineDecorated bool
+	// lineSelecting is set while the parts of a vertical line are drawn, whose
+	// selection's background is drawn along the whole line: lineParts is what of the
+	// part drawn it selects, in that part's space.
+	lineSelecting bool
+	lineParts     []Selected
 	// lastText is the last text run's options.
 	lastText struct {
 		key  textKey
@@ -517,6 +528,18 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	for _, c := range l.floats {
 		p.stack(c, alpha, true)
 	}
+	// A control laid out round its parts draws them under its generated
+	// content, as Chrome's shadow tree.
+	if marked(e.b) && parted(e.b) {
+		p.use(e.clip)
+		p.marks(e, alpha)
+	}
+	for _, c := range l.flow {
+		if marked(c.b) && parted(c.b) {
+			p.use(c.clip)
+			p.marks(c, alpha)
+		}
+	}
 	for _, c := range l.flow {
 		switch c.b.Kind {
 		case box.TextRun:
@@ -530,15 +553,15 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 				p.use(c.clip)
 				p.lineBreak(c, alpha)
 			}
-		case box.AnonymousBlock, box.Viewport:
+		case box.AnonymousBlock, box.Viewport, box.ControlPart:
 		}
 	}
-	if marked(e.b) {
+	if marked(e.b) && !parted(e.b) {
 		p.use(e.clip)
 		p.marks(e, alpha)
 	}
 	for _, c := range l.flow {
-		if marked(c.b) {
+		if marked(c.b) && !parted(c.b) {
 			p.use(c.clip)
 			p.marks(c, alpha)
 		}
@@ -874,9 +897,16 @@ func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)
-	r.W, r.H = max(r.W-b.Scrollbar.X, 0), max(r.H-b.Scrollbar.Y, 0)
+	bar := b.Scrollbar
+	// A stable gutter no bar stands in clips nothing: the content shows
+	// under it, as in Chrome.
+	if oy := shown(b).Overflow.Height; b.Kind == box.Element && oy != style.Scroll &&
+		(oy != style.OverflowAuto || b.Content.Y <= r.H-bar.Y) {
+		bar.X = 0
+	}
+	r.W, r.H = max(r.W-bar.X, 0), max(r.H-bar.Y, 0)
 	if shown(b).Dir == style.RTL {
-		r.X += b.Scrollbar.X
+		r.X += bar.X
 	}
 	if o.Width == style.Visible {
 		r.X, r.W = -unbounded, 2*unbounded

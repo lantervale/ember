@@ -827,8 +827,11 @@ func TestScrollbarWidthNoneLeavesNoGutter(t *testing.T) {
 	if c := styleOf(none); c.ScrollbarWidth != 0 || !c.ScrollbarNone {
 		t.Errorf("none: gutter %v, none %v", c.ScrollbarWidth, c.ScrollbarNone)
 	}
-	if styleOf(thin).ScrollbarWidth != 15 || styleOf(auto).ScrollbarWidth != 15 {
-		t.Errorf("thin and auto keep the 15-point gutter: %v %v", styleOf(thin).ScrollbarWidth, styleOf(auto).ScrollbarWidth)
+	if c := styleOf(thin); c.ScrollbarWidth != 0 || !c.ScrollbarOverlay {
+		t.Errorf("thin asks for the system's overlay bars: gutter %v, overlay %v", c.ScrollbarWidth, c.ScrollbarOverlay)
+	}
+	if styleOf(auto).ScrollbarWidth != 15 {
+		t.Errorf("auto keeps the 15-point gutter: %v", styleOf(auto).ScrollbarWidth)
 	}
 	if !strings.Contains(s.String(), "scrollbar-width: none") {
 		t.Errorf("it travels to Chrome: %s", s.String())

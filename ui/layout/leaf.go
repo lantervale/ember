@@ -5,7 +5,7 @@ import "github.com/lantervale/ember/ui/internal/style"
 // flowAmong has the lines of n take the room the floats of ctx leave them, at the width
 // the block has, and reports whether there are such floats.
 func (c *inlineContent) flowAmong(ctx *blockContext, n *node, width float32, inset rect) bool {
-	flows := ctx != nil && n.control == noControl && some(width) && ctx.hasFloats()
+	flows := ctx != nil && n.control == noControl && some(width) && (ctx.hasFloats() || c.pendingFloats())
 	if flows || c.flowed {
 		c.broken = nil
 	}
@@ -167,7 +167,10 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		out.lastBaseline = pb.t + shift + last
 	}
 	if in.run == performLayout && n.inline != nil {
-		t.placeText(n, s.sub(size{gutter.x, gutter.y}), pb)
+		ge := gutterEdges(st, gutter)
+		text := pb
+		text.l, text.r, text.b = text.l+ge.l, text.r+ge.r, text.b+ge.b
+		t.placeText(n, s, text)
 	}
 	if in.run == performLayout && len(n.kids) > 0 {
 		t.leafChildren(n, &out, pb, border, gutter)

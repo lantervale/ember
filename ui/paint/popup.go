@@ -42,11 +42,14 @@ type popup struct {
 	xf geom.Transform2D
 }
 
-// menu is where an open select's options lie, in the root's space.
+// menu is where an open select's options lie, in the root's space: its
+// lines, each group's label before its options, rows of them shown from
+// first.
 type menu struct {
 	rect        geom.Rect
 	border      float32
 	row         float32
+	lines       []control.Row
 	first, rows int
 }
 
@@ -70,12 +73,14 @@ func (p *painter) open(e entry) {
 // place lays an open select's list out within the viewport.
 func (p *painter) place(pp popup) menu {
 	b, st := pp.b, shown(pp.b)
-	n := len(pp.m.Options)
-	l := menu{border: b.Border.Top, row: rowHeight(p.fonts, st.Font), rows: n}
+	lines := pp.m.Rows()
+	n := len(lines)
+	l := menu{border: b.Border.Top, row: rowHeight(p.fonts, st.Font), lines: lines, rows: n}
 	w := b.Size.X
 	if p.fonts != nil {
-		for _, o := range pp.m.Options {
-			w = max(w, p.fonts.Advance(st.Font, o.Text())+st.Spacing(o.Text())+2*optionPad+2*l.border)
+		for _, r := range lines {
+			f, text := lineText(st, pp.m, r)
+			w = max(w, p.fonts.Advance(f, text)+st.Spacing(text)+2*optionPad+2*l.border)
 		}
 	}
 	vp := p.viewport
@@ -97,11 +102,52 @@ func (p *painter) place(pp popup) menu {
 	}
 	x := min(max(pp.at.X, vp.X), vp.X+vp.W-w)
 	l.rect = geom.Rect{X: x, Y: y, W: w, H: h}
-	l.first = max(0, min(pp.m.Highlight-l.rows+1, n-l.rows))
+	l.first = max(0, min(l.line(pp.m.Highlight)-l.rows+1, n-l.rows))
 	return l
 }
 
-// rowRect is option i's row, if shown.
+// line is the line of option i, -1 for none.
+func (l menu) line(i int) int {
+	for k, r := range l.lines {
+		if r.Option == i {
+			return k
+		}
+	}
+	return -1
+}
+
+// groupIndent is what Chrome sets before an option of an optgroup in
+// its list, as it measures a select's width.
+const groupIndent = "    "
+
+// lineText is the font and the text of a line of the list: a group's
+// label in bold, an option of a group indented.
+func lineText(st *style.Computed, m *control.Select, r control.Row) (style.Font, string) {
+	switch {
+	case r.Option >= 0 && r.Group > 0:
+		return st.Font, groupIndent + m.Options[r.Option].Text()
+	case r.Option >= 0:
+		return st.Font, m.Options[r.Option].Text()
+	}
+	f := st.Font
+	f.Weight = bolder(f.Weight)
+	return f, m.Groups[r.Group-1].Text()
+}
+
+// bolder is font-weight bolder of w.
+func bolder(w float32) float32 {
+	switch {
+	case w < 350:
+		return 400
+	case w < 550:
+		return 700
+	case w < 900:
+		return 900
+	}
+	return w
+}
+
+// rowRect is line i's row, if shown.
 func (l menu) rowRect(i int) (geom.Rect, bool) {
 	if i < l.first || i >= l.first+l.rows {
 		return geom.Rect{}, false
@@ -174,20 +220,14 @@ func (p *painter) drawList(pp popup, l menu) {
 	}
 	p.fill(l.rect, radius, bg)
 	p.border(l.rect, pp.b.Border, radius, st, 1)
-	face := twod.Regular()
-	if p.face != nil {
-		if f := p.face(st.Font); f != nil {
-			face = f
-		}
-	}
 	p.s.PushClip(l.inner())
-	for i, o := range pp.m.Options {
+	for i, r := range l.lines {
 		row, ok := l.rowRect(i)
 		if !ok {
 			continue
 		}
 		ink := st.Color
-		if i == pp.m.Highlight {
+		if r.Option >= 0 && r.Option == pp.m.Highlight {
 			mark, text := highlight, highlightText
 			if !st.AccentAuto {
 				mark, text = st.AccentColor, st.Color
@@ -195,11 +235,18 @@ func (p *painter) drawList(pp popup, l menu) {
 			p.s.Rect(row, mark)
 			ink = text
 		}
-		if o.Disabled {
+		if r.Option >= 0 && pp.m.Options[r.Option].Disabled || r.Option < 0 && pp.m.Groups[r.Group-1].Disabled {
 			ink = fade(ink, dimmed)
 		}
-		p.wordsIn(geom.V2(row.X+optionPad, row.Y+2), o.Text(), st, st.Font, smoothed([]twod.TextOption{
-			twod.Typeface(face), twod.FontSize(st.Font.Size), twod.Color(ink), twod.Tracking(st.LetterGap()),
+		f, text := lineText(st, pp.m, r)
+		look := st
+		if r.Option < 0 {
+			bold := *st
+			bold.Font = f
+			look = &bold
+		}
+		p.words(geom.V2(row.X+optionPad, row.Y+2), text, look, smoothed([]twod.TextOption{
+			twod.Typeface(p.faceOf(f)), twod.FontSize(f.Size), twod.Color(ink), twod.Tracking(st.LetterGap()),
 		}, smoothingOf(st)))
 	}
 	p.s.PopClip()
@@ -242,9 +289,9 @@ func pickOption(t *box.Tree, p geom.Vec2, opts []Option, whole bool) Pick {
 	pick.Self = geom.Rect{X: pp.at.X, Y: pp.at.Y, W: pp.b.Size.X, H: pp.b.Size.Y}.Contains(p)
 	if l.rect.Contains(p) {
 		pick.List, pick.Self = true, false
-		for i := range pp.m.Options {
+		for i, line := range l.lines {
 			if r, ok := l.rowRect(i); ok && r.Contains(p) {
-				pick.Index = i
+				pick.Index = line.Option
 			}
 		}
 	}

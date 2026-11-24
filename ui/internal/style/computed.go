@@ -210,12 +210,22 @@ type Box struct {
 	// GutterStable is scrollbar-gutter: stable: the vertical bar's room is
 	// kept whenever the box clips, whether its content overflows or not.
 	GutterStable bool
+	// GutterBothEdges is stable's both-edges: the same room kept at the
+	// inline start too, never drawn in.
+	GutterBothEdges bool
 	// ScrollbarNone is scrollbar-width: none: no gutter and no bars, the
 	// box still scrolling by the wheel.
 	ScrollbarNone bool
+	// ScrollbarThin is scrollbar-width: thin, which asks for the system's
+	// bars as scrollbar-color does: overlay bars (decision 0198).
+	ScrollbarThin bool
 	// ScrollbarOverlay is a Document's overlay scrollbars on a box that
 	// shows bars: they take no gutter and draw over its content.
 	ScrollbarOverlay bool
+	// ViewportBars are the viewport's bars as the rules of this element,
+	// the root or body, style them; nil where none styles its
+	// ::-webkit-scrollbar.
+	ViewportBars *StyledBars
 	// Viewport is the style of the viewport, in a Document whose viewport
 	// scrolls: on the root always, and on body when the viewport takes
 	// body's overflow. OverflowPropagated is set on the one of them whose
@@ -625,6 +635,11 @@ const (
 	// PreLineNoWrap keeps newlines and collapses spaces, on lines that
 	// don't wrap: white-space: preserve-breaks nowrap.
 	PreLineNoWrap
+	// BreakSpaces keeps spaces and newlines, each space taking room at a
+	// line's end and a line breaking after any of them.
+	BreakSpaces
+	// BreakSpacesNoWrap is white-space: break-spaces nowrap, laid out as pre.
+	BreakSpacesNoWrap
 )
 
 // Collapse is white-space-collapse.
@@ -634,6 +649,7 @@ const (
 	CollapseSpaces Collapse = iota
 	Preserve
 	PreserveBreaks
+	CollapseBreakSpaces
 )
 
 // Collapse is w's white-space-collapse.
@@ -643,13 +659,23 @@ func (w WhiteSpace) Collapse() Collapse {
 		return Preserve
 	case PreLine, PreLineNoWrap:
 		return PreserveBreaks
+	case BreakSpaces, BreakSpacesNoWrap:
+		return CollapseBreakSpaces
 	case Normal, NoWrapSpace:
 	}
 	return CollapseSpaces
 }
 
 // Wraps is w's text-wrap-mode: whether its lines wrap.
-func (w WhiteSpace) Wraps() bool { return w != NoWrapSpace && w != Pre && w != PreLineNoWrap }
+func (w WhiteSpace) Wraps() bool {
+	return w != NoWrapSpace && w != Pre && w != PreLineNoWrap && w != BreakSpacesNoWrap
+}
+
+// KeepsSpaces reports whether w keeps the spaces and tabs of its text.
+func (w WhiteSpace) KeepsSpaces() bool {
+	c := w.Collapse()
+	return c == Preserve || c == CollapseBreakSpaces
+}
 
 // KeepsBreaks reports whether w keeps the newlines of its text.
 func (w WhiteSpace) KeepsBreaks() bool { return w.Collapse() != CollapseSpaces }
@@ -666,6 +692,10 @@ func WhiteSpaceOf(c Collapse, wraps bool) WhiteSpace {
 		return PreLine
 	case c == PreserveBreaks:
 		return PreLineNoWrap
+	case c == CollapseBreakSpaces && wraps:
+		return BreakSpaces
+	case c == CollapseBreakSpaces:
+		return BreakSpacesNoWrap
 	case wraps:
 		return Normal
 	}
@@ -696,6 +726,20 @@ const (
 	HyphensNone
 	// HyphensAuto breaks where a dictionary would too.
 	HyphensAuto
+)
+
+// SkipInk is text-decoration-skip-ink: where underlines and overlines
+// leave a gap round the glyphs' ink they cross.
+type SkipInk uint8
+
+const (
+	// SkipInkAuto skips the ink of every glyph but those of CJK and Hangul
+	// characters, slashes and the low line, as Chrome.
+	SkipInkAuto SkipInk = iota
+	// SkipInkNone goes through the ink.
+	SkipInkNone
+	// SkipInkAll skips the ink of every glyph.
+	SkipInkAll
 )
 
 // TextBoxTrim is text-box-trim: which ends of a block's text lose the
@@ -931,6 +975,11 @@ type Text struct {
 	// ExactText draws them at their exact coverage, without stem
 	// darkening, as -webkit-font-smoothing: antialiased does in Chrome.
 	ExactText bool
+	// SubpixelText is -webkit-font-smoothing: subpixel-antialiased, drawn
+	// as auto: Chrome shapes it apart from text of another smoothing.
+	SubpixelText bool
+	// TextRendering is text-rendering, which draws nothing differently.
+	TextRendering TextRendering
 	// Ellipsis is text-overflow: ellipsis.
 	Ellipsis bool
 	// EllipsisStart cuts the start of the text rather than its end, as a
@@ -947,12 +996,17 @@ type Text struct {
 	BreakAnywhere bool
 	WordBreak     WordBreak
 	LineBreak     LineBreak
-	TabSize       TabSize
-	// InkThrough is text-decoration-skip-ink: none: underlines and
-	// overlines go through the glyphs' ink, which they otherwise skip.
-	InkThrough bool
-	WrapStyle  WrapStyle
-	Hyphens    Hyphens
+	// Strictness is the rules line-break and the element's language
+	// break its lines by.
+	Strictness Strictness
+	TabSize    TabSize
+	SkipInk    SkipInk
+	// UnderlineOffset is text-underline-offset, Auto for auto, its
+	// percentage kept: it is of the font size of the box decorating.
+	UnderlineOffset   Length
+	UnderlinePosition UnderlinePosition
+	WrapStyle         WrapStyle
+	Hyphens           Hyphens
 	// HyphenChar is hyphenate-character's string when HyphenChosen,
 	// else it is auto.
 	HyphenChar   string
@@ -960,7 +1014,7 @@ type Text struct {
 	TextBoxTrim  TextBoxTrim
 	TextBoxEdge  TextBoxEdge
 	// SpacingTrim is text-spacing-trim, and Autospace text-autospace:
-	// normal; both read and computed, laid out as their initial values.
+	// normal.
 	SpacingTrim SpacingTrim
 	Autospace   bool
 	// KeywordSizes is interpolate-size: allow-keywords.
@@ -991,8 +1045,9 @@ const (
 	WordBreakBreakWord
 )
 
-// LineBreak is line-break. Its values but anywhere differ only on the
-// punctuation of Chinese and Japanese, where ui breaks as normal.
+// LineBreak is line-break. Its values but anywhere differ on the small
+// kana and the punctuation of Chinese and Japanese, which Strictness
+// says by the element's language.
 type LineBreak uint8
 
 const (
@@ -1002,6 +1057,27 @@ const (
 	LineBreakStrict
 	// LineBreakAnywhere breaks between any two characters.
 	LineBreakAnywhere
+)
+
+// Strictness is the rules of Chrome's line breaker, which line-break
+// picks by the element's language.
+type Strictness uint8
+
+const (
+	// StrictnessNormal breaks before small kana and prolonged sound marks.
+	StrictnessNormal Strictness = iota
+	// StrictnessStrict breaks before none of them.
+	StrictnessStrict
+	// StrictnessNormalCJK also breaks before 〜 and ゠, in Chinese,
+	// Japanese and Korean.
+	StrictnessNormalCJK
+	// StrictnessLoose also breaks before iteration marks and between
+	// inseparable characters.
+	StrictnessLoose
+	// StrictnessLooseCJK also breaks before CJK hyphens, centred
+	// punctuation and postfixes and after prefixes, in Chinese, Japanese
+	// and Korean.
+	StrictnessLooseCJK
 )
 
 // TabSize is tab-size: Spaces spaces of the text's font, or Px points
@@ -1186,6 +1262,11 @@ type Look struct {
 	// ScrollbarColored.
 	ScrollbarThumb, ScrollbarTrack color.Color
 	ScrollbarColored               bool
+	// Resizable is resize other than none on a box that clips: Chrome
+	// keeps its bars' corner for the resizer, which Resizer, its
+	// ::-webkit-resizer, draws where a rule styles it.
+	Resizable bool
+	Resizer   *Computed
 	// Background is background-color, painted under the last layer in
 	// the box its clip names.
 	Background color.Color
@@ -1789,6 +1870,16 @@ const (
 	WidthPercent
 	// WidthAuto is the slice's own size.
 	WidthAuto
+)
+
+// TextRendering is text-rendering.
+type TextRendering uint8
+
+const (
+	TextRenderingAuto TextRendering = iota
+	OptimizeSpeed
+	OptimizeLegibility
+	GeometricPrecision
 )
 
 // ImageRendering is image-rendering.

@@ -302,6 +302,12 @@ func (t *tree) gridContribution(it *gridItem, a axis, area, avail size, fallback
 	if v := known.get(a); some(v) {
 		return v
 	}
+	if st := it.st; a == horizontal && fallback.kind == minContent && it.node.replaced &&
+		(st.Size.Width.IsPercent || st.MaxSize.Width.IsPercent) {
+		// A picture as wide as a share of its track asks it for no width at its narrowest,
+		// CSS Sizing 3 (compressible replaced elements).
+		return it.paddingBorderSize(area.w).w
+	}
 	am := it.availMinusMargins(area, avail)
 	space := spaces{spaceOr(am.w, fallback), spaceOr(am.h, fallback)}
 	return t.measureChildSize(it.node, known, area, it.keywordAdjustedSpace(area, space), inherentSize, a, [2]bool{})

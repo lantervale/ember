@@ -209,7 +209,7 @@ func (d *Document) textRuns() []*Node {
 	}
 	d.html.Walk(func(n *Node) bool {
 		if n.IsText() {
-			if b := d.tree.Of[n]; b != nil && b.Kind == box.TextRun && len(b.Lines) > 0 {
+			if b := d.tree.Of[n]; b != nil && b.Kind == box.TextRun && (len(b.Lines) > 0 || dom.Data(n).Letter != nil) {
 				s.runs = append(s.runs, n)
 			}
 			return false
@@ -299,17 +299,38 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 	}
 	f.xs = make([]float32, 1, len(f.offs))
 	sp := spacingOf(st)
+	frag := &b.Lines[k]
+	length := frag.Rect.W
+	if st.Mode.Vertical() {
+		length = frag.Rect.H
+	}
+	carets, _ := d.fonts.Carets(st.Font, text, frag.Lead, frag.Trail, frag.Before, frag.After)
+	advance := func(_, n int) float32 { return carets[n] }
+	switch {
+	case st.Combine && st.Mode.Vertical():
+		// combined text stands across one em, its characters inside it
+		advance = func(int, int) float32 { return 0 }
+	case st.Stands():
+		advance = func(i, _ int) float32 { return d.uprightAdvance(st, text[:i]) }
+	}
 	var room float32
 	last := rune(-1)
+	han := b.Lines[k].Spacing
+	n := 0
 	for i, r := range text {
 		if i > 0 {
 			room += sp.after(last)
-			f.xs = append(f.xs, d.fonts.Advance(st.Font, text[:i])+room)
+			for len(han) > 0 && han[0].At < i {
+				room += han[0].Space
+				han = han[1:]
+			}
+			f.xs = append(f.xs, advance(i, n)+room)
 		}
 		last = r
+		n++
 	}
 	if len(text) > 0 {
-		f.xs = append(f.xs, max(b.Lines[k].Rect.W, f.xs[len(f.xs)-1]))
+		f.xs = append(f.xs, max(length, f.xs[len(f.xs)-1]))
 	}
 	if b.Lines[k].RTL {
 		w := f.xs[len(f.xs)-1]
@@ -318,6 +339,22 @@ func (d *Document) edges(m *runMap, b *box.Box, k int) []float32 {
 		}
 	}
 	return f.xs
+}
+
+// uprightAdvance is the length of s, text of vertical lines of style st,
+// along them: each cluster standing upright its vertical advance, as
+// layout measures it.
+func (d *Document) uprightAdvance(st *style.Computed, s string) float32 {
+	var w float32
+	style.Oriented(s, st.Orientation, func(part string, upright bool) {
+		if !upright {
+			w += d.fonts.Advance(st.Font, part)
+			return
+		}
+		a, _ := box.Upright(d.fonts, st.Font, part)
+		w += a
+	})
+	return w
 }
 
 // lower is the first character of a fragment at or after the place off.
@@ -380,45 +417,106 @@ func away(v, lo, hi float32) float32 {
 	return 0
 }
 
-// piece is one fragment a selection may reach: fragment k of n's run b,
-// r in the Document's space as its ancestors show it, and q the point
-// asked about in that space.
+// piece is one fragment a selection may reach: fragment k of the run b
+// of text node t, which shows n's text from its character shift on (a
+// ::first-letter's, or n's own), page in the Document's space as its
+// ancestors show it. r is it in the flow of its lines (flow), x where
+// its line's frame starts along them, and q the point asked about there.
 type piece struct {
-	n *Node
-	b *box.Box
-	k int
-	r geom.Rect
-	x float32
-	q geom.Vec2
+	n, t  *Node
+	shift int
+	b     *box.Box
+	k     int
+	page  geom.Rect
+	r     geom.Rect
+	x     float32
+	q     geom.Vec2
+}
+
+// flow is where v stands in the frame of the lines of writing mode m: x
+// along them, y across them from where their blocks start, so that
+// vertical lines are found and measured as horizontal ones.
+func flow(m style.WritingMode, v geom.Vec2) geom.Vec2 {
+	switch {
+	case !m.Vertical():
+		return v
+	case m.Upward():
+		return geom.V2(-v.Y, v.X)
+	case m.BlockFromRight():
+		return geom.V2(v.Y, -v.X)
+	}
+	return geom.V2(v.Y, v.X)
+}
+
+// unflow is the point of the Document's space that stands at v in the
+// frame of the lines of writing mode m.
+func unflow(m style.WritingMode, v geom.Vec2) geom.Vec2 {
+	switch {
+	case !m.Vertical():
+		return v
+	case m.Upward():
+		return geom.V2(v.Y, -v.X)
+	case m.BlockFromRight():
+		return geom.V2(-v.Y, v.X)
+	}
+	return geom.V2(v.Y, v.X)
+}
+
+// flowRect is r in the frame of the lines of writing mode m.
+func flowRect(m style.WritingMode, r geom.Rect) geom.Rect {
+	a, b := flow(m, geom.V2(r.X, r.Y)), flow(m, geom.V2(r.X+r.W, r.Y+r.H))
+	return geom.Rect{X: min(a.X, b.X), Y: min(a.Y, b.Y), W: abs(b.X - a.X), H: abs(b.Y - a.Y)}
+}
+
+// fragRect is fragment k of b in the Document's space, in the flow of its
+// lines.
+func fragRect(b *box.Box, k int) geom.Rect {
+	at, f := b.Rect(), b.Lines[k].Rect
+	return flowRect(b.Style.Mode, geom.Rect{X: at.X + f.X, Y: at.Y + f.Y, W: f.W, H: f.H})
+}
+
+// at is the place in n's text of the piece's character edge j.
+func (p piece) at(d *Document, j int) Position {
+	return Position{p.n, p.shift + int(d.mapOf(p.t).frags[p.k].offs[j])}
 }
 
 // pieces calls each for the fragments that take a selection and show,
 // those inside scope when it is not nil, in the text's order, at the
-// point at.
+// point at: a text's first letter before the rest of it.
 func (d *Document) pieces(at geom.Vec2, scope *box.Box, each func(p piece)) {
 	for _, n := range d.textRuns() {
 		b := d.tree.Of[n]
 		if !selects(b.Style) || scope != nil && !under(b, scope) {
 			continue
 		}
-		pl := place(b)
-		q := at
-		if pl.turned {
-			q = pl.xf.Inverse().Xform(at)
+		if l, ok := d.letterOf(n); ok {
+			d.runPieces(n, l.text, l.lead, l.run, at, each)
 		}
-		for k, f := range b.Lines {
-			if f.Text == "" {
+		d.runPieces(n, n, 0, b, at, each)
+	}
+}
+
+// runPieces calls each for the fragments of t's run b, which shows n's
+// text from its character shift on.
+func (d *Document) runPieces(n, t *Node, shift int, b *box.Box, at geom.Vec2, each func(p piece)) {
+	pl := place(b)
+	q := at
+	if pl.turned {
+		q = pl.xf.Inverse().Xform(at)
+	}
+	m := b.Style.Mode
+	for k, f := range b.Lines {
+		if f.Text == "" {
+			continue
+		}
+		r := geom.Rect{X: pl.at.X + f.Rect.X, Y: pl.at.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}
+		x := flowRect(m, r).X
+		if pl.clipped {
+			if r = intersect(r, pl.clip); r.W <= 0 || r.H <= 0 {
 				continue
 			}
-			r := geom.Rect{X: pl.at.X + f.Rect.X, Y: pl.at.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}
-			x := r.X
-			if pl.clipped {
-				if r = intersect(r, pl.clip); r.W <= 0 || r.H <= 0 {
-					continue
-				}
-			}
-			each(piece{n: n, b: b, k: k, r: r, x: x, q: q})
 		}
+		each(piece{n: n, t: t, shift: shift, b: b, k: k, page: r, r: flowRect(m, r), x: x, q: flow(m, q)})
 	}
 }
 
@@ -458,25 +556,23 @@ func (d *Document) positionNear(at geom.Vec2, scope *box.Box) (Position, bool) {
 	}
 	switch {
 	case bestY > 0 && best.q.Y < top:
-		return Position{first.n, int(d.mapOf(first.n).frags[first.k].offs[0])}, true
+		return first.at(d, 0), true
 	case bestY > 0 && best.q.Y >= bottom:
-		offs := d.mapOf(last.n).frags[last.k].offs
-		return Position{last.n, int(offs[len(offs)-1])}, true
+		return last.at(d, len(d.mapOf(last.t).frags[last.k].offs)-1), true
 	}
 	return d.positionIn(best, best.q.X), true
 }
 
 // positionIn is the character edge of p nearest x.
 func (d *Document) positionIn(p piece, x float32) Position {
-	m := d.mapOf(p.n)
-	xs := d.edges(m, p.b, p.k)
+	xs := d.edges(d.mapOf(p.t), p.b, p.k)
 	j := 0
 	for i, e := range xs {
 		if abs(p.x+e-x) < abs(p.x+xs[j]-x) {
 			j = i
 		}
 	}
-	return Position{p.n, int(m.frags[p.k].offs[j])}
+	return p.at(d, j)
 }
 
 // treeBefore reports whether a comes before b in tree order, an ancestor
@@ -890,15 +986,19 @@ type letter struct {
 func (d *Document) letterOf(n *Node) (letter, bool) {
 	data := dom.Data(n)
 	g := data.Letter
-	if g == nil || dom.Data(g).Letter != n || len(g.Children()) != 1 || data.LetterEnd > len(n.Text()) {
+	if g == nil || dom.Data(g).Letter != n || len(g.Children()) != 1 {
+		return letter{}, false
+	}
+	shown := d.shown(n)
+	if data.LetterEnd > len(shown) {
 		return letter{}, false
 	}
 	t := g.Children()[0]
 	b := d.tree.Of[t]
-	if b == nil || b.Kind != box.TextRun || len(b.Lines) == 0 || !strings.HasSuffix(n.Text()[:data.LetterEnd], t.Text()) {
+	if b == nil || b.Kind != box.TextRun || len(b.Lines) == 0 || !strings.HasSuffix(shown[:data.LetterEnd], t.Text()) {
 		return letter{}, false
 	}
-	end := utf8.RuneCountInString(n.Text()[:data.LetterEnd])
+	end := utf8.RuneCountInString(shown[:data.LetterEnd])
 	return letter{text: t, run: b, lead: end - utf8.RuneCountInString(t.Text()), end: end}, true
 }
 
@@ -916,14 +1016,18 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 		m = d.mapOf(n)
 	}
 	metrics := d.fonts.Metrics(b.Style.Font)
+	mode := b.Style.Mode
 	ws := b.Style.WhiteSpace
-	keeps := ws.KeepsBreaks()
+	keeps := ws.KeepsBreaks() && !mode.Vertical()
 	var out []paint.Selected
 	for k, f := range b.Lines {
 		if k > 0 && keeps {
 			out = append(out, d.emptyLines(n, b, k, from, to)...)
 		}
 		x0, x1, goesOn := float32(0), f.Rect.W, true
+		if mode.Vertical() {
+			x1 = f.Rect.H
+		}
 		tabs, t0, t1 := d.tabRoom(m, b, k, from, to)
 		if !whole {
 			offs := m.frags[k].offs
@@ -949,6 +1053,14 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 		if x1 <= x0 {
 			continue
 		}
+		if mode.Vertical() {
+			// the part in its line's frame, where the line runs across, turned onto the page
+			base := paint.LineBaseline(mode, f)
+			top, bottom := min(0, base-metrics.Ascent), max(f.Rect.W, base+metrics.Descent)
+			r := paint.TurnRect(paint.LineTurn(mode, f.Rect), geom.Rect{X: x0, Y: top, W: x1 - x0, H: bottom - top})
+			out = append(out, paint.Selected{Line: k, Rect: r})
+			continue
+		}
 		top := min(f.Rect.Y, f.Baseline-metrics.Ascent)
 		bottom := max(f.Rect.Y+f.Rect.H, f.Baseline+metrics.Descent)
 		out = append(out, paint.Selected{Line: k, Rect: geom.Rect{X: f.Rect.X + x0, Y: top, W: x1 - x0, H: bottom - top}})
@@ -962,7 +1074,7 @@ func (d *Document) partsOf(n *Node, b, next *box.Box, from, to int, on bool) []p
 // stop, the first from the fragment's end.
 func (d *Document) tabRoom(m *runMap, b *box.Box, k, from, to int) (bool, float32, float32) {
 	st, f := b.Style, b.Lines[k]
-	if m == nil || f.RTL || st.WhiteSpace.Collapse() != style.Preserve {
+	if m == nil || f.RTL || !st.WhiteSpace.KeepsSpaces() || st.Mode.Vertical() {
 		return false, 0, 0
 	}
 	var after *box.Fragment
@@ -1026,27 +1138,28 @@ func (d *Document) emptyLines(n *Node, b *box.Box, k, from, to int) []paint.Sele
 // other side, its text of the other direction, or a space past the
 // line's end, on its left for a fragment shown right to left.
 func (d *Document) tail(b *box.Box, k int, next *box.Box) float32 {
-	f := b.Lines[k]
-	at := b.Rect()
-	line := func(o geom.Rect, g box.Fragment) bool { return abs(o.Y+g.Rect.Y-(at.Y+f.Rect.Y)) < 0.5 }
+	f, fr := b.Lines[k], fragRect(b, k)
+	line := func(g geom.Rect) bool { return abs(g.Y-fr.Y) < 0.5 }
 	var after *box.Fragment
-	origin := at
+	var ar geom.Rect
 	for j := range b.Lines {
-		if g := &b.Lines[j]; g.Start > f.Start && line(at, *g) && (after == nil || g.Start < after.Start) {
-			after = g
+		if g := &b.Lines[j]; g.Start > f.Start && (after == nil || g.Start < after.Start) {
+			if r := fragRect(b, j); line(r) {
+				after, ar = g, r
+			}
 		}
 	}
 	if after == nil && next != nil && len(next.Lines) > 0 && container(next) == container(b) &&
-		line(next.Rect(), next.Lines[0]) {
-		after, origin = &next.Lines[0], next.Rect()
+		line(fragRect(next, 0)) {
+		after, ar = &next.Lines[0], fragRect(next, 0)
 	}
 	if after == nil {
 		return d.fonts.Advance(b.Style.Font, " ")
 	}
 	if f.RTL {
-		return max(at.X+f.Rect.X-(origin.X+after.Rect.X+after.Rect.W), 0)
+		return max(fr.X-(ar.X+ar.W), 0)
 	}
-	return max(origin.X+after.Rect.X-(at.X+f.Rect.X+f.Rect.W), 0)
+	return max(ar.X-(fr.X+fr.W), 0)
 }
 
 // container is the block whose lines b's fragments are on.
@@ -1206,7 +1319,7 @@ func (c *copier) dropped(src []rune, from, to int, ws style.WhiteSpace, wrap boo
 		switch {
 		case r == '\n' && keeps:
 			c.put('\n')
-		case r == '\t' && ws.Collapse() == style.Preserve:
+		case r == '\t' && ws.KeepsSpaces():
 			c.put('\t')
 		case isBlank(r) && wrap:
 			if c.last != ' ' {

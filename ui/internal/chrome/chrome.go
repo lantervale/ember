@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -432,6 +433,11 @@ func runAt(dir, address string, size geom.Vec2, action string, m css.Media) ([]b
 	}
 	if len(features) > 0 {
 		args = append([]string{"--enable-blink-features=" + strings.Join(features, ",")}, args...)
+	}
+	if runtime.GOOS != "darwin" {
+		// The system's bars (scrollbar-color's) lie over the content, as
+		// macOS's do, which ui's follow (decision 0181).
+		args = append([]string{"--enable-features=OverlayScrollbar"}, args...)
 	}
 	cmd := browserCommand(ctx, helpersWait, browser(), args...)
 	var stderr bytes.Buffer

@@ -54,13 +54,22 @@ type Face struct {
 	// ascii is 1 once the face is known to draw every printable ASCII
 	// character, -1 once known not to.
 	ascii int8
-	// shaper is the face's layout tables, read when it is first shaped.
+	// shaper is the face's layout tables, read when it is first shaped;
+	// han what text-spacing-trim reads of its glyphs, by character.
 	shaper *shape.Font
+	han    map[rune]hanGlyph
+	// vertical is the face's vertical metrics, read when it first sets a
+	// character upright in a vertical line.
+	vertical *vertical
 	// web is the file of an @font-face's face that is fetched.
 	web *File
 	// file is the installed font the face is read from when it is first
 	// drawn with, nil for a face added with its bytes.
 	file *installedFace
+	// typo is OS/2's typographic ascender and descender, read once
+	// (typoRead), typoOK when the face has them.
+	typo             [2]float32
+	typoRead, typoOK bool
 }
 
 // Of is a ui.Document's set, for export.
@@ -79,6 +88,10 @@ type Set struct {
 	shapedCount int
 	run         []shape.Glyph
 	ids         []byte
+	// counted counts the glyphs measures count, each its own part's (Carets).
+	counted int
+	// uprights are the clusters set upright in vertical lines so far.
+	uprights map[uprightKey]uprightSet
 	// scale is device pixels per point, 0 for 1.
 	scale float32
 	installing
@@ -254,8 +267,10 @@ func (s *Set) metricsOf(c *Face, size float32) box.Metrics {
 	if px <= 0 {
 		px = 1
 	}
-	return box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
+	out := box.Metrics{Ascent: round(ascent*px) / px, Descent: round(descent*px) / px, LineGap: max(gap, 0),
 		XHeight: float32(m.XHeight) / 64 * scale, CapHeight: float32(m.CapHeight) / 64 * scale}
+	c.underlined(&out, scale)
+	return out
 }
 
 // Has reports whether f's own face has a glyph for r.
@@ -270,6 +285,25 @@ func (s *Set) Advance(f style.Font, text string) float32 { return s.AdvanceIn(f,
 // AdvanceIn is Advance for text between before and after, which shape
 // it where its letters join with theirs (box.ContextFonts).
 func (s *Set) AdvanceIn(f style.Font, text, before, after string) float32 {
+	return s.advanceIn(f, text, before, after, all)
+}
+
+// AdvanceAmid is the advance of text's own glyphs, text shaped as one
+// with lead before it and trail after it, between before and after
+// (box.WholeFonts): a glyph is text's where its cluster starts in it.
+func (s *Set) AdvanceAmid(f style.Font, text, lead, trail, before, after string) float32 {
+	if lead == "" && trail == "" {
+		return s.AdvanceIn(f, text, before, after)
+	}
+	if s.Caps(f, lead+text+trail).SmallCaps(text) != nil {
+		return s.AdvanceIn(f, text, before+lead, trail+after)
+	}
+	return s.advanceIn(f, lead+text+trail, before, after, part{len(lead), len(lead) + len(text)})
+}
+
+// advanceIn is the advance of the glyphs own has of text between before
+// and after.
+func (s *Set) advanceIn(f style.Font, text, before, after string, own part) float32 {
 	if !shape.JoinsAcross(before, after) {
 		before, after = "", ""
 	}
@@ -282,7 +316,7 @@ func (s *Set) AdvanceIn(f style.Font, text, before, after string) float32 {
 		return w
 	}
 	if s.emoji == nil || isASCII(text) {
-		return s.advance(f, text, before, after)
+		return s.advance(f, text, before, after, own)
 	}
 	var w float32
 	start := 0
@@ -291,12 +325,16 @@ func (s *Set) AdvanceIn(f style.Font, text, before, after string) float32 {
 	for at := 0; len(rest) > 0; {
 		c, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
 		if len(c) > 1 && s.emoji(c) {
-			w += s.advance(f, text[start:at], before+text[:start], text[at:]+after) + f.Size
+			w += s.advance(f, text[start:at], before+text[:start], text[at:]+after, own.in(start))
+			if own.has(at) {
+				w += f.Size
+				s.counted++
+			}
 			start = at + len(c)
 		}
 		at += len(c)
 	}
-	return w + s.advance(f, text[start:], before+text[:start], after)
+	return w + s.advance(f, text[start:], before+text[:start], after, own.in(start))
 }
 
 // SetEmoji has Advance measure each grapheme cluster has reports, and
@@ -362,11 +400,12 @@ func (s *Set) spaceAdvance(c *Face, r rune, size float32) (float32, bool) {
 	})
 }
 
-// advance is text's width in f's face, shaped with f's features between
-// before and after, the fallback's characters in it.
-func (s *Set) advance(f style.Font, text, before, after string) float32 {
+// advance is the width of the glyphs own has of text in f's face, shaped
+// with f's features between before and after, the fallback's characters
+// in it.
+func (s *Set) advance(f style.Font, text, before, after string, own part) float32 {
 	if ch := s.chained(f); ch != nil {
-		return s.chainAdvance(ch, f, text, before, after)
+		return s.chainAdvance(ch, f, text, before, after, own)
 	}
 	c := s.Face(f)
 	script := shape.Script(text)
@@ -375,7 +414,7 @@ func (s *Set) advance(f style.Font, text, before, after string) float32 {
 	run := s.run[:0]
 	for i, r := range text {
 		if sc, ok := shape.ScriptOf(r); ok && sc != script {
-			w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after))
+			w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
 			run, script = run[:0], sc
 		}
 		g, err := c.font.GlyphIndex(&s.buf, r)
@@ -388,8 +427,11 @@ func (s *Set) advance(f style.Font, text, before, after string) float32 {
 				a, ok = s.spaceAdvance(c, r, f.Size)
 			}
 			if ok {
-				other += a
-				w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after))
+				if own.has(i) {
+					other += a
+					s.counted++
+				}
+				w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
 				run = run[:0]
 				continue
 			}
@@ -397,7 +439,7 @@ func (s *Set) advance(f style.Font, text, before, after string) float32 {
 		//nolint:gosec // a glyph index and a text offset
 		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r})
 	}
-	w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after))
+	w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
 	s.run = run
 	return w*f.Size/c.upem + other
 }

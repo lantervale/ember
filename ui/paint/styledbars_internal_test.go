@@ -19,7 +19,7 @@ func TestAStyledThumbIsSizedAndPlacedAsChromes(t *testing.T) {
 		{"at the end when scrolled down", 10, 88, 88, 200, 112, 26, 59, 39, true},
 		{"no shorter than its least", 0, 64, 64, 2000, 0, 26, 0, 26, true},
 		{"none when the content fits", 0, 88, 88, 80, 0, 26, 0, 0, false},
-		{"none when it doesn't fit the track", 0, 20, 20, 2000, 0, 26, 0, 0, false},
+		{"the whole track when its least is longer", 0, 20, 20, 2000, 0, 26, 0, 20, true},
 	} {
 		at, n, ok := thumbAlong(c.start, c.track, c.port, c.content, c.scroll, c.min)
 		if at != c.at || n != c.n || ok != c.ok {

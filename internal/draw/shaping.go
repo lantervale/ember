@@ -40,6 +40,8 @@ type item struct {
 	offset  geom.Vec2
 	// clusters is how many grapheme clusters the item draws.
 	clusters int
+	// at is where the first character of its cluster is in the text, in bytes.
+	at int
 }
 
 // pending is a character of a run of one face waiting to be shaped:
@@ -51,6 +53,7 @@ type pending struct {
 	idx     sfnt.GlyphIndex
 	cluster int32
 	first   bool
+	at      int
 }
 
 // planMemo is the plan a face shapes with last asked for.
@@ -60,30 +63,42 @@ type planMemo struct {
 	plan     *shape.Plan
 }
 
-// plan is face's plan for runs in script with features after its own.
+// plan is face's plan for runs in script with features after its own,
+// at the instance its look draws.
 func (f *Font) plan(face int, script shape.Tag, features string) *shape.Plan {
 	if f.memos == nil {
 		f.memos = make([]planMemo, len(f.layouts))
 	}
 	m := &f.memos[face]
 	if m.plan == nil || m.script != script || m.features != features {
-		*m = planMemo{script, features,
-			f.layouts[face].Plan(script, shape.Splice(features, f.looks[face].Features))}
+		spliced := shape.Splice(features, f.looks[face].Features)
+		p := f.layouts[face].Plan(script, spliced)
+		if v := f.looks[face].varied(); v != nil {
+			p = f.layouts[face].PlanAt(script, spliced, v.Font, v.Coords)
+		}
+		*m = planMemo{script, features, p}
 	}
 	return m.plan
 }
+
+// round is the text round a text drawn: before and after, which it is
+// shaped between as HarfBuzz's context, and nearer it lead and trail,
+// which it is shaped as one with.
+type round struct{ before, after, lead, trail string }
 
 // items calls fn with what s is drawn as, shaped with features after
 // each face's own: each run of clusters one face draws shaped together,
 // a picture or a character no face has breaking the run. Text right to
 // left is shaped in its order and each line given from its end, its
-// characters that have mirror images drawn as them. before and after are
-// the text round s, which each run is shaped between with the rest of
-// s, so that its letters join with those beside it.
-func (f *Font) items(s, features string, rtl bool, before, after string, fn func(item)) {
+// characters that have mirror images drawn as them. The text of ctx
+// round s is what each run is shaped between with the rest of s, so that
+// its letters join with those beside it; lead and trail are shaped as
+// one with s, and only the glyphs whose clusters start in s given.
+func (f *Font) items(s, features string, rtl bool, ctx round, fn func(item)) {
 	if rtl {
 		line := f.line[:0]
-		f.items(mirrored(s), features, false, before, after, func(it item) {
+		ctx.lead, ctx.trail = mirrored(ctx.lead), mirrored(ctx.trail)
+		f.items(mirrored(s), features, false, ctx, func(it item) {
 			if !it.newline {
 				line = append(line, it)
 				return
@@ -100,6 +115,11 @@ func (f *Font) items(s, features string, rtl bool, before, after string, fn func
 		f.line = line[:0]
 		return
 	}
+	if ctx.lead != "" || ctx.trail != "" {
+		f.amid(s, features, ctx, fn)
+		return
+	}
+	before, after := ctx.before, ctx.after
 	run := f.pending[:0]
 	face := -1
 	var clusters int32
@@ -116,12 +136,12 @@ func (f *Font) items(s, features string, rtl bool, before, after string, fn func
 		at += len(c)
 		if first == '\n' || first == '\r' {
 			flush()
-			fn(item{newline: true})
+			fn(item{newline: true, at: from})
 			return
 		}
 		if tex, ok := f.picture(c); ok {
 			flush()
-			fn(item{pic: tex, advance: f.size, clusters: 1})
+			fn(item{pic: tex, advance: f.size, clusters: 1, at: from})
 			return
 		}
 		for _, r := range c {
@@ -138,7 +158,7 @@ func (f *Font) items(s, features string, rtl bool, before, after string, fn func
 			g.face = 0
 		} else if g.idx == 0 || f.plan(g.face, script, features).Inert() {
 			flush()
-			fn(item{r: first, g: g, advance: g.advance, clusters: 1})
+			fn(item{r: first, g: g, advance: g.advance, clusters: 1, at: from})
 			return
 		}
 		if g.face != face {
@@ -149,12 +169,24 @@ func (f *Font) items(s, features string, rtl bool, before, after string, fn func
 			start = from
 		}
 		end = at
-		run = f.cluster(append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true}), face,
+		run = f.cluster(append(run, pending{r: first, g: g, idx: g.idx, cluster: clusters, first: true, at: from}), face,
 			c[utf8.RuneLen(first):], clusters)
 		clusters++
 	})
 	flush()
 	f.pending = run
+}
+
+// amid is items for s shaped as one with ctx's lead and trail: the items
+// whose clusters start in s.
+func (f *Font) amid(s, features string, ctx round, fn func(item)) {
+	from, to := len(ctx.lead), len(ctx.lead)+len(s)
+	f.items(ctx.lead+s+ctx.trail, features, false, round{before: ctx.before, after: ctx.after}, func(it item) {
+		if it.at >= from && it.at < to {
+			it.at -= from
+			fn(it)
+		}
+	})
 }
 
 // cluster appends to run the characters after the first of cluster n,
@@ -239,20 +271,15 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 	if !p.Touches(glyphs) {
 		for _, c := range run {
 			if c.first {
-				fn(item{r: c.r, g: c.g, advance: c.g.advance, clusters: 1})
+				fn(item{r: c.r, g: c.g, advance: c.g.advance, clusters: 1, at: c.at})
 			}
 		}
 		return
 	}
 	shaped := f.shaped(p, glyphs, ctx)
 	scale := f.size * f.looks[face].scale() / float32(f.sources[face].UnitsPerEm())
-	v := f.looks[face].varied()
 	for i, sg := range shaped {
 		advance := float32(sg.Advance)
-		if v != nil && advance != 0 {
-			// GPOS's values stay the default instance's; the advance is the instance's.
-			advance += v.Font.Advance(sg.ID, v.Coords) - v.Font.Advance(sg.ID, nil)
-		}
 		c := run[starts[sg.Cluster]]
 		next := n
 		if i+1 < len(shaped) {
@@ -263,6 +290,7 @@ func (f *Font) shapeRun(face int, run []pending, n int32, script shape.Tag, feat
 			advance:  advance * scale,
 			offset:   geom.V2(float32(sg.XOffset)*scale, -float32(sg.YOffset)*scale),
 			clusters: max(int(next-sg.Cluster), 0),
+			at:       c.at,
 		})
 	}
 }

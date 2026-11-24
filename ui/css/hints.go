@@ -9,11 +9,13 @@ import (
 )
 
 // hintedBelow are the attributes that hint an element's descendants, a
-// table's cells and groups, keyed as dom.Pipeline.Changed.
+// table's cells and groups, and lang, whose language picks how their
+// lines break and where they are underlined, keyed as
+// dom.Pipeline.Changed.
 //
 //nolint:gochecknoglobals // lookup table
 var hintedBelow = map[string]bool{
-	"[cellpadding": true, "[valign": true, "[border": true, "[bordercolor": true, "[rules": true,
+	"[cellpadding": true, "[valign": true, "[border": true, "[bordercolor": true, "[rules": true, langChanged: true,
 }
 
 // hints are the declarations an element's presentational attributes
@@ -149,7 +151,7 @@ func hints(n *dom.Node) []Declaration {
 		dom.Form, dom.Address, dom.Hgroup, dom.Menu, dom.Search, dom.A, dom.B, dom.I, dom.U, dom.S, dom.Small, dom.Abbr,
 		dom.Cite, dom.Mark, dom.Time, dom.Var, dom.Del, dom.Ins, dom.Dfn, dom.Bdi, dom.Bdo, dom.DataElement,
 		dom.Center, dom.Big, dom.Sub, dom.Sup, dom.Q, dom.Fieldset, dom.Legend,
-		dom.PictureElement, dom.Source:
+		dom.PictureElement, dom.Source, dom.Optgroup:
 		return nil
 	}
 	if src.Len() == 0 {

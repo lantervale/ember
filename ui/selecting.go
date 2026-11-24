@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"slices"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/lantervale/ember/twod"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
+	"github.com/lantervale/ember/ui/internal/style"
 	"github.com/lantervale/ember/ui/paint"
 )
 
@@ -362,13 +364,13 @@ func (d *Document) moveSelection(a textedit.Action) bool {
 		return false
 	}
 	to := s.focus
-	switch a {
+	switch flowKey(cur.b.Style.Mode, a) {
 	case textedit.Left, textedit.Right:
-		to = d.step(s.focus, a == textedit.Right)
+		to = d.step(s.focus, flowKey(cur.b.Style.Mode, a) == textedit.Right)
 	case textedit.WordLeft, textedit.WordRight:
 		to = d.stepWord(s.focus, a == textedit.WordRight)
 	case textedit.Up, textedit.Down:
-		to = d.stepLine(cur, a == textedit.Down)
+		to = d.stepLine(cur, flowKey(cur.b.Style.Mode, a) == textedit.Down)
 	case textedit.LineStart, textedit.LineEnd:
 		to = d.lineEdge(cur, a == textedit.LineEnd)
 	case textedit.Start, textedit.End:
@@ -387,9 +389,36 @@ func (d *Document) moveSelection(a textedit.Action) bool {
 	}
 	d.point(s.anchor, to)
 	if p, shown := d.pieceOf(s.focus); shown {
-		d.revealRect(p.b, p.r)
+		d.revealRect(p.b, p.page)
 	}
 	return true
+}
+
+// flowKey is the move an arrow's a makes in lines of writing mode m, as
+// it makes it in horizontal ones: on vertical lines, the arrows along
+// them step through the text and those across them go from line to
+// line, as Chrome.
+func flowKey(m style.WritingMode, a textedit.Action) textedit.Action {
+	if !m.Vertical() {
+		return a
+	}
+	// along the lines: forward down them, or up those of sideways-lr
+	along, back := textedit.Down, textedit.Up
+	if m.Upward() {
+		along, back = back, along
+	}
+	// across them: on to the side the blocks go
+	next, prev := textedit.Right, textedit.Left
+	if m.BlockFromRight() {
+		next, prev = prev, next
+	}
+	for _, turn := range [][2]textedit.Action{{along, textedit.Right}, {back, textedit.Left},
+		{next, textedit.Down}, {prev, textedit.Up}} {
+		if a == turn[0] {
+			return turn[1]
+		}
+	}
+	return a
 }
 
 // pieceOf is the fragment p stands in or beside, x where p is along it.
@@ -407,7 +436,8 @@ func (d *Document) pieceOf(p Position) (piece, bool) {
 		k++
 	}
 	r, f := b.Rect(), b.Lines[k]
-	out := piece{n: p.Node, b: b, k: k, r: geom.Rect{X: r.X + f.Rect.X, Y: r.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}}
+	page := geom.Rect{X: r.X + f.Rect.X, Y: r.Y + f.Rect.Y, W: f.Rect.W, H: f.Rect.H}
+	out := piece{n: p.Node, t: p.Node, b: b, k: k, page: page, r: flowRect(b.Style.Mode, page)}
 	out.x = out.r.X + d.edges(m, b, k)[lower(m.frags[k].offs, p.Offset)]
 	return out, true
 }
@@ -484,9 +514,22 @@ func (d *Document) stepWord(p Position, forward bool) Position {
 // stepLine is the place nearest cur's on the line under it, or over it;
 // the text's end or start when there is none.
 func (d *Document) stepLine(cur piece, down bool) Position {
-	var best piece
-	found := false
-	d.pieces(geom.V2(cur.x, cur.r.Y), nil, func(p piece) {
+	m := cur.b.Style.Mode
+	var best, other piece
+	found, passed, hasOther := false, false, false
+	order, bestAt, otherAt := 0, 0, 0
+	d.pieces(geom.Vec2{}, nil, func(p piece) {
+		order++
+		if p.b == cur.b && p.k == cur.k {
+			passed = true
+			return
+		}
+		if p.b.Style.Mode != m {
+			if down && passed && !hasOther || !down && !passed {
+				other, hasOther, otherAt = p, true, order
+			}
+			return
+		}
 		gap := p.r.Y - (cur.r.Y + cur.r.H)
 		if !down {
 			gap = cur.r.Y - (p.r.Y + p.r.H)
@@ -500,17 +543,26 @@ func (d *Document) stepLine(cur piece, down bool) Position {
 		}
 		if !found || gap < was-0.5 ||
 			abs(gap-was) <= 0.5 && away(cur.x, p.r.X, p.r.X+p.r.W) < away(cur.x, best.r.X, best.r.X+best.r.W) {
-			best, found = p, true
+			best, found, bestAt = p, true, order
 		}
 	})
-	if !found {
-		first, last, _ := d.textIn(d.html)
-		if down {
-			return last
-		}
-		return first
+	// a line of another writing mode is reached in the text's order, as
+	// Chrome goes on into the block after or before cur's, the place on it
+	// where cur's stands on the page
+	// Chrome looks for the place on the page's whole points
+	at := unflow(m, geom.V2(cur.x, cur.r.Y+cur.r.H/2))
+	at = geom.V2(float32(math.Floor(float64(at.X))), float32(math.Floor(float64(at.Y))))
+	if hasOther && (!found || down && otherAt < bestAt || !down && otherAt > bestAt) {
+		return d.positionIn(other, flow(other.b.Style.Mode, at).X)
 	}
-	return d.positionIn(best, cur.x)
+	if found {
+		return d.positionIn(best, flow(m, at).X)
+	}
+	first, last, _ := d.textIn(d.html)
+	if down {
+		return last
+	}
+	return first
 }
 
 // lineEdge is the start of cur's line, or its end.
@@ -524,11 +576,10 @@ func (d *Document) lineEdge(cur piece, end bool) Position {
 			best = p
 		}
 	})
-	offs := d.mapOf(best.n).frags[best.k].offs
 	if end {
-		return Position{best.n, int(offs[len(offs)-1])}
+		return best.at(d, len(d.mapOf(best.t).frags[best.k].offs)-1)
 	}
-	return Position{best.n, int(offs[0])}
+	return best.at(d, 0)
 }
 
 // revealRect scrolls the containers holding b by the least that shows r,

@@ -82,3 +82,40 @@ func TestAStableGutterIsKeptWhereTheBoxClips(t *testing.T) {
 		}
 	}
 }
+
+func TestBothEdgesKeepAGutterAtEachEdge(t *testing.T) {
+	one, both := el(dom.Div, "", "one"), el(dom.Div, "", "both")
+	s, warns := Parse("t.css", `div { overflow: auto; } .one { scrollbar-gutter: stable; }
+		.both { scrollbar-gutter: both-edges stable; }`)
+	if len(warns) > 0 {
+		t.Fatalf("warnings:\n%s", warnings(warns))
+	}
+	Compute(page(one, both), []*Sheet{s})
+	if c := styleOf(one); !c.GutterStable || c.GutterBothEdges {
+		t.Errorf("stable: stable %v, both edges %v", c.GutterStable, c.GutterBothEdges)
+	}
+	if c := styleOf(both); !c.GutterStable || !c.GutterBothEdges {
+		t.Errorf("both-edges stable: stable %v, both edges %v", c.GutterStable, c.GutterBothEdges)
+	}
+}
+
+// scrollbar-color asks for the system's bars, which Chrome on macOS lays
+// over the content: no gutter, whether the bars are styled or not.
+func TestAColouredScrollbarIsAnOverlayOne(t *testing.T) {
+	plain, coloured, styled := el(dom.Div, "", "p"), el(dom.Div, "", "c"), el(dom.Div, "", "c", "s")
+	s, warns := Parse("t.css", `div { overflow: scroll; } .c { scrollbar-color: red blue; }
+		.s::-webkit-scrollbar { width: 30px; }`)
+	if len(warns) > 0 {
+		t.Fatalf("warnings:\n%s", warnings(warns))
+	}
+	Compute(page(plain, coloured, styled), []*Sheet{s})
+	if c := styleOf(plain); c.ScrollbarOverlay || c.ScrollbarWidth != barGutter {
+		t.Errorf("plain: overlay %v, gutter %v", c.ScrollbarOverlay, c.ScrollbarWidth)
+	}
+	for _, n := range []*dom.Node{coloured, styled} {
+		if c := styleOf(n); !c.ScrollbarOverlay || c.ScrollbarWidth != 0 || c.ScrollbarHeight != 0 || c.Scrollbar != nil {
+			t.Errorf("%s: overlay %v, gutters %v %v, parts %v", describe(n), c.ScrollbarOverlay, c.ScrollbarWidth,
+				c.ScrollbarHeight, c.Scrollbar != nil)
+		}
+	}
+}

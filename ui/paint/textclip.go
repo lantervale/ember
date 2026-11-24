@@ -52,7 +52,7 @@ func (p *painter) glyphs(b *box.Box, at geom.Vec2) {
 			if st := shown(c); st == nil || st.Display != style.DisplayNone {
 				p.glyphs(c, ca)
 			}
-		case box.Marker, box.Viewport:
+		case box.Marker, box.Viewport, box.ControlPart:
 		}
 	}
 }

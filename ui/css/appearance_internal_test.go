@@ -100,8 +100,8 @@ func TestTheUserAgentsNativeClassWeighsAsAClassAndPrints(t *testing.T) {
 }
 
 // A range, a progress and a meter get their parts' styles, each
-// inheriting from the part it is in; a range of appearance none is as
-// tall as its track, as tall as its thumb unless sized.
+// inheriting from the part it is in; a range of appearance none is at
+// least as tall as its track, as tall as its thumb unless sized.
 func TestTheControlsPartsAreStyledAsChromes(t *testing.T) {
 	prog, meter := el(dom.Progress, "", ""), el(dom.Meter, "", "")
 	plain, short, tall := input("range", "none", ""), input("range", "none four", ""), input("range", "none thumb", "")
@@ -124,11 +124,90 @@ meter::-webkit-meter-suboptimum-value { background-color: #f00; }`)})
 		n *dom.Node
 		h style.Length
 	}{"plain": {plain, style.Px(16)}, "short": {short, style.Px(8)}, "tall": {tall, style.Px(20)}} {
-		if got := styleOf(c.n).Size.Height; got != c.h {
-			t.Errorf("%s: height %v, want %v", name, got, c.h)
+		if got := styleOf(c.n).MinSize.Height; got != c.h {
+			t.Errorf("%s: min-height %v, want %v", name, got, c.h)
 		}
 	}
 	if st := styleOf(own); st.Size.Height != style.Px(16) || st.Parts.Thumb.Appearance.Native() {
 		t.Errorf("a range of its own look: height %v, thumb %v", st.Size.Height, st.Parts.Thumb.Appearance)
+	}
+}
+
+// A part's :hover and :active hold while the pointer is over it and
+// while a press on it lasts, as the element's part states say; the
+// parts they hold are in them too.
+func TestAControlsPartsTakeTheirHoverAndActive(t *testing.T) {
+	sels, err := ParseSelectors("input::-webkit-slider-thumb:hover:active")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sels[0].String(); got != "input::-webkit-slider-thumb:hover:active" {
+		t.Errorf("printed %q", got)
+	}
+	for _, bad := range []string{"input::-webkit-slider-thumb:vertical", "progress::-webkit-progress-value:checked"} {
+		if _, e := ParseSelectors(bad); e == nil {
+			t.Errorf("%s read", bad)
+		}
+	}
+	rest, over, pressed := input("range", "none", ""), input("range", "none", ""), input("range", "none", "")
+	over.SetState(dom.ContainerHover|dom.TrackHover, true)
+	pressed.SetState(dom.PartHover|dom.PartActive, true)
+	bar := el(dom.Progress, "", "")
+	bar.SetState(dom.PartHover, true)
+	Compute(page(rest, over, pressed, bar), []*Sheet{sheet(t, `.none { appearance: none; }
+::-webkit-slider-container { background-color: #100; }
+::-webkit-slider-container:hover { background-color: #200; }
+::-webkit-slider-runnable-track:hover { background-color: #300; }
+::-webkit-slider-runnable-track:active { background-color: #400; }
+::-webkit-slider-thumb { appearance: none; background-color: #500; }
+::-webkit-slider-thumb:hover { background-color: #600; }
+::-webkit-slider-thumb:hover:active { background-color: #700; }
+progress::-webkit-progress-value:hover { background-color: #800; }`)})
+	for name, c := range map[string]struct {
+		n                       *dom.Node
+		container, track, thumb color.Color
+	}{
+		"at rest": {rest, color.Hex("#100"), color.Color{}, color.Hex("#500")},
+		"over":    {over, color.Hex("#200"), color.Hex("#300"), color.Hex("#500")},
+		"a press": {pressed, color.Hex("#200"), color.Hex("#400"), color.Hex("#700")},
+	} {
+		p := styleOf(c.n).Parts
+		var track color.Color
+		if p.Track != nil {
+			track = p.Track.Background
+		}
+		if p.Container.Background != c.container || track != c.track || p.Thumb.Background != c.thumb {
+			t.Errorf("%s: container %v, track %v, thumb %v", name, p.Container.Background, track, p.Thumb.Background)
+		}
+	}
+	if v := styleOf(bar).Parts.Value; v.Background != color.Hex("#800") {
+		t.Errorf("a hovered progress value: %v", v.Background)
+	}
+}
+
+// A range of appearance none is as thick as its slider container round
+// its track, down it, or across it where its lines are vertical.
+func TestARangesContainerAndVerticalLinesSizeIt(t *testing.T) {
+	padded, upright := input("range", "none pad", ""), input("range", "none up", "")
+	own := input("range", "up", "")
+	sv := input("range", "", "appearance: slider-vertical")
+	Compute(page(padded, upright, own, sv), []*Sheet{sheet(t, `.none { appearance: none; }
+.pad::-webkit-slider-container { padding: 3px; border: 1px solid; }
+.pad::-webkit-slider-runnable-track { height: 8px; }
+.up { writing-mode: vertical-lr; }
+.up::-webkit-slider-thumb { appearance: none; width: 12px; height: 6px; }`)})
+	if got := styleOf(padded).MinSize.Height; got != style.Px(16) {
+		t.Errorf("a padded container: min-height %v, want 16px", got)
+	}
+	if st := styleOf(upright); st.MinSize.Width != style.Px(12) || st.Size.Height != style.Px(129) ||
+		st.MinSize.Height.Kind != style.Auto {
+		t.Errorf("vertical lines: min-width %v, height %v, min-height %v", st.MinSize.Width, st.Size.Height,
+			st.MinSize.Height)
+	}
+	if st := styleOf(own); st.Size.Width != style.Px(16) || st.Size.Height != style.Px(129) {
+		t.Errorf("its own look in vertical lines: %v × %v", st.Size.Width, st.Size.Height)
+	}
+	if a := styleOf(sv).Appearance; a != style.AppearanceSliderVertical {
+		t.Errorf("appearance: slider-vertical computes as %v", a)
 	}
 }

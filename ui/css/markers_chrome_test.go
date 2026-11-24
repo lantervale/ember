@@ -65,3 +65,49 @@ return [s.color, s.fontSize, s.cursor, at.tagName.toLowerCase(), r.left, r.top +
 		}
 	}
 }
+
+// TestAMarkerFollowsItsItemsColourTransitionAsInChrome has list items
+// transition their colour halfway while a rule styles their ::marker
+// without a colour of its own, and once with one, and asks Chrome and ui
+// for each marker's colour.
+func TestAMarkerFollowsItsItemsColourTransitionAsInChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+li { color: #000; transition: color 1000s linear -500s; }
+li.on { color: #fff; }
+li::marker { font-size: 20px; }
+.own::marker { color: #08f; }
+.inherit::marker { color: inherit; }
+`))
+	items := []*ui.Node{ui.Li(ui.Text("a")), ui.Li(ui.Class("own"), ui.Text("b")),
+		ui.Li(ui.Class("inherit"), ui.Text("c"))}
+	d.Body().Append(ui.Ul(items[0], items[1], items[2]))
+	d.Layout(geom.V2(800, 600))
+	raw, err := chrome.Eval(d, geom.V2(800, 600), `
+const lis = [...document.querySelectorAll("li")];
+lis.forEach(li => li.classList.add("on"));
+return lis.map(li => getComputedStyle(li, "::marker").color);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	if err = json.Unmarshal(raw, &want); err != nil {
+		t.Fatalf("%v in %s", err, raw)
+	}
+	win := platform.NewWindow(platform.Size(800, 600))
+	win.Add(d)
+	w := ember.New().AddEntities(win)
+	w.RunFrames(1)
+	for _, li := range items {
+		li.AddClass("on")
+	}
+	w.RunFrames(1)
+	for i, li := range items {
+		g := dom.Data(li).MarkerNode
+		if g == nil {
+			t.Fatalf("%d: no ::marker node", i)
+		}
+		if got := rgb(dom.Data(g).Shown.Color); !same("color", got, want[i]) {
+			t.Errorf("%d: ui %q, Chrome %q", i, got, want[i])
+		}
+	}
+}

@@ -962,9 +962,10 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	}
 	colGone, rowGone := collapsedTracks(tracks, cols), collapsedRows(rows)
 	shownX, colAt := shownLines(widths, colGone, nil, sx, 0)
-	// A flex item keeps the width its container gave it, as wide as before the collapse,
-	// its rows too, as in Chrome; a grid item narrows as a block does.
-	kept := some(in.known.w) && inFlex(n)
+	// An item of a flex row keeps the width its container gave it, as wide as before the
+	// collapse, its rows too, as in Chrome; stretched across a flex column or in a grid
+	// area, it narrows as a block does.
+	kept := some(in.known.w) && inFlexRow(n)
 	if !kept {
 		w -= colX[cols] - shownX[cols]
 	}
@@ -1114,9 +1115,11 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 	return lowered, rowBase
 }
 
-// inFlex reports whether n is a flex item, sized by its container.
-func inFlex(n *node) bool {
-	return n.parent != nil && (n.parent.st.Display == style.FlexDisplay || n.parent.st.Display == style.InlineFlex)
+// inFlexRow reports whether n is an item of a flex row, its width the main size its
+// container gives it.
+func inFlexRow(n *node) bool {
+	return n.parent != nil && (n.parent.st.Display == style.FlexDisplay || n.parent.st.Display == style.InlineFlex) &&
+		flexDir(n.parent.st.Direction).isRow()
 }
 
 // collapsedTracks marks the columns of a table with cols of them that tracks collapse,
@@ -1286,7 +1289,9 @@ func spannedPercents(cells []slot, percent, colMax []float32) {
 
 // tableHeight is the height of a table whose rows are heights tall, around being its
 // inset and captions: the rows' with the spacing round them, or the height the table is
-// given, which grows the rows where it is above theirs.
+// given, which grows the rows where it is above theirs: a floor only, as Chrome's, which
+// never shortens a table below its rows, and for a table that collapses rows one taken
+// from before the collapse.
 func tableHeight(st *style.Computed, in input, heights []float32, sy, around float32) float32 {
 	hgt := around
 	if len(heights) > 0 {
@@ -1298,9 +1303,6 @@ func tableHeight(st *style.Computed, in input, heights []float32, sy, around flo
 	if given := or(in.known.h, resolve(st.Size.Height, in.parent.h)); some(given) && given > hgt {
 		growRows(heights, given-hgt)
 		return given
-	}
-	if some(in.known.h) {
-		return in.known.h
 	}
 	return hgt
 }

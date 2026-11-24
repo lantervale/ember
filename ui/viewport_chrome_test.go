@@ -5,6 +5,7 @@ package ui_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,8 +56,18 @@ func TestAScrolledViewportMatchesChrome(t *testing.T) {
 		"html's overflow hidden":        {300, "html { overflow: hidden; }", nil},
 		"body's overflow-y scroll":      {300, "body { overflow-y: scroll; } .row, #note { display: none; }", nil},
 		"html and body a viewport high": {900, "html, body { height: 100%; }", nil},
+		"a stable gutter, the page fitting": {0, "html { scrollbar-gutter: stable; } .row, #note { display: none; }",
+			nil},
+		"both edges": {700, "html { scrollbar-gutter: stable both-edges; }", nil},
+		"both edges, the page fitting": {0,
+			"html { scrollbar-gutter: stable both-edges; } .row, #note { display: none; }", nil},
+		"both edges, right to left":     {700, "html { scrollbar-gutter: stable both-edges; direction: rtl; }", nil},
+		"body's gutter, not the root's": {700, "body { scrollbar-gutter: stable both-edges; }", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
+			if strings.Contains(c.sheet, "html { scrollbar-gutter") {
+				chrome.Since(t, 158, "the root keeps no stable gutter without a bar, nor a start one")
+			}
 			r := chrome.Match(t, chromeDoc(c.y, c.sheet, c.opts...), geom.V2(640, 400))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
 		})

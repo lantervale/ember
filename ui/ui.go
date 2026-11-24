@@ -163,6 +163,13 @@ func PictureOf(n *Node) (string, bool) { return dom.Picture(n) }
 // Option is an option element of a select.
 func Option(args ...Arg) *Node { return element(dom.Option, args) }
 
+// Optgroup is a select's group of options under label: the label stands
+// in the list in bold and is never chosen, its options indented below
+// it. Disabled disables them all.
+func Optgroup(label string, args ...Arg) *Node {
+	return element(dom.Optgroup, append([]Arg{Attr("label", label)}, args...))
+}
+
 // Input is an input, of Type "text" unless set.
 func Input(args ...Arg) *Node { return element(dom.Input, args) }
 

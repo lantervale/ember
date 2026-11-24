@@ -85,11 +85,10 @@ p { margin: 0 0 12px; }
 .boxed::first-letter { initial-letter: 2; padding: 2px 4px; margin-right: 4px; border: 2px solid #357; }
 .tall { line-height: 26px; }
 .tall::first-letter { initial-letter: 3 drop; }
-.half::first-letter { initial-letter: 2.5; }
 .large { font-size: 20px; line-height: 1.5; }
 .large::first-letter { initial-letter: 4; }
 `))
-	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "half", "large"} {
+	for _, c := range []string{"i3", "i2", "raise", "up", "boxed", "tall", "large"} {
 		d.Body().Append(ui.P(append([]ui.Arg{ui.Class(c), ui.Text("Down ")}, words(prose+" "+prose)...)...))
 	}
 	// Chrome on Linux and Windows rounds a letter's ink out to whole
@@ -101,6 +100,28 @@ p { margin: 0 0 12px; }
 	}
 	r := chrome.MatchWithin(t, d, geom.V2(400, 1400), within)
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// A drop cap of a fractional size sinks its size rounded down and rises
+// over the first line by the rest, pushing the lines down, as Chrome 158.
+func TestFractionalInitialLettersMatchChrome(t *testing.T) {
+	chrome.Since(t, 158, "a fractional initial-letter sinks its size rounded down, no longer up")
+	for _, size := range []string{"1.5", "2.3", "2.5", "2.7", "3.5", "2.5 drop", "2.5 raise", "2.5 3"} {
+		t.Run(size, func(t *testing.T) {
+			d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; width: 360px; }
+p { margin: 0 0 12px; }
+.x::first-letter { initial-letter: ` + size + `; }
+`))
+			d.Body().Append(ui.P(append([]ui.Arg{ui.Class("x"), ui.Text("Down ")}, words(prose+" "+prose)...)...))
+			within := float32(chrome.Tolerance)
+			if runtime.GOOS != "darwin" {
+				within = 2
+			}
+			r := chrome.MatchWithin(t, d, geom.V2(400, 600), within)
+			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+		})
+	}
 }
 
 func TestFirstLinesMatchChrome(t *testing.T) {
@@ -135,4 +156,89 @@ li::first-line { font-size: 20px; }
 	)
 	r := chrome.Match(t, d, geom.V2(400, 1000))
 	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// TestFirstLineSizesMatchChrome sizes to their content blocks whose first
+// line is styled, as Chrome measures them: every line in the first
+// line's styles, the padding, border and margin in em of the inline
+// elements on it resolved in its font; and vertical-align on a first
+// line, which Chrome reads and lays out nothing by.
+func TestFirstLineSizesMatchChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; width: 380px; }
+p { margin: 0; }
+.big::first-line { font-size: 30px; }
+.small::first-line { font-size: 8px; }
+.min { width: min-content; margin-bottom: 6px; }
+.max { width: max-content; margin-bottom: 6px; }
+.fit { float: left; clear: left; margin-bottom: 6px; }
+.lines { white-space: pre-line; }
+.ems span { padding: 0 1em; margin: 0 0.5em; border: 0.125em solid #357; }
+.ib { display: inline-block; }
+.ib::first-line { font-size: 24px; }
+.raised::first-line { vertical-align: 10px; }
+.super::first-line { vertical-align: super; font-size: 20px; }
+.after { clear: left; }
+`))
+	d.Body().Append(
+		ui.Div(ui.Class("min"), ui.P(ui.Class("big"), ui.Span(ui.Text("aa")), ui.Text(" "), ui.Span(ui.Text("bbbbbb")))),
+		ui.Div(ui.Class("min"), ui.P(ui.Class("small"), ui.Span(ui.Text("aa")), ui.Text(" "),
+			ui.Span(ui.Text("bbbbbb")))),
+		ui.Div(ui.Class("max"), ui.P(ui.Class("big", "lines"), ui.Span(ui.Text("aa bb")), ui.Text("\n"),
+			ui.Span(ui.Text("cc dddddd")))),
+		ui.Div(ui.Class("fit"), ui.P(ui.Class("small", "lines"), ui.Span(ui.Text("aa bb")), ui.Text("\n"),
+			ui.Span(ui.Text("cc dddddd")))),
+		ui.Div(ui.Class("fit"), ui.P(ui.Class("big", "ems"), ui.Text("aa "), ui.Span(ui.Text("bb")))),
+		ui.Div(ui.Class("min"), ui.P(ui.Class("big", "ems"), ui.Text("aa "), ui.Span(ui.Text("bb")))),
+		ui.P(ui.Class("big", "ems", "after"), ui.Text("aa "), ui.Span(ui.Text("bb")), ui.Text(" cc "),
+			ui.Span(ui.Text("dd")), ui.Text(" over and over past the end of the line "), ui.Span(ui.Text("ee"))),
+		ui.Div(ui.Span(ui.Class("ib"), ui.Span(ui.Text("an")), ui.Text(" "), ui.Span(ui.Text("inline"))),
+			ui.Text(" "), ui.Span(ui.Text("after"))),
+		ui.P(append([]ui.Arg{ui.Class("raised")}, words(prose)...)...),
+		ui.P(append([]ui.Arg{ui.Class("super")}, words(prose)...)...),
+	)
+	r := chrome.Match(t, d, geom.V2(400, 700))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// TestFirstLettersAfterKeptSpacesMatchChrome takes the first letter of
+// text whose spaces white-space keeps, the spaces before it going with
+// it into its box, in its size; and the first letter of text a
+// translation changes, taken from what the translation says.
+func TestFirstLettersAfterKeptSpacesMatchChrome(t *testing.T) {
+	d := ui.NewDocument(ui.CSS(`
+body { margin: 8px; font-size: 16px; width: 380px; }
+p { margin: 0 0 6px; float: left; clear: left; }
+p::first-letter { font-size: 32px; }
+.pre { white-space: pre; }
+.wrap { white-space: pre-wrap; }
+.line { white-space: pre-line; }
+.boxed::first-letter { padding: 0 4px; border: 2px solid #357; }
+.drop::first-letter { float: left; font-size: 40px; line-height: 1; }
+`), ui.WithTranslator(translator{"greeting": "Willkommen", "quote": "«Ça va»", "night": "Úlfur"}))
+	d.Body().Append(
+		ui.P(ui.Class("pre"), ui.Text("   Lantern "), ui.Span(ui.Text("light"))),
+		ui.P(ui.Class("pre"), ui.Text("  “Well” "), ui.Span(ui.Text("said"))),
+		ui.P(ui.Class("wrap"), ui.Text("   Lantern "), ui.Span(ui.Text("light"))),
+		ui.P(ui.Class("line"), ui.Text("   Lantern "), ui.Span(ui.Text("light"))),
+		ui.P(ui.Class("pre", "boxed"), ui.Text("  Every "), ui.Span(ui.Text("step"))),
+		ui.P(ui.Class("pre", "drop"), ui.Text("  Every "), ui.Span(ui.Text("step"))),
+		ui.P(ui.Class("pre"), ui.Span(ui.Text("  ")), ui.Text("  Under "), ui.Span(ui.Text("boots"))),
+		ui.P(ui.Text("greeting"), ui.Text(" "), ui.Span(ui.Text("friend"))),
+		ui.P(ui.Text("quote"), ui.Text(" "), ui.Span(ui.Text("friend"))),
+		ui.P(ui.Class("boxed"), ui.Text("night"), ui.Text(" "), ui.Span(ui.Text("friend"))),
+		ui.P(ui.Attr("translate", "no"), ui.Text("night"), ui.Text(" "), ui.Span(ui.Text("friend"))),
+	)
+	r := chrome.Match(t, d, geom.V2(400, 700))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
+// translator says a few words otherwise.
+type translator map[string]string
+
+func (tr translator) Tr(m string) string {
+	if s, ok := tr[m]; ok {
+		return s
+	}
+	return m
 }

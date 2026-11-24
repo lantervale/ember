@@ -32,7 +32,13 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/pixelated", 420, 130, 0.0002},
 		{"./internal/pages/scrolled", 300, 320, 0.0125},
 		{"./internal/pages/scrollbar-parts", 480, 230, 0.0003},
+		{"./internal/pages/scrollbar-gutter", 560, 210, 0.0015},
+		{"./internal/pages/scrollbar-buttons", 560, 250, 0.0004},
+		{"./internal/pages/scrollbar-viewport", 320, 260, 0.0004},
+		{"./internal/pages/scrollbar-fields", 480, 230, 0.003},
 		{"./internal/pages/control-parts", 440, 280, 0.001},
+		{"./internal/pages/control-generated", 420, 280, 0.003},
+		{"./internal/pages/control-states", 440, 240, 0.001},
 		{"./internal/pages/viewport-top", 320, 260, 0.0055},
 		{"./internal/pages/viewport-end", 320, 260, 0.006},
 		{"./internal/pages/top-layer", 320, 240, 0.002},
@@ -66,6 +72,8 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-boxes", 640, 330, 0.0065},
 		{"./internal/pages/debug-grid", 640, 180, 0.004},
 		{"./internal/pages/decorations", 420, 560, 0.007},
+		{"./internal/pages/decoration-caps", 440, 420, 0.0095},
+		{"./internal/pages/underline-position", 560, 450, 0.009},
 		{"./internal/pages/word-spacing", 420, 440, 0.0065},
 		{"./internal/pages/text-properties", 420, 490, 0.0086},
 		{"./internal/pages/vertical-align", 420, 620, 0.0092},
@@ -86,9 +94,13 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/multicol", 640, 440, 0.0046},
 		{"./internal/pages/column-span", 640, 420, 0.004},
 		{"./internal/pages/column-cuts", 560, 420, 0.0025},
+		{"./internal/pages/column-cuts-more", 560, 420, 0.0035},
+		{"./internal/pages/column-lanes-more", 560, 420, 0.0035},
 		{"./internal/pages/inline-opacity", 420, 240, 0.002},
-		{"./internal/pages/table-collapse", 520, 200, 0.0022},
+		{"./internal/pages/table-collapse", 520, 240, 0.0022},
 		{"./internal/pages/generated", 640, 440, 0.0025},
+		{"./internal/pages/optgroups", 520, 100, 0.016},
+		{"./internal/pages/listboxes", 520, 140, 0.0035},
 		{"./internal/pages/selection", 560, 560, 0.004},
 		{"./internal/pages/selection-marks", 420, 560, 0.0065},
 		{"./internal/pages/field-selection", 320, 60, 0.004},
@@ -106,8 +118,11 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/direction-more", 400, 420, 0.003},
 		{"./internal/pages/lists", 520, 300, 0.0032},
 		{"./internal/pages/list-inside", 520, 360, 0.0072},
+		{"./internal/pages/list-counters", 440, 300, 0.0042},
 		{"./internal/pages/first-letter-line", 560, 420, 0.0058},
 		{"./internal/pages/initial-letter", 520, 260, 0.008},
+		{"./internal/pages/first-line-more", 560, 420, 0.0042},
+		{"./internal/pages/floats-in-lines", 560, 420, 0.0062},
 		{"./internal/pages/font-synthesis", 520, 300, 0.007},
 		{"./internal/pages/text-stroke", 480, 420, 0.0095},
 		{"./internal/pages/marker-properties", 420, 360, 0.0065},
@@ -115,16 +130,40 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/background-text", 640, 300, 0.0031},
 		{"./internal/pages/text-sizes", 420, 240, 0.008},
 		{"./internal/pages/font-variations", 520, 320, 0.0065},
+		{"./internal/pages/variable-layout", 480, 280, 0.01},
 		{"./internal/pages/colour-fonts", 520, 340, 0.0025},
 		{"./internal/pages/joined", 440, 400, 0.0055},
 		{"./internal/pages/syllables", 420, 400, 0.0058},
 		{"./internal/pages/scripts", 420, 400, 0.0045},
+		{"./internal/pages/han-spacing", 560, 300, 0.0055},
+		{"./internal/pages/line-break", 480, 420, 0.0075},
+		{"./internal/pages/ascii-breaks", 520, 440, 0.01},
+		{"./internal/pages/shaped-whole", 460, 480, 0.0088},
+		{"./internal/pages/shaped-whole-rtl", 460, 480, 0.0078},
 		{"./internal/pages/writing-modes", 480, 240, 0.0075},
+		{"./internal/pages/break-spaces", 420, 520, 0.0035},
+		{"./internal/pages/vertical-glyphs", 420, 240, 0.0075},
+		{"./internal/pages/vertical-selection", 420, 240, 0.011},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
+			if major, why := pageSince(c.pkg); major > 0 {
+				chrome.Since(t, major, why)
+			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}
+}
+
+// pageSince is the Chrome version from which a page draws as ui does,
+// and what changed then; none for a page every version draws alike.
+func pageSince(pkg string) (int, string) {
+	switch pkg {
+	case "./internal/pages/scrollbar-gutter":
+		return 158, "scrollbar-color's bars lie over the content, and a short styled thumb is at least 26 points long"
+	case "./internal/pages/scrollbar-buttons":
+		return 157, "a short styled thumb is at least 26 points long"
+	}
+	return 0, ""
 }
 
 // TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of

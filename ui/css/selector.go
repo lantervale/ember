@@ -93,6 +93,9 @@ const (
 	pseudoRequired
 	pseudoOptional
 	pseudoDir
+	// pseudoListBox is ui's own :-ember-listbox, a select shown as a
+	// listbox, as Chrome's :-internal-list-box.
+	pseudoListBox
 )
 
 type pseudo struct {
@@ -419,6 +422,8 @@ func (p *pseudo) matches(e, scope *dom.Node) bool {
 		return slices.Contains(fields, e.Tag()) && !required(e)
 	case pseudoDir:
 		return directionOf(e) == p.dir
+	case pseudoListBox:
+		return dom.ListBox(e)
 	case pseudoScope:
 		if scope == nil {
 			return e.Parent() == nil
@@ -609,7 +614,7 @@ var uneditable = []string{"checkbox", "radio", "range", "color", "file", "hidden
 // controls are the elements :enabled is about.
 //
 //nolint:gochecknoglobals // lookup table
-var controls = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Option, dom.Fieldset}
+var controls = []dom.Tag{dom.Button, dom.Input, dom.Select, dom.Textarea, dom.Option, dom.Optgroup, dom.Fieldset}
 
 func matchesAny(sels []Selector, e, scope *dom.Node) bool {
 	for _, s := range sels {
@@ -822,6 +827,7 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 	cs, s.native = nativeOf(cs)
 	cs, s.part = partStatesOf(cs)
 	cs, s.inactive = windowInactive(cs)
+	s.part, s.inactive = s.part&^partWindowInactive, s.inactive || s.part&partWindowInactive != 0
 	name, n, err := pseudoElementAt(cs)
 	if err != nil {
 		return Selector{}, err
@@ -938,7 +944,7 @@ func (c *Compound) specificity() Specificity {
 		case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 			pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
 			pseudoNthOfType, pseudoNthLastOfType, pseudoLang, pseudoReadOnly, pseudoReadWrite, pseudoIndeterminate,
-			pseudoRequired, pseudoOptional, pseudoDir:
+			pseudoRequired, pseudoOptional, pseudoDir, pseudoListBox:
 			sp[1]++
 		}
 	}
@@ -1073,6 +1079,8 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{kind: pseudoRequired}, 2, nil
 	case "optional":
 		return pseudo{kind: pseudoOptional}, 2, nil
+	case listBoxClass:
+		return pseudo{kind: pseudoListBox}, 2, nil
 	case "autofill", "-webkit-autofill", "window-inactive":
 		// matching nothing: no field is filled in, and an element is never
 		// inactive, only its ::selection
@@ -1195,7 +1203,7 @@ func dropHas(s Selector, at Component) *SelectorError {
 			case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNthChild, pseudoLink, pseudoVisited,
 				pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
 				pseudoNthOfType, pseudoNthLastOfType, pseudoScope, pseudoLang, pseudoReadOnly, pseudoReadWrite,
-				pseudoIndeterminate, pseudoRequired, pseudoOptional, pseudoDir:
+				pseudoIndeterminate, pseudoRequired, pseudoOptional, pseudoDir, pseudoListBox:
 			}
 		}
 	}
@@ -1341,7 +1349,7 @@ func (p *pseudo) reads() dom.State {
 	case pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink, pseudoVisited, pseudoIs,
 		pseudoWhere, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType, pseudoLastOfType, pseudoOnlyOfType,
 		pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope, pseudoLang, pseudoRequired, pseudoOptional,
-		pseudoDir:
+		pseudoDir, pseudoListBox:
 	}
 	return 0
 }
@@ -1442,7 +1450,7 @@ func (c Compound) keys(add func(string)) {
 func (p *pseudo) attrs() []string {
 	switch p.kind {
 	case pseudoLang:
-		return []string{"[lang"}
+		return []string{langChanged}
 	case pseudoReadOnly, pseudoReadWrite:
 		return []string{"[readonly", "[disabled", "[type", "[contenteditable"}
 	case pseudoIndeterminate:
@@ -1451,6 +1459,8 @@ func (p *pseudo) attrs() []string {
 		return []string{"[required", "[type"}
 	case pseudoDir:
 		return []string{"[dir"}
+	case pseudoListBox:
+		return []string{"[multiple", "[size"}
 	case pseudoState, pseudoFirstChild, pseudoLastChild, pseudoRoot, pseudoNot, pseudoNthChild, pseudoLink,
 		pseudoVisited, pseudoIs, pseudoWhere, pseudoEnabled, pseudoOnlyChild, pseudoNthLastChild, pseudoFirstOfType,
 		pseudoLastOfType, pseudoOnlyOfType, pseudoNthOfType, pseudoNthLastOfType, pseudoHas, pseudoScope:

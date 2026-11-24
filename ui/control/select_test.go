@@ -25,6 +25,7 @@ func TestASelectStartsOnItsFirstEnabledOption(t *testing.T) {
 	assert.Equal(t, 1, s.Selected)
 	assert.Equal(t, "y", s.Value(), "no Value: the label")
 	assert.Equal(t, -1, control.NewSelect().Selected)
+	assert.Empty(t, control.NewSelect(control.Option{Label: "x", Valued: true}).Value(), "an empty value attribute")
 }
 
 func TestAClosedSelectOpensOnActivateAndLeavesArrowsToTheFocus(t *testing.T) {
@@ -106,4 +107,35 @@ func TestADisabledSelectNeverOpens(t *testing.T) {
 	s.Do(control.Activate)
 	s.Click()
 	assert.False(t, s.Open)
+}
+
+func weapons() *control.Select {
+	s := control.NewSelect(
+		control.Option{Label: "Sword"},
+		control.Option{Label: "Wand", Group: 1},
+		control.Option{Label: "Staff", Group: 1},
+		control.Option{Label: "Bow"},
+	)
+	s.Groups = []control.Group{{Label: "Magic", At: 1}, {Label: "Empty", At: 3}, {Label: "Last", At: 4}}
+	return s
+}
+
+func TestAGroupsLabelStandsBeforeItsOptionsInTheList(t *testing.T) {
+	assert.Equal(t, []control.Row{
+		{Option: 0}, {Option: -1, Group: 1}, {Option: 1, Group: 1}, {Option: 2, Group: 1},
+		{Option: -1, Group: 2}, {Option: 3}, {Option: -1, Group: 3},
+	}, weapons().Rows())
+	assert.Equal(t, []control.Row{{Option: 0}}, control.NewSelect(control.Option{Label: "x"}).Rows())
+}
+
+func TestTheArrowsWalkOptionsAcrossGroupsNeverTheirLabels(t *testing.T) {
+	s := weapons()
+	s.Do(control.Activate)
+	s.Do(control.Down)
+	assert.Equal(t, 1, s.Highlight, "from Sword to Wand, past Magic")
+	s.Do(control.Down)
+	s.Do(control.Down)
+	assert.Equal(t, 3, s.Highlight, "from Staff to Bow, past Empty")
+	s.Do(control.Activate)
+	assert.Equal(t, "Bow", s.Value())
 }

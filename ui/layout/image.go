@@ -35,6 +35,7 @@ func pictured(e *dom.Node) bool {
 func (t *tree) buildImage(n *node, e *dom.Node) {
 	n.replaced = true
 	n.natural, n.shape, n.sized = pictureOf(e, n.st, t.images, t.fonts)
+	n.turnPicture()
 }
 
 // pictureOf is what the picture of the img e gives its box: its natural size at the
@@ -116,9 +117,14 @@ func attrNumber(e *dom.Node, name string) float32 {
 // Landed tells the kept layout that the pictures landed reports arrived since it ran.
 // An img of one whose layout read its picture's size or proportions is flagged to be
 // laid out again, as a changed element is; any other keeps its box, its node taking the
-// picture's size for the layouts to come.
+// picture's size for the layouts to come. A list item whose list-style-image landed is
+// laid out again, its marker the picture.
 func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts box.Fonts) {
 	for e, n := range r.nodes {
+		if n.st.ListItem && n.st.ListImage != "" && landed(n.st.ListImage) {
+			relay(e)
+			continue
+		}
 		if !n.replaced || !pictured(e) {
 			continue
 		}
@@ -127,6 +133,7 @@ func (r *Retained) Landed(landed func(url string) bool, images box.Images, fonts
 			continue
 		}
 		natural, shape, sized := pictureOf(e, n.st, images, fonts)
+		natural, shape = turnPicture(natural, shape, outerFrame(n.parent, n.box.Style))
 		switch {
 		case natural == n.natural && shape == n.shape && sized == n.sized:
 		case n.intrinsic || n.fills() || sized && fillsRoom(shape):

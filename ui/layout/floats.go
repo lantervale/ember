@@ -2,6 +2,8 @@ package layout
 
 import (
 	"math"
+	"slices"
+	"sort"
 
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -479,4 +481,70 @@ func (c *blockContext) topAdjoiningFloats() [2]bool {
 		return c.topAdjoining
 	}
 	return c.adjoining
+}
+
+// clone is a copy of the context that placing floats in leaves c as it was.
+func (c *floatContext) clone() *floatContext {
+	d := *c
+	d.segments = slices.Clone(c.segments)
+	d.floats = [2][]placedFloat{slices.Clone(c.floats[0]), slices.Clone(c.floats[1])}
+	return &d
+}
+
+// lineFloat is a float after content in a block's lines: placed as its lines are broken,
+// on the line its place in the text falls on where it fits beside what stands before it
+// there, below that line otherwise.
+type lineFloat struct {
+	node *node
+	// run is the run the float stands before in its content's runs.
+	run int
+	// pending is set while its block's layout places it among the lines, with its margin
+	// box and the context the lines start from; at is then its margin box's corner from
+	// the lines' block, and first marks one on their first line.
+	pending  bool
+	box      size
+	side     floatSide
+	clearing style.Clear
+	placed   bool
+	at       point
+	first    bool
+}
+
+// floatsFrom is what the floats of the context were before the lines of a block whose
+// pending floats they place: each breaking of its lines starts from it again.
+type floatsFrom struct {
+	floats      *floatContext
+	floatHeight float32
+}
+
+// pendingFloats reports floats placed among c's lines.
+func (c *inlineContent) pendingFloats() bool {
+	return c != nil && len(c.lineFloats) > 0 && c.lineFloats[0].pending
+}
+
+// pieceOf is the first piece of run r or after it, len(pieces) past the last.
+func (c *inlineContent) pieceOf(r int) int {
+	return sort.Search(len(c.pieces), func(i int) bool { return c.pieces[i].run >= r })
+}
+
+// widthBefore is how far line l reaches before piece k, the spaces it would end in left
+// out: the room what stands before a float there takes.
+func (c *inlineContent) widthBefore(l line, k int) float32 {
+	at := l.pen(c.unit, 0)
+	held := -1
+	for j := l.from; j < min(k, l.to); j++ {
+		p := c.pieces[j]
+		if p.kind == gap || p.kind == tab {
+			if held < 0 {
+				held = j
+			}
+			continue
+		}
+		for ; held >= 0 && held < j; held++ {
+			at.step(c.pieces[held], 0)
+		}
+		held = -1
+		at.step(p, 0)
+	}
+	return at.end()
 }

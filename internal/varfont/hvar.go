@@ -7,9 +7,9 @@ import (
 
 var errStore = errors.New("varfont: an item variation store is wrong")
 
-// itemStore is an ItemVariationStore: regions of the axes, and sets of
+// ItemStore is an ItemVariationStore: regions of the axes, and sets of
 // deltas over some of them.
-type itemStore struct {
+type ItemStore struct {
 	// regions are each region's start, peak and end on every axis.
 	regions [][][3]float32
 	data    []itemData
@@ -21,8 +21,13 @@ type itemData struct {
 	deltas []float32
 }
 
-// readItemStore reads the store at at in b, over axes axes.
-func readItemStore(b []byte, at, axes int) (*itemStore, error) {
+// ReadItemStore reads the store at at in b, as GDEF holds GPOS's: over
+// as many axes as its regions say.
+func ReadItemStore(b []byte, at int) (*ItemStore, error) { return readItemStore(b, at, -1) }
+
+// readItemStore reads the store at at in b, over axes axes, any when
+// negative.
+func readItemStore(b []byte, at, axes int) (*ItemStore, error) {
 	be := binary.BigEndian
 	if at <= 0 || at+8 > len(b) {
 		return nil, errStore
@@ -33,6 +38,9 @@ func readItemStore(b []byte, at, axes int) (*itemStore, error) {
 		return nil, errStore
 	}
 	r := s[regionsAt:]
+	if axes < 0 {
+		axes = int(be.Uint16(r))
+	}
 	if int(be.Uint16(r)) != axes {
 		return nil, errStore
 	}
@@ -40,7 +48,7 @@ func readItemStore(b []byte, at, axes int) (*itemStore, error) {
 	if 4+6*axes*regionCount > len(r) {
 		return nil, errStore
 	}
-	store := &itemStore{}
+	store := &ItemStore{}
 	for i := range regionCount {
 		region := make([][3]float32, axes)
 		for j := range axes {
@@ -109,8 +117,8 @@ func readItemData(s []byte, at, regionCount int) (itemData, error) {
 	return out, nil
 }
 
-// delta is item inner of set outer's delta at c.
-func (s *itemStore) delta(outer, inner int, c Coords) float32 {
+// Delta is item inner of set outer's delta at c.
+func (s *ItemStore) Delta(outer, inner int, c Coords) float32 {
 	if outer >= len(s.data) {
 		return 0
 	}

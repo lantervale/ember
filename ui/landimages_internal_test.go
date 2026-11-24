@@ -256,6 +256,9 @@ func TestAPictureLandingInABoxItSizesLaysOutItsPathAlone(t *testing.T) {
 		"a flex item":              {css: `.path { display: flex }`},
 		"a grid item":              {css: `.path { display: grid; grid-template-columns: auto 1fr }`},
 		"an inline-block's":        {css: `.path { display: inline-block }`},
+		"a vertical flex item":     {css: `.path { display: flex; writing-mode: vertical-lr }`},
+		"a vertical flex item of a set width": {
+			css: `.path { display: flex; writing-mode: vertical-lr; width: 100px; align-items: start } img { width: 40px }`},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -274,6 +277,39 @@ func TestAPictureLandingInABoxItSizesLaysOutItsPathAlone(t *testing.T) {
 			a.matchesFresh("after it landed")
 			lays, _ = a.layout()
 			assert.Zero(t, lays, "and no other")
+		})
+	}
+}
+
+// The pages of WPT's css/css-flexbox/flex-aspect-ratio-img-vert-lr.html and
+// flexbox-vert-lr-with-img.html: a picture alone in a vertical flex container.
+func TestAPictureLandingInAVerticalFlexItemSizesIt(t *testing.T) {
+	cases := map[string]struct {
+		css  string
+		w, h int
+		abs  bool
+		want geom.Vec2
+	}{
+		"its width set": {css: `.flex { position: relative; display: flex; writing-mode: vertical-lr; width: 100px;
+align-items: start } img { width: 40px } .abs { position: absolute; left: 40px; width: 60px; height: 100px }`,
+			w: 20, h: 50, abs: true, want: geom.V2(40, 100)},
+		"no size": {css: `.flex { writing-mode: vertical-lr; display: flex }`, w: 100, h: 100, want: geom.V2(100, 100)},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			var pic *Node
+			a := arrive(t, c.css, map[string][]byte{"a.png": picture(t, c.w, c.h)}, func() []*Node {
+				pic = img("a.png")
+				flex := Div(Class("flex"), Text("\n    "), pic, Text("\n    "))
+				if c.abs {
+					flex.Append(Div(Class("abs")))
+				}
+				return []*Node{P(Text("Test passes if there is a filled green square.")), flex}
+			})
+			lays, _ := a.land("a.png")
+			assert.Equal(t, 1, lays)
+			assert.Equal(t, c.want, a.d.tree.Of[pic].Size)
+			a.matchesFresh("after it landed")
 		})
 	}
 }

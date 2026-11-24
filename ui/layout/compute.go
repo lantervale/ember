@@ -235,10 +235,14 @@ type oofArea struct {
 
 // output is Taffy's LayoutOutput.
 type output struct {
-	size                    size
-	overflow                overflowRect
-	firstBaseline           float32
-	lastBaseline            float32
+	size          size
+	overflow      overflowRect
+	firstBaseline float32
+	lastBaseline  float32
+	// synthetic is the height of the item whose block-end edge firstBaseline is made up
+	// from, as a flex or grid container whose first item has no line makes it; 0 where
+	// it is a line's.
+	synthetic               float32
 	topMargin, bottomMargin marginSet
 	collapsesThrough        bool
 	oof                     []oofCandidate
@@ -341,7 +345,7 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 	}
 	// Among floats a layout is the context's as much as the node's: where the floats
 	// before it stand, and the floats it places for what follows.
-	floats := ctx != nil && (n.holdsFloats || ctx.hasFloats())
+	floats := ctx != nil && (n.holdsFloats || ctx.hasFloats() || n.inline.pendingFloats())
 	if !floats {
 		if out, ok := n.cache.get(key); ok {
 			return out
@@ -369,7 +373,7 @@ func (t *tree) computeChildIn(n *node, in input, ctx *blockContext) output {
 }
 
 func (t *tree) dispatch(n *node, in input, ctx *blockContext) output {
-	in = n.contain(in)
+	in = t.listBox(n, n.contain(in))
 	if n.st.Multicol() && n.columnar() {
 		return t.columns(n, in)
 	}

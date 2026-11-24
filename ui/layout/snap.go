@@ -78,7 +78,7 @@ func (p *pen) step(q piece, perGap float32) float32 {
 
 // tabAdvance is how far a tab at x from its line's start goes: to the next stop, a
 // multiple of stop, or to the one after where that is nearer than least, as Chrome's
-// Font::TabWidth. No stop is a carriage return, of no width.
+// Font::TabWidth. No stop, under tab-size: 0, is no width.
 func tabAdvance(x, stop, least float32) float32 {
 	if stop <= 0 {
 		return 0

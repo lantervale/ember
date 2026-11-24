@@ -140,6 +140,9 @@ type restyler struct {
 	// browser reads style attributes as a browser does
 	// (Transitions.BrowserSheets).
 	browser bool
+	// shown, when set, is a text node's text as layout shows it, which
+	// its first letter is taken from (Transitions.ShowText).
+	shown func(text *dom.Node) string
 	// before, after, marker, firstLine and firstLetter are set when some
 	// sheet has a rule for the pseudo-element: only then is one looked for.
 	before, after, marker, firstLine, firstLetter bool
@@ -583,7 +586,7 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 			c.Backdrop = fadeColor(bd.Background, bd.Opacity)
 		}
 	}
-	r.scrollbars(&c, n, rem)
+	r.scrollbars(&c, n, rem, x.toViewport, parent)
 	r.controlParts(&c, n, rem)
 	if c.ListItem && (c.ListStyle == style.ListCounter || c.ListStyle == style.ListString) ||
 		len(c.CounterReset)+len(c.CounterIncrement)+len(c.CounterSet) > 0 {
@@ -802,6 +805,7 @@ func (x *ctx) pseudo(m *matcher, n *dom.Node, sheets []*Sheet, name string) (*st
 	ps := *x.c
 	ps.Opacity, ps.Content, ps.Background = 1, style.Content{}, color.Color{}
 	ps.TextDecoration, ps.CurrentColor = style.TextDecoration{}, ps.CurrentColor|style.DecorationCurrent
+	ps.ColorInherited = true
 	px := &ctx{c: &ps, parent: x.c, em: x.em, rem: x.rem, env: x.env, node: n, flow: casc.flow}
 	px.customs(casc.custom)
 	for i := range longhands {
@@ -1203,9 +1207,10 @@ func (x *ctx) propagateOverflow(root bool) {
 	v := initial
 	v.Display, v.Font = style.Block, c.Font
 	v.Overflow = style.Size[style.Overflow]{Width: of(c.Overflow.Width), Height: of(c.Overflow.Height)}
-	v.ScrollbarNone = c.ScrollbarNone
+	v.ScrollbarNone, v.ScrollbarThin = c.ScrollbarNone, c.ScrollbarThin
+	v.ScrollbarColored, v.ScrollbarThumb, v.ScrollbarTrack = c.ScrollbarColored, c.ScrollbarThumb, c.ScrollbarTrack
 	if bars := v.Overflow.Width != style.Hidden || v.Overflow.Height != style.Hidden; bars && !v.ScrollbarNone {
-		if v.ScrollbarOverlay = x.overlay; !x.overlay {
+		if v.ScrollbarOverlay = x.overlay || v.ScrollbarColored || v.ScrollbarThin; !v.ScrollbarOverlay {
 			v.ScrollbarWidth, v.ScrollbarHeight = barGutter, barGutter
 		}
 	}
@@ -1247,10 +1252,11 @@ func (x *ctx) finish(root bool) {
 	if (c.Overflow.Width == style.Scroll || c.Overflow.Width == style.OverflowAuto ||
 		c.Overflow.Height == style.Scroll || c.Overflow.Height == style.OverflowAuto ||
 		c.GutterStable && scrolls(oy)) && !c.ScrollbarNone {
-		if c.ScrollbarOverlay = x.overlay; !x.overlay {
+		if c.ScrollbarOverlay = x.overlay || c.ScrollbarColored || c.ScrollbarThin; !c.ScrollbarOverlay {
 			c.ScrollbarWidth, c.ScrollbarHeight = barGutter, barGutter
 		}
 	}
+	c.Resizable = c.Resizable && (scrolls(ox) || scrolls(oy))
 	if scrolls(ox) && !scrolls(oy) {
 		c.Overflow.Height = fix(oy)
 	} else if scrolls(oy) && !scrolls(ox) {
@@ -1266,6 +1272,7 @@ func (x *ctx) finish(root bool) {
 	c.FollowColor(c.Color)
 	c.TextShadows = followColor(c.TextShadows, c.Color)
 	c.Decorations = x.decorations()
+	c.Strictness = x.strictness()
 	c.Shadows = followColor(c.Shadows, c.Color)
 	c.Filters = followFilterColor(c.Filters, c.Color)
 	c.BackdropFilters = followFilterColor(c.BackdropFilters, c.Color)
@@ -2243,11 +2250,16 @@ var props = func() map[string]prop {
 		"-webkit-font-smoothing": {
 			set: func(x *ctx, v []Component) {
 				kw := strings.ToLower(v[0].Text)
-				x.c.PixelText, x.c.ExactText = kw == kwNone, kw == "antialiased"
+				x.c.PixelText, x.c.ExactText, x.c.SubpixelText = kw == kwNone, kw == "antialiased", kw == "subpixel-antialiased"
 			},
-			inherit: func(dst, src *style.Computed) { dst.PixelText, dst.ExactText = src.PixelText, src.ExactText },
-			anim:    anim{kind: discrete},
+			inherit: func(dst, src *style.Computed) {
+				dst.PixelText, dst.ExactText, dst.SubpixelText = src.PixelText, src.ExactText, src.SubpixelText
+			},
+			anim: anim{kind: discrete},
 		},
+		"text-rendering": keyword(func(c *style.Computed) *style.TextRendering { return &c.TextRendering },
+			map[string]style.TextRendering{"auto": style.TextRenderingAuto, "optimizespeed": style.OptimizeSpeed,
+				"optimizelegibility": style.OptimizeLegibility, "geometricprecision": style.GeometricPrecision}),
 		"text-transform": keyword(func(c *style.Computed) *style.TextTransform { return &c.TextTransform },
 			map[string]style.TextTransform{"none": style.NoTransform, "uppercase": style.Uppercase,
 				"lowercase": style.Lowercase, "capitalize": style.Capitalize}),
@@ -2284,8 +2296,8 @@ var props = func() map[string]prop {
 			inherit: func(dst, src *style.Computed) { dst.BreakWord, dst.BreakAnywhere = src.BreakWord, src.BreakAnywhere },
 			anim:    anim{kind: discrete},
 		},
-		"text-decoration-skip-ink": keyword(func(c *style.Computed) *bool { return &c.InkThrough },
-			map[string]bool{"auto": false, "all": false, "none": true}),
+		"text-decoration-skip-ink": keyword(func(c *style.Computed) *style.SkipInk { return &c.SkipInk },
+			map[string]style.SkipInk{"auto": style.SkipInkAuto, "all": style.SkipInkAll, "none": style.SkipInkNone}),
 		"tab-size": field(func(c *style.Computed) *style.TabSize { return &c.TabSize },
 			func(x *ctx, v []Component) style.TabSize {
 				if d, err := parseDim(v[0]); err == nil && d.typ == typeNumber {
@@ -2299,11 +2311,17 @@ var props = func() map[string]prop {
 		"line-break": keyword(func(c *style.Computed) *style.LineBreak { return &c.LineBreak },
 			map[string]style.LineBreak{"auto": style.LineBreakAuto, "loose": style.LineBreakLoose,
 				"normal": style.LineBreakNormal, "strict": style.LineBreakStrict, "anywhere": style.LineBreakAnywhere}),
-		"scrollbar-width": field(func(c *style.Computed) *bool { return &c.ScrollbarNone },
-			func(_ *ctx, v []Component) bool { return isWord(v[0], "none") }, flips[bool]()),
-		"scrollbar-gutter": field(func(c *style.Computed) *bool { return &c.GutterStable },
-			func(_ *ctx, v []Component) bool { return !isWord(v[0], "auto") }, flips[bool]()),
-		"scrollbar-color": scrollbarColor(),
+		"scrollbar-width": {
+			set: func(x *ctx, v []Component) {
+				x.c.ScrollbarNone, x.c.ScrollbarThin = isWord(v[0], "none"), isWord(v[0], "thin")
+			},
+			inherit: func(dst, src *style.Computed) {
+				dst.ScrollbarNone, dst.ScrollbarThin = src.ScrollbarNone, src.ScrollbarThin
+			},
+			anim: anim{kind: discrete},
+		},
+		"scrollbar-gutter": scrollbarGutter(),
+		"scrollbar-color":  scrollbarColor(),
 		"text-overflow": field(func(c *style.Computed) *bool { return &c.Ellipsis }, func(_ *ctx, v []Component) bool {
 			return isWord(v[0], "ellipsis")
 		}, flips[bool]()),
@@ -2426,8 +2444,13 @@ var props = func() map[string]prop {
 			decorationStyles),
 		"text-decoration-color": currentField(style.DecorationCurrent,
 			func(c *style.Computed) *color.Color { return &c.TextDecoration.Color }),
-		"text-decoration-thickness": lengthField(
-			func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness }, anyLength),
+		"text-decoration-thickness": field(func(c *style.Computed) *style.Length { return &c.TextDecoration.Thickness },
+			decorationThicknessOf, anyLength),
+		"text-underline-offset": lengthField(func(c *style.Computed) *style.Length { return &c.UnderlineOffset },
+			anyLength),
+		"text-underline-position": field(
+			func(c *style.Computed) *style.UnderlinePosition { return &c.UnderlinePosition }, underlinePosition,
+			flips[style.UnderlinePosition]()),
 		"image-rendering": keyword(func(c *style.Computed) *style.ImageRendering { return &c.ImageRendering },
 			map[string]style.ImageRendering{"auto": style.RenderAuto, "pixelated": style.RenderPixelated}),
 		"accent-color": autoColor(func(c *style.Computed) (*color.Color, *bool) { return &c.AccentColor, &c.AccentAuto }),
@@ -2490,7 +2513,8 @@ var props = func() map[string]prop {
 		"transform-origin": field(func(c *style.Computed) *style.Size[style.Length] { return &c.TransformOrigin },
 			(*ctx).origin, pairs(anyLength)),
 		"appearance": keyword(func(c *style.Computed) *style.Appearance { return &c.Appearance }, appearances),
-		"resize":     {set: func(*ctx, []Component) {}, inherit: func(_, _ *style.Computed) {}, anim: anim{kind: discrete}},
+		"resize": keyword(func(c *style.Computed) *bool { return &c.Resizable },
+			map[string]bool{"none": false, "both": true, "horizontal": true, "vertical": true}),
 
 		"border-top-left-radius": field(func(c *style.Computed) *style.Size[style.Length] { return &c.Radius.TopLeft },
 			cornerOf, pairs(sizeLength)),
@@ -2595,6 +2619,20 @@ func followFilterColor(filters []style.Filter, c color.Color) []style.Filter {
 
 // autoColor is a colour whose auto (and currentColor) follow the element's own
 // color, inherited as the keyword.
+// scrollbarGutter is scrollbar-gutter: stable, and both-edges beside it.
+func scrollbarGutter() prop {
+	return prop{
+		set: func(x *ctx, v []Component) {
+			x.c.GutterStable = !isWord(v[0], "auto")
+			x.c.GutterBothEdges = len(v) == 2
+		},
+		inherit: func(dst, src *style.Computed) {
+			dst.GutterStable, dst.GutterBothEdges = src.GutterStable, src.GutterBothEdges
+		},
+		anim: anim{kind: discrete},
+	}
+}
+
 // scrollbarColor is scrollbar-color: the thumb's colour and the track's,
 // or none set for auto. It changes at once, as Chrome's discrete one.
 func scrollbarColor() prop {

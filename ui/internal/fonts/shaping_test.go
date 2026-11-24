@@ -30,6 +30,22 @@ func TestAVariableFaceIsShapedAtItsInstance(t *testing.T) {
 		1e-3, "the ligature, at the instance")
 }
 
+func TestAVariableFacesLayoutIsItsInstances(t *testing.T) {
+	s := Builtin()
+	loaded(t, s, Descriptors{Family: "Varied", Weight: 400, WeightMax: 400, AutoWeight: true,
+		Stretch: 100, StretchMax: 100, AutoStretch: true}, varfonttest.Build(varfonttest.Options{Layout: true}))
+	at := func(weight, stretch float32) style.Font {
+		return style.Font{Family: []string{"Varied"}, Size: 20, Weight: weight, Stretch: stretch}
+	}
+	// What hb-shape --font-size=2048 --variations=… prints, as widths.
+	assert.InDelta(t, units(1286+1366), s.Advance(at(400, 100), "AV"), 1e-3)
+	assert.InDelta(t, units(1246+1486), s.Advance(at(900, 100), "AV"), 1e-3, "GDEF's deltas")
+	assert.InDelta(t, units(1512+1912), s.Advance(at(400, 150), "AV"), 1e-3, "GPOS's feature variations")
+	assert.InDelta(t, units(1486), s.Advance(at(900, 100), "$"), 1e-3, "rvrn draws $ as S")
+	assert.InDelta(t, units(1203), s.Advance(at(100, 100), "z"), 1e-3, "liga draws z as Z")
+	assert.InDelta(t, units(1144), s.Advance(at(900, 100), "x^"), 1e-3, "^ is a mark")
+}
+
 // featured is the builtin set with Featured, Go with ligatures, small
 // capitals, figures and kerning (internal/shape/testdata).
 func featured(t *testing.T) (*Set, []byte) {
@@ -95,6 +111,53 @@ func TestASpaceTiesItsWordsWhereTheFaceKernsIt(t *testing.T) {
 	s, _ := featured(t)
 	assert.True(t, s.SpaceTies(style.Font{Family: []string{"Featured"}, Size: 20, Weight: 400}))
 	assert.False(t, s.SpaceTies(style.Font{Family: []string{"Go"}, Size: 20, Weight: 400}))
+}
+
+func TestTextShapedAmidItsNeighboursTakesTheGlyphsItsClustersStart(t *testing.T) {
+	s, _ := featured(t)
+	f := style.Font{Family: []string{"Featured"}, Size: 20, Weight: 400}
+	plain := f
+	plain.Features = "-liga,-kern"
+	assert.InDelta(t, s.Advance(plain, "A")-units(160), s.AdvanceAmid(f, "A", "", "V", "", ""), 1e-3,
+		"the pair's kerning is its first glyph's")
+	assert.InDelta(t, s.Advance(plain, "V"), s.AdvanceAmid(f, "V", "A", "", "", ""), 1e-3)
+	assert.InDelta(t, units(1383), s.AdvanceAmid(f, "f", "o", "fice", "", ""), 1e-3,
+		"the ligature is the part its first character is in")
+	assert.InDelta(t, 0, s.AdvanceAmid(f, "fi", "of", "ce", "", ""), 1e-3)
+	assert.InDelta(t, s.Advance(f, "ce"), s.AdvanceAmid(f, "ce", "offi", "", "", ""), 1e-3)
+	assert.InDelta(t, s.Advance(f, "office"), s.AdvanceAmid(f, "o", "", "ffice", "", "")+
+		s.AdvanceAmid(f, "ffi", "o", "ce", "", "")+s.AdvanceAmid(f, "ce", "offi", "", "", ""), 1e-3,
+		"the parts add up to the whole")
+	assert.InDelta(t, s.Advance(f, "To"), s.AdvanceAmid(f, "T", "", "o", "", "")+
+		s.AdvanceAmid(f, "o", "T", "", "", ""), 1e-3)
+}
+
+func TestCaretsShareALigatureEvenlyAndGiveAPairsKerningToItsFirst(t *testing.T) {
+	s, _ := featured(t)
+	f := style.Font{Family: []string{"Featured"}, Size: 20, Weight: 400}
+	plain := f
+	plain.Features = "-liga,-kern"
+	carets := func(text, lead, trail string) []float32 {
+		xs, _ := s.Carets(f, text, lead, trail, "", "")
+		return xs
+	}
+	o, ffi, c := s.Advance(f, "o"), units(1383), s.Advance(f, "c")
+	want := []float32{0, o, o + ffi/3, o + 2*ffi/3, o + ffi, o + ffi + c, s.Advance(f, "office")}
+	assert.InDeltaSlice(t, want, carets("office", "", ""), 1e-3)
+	_, starts := s.Carets(f, "office", "", "", "", "")
+	assert.Equal(t, []bool{true, true, false, false, true, true, true}, starts, "no glyph starts inside the ligature")
+	a := s.Advance(plain, "A") - units(160)
+	assert.InDeltaSlice(t, []float32{0, a, s.Advance(f, "AV")}, carets("AV", "", ""), 1e-3)
+	assert.InDeltaSlice(t, []float32{0, 0, 0}, carets("fi", "of", "ce"), 1e-3,
+		"a ligature the text before starts is its")
+	_, starts = s.Carets(f, "fi", "of", "ce", "", "")
+	assert.Equal(t, []bool{false, false, true}, starts)
+	assert.InDeltaSlice(t, []float32{0, o, o + ffi}, carets("of", "", "fice"), 1e-3,
+		"one it starts is its first character's whole")
+	assert.InDeltaSlice(t, []float32{0, a}, carets("A", "", "V"), 1e-3)
+	accented := carets("e\u0301x", "", "")
+	assert.InDeltaSlice(t, []float32{0, 0, s.Advance(f, "e\u0301"), s.Advance(f, "e\u0301x")}, accented, 1e-3,
+		"a caret inside a grapheme cluster at its start")
 }
 
 func TestLayoutAndDrawingShapeAlike(t *testing.T) {

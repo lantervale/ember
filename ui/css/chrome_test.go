@@ -62,7 +62,7 @@ var compared = map[string]func(s *style.Computed) string{
 		return strings.Join(parts, ", ")
 	},
 	"text-decoration-skip-ink": func(s *style.Computed) string {
-		return map[bool]string{false: "auto", true: "none"}[s.InkThrough]
+		return [...]string{"auto", "none", "all"}[s.SkipInk]
 	},
 	"tab-size": func(s *style.Computed) string {
 		if s.TabSize.Length {
@@ -133,10 +133,11 @@ var compared = map[string]func(s *style.Computed) string{
 		return []string{"none", "uppercase", "lowercase", "capitalize"}[s.TextTransform]
 	},
 	"white-space": func(s *style.Computed) string {
-		return []string{"normal", "nowrap", "pre", "pre-wrap", "pre-line", "preserve-breaks nowrap"}[s.WhiteSpace]
+		return []string{"normal", "nowrap", "pre", "pre-wrap", "pre-line", "preserve-breaks nowrap", "break-spaces",
+			"break-spaces nowrap"}[s.WhiteSpace]
 	},
 	"white-space-collapse": func(s *style.Computed) string {
-		return []string{"collapse", "preserve", "preserve-breaks"}[s.WhiteSpace.Collapse()]
+		return []string{"collapse", "preserve", "preserve-breaks", "break-spaces"}[s.WhiteSpace.Collapse()]
 	},
 	"text-wrap-mode": wrapMode,
 	"text-wrap-style": func(s *style.Computed) string {
@@ -237,6 +238,9 @@ func overflow(o style.Overflow) string {
 	return []string{"visible", "hidden", "clip", "scroll", "auto"}[o]
 }
 
+//nolint:gochecknoglobals // a fixed table
+var flowNames = strings.NewReplacer("flow-start", "flex-start", "flow-end", "flex-end")
+
 // same compares two computed values: numbers within 0.01 wherever they
 // stand, colours channel by channel within one step.
 func same(prop, ours, chrome string) bool {
@@ -245,6 +249,10 @@ func same(prop, ours, chrome string) bool {
 		p, _ := url.PathUnescape(pageURL.FindStringSubmatch(m)[1])
 		return "url(" + p + ")"
 	}))
+	if strings.HasPrefix(prop, "align-") || strings.HasPrefix(prop, "justify-") {
+		// Chrome 158 writes flex-start and flex-end as flow-start and flow-end.
+		chrome = flowNames.Replace(chrome)
+	}
 	if ours == chrome {
 		return true
 	}

@@ -29,6 +29,7 @@ type Transitions struct {
 	overlay  bool
 	viewport bool
 	browser  bool
+	shown    func(text *dom.Node) string
 	// media is what @media rules are answered for, off the rules of each
 	// sheet they leave out, and ranks the sheets' cascade layers.
 	media Media
@@ -117,6 +118,10 @@ func (t *Transitions) ScrollingViewport() { t.viewport = true }
 // (BrowserDefault after Default) and style attributes read as a
 // browser's (Browser). Set it before the first Compute.
 func (t *Transitions) BrowserSheets() { t.browser = true }
+
+// ShowText has a ::first-letter take its letter from what shown says a
+// text node shows, a translation of its text, in place of its text.
+func (t *Transitions) ShowText(shown func(text *dom.Node) string) { t.shown = shown }
 
 // SetMedia answers the sheets' @media rules for m from now on, and
 // reports whether that changes which rules apply: the caller then flags
@@ -249,7 +254,7 @@ func (t *Transitions) Compute(root *dom.Node, sheets []*Sheet) []Warning {
 	}
 	r := restyler{sheets: t.all, styles: t.styles, changed: t.changed, m: &t.m, pm: &t.pm, over: t.overrides,
 		transit: t.transition, transits: t.Running, afterChange: t.after, computed: &t.computed, overlay: t.overlay,
-		viewport: t.viewport, browser: t.browser, env: &t.env}
+		viewport: t.viewport, browser: t.browser, shown: t.shown, env: &t.env}
 	r.run(root, t.stale)
 	t.stale = false
 	if (len(t.anims) > 0 || t.rekey) && t.animate() {
@@ -641,9 +646,13 @@ func (t *Transitions) build(n *dom.Node, a *nodeAnim) {
 }
 
 // carry shows c as the colour of n's children that inherit it, and of
-// theirs.
+// theirs, its ::marker's among them.
 func (t *Transitions) carry(n *dom.Node, c color.Color) {
-	for _, k := range n.Flow() {
+	kids := n.Flow()
+	if g := dom.Data(n).MarkerNode; g != nil {
+		kids = append(slices.Clip(kids), g)
+	}
+	for _, k := range kids {
 		if k.IsText() {
 			continue
 		}

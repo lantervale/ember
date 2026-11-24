@@ -67,6 +67,9 @@ func ownInk(b *box.Box, st *style.Computed) geom.Rect {
 	switch b.Kind {
 	case box.Element, box.Marker:
 		r := inkOf(e, st)
+		if a := b.Area; a.W > 0 {
+			r = union(r, a)
+		}
 		if outlined(b) {
 			r = union(r, grow(r, outlineReach(st)))
 		}
@@ -75,7 +78,7 @@ func ownInk(b *box.Box, st *style.Computed) geom.Rect {
 		if len(b.Lines) > 0 {
 			return textInk(e, st)
 		}
-	case box.AnonymousBlock, box.Viewport:
+	case box.AnonymousBlock, box.Viewport, box.ControlPart:
 	}
 	return geom.Rect{}
 }

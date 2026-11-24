@@ -7,6 +7,8 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/sfnt"
+
+	"github.com/lantervale/ember/ui/internal/pages"
 )
 
 // hebrewFont is Go Regular with the Hebrew letters drawn by its Latin ones,
@@ -91,56 +93,7 @@ func cmap4(glyphs map[rune]uint16) []byte {
 // withCmap is the font file ttf with its cmap table replaced by cmap.
 func withCmap(t testing.TB, ttf, cmap []byte) []byte {
 	t.Helper()
-	be := binary.BigEndian
-	n := int(be.Uint16(ttf[4:]))
-	type table struct {
-		tag  string
-		data []byte
-	}
-	tables := make([]table, n)
-	for i := range n {
-		rec := ttf[12+16*i:]
-		off, size := be.Uint32(rec[8:]), be.Uint32(rec[12:])
-		tables[i] = table{string(rec[:4]), ttf[off : off+size]}
-		if tables[i].tag == "cmap" {
-			tables[i].data = cmap
-		}
-		if tables[i].tag == "head" {
-			head := slices.Clone(tables[i].data)
-			be.PutUint32(head[8:], 0)
-			tables[i].data = head
-		}
-	}
-	out := slices.Clone(ttf[:12])
-	off := 12 + 16*n
-	var body []byte
-	var headAt int
-	for _, tb := range tables {
-		out = append(out, tb.tag...)
-		out = be.AppendUint32(out, checksum(tb.data))
-		out = be.AppendUint32(out, uint32(off+len(body)))
-		out = be.AppendUint32(out, uint32(len(tb.data)))
-		if tb.tag == "head" {
-			headAt = off + len(body)
-		}
-		body = append(body, tb.data...)
-		for len(body)%4 != 0 {
-			body = append(body, 0)
-		}
-	}
-	out = append(out, body...)
-	be.PutUint32(out[headAt+8:], 0xb1b0afba-checksum(out))
-	return out
-}
-
-func checksum(b []byte) uint32 {
-	var sum uint32
-	for i := 0; i < len(b); i += 4 {
-		var word [4]byte
-		copy(word[:], b[i:])
-		sum += binary.BigEndian.Uint32(word[:])
-	}
-	return sum
+	return pages.WithTables(ttf, map[string][]byte{"cmap": cmap})
 }
 
 func TestTheHebrewFontDrawsHebrewByLatin(t *testing.T) {

@@ -11,22 +11,36 @@ import (
 
 // viewportOf is the style of the viewport root is laid out in when it
 // scrolls: the root's Viewport, or body's when the viewport took body's
-// overflow; nil when the viewport doesn't scroll.
-func viewportOf(root *dom.Node) *style.Computed {
+// overflow; nil when the viewport doesn't scroll. Its bars are styled
+// by body's rules, else the root's, as Chrome's: the same copy of it
+// while those styles are the same, in a retained layout.
+func (t *tree) viewportOf(root *dom.Node) *style.Computed {
 	st := styleOf(root)
-	if st.Viewport == nil || st.OverflowPropagated {
-		return st.Viewport
-	}
+	view, bars := st.Viewport, st.ViewportBars
 	for _, c := range root.Children() {
 		if c.IsText() || c.Tag() != dom.Body {
 			continue
 		}
-		if b := styleOf(c); b.OverflowPropagated && b.Viewport != nil {
-			return b.Viewport
+		b := styleOf(c)
+		if !st.OverflowPropagated && b.OverflowPropagated && b.Viewport != nil {
+			view = b.Viewport
+		}
+		if b.ViewportBars != nil {
+			bars = b.ViewportBars
 		}
 		break
 	}
-	return st.Viewport
+	if view == nil || bars == nil {
+		return view
+	}
+	k := t.keep
+	if k == nil {
+		return bars.On(view)
+	}
+	if k.barsView != view || k.bars != bars {
+		k.barsView, k.bars, k.barsOn = view, bars, bars.On(view)
+	}
+	return k.barsOn
 }
 
 // viewport lays the root out in a viewport of size whole that scrolls, st its

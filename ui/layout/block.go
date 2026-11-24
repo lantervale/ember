@@ -83,12 +83,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	ratio := aspectRatio(st)
 	padding := edges(st.Padding, in.parent.w)
 	border := n.borders()
-	g := n.ownGutter()
-	gutter := rect{r: g.x, b: g.y}
-	if st.Dir == style.RTL {
-		// the vertical scrollbar stands on the start side, as Chrome's
-		gutter.l, gutter.r = gutter.r, 0
-	}
+	gutter := gutterEdges(st, n.ownGutter())
 	pb := padding.add(border)
 	pbSize := pb.sum()
 	inset := pb.add(gutter)
@@ -181,6 +176,9 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		if some(res.firstBaseline) {
 			res.firstBaseline += offset
 		}
+		if some(res.lastBaseline) {
+			res.lastBaseline += offset
+		}
 		anyInFlow := false
 		for _, it := range items {
 			if it.final != nil {
@@ -219,7 +217,7 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 	out := output{
 		size:             final,
 		firstBaseline:    res.firstBaseline,
-		lastBaseline:     none,
+		lastBaseline:     res.lastBaseline,
 		collapsesThrough: !preventsCollapse && outerH == 0 && allCollapse,
 		lines:            res.lines,
 		clamped:          res.clamped,
@@ -454,6 +452,7 @@ type blockResult struct {
 	firstTop      marginSet
 	lastBottom    marginSet
 	firstBaseline float32
+	lastBaseline  float32
 	lines         int
 	clamped       bool
 }
@@ -507,7 +506,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	yForAbsolute := rInset.t
 	var firstTop, active marginSet
 	collapsingWithFirst := true
-	firstBaseline := none
+	firstBaseline, lastBaseline := none, none
 	// activeHasClearance is set while the margins waiting to collapse are those of an
 	// empty element with clearance: they collapse with what follows, never out of the
 	// block's bottom.
@@ -528,6 +527,11 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			lastInFlow = i
 		}
 	}
+	// floats are the floats since the last block in the flow: those an anonymous block's
+	// lines go round stand on its first line in Chrome.
+	floats := 0
+	// inLines are the floats since the last block in the flow that its lines place.
+	var inLines []lineFloatItem
 	for i, it := range items {
 		if outOfFlow(it.position) {
 			it.staticPosition = point{rInset.l, yForAbsolute}
@@ -565,6 +569,17 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				avail:           spaces{itemAvail, maxContentSpace},
 			})
 			it.oof = lo.oof
+			off := relativeOffset(it, parent)
+			if lf := it.node.inLines; lf != nil {
+				// placed by the lines it stands among, once they are broken
+				lf.pending, lf.placed = true, false
+				lf.box, lf.side, lf.clearing = lo.size.add(nonAuto.sum()), sideOf(it.float), it.clear
+				it.final = &placed{order: it.order, size: lo.size, overflow: lo.overflow, scrollbar: gutter,
+					padding: it.padding, border: it.border, margin: nonAuto}
+				inLines = append(inLines, lineFloatItem{it: it, lf: lf, margin: nonAuto, off: off, out: lo})
+				floats++
+				continue
+			}
 			// Between collapsing margins a float sits as an empty block would, below the
 			// margins before it, unless those leave through the block's top: then its
 			// place still moves with the margins after it.
@@ -574,7 +589,6 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				y += active.resolve()
 			}
 			loc := ctx.place(lo.size.add(nonAuto.sum()), y, sideOf(it.float), it.clear, adjoins)
-			off := relativeOffset(it, parent)
 			loc = point{loc.x + nonAuto.l + off.x, loc.y + nonAuto.t + off.y}
 			it.final = &placed{
 				order:     it.order,
@@ -589,6 +603,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 			overflow = overflow.union(overflowContribution(contributionLoc, lo.size,
 				lo.overflow.rect, it.border, it.overflow, container, negativeEdges(nonAuto)))
+			floats++
 			continue
 		}
 
@@ -673,14 +688,28 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			width := fmax(known.w, it.pbSum.w)
 			left := estimatedLeft(st, margin, nonAuto.l, fmax(0, stretchW-width)) + insetL
 			estimated := committed + active.collapseWithMargin(nonAuto.t).resolve()
-			child := ctx.sub(fmax(estimated, clearPos), [2]float32{left, outerW - width - left})
+			childY := fmax(estimated, clearPos)
+			child := ctx.sub(childY, [2]float32{left, outerW - width - left})
+			c := it.node.inline
+			if c.pendingFloats() {
+				c.floatsFrom = &floatsFrom{floats: ctx.bfc.floats.clone(), floatHeight: child.floatHeight}
+			}
 			lo = t.computeChildIn(it.node, in, child)
+			if c != nil {
+				c.floatsFrom = nil
+			}
+			overflow = t.placeLineFloats(ctx, inLines, point{left, childY}, rInset, rBorder, rPadding, container,
+				overflow)
+			inLines = nil
 			childFloats = child.floatHeight
 			top := child.topAdjoiningFloats()
 			ctx.adjoining = [2]bool{ctx.adjoining[0] || top[0], ctx.adjoining[1] || top[1]}
 		} else {
 			lo = t.computeChild(it.node, in)
 		}
+		overflow = t.placeLineFloats(ctx, inLines, point{rInset.l, committed}, rInset, rBorder, rPadding, container,
+			overflow)
+		inLines = nil
 		it.oof = lo.oof
 		finalSize := lo.size
 		topSet := lo.topMargin.collapseWithMargin(or(margin.t, 0))
@@ -773,6 +802,9 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				firstBaseline = loc.y - insetOffset.y + b
 			}
 		}
+		if b := childLastBaseline(lo, finalSize.h, it.overflow.Height); some(b) {
+			lastBaseline = loc.y - insetOffset.y + b
+		}
 		if avoids {
 			if !some(margin.l) {
 				resolved.l += avoid.x - rInset.l
@@ -794,6 +826,10 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
 		overflow = overflow.union(overflowContribution(contributionLoc, finalSize,
 			lo.overflow.rect, it.border, it.overflow, container, negativeEdges(resolved)))
+		if run == performLayout && floats > 0 {
+			t.raiseFloats(items[:i], floats, it.node, finalSize.w)
+		}
+		floats = 0
 		if in.clamp.lines > 0 {
 			left -= lo.lines
 			if lo.clamped {
@@ -854,6 +890,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	case ownCollapse[1]:
 		bottomOffset = 0
 	}
+	overflow = t.placeLineFloats(ctx, inLines, point{rInset.l, committed}, rInset, rBorder, rPadding, container,
+		overflow)
 	committed += rInset.b + bottomOffset
 	if some(clampEnd) && !clamp.hides {
 		committed, lastBottom = clampEnd+rInset.b, marginSet{}
@@ -864,6 +902,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		firstTop:      firstTop,
 		lastBottom:    lastBottom,
 		firstBaseline: firstBaseline,
+		lastBaseline:  lastBaseline,
 		lines:         clamp.lines - max(left, 0),
 		clamped:       some(clampEnd),
 	}
@@ -901,4 +940,57 @@ func blockAlignOffset(st *style.Computed, free float32) float32 {
 		return free
 	}
 	return 0
+}
+
+// raiseFloats moves the last count floats of items, which stand before the anonymous
+// block anon of width w, up by what text-box-trim takes off its first line, but for
+// those its lines placed below it: Chrome lays them out on that line, which the trim
+// raises with what stands on it.
+func (t *tree) raiseFloats(items []*blockItem, count int, anon *node, w float32) {
+	c := anon.inline
+	if c == nil || anon.box.Kind != box.AnonymousBlock {
+		return
+	}
+	top, _ := t.trims(c, c.lines(w))
+	if top == 0 {
+		return
+	}
+	for i := len(items) - 1; i >= 0 && count > 0; i-- {
+		if it := items[i]; it.float != style.FloatNone && !outOfFlow(it.position) && it.final != nil {
+			if lf := it.node.inLines; lf == nil || lf.first {
+				it.final.location.y -= top
+			}
+			count--
+		}
+	}
+}
+
+// lineFloatItem is a float the lines after it place, with what its place adds to where
+// they put its margin box.
+type lineFloatItem struct {
+	it     *blockItem
+	lf     *lineFloat
+	margin rect
+	off    point
+	out    output
+}
+
+// placeLineFloats gives the floats the lines of the block at corner placed their places
+// in its parent, and places at its top those they did not, and returns the parent's
+// overflow with theirs.
+func (t *tree) placeLineFloats(ctx *blockContext, floats []lineFloatItem, corner point,
+	rInset, rBorder, rPadding rect, container overflowContainer, overflow rect) rect {
+	for _, f := range floats {
+		at := point{corner.x + f.lf.at.x, corner.y + f.lf.at.y}
+		if !f.lf.placed {
+			at = ctx.place(f.lf.box, corner.y, f.lf.side, f.lf.clearing, false)
+		}
+		f.lf.pending = false
+		loc := point{at.x + f.margin.l + f.off.x, at.y + f.margin.t + f.off.y}
+		f.it.final.location = loc
+		contributionLoc := point{loc.x - rInset.l + rPadding.l, loc.y - rBorder.t}
+		overflow = overflow.union(overflowContribution(contributionLoc, f.out.size,
+			f.out.overflow.rect, f.it.border, f.it.overflow, container, negativeEdges(f.margin)))
+	}
+	return overflow
 }
