@@ -78,7 +78,14 @@ func TestScrollStateQueriesAnswerAsChromes(t *testing.T) {
 	}
 	script += `];
 document.querySelectorAll(".scroller").forEach((s, i) => { s.scrollLeft = offs[i][0]; s.scrollTop = offs[i][1]; });
-await new Promise(r => setTimeout(r, 300));
+const first = document.querySelector(".scroller .k"), probes = [...document.querySelectorAll("i")];
+const widths = () => probes.map(e => e.getBoundingClientRect().width).join();
+for (let i = 0, last = "", same = 0; i < 60 && same < 4; i++) {
+  await new Promise(r => setTimeout(r, 50));
+  const now = widths();
+  same = first.getBoundingClientRect().width !== 19 && now === last ? same + 1 : 0;
+  last = now;
+}
 return {widths: [...document.querySelectorAll("i")].map(e => e.getBoundingClientRect().width),
   scrollers: [...document.querySelectorAll(".scroller")].map(s =>
     [s.scrollLeft, s.scrollTop, s.scrollWidth, s.scrollHeight, s.clientWidth, s.clientHeight])};`
@@ -96,7 +103,9 @@ return {widths: [...document.querySelectorAll("i")].map(e => e.getBoundingClient
 	})
 	// Headless Chrome answers scroll-state() from a snapshot it takes at
 	// a frame, which its virtual time sometimes runs after the script on a
-	// loaded machine: a run that answers otherwise is asked again.
+	// loaded machine: the script waits until the first scroller, which
+	// overflows, says it scrolls and the answers hold for a few frames,
+	// and a run that answers otherwise is asked again.
 	var answer struct {
 		Widths    []float32    `json:"widths"`
 		Scrollers [][6]float32 `json:"scrollers"`
