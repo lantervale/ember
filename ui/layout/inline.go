@@ -1566,7 +1566,7 @@ func (t *tree) sizeAtomics(c *inlineContent, avail space, parent size) {
 		switch {
 		case isScrollContainer(st) && a.node.control != inputControl && a.node.control != selectControl,
 			a.node.slider:
-		case some(out.lastBaseline):
+		case some(out.lastBaseline) && st.Display != style.InlineFlex && st.Display != style.InlineGrid:
 			a.baseline = out.lastBaseline
 		case out.synthetic > 0 && c.owner.st.Stands():
 			// a central line synthesizes it across the middle of the item, as Chrome
@@ -2976,6 +2976,10 @@ func (t *tree) measure(c *inlineContent, known size, avail spaces, parent size, 
 			break
 		}
 		lh, lb := t.lineBox(c, l)
+		if c.owner.st.Mode == style.VerticalLR {
+			// the line's over side is the frame's bottom, as turnLines mirrors it
+			lb = lh - lb
+		}
 		h += l.push
 		if i == 0 {
 			first = h + lb

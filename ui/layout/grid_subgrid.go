@@ -452,8 +452,8 @@ func (h *hoisting) place(t *tree, it *gridItem, a axis) {
 	it.hoisted = true
 	if a == vertical {
 		it.node.sharing = false
-	} else if it.alignSelf == style.AlignBaseline {
-		it.alignSelf = style.AlignStart
+	} else {
+		it.alignSelf, it.justifySelf = baselineFallback(it.alignSelf), baselineFallback(it.justifySelf)
 	}
 }
 

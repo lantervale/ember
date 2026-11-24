@@ -242,7 +242,10 @@ type output struct {
 	// synthetic is the height of the item whose block-end edge firstBaseline is made up
 	// from, as a flex or grid container whose first item has no line makes it; 0 where
 	// it is a line's.
-	synthetic               float32
+	synthetic float32
+	// across are an orthogonal flow's first and last baselines in its parent's frame,
+	// from its left border edge there: lines running down its parent's lines.
+	across                  [2]float32
 	topMargin, bottomMargin marginSet
 	collapsesThrough        bool
 	oof                     []oofCandidate
@@ -254,7 +257,7 @@ type output struct {
 }
 
 func sizeOutput(s size) output {
-	return output{size: s, firstBaseline: none, lastBaseline: none}
+	return output{size: s, firstBaseline: none, lastBaseline: none, across: [2]float32{none, none}}
 }
 
 // placed is a node's layout, Taffy's Layout.

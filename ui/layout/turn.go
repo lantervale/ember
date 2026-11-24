@@ -299,6 +299,12 @@ func (t *tree) turnedLayout(n *node, in input) output {
 	turnedOut.size = out.size.across()
 	turnedOut.overflow = t.reframeOverflow(n, out, from, to)
 	turnedOut.firstBaseline, turnedOut.lastBaseline = none, none
+	for i, b := range [2]float32{out.firstBaseline, out.lastBaseline} {
+		turnedOut.across[i] = none
+		if some(b) {
+			turnedOut.across[i] = reframe(rect{t: b, b: b}, out.size, from, to).l
+		}
+	}
 	turnedOut.topMargin = marginFrom(resolveOrZero(outer.Margin.Top, in.parent.w))
 	turnedOut.bottomMargin = marginFrom(resolveOrZero(outer.Margin.Bottom, in.parent.w))
 	turnedOut.collapsesThrough, turnedOut.lines, turnedOut.clamped = false, 0, false

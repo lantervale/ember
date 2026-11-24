@@ -57,7 +57,7 @@ func oofAlignmentOf(a style.Align) oofAlignment {
 		return oofStretch
 	case style.AlignCenter, style.AlignAnchorCenter:
 		return oofCenter
-	case style.AlignEnd, style.AlignFlexEnd:
+	case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 		return oofEnd
 	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline, style.AlignSpaceBetween, style.AlignSpaceAround,
 		style.AlignSpaceEvenly: // at the start
@@ -322,13 +322,16 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 	h := oofAxis{
 		cbSize: area.w, inset: span{inset.l, inset.r}, margin: span{margin.l, margin.r},
 		static:    staticPosition{area: span{c.x.area.start - offset.x, c.x.area.end - offset.x}, align: c.x.align},
-		alignment: oofAlignmentOf(justifySelf), isInline: true,
+		alignment: oofAlignmentOf(justifySelf.Position()), safe: justifySelf.Safe(), unsafe: justifySelf.Unsafe(),
+		isInline:   true,
 		scrollAxis: scrollContainer(containerOverflow.Width), outer: p.outerSpan(true),
 	}
 	v := oofAxis{
 		cbSize: area.h, inset: span{inset.t, inset.b}, margin: span{margin.t, margin.b},
 		static:     staticPosition{area: span{c.y.area.start - offset.y, c.y.area.end - offset.y}, align: c.y.align},
-		alignment:  oofAlignmentOf(alignSelf),
+		alignment:  oofAlignmentOf(alignSelf.Position()),
+		safe:       alignSelf.Safe(),
+		unsafe:     alignSelf.Unsafe(),
 		scrollAxis: scrollContainer(containerOverflow.Height), outer: p.outerSpan(false),
 	}
 	stretchFit := size{h.stretchFitSize(), v.stretchFitSize()}

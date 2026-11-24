@@ -7,7 +7,7 @@ import (
 )
 
 func gridAlignContent(a style.Align) alignment {
-	if a == style.AlignNormal {
+	if a.Position() == style.AlignNormal {
 		return align(style.AlignStretch)
 	}
 	return align(a)
@@ -98,7 +98,7 @@ func (t *tree) grid(n *node, in input) output {
 	markCrossings(items, columns, rows)
 	hasBaseline := false
 	for _, it := range items {
-		if it.baselineAligned() {
+		if it.baselineAlignedIn(horizontal) || it.baselineAlignedIn(vertical) {
 			hasBaseline = true
 		}
 	}
@@ -117,13 +117,9 @@ func (t *tree) grid(n *node, in input) output {
 	for _, it := range rowItems {
 		it.areaCache = nil
 	}
-	if slices.ContainsFunc(rowItems, func(it *gridItem) bool {
-		return (it.hoisted || it.subgrid[horizontal]) && it.baselineAligned()
-	}) {
-		t.resolveItemBaselines(horizontal, rowItems, inner)
-	}
+	rowBaseline := hasBaseline || slices.ContainsFunc(rowItems, (*gridItem).baselineAligned)
 	t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
+		justifyContent, availGrid, inner, rows, columns, rowItems, byBase, rowBaseline)
 	handTracks(items, vertical, rows, gaps[vertical], false)
 	rowSum := sumBaseSizes(rows)
 	borderBox := size{
@@ -200,7 +196,7 @@ func (t *tree) grid(n *node, in input) output {
 	}
 	if rerunRows {
 		t.trackSizing(vertical, innerMin.h, innerMax.h, alignContent,
-			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, false)
+			justifyContent, availGrid, inner, rows, columns, rowItems, byBase, rowBaseline)
 		handTracks(items, vertical, rows, gaps[vertical], false)
 	}
 	if columnChanged && !hasPercentColumn {
@@ -235,9 +231,9 @@ func (t *tree) grid(n *node, in input) output {
 			l: columns[it.columnIndexes.start+1].offset,
 			r: columns[it.columnIndexes.end].offset,
 		}
-		contribution, y, h, baseline := t.alignAndPositionItem(it, uint32(i), area,
+		contribution, y, h, baseline, last := t.alignAndPositionItem(it, uint32(i), area,
 			size{area.r - area.l, area.b - area.t}, alignItems, justifyItems, paddingBoxInset, container)
-		it.yPosition, it.height, it.baseline = y, h, baseline
+		it.yPosition, it.height, it.baseline, it.lastBaseline = y, h, baseline, last
 		overflow = overflow.union(contribution)
 	}
 
@@ -331,8 +327,32 @@ func (t *tree) grid(n *node, in input) output {
 		if !some(first.baseline) {
 			out.synthetic = first.height
 		}
+		out.lastBaseline = gridLastBaseline(items)
 	}
 	return out
+}
+
+// gridLastBaseline is a grid's last baseline: that of the items of its last row on their
+// last baseline, else the last baseline of the last item there.
+func gridLastBaseline(items []*gridItem) float32 {
+	lastRow := 0
+	for _, it := range items {
+		lastRow = max(lastRow, it.rowIndexes.end)
+	}
+	var last *gridItem
+	for _, it := range items {
+		if it.rowIndexes.end != lastRow {
+			continue
+		}
+		if it.baselineAligned() && it.lastIn(vertical) {
+			last = it
+			break
+		}
+		if last == nil || it.columnIndexes.start >= last.columnIndexes.start {
+			last = it
+		}
+	}
+	return last.yPosition + or(last.lastBaseline, last.height)
 }
 
 func sumBaseSizes(tracks []gridTrack) float32 {
@@ -379,7 +399,7 @@ func alignTracks(contentBox float32, padding, border span, tracks []gridTrack, a
 //
 //nolint:cyclop,funlen,gocognit,gocyclo // Taffy's align_and_position_item, kept in its shape
 func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb size, _, _ style.Align,
-	paddingBoxInset rect, container overflowContainer) (rect, float32, float32, float32) {
+	paddingBoxInset rect, container overflowContainer) (rect, float32, float32, float32, float32) {
 	n := it.node
 	st := n.st
 	areaSize := size{area.r - area.l, area.b - area.t}
@@ -423,8 +443,8 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	margin := optionalEdges(st.Margin, cb.w)
 	inner := size{
-		w: fmax(mSub(mSub(areaSize.w, margin.l), margin.r), 0),
-		h: fmax(mSub(mSub(areaSize.h, margin.t), margin.b)-it.baselineShim, 0),
+		w: fmax(mSub(mSub(areaSize.w, margin.l), margin.r)-it.shim[horizontal], 0),
+		h: fmax(mSub(mSub(areaSize.h, margin.t), margin.b)-it.shim[vertical], 0),
 	}
 	kw, kwSpace := keywordNone, space{}
 	if !some(inherent.w) && !it.subgrid[horizontal] {
@@ -491,9 +511,9 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 		final = out.size
 	}
 	x, xMargin := alignItemWithinArea(span{area.l, area.r},
-		align(hAlign), final.w, pos, insetH, span{margin.l, margin.r}, 0)
+		align(hAlign), final.w, pos, insetH, span{margin.l, margin.r}, it.shimSpan(horizontal))
 	y, yMargin := alignItemWithinArea(span{area.t, area.b}, align(vAlign),
-		final.h, pos, insetV, span{margin.t, margin.b}, it.baselineShim)
+		final.h, pos, insetV, span{margin.t, margin.b}, it.shimSpan(vertical))
 	x += gridRelativeOffset(pos, insetH)
 	yWithout := y
 	y += gridRelativeOffset(pos, insetV)
@@ -515,12 +535,13 @@ func (t *tree) alignAndPositionItem(it *gridItem, order uint32, area rect, cb si
 	}
 	contribution := overflowContribution(point{x - paddingBoxInset.l, y - paddingBoxInset.t},
 		final, out.overflow.rect, border, st.Overflow, st, container, resolvedMargin)
-	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height)
+	return contribution, yWithout, final.h, childFirstBaseline(out.firstBaseline, final.h, st.Overflow.Height),
+		childLastAlignedBaseline(out, final.h, st.Overflow.Height)
 }
 
 func alignItemWithinArea(area span, a alignment, s float32,
-	pos style.Position, inset, margin span, shim float32) (float32, span) {
-	nonAuto := span{or(margin.start, 0) + shim, or(margin.end, 0)}
+	pos style.Position, inset, margin, shim span) (float32, span) {
+	nonAuto := span{or(margin.start, 0) + shim.start, or(margin.end, 0) + shim.end}
 	areaSize := fmax(area.end-area.start, 0)
 	free := fmax(areaSize-s-nonAuto.start-nonAuto.end, 0)
 	autos := 0
@@ -534,11 +555,11 @@ func alignItemWithinArea(area span, a alignment, s float32,
 	if autos > 0 {
 		autoSize = free / float32(autos)
 	}
-	resolved := span{or(margin.start, autoSize) + shim, or(margin.end, autoSize)}
+	resolved := span{or(margin.start, autoSize) + shim.start, or(margin.end, autoSize) + shim.end}
 	overflows := s+nonAuto.start+nonAuto.end > areaSize
 	var offset float32
 	switch resolveSelfAlignmentSafety(a, overflows) {
-	case style.AlignEnd, style.AlignFlexEnd:
+	case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 		offset = areaSize - s - resolved.end
 	case style.AlignCenter, style.AlignAnchorCenter:
 		offset = (areaSize - s + resolved.start - resolved.end) / 2

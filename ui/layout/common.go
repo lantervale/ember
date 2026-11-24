@@ -14,13 +14,44 @@ type alignment struct {
 	unsafe  bool
 }
 
-func align(k style.Align) alignment { return alignment{keyword: k} }
+// align is k's position and its overflow position.
+func align(k style.Align) alignment {
+	return alignment{keyword: k.Position(), safe: k.Safe(), unsafe: k.Unsafe()}
+}
 
 func childFirstBaseline(first, height float32, overflowY style.Overflow) float32 {
 	if scrollContainer(overflowY) {
 		return fmax(fmin(or(first, height), height), 0)
 	}
 	return first
+}
+
+// childLastAlignedBaseline is the last baseline a child laid out as out aligns by, its
+// first where it reports no last: a scroll container's held within its box, as Chrome's.
+func childLastAlignedBaseline(out output, height float32, overflowY style.Overflow) float32 {
+	last := out.lastBaseline
+	if !some(last) {
+		last = out.firstBaseline
+	}
+	return childFirstBaseline(last, height, overflowY)
+}
+
+// synthesizedBaseline is where the baseline of a box h tall that has none is made up,
+// aligning in container: at its bottom, or across its middle where the container's text
+// may stand on a central baseline, as Chrome rounds it.
+func (t *tree) synthesizedBaseline(h float32, container *node) float32 {
+	if container == nil || !container.st.Stands() {
+		return h
+	}
+	u := unitsPerPoint(t.fonts)
+	return h - float32(math.Floor(float64(h*u)/2))/u
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // childLastBaseline is the baseline of the last line in a child laid out as out, its first
@@ -58,7 +89,7 @@ func applyAlignmentFallback(free float32, items int, a alignment) style.Align {
 		case style.AlignSpaceAround, style.AlignSpaceEvenly:
 			k, safe = style.AlignCenter, true
 		case style.AlignNormal, style.AlignAuto, style.AlignStart, style.AlignEnd, style.AlignFlexStart, style.AlignFlexEnd,
-			style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline: // no fallback needed
+			style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline, style.AlignLastBaseline: // no fallback needed
 		}
 	}
 	if free <= 0 && safe {
@@ -96,7 +127,8 @@ func computeAlignmentOffset(free float32, items int, gap float32, k style.Align,
 				return free / float32(items+1)
 			}
 			return free / 2
-		case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignBaseline, style.AlignSpaceBetween:
+		case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignBaseline, style.AlignLastBaseline,
+			style.AlignSpaceBetween:
 		}
 		return 0
 	}
@@ -109,7 +141,8 @@ func computeAlignmentOffset(free float32, items int, gap float32, k style.Align,
 	case style.AlignSpaceEvenly:
 		return gap + free/float32(items+1)
 	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignStart, style.AlignEnd, style.AlignFlexStart,
-		style.AlignFlexEnd, style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline: // only the gap
+		style.AlignFlexEnd, style.AlignCenter, style.AlignAnchorCenter, style.AlignBaseline,
+		style.AlignLastBaseline: // only the gap
 	}
 	return gap
 }

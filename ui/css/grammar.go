@@ -185,8 +185,6 @@ var (
 	borderWidth = either(dimTerm(nonNegative), words("thin", "medium", "thick"))
 	borderStyle = words("none", "hidden", "solid", "dashed", "dotted", "inset", "outset", "groove", "ridge",
 		"double")
-	alignWords = []string{"normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "baseline",
-		"self-start", "self-end"}
 	// textAlign has Chrome's -webkit- values, which place blocks as well as lines.
 	blendMode = words("normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn",
 		"hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity")
@@ -424,21 +422,19 @@ var checks = map[string]check{
 	"border-image-outset":        repeated(dimTerm(allowNumber|nonNegative), 4),
 	"border-image-repeat":        repeated(words("stretch", "repeat", "round", "space"), 2),
 
-	"row-gap":        single(either(sizeLP, words("normal"))),
-	"column-gap":     single(either(sizeLP, words("normal"))),
-	"flex-grow":      single(number),
-	"flex-shrink":    single(number),
-	"flex-basis":     single(either(sizeLP, words("auto", "content"), boxSizes)),
-	"flex-wrap":      single(words("nowrap", "wrap", "wrap-reverse")),
-	"flex-direction": single(words("row", "row-reverse", "column", "column-reverse")),
-	"align-items":    single(words(alignWords...)),
-	"align-self":     single(words(append([]string{"auto", "anchor-center"}, alignWords...)...)),
-	"align-content": single(words("normal", "stretch", "center", "start", "end", "flex-start", "flex-end",
-		"space-between", "space-around", "space-evenly", "baseline")),
-	"justify-content": single(words("normal", "stretch", "center", "start", "end", "flex-start", "flex-end", "left",
-		"right", "space-between", "space-around", "space-evenly")),
-	"justify-items": single(words(append([]string{"legacy", "left", "right"}, alignWords...)...)),
-	"justify-self":  single(words(append([]string{"auto", "left", "right", "anchor-center"}, alignWords...)...)),
+	"row-gap":         single(either(sizeLP, words("normal"))),
+	"column-gap":      single(either(sizeLP, words("normal"))),
+	"flex-grow":       single(number),
+	"flex-shrink":     single(number),
+	"flex-basis":      single(either(sizeLP, words("auto", "content"), boxSizes)),
+	"flex-wrap":       single(words("nowrap", "wrap", "wrap-reverse")),
+	"flex-direction":  single(words("row", "row-reverse", "column", "column-reverse")),
+	"align-items":     alignItems.check,
+	"align-self":      alignSelf.check,
+	"align-content":   alignContent.check,
+	"justify-content": justifyContent.check,
+	"justify-items":   justifyItems.check,
+	"justify-self":    justifySelf.check,
 
 	"grid-template-columns":     checkTracks,
 	"grid-template-rows":        checkTracks,
@@ -716,7 +712,7 @@ func iterationCount(c Component) error {
 
 //nolint:gochecknoglobals // the keywords of two animation longhands
 var (
-	animationDirections = []string{"normal", "reverse", "alternate", "alternate-reverse"}
+	animationDirections = []string{kwNormal, "reverse", "alternate", "alternate-reverse"}
 	animationFills      = []string{kwNone, "forwards", "backwards", kwBoth}
 )
 

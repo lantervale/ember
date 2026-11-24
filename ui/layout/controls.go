@@ -178,10 +178,10 @@ func contentShare(n *node) float32 {
 	if !centresContent(n) {
 		return 0
 	}
-	switch contentAlign(n) {
+	switch contentAlign(n).Position() {
 	case style.AlignStart, style.AlignFlexStart, style.AlignBaseline:
 		return 0
-	case style.AlignEnd, style.AlignFlexEnd:
+	case style.AlignEnd, style.AlignFlexEnd, style.AlignLastBaseline:
 		return 1
 	case style.AlignNormal, style.AlignAuto, style.AlignStretch, style.AlignCenter, style.AlignAnchorCenter,
 		style.AlignSpaceBetween,

@@ -375,7 +375,30 @@ const (
 	// AlignAnchorCenter centres an absolutely positioned box on its
 	// default anchor.
 	AlignAnchorCenter
+	// AlignLastBaseline is last baseline: the last line's baseline shared, the box
+	// otherwise at the end.
+	AlignLastBaseline
 )
+
+// The overflow position an alignment may carry, or-ed into its keyword: safe puts a box
+// bigger than its space at the start, unsafe lets it overflow both ways. Neither is the
+// property's own default.
+const (
+	AlignSafe   = 1 << 6
+	AlignUnsafe = 1 << 7
+)
+
+// Position is a without its overflow position.
+func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe) }
+
+// Safe reports whether a is safe.
+func (a Align) Safe() bool { return a&AlignSafe != 0 }
+
+// Unsafe reports whether a is unsafe.
+func (a Align) Unsafe() bool { return a&AlignUnsafe != 0 }
+
+// Baseline reports whether a is first or last baseline.
+func (a Align) Baseline() bool { return a == AlignBaseline || a == AlignLastBaseline }
 
 // Flex holds the flex and box-alignment properties.
 type Flex struct {
