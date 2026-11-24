@@ -92,6 +92,10 @@ task docs                           # the guide: plain Markdown in docs/ (served
 
 In this module, `go mod tidy` drops the Hextra requirement Hugo needs; restore it with `hugo mod get github.com/imfing/hextra@v0.13.0`.
 
+## Merging
+
+One feature per pull request, branched from `main`: no integration branches batching several. Once it is opened, `gh pr merge --merge --auto` queues it, and GitHub merges it with a merge commit as soon as CI is green; a red check keeps it open until a fix is pushed. light follows ember's `main` by itself (its hourly bump workflow), so a merged change reaches it without a hand-made pin bump.
+
 ## Architecture
 
 - Entities are structs embedding `*world.BasicEntity` plus components, and each component has a `GetX()` getter. A system embeds `world.Group[SomeInterface]` and receives matching entities automatically. Phases run in this order: Startup (once), PreUpdate, FixedUpdate, Update, PostUpdate.
