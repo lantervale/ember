@@ -380,6 +380,13 @@ func (u *Canvas) Mouse() geom.Vec2 {
 	if !u.takesPointer() {
 		m = geom.V2(-1e9, -1e9)
 	}
+	return u.Local(m)
+}
+
+// Local is at, a point of the window in points, in what is drawn next,
+// as Mouse is the cursor: where a finger on a touchscreen is.
+func (u *Canvas) Local(at geom.Vec2) geom.Vec2 {
+	m := at
 	if u.scaled != nil {
 		m = u.scaled.screen.Inverse().Xform(m)
 	}

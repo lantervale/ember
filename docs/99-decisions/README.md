@@ -222,6 +222,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0219 | [A transform holds fixed boxes, and a point hits through it as its pixel square](0219-a-transform-holds-fixed-boxes-and-a-point-hits-through-it-as-its-pixel-square.md) | rendering |
 | 0220 | [A turned picture's and border's edges are covered by their distance](0220-a-turned-pictures-and-borders-edges-are-covered-by-their-distance.md) | rendering |
 | 0221 | [A vertical root scrolls its viewport along its blocks](0221-a-vertical-root-scrolls-its-viewport-along-its-blocks.md) | api |
+| 0222 | [A press inside the selection drags its text, and a long press selects a word](0222-a-press-inside-the-selection-drags-its-text-and-a-long-press-selects-a-word.md) | api |
 | 0223 | [A vertical drop cap is the horizontal one turned, and an element is never one](0223-a-vertical-drop-cap-is-the-horizontal-one-turned-and-an-element-is-never-one.md) | rendering |
 
 ## Writing one

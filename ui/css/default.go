@@ -309,4 +309,13 @@ dialog:popover-open { display: block; }
   border: 1px solid #c8c8c8; border-radius: 4px; background-color: #fff; color: #222; font: 12px sans-serif;
   white-space: pre-line; overflow-wrap: break-word; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); user-select: none;
 }
+.ember-drag-image {
+  position: fixed; z-index: 2147483647; pointer-events: none; width: max-content; max-width: 300px; overflow: hidden;
+  white-space: pre; opacity: 0.75; user-select: none;
+}
+.ember-selection-handle {
+  position: fixed; z-index: 2147483647; width: 20px; height: 20px; background-color: #1a73e8; user-select: none;
+  border-radius: 50% 0 50% 50%;
+}
+.ember-selection-handle[data-side="end"] { border-radius: 0 50% 50% 50%; }
 `

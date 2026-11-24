@@ -40,6 +40,9 @@ type Session struct {
 	session string
 	size    geom.Vec2
 	scale   float32
+	// dragged is the data of the drag Chrome began since the last Drop,
+	// once InterceptDrags has it hand its drags over.
+	dragged json.RawMessage
 }
 
 // Serve serves d, exported, at the root of a server on 127.0.0.1, and
@@ -230,13 +233,20 @@ func (s *Session) call(method string, params, out any) {
 			s.t.Fatalf("chrome: %s: %v", method, err)
 		}
 		var resp struct {
-			ID     int             `json:"id"`
+			ID     int    `json:"id"`
+			Method string `json:"method"`
+			Params struct {
+				Data json.RawMessage `json:"data"`
+			} `json:"params"`
 			Result json.RawMessage `json:"result"`
 			Error  *struct {
 				Message string `json:"message"`
 			} `json:"error"`
 		}
 		if err = json.Unmarshal(line[:len(line)-1], &resp); err != nil || resp.ID != s.id {
+			if resp.Method == "Input.dragIntercepted" {
+				s.dragged = resp.Params.Data
+			}
 			continue
 		}
 		if resp.Error != nil {
@@ -474,4 +484,35 @@ func (s *Session) key(key string, mods int, at time.Time, commands []string) {
 		}
 	}
 	s.call("Input.dispatchKeyEvent", up, nil)
+}
+
+// InterceptDrags has Chrome hand over the drags it begins, which headless
+// it can't carry itself: a press and moves that drag the selected text
+// leave the drag for Drop.
+func (s *Session) InterceptDrags() {
+	s.t.Helper()
+	s.call("Input.setInterceptDrags", map[string]any{"enabled": true}, nil)
+}
+
+// Dragging reports whether Chrome began a drag since the last Drop: it
+// tells its drag a moment after the move that began it.
+func (s *Session) Dragging() bool {
+	s.t.Helper()
+	s.Eval("0", nil)
+	return s.dragged != nil
+}
+
+// Drop carries the drag Chrome began over (x, y) and drops it there with
+// mods held, then lets the left button go; without a drag it only lets
+// the button go.
+func (s *Session) Drop(x, y float32, mods int) {
+	s.t.Helper()
+	if s.Dragging() {
+		for _, kind := range []string{"dragEnter", "dragOver", "drop"} {
+			s.call("Input.dispatchDragEvent", map[string]any{kindField: kind, "x": x, "y": y, "data": s.dragged,
+				modifiers: mods}, nil)
+		}
+		s.dragged = nil
+	}
+	s.Release(x, y, mods)
 }
