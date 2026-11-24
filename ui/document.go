@@ -47,6 +47,8 @@ type Document struct {
 	tree       *box.Tree
 	fonts      *fonts.Set
 	faces      map[faceKey]*twod.Face
+	// fallbackGen is the fonts' SystemGen the faces were made for.
+	fallbackGen uint64
 	// authored are the stylesheets in cascade order, sheets what the
 	// cascade reads of those not disabled, and resheet is set once one
 	// changed: the next frame takes them again (take).
@@ -837,17 +839,25 @@ func (d *Document) drawSize(c *twod.Canvas) geom.Vec2 {
 }
 
 func (d *Document) face(f style.Font) *twod.Face {
+	if gen := d.fonts.SystemGen(); gen != d.fallbackGen {
+		clear(d.faces)
+		d.pageFonts.chained = nil
+		d.fallbackGen = gen
+	}
 	if ch := d.fonts.Chained(f); ch != nil {
 		return d.chainFace(ch)
 	}
 	ff := d.fonts.Face(f)
-	key := faceKey{ff, f.Palette}
+	key := faceKey{ff, f.Palette, d.fonts.FallbackContext(f)}
 	if tf, ok := d.faces[key]; ok {
 		return tf
 	}
 	var opts []twod.FaceOption
 	if fb := d.fonts.Fallback(); fb != nil && fb != ff {
 		opts = append(opts, twod.Fallback(d.face(style.Font{Family: []string{fb.Family}, Weight: float32(fb.Weight)})))
+	}
+	if sys := d.systemFaces(f); len(sys) > 0 {
+		opts = append(opts, twod.Fallback(sys...))
 	}
 	if d.emoji != nil {
 		opts = append(opts, twod.Emoji(d.emoji))
@@ -865,10 +875,28 @@ func (d *Document) face(f style.Font) *twod.Face {
 	return tf
 }
 
-// faceKey is a face of the Document's fonts drawn in a font-palette.
+// systemFaces are the machine's faces drawing what f's own lack, each
+// only the characters layout measured in it.
+func (d *Document) systemFaces(f style.Font) []*twod.Face {
+	var out []*twod.Face
+	for _, sf := range d.fonts.SystemFaces(f) {
+		df := d.pageFonts.drawFace(sf.Face)
+		if df == nil {
+			continue
+		}
+		if tf, ok := draw.Wrap(df.Only(sf.Ranges)).(*twod.Face); ok {
+			out = append(out, tf)
+		}
+	}
+	return out
+}
+
+// faceKey is a face of the Document's fonts drawn in a font-palette,
+// falling back to the machine's faces in a context.
 type faceKey struct {
-	face    *fonts.Face
-	palette string
+	face     *fonts.Face
+	palette  string
+	fallback fonts.FallbackContext
 }
 
 // warn keeps a style attribute's warning once, however often its element

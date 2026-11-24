@@ -61,7 +61,7 @@ func (s *Set) drawing(f style.Font, r rune) (*Face, sfnt.GlyphIndex) {
 	}
 	g, err := c.font.GlyphIndex(&s.buf, r)
 	if err != nil || g == 0 {
-		return nil, 0
+		return s.systemGlyph(f, r)
 	}
 	return c, g
 }

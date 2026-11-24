@@ -555,6 +555,13 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	}
 	casc := r.m.cascade(r.m.matched(n, r.sheets, inline), parent)
 	c := initial
+	if v, ok := n.Attr("lang"); ok {
+		c.Font.Lang = v
+	} else if root {
+		c.Font.Lang = dom.Data(n).Language
+	} else {
+		c.Font.Lang = parent.Font.Lang
+	}
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
 	if r.m.native && !x.appearance(casc).Native() {

@@ -516,6 +516,10 @@ type Font struct {
 	// Palette is font-palette's: "" for normal, "light", "dark" or an
 	// @font-palette-values' --name.
 	Palette string
+	// Lang is the language of the element's text, as Chrome's font
+	// description holds it: the lang attribute of the element or of the
+	// nearest above it that has one, else the Document's; "" for none.
+	Lang string
 }
 
 // FontVariation is a place on one axis of a variable font: a tag, such

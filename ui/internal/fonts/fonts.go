@@ -101,6 +101,7 @@ type Set struct {
 	scale float32
 	installing
 	webFonts
+	fallback systemFallback
 }
 
 // SetScale sets the device pixels per point the text is drawn at, which
@@ -293,7 +294,10 @@ func round(v float32) float32 { return float32(int(v + 0.5)) }
 // height, in whole device pixels, added to their ascent.
 //
 //nolint:gochecknoglobals // the platform's, set apart by tests
-var appleAscent = runtime.GOOS == "darwin"
+var appleAscent = runtime.GOOS == goosDarwin
+
+// goosDarwin is macOS's GOOS.
+const goosDarwin = "darwin"
 
 //nolint:gochecknoglobals // a lookup table
 var widenedAscent = [...]string{"Times", "Helvetica", "Courier"}
@@ -422,7 +426,7 @@ func (s *Set) spaceAdvance(c *Face, r rune, size float32) (float32, bool) {
 
 // advance is the width of the glyphs own has of text in f's face, shaped
 // with f's features between before and after, the fallback's characters
-// in it.
+// in it, and those the machine's faces draw in runs of each.
 func (s *Set) advance(f style.Font, text, before, after string, own part) float32 {
 	if ch := s.chained(f); ch != nil {
 		return s.chainAdvance(ch, f, text, before, after, own)
@@ -432,37 +436,83 @@ func (s *Set) advance(f style.Font, text, before, after string, own part) float3
 	var w float32
 	var other float32
 	run := s.run[:0]
+	// sys is the installed face the run is of, nil for c.
+	var sys *Face
+	flush := func() {
+		if sys == nil {
+			w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
+		} else if len(run) > 0 {
+			other += s.shaped(sys, script, f.Features, run, nil, around(text, run, before, after), own) * f.Size / sys.upem
+		}
+		run, sys = run[:0], nil
+	}
 	for i, r := range text {
 		if sc, ok := shape.ScriptOf(r); ok && sc != script {
-			w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
-			run, script = run[:0], sc
+			flush()
+			script = sc
 		}
 		g, err := c.font.GlyphIndex(&s.buf, r)
 		if err != nil {
 			continue
 		}
+		if g == 0 && sys != nil && joins(r) {
+			g, _ = sys.font.GlyphIndex(&s.buf, r)
+			//nolint:gosec // a glyph index and a text offset
+			run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r})
+			continue
+		}
+		var fc *Face
+		var a float32
+		apart := false
 		if g == 0 {
-			a, ok := s.fallbackAdvance(c, r, f.Size)
-			if !ok {
-				a, ok = s.spaceAdvance(c, r, f.Size)
+			fc, g, a, apart = s.missing(f, c, r)
+		}
+		if fc != nil {
+			if fc != sys {
+				flush()
+				sys = fc
 			}
-			if ok {
-				if own.has(i) {
-					other += a
-					s.counted++
-				}
-				w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
-				run = run[:0]
-				continue
+			//nolint:gosec // a glyph index and a text offset
+			run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r})
+			continue
+		}
+		if apart {
+			if own.has(i) {
+				other += a
+				s.counted++
 			}
+			flush()
+			continue
+		}
+		if sys != nil {
+			flush()
 		}
 		//nolint:gosec // a glyph index and a text offset
 		run = append(run, shape.Glyph{ID: uint16(g), Cluster: int32(i), Char: r})
 	}
-	w += s.shaped(c, script, f.Features, run, nil, around(text, run, before, after), own)
+	flush()
 	s.run = run
 	return w*f.Size/c.upem + other
 }
+
+// missing is how r, which c, f's face, lacks, is measured: its advance in
+// the Fallback face, else the machine's face drawing it and its glyph
+// there, else the advance of a space c lacks; ok false and no face for
+// none, drawn as c's missing glyph.
+func (s *Set) missing(f style.Font, c *Face, r rune) (*Face, sfnt.GlyphIndex, float32, bool) {
+	if a, ok := s.fallbackAdvance(c, r, f.Size); ok {
+		return nil, 0, a, true
+	}
+	if fc, fg := s.systemGlyph(f, r); fc != nil {
+		return fc, fg, 0, false
+	}
+	a, ok := s.spaceAdvance(c, r, f.Size)
+	return nil, 0, a, ok
+}
+
+// joins reports whether r is shaped with the character before it,
+// whichever face draws that: a joiner or a variation selector.
+func joins(r rune) bool { return r == 0x200C || r == 0x200D || shape.VariationSelector(r) }
 
 // Fallback is the face that draws what a face lacks: Go Mono, whose
 // arrows, triangles and ticks Go has not.
@@ -510,25 +560,50 @@ func (s *Set) FallbackRanges(c *Face) string {
 	return strings.Join(ranges, ", ")
 }
 
-// FallbackMetrics are the Fallback face's metrics at f's size when it
-// draws some of text, as box.FallbackFonts says.
+// FallbackMetrics are the largest metrics of the faces besides f's own
+// that draw some of text, the Fallback's and the machine's, as
+// box.FallbackFonts says.
 func (s *Set) FallbackMetrics(f style.Font, text string) (box.Metrics, bool) {
 	if ch := s.chained(f); ch != nil {
 		return s.chainFallbackMetrics(ch, f.Size, text)
 	}
 	c, fb := s.Face(f), s.Fallback()
-	if fb == nil || fb == c || isASCII(text) && s.drawsASCII(c) {
+	if fb == c {
+		fb = nil
+	}
+	if fb == nil && !s.fallback.on || isASCII(text) && s.drawsASCII(c) {
 		return box.Metrics{}, false
+	}
+	var out box.Metrics
+	found := false
+	var seen *Face
+	add := func(m box.Metrics) {
+		if !found {
+			out, found = m, true
+			return
+		}
+		out.Ascent, out.Descent = max(out.Ascent, m.Ascent), max(out.Descent, m.Descent)
+		out.LineGap = max(out.LineGap, m.LineGap)
 	}
 	for _, r := range text {
 		if g, _ := c.font.GlyphIndex(&s.buf, r); g != 0 {
 			continue
 		}
-		if g, _ := fb.font.GlyphIndex(&s.buf, r); g != 0 {
-			return s.Metrics(style.Font{Family: []string{fb.Family}, Size: f.Size, Weight: float32(fb.Weight)}), true
+		if fb != nil {
+			if g, _ := fb.font.GlyphIndex(&s.buf, r); g != 0 {
+				if seen != fb {
+					add(s.Metrics(style.Font{Family: []string{fb.Family}, Size: f.Size, Weight: float32(fb.Weight)}))
+					seen = fb
+				}
+				continue
+			}
+		}
+		if sc, _ := s.systemGlyph(f, r); sc != nil && sc != seen {
+			add(s.metricsOf(sc, f.Size))
+			seen = sc
 		}
 	}
-	return box.Metrics{}, false
+	return out, found
 }
 
 var _ box.FallbackFonts = (*Set)(nil)
@@ -555,7 +630,9 @@ func (s *Set) Draws(f style.Font, text string) bool {
 		}
 		r, _ := utf8.DecodeRuneInString(bare)
 		if !s.hasGlyph(c, r) && (fb == nil || !s.hasGlyph(fb, r)) {
-			return false
+			if sc, _ := s.systemGlyph(f, r); sc == nil {
+				return false
+			}
 		}
 	}
 	return true

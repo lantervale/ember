@@ -59,7 +59,7 @@ func (s *Set) Intercepts(f style.Font, text string, letter, word, top, bottom fl
 			continue
 		}
 		if g == 0 {
-			if face, fg := s.fallbackGlyph(c, r); fg != 0 {
+			if face, fg := s.fallbackGlyph(f, c, r); fg != 0 {
 				flush()
 				//nolint:gosec // a glyph index and a text offset
 				in.run(face, script, "", []shape.Glyph{{ID: uint16(fg), Cluster: int32(i), Char: r}})
@@ -166,13 +166,16 @@ func (c *Face) outline(buf *sfnt.Buffer, g uint16, at varfont.Coords) (sfnt.Segm
 	return segs, nil
 }
 
-// fallbackGlyph is r's glyph in the Fallback face when c lacks it and it has it, else
-// c's missing glyph.
-func (s *Set) fallbackGlyph(c *Face, r rune) (*Face, sfnt.GlyphIndex) {
+// fallbackGlyph is r's glyph in the Fallback face when c, f's face, lacks it and it has
+// it, else in the machine's face drawing it in f, else c's missing glyph.
+func (s *Set) fallbackGlyph(f style.Font, c *Face, r rune) (*Face, sfnt.GlyphIndex) {
 	if fb := s.Fallback(); fb != nil && fb != c {
 		if g, err := fb.font.GlyphIndex(&s.buf, r); err == nil && g != 0 {
 			return fb, g
 		}
+	}
+	if sc, g := s.systemGlyph(f, r); sc != nil {
+		return sc, g
 	}
 	return c, 0
 }
