@@ -43,7 +43,7 @@ func Initial() Computed {
 		},
 		Flex: Flex{
 			Shrink: 1, AlignItems: AlignNormal, AlignContent: AlignNormal, JustifyContent: AlignNormal,
-			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto,
+			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto, LineCount: 1,
 		},
 		Text: Text{
 			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400, Stretch: 100},
@@ -350,11 +350,21 @@ const (
 
 type FlexWrap uint8
 
+// BalanceWrap and BalanceWrapReverse are flex-wrap: balance, alone or
+// with wrap-reverse: lines as long as one another.
 const (
 	NoWrap FlexWrap = iota
 	Wrap
 	WrapReverse
+	BalanceWrap
+	BalanceWrapReverse
 )
+
+// Reverse reports whether w stacks its lines in reverse.
+func (w FlexWrap) Reverse() bool { return w == WrapReverse || w == BalanceWrapReverse }
+
+// Balance reports whether w balances its items across its lines.
+func (w FlexWrap) Balance() bool { return w == BalanceWrap || w == BalanceWrapReverse }
 
 // Align is a value of align-*, justify-* and place-*.
 type Align uint8
@@ -417,6 +427,10 @@ type Flex struct {
 	JustifySelf    Align
 	// Order is the flex and grid order.
 	Order int
+	// LineCount is flex-line-count: the fewest lines a balanced flex
+	// container makes, and how many share its cross size as the room
+	// its items have.
+	LineCount int
 }
 
 // Track is one grid track size: minmax(Min, Max), or a single size in

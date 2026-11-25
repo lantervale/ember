@@ -39,7 +39,7 @@ var properties = map[string]property{
 
 	"row-gap": {initial: "normal"}, "column-gap": {initial: "normal"},
 	"flex-grow": {initial: "0"}, "flex-shrink": {initial: "1"}, "flex-basis": {initial: "auto"},
-	"flex-wrap": {initial: "nowrap"}, "flex-direction": {initial: "row"},
+	propFlexWrap: {initial: kwNowrap}, "flex-direction": {initial: "row"}, propFlexLineCount: {initial: "1"},
 	"align-items": {initial: "normal"}, "align-content": {initial: "normal"},
 	"align-self": {initial: "auto"}, "justify-content": {initial: "normal"},
 	"justify-items": {initial: "legacy"}, "justify-self": {initial: "auto"},
@@ -259,7 +259,7 @@ var shorthands = map[string][]string{
 		"border-image-repeat"},
 	shortGap:        {"row-gap", "column-gap"},
 	"flex":          {"flex-grow", "flex-shrink", "flex-basis"},
-	"flex-flow":     {"flex-direction", "flex-wrap"},
+	"flex-flow":     {"flex-direction", propFlexWrap},
 	"place-items":   {"align-items", "justify-items"},
 	"place-content": {"align-content", "justify-content"},
 	"place-self":    {"align-self", "justify-self"},

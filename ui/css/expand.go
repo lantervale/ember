@@ -75,7 +75,7 @@ func expand(name string, v []Component) (map[string][]Component, error) {
 	case kwFlex:
 		err = expandFlex(v, out)
 	case "flex-flow":
-		err = expandAnyOrder(long, v, out)
+		err = expandFlexFlow(v, out)
 	case propPositionTry:
 		err = expandPositionTry(v, out)
 	case "grid-column", "grid-row":
