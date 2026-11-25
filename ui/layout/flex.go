@@ -516,6 +516,7 @@ func (t *tree) flexItems(n *node, c *flexConstants) []*flexItem {
 		if self == style.AlignAuto {
 			self = c.alignItems
 		}
+		self = sided(self, k, n, c.dir.cross())
 		it.alignSelf, it.safe = normalToStretch(self).Position(), self.Safe()
 		if st.Position == style.Relative {
 			inset := rect{
@@ -1514,6 +1515,7 @@ func (t *tree) flexOOFCandidates(n *node, c *flexConstants, lines []*flexLine) [
 		if self == style.AlignAuto {
 			self = c.alignItems
 		}
+		self = sided(self, k, n, c.dir.cross())
 		selfAlign := align(normalToStretch(self))
 		var mainEdge staticEdge
 		switch k := c.justifyContent.keyword; {

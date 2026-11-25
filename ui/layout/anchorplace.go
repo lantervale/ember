@@ -216,6 +216,10 @@ func cutArea(s *style.Computed, def rect, area size, offset point) (size, point,
 	// One auto inset aligns the box to the other, as anywhere else.
 	if normal(s.JustifySelf) && (s.Inset.Left.Kind == style.Auto) == (s.Inset.Right.Kind == style.Auto) {
 		s.JustifySelf = areaAlign(ar.X)
+		if k := s.JustifySelf; k == style.AlignStart || k == style.AlignEnd {
+			// the area's columns run from the left, whatever the direction
+			s.JustifySelf |= style.AlignLineSide
+		}
 	}
 	if normal(s.AlignSelf) && (s.Inset.Top.Kind == style.Auto) == (s.Inset.Bottom.Kind == style.Auto) {
 		s.AlignSelf = areaAlign(ar.Y)
