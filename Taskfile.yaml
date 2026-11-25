@@ -71,6 +71,20 @@ tasks:
     cmds:
       - go run ./ui/internal/emberdiff -base '{{.BASE}}'
 
+  reftest:
+    desc: "The WPT reftests ui passes (ui/internal/reftest/testdata/expected.txt, marked ref), each drawn by ember beside its references and held to them (decision 0229; needs task wgpu, a GPU and a WPT checkout: EMBER_WPT, else light's, task wpt:setup in light); about 25 seconds for its 2,400 tests on an M-series Mac"
+    cmds: [go test -tags gpu -run ReftestsStillPass -count=1 -timeout 30m ./ui/internal/reftest]
+
+  reftest:chrome:
+    desc: "The WPT reftests marked chrome in the same list, ember's picture of each held to headless Chrome's (needs Chrome too); 1 to 2 seconds a test, about two hours for the whole list as Chrome starts once a page"
+    cmds: [go test -tags 'chrome gpu' -run ReftestsMatchChrome -count=1 -timeout 0 ./ui/internal/reftest]
+
+  reftest:survey:
+    desc: "Every WPT reftest of the CSS directories drawn by ember and decided, a summary ranked by property in OUT (default the temp folder's ember-reftests): go run ./ui/internal/reftest/run -h for its flags"
+    vars:
+      OUT: '{{.OUT | default (print (coalesce (env "TMPDIR") (env "TEMP") "/tmp") "/ember-reftests")}}'
+    cmds: ["go run ./ui/internal/reftest/run -out '{{.OUT}}'"]
+
   test:chrome:
     desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome, from EMBER_CHROME on other systems than macOS, task wgpu and a GPU). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
     vars:
