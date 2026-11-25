@@ -2082,7 +2082,7 @@ var props = func() map[string]prop {
 		"align-items":     selfAlignField(func(c *style.Computed) *style.Align { return &c.AlignItems }),
 		"align-self":      selfAlignField(func(c *style.Computed) *style.Align { return &c.AlignSelf }),
 		"align-content":   alignField(func(c *style.Computed) *style.Align { return &c.AlignContent }),
-		"justify-content": alignField(func(c *style.Computed) *style.Align { return &c.JustifyContent }),
+		"justify-content": justifyContentField(func(c *style.Computed) *style.Align { return &c.JustifyContent }),
 		"justify-items":   selfAlignField(func(c *style.Computed) *style.Align { return &c.JustifyItems }),
 		"justify-self":    selfAlignField(func(c *style.Computed) *style.Align { return &c.JustifySelf }),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
