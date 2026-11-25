@@ -5,6 +5,7 @@
 /.hugo/resources/
 /.hugo_build.lock
 /internal/wgpu/lib/
+/ui/internal/chrome/lib/
 /dist/
 # tk generates these on demand (task golangci:boilerplate, golangci:ci, trufflehog:ci); they stay out of commits
 /.golangci.yaml

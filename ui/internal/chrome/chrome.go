@@ -2,8 +2,9 @@
 
 // Package chrome is the layout tests' reference: it lays an exported
 // Document out in headless Google Chrome and compares every element's
-// getBoundingClientRect with its Node.Box. Tests run with -tags chrome;
-// EMBER_CHROME names the browser when it isn't in /Applications.
+// getBoundingClientRect with its Node.Box. Tests run with -tags chrome
+// against EMBER_CHROME, else the Chrome for Testing task chrome fetched
+// (the one CI pins, VERSION), else the system's Chrome on macOS.
 package chrome
 
 import (
@@ -24,7 +25,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,13 +102,6 @@ type generatedBox struct {
 	element int
 	after   bool
 	rect    geom.Rect
-}
-
-func browser() string {
-	if p := os.Getenv("EMBER_CHROME"); p != "" {
-		return p
-	}
-	return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 }
 
 // Screenshot writes Chrome's picture of page in a viewport of size
@@ -210,9 +203,8 @@ func boxes(page []byte, size geom.Vec2, medium css.Media) ([]geom.Rect, [][]geom
 	return rects, parts, generated, nil
 }
 
-// run runs one Chrome at a time across test processes: two headless
-// Chromes started together on macOS can fail at teardown. A failed run is
-// tried once more.
+// run runs Chrome in one of the machine's Chrome slots (lockChrome),
+// each run with its own profile. A failed run is tried once more.
 func run(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, error) {
 	unlock, err := lockChrome()
 	if err != nil {
@@ -224,74 +216,6 @@ func run(page []byte, size geom.Vec2, action string, m css.Media) ([]byte, error
 		out, err = runOnce(page, size, action, m)
 	}
 	return out, err
-}
-
-// lockPath is the file every run of Chrome locks, across test processes.
-func lockPath() string { return filepath.Join(os.TempDir(), "ember-chrome.lock") }
-
-// waitNote tells that a run waits for another's Chrome; waitAfter is how
-// long it waits before saying so, and again between notes.
-//
-//nolint:gochecknoglobals // the lock test swaps them to watch the notes quickly
-var (
-	waitNote  = func(s string) { fmt.Fprintln(os.Stderr, s) }
-	waitAfter = 5 * time.Second
-)
-
-// lockHeld counts the Chrome locks this process holds: a run asking for
-// another while it holds one would wait on itself.
-//
-//nolint:gochecknoglobals // the process's own count of the lock it holds
-var lockHeld atomic.Int32
-
-// lockChrome takes the Chrome lock and writes who holds it into the file:
-// full suites in several sessions queue on it for an hour, and a run
-// waiting behind them says whom it waits for instead of seeming to hang.
-func lockChrome() (func(), error) {
-	f, err := os.OpenFile(lockPath(), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	if err = lockFile(f, false); err != nil {
-		done := make(chan struct{})
-		go func() {
-			start := time.Now()
-			for {
-				select {
-				case <-done:
-					return
-				case <-time.After(waitAfter):
-					holder, _ := os.ReadFile(lockPath())
-					waitNote(fmt.Sprintf("chrome: waiting for the Chrome lock %s for %s, held by %s",
-						lockPath(), time.Since(start).Round(time.Second), strings.TrimSpace(string(holder))))
-				}
-			}
-		}()
-		err = lockFile(f, true)
-		close(done)
-		if err != nil {
-			f.Close()
-			return nil, err
-		}
-	}
-	// The holder's note only tells those waiting whom for: a failed write
-	// leaves the lock held all the same.
-	_ = f.Truncate(0)
-	note := fmt.Sprintf(
-		"pid %d (%s) since %s",
-		os.Getpid(),
-		filepath.Base(os.Args[0]),
-		time.Now().Format(time.TimeOnly),
-	)
-	_, _ = f.WriteAt([]byte(note), 0)
-	lockHeld.Add(1)
-	return func() {
-		lockHeld.Add(-1)
-		_ = f.Truncate(0)
-		// Closing the file releases the lock too, should unlocking fail.
-		_ = unlockFile(f)
-		f.Close()
-	}, nil
 }
 
 // dumpDOM is the action that prints the laid-out page.

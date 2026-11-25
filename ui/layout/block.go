@@ -251,10 +251,12 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 			if justify == style.AlignAuto {
 				justify = st.JustifyItems
 			}
+			justify = sided(justify, it.node, n, horizontal)
 			self := it.alignSelf
 			if self == style.AlignAuto {
 				self = style.AlignNormal
 			}
+			self = sided(self, it.node, n, vertical)
 			candidates = append(candidates, oofCandidate{
 				node:     it.node,
 				order:    it.order,
@@ -635,6 +637,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		if justify == style.AlignAuto {
 			justify = st.JustifyItems
 		}
+		justify = sided(justify, it.node, it.node.parent, horizontal)
 		nonStretch := justify != style.AlignNormal && justify != style.AlignStretch
 		widthStyle := it.sizeStyle.Width
 		shrinks := nonStretch || it.node.role == roleTable || it.node.replaced || it.node.st.Table || it.node.across ||
@@ -790,7 +793,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 			ctx.floatHeight = fmax(ctx.floatHeight, loc.y-insetOffset.y+childFloats)
 		}
 		hasAutoX := !some(margin.l) || !some(margin.r)
-		outerItemW := finalSize.w + resolved.horizontal()
+		outerItemW := finalSize.w + nonAuto.horizontal()
 		if nonStretch && !hasAutoX {
 			start, free := rInset.l, innerW-outerItemW
 			if avoids {

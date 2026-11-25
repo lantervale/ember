@@ -362,12 +362,16 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 		switch {
 		case kw == kwInherit, kw == kwUnset && properties[name].inherited:
 			inherited = append(inherited, name)
+		case kw != "" && isAlignLonghand(name):
+			out[name] = cascadedValue{text: alignComputed(properties[name].initial)}
 		case kw != "":
 			out[name] = cascadedValue{text: properties[name].initial}
 		case name == propFontSize:
 			out[name] = cascadedValue{text: pixels(float64(c.Font.Size)), declared: true}
 		case colored[name]:
 			out[name] = cascadedValue{text: x.written(inScheme(v, c.Dark)), declared: true}
+		case isAlignLonghand(name):
+			out[name] = cascadedValue{text: alignComputed(x.written(v)), declared: true}
 		default:
 			out[name] = cascadedValue{text: x.written(v), declared: true}
 		}
@@ -377,6 +381,9 @@ func (t *Transitions) cascaded(n *dom.Node, names []string) map[string]cascadedV
 	case above == nil:
 		for _, name := range inherited {
 			out[name] = cascadedValue{text: properties[name].initial}
+			if isAlignLonghand(name) {
+				out[name] = cascadedValue{text: alignComputed(properties[name].initial)}
+			}
 		}
 	default:
 		from := t.cascaded(above, inherited)

@@ -388,8 +388,22 @@ const (
 	AlignUnsafe = 1 << 7
 )
 
-// Position is a without its overflow position.
-func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe) }
+// The side a self-alignment's start or end is taken on, or-ed into AlignStart or AlignEnd:
+// the item's own (self-start, self-end), or the line's left (left, right). Layout turns
+// them into the container's start or end; Position drops them.
+const (
+	AlignOwnSide  = 1 << 4
+	AlignLineSide = 1 << 5
+)
+
+// Position is a without its overflow position and its side.
+func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe | AlignOwnSide | AlignLineSide) }
+
+// OwnSide reports whether a is self-start or self-end.
+func (a Align) OwnSide() bool { return a&AlignOwnSide != 0 }
+
+// LineSide reports whether a is left or right.
+func (a Align) LineSide() bool { return a&AlignLineSide != 0 }
 
 // Safe reports whether a is safe.
 func (a Align) Safe() bool { return a&AlignSafe != 0 }

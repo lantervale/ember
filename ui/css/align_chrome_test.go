@@ -7,11 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
-	"github.com/lantervale/ember/ui/internal/chrome"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -50,6 +47,13 @@ var alignDeclarations = map[string][]string{
 var alignLonghands = []string{"align-items", "align-self", "align-content", "justify-content", "justify-items",
 	"justify-self"}
 
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // alignWord is how Chrome serializes the computed alignment a.
 func alignWord(a style.Align) string {
 	var b strings.Builder
@@ -58,6 +62,17 @@ func alignWord(a style.Align) string {
 		b.WriteString("safe ")
 	case a.Unsafe():
 		b.WriteString("unsafe ")
+	}
+	if p := a.Position(); p == style.AlignStart || p == style.AlignEnd {
+		sides := [2]string{"start", "end"}
+		switch {
+		case a.OwnSide():
+			sides = [2]string{"self-start", "self-end"}
+		case a.LineSide():
+			sides = [2]string{"left", "right"}
+		}
+		b.WriteString(sides[b2i(p == style.AlignEnd)])
+		return b.String()
 	}
 	b.WriteString(map[style.Align]string{
 		style.AlignNormal: "normal", style.AlignAuto: "auto", style.AlignStretch: "stretch",
@@ -95,8 +110,6 @@ return `+string(list)+`.map(d => {
 	const cs = getComputedStyle(e);
 	return `+string(longhands)+`.map(p => cs.getPropertyValue(p));
 });`, &want)
-	version, err := chrome.Version()
-	require.NoError(t, err)
 	d := ui.NewDocument()
 	for _, dc := range decls {
 		d.Body().Append(ui.Div(ui.Style(dc.Prop + ": " + dc.Value)))
@@ -106,14 +119,58 @@ return `+string(list)+`.map(d => {
 		st := dom.Data(n).Style
 		got := []string{alignWord(st.AlignItems), alignWord(st.AlignSelf), alignWord(st.AlignContent),
 			alignWord(st.JustifyContent), alignWord(st.JustifyItems), alignWord(st.JustifySelf)}
-		if version < 158 && strings.Contains(decls[i].Value, "flow-") {
-			continue // flow-start and flow-end are read since Chrome 158
-		}
 		for k, p := range alignLonghands {
-			w := strings.NewReplacer("self-start", "start", "self-end", "end", "left", "start", "right", "end",
-				"flow-start", "flex-start", "flow-end", "flex-end").Replace(want[i][k])
+			w := strings.NewReplacer("flow-start", "flex-start", "flow-end", "flex-end").Replace(want[i][k])
+			if p == "align-content" || p == "justify-content" {
+				w = strings.NewReplacer("left", "start", "right", "end").Replace(w)
+			}
 			if got[k] != w {
 				t.Errorf("%s: %s: %s computes to %q, Chrome's %q", decls[i].Prop, decls[i].Value, p, got[k], want[i][k])
+			}
+		}
+	}
+}
+
+// TestAlignmentComputedValuesReadAsInChrome reads the six longhands each of
+// alignDeclarations computes to as getComputedStyle does in Chrome: first baseline is
+// baseline, flex-start and flex-end flow-start and flow-end (since Chrome 158).
+func TestAlignmentComputedValuesReadAsInChrome(t *testing.T) {
+	type decl struct {
+		Prop  string `json:"Prop"`
+		Value string `json:"Value"`
+	}
+	var decls []decl
+	for p, vs := range alignDeclarations {
+		for _, v := range vs {
+			decls = append(decls, decl{p, v})
+		}
+	}
+	list, _ := json.Marshal(decls)
+	longhands, _ := json.Marshal(alignLonghands)
+	var want [][]string
+	ask(t, geom.V2(400, 300), `
+return `+string(list)+`.map(d => {
+	const e = document.createElement("div");
+	document.body.appendChild(e);
+	e.style.setProperty(d.Prop, d.Value);
+	const cs = getComputedStyle(e);
+	return `+string(longhands)+`.map(p => cs.getPropertyValue(p));
+});`, &want)
+	version, err := chrome.Version()
+	require.NoError(t, err)
+	d := ui.NewDocument()
+	for _, dc := range decls {
+		d.Body().Append(ui.Div(ui.Style(dc.Prop + ": " + dc.Value)))
+	}
+	d.Layout(geom.V2(400, 300))
+	for i, n := range d.Body().Children() {
+		for k, p := range alignLonghands {
+			got, _ := d.ComputedValue(n, p)
+			if version < 158 && strings.Contains(got, "flow-") {
+				continue // flex-start and flex-end compute to flow-start and flow-end since Chrome 158
+			}
+			if got != want[i][k] {
+				t.Errorf("%s: %s: %s reads %q, Chrome's %q", decls[i].Prop, decls[i].Value, p, got, want[i][k])
 			}
 		}
 	}

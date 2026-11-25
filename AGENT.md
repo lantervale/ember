@@ -71,7 +71,10 @@ go run ./games/flap
 go run ./examples/92-ui-kit -element button   # each ui kit component alone, its events logged (ui: HTML elements + a CSS subset, decision 0049; guide docs/05-ui)
 go run ./examples/93-html-elements -element p   # each ui element alone in its default look (div … canvas); its test runs align.Check on every one
 task test:all                       # vet + tests, GPU goldens, every ui Chrome suite/pixel page/card against its threshold (table last; reports in EMBER_CHROME_REPORTS)
+task chrome                         # the Chrome for Testing CI pins (ui/internal/chrome/VERSION, MD5SUMS) into the ignored ui/internal/chrome/lib; the ui Chrome tests prefer it to the system's (EMBER_CHROME still wins), so a machine compares with CI's Chrome; bump VERSION and MD5SUMS together
+task test:chrome SHARDS=5 ONLY=0    # one of five shards of the ui Chrome tests, as each CI chrome job runs (ui/internal/shard: a test by its name's hash; a long table splits by subtest with chrome.Shard(t) and its name in SPLIT); EMBER_CHROME_SLOTS Chromes run at once on a machine (default half the CPUs), each in its own profile
 task test:ember-diff BASE=wip        # ember against itself: every kit page, 92 page and the tileset start card at BASE vs the working tree, exact pixels; run it on any ui/kit refactor meant to change nothing
+task reftest                        # WPT CSS reftests (light's checkout or EMBER_WPT) drawn by ember beside their references, those of ui/internal/reftest/testdata/expected.txt held (decision 0229); task reftest:chrome holds them to Chrome, task reftest:survey ranks what fails by property
 go run ./tools/tileset -props props.json path/to/walls.tsj   # tile objects: collision and light-only shapes, lit preview, collision walker; saves back to the .tsj (engine tile properties only, a game passes its own -props)
 task web PKG=./examples/19-sprites  # the example built for the browser (js/wasm + WebGPU, decision 0054), page in dist/web
 EMBER_HIDDEN=1 EMBER_CAPTURE=docs/NN-section/name.png EMBER_CAPTURE_FRAME=30 go run ./examples/NN-name   # guide screenshot (extra windows: name-2.png…); halve to points, title it ![…](name.png "window title") for the framed look (docs/design/guide-plan.md)
@@ -89,6 +92,10 @@ task docs                           # the guide: plain Markdown in docs/ (served
 ```
 
 In this module, `go mod tidy` drops the Hextra requirement Hugo needs; restore it with `hugo mod get github.com/imfing/hextra@v0.13.0`.
+
+## Merging
+
+One feature per pull request, branched from `main`: no integration branches batching several. Once it is opened, `gh pr merge --merge --auto` queues it, and GitHub merges it with a merge commit as soon as CI is green; a red check keeps it open until a fix is pushed. light follows ember's `main` by itself (its hourly bump workflow), so a merged change reaches it without a hand-made pin bump.
 
 ## Architecture
 

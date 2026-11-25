@@ -72,7 +72,7 @@ func TestBothEdgesGuttersAsChromes(t *testing.T) {
 // over the content, keeping no gutter, whether ::-webkit-scrollbar styles
 // them or not; the bars it leaves alone keep theirs.
 func TestColouredScrollbarsTakeNoRoomAsChromes(t *testing.T) {
-	chrome.Since(t, 158, "scrollbar-color's bars lie over the content on every runner")
+	chrome.UnlikePinned(t, "scrollbar-color's bars take room beside the content")
 	const sheet = `.s { width: 120px; height: 80px; overflow: scroll; margin: 4px; }
 .s > div { width: 300px; height: 300px; }
 .c { scrollbar-color: #c33 #ddd; }
