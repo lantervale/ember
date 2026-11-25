@@ -97,7 +97,16 @@ func TestRangesOfAnAutoSizeAreChromes(t *testing.T) {
 	s.Eval(`[...document.querySelectorAll("input")].map(e => { const r = e.getBoundingClientRect(); `+
 		`return [r.width, r.height]; })`, &want)
 	d.Layout(size)
+	pinned, err := chrome.Pinned()
+	if err != nil {
+		t.Fatalf("Chrome's version: %v", err)
+	}
 	for i, n := range ranges {
+		if pinned && strings.Contains(styles[i], "slider-vertical") {
+			t.Logf("%q: the pinned Chrome for Testing sizes slider-vertical as a horizontal range, "+
+				"the stable Chrome as tall as its track", styles[i])
+			continue
+		}
 		if got := [2]float32{n.Box().W, n.Box().H}; got != want[i] {
 			t.Errorf("%q: ui's %v, Chrome's %v", styles[i], got, want[i])
 		}

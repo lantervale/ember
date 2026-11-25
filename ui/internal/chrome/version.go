@@ -8,7 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -30,6 +33,7 @@ var known struct {
 	sync.Mutex
 	set   bool
 	major int
+	agent string
 	err   error
 }
 
@@ -40,6 +44,7 @@ func knowAgent(agent string) {
 	defer known.Unlock()
 	if !known.set {
 		known.major, known.err = majorOf(agent)
+		known.agent = agent
 		known.set = true
 	}
 }
@@ -119,5 +124,37 @@ func Since(t testing.TB, major int, why string) {
 	}
 	if v < major {
 		t.Skipf("Chrome %d: %s since Chrome %d", v, why, major)
+	}
+}
+
+// Pinned reports whether the Chrome the tests run against is the Chrome
+// for Testing build CI pins (VERSION), as its user agent says.
+func Pinned() (bool, error) {
+	if _, err := Version(); err != nil {
+		return false, err
+	}
+	known.Lock()
+	defer known.Unlock()
+	return pinnedAgent(known.agent), nil
+}
+
+func pinnedAgent(agent string) bool {
+	return strings.Contains(agent, "Chrome/"+strings.TrimSpace(pinned)+" ")
+}
+
+// UnlikePinned skips t on the pinned Chrome for Testing build on systems
+// (every system when none is named), which differs there from the
+// stable Chrome ui follows: why says how. Elsewhere t runs.
+func UnlikePinned(t testing.TB, why string, systems ...string) {
+	t.Helper()
+	if len(systems) > 0 && !slices.Contains(systems, runtime.GOOS) {
+		return
+	}
+	on, err := Pinned()
+	if err != nil {
+		t.Fatalf("Chrome's version: %v", err)
+	}
+	if on {
+		t.Skipf("Chrome for Testing %s on %s: %s", strings.TrimSpace(pinned), runtime.GOOS, why)
 	}
 }

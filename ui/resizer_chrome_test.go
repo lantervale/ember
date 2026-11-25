@@ -14,6 +14,7 @@ import (
 	"github.com/lantervale/ember/platform"
 	"github.com/lantervale/ember/ui"
 	"github.com/lantervale/ember/ui/internal/chrome"
+	"github.com/lantervale/ember/ui/internal/dom"
 )
 
 // TestResizersDragTheirBoxAsChromes drags the resizer of boxes the user
@@ -51,6 +52,10 @@ textarea { resize: both; }`))
 	in.SetMouse(geom.V2(490, 1490))
 	w.RunFrames(3)
 	s := chrome.Open(t, srv.URL, size, 1)
+	pinned, err := chrome.Pinned()
+	if err != nil {
+		t.Fatalf("Chrome's version: %v", err)
+	}
 	drag := func(from, by geom.Vec2) {
 		to := from.Add(by)
 		in.SetMouse(from)
@@ -77,6 +82,9 @@ textarea { resize: both; }`))
 		s.Eval(`[...document.body.children].map(e => { const r = e.getBoundingClientRect();
 	return {X: r.x, Y: r.y, W: r.width, H: r.height, Width: e.style.width, Height: e.style.height}; })`, &want)
 		for i, b := range boxes {
+			if pinned && b.Tag() == dom.Textarea {
+				continue // textareaNarrower
+			}
 			got := b.Box()
 			if math.Abs(float64(got.W-want[i].W)) > 0.5 || math.Abs(float64(got.H-want[i].H)) > 0.5 ||
 				math.Abs(float64(got.Y-want[i].Y)) > 0.5 {
@@ -114,6 +122,7 @@ textarea { resize: both; }`))
 // gives it, rows and cols, right to left, vertical, scrolled and
 // disabled alike; on a game's screen none resizes, in either.
 func TestTextareasResizeAsChromes(t *testing.T) {
+	chrome.UnlikePinned(t, textareaNarrower)
 	for _, page := range []bool{true, false} {
 		t.Run(fmt.Sprint("browser sheets ", page), func(t *testing.T) {
 			var opts []ui.DocumentOption
@@ -176,6 +185,10 @@ func TestTextareasResizeAsChromes(t *testing.T) {
 		})
 	}
 }
+
+// textareaNarrower is how the pinned Chrome for Testing sizes a textarea
+// unlike the stable Chrome ui follows (158.0.8127.37 on a Mac).
+const textareaNarrower = "a textarea of its cols is a point narrower"
 
 // declaredIn is the value of the last declaration of property in the style
 // attribute css, empty with none.

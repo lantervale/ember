@@ -164,9 +164,27 @@ func TestPagesLookLikeChrome(t *testing.T) {
 				// (docs/05-ui/10-missing.md).
 				t.Skip("Chrome on Windows may shoot the animated GIF still on its first frame")
 			}
+			if why := unlikePinned(c.pkg); why != "" {
+				chrome.UnlikePinned(t, why)
+			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}
+}
+
+// unlikePinned is how the pinned Chrome for Testing draws a page unlike
+// the stable Chrome ui follows (158.0.8127.37 on a Mac); empty for a page
+// both draw alike.
+func unlikePinned(pkg string) string {
+	switch pkg {
+	case "./internal/pages/scrollbar-gutter":
+		return "scrollbar-color's bars take room, and a short styled thumb is shorter than 26 points"
+	case "./internal/pages/scrollbar-buttons", "./internal/pages/scrollbar-resizer":
+		return "a short styled thumb is shorter than 26 points"
+	case "./internal/pages/ico-bmp":
+		return "ICO and BMP pictures are drawn otherwise"
+	}
+	return ""
 }
 
 // TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of
