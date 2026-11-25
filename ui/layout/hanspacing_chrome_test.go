@@ -85,7 +85,6 @@ func TestHanPunctuationTrimsAsChrome(t *testing.T) {
 			)
 		},
 		"the content's end": func(t *testing.T) *ui.Document {
-			chrome.Since(t, 158, "a closing bracket the content's last line would overflow by is trimmed")
 			return hanPage(t, "p { width: 95px; }",
 				hanP("", ui.Text("字字字字」")), hanP("", ui.Text("字字字字）")), hanP("", ui.Text("字字字字」 ")),
 				hanP("text-align: right", ui.Text("字字字字」")), hanP("width: 100px", ui.Text("字字字字」")),

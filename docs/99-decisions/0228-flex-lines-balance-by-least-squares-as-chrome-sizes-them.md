@@ -1,4 +1,4 @@
-# 0227. Flex lines balance by least squares, as Chrome sizes them
+# 0228. Flex lines balance by least squares, as Chrome sizes them
 
 - Status: Accepted
 - Date: 2026-11-25

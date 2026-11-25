@@ -318,12 +318,13 @@ func (t *tree) placeOOFBox(c oofCandidate, area size, offset point,
 	maxSize := stretched(resolveMax(st.MaxSize, area).withAspectRatio(ratio).mAdd(adj), st.MaxSize, st, area)
 	known := styleSize.mClamp(minSize, maxSize)
 
-	justifySelf, alignSelf := st.JustifySelf, st.AlignSelf
+	justifySelf, alignSelf := sided(st.JustifySelf, n, c.cb, horizontal), sided(st.AlignSelf, n, c.cb, vertical)
 	h := oofAxis{
 		cbSize: area.w, inset: span{inset.l, inset.r}, margin: span{margin.l, margin.r},
 		static:    staticPosition{area: span{c.x.area.start - offset.x, c.x.area.end - offset.x}, align: c.x.align},
 		alignment: oofAlignmentOf(justifySelf.Position()), safe: justifySelf.Safe(), unsafe: justifySelf.Unsafe(),
 		isInline:   true,
+		reversed:   c.cb != nil && c.cb.st.Dir == style.RTL,
 		scrollAxis: scrollContainer(containerOverflow.Width), outer: p.outerSpan(true),
 	}
 	v := oofAxis{
@@ -437,6 +438,7 @@ func (t *tree) performOOF(n *node, candidates []oofCandidate, area size, offset 
 		if c.area != nil {
 			cbSize, cbAt, owner = c.area.size, c.area.offset, nil
 		}
+		c.cb = n
 		lb := t.layoutOOFBoxIn(n, c, cbSize, cbAt, containerOverflow, owner)
 		for _, s := range translateCandidates(lb.surfaced, lb.layout.location) {
 			if cl.take(s.position) {

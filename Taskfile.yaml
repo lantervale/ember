@@ -41,6 +41,13 @@ tasks:
       GOOS: {sh: 'echo ${GOOS:-$(go env GOOS)}'}
       GOARCH: {sh: 'echo ${GOARCH:-$(go env GOARCH)}'}
 
+  chrome:
+    desc: 'Fetch the Chrome for Testing build CI checks ui against (ui/internal/chrome/VERSION) into ui/internal/chrome/lib, ignored by git; the ui Chrome tests then run against it rather than the system''s Chrome (EMBER_CHROME still wins). DRY_RUN=1 says what it would fetch; GOOS/GOARCH pick another platform''s'
+    cmds: ['sh ui/internal/chrome/scripts/fetch.sh {{.GOOS}} {{.GOARCH}}']
+    vars:
+      GOOS: {sh: 'echo ${GOOS:-$(go env GOOS)}'}
+      GOARCH: {sh: 'echo ${GOARCH:-$(go env GOARCH)}'}
+
   package:
     desc: 'Build a game with its wgpu-native library beside it into dist (a signed .app on macOS); PKG=<package> NAME=<name>, GOOS/GOARCH pick another platform'
     cmds: ['sh internal/wgpu/scripts/package.sh {{.PKG}} {{.NAME}} {{.GOOS}} {{.GOARCH}}']
@@ -71,15 +78,30 @@ tasks:
     cmds:
       - go run ./ui/internal/emberdiff -base '{{.BASE}}'
 
+  reftest:
+    desc: "The WPT reftests ui passes (ui/internal/reftest/testdata/expected.txt, marked ref), each drawn by ember beside its references and held to them (decision 0229; needs task wgpu, a GPU and a WPT checkout: EMBER_WPT, else light's, task wpt:setup in light); about 25 seconds for its 2,400 tests on an M-series Mac"
+    cmds: [go test -tags gpu -run ReftestsStillPass -count=1 -timeout 30m ./ui/internal/reftest]
+
+  reftest:chrome:
+    desc: "The WPT reftests marked chrome in the same list, ember's picture of each held to headless Chrome's (needs Chrome too); 1 to 2 seconds a test, about two hours for the whole list as Chrome starts once a page"
+    cmds: [go test -tags 'chrome gpu' -run ReftestsMatchChrome -count=1 -timeout 0 ./ui/internal/reftest]
+
+  reftest:survey:
+    desc: "Every WPT reftest of the CSS directories drawn by ember and decided, a summary ranked by property in OUT (default the temp folder's ember-reftests): go run ./ui/internal/reftest/run -h for its flags"
+    vars:
+      OUT: '{{.OUT | default (print (coalesce (env "TMPDIR") (env "TEMP") "/tmp") "/ember-reftests")}}'
+    cmds: ["go run ./ui/internal/reftest/run -out '{{.OUT}}'"]
+
   test:chrome:
-    desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome, from EMBER_CHROME on other systems than macOS, task wgpu and a GPU). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
+    desc: 'Every ui Chrome suite, pixel page and kit card against its threshold (needs Chrome: EMBER_CHROME, else task chrome''s, else the system''s on macOS; task wgpu and a GPU). The suites run in SHARDS shards at once (default: the Chrome slots, EMBER_CHROME_SLOTS or half the CPUs), each a go test per package, JOBS of them at once (default SHARDS); ONLY=i runs shard i alone, as CI''s jobs do; SPLIT names the tests whose subtests spread over the shards (chrome.Shard). Reports, report.json and summary.md go to EMBER_CHROME_REPORTS (a temp folder otherwise); the table is printed last; DOCS=1 also fills docs/05-ui'
     vars:
       REPORT: '{{.EMBER_CHROME_REPORTS | default (print (coalesce (env "TMPDIR") (env "TEMP") "/tmp") "/ember-ui-report")}}'
+      SPLIT: '{{.SPLIT | default "TestPagesLookLikeChrome,TestPagesDrawAndHitTheSameCulled"}}'
     cmds:
       - go run ./ui/internal/parity -dir '{{.REPORT}}' -reset
       - |
         tests=0; table=0
-        EMBER_UI_RESULTS='{{.REPORT}}' EMBER_UI_REPORTS='{{.REPORT}}' go test -tags 'chrome gpu' -p 2 -count=1 -timeout 90m ./ui/... || tests=1
+        EMBER_UI_RESULTS='{{.REPORT}}' EMBER_UI_REPORTS='{{.REPORT}}' go run ./ui/internal/shard/run -tags 'chrome gpu' -timeout 40m -split '{{.SPLIT}}' {{if .SHARDS}}-shards {{.SHARDS}}{{end}} {{if .ONLY}}-only {{.ONLY}}{{end}} {{if .JOBS}}-p {{.JOBS}}{{end}} -json '{{.REPORT}}/tests.jsonl' ./ui/... || tests=1
         go run ./ui/internal/parity -dir '{{.REPORT}}' -json '{{.REPORT}}/report.json' -summary '{{.REPORT}}/summary.md' {{if .DOCS}}-docs docs/05-ui{{end}} || table=1
         exit $(( tests || table ))
 

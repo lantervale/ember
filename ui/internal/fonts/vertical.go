@@ -119,6 +119,8 @@ func (s *Set) Upright(f style.Font, text string) (float32, float32, bool) {
 		c = nil
 		if fb := s.Fallback(); fb != nil && s.hasGlyph(fb, r) {
 			c = fb
+		} else if sc, _ := s.systemGlyph(f, r); sc != nil {
+			c = sc
 		}
 	}
 	if c == nil {

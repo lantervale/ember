@@ -214,6 +214,8 @@ type oofCandidate struct {
 	area *oofArea
 	// inline is set when its place is among lines, not between blocks.
 	inline bool
+	// cb is the containing block laying it out, nil for the initial one.
+	cb *node
 }
 
 func translateCandidates(cs []oofCandidate, offset point) []oofCandidate {

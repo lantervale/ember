@@ -504,6 +504,8 @@ type chainKey struct {
 	stretch   float32
 	synthesis style.FontSynthesis
 	palette   string
+	// locale is the language's, which picks the machine's faces.
+	locale locale
 }
 
 //nolint:gochecknoglobals // the seed every chain key is hashed with
@@ -522,7 +524,7 @@ func keyOf(f style.Font) chainKey {
 		h.WriteByte(1)
 	}
 	return chainKey{families: h.Sum64(), n: len(f.Family), weight: int(f.Weight), italic: f.Italic,
-		stretch: f.Stretch, synthesis: f.Synthesis, palette: f.Palette}
+		stretch: f.Stretch, synthesis: f.Synthesis, palette: f.Palette, locale: localeOf(f.Lang)}
 }
 
 // Chain is the faces f draws with.
@@ -661,6 +663,11 @@ func (ch *Chain) glyph(s *Set, r rune) (*Face, sfnt.GlyphIndex, bool) {
 			continue
 		}
 		if g, err := c.font.GlyphIndex(&s.buf, r); err == nil && g != 0 {
+			return c, g, false
+		}
+	}
+	if !waiting {
+		if c, g := s.systemGlyph(ch.font, r); c != nil {
 			return c, g, false
 		}
 	}

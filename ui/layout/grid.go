@@ -264,6 +264,7 @@ func (t *tree) grid(n *node, in input) output {
 		if self == style.AlignAuto {
 			self = alignItems
 		}
+		self, justify = sided(self, k, n, vertical), sided(justify, k, n, horizontal)
 		var area rect
 		if claimsHere.take(k.st.Position) {
 			area = staticGridArea(colLines, rowLines, k.st, finalRows, finalCols, rows, columns, border, ge, borderBox)

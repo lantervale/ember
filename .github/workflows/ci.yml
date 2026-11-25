@@ -2,7 +2,8 @@
 # GPU-free tests, the GPU tests on a software adapter where the runner has
 # no GPU (lavapipe on Linux, WARP on Windows; skipped, saying so, when a
 # macOS runner's Metal is out of reach), the ui pages against a pinned
-# Chrome, and every example built for the browser and run in Chrome;
+# Chrome in shards, one job each, and every example built for the browser
+# and run in Chrome;
 # golangci-lint on the whole tree, on each OS and on the browser's build;
 # and a scan for leaked secrets.
 name: CI
@@ -19,12 +20,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  # The Chrome the ui pages are checked against: the Chrome for Testing
-  # build next to the one the thresholds were measured with (156.0.8078.79,
-  # which Chrome for Testing doesn't publish).
-  CHROME_VERSION: 156.0.8078.80
 
 jobs:
   test:
@@ -74,7 +69,6 @@ jobs:
         run: |
           {
             echo "EMBER_TILESET_DIR=$RUNNER_TEMP/tileset"
-            echo "EMBER_CHROME_REPORTS=$RUNNER_TEMP/chrome-reports"
             case "${{ matrix.gpu }}" in
               lavapipe | warp) echo "EMBER_WGPU_FALLBACK=1" ;;
               metal) echo "EMBER_GPU_OPTIONAL=1" ;;
@@ -100,6 +94,72 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
 
+  # The ui Chrome suites, pixel pages and kit cards, split into five
+  # shards (task test:chrome, ui/internal/shard), one job each: two
+  # Chromes at once on Linux and Windows, one on a macOS runner, whose
+  # three cores leave a second Chrome's pages late.
+  chrome:
+    name: chrome ${{ matrix.os }} ${{ matrix.shard }}/5
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        shard: [0, 1, 2, 3, 4]
+        include:
+          - os: ubuntu-latest
+            gpu: lavapipe
+            run: xvfb-run -a
+            chromes: "2"
+          - os: macos-latest
+            gpu: metal
+            run: ""
+            chromes: "1"
+          - os: windows-latest
+            gpu: warp
+            run: ""
+            chromes: "2"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      EMBER_CHROME_SLOTS: ${{ matrix.chromes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Linux libraries (GLFW's X11 and Wayland headers, ALSA, Vulkan with lavapipe, Xvfb)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
+            libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev \
+            libvulkan-dev mesa-vulkan-drivers xvfb
+
+      - name: Tool settings and reports in the runner's temp
+        run: |
+          {
+            echo "EMBER_CHROME_REPORTS=$RUNNER_TEMP/chrome-reports"
+            echo "CHROME_VERSION=$(tr -d '[:space:]' < ui/internal/chrome/VERSION)"
+            case "${{ matrix.gpu }}" in
+              lavapipe | warp) echo "EMBER_WGPU_FALLBACK=1" ;;
+              metal) echo "EMBER_GPU_OPTIONAL=1" ;;
+            esac
+          } >> "$GITHUB_ENV"
+
+      - name: wgpu-native
+        run: task wgpu
+
       - uses: browser-actions/setup-chrome@v1
         id: chrome
         with:
@@ -111,14 +171,14 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: ui pages against Chrome ${{ env.CHROME_VERSION }}
+      - name: ui pages against Chrome ${{ env.CHROME_VERSION }}, shard ${{ matrix.shard }} of 5
         env:
           EMBER_CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           status=0
-          ${{ matrix.run }} task test:chrome || status=$?
+          ${{ matrix.run }} task test:chrome SHARDS=5 ONLY=${{ matrix.shard }} JOBS=${{ matrix.chromes }} || status=$?
           {
-            echo "### ui against Chrome $CHROME_VERSION on ${{ matrix.os }}"
+            echo "### ui against Chrome $CHROME_VERSION on ${{ matrix.os }}, shard ${{ matrix.shard }} of 5"
             cat "$EMBER_CHROME_REPORTS/summary.md" 2>/dev/null || echo "no summary.md: the pages didn't run"
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status
@@ -127,7 +187,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chrome-reports-${{ matrix.os }}
+          name: chrome-reports-${{ matrix.os }}-${{ matrix.shard }}
           path: ${{ env.EMBER_CHROME_REPORTS }}
           if-no-files-found: ignore
 
@@ -153,6 +213,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxxf86vm-dev \
             libgl1-mesa-dev libwayland-dev libxkbcommon-dev libasound2-dev libvulkan-dev mesa-vulkan-drivers
+
+      - name: The Chrome for Testing ui is checked against (ui/internal/chrome/VERSION)
+        run: echo "CHROME_VERSION=$(tr -d '[:space:]' < ui/internal/chrome/VERSION)" >> "$GITHUB_ENV"
 
       - uses: browser-actions/setup-chrome@v1
         id: chrome

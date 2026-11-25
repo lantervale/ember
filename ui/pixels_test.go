@@ -156,6 +156,7 @@ func TestPagesLookLikeChrome(t *testing.T) {
 		{"./internal/pages/vertical-root", 400, 240, 0.004},
 	} {
 		t.Run(c.pkg, func(t *testing.T) {
+			chrome.Shard(t)
 			if c.pkg == "./internal/pages/img-crisp-animated" && runtime.GOOS == "windows" {
 				// Headless Chrome on a Windows runner shoots some runs before
 				// the GIF's first 20 ms frame turns, its virtual time budget
@@ -163,24 +164,27 @@ func TestPagesLookLikeChrome(t *testing.T) {
 				// (docs/05-ui/10-missing.md).
 				t.Skip("Chrome on Windows may shoot the animated GIF still on its first frame")
 			}
-			if major, why := pageSince(c.pkg); major > 0 {
-				chrome.Since(t, major, why)
+			if why := unlikePinned(c.pkg); why != "" {
+				chrome.UnlikePinned(t, why)
 			}
 			chrome.Within(t, c.pkg, c.w, c.h, c.mean)
 		})
 	}
 }
 
-// pageSince is the Chrome version from which a page draws as ui does,
-// and what changed then; none for a page every version draws alike.
-func pageSince(pkg string) (int, string) {
+// unlikePinned is how the pinned Chrome for Testing draws a page unlike
+// the stable Chrome ui follows (158.0.8127.37 on a Mac); empty for a page
+// both draw alike.
+func unlikePinned(pkg string) string {
 	switch pkg {
 	case "./internal/pages/scrollbar-gutter":
-		return 158, "scrollbar-color's bars lie over the content, and a short styled thumb is at least 26 points long"
+		return "scrollbar-color's bars take room, and a short styled thumb is shorter than 26 points"
 	case "./internal/pages/scrollbar-buttons", "./internal/pages/scrollbar-resizer":
-		return 157, "a short styled thumb is at least 26 points long"
+		return "a short styled thumb is shorter than 26 points"
+	case "./internal/pages/ico-bmp":
+		return "ICO and BMP pictures are drawn otherwise"
 	}
-	return 0, ""
+	return ""
 }
 
 // TestFlaggedPagesLookLikeChrome is TestPagesLookLikeChrome for pages of
