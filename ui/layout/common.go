@@ -14,6 +14,33 @@ type alignment struct {
 	unsafe  bool
 }
 
+// sided is k, the self-alignment of item in container along a, the container's inline
+// axis (horizontal) or block axis (vertical), with its side resolved: self-start and
+// self-end are the container's start or end where item's own start or end stands, left
+// and right its start or end where the line's left or right does. A container of nil is
+// the initial containing block.
+func sided(k style.Align, item, container *node, a axis) style.Align {
+	pos, rest := k.Position(), k&(style.AlignSafe|style.AlignUnsafe)
+	if pos != style.AlignStart && pos != style.AlignEnd {
+		return k.Position() | rest
+	}
+	outer := gridFrame{mode: style.HorizontalTB}
+	if container != nil {
+		outer = frameOfGrid(container)
+	}
+	flip := false
+	switch {
+	case k.LineSide():
+		flip = outer.rtl
+	case k.OwnSide():
+		_, flip = frameOfGrid(item).from(outer, a)
+	}
+	if flip {
+		pos = style.AlignStart + style.AlignEnd - pos
+	}
+	return pos | rest
+}
+
 // align is k's position and its overflow position.
 func align(k style.Align) alignment {
 	return alignment{keyword: k.Position(), safe: k.Safe(), unsafe: k.Unsafe()}

@@ -55,6 +55,7 @@ func newGridItem(n *node, alignItems, justifyItems style.Align, order int) *grid
 	if justify == style.AlignAuto {
 		justify = justifyItems
 	}
+	self, justify = sided(self, n, n.parent, vertical), sided(justify, n, n.parent, horizontal)
 	if n.replaced {
 		// A replaced box keeps its own size where it isn't told to stretch, CSS Box
 		// Alignment §6.1.
