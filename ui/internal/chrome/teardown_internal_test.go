@@ -31,14 +31,22 @@ func TestMain(m *testing.M) {
 // the file mode names, then dies at teardown as Chrome's watchdog makes it
 // on a loaded Mac; mode "broken" fails outright.
 func fakeChromeMain(mode string, args []string) int {
+	if said, ok := strings.CutPrefix(mode, "version:"); ok {
+		fmt.Fprintln(os.Stdout, said)
+		return 0
+	}
 	if mode == "broken" {
 		fmt.Fprintln(os.Stderr, "crashed before drawing")
 		return 2
 	}
+	if log := os.Getenv("EMBER_FAKE_CHROME_LOG"); log != "" {
+		logRun(log, args)
+	}
 	for _, a := range args {
 		switch {
 		case a == dumpDOM:
-			fmt.Fprintln(os.Stdout, "<html><body>done</body></html>")
+			fmt.Fprintln(os.Stdout, `<html><head><script type="application/json" id="ember-eval">`+
+				`"HeadlessChrome/158.0.8127.88"</script></head><body>done</body></html>`)
 		case strings.HasPrefix(a, "--screenshot="):
 			shot, err := os.ReadFile(mode)
 			if err != nil {
