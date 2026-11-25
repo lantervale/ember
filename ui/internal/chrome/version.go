@@ -4,9 +4,13 @@ package chrome
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -14,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui"
@@ -33,7 +38,6 @@ var known struct {
 	sync.Mutex
 	set   bool
 	major int
-	agent string
 	err   error
 }
 
@@ -44,7 +48,6 @@ func knowAgent(agent string) {
 	defer known.Unlock()
 	if !known.set {
 		known.major, known.err = majorOf(agent)
-		known.agent = agent
 		known.set = true
 	}
 }
@@ -128,18 +131,41 @@ func Since(t testing.TB, major int, why string) {
 }
 
 // Pinned reports whether the Chrome the tests run against is the Chrome
-// for Testing build CI pins (VERSION), as its user agent says.
+// for Testing build CI pins (VERSION): a page's user agent gives no more
+// than the major version, so the executable is asked, once.
 func Pinned() (bool, error) {
-	if _, err := Version(); err != nil {
-		return false, err
+	pinnedState.Lock()
+	defer pinnedState.Unlock()
+	if !pinnedState.asked {
+		pinnedState.on, pinnedState.err = isPinned(browser())
+		pinnedState.asked = true
 	}
-	known.Lock()
-	defer known.Unlock()
-	return pinnedAgent(known.agent), nil
+	return pinnedState.on, pinnedState.err
 }
 
-func pinnedAgent(agent string) bool {
-	return strings.Contains(agent, "Chrome/"+strings.TrimSpace(pinned)+" ")
+//nolint:gochecknoglobals // one Chrome per process, asked once
+var pinnedState struct {
+	sync.Mutex
+	asked, on bool
+	err       error
+}
+
+// isPinned reports whether the Chrome at exe is the pinned build: its
+// --version says so, or, on Windows, where it prints nothing, the folder
+// of its resources beside it is named by the version.
+func isPinned(exe string) (bool, error) {
+	v := strings.TrimSpace(pinned)
+	if info, err := os.Stat(filepath.Join(filepath.Dir(exe), v)); err == nil && info.IsDir() {
+		return true, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, exe, "--version").Output()
+	if err != nil {
+		return false, fmt.Errorf("chrome: %s --version: %w", exe, err)
+	}
+	said := strings.Fields(string(out))
+	return strings.Contains(string(out), "Chrome for Testing ") && slices.Contains(said, v), nil
 }
 
 // UnlikePinned skips t on the pinned Chrome for Testing build on systems

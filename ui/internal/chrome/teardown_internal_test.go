@@ -31,6 +31,10 @@ func TestMain(m *testing.M) {
 // the file mode names, then dies at teardown as Chrome's watchdog makes it
 // on a loaded Mac; mode "broken" fails outright.
 func fakeChromeMain(mode string, args []string) int {
+	if said, ok := strings.CutPrefix(mode, "version:"); ok {
+		fmt.Fprintln(os.Stdout, said)
+		return 0
+	}
 	if mode == "broken" {
 		fmt.Fprintln(os.Stderr, "crashed before drawing")
 		return 2

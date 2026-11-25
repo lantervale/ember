@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/geom"
 )
@@ -42,28 +45,58 @@ func TestVersionIsTheBrowsers(t *testing.T) {
 func forget(t *testing.T) {
 	t.Helper()
 	known.Lock()
-	set, major, agent, err := known.set, known.major, known.agent, known.err
-	known.set, known.major, known.agent, known.err = false, 0, "", nil
+	set, major, err := known.set, known.major, known.err
+	known.set, known.major, known.err = false, 0, nil
 	known.Unlock()
 	t.Cleanup(func() {
 		known.Lock()
-		known.set, known.major, known.agent, known.err = set, major, agent, err
+		known.set, known.major, known.err = set, major, err
 		known.Unlock()
 	})
 }
 
-func TestThePinnedChromeIsToldByItsUserAgent(t *testing.T) {
+// pinAs has Pinned answer on until t ends.
+func pinAs(t *testing.T, on bool) {
+	t.Helper()
+	pinnedState.Lock()
+	asked, was, err := pinnedState.asked, pinnedState.on, pinnedState.err
+	pinnedState.asked, pinnedState.on, pinnedState.err = true, on, nil
+	pinnedState.Unlock()
+	t.Cleanup(func() {
+		pinnedState.Lock()
+		pinnedState.asked, pinnedState.on, pinnedState.err = asked, was, err
+		pinnedState.Unlock()
+	})
+}
+
+// The pinned build is told by its executable: a page's user agent says
+// 158.0.0.0 of every 158.
+func TestThePinnedChromeIsToldByItsExecutable(t *testing.T) {
 	v := strings.TrimSpace(pinned)
-	assert.True(t, pinnedAgent("Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/"+v+
-		" Safari/537.36"))
-	assert.False(t, pinnedAgent("Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/"+v+
-		"1 Safari/537.36"))
-	assert.False(t, pinnedAgent("Mozilla/5.0 (X11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"))
+	self, err := os.Executable()
+	require.NoError(t, err)
+	for said, want := range map[string]bool{
+		"Google Chrome for Testing " + v:       true,
+		"Google Chrome for Testing " + v + "1": false,
+		"Google Chrome 158.0.8127.37":          false,
+	} {
+		t.Setenv("EMBER_FAKE_CHROME", "version:"+said)
+		got, askErr := isPinned(self)
+		require.NoError(t, askErr)
+		assert.Equal(t, want, got, said)
+	}
+
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "chrome.exe")
+	require.NoError(t, os.WriteFile(exe, nil, 0o600))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, v), 0o750))
+	got, err := isPinned(exe)
+	require.NoError(t, err)
+	assert.True(t, got, "Windows' chrome.exe beside its version's folder")
 }
 
 func TestOnlyThePinnedChromeSkipsWhatItDrawsUnlike(t *testing.T) {
-	forget(t)
-	knowAgent("Mozilla/5.0 HeadlessChrome/" + strings.TrimSpace(pinned) + " Safari/537.36")
+	pinAs(t, true)
 	skipped := false
 	t.Run("pinned, this system", func(t *testing.T) {
 		t.Cleanup(func() { skipped = t.Skipped() })
@@ -76,8 +109,7 @@ func TestOnlyThePinnedChromeSkipsWhatItDrawsUnlike(t *testing.T) {
 	})
 	assert.False(t, skipped)
 
-	forget(t)
-	knowAgent("Mozilla/5.0 HeadlessChrome/158.0.8127.37 Safari/537.36")
+	pinAs(t, false)
 	t.Run("stable", func(t *testing.T) {
 		t.Cleanup(func() { skipped = t.Skipped() })
 		UnlikePinned(t, "draws it otherwise")
