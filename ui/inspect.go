@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"math"
+	"strconv"
+	"strings"
+
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/css"
 	"github.com/lantervale/ember/ui/internal/dom"
@@ -37,9 +41,66 @@ func (d *Document) ComputedStyle(n *Node) []css.Property {
 // ComputedValue is one property of ComputedStyle, false for a name that
 // is no longhand of the subset or custom property of n. A property that
 // does not inherit costs the cascade of n alone.
+//
+// grid-template-columns and grid-template-rows of a grid container laid
+// out are its tracks as the last layout sized them, implicit ones too, in
+// px with the names its track list gives their lines, as Chrome's
+// getComputedStyle resolves them.
 func (d *Document) ComputedValue(n *Node, name string) (string, bool) {
 	d.restyleFor(n)
+	if name == "grid-template-columns" || name == "grid-template-rows" {
+		if v, ok := d.resolvedTracks(n, name == "grid-template-columns"); ok {
+			return v, true
+		}
+	}
 	return d.trans.ComputedValue(n, name)
+}
+
+// resolvedTracks is the used value of a laid out grid container's columns or rows; false
+// for any other element, and for a subgrid's axis.
+func (d *Document) resolvedTracks(n *Node, columns bool) (string, bool) {
+	if d.tree == nil {
+		return "", false
+	}
+	b := d.tree.Of[n]
+	if b == nil || b.Grid == nil || b.Style == nil {
+		return "", false
+	}
+	axis := b.Grid.Rows
+	if columns {
+		if b.Style.Subgrid.Width {
+			return "", false
+		}
+		axis = b.Grid.Columns
+	} else if b.Style.Subgrid.Height {
+		return "", false
+	}
+	if len(axis.Sizes) == 0 {
+		return "none", true
+	}
+	var parts []string
+	names := func(line int) {
+		if i := line - axis.Implicit; i >= 0 && i < len(axis.Names) && len(axis.Names[i]) > 0 {
+			parts = append(parts, "["+strings.Join(axis.Names[i], " ")+"]")
+		}
+	}
+	for i, size := range axis.Sizes {
+		names(i)
+		parts = append(parts, trackPixels(size))
+	}
+	names(len(axis.Sizes))
+	return strings.Join(parts, " "), true
+}
+
+// trackPixels writes a track's size as Chrome does: in its 1/64 px layout units, to six
+// significant digits.
+func trackPixels(size float32) string {
+	v := math.Floor(float64(size)*64+0.01) / 64
+	s := strconv.FormatFloat(v, 'g', 6, 64)
+	if strings.Contains(s, "e") {
+		s = strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return s + "px"
 }
 
 // restyleFor works the styles out again before the frame does when n,

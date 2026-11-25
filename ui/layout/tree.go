@@ -1215,6 +1215,10 @@ func (t *tree) writeIn(n *node, parent *node, placed bool) {
 	b.Wrap = box.Edges{Top: n.captionRoom[0], Bottom: n.captionRoom[1]}
 	b.Cut = n.cut
 	b.Discarded = n.discarded
+	b.Grid = nil
+	if g := n.grid; g != nil && (n.st.Display == style.GridDisplay || n.st.Display == style.InlineGrid) {
+		b.Grid = &box.GridTracks{Columns: g.columns.tracks(), Rows: g.rows.tracks()}
+	}
 	if n.frag != nil || n.columns != nil || b.Broken || b.Columns != nil {
 		n.writeColumns()
 		turnBroken(b, framed, in, outer)

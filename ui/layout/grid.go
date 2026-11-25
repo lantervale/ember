@@ -3,6 +3,7 @@ package layout
 import (
 	"slices"
 
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
 )
 
@@ -637,6 +638,8 @@ type gridAxisInfo struct {
 	lines     gridLines
 	counts    trackCounts
 	positions []span
+	// sizes are every track's, a collapsed one's zero.
+	sizes     []float32
 	collapsed [][2]int
 	emptyLine float32
 }
@@ -664,6 +667,7 @@ func newGridAxisInfo(lines gridLines, counts trackCounts, tracks []gridTrack) gr
 			}
 		}
 		info.positions = append(info.positions, span{tr.offset, tr.offset + tr.baseSize})
+		info.sizes = append(info.sizes, tr.baseSize)
 	}
 	if len(info.positions) == 0 && len(tracks) > 0 {
 		info.emptyLine = tracks[0].offset
@@ -677,6 +681,11 @@ func newGridInfo(colLines gridLines, colCounts trackCounts, columns []gridTrack,
 		columns: newGridAxisInfo(colLines, colCounts, columns),
 		rows:    newGridAxisInfo(rowLines, rowCounts, rows),
 	}
+}
+
+// tracks is the axis as a box reports it.
+func (g *gridAxisInfo) tracks() box.GridAxis {
+	return box.GridAxis{Sizes: g.sizes, Implicit: g.counts.negative, Names: g.lines.listed}
 }
 
 func (g *gridInfo) axis(a axis) *gridAxisInfo {

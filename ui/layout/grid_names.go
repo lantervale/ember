@@ -11,11 +11,19 @@ import (
 type gridLines struct {
 	explicit int
 	named    map[string][]int
+	// listed are the names its track list gives each line, in its order.
+	listed [][]string
 }
 
 func (g *gridLines) add(line int, names []string) {
 	if line > g.explicit {
 		return
+	}
+	if len(names) > 0 {
+		for len(g.listed) <= line {
+			g.listed = append(g.listed, nil)
+		}
+		g.listed[line] = append(g.listed[line], names...)
 	}
 	for _, n := range names {
 		if g.named == nil {
