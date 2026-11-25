@@ -2069,9 +2069,9 @@ var props = func() map[string]prop {
 		"flex-direction": keyword(func(c *style.Computed) *style.FlexDirection { return &c.Direction },
 			map[string]style.FlexDirection{"row": style.Row, "row-reverse": style.RowReverse,
 				"column": style.Column, "column-reverse": style.ColumnReverse}),
-		"flex-wrap": keyword(func(c *style.Computed) *style.FlexWrap { return &c.Wrap }, map[string]style.FlexWrap{
-			"nowrap": style.NoWrap, "wrap": style.Wrap, "wrap-reverse": style.WrapReverse,
-		}),
+		propFlexWrap: field(func(c *style.Computed) *style.FlexWrap { return &c.Wrap }, flexWrapOf, flips[style.FlexWrap]()),
+		propFlexLineCount: field(func(c *style.Computed) *int { return &c.LineCount },
+			lineCountOf, integers(1)),
 		"flex-grow": field(func(c *style.Computed) *float32 { return &c.Grow },
 			func(x *ctx, v []Component) float32 { return x.num(v[0]) }, numbers(0, math.MaxFloat32)),
 		"flex-shrink": field(func(c *style.Computed) *float32 { return &c.Shrink },

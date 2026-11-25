@@ -166,9 +166,12 @@ type flexLine struct {
 }
 
 type flexConstants struct {
-	dir                     flexDir
-	isRow, isColumn         bool
-	isWrap, isWrapReverse   bool
+	dir                   flexDir
+	isRow, isColumn       bool
+	isWrap, isWrapReverse bool
+	// balance is flex-wrap: balance, and lineCount flex-line-count.
+	balance                 bool
+	lineCount               int
 	minSize, maxSize        size
 	border                  rect
 	contentBoxInset         rect
@@ -201,6 +204,17 @@ func (c *flexConstants) scrollOriginReversed() [2]bool {
 		return [2]bool{cross, main}
 	}
 	return [2]bool{main, cross}
+}
+
+// lineRoom is the room across a line of a balanced container with v across it all: v
+// less the gaps between flex-line-count lines, shared among them. Chrome leaves the
+// room of a container that wraps without balancing whole, whatever its line count.
+func (c *flexConstants) lineRoom(v float32) float32 {
+	if !c.balance || c.lineCount <= 1 {
+		return v
+	}
+	n := float32(c.lineCount)
+	return fmax((v-(n-1)*c.gap.get(c.dir.cross()))/n, 0)
 }
 
 func normalToStretch(a style.Align) style.Align {
@@ -431,7 +445,9 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 		isRow:                   d.isRow(),
 		isColumn:                d.isColumn(),
 		isWrap:                  st.Wrap != style.NoWrap,
-		isWrapReverse:           st.Wrap == style.WrapReverse,
+		isWrapReverse:           st.Wrap.Reverse(),
+		balance:                 st.Wrap.Balance(),
+		lineCount:               max(st.LineCount, 1),
 		minSize:                 transferred(resolveSize(st.MinSize, parent), ratio, known).mAdd(adj),
 		maxSize:                 transferred(resolveMax(st.MaxSize, parent), ratio, known).mAdd(adj),
 		border:                  border,
@@ -571,7 +587,7 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 		var crossAvail space
 		switch a := avail.get(d.cross()); a.kind {
 		case definite:
-			crossAvail = def(mClamp(fmax(or(crossParent, a.v)-d.crossSum(it.margin), 0), minCross, maxCross))
+			crossAvail = def(mClamp(fmax(c.lineRoom(or(crossParent, a.v))-d.crossSum(it.margin), 0), minCross, maxCross))
 		case minContent:
 			crossAvail = spaceOr(minCross, minContentSpace)
 		case maxContent:
@@ -748,6 +764,9 @@ func collectFlexLines(c *flexConstants, avail spaces, items []*flexItem) []*flex
 	}
 	switch mainAvail.kind {
 	case maxContent:
+		if c.balance && c.lineCount > 1 {
+			return shortestLines(items, outerMainSizes(c, items), mainGap(c), min(c.lineCount, len(items)))
+		}
 		return []*flexLine{{items: items}}
 	case minContent:
 		lines := make([]*flexLine, 0, len(items))
@@ -756,6 +775,11 @@ func collectFlexLines(c *flexConstants, avail spaces, items []*flexItem) []*flex
 		}
 		return lines
 	case definite:
+	}
+	if c.balance {
+		sizes := outerMainSizes(c, items)
+		count := len(greedyLines(items, sizes, mainGap(c), mainAvail.v))
+		return balancedLines(items, sizes, mainGap(c), mainAvail.v, max(count, min(c.lineCount, len(items))))
 	}
 	var lines []*flexLine
 	gap := c.gap.get(d.main())
@@ -776,6 +800,126 @@ func collectFlexLines(c *flexConstants, avail spaces, items []*flexItem) []*flex
 		}
 		lines = append(lines, &flexLine{items: rest[:index]})
 		rest = rest[index:]
+	}
+	return lines
+}
+
+// mainGap is the gap between items along a line.
+func mainGap(c *flexConstants) float32 { return c.gap.get(c.dir.main()) }
+
+// outerMainSizes are the items' outer hypothetical main sizes, floored at 0, as
+// balancing measures them.
+func outerMainSizes(c *flexConstants, items []*flexItem) []float64 {
+	sizes := make([]float64, len(items))
+	for i, it := range items {
+		sizes[i] = float64(fmax(it.hypotheticalOuterSize.get(c.dir.main()), 0))
+	}
+	return sizes
+}
+
+// greedyLines fills each line in turn with what fits in avail.
+func greedyLines(items []*flexItem, sizes []float64, gap, avail float32) []*flexLine {
+	var lines []*flexLine
+	for start := 0; start < len(items); {
+		end, length := start+1, sizes[start]
+		for end < len(items) && length+float64(gap)+sizes[end] <= float64(avail) {
+			length += float64(gap) + sizes[end]
+			end++
+		}
+		lines = append(lines, &flexLine{items: items[start:end]})
+		start = end
+	}
+	return lines
+}
+
+// balanceTie is how close two errors are to be the same.
+const balanceTie = 1e-9
+
+// balancedLines divides items into count lines, CSS Flexbox 2 §9.7: none longer than
+// avail but an item alone, a zero-sized item at the end of the line before it where it
+// fits there, and the squares of what each line leaves of avail the least they can sum
+// to, ties going to the partition with the most items on its first line, then its second.
+func balancedLines(items []*flexItem, sizes []float64, gap, avail float32, count int) []*flexLine {
+	if lines := partition(sizes, gap, count, func(length float64, n, next int) (float64, bool) {
+		if length > float64(avail) && n > 1 {
+			return 0, false
+		}
+		if next < len(sizes) && sizes[next] == 0 && length+float64(gap) <= float64(avail) {
+			return 0, false
+		}
+		e := float64(avail) - length
+		return e * e, true
+	}, func(a, b float64) float64 { return a + b }); lines != nil {
+		return cut(items, lines)
+	}
+	return greedyLines(items, sizes, gap, avail)
+}
+
+// shortestLines divides items into count lines with the longest of them the shortest
+// it can be, ties going to the most items on the first line, then the second: the lines
+// of a balanced flex container with room for any.
+func shortestLines(items []*flexItem, sizes []float64, gap float32, count int) []*flexLine {
+	return cut(items, partition(sizes, gap, count, func(length float64, _, _ int) (float64, bool) {
+		return length, true
+	}, math.Max))
+}
+
+// partition is where each of count lines of sizes ends, the lines' costs combined the
+// least they can be: a line's cost is that of its length, its number of items and the
+// index of the item after it, false where it may not be. Nil when no partition may be.
+func partition(sizes []float64, gap float32, count int, cost func(length float64, n, next int) (float64, bool),
+	combine func(a, b float64) float64) []int {
+	n := len(sizes)
+	inf := math.Inf(1)
+	// best[l][i] is the least cost of items i… in l lines, first[l][i] where its first line ends.
+	best := make([][]float64, count+1)
+	first := make([][]int, count+1)
+	for l := range best {
+		best[l], first[l] = make([]float64, n+1), make([]int, n+1)
+		for i := range best[l] {
+			best[l][i] = inf
+		}
+	}
+	best[0][n] = 0
+	for l := 1; l <= count; l++ {
+		for i := n - l; i >= 0; i-- {
+			length := -float64(gap)
+			for j := i + 1; j <= n-l+1; j++ {
+				length += float64(gap) + sizes[j-1]
+				rest := best[l-1][j]
+				if math.IsInf(rest, 1) {
+					continue
+				}
+				c, ok := cost(length, j-i, j)
+				if !ok {
+					continue
+				}
+				if total := combine(c, rest); total <= best[l][i]+balanceTie*fmax64(1, math.Abs(total)) {
+					best[l][i], first[l][i] = total, j
+				}
+			}
+		}
+	}
+	if math.IsInf(best[count][0], 1) {
+		return nil
+	}
+	ends := make([]int, 0, count)
+	for l, i := count, 0; l > 0; l-- {
+		i = first[l][i]
+		ends = append(ends, i)
+	}
+	return ends
+}
+
+func fmax64(a, b float64) float64 { return math.Max(a, b) }
+
+// cut makes the lines of items that end at ends.
+func cut(items []*flexItem, ends []int) []*flexLine {
+	lines := make([]*flexLine, 0, len(ends))
+	start := 0
+	for _, end := range ends {
+		lines = append(lines, &flexLine{items: items[start:end]})
+		start = end
 	}
 	return lines
 }
@@ -812,6 +956,27 @@ func minContentMainSize(lines []*flexLine, c *flexConstants) float32 {
 	return total
 }
 
+// balancedMaxContent is the max-content main size of a balanced container with a line
+// count: the longest of its items' lines when they are as short as that many can be.
+func balancedMaxContent(lines []*flexLine, c *flexConstants) float32 {
+	var items []*flexItem
+	for _, l := range lines {
+		items = append(items, l.items...)
+	}
+	if len(items) == 0 {
+		return 0
+	}
+	longest := float32(0)
+	for _, l := range shortestLines(items, outerMainSizes(c, items), mainGap(c), min(c.lineCount, len(items))) {
+		length := sumAxisGaps(mainGap(c), len(l.items))
+		for _, it := range l.items {
+			length += fmax(it.hypotheticalOuterSize.get(c.dir.main()), 0)
+		}
+		longest = fmax(longest, length)
+	}
+	return longest
+}
+
 func sumAxisGaps(gap float32, items int) float32 {
 	if items <= 1 {
 		return 0
@@ -844,9 +1009,12 @@ func (t *tree) flexContainerMainSize(avail spaces, lines []*flexLine, c *flexCon
 		switch a := avail.get(d.main()); {
 		case a.kind == definite:
 			s := longestLine() + inset
-			if len(lines) > 1 {
+			switch {
+			case c.balance && c.lineCount > 1:
+				s = fmax(fmin(balancedMaxContent(lines, c), a.v), minContentMainSize(lines, c)) + inset
+			case len(lines) > 1:
 				s = fmax(s, a.v)
-			} else if c.isRow {
+			case c.isRow:
 				s = fmin(s, fmax(a.v+inset, minContentMainSize(lines, c)+inset))
 			}
 			outer = s
@@ -1103,9 +1271,9 @@ func (t *tree) hypotheticalCrossSize(l *flexLine, c *flexConstants, nodeSize siz
 			childCross = mMax(mClamp(flexed.get(d.cross())+adj.get(d.cross()), tMinCross, tMaxCross), pb)
 		}
 		availCross := avail.get(d.cross()).mapDefinite(func(v float32) float32 {
-			return fmax(v-d.crossSum(it.margin), 0)
+			return fmax(c.lineRoom(v)-d.crossSum(it.margin), 0)
 		}).mClamp(tMinCross, tMaxCross).mMax(pb)
-		stretch := fmax(mSub(c.nodeInnerSize.get(d.cross()), d.crossSum(it.margin)), 0)
+		stretch := fmax(mSub(c.lineRoom(c.nodeInnerSize.get(d.cross())), d.crossSum(it.margin)), 0)
 		if !some(c.nodeInnerSize.get(d.cross())) {
 			stretch = none
 		}
