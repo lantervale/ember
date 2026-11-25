@@ -640,7 +640,11 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 				mainAvail = def(stretch)
 			}
 			childAvail := maxContentSpaces.with(d.main(), mainAvail).with(d.cross(), crossAvail)
-			return t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
+			measured := t.measureChildSize(it.node, ckd, childParent, childAvail, contentSize, d.main(), [2]bool{})
+			if crossIsDefinite {
+				return measured
+			}
+			return it.replacedMain(d, measured)
 		}()
 		pbMain := d.mainSum(it.padding) + d.mainSum(it.border)
 		it.flexBasis = fmax(it.flexBasis, pbMain)
@@ -670,6 +674,35 @@ func (t *tree) flexBaseSizes(c *flexConstants, avail spaces, items []*flexItem) 
 		it.hypotheticalInnerSize.set(d.main(), hypInner)
 		it.hypotheticalOuterSize.set(d.main(), hypInner+d.mainSum(it.margin))
 	}
+}
+
+// replacedMain is the main size measured of a replaced item with proportions and no
+// definite cross size, made to keep the cross size they give it within its min and max
+// cross sizes, as Chrome sizes a picture: an img 20×50 with min-width: 40px is 100 tall
+// down a column.
+func (it *flexItem) replacedMain(d flexDir, measured float32) float32 {
+	r := it.aspectRatio
+	if !some(r) {
+		r = it.node.naturalRatio()
+	}
+	if !it.node.replaced || !some(r) || r <= 0 || !some(measured) {
+		return measured
+	}
+	pb := it.padding.add(it.border)
+	pbMain, pbCross := d.mainSum(pb), d.crossSum(pb)
+	main := fmax(measured-pbMain, 0)
+	cross := main / r
+	if !d.isRow() {
+		cross = main * r
+	}
+	clamped := mClamp(cross, mSub(it.minSize.get(d.cross()), pbCross), mSub(it.maxSize.get(d.cross()), pbCross))
+	if clamped == cross {
+		return measured
+	}
+	if d.isRow() {
+		return clamped*r + pbMain
+	}
+	return clamped/r + pbMain
 }
 
 // transferred is the main size an item with an aspect ratio takes from its definite
@@ -791,7 +824,7 @@ func (t *tree) flexContainerMainSize(avail spaces, lines []*flexLine, c *flexCon
 	inset := d.mainSum(c.contentBoxInset)
 	itemMainLength := func(it *flexItem) float32 {
 		pb := d.mainSum(it.padding.add(it.border))
-		return fmax(mMax(it.flexBasis, it.minSize.get(d.main())), pb) + d.mainSum(it.margin)
+		return fmax(mClamp(it.flexBasis, it.minSize.get(d.main()), it.maxSize.get(d.main())), pb) + d.mainSum(it.margin)
 	}
 	longestLine := func() float32 {
 		longest := float32(0)
@@ -884,6 +917,9 @@ func (t *tree) flexIntrinsicMainSize(avail spaces, lines []*flexLine, c *flexCon
 					ckd.set(d.cross(), crossAvail.value())
 				}
 				measured := t.measureChildSize(it.node, ckd, c.nodeInnerSize, childAvail, contentSize, d.main(), [2]bool{})
+				if !some(ckd.get(d.cross())) {
+					measured = it.replacedMain(d, measured)
+				}
 				transferred := none
 				if some(it.aspectRatio) && some(ckd.get(d.cross())) {
 					if c.isRow {
