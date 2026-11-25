@@ -114,7 +114,7 @@ func (f Font) Equal(o Font) bool {
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
 		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations) &&
-		f.Palette == o.Palette
+		f.Palette == o.Palette && f.Lang == o.Lang
 }
 
 //nolint:cyclop,gocyclo // one comparison a field

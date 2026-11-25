@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf16"
@@ -19,6 +20,11 @@ import (
 // each file's name table calls it, in any case.
 type Installed struct {
 	families map[string]*installedFamily
+	// coverOnce begins reading the cmap of every font, off the frame,
+	// which ends in byName, the families in order of their names.
+	coverOnce sync.Once
+	coverDone chan struct{}
+	byName    []*installedFamily
 }
 
 type installedFamily struct {
@@ -49,7 +55,7 @@ func SystemDirs() []string {
 	}
 	var dirs []string
 	switch runtime.GOOS {
-	case "darwin", "ios":
+	case goosDarwin, "ios":
 		dirs = []string{"/System/Library/Fonts", "/Library/Fonts", under(home, "Library", "Fonts")}
 	case "windows":
 		dirs = []string{
@@ -147,6 +153,46 @@ func (idx *Installed) family(name string) *installedFamily {
 	}
 	return idx.families[strings.ToLower(name)]
 }
+
+// covered is every family, in order of their names, once the cmap of
+// each of their fonts is read; done false while it is read, off the
+// frame, begun the first time it is asked for.
+func (idx *Installed) covered() ([]*installedFamily, bool) {
+	done := idx.coverage()
+	select {
+	case <-done:
+		return idx.byName, true
+	default:
+		return nil, false
+	}
+}
+
+// coverage is closed once every font's cmap is read.
+func (idx *Installed) coverage() chan struct{} {
+	idx.coverOnce.Do(func() {
+		idx.coverDone = make(chan struct{})
+		go func() {
+			defer close(idx.coverDone)
+			fams := make([]*installedFamily, 0, len(idx.families))
+			for _, fam := range idx.families {
+				fams = append(fams, fam)
+			}
+			slices.SortFunc(fams, func(a, b *installedFamily) int {
+				return strings.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
+			})
+			for _, fam := range fams {
+				for _, f := range fam.faces {
+					f.coverage()
+				}
+			}
+			idx.byName = fams
+		}()
+	})
+	return idx.coverDone
+}
+
+// Has reports whether the index holds family, in any case.
+func (idx *Installed) Has(family string) bool { return idx.family(family) != nil }
 
 // Families is how many families the index holds.
 func (idx *Installed) Families() int { return len(idx.families) }

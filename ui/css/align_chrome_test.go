@@ -133,7 +133,7 @@ return `+string(list)+`.map(d => {
 
 // TestAlignmentComputedValuesReadAsInChrome reads the six longhands each of
 // alignDeclarations computes to as getComputedStyle does in Chrome: first baseline is
-// baseline, flex-start and flex-end flow-start and flow-end (since Chrome 158).
+// baseline, flex-start and flex-end flow-start and flow-end.
 func TestAlignmentComputedValuesReadAsInChrome(t *testing.T) {
 	type decl struct {
 		Prop  string `json:"Prop"`
@@ -156,8 +156,6 @@ return `+string(list)+`.map(d => {
 	const cs = getComputedStyle(e);
 	return `+string(longhands)+`.map(p => cs.getPropertyValue(p));
 });`, &want)
-	version, err := chrome.Version()
-	require.NoError(t, err)
 	d := ui.NewDocument()
 	for _, dc := range decls {
 		d.Body().Append(ui.Div(ui.Style(dc.Prop + ": " + dc.Value)))
@@ -166,9 +164,6 @@ return `+string(list)+`.map(d => {
 	for i, n := range d.Body().Children() {
 		for k, p := range alignLonghands {
 			got, _ := d.ComputedValue(n, p)
-			if version < 158 && strings.Contains(got, "flow-") {
-				continue // flex-start and flex-end compute to flow-start and flow-end since Chrome 158
-			}
 			if got != want[i][k] {
 				t.Errorf("%s: %s: %s reads %q, Chrome's %q", decls[i].Prop, decls[i].Value, p, got, want[i][k])
 			}

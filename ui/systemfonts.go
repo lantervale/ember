@@ -12,15 +12,25 @@ import (
 // any case, and the file of the asked weight and style is read when it
 // is first drawn with; a family the machine lacks falls to the next name
 // of the list, as without the option. The generic families stay the
-// engine's faces. The machine's font folders are scanned once, off the
-// frame: text laid out before the scan is done shows in the next name's
-// face, then the Document lays out again. A font that can't be read is a
-// warning. Without the option a Document looks the same on every
-// machine; with it, it shows what each one has installed. Where there
-// are no files to scan, in a browser, it finds none.
+// engine's faces. A character that no face of the list has, nor the
+// engine's fallback, is drawn with an installed face that has it, as
+// Chrome asks the platform for one (decision 0227): the platform's
+// families for its script, in the text's language for Han and the
+// punctuation Chinese, Japanese and Korean share (the lang attribute,
+// else the Document's Language), serif ones under serif, the bold face
+// under a bold font, then any installed face whose cmap has it; a run of
+// one script goes to one face, so Arabic joins and CJK punctuation is
+// trimmed by that face. The machine's font folders are scanned once, off
+// the frame, and their cmaps read there too: text laid out before then
+// shows in the next name's face, or as missing glyphs, then the Document
+// lays out again. A font that can't be read is a warning, one only
+// fallen back to is passed over. Without the option a Document looks the
+// same on every machine; with it, it shows what each one has installed.
+// Where there are no files to scan, in a browser, it finds none.
 func SystemFonts() DocumentOption {
 	return func(d *Document) {
 		d.systemFonts = true
+		d.fonts.SetSystemFallback(true)
 		d.fonts.Scan(fonts.ScanSystem())
 	}
 }

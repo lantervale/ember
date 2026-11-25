@@ -227,6 +227,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0224 | [A rich copy writes Chrome's markup](0224-a-rich-copy-writes-chromes-markup.md) | api |
 | 0225 | [Letter-spacing leaves cursive scripts unspaced, and old Arabic faces join](0225-letter-spacing-leaves-cursive-scripts-unspaced-and-old-arabic-faces-join.md) | rendering |
 | 0226 | [The page keys scroll as they point, and Space along the blocks](0226-the-page-keys-scroll-as-they-point-and-space-along-the-blocks.md) | api |
+| 0227 | [What no face has falls back to the machine's faces, as Chrome asks the platform](0227-what-no-face-has-falls-back-to-the-machines-faces-as-chrome-asks-the-platform.md) | rendering |
 | 0229 | [WPT reftests run on ember against ember, and against Chrome](0229-wpt-reftests-run-on-ember-against-ember-and-against-chrome.md) | tools |
 
 ## Writing one

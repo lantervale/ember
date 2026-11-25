@@ -431,6 +431,9 @@ func (d *Document) chainFace(ch *fonts.Chain) *twod.Face {
 			faces = append(faces, tf)
 		}
 	}
+	if len(faces) > 0 {
+		faces = append(faces, d.systemFaces(ch.Font())...)
+	}
 	tf := twod.Regular()
 	if len(faces) > 0 {
 		var opts []twod.FaceOption
