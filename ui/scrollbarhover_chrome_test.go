@@ -32,7 +32,7 @@ func TestScrollbarPartsUnderTheMouseAsChromes(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if c.pkg == hover {
-				chrome.Since(t, 157, "a short styled thumb is at least 26 points long")
+				chrome.UnlikePinned(t, "a short styled thumb is shorter than 26 points")
 			}
 			mouse := fmt.Sprintf("%g,%g@0", c.at.X, c.at.Y)
 			if c.pressed {

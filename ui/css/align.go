@@ -3,6 +3,7 @@ package css
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lantervale/ember/ui/internal/style"
@@ -18,7 +19,7 @@ type alignGrammar struct {
 
 //nolint:gochecknoglobals // the grammars
 var (
-	contentPositions = []string{kwCenter, kwStart, kwEnd, "flex-start", "flex-end", "flow-start", "flow-end"}
+	contentPositions = []string{kwCenter, kwStart, kwEnd, kwFlexStart, kwFlexEnd, kwFlowStart, kwFlowEnd}
 	selfPositions    = append([]string{kwSelfStart, kwSelfEnd}, contentPositions...)
 	distributions    = []string{"space-between", "space-around", "space-evenly", kwStretch}
 	alignItems       = alignGrammar{alone: []string{kwNormal, kwStretch}, positions: selfPositions, baseline: true,
@@ -36,6 +37,10 @@ var (
 )
 
 const (
+	kwFlexStart    = "flex-start"
+	kwFlexEnd      = "flex-end"
+	kwFlowStart    = "flow-start"
+	kwFlowEnd      = "flow-end"
 	kwAnchorCenter = "anchor-center"
 	kwLegacy       = "legacy"
 	kwSelfStart    = "self-start"
@@ -94,7 +99,7 @@ func justifyContentField(get func(*style.Computed) *style.Align) prop {
 	return field(get, func(_ *ctx, v []Component) style.Align {
 		a := alignOf(v)
 		if isWord(v[len(v)-1], kwLeft, kwRight) {
-			a |= style.AlignPhysical
+			a |= style.AlignLineSide
 		}
 		return a
 	}, flips[style.Align]())
@@ -102,6 +107,23 @@ func justifyContentField(get func(*style.Computed) *style.Align) prop {
 
 func alignField(get func(*style.Computed) *style.Align) prop {
 	return field(get, func(_ *ctx, v []Component) style.Align { return alignOf(v) }, flips[style.Align]())
+}
+
+// selfAlignField is alignField for the self-alignment properties, whose self-start,
+// self-end, left and right keep the side they are taken on.
+func selfAlignField(get func(*style.Computed) *style.Align) prop {
+	return field(get, func(_ *ctx, v []Component) style.Align { return selfAlignOf(v) }, flips[style.Align]())
+}
+
+func selfAlignOf(v []Component) style.Align {
+	k := alignOf(v)
+	switch strings.ToLower(v[len(v)-1].Text) {
+	case kwSelfStart, kwSelfEnd:
+		k |= style.AlignOwnSide
+	case kwLeft, kwRight:
+		k |= style.AlignLineSide
+	}
+	return k
 }
 
 // expandPlace splits a place-* value between its two longhands, as Chrome does: the first
@@ -126,6 +148,41 @@ func expandPlace(long []string, v []Component, out map[string][]Component) error
 		return nil
 	}
 	return fmt.Errorf("not a %s value: %q", strings.Join(long, " and "), spelled(v))
+}
+
+// isAlignLonghand reports whether name is a longhand of place-items, place-content or
+// place-self.
+func isAlignLonghand(name string) bool {
+	for short, longs := range shorthands {
+		if strings.HasPrefix(short, "place-") && slices.Contains(longs, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// alignComputed is how a written value of an alignment longhand reads computed, as
+// Chrome writes it: first baseline as baseline, flex-start and flex-end as flow-start and
+// flow-end, anchor-center without an overflow position, and legacy alone as normal.
+func alignComputed(written string) string {
+	words := strings.Fields(strings.ToLower(written))
+	switch {
+	case len(words) == 2 && words[0] == "first" && words[1] == kwBaseline:
+		return kwBaseline
+	case len(words) == 2 && words[1] == kwAnchorCenter:
+		return kwAnchorCenter
+	case len(words) == 1 && words[0] == kwLegacy:
+		return kwNormal
+	}
+	for i, w := range words {
+		switch w {
+		case kwFlexStart:
+			words[i] = kwFlowStart
+		case kwFlexEnd:
+			words[i] = kwFlowEnd
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func spelled(v []Component) string {

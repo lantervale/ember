@@ -555,6 +555,13 @@ func (r *restyler) compute(n *dom.Node, parent *style.Computed, rem float32) *st
 	}
 	casc := r.m.cascade(r.m.matched(n, r.sheets, inline), parent)
 	c := initial
+	if v, ok := n.Attr("lang"); ok {
+		c.Font.Lang = v
+	} else if root {
+		c.Font.Lang = dom.Data(n).Language
+	} else {
+		c.Font.Lang = parent.Font.Lang
+	}
 	x := &ctx{c: &c, parent: parent, em: parent.Font.Size, rem: rem, env: r.env, root: root, overlay: r.overlay,
 		toViewport: r.viewport && (root || rootBody(n)), node: n}
 	if r.m.native && !x.appearance(casc).Native() {
@@ -2062,9 +2069,9 @@ var props = func() map[string]prop {
 		"flex-direction": keyword(func(c *style.Computed) *style.FlexDirection { return &c.Direction },
 			map[string]style.FlexDirection{"row": style.Row, "row-reverse": style.RowReverse,
 				"column": style.Column, "column-reverse": style.ColumnReverse}),
-		"flex-wrap": keyword(func(c *style.Computed) *style.FlexWrap { return &c.Wrap }, map[string]style.FlexWrap{
-			"nowrap": style.NoWrap, "wrap": style.Wrap, "wrap-reverse": style.WrapReverse,
-		}),
+		propFlexWrap: field(func(c *style.Computed) *style.FlexWrap { return &c.Wrap }, flexWrapOf, flips[style.FlexWrap]()),
+		propFlexLineCount: field(func(c *style.Computed) *int { return &c.LineCount },
+			lineCountOf, integers(1)),
 		"flex-grow": field(func(c *style.Computed) *float32 { return &c.Grow },
 			func(x *ctx, v []Component) float32 { return x.num(v[0]) }, numbers(0, math.MaxFloat32)),
 		"flex-shrink": field(func(c *style.Computed) *float32 { return &c.Shrink },
@@ -2072,12 +2079,12 @@ var props = func() map[string]prop {
 		"flex-basis":      lengthField(func(c *style.Computed) *style.Length { return &c.Basis }, sizeLength),
 		"row-gap":         lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Height }, sizeLength),
 		"column-gap":      lengthField(func(c *style.Computed) *style.Length { return &c.Gap.Width }, sizeLength),
-		"align-items":     alignField(func(c *style.Computed) *style.Align { return &c.AlignItems }),
-		"align-self":      alignField(func(c *style.Computed) *style.Align { return &c.AlignSelf }),
+		"align-items":     selfAlignField(func(c *style.Computed) *style.Align { return &c.AlignItems }),
+		"align-self":      selfAlignField(func(c *style.Computed) *style.Align { return &c.AlignSelf }),
 		"align-content":   alignField(func(c *style.Computed) *style.Align { return &c.AlignContent }),
 		"justify-content": justifyContentField(func(c *style.Computed) *style.Align { return &c.JustifyContent }),
-		"justify-items":   alignField(func(c *style.Computed) *style.Align { return &c.JustifyItems }),
-		"justify-self":    alignField(func(c *style.Computed) *style.Align { return &c.JustifySelf }),
+		"justify-items":   selfAlignField(func(c *style.Computed) *style.Align { return &c.JustifyItems }),
+		"justify-self":    selfAlignField(func(c *style.Computed) *style.Align { return &c.JustifySelf }),
 		"order": field(func(c *style.Computed) *int { return &c.Order },
 			func(x *ctx, v []Component) int { return x.whole(v[0]) }, integers(math.MinInt)),
 

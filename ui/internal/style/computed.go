@@ -43,7 +43,7 @@ func Initial() Computed {
 		},
 		Flex: Flex{
 			Shrink: 1, AlignItems: AlignNormal, AlignContent: AlignNormal, JustifyContent: AlignNormal,
-			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto,
+			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto, LineCount: 1,
 		},
 		Text: Text{
 			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400, Stretch: 100},
@@ -350,11 +350,21 @@ const (
 
 type FlexWrap uint8
 
+// BalanceWrap and BalanceWrapReverse are flex-wrap: balance, alone or
+// with wrap-reverse: lines as long as one another.
 const (
 	NoWrap FlexWrap = iota
 	Wrap
 	WrapReverse
+	BalanceWrap
+	BalanceWrapReverse
 )
+
+// Reverse reports whether w stacks its lines in reverse.
+func (w FlexWrap) Reverse() bool { return w == WrapReverse || w == BalanceWrapReverse }
+
+// Balance reports whether w balances its items across its lines.
+func (w FlexWrap) Balance() bool { return w == BalanceWrap || w == BalanceWrapReverse }
 
 // Align is a value of align-*, justify-* and place-*.
 type Align uint8
@@ -386,16 +396,24 @@ const (
 const (
 	AlignSafe   = 1 << 6
 	AlignUnsafe = 1 << 7
-	// AlignPhysical marks a justify-content of left (AlignStart) or right (AlignEnd),
-	// which a flex container's main axis takes as the sides they name.
-	AlignPhysical = 1 << 5
 )
 
-// Position is a without its overflow position, left and right as start and end.
-func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe | AlignPhysical) }
+// The side a self-alignment's start or end is taken on, or-ed into AlignStart or AlignEnd:
+// the item's own (self-start, self-end), or the line's left (left, right). Layout turns
+// them into the container's start or end; Position drops them.
+const (
+	AlignOwnSide  = 1 << 4
+	AlignLineSide = 1 << 5
+)
 
-// Physical reports whether a is left or right.
-func (a Align) Physical() bool { return a&AlignPhysical != 0 }
+// Position is a without its overflow position and its side.
+func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe | AlignOwnSide | AlignLineSide) }
+
+// OwnSide reports whether a is self-start or self-end.
+func (a Align) OwnSide() bool { return a&AlignOwnSide != 0 }
+
+// LineSide reports whether a is left or right.
+func (a Align) LineSide() bool { return a&AlignLineSide != 0 }
 
 // Safe reports whether a is safe.
 func (a Align) Safe() bool { return a&AlignSafe != 0 }
@@ -423,6 +441,10 @@ type Flex struct {
 	JustifySelf    Align
 	// Order is the flex and grid order.
 	Order int
+	// LineCount is flex-line-count: the fewest lines a balanced flex
+	// container makes, and how many share its cross size as the room
+	// its items have.
+	LineCount int
 }
 
 // Track is one grid track size: minmax(Min, Max), or a single size in
@@ -522,6 +544,10 @@ type Font struct {
 	// Palette is font-palette's: "" for normal, "light", "dark" or an
 	// @font-palette-values' --name.
 	Palette string
+	// Lang is the language of the element's text, as Chrome's font
+	// description holds it: the lang attribute of the element or of the
+	// nearest above it that has one, else the Document's; "" for none.
+	Lang string
 }
 
 // FontVariation is a place on one axis of a variable font: a tag, such

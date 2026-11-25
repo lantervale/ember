@@ -66,7 +66,7 @@ func TestAScrolledViewportMatchesChrome(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			if strings.Contains(c.sheet, "html { scrollbar-gutter") {
-				chrome.Since(t, 158, "the root keeps no stable gutter without a bar, nor a start one")
+				chrome.UnlikePinned(t, "the root keeps a stable gutter without a bar, and a start one")
 			}
 			r := chrome.Match(t, chromeDoc(c.y, c.sheet, c.opts...), geom.V2(640, 400))
 			t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)

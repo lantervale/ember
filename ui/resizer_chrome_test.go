@@ -52,7 +52,7 @@ textarea { resize: both; }`))
 	in.SetMouse(geom.V2(490, 1490))
 	w.RunFrames(3)
 	s := chrome.Open(t, srv.URL, size, 1)
-	v, err := chrome.Version()
+	pinned, err := chrome.Pinned()
 	if err != nil {
 		t.Fatalf("Chrome's version: %v", err)
 	}
@@ -82,8 +82,8 @@ textarea { resize: both; }`))
 		s.Eval(`[...document.body.children].map(e => { const r = e.getBoundingClientRect();
 	return {X: r.x, Y: r.y, W: r.width, H: r.height, Width: e.style.width, Height: e.style.height}; })`, &want)
 		for i, b := range boxes {
-			if v < textareaWidthSince && b.Tag() == dom.Textarea {
-				continue
+			if pinned && b.Tag() == dom.Textarea {
+				continue // textareaNarrower
 			}
 			got := b.Box()
 			if math.Abs(float64(got.W-want[i].W)) > 0.5 || math.Abs(float64(got.H-want[i].H)) > 0.5 ||
@@ -122,7 +122,7 @@ textarea { resize: both; }`))
 // gives it, rows and cols, right to left, vertical, scrolled and
 // disabled alike; on a game's screen none resizes, in either.
 func TestTextareasResizeAsChromes(t *testing.T) {
-	chrome.Since(t, textareaWidthSince, "a textarea of its cols is a point wider")
+	chrome.UnlikePinned(t, textareaNarrower)
 	for _, page := range []bool{true, false} {
 		t.Run(fmt.Sprint("browser sheets ", page), func(t *testing.T) {
 			var opts []ui.DocumentOption
@@ -186,9 +186,9 @@ func TestTextareasResizeAsChromes(t *testing.T) {
 	}
 }
 
-// textareaWidthSince is the Chrome version from which a textarea sized by
-// its cols is as wide as ui makes it; Chrome 156 makes it a point narrower.
-const textareaWidthSince = 158
+// textareaNarrower is how the pinned Chrome for Testing sizes a textarea
+// unlike the stable Chrome ui follows (158.0.8127.37 on a Mac).
+const textareaNarrower = "a textarea of its cols is a point narrower"
 
 // declaredIn is the value of the last declaration of property in the style
 // attribute css, empty with none.

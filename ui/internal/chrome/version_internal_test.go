@@ -6,8 +6,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/lantervale/ember/geom"
 )
@@ -48,6 +55,68 @@ func forget(t *testing.T) {
 	})
 }
 
+// pinAs has Pinned answer on until t ends.
+func pinAs(t *testing.T, on bool) {
+	t.Helper()
+	pinnedState.Lock()
+	asked, was, err := pinnedState.asked, pinnedState.on, pinnedState.err
+	pinnedState.asked, pinnedState.on, pinnedState.err = true, on, nil
+	pinnedState.Unlock()
+	t.Cleanup(func() {
+		pinnedState.Lock()
+		pinnedState.asked, pinnedState.on, pinnedState.err = asked, was, err
+		pinnedState.Unlock()
+	})
+}
+
+// The pinned build is told by its executable: a page's user agent says
+// 158.0.0.0 of every 158.
+func TestThePinnedChromeIsToldByItsExecutable(t *testing.T) {
+	v := strings.TrimSpace(pinned)
+	self, err := os.Executable()
+	require.NoError(t, err)
+	for said, want := range map[string]bool{
+		"Google Chrome for Testing " + v:       true,
+		"Google Chrome for Testing " + v + "1": false,
+		"Google Chrome 158.0.8127.37":          false,
+	} {
+		t.Setenv("EMBER_FAKE_CHROME", "version:"+said)
+		got, askErr := isPinned(self)
+		require.NoError(t, askErr)
+		assert.Equal(t, want, got, said)
+	}
+
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "chrome.exe")
+	require.NoError(t, os.WriteFile(exe, nil, 0o600))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, v), 0o750))
+	got, err := isPinned(exe)
+	require.NoError(t, err)
+	assert.True(t, got, "Windows' chrome.exe beside its version's folder")
+}
+
+func TestOnlyThePinnedChromeSkipsWhatItDrawsUnlike(t *testing.T) {
+	pinAs(t, true)
+	skipped := false
+	t.Run("pinned, this system", func(t *testing.T) {
+		t.Cleanup(func() { skipped = t.Skipped() })
+		UnlikePinned(t, "draws it otherwise", runtime.GOOS)
+	})
+	assert.True(t, skipped)
+	t.Run("pinned, another system", func(t *testing.T) {
+		t.Cleanup(func() { skipped = t.Skipped() })
+		UnlikePinned(t, "draws it otherwise", "plan9")
+	})
+	assert.False(t, skipped)
+
+	pinAs(t, false)
+	t.Run("stable", func(t *testing.T) {
+		t.Cleanup(func() { skipped = t.Skipped() })
+		UnlikePinned(t, "draws it otherwise")
+	})
+	assert.False(t, skipped)
+}
+
 func TestASessionTellsTheVersionItHoldsTheLockFor(t *testing.T) {
 	forget(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -70,21 +139,5 @@ func TestASessionTellsTheVersionItHoldsTheLockFor(t *testing.T) {
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("the version waited for the lock its own session holds")
-	}
-}
-
-func TestTheVersionAskedUnderTheLockFailsAtOnce(t *testing.T) {
-	forget(t)
-	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
-	t.Setenv("TMP", tmp)
-	t.Setenv("TEMP", tmp)
-	unlock, err := lockChrome()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unlock()
-	if _, err = Version(); err == nil {
-		t.Fatal("a version read under this process's own lock")
 	}
 }

@@ -35,7 +35,7 @@ func (s *Set) Scan(scanning *Scanning) { s.scanning = scanning }
 // the machine's fonts.
 func (s *Set) Land() bool {
 	if s.scanning == nil {
-		return false
+		return s.landCoverage()
 	}
 	idx, ok := s.scanning.Ready()
 	if !ok {
@@ -43,13 +43,35 @@ func (s *Set) Land() bool {
 	}
 	s.scanning = nil
 	s.SetInstalled(idx)
+	if s.fallback.on {
+		idx.coverage()
+	}
 	return true
 }
 
-// Await waits for the scan Land takes, however long it has left.
+// landCoverage reports whether the coverage of every installed font a
+// character waited for has just been read: the text it is in was
+// measured without its face.
+func (s *Set) landCoverage() bool {
+	if !s.fallback.waiting || s.installed == nil {
+		return false
+	}
+	if _, done := s.installed.covered(); !done {
+		return false
+	}
+	s.fallback.waiting = false
+	return true
+}
+
+// Await waits for the scan Land takes, however long it has left, and
+// with the system fallback on for the coverage of its fonts.
 func (s *Set) Await() {
+	idx := s.installed
 	if s.scanning != nil {
-		s.scanning.Wait()
+		idx = s.scanning.Wait()
+	}
+	if idx != nil && s.fallback.on {
+		<-idx.coverage()
 	}
 }
 
