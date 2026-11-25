@@ -203,6 +203,29 @@ func (c *flexConstants) scrollOriginReversed() [2]bool {
 	return [2]bool{main, cross}
 }
 
+// physicalJustify is a justify-content of left (start) or right (end) on a main axis, as
+// Chrome takes it: line-left and line-right along a row, the line-left of a right-to-left
+// one its end; the sides they name along a column across a vertical writing mode, left
+// its end where blocks stack from the right; start along a column down the page.
+func physicalJustify(k style.Align, row bool, st *style.Computed) style.Align {
+	var flip bool
+	switch {
+	case row:
+		flip = st.Dir == style.RTL
+	case st.Mode.Vertical():
+		flip = st.Mode.BlockFromRight()
+	default:
+		return style.AlignStart
+	}
+	if !flip {
+		return k
+	}
+	if k == style.AlignStart {
+		return style.AlignEnd
+	}
+	return style.AlignStart
+}
+
 func normalToStretch(a style.Align) style.Align {
 	if a == style.AlignNormal {
 		return style.AlignStretch
@@ -417,6 +440,9 @@ func (t *tree) flexConstants(n *node, known size, knownIsDefinite bools, parent 
 	justify := align(st.JustifyContent)
 	if justify.keyword == style.AlignNormal {
 		justify.keyword = style.AlignFlexStart
+	}
+	if st.JustifyContent.Physical() {
+		justify.keyword = physicalJustify(justify.keyword, d.isRow(), st)
 	}
 	gutter := n.ownGutter()
 	ge := mirroredGutterEdges(st, gutter)

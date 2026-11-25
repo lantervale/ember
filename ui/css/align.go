@@ -89,6 +89,17 @@ func alignOf(v []Component) style.Align {
 	return k | overflow
 }
 
+// justifyContentField is justify-content: left and right kept apart from start and end.
+func justifyContentField(get func(*style.Computed) *style.Align) prop {
+	return field(get, func(_ *ctx, v []Component) style.Align {
+		a := alignOf(v)
+		if isWord(v[len(v)-1], kwLeft, kwRight) {
+			a |= style.AlignPhysical
+		}
+		return a
+	}, flips[style.Align]())
+}
+
 func alignField(get func(*style.Computed) *style.Align) prop {
 	return field(get, func(_ *ctx, v []Component) style.Align { return alignOf(v) }, flips[style.Align]())
 }

@@ -386,10 +386,16 @@ const (
 const (
 	AlignSafe   = 1 << 6
 	AlignUnsafe = 1 << 7
+	// AlignPhysical marks a justify-content of left (AlignStart) or right (AlignEnd),
+	// which a flex container's main axis takes as the sides they name.
+	AlignPhysical = 1 << 5
 )
 
-// Position is a without its overflow position.
-func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe) }
+// Position is a without its overflow position, left and right as start and end.
+func (a Align) Position() Align { return a &^ (AlignSafe | AlignUnsafe | AlignPhysical) }
+
+// Physical reports whether a is left or right.
+func (a Align) Physical() bool { return a&AlignPhysical != 0 }
 
 // Safe reports whether a is safe.
 func (a Align) Safe() bool { return a&AlignSafe != 0 }
