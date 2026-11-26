@@ -950,7 +950,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	for ri, r := range rows {
 		heights[ri] = or(resolve(r.st.Size.Height, none), 0)
 	}
-	lowered, baselines := t.baselines(cells, len(rows), cellW, content)
+	lowered, baselines, lined := t.baselines(cells, len(rows), cellW, content)
 	measure := func(i int) float32 {
 		c := cells[i]
 		cw := cellW(c)
@@ -1082,9 +1082,15 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	if len(rows) > 0 {
 		first = baselines[0]
 		for i, c := range cells {
-			if c.row == 0 && c.rs == 1 && !some(baselines[0]) {
-				first = fmax(or(first, 0),
-					measure(i)-edges(c.cell.st.Padding, content).b-c.cell.borders().b)
+			inset := edges(c.cell.st.Padding, content).b + c.cell.borders().b
+			switch {
+			case c.row != 0 || c.rs != 1:
+			case !some(baselines[0]):
+				first = fmax(or(first, 0), measure(i)-inset)
+			case !lined[0] && onBaseline(c.cell):
+				// Its baseline cells without a line, the row stands on the bottom of
+				// their content boxes as tall as the row, as Chrome's.
+				first = max(first, cellH(c)-inset)
 			}
 		}
 		first += rowY[0]
@@ -1103,10 +1109,13 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 // and each row's baseline from its top, none in a row with no cell on it (an inline
 // table then stands on the lowest content box of its first row, as Chrome's): the lowest
 // first baseline of its cells that are on it, with cellW their widths in a table of
-// content width. A cell without a line has its content box's bottom for one.
-func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, content float32) ([]float32, []float32) {
+// content width. A cell without a line has its content box's bottom for one; lined
+// marks the rows where a cell on the baseline has a line.
+func (t *tree) baselines(
+	cells []slot, rows int, cellW func(slot) float32, content float32,
+) (lowered, rowBase []float32, lined []bool) {
 	lowered, own := make([]float32, len(cells)), make([]float32, len(cells))
-	rowBase := slices.Repeat([]float32{none}, rows)
+	rowBase, lined = slices.Repeat([]float32{none}, rows), make([]bool, rows)
 	for i, c := range cells {
 		if !onBaseline(c.cell) {
 			c.cell.lower(0)
@@ -1116,6 +1125,7 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 		out := t.probeChildLayout(c.cell, size{cw, none}, size{content, none},
 			spaces{def(cw), maxContentSpace})
 		own[i] = out.firstBaseline - c.cell.lowered
+		lined[c.row] = lined[c.row] || some(out.firstBaseline)
 		if !some(out.firstBaseline) {
 			own[i] = out.size.h - edges(c.cell.st.Padding, content).b - c.cell.borders().b
 		}
@@ -1126,7 +1136,7 @@ func (t *tree) baselines(cells []slot, rows int, cellW func(slot) float32, conte
 			lowered[i] = rowBase[c.row] - own[i]
 		}
 	}
-	return lowered, rowBase
+	return lowered, rowBase, lined
 }
 
 // inFlexRow reports whether n is an item of a flex row, its width the main size its
