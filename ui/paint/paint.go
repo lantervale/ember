@@ -315,15 +315,18 @@ func (p *painter) newClip(c clip) *clip {
 // radii aren't all zero, are the curve it also cuts to (decision 0058):
 // the padding box rounded by its inner radii, while rect stops at the
 // scrollbars' gutter. by is the box whose overflow it is. A clip-path's
-// clip has its shape instead, and rect its bounds (decision 0119).
+// clip has its shape instead, and rect its bounds (decision 0119). A clip
+// property's is its rect, by the box it cuts, which it cuts the fixed boxes
+// of too (decision 0246).
 type clip struct {
-	rect   geom.Rect
-	round  geom.Rect
-	radii  radii
-	xf     geom.Transform2D
-	parent *clip
-	by     *box.Box
-	shape  *clipShape
+	rect    geom.Rect
+	round   geom.Rect
+	radii   radii
+	xf      geom.Transform2D
+	parent  *clip
+	by      *box.Box
+	shape   *clipShape
+	cssClip bool
 }
 
 // Paint draws t onto s.
@@ -722,7 +725,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		}
 		p.reached++
 		st := shown(c)
-		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
+		ce := entry{b: c, at: at, clip: p.cutByClip(c, st, at, p.placedClip(c, st, inner))}
 		if st.TablePart == style.TableCaption && shown(b).Table {
 			ce.clip = e.clip
 		}
@@ -809,20 +812,45 @@ func (p *painter) collectPositioned(e entry, outer *layers) {
 
 // placedClip is the clip of c, a child of the box inner is the clip in: inner, less,
 // for an absolutely or fixed positioned box, the clips of the boxes under its
-// containing block, whose overflow it lies outside.
-func placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
+// containing block, whose overflow it lies outside. A clip property's clip
+// stays, as Chrome keeps it on the fixed boxes inside.
+func (p *painter) placedClip(c *box.Box, st *style.Computed, inner *clip) *clip {
 	if c.Kind != box.Element || st.Position != style.Absolute && st.Position != style.FixedPosition {
 		return inner
 	}
+	var kept []*clip
 	for a := c.Parent; inner != nil && a != nil && a.Parent != nil; a = a.Parent {
 		if as := shown(a); as.HoldsFixed() || st.Position == style.Absolute && as.Position != style.Static {
 			break
 		}
-		if inner.by == a {
+		for inner != nil && inner.by == a {
+			if inner.cssClip {
+				kept = append(kept, inner)
+			}
 			inner = inner.parent
 		}
 	}
+	for i := len(kept) - 1; i >= 0; i-- {
+		k := *kept[i]
+		k.parent = inner
+		inner = p.newClip(k)
+	}
 	return inner
+}
+
+// cutByClip is inner cut to c's clip property, for an absolutely or fixed
+// positioned box with one, in the space of its own transform (decision 0246).
+func (p *painter) cutByClip(c *box.Box, st *style.Computed, at geom.Vec2, inner *clip) *clip {
+	if c.Kind != box.Element || !st.Clip.Set || st.Position != style.Absolute && st.Position != style.FixedPosition {
+		return inner
+	}
+	r := st.Clip.In(c.Size.X, c.Size.Y)
+	r.X, r.Y = r.X+at.X, r.Y+at.Y
+	xf := p.s.Transform()
+	if st.Transformed() {
+		xf = xf.Mul(st.TransformAt(at, c.Size))
+	}
+	return p.newClip(clip{rect: r, xf: xf, parent: inner, by: c, cssClip: true})
 }
 
 // reachable is what of b's children, placed from origin, can show inside

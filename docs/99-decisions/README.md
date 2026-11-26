@@ -233,6 +233,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0230 | [A sheet is decoded as CSS Syntax decodes bytes](0230-a-sheet-is-decoded-as-css-syntax-decodes-bytes.md) | api |
 | 0234 | [WPT reftests draw glyphs at their exact coverage](0234-wpt-reftests-draw-glyphs-at-their-exact-coverage.md) | tools |
 | 0242 | [Line and paragraph separators break their line, where Chrome does not](0242-line-and-paragraph-separators-break-their-line-where-chrome-does-not.md) | rendering |
+| 0246 | [clip cuts a positioned box to its rect, as an overflow clip its fixed boxes keep](0246-clip-cuts-a-positioned-box-to-its-rect-as-an-overflow-clip-its-fixed-boxes-keep.md) | rendering |
 
 ## Writing one
 
