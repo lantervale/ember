@@ -888,13 +888,15 @@ const unbounded = 1e6
 
 // clipRect is the scrollport b clips its content to, if its overflow
 // clips on either axis or a collapsed row or column cut it: its padding
-// box less its scrollbars' gutter.
+// box less its scrollbars' gutter. The overflow of a table's row, column
+// or group of them clips nothing, as Chrome's.
 func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 	o := shown(b).Overflow
 	if b.Cut {
 		o = style.Size[style.Overflow]{Width: style.Clip, Height: style.Clip}
 	}
-	if b.Kind != box.Element && b.Kind != box.Viewport || o.Width == style.Visible && o.Height == style.Visible {
+	if b.Kind != box.Element && b.Kind != box.Viewport || o.Width == style.Visible && o.Height == style.Visible ||
+		paintsCells(shown(b)) {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)

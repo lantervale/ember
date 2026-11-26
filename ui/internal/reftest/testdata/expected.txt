@@ -5272,9 +5272,15 @@ css/CSS2/text/word-spacing-remove-space-003.xht ref chrome
 css/CSS2/text/word-spacing-remove-space-004.xht ref chrome
 css/CSS2/text/word-spacing-remove-space-005.xht ref chrome
 css/CSS2/text/word-spacing-remove-space-006.xht ref chrome
+css/CSS2/ui/outline-applies-to-005.xht ref chrome
+css/CSS2/ui/outline-applies-to-006.xht ref chrome
 css/CSS2/ui/outline-applies-to-016.xht ref chrome
 css/CSS2/ui/outline-applies-to-017.xht ref chrome
+css/CSS2/ui/outline-color-applies-to-005.xht ref chrome
+css/CSS2/ui/outline-color-applies-to-006.xht ref chrome
 css/CSS2/ui/outline-style-001.xht ref chrome
+css/CSS2/ui/outline-style-applies-to-005.xht ref chrome
+css/CSS2/ui/outline-style-applies-to-006.xht ref chrome
 css/CSS2/ui/outline-width-002.xht ref chrome
 css/CSS2/ui/outline-width-004.xht ref chrome
 css/CSS2/ui/outline-width-005.xht ref chrome
@@ -5303,6 +5309,12 @@ css/CSS2/ui/outline-width-089.xht ref chrome
 css/CSS2/ui/outline-width-090.xht ref chrome
 css/CSS2/ui/outline-width-091.xht ref chrome
 css/CSS2/ui/outline-width-096.xht ref chrome
+css/CSS2/ui/outline-width-applies-to-005.xht ref chrome
+css/CSS2/ui/outline-width-applies-to-006.xht ref chrome
+css/CSS2/ui/overflow-applies-to-001.xht chrome
+css/CSS2/ui/overflow-applies-to-002.xht chrome
+css/CSS2/ui/overflow-applies-to-003.xht chrome
+css/CSS2/ui/overflow-applies-to-004.xht chrome
 css/CSS2/ui/overflow-applies-to-005.xht chrome
 css/CSS2/ui/overflow-applies-to-006.xht chrome
 css/CSS2/ui/overflow-applies-to-007.xht chrome

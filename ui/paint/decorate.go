@@ -1737,9 +1737,22 @@ func (p *painter) outline(e entry, alpha float32) {
 	}
 }
 
+// outlined reports whether b draws an outline: a table's column or column group draws
+// none, as Chrome's.
 func outlined(b *box.Box) bool {
 	st := shown(b)
-	return b.Kind == box.Element && st.Visible && st.OutlineStyle != style.BorderNone && st.OutlineWidth > 0
+	return b.Kind == box.Element && st.Visible && st.OutlineStyle != style.BorderNone && st.OutlineWidth > 0 &&
+		!isColumn(b)
+}
+
+// isColumn reports a table's column or column group: a box of that display in a table or
+// a column group, where a replaced element of the display is laid out as an inline.
+func isColumn(b *box.Box) bool {
+	if part := partOf(b); part != style.TableColumn && part != style.TableColumnGroup {
+		return false
+	}
+	p := b.Parent
+	return p != nil && p.Style != nil && (p.Style.Table || partOf(p) == style.TableColumnGroup)
 }
 
 // radii are a box's corner radii, top-left, top-right, bottom-right,
