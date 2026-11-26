@@ -219,8 +219,9 @@ type tree struct {
 	anonymousStyles map[*style.Computed]*style.Computed
 	// labelStyles is the style of the label row of each listbox optgroup style.
 	labelStyles map[*style.Computed]*style.Computed
-	// anonymousTables is the style of the anonymous tables of each parent style.
-	anonymousTables map[*style.Computed]*style.Computed
+	// anonymousTables is the style of the anonymous tables, block and inline, of each
+	// style they inherit from.
+	anonymousTables map[anonymousKey]*style.Computed
 	// flowStyles are the styles multi-column containers lay their content out with, by
 	// their own.
 	flowStyles map[*style.Computed]*style.Computed
@@ -948,7 +949,7 @@ func (t *tree) lift(owner *node, items []item) []item {
 		owner.contents = append(owner.contents, keyed{it.element, b})
 		part := item{element: it.element, cut: cut, first: true}
 		for _, in := range t.lift(owner, t.flatten(owner, it.element.Flow())) {
-			if in.cut != nil || in.element == nil || !inFlowBlock(in.element) {
+			if in.cut != nil || in.element == nil || !inFlowBlock(in.element) || partOf(in.element) != style.NoTablePart {
 				part.inside = append(part.inside, in)
 				continue
 			}
@@ -1051,7 +1052,8 @@ func isInline(e *dom.Node) bool {
 func cutByBlocks(e *dom.Node) bool { return isInline(e) && holdsBlock(e) }
 
 // holdsBlock reports a block in the flow among e's children, those of its display:
-// contents children and those of the inline elements it holds.
+// contents children and those of the inline elements it holds; a table part is none,
+// standing in the inline table its inline element wraps round it.
 func holdsBlock(e *dom.Node) bool {
 	for _, c := range e.Flow() {
 		switch {
@@ -1060,6 +1062,7 @@ func holdsBlock(e *dom.Node) bool {
 			if holdsBlock(c) {
 				return true
 			}
+		case partOf(c) != style.NoTablePart:
 		case inFlowBlock(c) || cutByBlocks(c):
 			return true
 		}

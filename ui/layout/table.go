@@ -75,12 +75,34 @@ type loose struct {
 	run []*dom.Node
 }
 
-// add puts c in the run, unless it is not shown or white space before anything else.
+// add puts c in the run, unless it is not shown or white space alone: before anything
+// else, or, whatever its white-space, a child of a table, a row group or a row, which
+// make no box of it as Chrome's.
 func (l *loose) add(c *dom.Node) {
-	if c.IsText() && len(l.run) == 0 && isCollapsibleSpace(c.Text()) || !c.IsText() && !shown(c) {
+	if c.IsText() && isCollapsibleSpace(c.Text()) && (len(l.run) == 0 && droppedSpace(c) || inTableBox(c)) ||
+		!c.IsText() && !shown(c) {
 		return
 	}
 	l.run = append(l.run, c)
+}
+
+// inTableBox reports a node whose parent is a table or one of its parts but a cell or a
+// caption.
+func inTableBox(c *dom.Node) bool {
+	p := c.Parent()
+	for p != nil && styleOf(p).Display == style.Contents {
+		p = p.Parent()
+	}
+	if p == nil || p.IsText() {
+		return false
+	}
+	switch partOf(p) {
+	case style.TableRowGroup, style.TableHeaderGroup, style.TableFooterGroup, style.TableRow, style.TableColumn,
+		style.TableColumnGroup:
+		return true
+	case style.NoTablePart, style.TableCell, style.TableCaption:
+	}
+	return isTable(p)
 }
 
 // flush hands the run to wrap, if there is one.
@@ -232,16 +254,41 @@ func (t *tree) anonymousRow(parent *node, children []*dom.Node) *node {
 // anonymousTable is the table a container wraps round the table parts among its
 // children that stand in none: border-spacing and all the rest at their initial values.
 func (t *tree) anonymousTable(parent *node, parts []*dom.Node) *node {
-	st := t.anonymousTables[parent.st]
+	return t.wrapParts(parent, parent.st, false, parts)
+}
+
+// anonymousInlineTable is the inline table an inline element of style from wraps round
+// the table parts among its children (CSS 2 §17.2.1), an atomic inline of parent's lines.
+func (t *tree) anonymousInlineTable(parent *node, from *style.Computed, parts []*dom.Node) *node {
+	n := t.wrapParts(parent, from, true, parts)
+	n.atomic = true
+	return n
+}
+
+// anonymousKey is what the style of an anonymous table follows: the style it inherits
+// from and whether it is inline.
+type anonymousKey struct {
+	from   *style.Computed
+	inline bool
+}
+
+// wrapParts is the anonymous table round parts, inheriting from from, an inline table
+// when inline.
+func (t *tree) wrapParts(parent *node, from *style.Computed, inline bool, parts []*dom.Node) *node {
+	key := anonymousKey{from, inline}
+	st := t.anonymousTables[key]
 	if st == nil {
 		s := style.Initial()
 		s.Display, s.Table = style.Block, true
-		s.Text = parent.st.Text
+		if inline {
+			s.Display = style.InlineBlock
+		}
+		s.Text = from.Text
 		st = &s
 		if t.anonymousTables == nil {
-			t.anonymousTables = map[*style.Computed]*style.Computed{}
+			t.anonymousTables = map[anonymousKey]*style.Computed{}
 		}
-		t.anonymousTables[parent.st] = st
+		t.anonymousTables[key] = st
 	}
 	n := &node{box: &box.Box{Kind: box.AnonymousBlock, Style: st}, st: st, parent: parent, fresh: true}
 	t.buildTable(n, parts)
