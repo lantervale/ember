@@ -5133,6 +5133,7 @@ css/CSS2/tables/table-vertical-align-baseline-004.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-005.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-006.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-007.xht ref chrome
+css/CSS2/tables/table-vertical-align-baseline-008.xht ref
 css/CSS2/tables/table-vertical-align-baseline-009.xht ref chrome
 css/CSS2/tables/table-visual-layout-017.xht ref chrome
 css/CSS2/tables/table-visual-layout-018.xht ref chrome

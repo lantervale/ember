@@ -1129,9 +1129,9 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 // marks the rows where a cell on the baseline has a line.
 func (t *tree) baselines(
 	cells []slot, rows int, cellW func(slot) float32, content float32,
-) (lowered, rowBase []float32, lined []bool) {
+) ([]float32, []float32, []bool) {
 	lowered, own := make([]float32, len(cells)), make([]float32, len(cells))
-	rowBase, lined = slices.Repeat([]float32{none}, rows), make([]bool, rows)
+	rowBase, lined := slices.Repeat([]float32{none}, rows), make([]bool, rows)
 	for i, c := range cells {
 		if !onBaseline(c.cell) {
 			c.cell.lower(0)
