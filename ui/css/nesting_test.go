@@ -61,7 +61,7 @@ func TestNestedRulesDropWhatChromeDrops(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{".a { color: red; ..b { color: blue } & .c { color: green } }",
 			`t.css:1:18: expected a class name after '.'; rule dropped`},
-		{".a { color: red .x { } }", `t.css:1:6: ui has no <color> element; rule dropped`},
+		{".a { color: red .x { } }", `t.css:1:12: expected a pseudo-class after ':'; rule dropped`},
 		{".a { &span { color: blue } }", `t.css:1:7: a type selector must come first in a compound; rule dropped`},
 		{".a { @font-face { font-family: x } color: red }", `t.css:1:6: @font-face is not supported inside a style rule`},
 		{".a { .b; color: red }", `t.css:1:6: expected a property name, found "."`},
@@ -75,6 +75,13 @@ func TestNestedRulesDropWhatChromeDrops(t *testing.T) {
 		if len(s.Rules) == 0 || s.Rules[0].Selectors[0].String() != ".a" {
 			t.Errorf("%s: the rule itself is kept: %s", c.src, selectorsOf(s))
 		}
+	}
+}
+
+func TestAnAtRuleDroppedInsideARuleEndsWithIt(t *testing.T) {
+	s, _ := Parse("t.css", ".a { color: green; @foo [ color: red; } .a { color: red; } ] }\n.b { color: green }")
+	if len(s.Rules) != 2 || s.Rules[1].Selectors[0].String() != ".b" {
+		t.Errorf("the block's } ends the dropped at-rule, as CSS Syntax reads it in a block: %s", selectorsOf(s))
 	}
 }
 

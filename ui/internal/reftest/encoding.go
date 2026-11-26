@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"mime"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -65,6 +66,18 @@ func declaresEncoding(data []byte) bool {
 		}
 	}
 	return metaEncoding.Match(data[:min(len(data), 1024)])
+}
+
+// servedAsCSS reports whether the file at name is served as a sheet, by
+// its .headers or else its extension, as WPT's server types it: a page
+// in standards mode drops a sheet of another type.
+func servedAsCSS(name string) bool {
+	kind := servedType(name)
+	if kind == "" {
+		kind = mime.TypeByExtension(filepath.Ext(name))
+	}
+	t, _, err := mime.ParseMediaType(kind)
+	return err == nil && t == "text/css"
 }
 
 // servedSheet is a sheet's bytes as ui reads them: decoded in the

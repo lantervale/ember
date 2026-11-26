@@ -180,7 +180,7 @@ func (p *Page) link(root string, n *html.Node) {
 		}
 		file := filepath.Join(root, filepath.FromSlash(at))
 		data, err := os.ReadFile(file)
-		if err != nil {
+		if err != nil || !servedAsCSS(file) {
 			return
 		}
 		environment := p.Encoding
@@ -315,8 +315,8 @@ func parseXML(text string) (*html.Node, error) {
 			n := &html.Node{Type: html.ElementNode, Data: t.Name.Local, Namespace: namespace(t.Name.Space)}
 			if n.Namespace == "" {
 				n.Data = strings.ToLower(n.Data)
-				n.DataAtom = atom.Lookup([]byte(n.Data))
 			}
+			n.DataAtom = atom.Lookup([]byte(n.Data))
 			for _, a := range t.Attr {
 				if a.Name.Space == "xmlns" || a.Name.Local == "xmlns" {
 					continue

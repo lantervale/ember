@@ -49,3 +49,11 @@ func TestVisualText(t *testing.T) {
 	assert.Equal(t, "12 בא", visualText("אב 12", 1))
 	assert.Equal(t, "(א)", visualText("(א)", 1), "brackets mirrored")
 }
+
+func TestIsolatesSideBySideAreOrderedApart(t *testing.T) {
+	bdo := func(st *style.Computed) { st.Dir, st.Bidi = style.RTL, style.BidiIsolateOverride }
+	cd, ef := el(dom.Span, bdo, text("cd")), el(dom.Span, bdo, text("ef"))
+	tr := lay(el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, text("ab "), cd, ef), 400)
+	assert.Less(t, tr.Of[cd].Pos.X, tr.Of[ef].Pos.X,
+		"each its own isolate, in the order they come, as Chrome's bdo")
+}

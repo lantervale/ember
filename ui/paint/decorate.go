@@ -2069,6 +2069,7 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 // the fragment ends.
 func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
 	shown := f.Text + f.Hyphen
+	at.Y = p.snapY(at.Y)
 	p.around, p.amid = [2]string{f.Before, f.After}, [2]string{f.Lead, f.Trail}
 	defer func() { p.around, p.amid = [2]string{}, [2]string{} }()
 	if !f.RTL {

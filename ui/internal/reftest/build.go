@@ -22,8 +22,12 @@ const (
 
 // FontsSheet is the sheet under every page's: the fonts WPT's runners
 // install on the system, from the checkout's fonts/ folder, so the pages
-// find them by name in ember and in Chrome alike.
-const FontsSheet = `@font-face { font-family: Ahem; src: url(` + Base + `fonts/Ahem.ttf); }`
+// find them by name in ember and in Chrome alike, and glyphs drawn at
+// their exact coverage, without the stem darkening of macOS's font
+// smoothing, which WPT's references, boxes where the tests draw Ahem's
+// squares, leave out (decision 0234).
+const FontsSheet = `@font-face { font-family: Ahem; src: url(` + Base + `fonts/Ahem.ttf); }
+:root { -webkit-font-smoothing: antialiased; }`
 
 // Fetches counts what a Document of the runner is still fetching.
 type Fetches struct{ n atomic.Int32 }
@@ -31,7 +35,10 @@ type Fetches struct{ n atomic.Int32 }
 // Busy reports whether a fetch is under way.
 func (f *Fetches) Busy() bool { return f.n.Load() > 0 }
 
-var errOutside = errors.New("outside the checkout")
+var (
+	errOutside = errors.New("outside the checkout")
+	errNoSheet = errors.New("not served as text/css")
+)
 
 // fetcher reads ref, resolved from the address from, from the checkout
 // at root.
@@ -52,7 +59,11 @@ func (f *Fetches) fetchSheet(root, from, ref string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return servedSheet(data, filepath.Join(root, filepath.FromSlash(Resolve(from, ref)))), nil
+	file := filepath.Join(root, filepath.FromSlash(Resolve(from, ref)))
+	if !servedAsCSS(file) {
+		return nil, errNoSheet
+	}
+	return servedSheet(data, file), nil
 }
 
 // Document builds p, read from the checkout at root, as a ui Document:
