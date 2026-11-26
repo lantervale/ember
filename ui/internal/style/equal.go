@@ -244,6 +244,7 @@ func (l *Look) equal(o *Look) bool {
 		l.MaskBoxImage.Width == o.MaskBoxImage.Width && l.MaskBoxImage.Outset == o.MaskBoxImage.Outset &&
 		l.MaskBoxImage.Repeat == o.MaskBoxImage.Repeat &&
 		l.ClipPath.Equal(&o.ClipPath) &&
+		l.Clip == o.Clip &&
 		l.ImageRendering == o.ImageRendering &&
 		l.ObjectFit == o.ObjectFit &&
 		l.ObjectPosition == o.ObjectPosition &&

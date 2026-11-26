@@ -36,6 +36,26 @@ func TestASplitSpanFillsEachLinesFragment(t *testing.T) {
 	assert.Equal(t, []geom.Rect{{X: 50, Y: 10, W: 60, H: 20}, {X: 10, Y: 30, W: 40, H: 20}}, fills, "never the union box")
 }
 
+func TestASpansBackgroundPaintsOverTheTextBeforeItInTheTree(t *testing.T) {
+	span := split()
+	span.Append(text(0, 20, "b", span.Style))
+	root := el(0, 0, 400, 300, bg(blue))
+	root.Append(text(0, 0, "a", root.Style), span)
+	r := newRecorder()
+	Paint(r, tree(root))
+	var order []string
+	for _, o := range r.ops {
+		switch {
+		case o.Kind == "text":
+			order = append(order, o.Text)
+		case o.Kind == "rect" && o.Color == red:
+			order = append(order, "span")
+		}
+	}
+	assert.Equal(t, []string{"a", "span", "span", "b"}, order,
+		"a line's boxes and text in tree order, as CSS 2.1's appendix E, never every background first")
+}
+
 func TestASplitSpansSideBordersAreOnItsEnds(t *testing.T) {
 	var sides []geom.Rect
 	for _, o := range paintOne(split()).of("rect") {
@@ -47,6 +67,21 @@ func TestASplitSpansSideBordersAreOnItsEnds(t *testing.T) {
 		{X: 50, Y: 10, W: 60, H: 2}, {X: 50, Y: 28, W: 60, H: 2}, {X: 50, Y: 10, W: 2, H: 20},
 		{X: 10, Y: 30, W: 40, H: 2}, {X: 48, Y: 30, W: 2, H: 20}, {X: 10, Y: 48, W: 40, H: 2},
 	}, sides, "top and bottom on every line, left on the first, right on the last")
+}
+
+func TestASplitSpansSideBordersAreWhereItsEndsSay(t *testing.T) {
+	b := split()
+	b.Ends = []box.Ends{box.RightEnd, box.LeftEnd}
+	var sides []geom.Rect
+	for _, o := range paintOne(b).of("rect") {
+		if o.Color == blue {
+			sides = append(sides, o.Rect)
+		}
+	}
+	assert.ElementsMatch(t, []geom.Rect{
+		{X: 50, Y: 10, W: 60, H: 2}, {X: 50, Y: 28, W: 60, H: 2}, {X: 108, Y: 10, W: 2, H: 20},
+		{X: 10, Y: 30, W: 40, H: 2}, {X: 10, Y: 30, W: 2, H: 20}, {X: 10, Y: 48, W: 40, H: 2},
+	}, sides, "right to left: its right edge on the first line, its left on the last")
 }
 
 func TestAnUnbrokenSpanPaintsLikeABox(t *testing.T) {

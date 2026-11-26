@@ -23,6 +23,26 @@ func TestAFloatPaintsOverTheBlocksAfterItAndUnderTheirText(t *testing.T) {
 	assert.Equal(t, "text", r.ops[len(r.ops)-1].Kind, "text comes after the floats")
 }
 
+func TestAnInlineBlockPaintsWholeWithItsLineOverTheBlocksAfterIt(t *testing.T) {
+	inner := el(0, 0, 10, 10, bg(black))
+	ib := el(0, 0, 40, 20, func(s *style.Computed) { s.Background, s.Display = green, style.InlineBlock }, inner)
+	line := el(0, 0, 100, 20, nil, ib)
+	after := el(0, 0, 100, 20, bg(red))
+	tr := tree(el(0, 0, 100, 100, bg(white), line, after))
+	r := newRecorder()
+	Paint(r, tr)
+	assert.Equal(t, "white red green black", r.order(names), "the next block's background goes under it")
+	assert.Same(t, inner, HitTest(tr, geom.V2(5, 5)), "hit as it is painted")
+}
+
+func TestAFlexItemPaintsWholeAsAnInlineBlockDoes(t *testing.T) {
+	first := el(0, 0, 40, 20, bg(green), el(0, 0, 60, 10, bg(black)))
+	flex := el(0, 0, 100, 20, func(s *style.Computed) { s.Display = style.FlexDisplay }, first, el(40, 0, 40, 20, bg(red)))
+	r := newRecorder()
+	Paint(r, tree(el(0, 0, 100, 100, bg(white), flex)))
+	assert.Equal(t, "white green black red", r.order(names), "what the first holds goes under the second")
+}
+
 func TestAFloatIsUnderThePositionedBoxesAndHitBeforeTheBlockBehindIt(t *testing.T) {
 	f := floated()
 	para := el(0, 0, 100, 60, bg(blue))
