@@ -73,6 +73,10 @@ type inlineContent struct {
 	// text, and base is the level of its first paragraph.
 	reorders bool
 	base     bidi.Level
+	// isolated is, for each span that isolates its content (unicode-bidi isolate,
+	// isolate-override or plaintext), the level it stands at in the text round it: its
+	// isolate initiator's.
+	isolated map[int]bidi.Level
 	// line is the style of the block's first line where a ::first-line styles it, nil
 	// elsewhere; firstPieces are the pieces as measured in the first line's styles, and
 	// firstOn is set while they, and each run's and span's first-line style, stand in
