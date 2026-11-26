@@ -22,8 +22,12 @@ const (
 
 // FontsSheet is the sheet under every page's: the fonts WPT's runners
 // install on the system, from the checkout's fonts/ folder, so the pages
-// find them by name in ember and in Chrome alike.
-const FontsSheet = `@font-face { font-family: Ahem; src: url(` + Base + `fonts/Ahem.ttf); }`
+// find them by name in ember and in Chrome alike, and glyphs drawn at
+// their exact coverage, without the stem darkening of macOS's font
+// smoothing, which WPT's references, boxes where the tests draw Ahem's
+// squares, leave out (decision 0234).
+const FontsSheet = `@font-face { font-family: Ahem; src: url(` + Base + `fonts/Ahem.ttf); }
+:root { -webkit-font-smoothing: antialiased; }`
 
 // Fetches counts what a Document of the runner is still fetching.
 type Fetches struct{ n atomic.Int32 }
@@ -31,7 +35,10 @@ type Fetches struct{ n atomic.Int32 }
 // Busy reports whether a fetch is under way.
 func (f *Fetches) Busy() bool { return f.n.Load() > 0 }
 
-var errOutside = errors.New("outside the checkout")
+var (
+	errOutside = errors.New("outside the checkout")
+	errNoSheet = errors.New("not served as text/css")
+)
 
 // fetcher reads ref, resolved from the address from, from the checkout
 // at root.
@@ -45,6 +52,20 @@ func (f *Fetches) fetch(root, from, ref string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
 }
 
+// fetchSheet is fetch for a sheet, given back as UTF-8 behind a byte
+// order mark when it is served with a charset, as ui reads one.
+func (f *Fetches) fetchSheet(root, from, ref string) ([]byte, error) {
+	data, err := f.fetch(root, from, ref)
+	if err != nil {
+		return nil, err
+	}
+	file := filepath.Join(root, filepath.FromSlash(Resolve(from, ref)))
+	if !servedAsCSS(file) {
+		return nil, errNoSheet
+	}
+	return servedSheet(data, file), nil
+}
+
 // Document builds p, read from the checkout at root, as a ui Document:
 // its sheets read as a browser's, scrolling as a browser's viewport with
 // its scrollbars over it, the WPT fonts under its own, and its pictures,
@@ -55,13 +76,13 @@ func (p *Page) Document(root string, fetches *Fetches) *ui.Document {
 		ui.CSS(FontsSheet, ui.From(Base)),
 	}
 	for _, s := range p.Sheets {
-		opts = append(opts, ui.CSS(s.Text, ui.From(s.From)))
+		opts = append(opts, ui.CSS(s.Text, ui.From(s.From), ui.Encoding(s.Encoding)))
 	}
 	page := p.Address()
 	opts = append(opts,
 		ui.FetchImages(func(ref string) ([]byte, error) { return fetches.fetch(root, page, ref) }),
 		ui.FetchFonts(func(ref, sheet string) ([]byte, error) { return fetches.fetch(root, or(sheet, page), ref) }),
-		ui.FetchSheets(func(ref, sheet string) ([]byte, error) { return fetches.fetch(root, or(sheet, page), ref) }),
+		ui.FetchSheets(func(ref, sheet string) ([]byte, error) { return fetches.fetchSheet(root, or(sheet, page), ref) }),
 	)
 	d := ui.NewDocument(opts...)
 	b := builder{page: page}

@@ -165,6 +165,13 @@ type Box struct {
 	// getBoundingClientRect.
 	Fragments []geom.Rect
 	Broken    bool
+	// Ends, where set, is which of an inline element's left and right
+	// edges each of its Fragments holds, in place of the first and the
+	// last: one bidi reorders is in parts on a line, each of a line's
+	// parts left to right, its start edge on the part holding its first
+	// content and its end edge on the one holding its last; one right to
+	// left holds its right edge on its first line (CSS 2.1 §8.6).
+	Ends []Ends
 	// Hidden is how many of an inline element's last Fragments lie on lines
 	// past the last a line-clamp shows: laid out, never drawn nor hit.
 	Hidden int
@@ -370,6 +377,15 @@ type HanGlyph struct {
 	Ink  Ink
 	Full bool
 }
+
+// Ends is which of an inline element's left and right edges one of its
+// Fragments holds.
+type Ends uint8
+
+const (
+	LeftEnd Ends = 1 << iota
+	RightEnd
+)
 
 // Ink is where a glyph's ink stands in its advance.
 type Ink uint8

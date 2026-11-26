@@ -18,7 +18,9 @@ import (
 // sheets at a time, so it may take as long as it needs and must be safe
 // to call from several goroutines. sheet is the address of the sheet
 // that imports it, "" when it says none: what a request for it gives as
-// its referrer.
+// its referrer. Its bytes are decoded as css.Decode says, so a fetcher
+// that got a charset with them gives them back as UTF-8 behind a byte
+// order mark.
 type SheetFetcher func(url, sheet string) ([]byte, error)
 
 // FetchSheets has fetch get the sheets the Document's @import rules
@@ -46,6 +48,9 @@ type pageSheets struct {
 	fetch   SheetFetcher
 	sheets  map[string]*css.Sheet
 	loading int
+	// encodings are the encodings the sheets were decoded in, by
+	// address, those they import fall back to.
+	encodings map[string]string
 
 	sync.WaitGroup
 	mu     sync.Mutex
@@ -56,17 +61,19 @@ type pageSheets struct {
 // importedSheet is a sheet back from its fetch, read off the frame, or
 // why there is none.
 type importedSheet struct {
-	url   string
-	sheet *css.Sheet
-	warns []css.Warning
-	err   error
+	url      string
+	sheet    *css.Sheet
+	encoding string
+	warns    []css.Warning
+	err      error
 }
 
 // imported is s with the sheets its @import rules name in their
 // places, those that have come so far: read from fsys when it holds
-// them, fetched otherwise. chain are the addresses s is imported
-// through, its own last, and from is its own, "" for none.
-func (d *Document) imported(s *css.Sheet, fsys fs.FS, chain []string, from string) *css.Sheet {
+// them, fetched otherwise, and decoded in encoding when they say no
+// encoding of their own. chain are the addresses s is imported through,
+// its own last, and from is its own, "" for none.
+func (d *Document) imported(s *css.Sheet, fsys fs.FS, chain []string, from, encoding string) *css.Sheet {
 	imps := s.Imports()
 	if len(imps) == 0 {
 		return s
@@ -77,16 +84,17 @@ func (d *Document) imported(s *css.Sheet, fsys fs.FS, chain []string, from strin
 			d.warn(fmt.Errorf("ui: @import %s: a sheet that imports itself", imp.URL))
 			continue
 		}
-		if in := d.importedSheet(imp.URL, fsys, from); in != nil {
-			got[i] = d.imported(in, fsys, append(slices.Clip(chain), imp.URL), imp.URL)
+		if in := d.importedSheet(imp.URL, fsys, from, encoding); in != nil {
+			got[i] = d.imported(in, fsys, append(slices.Clip(chain), imp.URL), imp.URL, d.pageSheets.encodings[imp.URL])
 		}
 	}
 	return s.Imported(got)
 }
 
-// importedSheet is the sheet at address, read once: nil while it is
-// on its way, and when it can't be had.
-func (d *Document) importedSheet(address string, fsys fs.FS, from string) *css.Sheet {
+// importedSheet is the sheet at address, read once, decoded in
+// encoding when it says none of its own: nil while it is on its way,
+// and when it can't be had.
+func (d *Document) importedSheet(address string, fsys fs.FS, from, encoding string) *css.Sheet {
 	p := &d.pageSheets
 	if s, ok := p.sheets[address]; ok {
 		return s
@@ -106,7 +114,9 @@ func (d *Document) importedSheet(address string, fsys fs.FS, from string) *css.S
 		}
 	}
 	if inline {
-		s, warns := css.Parse(address, string(data), d.importParsing(address)...)
+		text, read := css.Decode(data, encoding)
+		d.decodedIn(address, read)
+		s, warns := css.Parse(address, text, d.importParsing(address)...)
 		for _, w := range warns {
 			d.warn(w)
 		}
@@ -118,8 +128,16 @@ func (d *Document) importedSheet(address string, fsys fs.FS, from string) *css.S
 		d.warn(fmt.Errorf("ui: @import %s is not followed; fetch it with FetchSheets", address))
 		return nil
 	}
-	d.fetchSheet(address, from)
+	d.fetchSheet(address, from, encoding)
 	return nil
+}
+
+func (d *Document) decodedIn(address, encoding string) {
+	p := &d.pageSheets
+	if p.encodings == nil {
+		p.encodings = map[string]string{}
+	}
+	p.encodings[address] = encoding
 }
 
 // importParsing are the css options a sheet imported from address is
@@ -132,8 +150,8 @@ func (d *Document) importParsing(address string) []css.ParseOption {
 }
 
 // fetchSheet asks the fetcher for the sheet at address off the frame,
-// and reads it there.
-func (d *Document) fetchSheet(address, from string) {
+// and decodes and reads it there.
+func (d *Document) fetchSheet(address, from, encoding string) {
 	p := &d.pageSheets
 	if p.slots == nil {
 		p.slots = make(chan struct{}, sheetFetchesAtOnce)
@@ -150,7 +168,9 @@ func (d *Document) fetchSheet(address, from string) {
 		if err != nil {
 			got.err = err
 		} else {
-			got.sheet, got.warns = css.Parse(address, string(data), opts...)
+			var text string
+			text, got.encoding = css.Decode(data, encoding)
+			got.sheet, got.warns = css.Parse(address, text, opts...)
 		}
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -177,6 +197,7 @@ func (d *Document) landSheets() {
 		}
 		d.addFontFaces(got.sheet.FontFaces(), nil)
 		p.sheets[got.url] = got.sheet
+		d.decodedIn(got.url, got.encoding)
 	}
 	if len(landed) == 0 {
 		return

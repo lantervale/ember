@@ -239,3 +239,11 @@ func TestAStretchedTableNarrowsByItsCollapsedColumnButInAFlexRow(t *testing.T) {
 		})
 	}
 }
+
+func TestACollapsedRowGroupTakesItsAnonymousRowsWithIt(t *testing.T) {
+	gone := el(dom.Tbody, func(st *style.Computed) { st.Collapse = true }, el(dom.Div, block, text("H")))
+	kept := el(dom.Tbody, nil, row(cell("H")))
+	tb := el(dom.Table, nil, gone, kept)
+	tr := lay(el(dom.Div, block, tb), 400)
+	assert.Equal(t, float32(12), tr.Of[tb].Size.Y, "the block's anonymous row out with its group")
+}

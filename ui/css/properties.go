@@ -188,6 +188,7 @@ var properties = map[string]property{
 	"mask-mode":             {initial: "match-source"},
 	"mask-composite":        {initial: "add"},
 	"clip-path":             {initial: "none"},
+	"clip":                  {initial: "auto"},
 	"object-fit":            {initial: "fill"},
 	"object-position":       {initial: "50% 50%"},
 	"box-shadow":            {initial: "none"},
@@ -318,7 +319,6 @@ var outside = map[string]string{
 	"grid-column-gap": "grid-column-gap is the old name of column-gap",
 	"box-flex":        "old flexbox is not supported; use flex",
 	"zoom":            "zoom is not supported; use transform: scale()",
-	"clip":            "clip is not supported; use overflow: clip",
 }
 
 // shortGap is gap, the shorthand of row-gap and column-gap.

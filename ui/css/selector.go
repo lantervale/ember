@@ -843,10 +843,14 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 		}
 	}
 	i := 0
+	var unknown *SelectorError
 	for {
 		c, read, bad := parseCompound(cs[i:])
-		if bad != nil {
+		switch {
+		case bad != nil && !bad.unmatched:
 			return Selector{}, bad
+		case bad != nil && unknown == nil:
+			unknown = bad
 		}
 		s.Compounds = append(s.Compounds, c)
 		i += read
@@ -882,6 +886,9 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 			return Selector{}, selErr(cs[i-1], "selector ends with a combinator")
 		}
 		s.Combinators = append(s.Combinators, comb)
+	}
+	if unknown != nil {
+		return Selector{}, unknown
 	}
 	s.Specificity = s.specificity()
 	return s, nil
@@ -951,17 +958,21 @@ func (c *Compound) specificity() Specificity {
 	return sp
 }
 
+// parseCompound reads the compound cs starts with and how many of its
+// components it takes. One naming an element ui has none of is read to
+// its end all the same, and then is unmatched: anything else wrong in it
+// is the error.
 func parseCompound(cs []Component) (Compound, int, *SelectorError) {
 	var c Compound
+	var unknown *SelectorError
 	i := 0
 	if i < len(cs) {
 		switch t := cs[i]; {
 		case t.Kind == Ident:
 			tag, ok := dom.TagNamed(strings.ToLower(t.Text))
 			if !ok {
-				err := selErr(t, "ui has no <%s> element", strings.ToLower(t.Text))
-				err.unmatched = true
-				return c, 0, err
+				unknown = selErr(t, "ui has no <%s> element", strings.ToLower(t.Text))
+				unknown.unmatched = true
 			}
 			c.Tag = tag
 			i++
@@ -1004,11 +1015,11 @@ func parseCompound(cs []Component) (Compound, int, *SelectorError) {
 				return c, 0, selErr(t, "unexpected %q in selector", t.String())
 			}
 			c.text = join(cs[:i])
-			return c, i, nil
+			return c, i, unknown
 		}
 	}
 	c.text = join(cs[:i])
-	return c, i, nil
+	return c, i, unknown
 }
 
 func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
