@@ -459,8 +459,8 @@ func bodyUnder(b *box.Box, html *dom.Node) *box.Box {
 			return c
 		}
 		if c.Node == nil || c.Node == html {
-			if b := bodyUnder(c, html); b != nil {
-				return b
+			if body := bodyUnder(c, html); body != nil {
+				return body
 			}
 		}
 	}
