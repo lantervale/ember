@@ -202,6 +202,20 @@ func TestTextSitsOnLayoutsBaselineWhateverTheFonts(t *testing.T) {
 	assert.Equal(t, geom.V2(0, 15), r.of("text")[0].At, "the same with or without metrics")
 }
 
+func TestTextStandsOnItsBaselineRoundedToDevicePixels(t *testing.T) {
+	at := func(top, scale float32) float32 {
+		p := el(0, top, 100, 20, nil)
+		p.Append(text(0, 0, "x", p.Style))
+		r := newRecorder()
+		Paint(r, tree(p), Scale(scale))
+		return r.of("text")[0].At.Y
+	}
+	assert.InDelta(t, 15, at(0.3, 1), 1e-4, "15.3 rounds to the row of pixels at 15, as Chrome's")
+	assert.InDelta(t, 16, at(0.5, 1), 1e-4)
+	assert.InDelta(t, 15.5, at(0.3, 2), 1e-4, "on a 2× display, to half points")
+	assert.InDelta(t, 15.3, at(0.3, 0), 1e-4, "where no scale is given, as layout has it")
+}
+
 func TestStackingPaintsNegativeZThenFlowThenPositionedThenPositiveZ(t *testing.T) {
 	pos := func(c color.Color, z int, auto bool) *box.Box {
 		return el(0, 0, 10, 10, func(s *style.Computed) {

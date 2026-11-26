@@ -50,7 +50,8 @@ func TestHandlerServesXHTMLAsXMLWithTheFonts(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.Header.Get("Content-Type") != "application/xhtml+xml" ||
-		!strings.Contains(string(body), "<head><style>@font-face { font-family: Ahem; src: url(/fonts/Ahem.ttf)") {
+		!strings.Contains(string(body), "<head><style>@font-face { font-family: Ahem; src: url(/fonts/Ahem.ttf)") ||
+		!strings.Contains(string(body), ":root { -webkit-font-smoothing: antialiased; }") {
 		t.Errorf("%s:\n%s", resp.Header.Get("Content-Type"), body)
 	}
 	resp, err = srv.Client().Get(srv.URL + "/../MANIFEST.json")
