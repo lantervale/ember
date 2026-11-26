@@ -21,6 +21,20 @@ func squeezed(build func(width string) *ui.Node) []*ui.Node {
 	return out
 }
 
+// TestSpacesAZeroWidthSpaceKeepsApartMatchChrome holds the boxes alone to Chrome's: the
+// text of ember's lines leaves zero-width spaces out.
+func TestSpacesAZeroWidthSpaceKeepsApartMatchChrome(t *testing.T) {
+	const zwsp = "\u200b"
+	boxed := ui.Style("background: #ddd")
+	d := page(
+		ui.P(ui.Text("a"), ui.Span(boxed, ui.Text(zwsp+" "+zwsp+" "+zwsp+" "+zwsp)), ui.Text("b")),
+		ui.P(ui.Text("a"), ui.Span(boxed, ui.Text(" "+zwsp+" "+zwsp+" ")), ui.Text("b")),
+		ui.P(ui.Text("a "+zwsp+" b"), ui.Span(boxed, ui.Text("\u00a0\u00a0\u00a0")), ui.Text("c")),
+	)
+	r := chrome.Match(t, d, geom.V2(800, 600))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}
+
 func TestSpacesAtLineEdgesMatchChrome(t *testing.T) {
 	const padded = "padding: 0 5px; border: 1px solid #888; margin: 0 3px"
 	// Chrome gives a span that paints nothing of its own a rectangle per child on a line,

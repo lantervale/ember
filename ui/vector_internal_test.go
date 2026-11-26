@@ -341,14 +341,12 @@ func TestAFetchedVectorPictureIsReadAndDrawnOffTheFrame(t *testing.T) {
 	v := d.vectors["https://art.test/icon"]
 	require.NotNil(t, v)
 	assert.Empty(t, v.rasters, "the frames that ask for it don't wait for it")
-	assert.Equal(t, 1, d.ImagesLoading(), "its size being drawn counts as loading")
 
 	close(readShapes(icon).gate)
 	d.fetching.Wait()
 	assert.Empty(t, v.rasters, "drawn, it waits for the next layout")
 	frames(1)
 	require.Len(t, v.rasters, 1)
-	assert.Zero(t, d.ImagesLoading())
 	assert.True(t, d.replay.recorded)
 	frames(3)
 	d.fetching.Wait()

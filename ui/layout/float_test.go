@@ -39,6 +39,21 @@ func fragments(b *box.Box) []fragmentAt {
 	return out
 }
 
+func TestABoxBesideFloatsFitsAllTheWayDown(t *testing.T) {
+	bfc := func() *dom.Node {
+		return el(dom.Div, func(st *style.Computed) {
+			st.Display, st.Overflow = style.Block, style.Size[style.Overflow]{Width: style.Hidden, Height: style.Hidden}
+			st.Size.Width, st.Size.Height = style.Px(200), style.Px(50)
+		})
+	}
+	first, second := bfc(), bfc()
+	root := el(dom.Div, width(400), el(dom.Div, float(style.FloatLeft, 150, 75)),
+		el(dom.Div, float(style.FloatRight, 300, 75)), first, second)
+	tr := lay(root, 600)
+	assert.Equal(t, geom.V2(150, 0), at(tr.Of[first]), "beside the left float, above the right one below it")
+	assert.Equal(t, geom.V2(0, 150), at(tr.Of[second]), "the right float would overlap its bottom: below both")
+}
+
 func TestABoxThatShrinksHoldsAFloatAndTheTextBesideIt(t *testing.T) {
 	shrunk := func(kids ...*dom.Node) *dom.Node {
 		return el(dom.Div, func(st *style.Computed) { st.Display, st.Float = style.Block, style.FloatLeft }, kids...)
