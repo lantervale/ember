@@ -975,9 +975,9 @@ css/CSS2/box-display/containing-block-004.xht ref chrome
 css/CSS2/box-display/containing-block-005.xht ref chrome
 css/CSS2/box-display/containing-block-006.xht ref chrome
 css/CSS2/box-display/containing-block-007.xht ref chrome
-css/CSS2/box-display/containing-block-008.xht chrome
+css/CSS2/box-display/containing-block-008.xht ref chrome
 css/CSS2/box-display/containing-block-009.xht ref chrome
-css/CSS2/box-display/containing-block-010.xht chrome
+css/CSS2/box-display/containing-block-010.xht ref chrome
 css/CSS2/box-display/containing-block-019.xht ref chrome
 css/CSS2/box-display/containing-block-020.xht ref chrome
 css/CSS2/box-display/containing-block-021.xht ref chrome
@@ -1255,7 +1255,7 @@ css/CSS2/floats-clear/adjoining-float-nested-forced-clearance-004.html ref chrom
 css/CSS2/floats-clear/adjoining-float-nested-forced-clearance.html ref chrome
 css/CSS2/floats-clear/adjoining-float-new-fc.html ref chrome
 css/CSS2/floats-clear/clear-001.xht ref chrome
-css/CSS2/floats-clear/clear-002.xht chrome
+css/CSS2/floats-clear/clear-002.xht ref chrome
 css/CSS2/floats-clear/clear-003.xht ref chrome
 css/CSS2/floats-clear/clear-004.xht ref chrome
 css/CSS2/floats-clear/clear-005.xht ref chrome
@@ -1283,7 +1283,7 @@ css/CSS2/floats-clear/clear-default-inheritance-001.xht ref chrome
 css/CSS2/floats-clear/clear-float-001.xht ref chrome
 css/CSS2/floats-clear/clear-float-002.xht ref chrome
 css/CSS2/floats-clear/clear-float-004.xht ref chrome
-css/CSS2/floats-clear/clear-float-005.xht chrome
+css/CSS2/floats-clear/clear-float-005.xht ref chrome
 css/CSS2/floats-clear/clear-float-006.xht ref chrome
 css/CSS2/floats-clear/clear-float-007.xht ref chrome
 css/CSS2/floats-clear/clear-float-008.xht ref chrome
@@ -3670,8 +3670,8 @@ css/CSS2/positioning/abspos-019.xht ref chrome
 css/CSS2/positioning/abspos-020.xht ref chrome
 css/CSS2/positioning/abspos-022.xht ref chrome
 css/CSS2/positioning/abspos-024.xht ref chrome
-css/CSS2/positioning/abspos-025.xht chrome
-css/CSS2/positioning/abspos-026.xht chrome
+css/CSS2/positioning/abspos-025.xht ref chrome
+css/CSS2/positioning/abspos-026.xht ref chrome
 css/CSS2/positioning/abspos-027.xht ref chrome
 css/CSS2/positioning/abspos-028.xht ref chrome
 css/CSS2/positioning/abspos-containing-block-001.xht ref chrome
@@ -3957,6 +3957,7 @@ css/CSS2/positioning/right-applies-to-015.xht ref chrome
 css/CSS2/positioning/right-offset-001.xht ref chrome
 css/CSS2/positioning/right-offset-002.xht ref chrome
 css/CSS2/positioning/right-offset-003.xht ref chrome
+css/CSS2/positioning/right-offset-004.xht ref
 css/CSS2/positioning/right-offset-percentage-001.xht ref chrome
 css/CSS2/positioning/top-004.xht ref chrome
 css/CSS2/positioning/top-005.xht ref chrome
@@ -5397,6 +5398,7 @@ css/CSS2/visufx/visibility-block-001.xht ref chrome
 css/CSS2/visufx/visibility-descendants-002.html ref chrome
 css/CSS2/visuren/anonymous-boxes-001a.xht ref
 css/CSS2/visuren/anonymous-boxes-001b.xht ref chrome
+css/CSS2/visuren/box-offsets-rel-pos-002.xht ref
 css/CSS2/visuren/clear-applies-to-016.xht ref chrome
 css/CSS2/visuren/clear-applies-to-017.xht ref chrome
 css/CSS2/visuren/emptyspan-1.html chrome

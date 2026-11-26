@@ -3187,6 +3187,11 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 					// its margin box mirrored across the line, its margins on their sides
 					l.location.y = 2*y + lh - l.location.y - a.height - a.margin.b + a.margin.t
 				}
+				moved := inlineOffset(a.node.st, size{content, none})
+				for k := c.runs[p.run].span; k >= 0; k = c.spans[k].up {
+					moved = moved.Add(inlineOffset(c.spans[k].st, size{content, none}))
+				}
+				l.location = point{l.location.x + moved.X, l.location.y + moved.Y}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
 				st := a.node.st
