@@ -109,3 +109,16 @@ func TestAColumnWithAWidthTakesNoExtra(t *testing.T) {
 	assert.Equal(t, float32(30), tr.Of[size].Size.X, "the sized column keeps its width")
 	assert.Equal(t, float32(170), tr.Of[name].Size.X, "the rest goes to the auto column")
 }
+
+func TestATableWhoseBordersCollapseHasNoPadding(t *testing.T) {
+	collapsed := func(st *style.Computed) {
+		st.BorderCollapse, st.BoxSizing = true, style.ContentBox
+		st.Size.Width, st.Size.Height = style.Px(100), style.Px(100)
+		st.Padding = style.All(style.Px(100))
+	}
+	empty := el(dom.Table, collapsed)
+	full := el(dom.Table, collapsed, row(cell("H")))
+	tr := lay(el(dom.Div, block, empty, full), 400)
+	assert.Equal(t, geom.Vec2{X: 100, Y: 100}, tr.Of[empty].Size, "empty, its padding dropped all the same")
+	assert.Equal(t, geom.Vec2{X: 100, Y: 100}, tr.Of[full].Size)
+}
