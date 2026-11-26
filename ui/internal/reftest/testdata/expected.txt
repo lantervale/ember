@@ -3930,6 +3930,7 @@ css/CSS2/positioning/position-relative-005.xht ref chrome
 css/CSS2/positioning/position-relative-006.xht ref chrome
 css/CSS2/positioning/position-relative-007.xht ref chrome
 css/CSS2/positioning/position-relative-009.xht ref chrome
+css/CSS2/positioning/position-relative-010.xht ref
 css/CSS2/positioning/position-relative-013.xht ref chrome
 css/CSS2/positioning/position-relative-014.xht ref chrome
 css/CSS2/positioning/position-relative-015.xht ref chrome
@@ -3946,6 +3947,7 @@ css/CSS2/positioning/position-relative-032.xht ref chrome
 css/CSS2/positioning/position-relative-033.xht ref chrome
 css/CSS2/positioning/position-relative-035.xht ref chrome
 css/CSS2/positioning/position-relative-037.xht ref chrome
+css/CSS2/positioning/position-relative-038.xht ref
 css/CSS2/positioning/position-relative-nested-001.xht ref chrome
 css/CSS2/positioning/position-static-001.xht ref chrome
 css/CSS2/positioning/positioning-float-001.xht chrome
@@ -3955,6 +3957,7 @@ css/CSS2/positioning/relpos-calcs-002.xht ref chrome
 css/CSS2/positioning/relpos-calcs-003.xht ref chrome
 css/CSS2/positioning/relpos-calcs-004.xht ref chrome
 css/CSS2/positioning/relpos-calcs-005.xht ref chrome
+css/CSS2/positioning/relpos-calcs-006.xht ref
 css/CSS2/positioning/relpos-calcs-007.xht ref chrome
 css/CSS2/positioning/right-004.xht ref chrome
 css/CSS2/positioning/right-005.xht ref chrome
