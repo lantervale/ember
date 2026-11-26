@@ -55,6 +55,31 @@ func TestAListItemsMarkerStandsOutsideItBesideItsFirstLine(t *testing.T) {
 	assert.Nil(t, markerOfBox(tr.Of[none]), "list-style-type: none draws no marker")
 }
 
+func TestAnEmptyListItemTakesTheLineOfItsMarker(t *testing.T) {
+	list := func(st *style.Computed) { st.Display = style.Block; st.Padding.Left = style.Px(40) }
+	a := el(dom.Li, listItem(style.ListCounter))
+	b := el(dom.Li, listItem(style.ListDisc))
+	none := el(dom.Li, listItem(style.ListNone))
+	dom.Data(a).MarkerText, dom.Data(a).HasMarkerText = "1. ", true
+	tr := lay(el(dom.Div, width(100), el(dom.Ol, list, a, b, none)), 200)
+
+	assert.Equal(t, geom.Rect{X: 40, W: 60, H: 10}, tr.Of[a].Rect(), "one line, as Chrome's")
+	num := markerOfBox(tr.Of[a])
+	require.NotNil(t, num)
+	require.Len(t, num.Lines, 1)
+	assert.Equal(t, "1. ", num.Lines[0].Text)
+	assert.Equal(t, float32(0), num.Pos.X+num.Size.X, "the number ends where the content starts")
+	assert.Equal(t, float32(0), num.Pos.Y)
+
+	assert.Equal(t, geom.Rect{X: 40, Y: 10, W: 60, H: 10}, tr.Of[b].Rect())
+	disc := markerOfBox(tr.Of[b])
+	require.NotNil(t, disc)
+	assert.Less(t, disc.Pos.X+disc.Size.X, float32(0), "a bullet stands before the item's content")
+	assert.Len(t, tr.Of[b].Children, 1, "the marker alone: no run of text")
+
+	assert.Equal(t, geom.Rect{X: 40, Y: 20, W: 60}, tr.Of[none].Rect(), "without a marker the item is empty")
+}
+
 func TestABrBreaksTheLine(t *testing.T) {
 	br := el(dom.Br, nil)
 	p := el(dom.P, block, text("HH"), br, text("HHH HH"))
