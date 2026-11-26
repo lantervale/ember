@@ -30,3 +30,12 @@ func TestAScreensSheetRefusesARuleNamingAnElementUIHasNot(t *testing.T) {
 	assert.Contains(t, warns[0].Msg, "ui has no <applet> element; rule dropped")
 	assert.Empty(t, sheet.Rules)
 }
+
+func TestABrowsersSheetRefusesARuleWhoseUnknownElementIsBadlyWritten(t *testing.T) {
+	sheet, warns := css.Parse("",
+		"test;\n@charset \"UTF-8\";\n.a, #b { color: red }\nvideo > p:hover, #c { color: green }", css.Browser())
+	require.Len(t, warns, 1)
+	assert.Contains(t, warns[0].Msg, `unexpected ";" in selector; rule dropped`)
+	require.Len(t, sheet.Rules, 1, "a selector naming an element ui has not is read to its end before it matches nothing")
+	assert.Equal(t, "#c", sheet.Rules[0].Selectors[0].String())
+}

@@ -30,6 +30,9 @@ func TestDocumentBuildsThePageWithItsSheets(t *testing.T) {
 	if v, _ := d.ComputedValue(d.ByID("t"), "background-color"); v != "green" {
 		t.Errorf("background-color %q", v)
 	}
+	if v, _ := d.ComputedValue(d.ByID("t"), "-webkit-font-smoothing"); v != "antialiased" {
+		t.Errorf("-webkit-font-smoothing %q: glyphs at their exact coverage, as the references draw boxes", v)
+	}
 }
 
 const fixture = "testdata/wpt"
@@ -160,6 +163,10 @@ func TestReadPageKeepsXHTMLsEmptyElementsEmpty(t *testing.T) {
 	if div == nil || div.FirstChild != nil || div.NextSibling == nil || div.NextSibling.DataAtom != atom.P {
 		t.Fatalf("the div holds what follows it")
 	}
+	svg := find(body, atom.Svg)
+	if svg == nil || svg.Namespace != nsSVG || svg.FirstChild == nil || svg.FirstChild.Data != "rect" {
+		t.Errorf("an svg element is SVG's, known by its atom as html.Parse knows it")
+	}
 	if p.Skip != "" || len(p.Refs) != 1 || p.Refs[0].Rel != Mismatch {
 		t.Errorf("skip %q, refs %v", p.Skip, p.Refs)
 	}
@@ -286,6 +293,9 @@ func TestDecideFollowsAlternativesAndChains(t *testing.T) {
 	add("green", green, Ref{"chained-red", Match})
 	add("chained-red", red)
 	add("plain", green)
+	add("one-way", green, Ref{"other-way", Match})
+	add("other-way", green, Ref{"one-way", Match})
+	add("white", solid(2, 2, color.NRGBA{255, 255, 255, 255}))
 	cases := []struct {
 		refs []Ref
 		want Status
@@ -294,12 +304,19 @@ func TestDecideFollowsAlternativesAndChains(t *testing.T) {
 		{[]Ref{{"green", Match}}, Fail},
 		{[]Ref{{"red", Mismatch}}, Pass},
 		{[]Ref{{"absent", Match}}, Error},
+		{[]Ref{{"one-way", Match}}, Pass},
 	}
 	for _, c := range cases {
 		got := decide(Test{Path: "t", Refs: c.refs}, pages, map[string]error{}, renders)
 		if got.Status != c.want {
 			t.Errorf("refs %v: %s (%s), want %s", c.refs, got.Status, got.Reason, c.want)
 		}
+	}
+	if got := decide(Test{Path: "white", Refs: []Ref{{Blank, Match}}}, pages, nil, renders); got.Status != Pass {
+		t.Errorf("white against about:blank: %s (%s)", got.Status, got.Reason)
+	}
+	if got := decide(Test{Path: "t", Refs: []Ref{{Blank, Match}}}, pages, nil, renders); got.Status != Fail {
+		t.Errorf("green against about:blank: %s (%s)", got.Status, got.Reason)
 	}
 	pages["skipped"] = &Page{Path: "skipped", Skip: "script"}
 	if got := decide(Test{Path: "t", Refs: []Ref{{"skipped", Match}}}, pages, nil, renders); got.Status != Skip {

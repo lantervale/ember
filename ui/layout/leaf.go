@@ -1,6 +1,9 @@
 package layout
 
-import "github.com/lantervale/ember/ui/internal/style"
+import (
+	"github.com/lantervale/ember/ui/internal/box"
+	"github.com/lantervale/ember/ui/internal/style"
+)
 
 // flowAmong has the lines of n take the room the floats of ctx leave them, at the width
 // the block has, and reports whether there are such floats.
@@ -104,6 +107,9 @@ func (t *tree) leaf(n *node, in input, ctx *blockContext) output {
 		c.height = none
 		if some(nodeSize.h) {
 			c.height = max(mClamp(nodeSize.h, minSize.h, maxSize.h)-inset.vertical(), 0)
+		} else if n.box.Kind == box.AnonymousBlock {
+			// an anonymous block's percentages are of the box round it, as CSS 2.1 §10.1 has it
+			c.height = in.parent.h
 		}
 	}
 	// A box that takes its content's width gives its content's percentages that width.
