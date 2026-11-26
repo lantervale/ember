@@ -4814,6 +4814,7 @@ css/CSS2/tables/height-width-table-001d.xht ref chrome
 css/CSS2/tables/height-width-table-001e.xht ref chrome
 css/CSS2/tables/padding-applies-to-013a.xht ref chrome
 css/CSS2/tables/row-visibility-001.xht ref chrome
+css/CSS2/tables/row-visibility-002.xht ref chrome
 css/CSS2/tables/separated-border-model-003a.xht ref chrome
 css/CSS2/tables/separated-border-model-003b.xht ref chrome
 css/CSS2/tables/separated-border-model-004a.xht ref chrome
