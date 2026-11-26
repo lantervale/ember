@@ -73,6 +73,10 @@ type inlineContent struct {
 	// text, and base is the level of its first paragraph.
 	reorders bool
 	base     bidi.Level
+	// isolated is, for each span that isolates its content (unicode-bidi isolate,
+	// isolate-override or plaintext), the level it stands at in the text round it: its
+	// isolate initiator's.
+	isolated map[int]bidi.Level
 	// line is the style of the block's first line where a ::first-line styles it, nil
 	// elsewhere; firstPieces are the pieces as measured in the first line's styles, and
 	// firstOn is set while they, and each run's and span's first-line style, stand in
@@ -1077,7 +1081,8 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			afterSpace = true
 		case string(ch) == zeroWidthSpace || ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
 			emit(word)
-			c.pieces = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level))
+			// a space after it follows no space: the spaces round it never collapse
+			c.pieces, afterSpace = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level)), false
 		default:
 			b.WriteRune(ch)
 			afterSpace = false
@@ -3202,6 +3207,9 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 				}
 				st := a.node.st
 				moved := inlineOffset(st, size{content, none})
+				for k := c.runs[p.run].span; k >= 0; k = c.spans[k].up {
+					moved = moved.Add(inlineOffset(c.spans[k].st, size{content, none}))
+				}
 				l.location = point{l.location.x + moved.X, l.location.y + moved.Y}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}

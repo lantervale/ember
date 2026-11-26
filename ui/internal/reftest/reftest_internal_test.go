@@ -30,6 +30,9 @@ func TestDocumentBuildsThePageWithItsSheets(t *testing.T) {
 	if v, _ := d.ComputedValue(d.ByID("t"), "background-color"); v != "green" {
 		t.Errorf("background-color %q", v)
 	}
+	if v, _ := d.ComputedValue(d.ByID("t"), "-webkit-font-smoothing"); v != "antialiased" {
+		t.Errorf("-webkit-font-smoothing %q: glyphs at their exact coverage, as the references draw boxes", v)
+	}
 }
 
 const fixture = "testdata/wpt"

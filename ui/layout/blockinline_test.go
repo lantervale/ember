@@ -81,6 +81,31 @@ func TestPositionRelativeMovesAnInlineAndTheBlocksItHolds(t *testing.T) {
 	assert.Equal(t, float32(30), tr.Of[root].Size.Y, "and leaves its room where it was")
 }
 
+func TestPositionRelativeMovesAnAtomicInlineAndThoseItsInlinesHold(t *testing.T) {
+	moved := func(left, top float32) func(*style.Computed) {
+		return func(st *style.Computed) {
+			st.Display = style.InlineBlock
+			st.Position = style.Relative
+			st.Inset.Left, st.Inset.Top = style.Px(left), style.Px(top)
+			st.Size = sizeOf(20, 20)
+		}
+	}
+	still := el(dom.Span, moved(0, 0))
+	own := el(dom.Span, moved(2, 5))
+	inner := el(dom.Span, moved(0, 0))
+	span := el(dom.Span, func(st *style.Computed) {
+		st.Position = style.Relative
+		st.Inset.Left, st.Inset.Top = style.Px(10), style.Px(3)
+	}, inner)
+	root := el(dom.Div, width(200), still, own, span)
+	tr := lay(root, 200)
+	at := tr.Of[still].Rect()
+	assert.Equal(t, at.X+20+2, tr.Of[own].Rect().X, "its own offset moves it")
+	assert.Equal(t, at.Y+5, tr.Of[own].Rect().Y)
+	assert.Equal(t, at.X+40+10, tr.Of[inner].Rect().X, "and the offset of the inline holding it")
+	assert.Equal(t, at.Y+3, tr.Of[inner].Rect().Y)
+}
+
 func TestABlockInNestedInlinesCutsThemAll(t *testing.T) {
 	inner := el(dom.Div, block, text("HHH"))
 	em := el(dom.Em, nil, text("H"), inner, text("HH"))

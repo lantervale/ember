@@ -230,6 +230,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0227 | [What no face has falls back to the machine's faces, as Chrome asks the platform](0227-what-no-face-has-falls-back-to-the-machines-faces-as-chrome-asks-the-platform.md) | rendering |
 | 0228 | [Flex lines balance by least squares, as Chrome sizes them](0228-flex-lines-balance-by-least-squares-as-chrome-sizes-them.md) | rendering |
 | 0229 | [WPT reftests run on ember against ember, and against Chrome](0229-wpt-reftests-run-on-ember-against-ember-and-against-chrome.md) | tools |
+| 0234 | [WPT reftests draw glyphs at their exact coverage](0234-wpt-reftests-draw-glyphs-at-their-exact-coverage.md) | tools |
 
 ## Writing one
 

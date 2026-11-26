@@ -723,6 +723,9 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		p.reached++
 		st := shown(c)
 		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
+		if st.TablePart == style.TableCaption && shown(b).Table {
+			ce.clip = e.clip
+		}
 		if c.Discarded {
 			p.collectPositioned(ce, outer)
 			continue
@@ -877,10 +880,12 @@ func inkReach(st *style.Computed) float32 {
 }
 
 // startsContext reports whether a box paints as a stacking context: a
-// positioned one with a z-index, or one less than opaque, transformed,
-// clipped by a clip-path, filtered, masked, mixed or isolated.
+// positioned one with a z-index, a fixed or sticky one whatever its
+// z-index, as Chrome's, or one less than opaque, transformed, clipped by
+// a clip-path, filtered, masked, mixed or isolated.
 func startsContext(st *style.Computed) bool {
-	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || st.Transformed() ||
+	return st.Position != style.Static && !st.ZAuto || st.Position == style.FixedPosition ||
+		st.Position == style.Sticky || st.Opacity < 1 || st.Transformed() ||
 		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 || st.Masked() ||
 		st.BlendMode != style.BlendNormal || st.Isolate
 }
@@ -930,7 +935,8 @@ const unbounded = 1e6
 
 // clipRect is the scrollport b clips its content to, if its overflow
 // clips on either axis or a collapsed row or column cut it: its padding
-// box less its scrollbars' gutter.
+// box less its scrollbars' gutter, a table's less its captions, which
+// stand outside its clip as Chrome's table wrapper holds them.
 func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 	o := shown(b).Overflow
 	if b.Cut {
@@ -940,6 +946,9 @@ func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)
+	if shown(b).Table {
+		r.Y, r.H = r.Y+b.Wrap.Top, max(r.H-b.Wrap.Vertical(), 0)
+	}
 	bar := b.Scrollbar
 	// A stable gutter no bar stands in clips nothing: the content shows
 	// under it, as in Chrome.
@@ -1011,14 +1020,27 @@ func (p *painter) snap(r geom.Rect) geom.Rect {
 		return r
 	}
 	xf := p.s.Transform()
+	x0, y0 := p.onPixel(r.X, xf.Origin.X), p.onPixel(r.Y, xf.Origin.Y)
+	return geom.Rect{X: x0, Y: y0, W: p.onPixel(r.X+r.W, xf.Origin.X) - x0, H: p.onPixel(r.Y+r.H, xf.Origin.Y) - y0}
+}
+
+// snapY is y on the nearest row of device pixels, as Chrome draws a line's
+// glyphs on its baseline rounded so, unless snap leaves things as they are.
+func (p *painter) snapY(y float32) float32 {
+	if p.snapScale() <= 0 {
+		return y
+	}
+	return p.onPixel(y, p.s.Transform().Origin.Y)
+}
+
+// onPixel is v, on an axis the transform moves by origin, on the nearest
+// device pixel.
+func (p *painter) onPixel(v, origin float32) float32 {
+	xf := p.s.Transform()
 	// k is device pixels per point of the space the base draws into: the
 	// window's, when the base is a Document's zoom.
 	k := p.scale / xf.X.X
-	round := func(v, origin float32) float32 {
-		return (float32(math.Round(float64((v*xf.X.X+origin)*k)))/k - origin) / xf.X.X
-	}
-	x0, y0 := round(r.X, xf.Origin.X), round(r.Y, xf.Origin.Y)
-	return geom.Rect{X: x0, Y: y0, W: round(r.X+r.W, xf.Origin.X) - x0, H: round(r.Y+r.H, xf.Origin.Y) - y0}
+	return (float32(math.Round(float64((v*xf.X.X+origin)*k)))/k - origin) / xf.X.X
 }
 
 // snapScale is how many device pixels a point of what is drawn takes, 0
