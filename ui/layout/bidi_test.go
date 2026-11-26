@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -48,4 +49,28 @@ func TestVisualText(t *testing.T) {
 	assert.Equal(t, "גבא", visualText("אבג", 0))
 	assert.Equal(t, "12 בא", visualText("אב 12", 1))
 	assert.Equal(t, "(א)", visualText("(א)", 1), "brackets mirrored")
+}
+
+func TestABlockOverridingBidiShowsItsTextInItsDirection(t *testing.T) {
+	override := func(dir style.Direction) func(*style.Computed) {
+		return func(st *style.Computed) {
+			st.Dir = dir
+			st.Bidi = style.BidiOverride
+			st.Display = style.Block
+		}
+	}
+	shown := func(b *box.Box) []string {
+		var out []string
+		for _, c := range b.Children {
+			for _, f := range c.Lines {
+				out = append(out, f.Shown())
+			}
+		}
+		return out
+	}
+	rtlP := el(dom.P, override(style.RTL), text("txeT relliF"), el(dom.Br, nil), text("dc"))
+	ltrP := el(dom.P, override(style.LTR), text("ab אבג"))
+	tr := lay(el(dom.Div, block, rtlP, ltrP), 400)
+	assert.Equal(t, []string{"Filler Text", "cd"}, shown(tr.Of[rtlP]), "each line, past the break too")
+	assert.Equal(t, []string{"ab אבג"}, shown(tr.Of[ltrP]), "Hebrew left to right, as written")
 }

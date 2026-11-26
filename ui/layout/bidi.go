@@ -39,7 +39,7 @@ func baseLevel(st *style.Computed) bidi.Level {
 // inline elements is right to left or orders its content apart, or its text has a
 // right-to-left character or a bidi control.
 func (c *inlineContent) mixed() bool {
-	if c.owner.st.Dir == style.RTL || c.owner.st.Bidi == style.BidiPlaintext {
+	if c.owner.st.Dir == style.RTL || c.owner.st.Bidi == style.BidiPlaintext || c.owner.st.Bidi.Overrides() {
 		return true
 	}
 	for _, s := range c.spans {
@@ -99,7 +99,8 @@ func closing(st *style.Computed) []rune {
 
 // levels resolves the content's bidi levels, the runs read as one text, atoms as
 // U+FFFC and each inline element's unicode-bidi as controls round its runs, a paragraph
-// to each forced break: per run, the level of each character of its text as cut reads
+// to each forced break, each opened by the override of an owner of unicode-bidi
+// bidi-override or isolate-override (CSS 2.1 §9.10): per run, the level of each character of its text as cut reads
 // it, the one of an atom. nil when the content needs no reordering.
 func (c *inlineContent) levels() [][]bidi.Level {
 	c.base = 0
@@ -135,18 +136,25 @@ func (c *inlineContent) levels() [][]bidi.Level {
 	open(len(c.runs))
 	levels := make([]bidi.Level, len(text))
 	base := baseLevel(c.owner.st)
+	var override []rune
+	if c.owner.st.Bidi.Overrides() {
+		override = []rune{lro}
+		if c.owner.st.Dir == style.RTL {
+			override = []rune{rlo}
+		}
+	}
 	for from := 0; from < len(text); {
 		to := from
 		for to < len(text) && text[to] != '\n' {
 			to++
 		}
 		to = min(to+1, len(text))
-		p := bidi.Levels(text[from:to], base)
+		p := bidi.Levels(append(slices.Clip(override), text[from:to]...), base)
 		if from == 0 {
 			c.base = p.Base()
 		}
 		for i := from; i < to; i++ {
-			levels[i] = p.Level(i - from)
+			levels[i] = p.Level(i - from + len(override))
 		}
 		from = to
 	}
