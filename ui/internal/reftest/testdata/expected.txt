@@ -4937,7 +4937,6 @@ css/CSS2/tables/table-anonymous-objects-197.xht chrome
 css/CSS2/tables/table-anonymous-objects-198.xht chrome
 css/CSS2/tables/table-anonymous-objects-199.xht chrome
 css/CSS2/tables/table-anonymous-objects-200.xht chrome
-css/CSS2/tables/table-anonymous-objects-211.xht chrome
 css/CSS2/tables/table-anonymous-objects-212.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-213.xht chrome
 css/CSS2/tables/table-backgrounds-bc-cell-001.xht ref chrome
