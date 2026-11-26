@@ -225,6 +225,9 @@ func TestDecideFollowsAlternativesAndChains(t *testing.T) {
 	add("green", green, Ref{"chained-red", Match})
 	add("chained-red", red)
 	add("plain", green)
+	add("one-way", green, Ref{"other-way", Match})
+	add("other-way", green, Ref{"one-way", Match})
+	add("white", solid(2, 2, color.NRGBA{255, 255, 255, 255}))
 	cases := []struct {
 		refs []Ref
 		want Status
@@ -233,12 +236,19 @@ func TestDecideFollowsAlternativesAndChains(t *testing.T) {
 		{[]Ref{{"green", Match}}, Fail},
 		{[]Ref{{"red", Mismatch}}, Pass},
 		{[]Ref{{"absent", Match}}, Error},
+		{[]Ref{{"one-way", Match}}, Pass},
 	}
 	for _, c := range cases {
 		got := decide(Test{Path: "t", Refs: c.refs}, pages, map[string]error{}, renders)
 		if got.Status != c.want {
 			t.Errorf("refs %v: %s (%s), want %s", c.refs, got.Status, got.Reason, c.want)
 		}
+	}
+	if got := decide(Test{Path: "white", Refs: []Ref{{Blank, Match}}}, pages, nil, renders); got.Status != Pass {
+		t.Errorf("white against about:blank: %s (%s)", got.Status, got.Reason)
+	}
+	if got := decide(Test{Path: "t", Refs: []Ref{{Blank, Match}}}, pages, nil, renders); got.Status != Fail {
+		t.Errorf("green against about:blank: %s (%s)", got.Status, got.Reason)
 	}
 	pages["skipped"] = &Page{Path: "skipped", Skip: "script"}
 	if got := decide(Test{Path: "t", Refs: []Ref{{"skipped", Match}}}, pages, nil, renders); got.Status != Skip {
