@@ -1234,15 +1234,15 @@ css/CSS2/css1/c71-fwd-parsing-001.xht ref chrome
 css/CSS2/css1/c71-fwd-parsing-002.xht ref
 css/CSS2/css1/c71-fwd-parsing-003.xht ref chrome
 css/CSS2/css1/c71-fwd-parsing-004.xht ref chrome
-css/CSS2/css21-errata/s-11-1-1b-001.html chrome
+css/CSS2/css21-errata/s-11-1-1b-001.html ref chrome
 css/CSS2/css21-errata/s-11-1-1b-002.html chrome
 css/CSS2/css21-errata/s-11-1-1b-003.html chrome
 css/CSS2/css21-errata/s-11-1-1b-004.html chrome
 css/CSS2/css21-errata/s-11-1-1b-005.html ref chrome
 css/CSS2/css21-errata/s-11-1-1b-006.html ref chrome
 css/CSS2/css21-errata/s-11-1-1b-007.html ref chrome
-css/CSS2/css21-errata/s-11-1-1b-008.html chrome
-css/CSS2/css21-errata/s-11-1-1b-009.html chrome
+css/CSS2/css21-errata/s-11-1-1b-008.html ref chrome
+css/CSS2/css21-errata/s-11-1-1b-009.html ref chrome
 css/CSS2/csswg-issues/submitted/css2.1/anonymous-boxes-001.xht ref chrome
 css/CSS2/floats-clear/adjacent-floats-001.xht ref chrome
 css/CSS2/floats-clear/adjoining-float-before-clearance.html ref chrome

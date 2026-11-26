@@ -709,6 +709,9 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		p.reached++
 		st := shown(c)
 		ce := entry{b: c, at: at, clip: placedClip(c, st, inner)}
+		if st.TablePart == style.TableCaption && shown(b).Table {
+			ce.clip = e.clip
+		}
 		if c.Discarded {
 			p.collectPositioned(ce, outer)
 			continue
@@ -888,7 +891,8 @@ const unbounded = 1e6
 
 // clipRect is the scrollport b clips its content to, if its overflow
 // clips on either axis or a collapsed row or column cut it: its padding
-// box less its scrollbars' gutter.
+// box less its scrollbars' gutter, a table's less its captions, which
+// stand outside its clip as Chrome's table wrapper holds them.
 func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 	o := shown(b).Overflow
 	if b.Cut {
@@ -898,6 +902,9 @@ func clipRect(b *box.Box, at geom.Vec2) (geom.Rect, bool) {
 		return geom.Rect{}, false
 	}
 	r := padding(b, at)
+	if shown(b).Table {
+		r.Y, r.H = r.Y+b.Wrap.Top, max(r.H-b.Wrap.Vertical(), 0)
+	}
 	bar := b.Scrollbar
 	// A stable gutter no bar stands in clips nothing: the content shows
 	// under it, as in Chrome.
