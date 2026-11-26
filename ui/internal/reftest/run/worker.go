@@ -76,7 +76,7 @@ func (d *drawer) step(f world.Frame) {
 	case d.frames >= lastFrames || d.frames >= firstFrames && d.quiet >= settled:
 		d.win.Capture(d.job[1])
 		d.captured = true
-	case d.doc.FontsLoading() == 0 && d.doc.SheetsLoading() == 0 && !d.fetches.Busy():
+	case d.doc.FontsLoading() == 0 && d.doc.SheetsLoading() == 0 && d.doc.ImagesLoading() == 0 && !d.fetches.Busy():
 		d.quiet++
 	default:
 		d.quiet = 0
