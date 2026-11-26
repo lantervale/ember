@@ -3646,8 +3646,8 @@ css/CSS2/positioning/abspos-019.xht ref chrome
 css/CSS2/positioning/abspos-020.xht ref chrome
 css/CSS2/positioning/abspos-022.xht ref chrome
 css/CSS2/positioning/abspos-024.xht ref chrome
-css/CSS2/positioning/abspos-025.xht chrome
-css/CSS2/positioning/abspos-026.xht chrome
+css/CSS2/positioning/abspos-025.xht ref chrome
+css/CSS2/positioning/abspos-026.xht ref chrome
 css/CSS2/positioning/abspos-027.xht ref chrome
 css/CSS2/positioning/abspos-028.xht ref chrome
 css/CSS2/positioning/abspos-containing-block-001.xht ref chrome
@@ -3933,6 +3933,7 @@ css/CSS2/positioning/right-applies-to-015.xht ref chrome
 css/CSS2/positioning/right-offset-001.xht ref chrome
 css/CSS2/positioning/right-offset-002.xht ref chrome
 css/CSS2/positioning/right-offset-003.xht ref chrome
+css/CSS2/positioning/right-offset-004.xht ref
 css/CSS2/positioning/right-offset-percentage-001.xht ref chrome
 css/CSS2/positioning/top-004.xht ref chrome
 css/CSS2/positioning/top-005.xht ref chrome
@@ -5370,6 +5371,7 @@ css/CSS2/visufx/visibility-005.xht chrome
 css/CSS2/visufx/visibility-block-001.xht ref chrome
 css/CSS2/visufx/visibility-descendants-002.html ref chrome
 css/CSS2/visuren/anonymous-boxes-001b.xht ref chrome
+css/CSS2/visuren/box-offsets-rel-pos-002.xht ref
 css/CSS2/visuren/clear-applies-to-016.xht ref chrome
 css/CSS2/visuren/clear-applies-to-017.xht ref chrome
 css/CSS2/visuren/emptyspan-1.html chrome
