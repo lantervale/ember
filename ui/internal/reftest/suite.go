@@ -137,7 +137,8 @@ func decide(t Test, pages map[string]*Page, failed map[string]error, renders map
 		res.Properties = PropertiesOf(page, ref)
 	}
 	c := chain{pages: pages, failed: failed, renders: renders, fuzzy: t.Fuzzy, pictures: map[string]image.Image{}}
-	ok, why := c.passes(t.Path, t.Refs, 0)
+	root := c.node(t.Path, t.Refs, map[string]*refNode{}, map[[3]string]bool{})
+	ok, why := c.passes(root, map[string]bool{t.Path: true})
 	switch {
 	case ok:
 		res.Status = Pass
@@ -177,7 +178,10 @@ func unusable(p string, pages map[string]*Page, failed map[string]error, renders
 
 // chain walks a test's references as WPT's runner does: the references
 // of one page are alternatives, and a reference with its own continues
-// the chain, all of whose links must pass.
+// the chain, all of whose links must pass. The chain is the graph of the
+// references from the test, each comparison (a relation between two
+// pages, whichever way) in it once, so a reference that names a page
+// before it in the chain ends there.
 type chain struct {
 	pages    map[string]*Page
 	failed   map[string]error
@@ -186,43 +190,79 @@ type chain struct {
 	pictures map[string]image.Image
 }
 
-// passes reports whether p relates to one of refs as it says; else the
-// outcome of the last tried, with a status when it couldn't be compared.
-func (c *chain) passes(p string, refs []Ref, depth int) (bool, outcome) {
-	last := outcome{reason: "no reference"}
-	if depth > 8 {
-		return false, outcome{Error, "references chained too deep"}
-	}
+// refNode is a page of a chain and the references it continues to.
+type refNode struct {
+	path string
+	refs []refEdge
+}
+
+type refEdge struct {
+	to  *refNode
+	rel Rel
+}
+
+// node builds the chain from p, whose references are refs, as WPT's
+// runner builds it: nodes holds the pages met, seen the comparisons.
+func (c *chain) node(p string, refs []Ref, nodes map[string]*refNode, seen map[[3]string]bool) *refNode {
+	n := &refNode{path: p}
+	nodes[p] = n
 	for _, ref := range refs {
-		if why, ok := unusable(ref.Path, c.pages, c.failed, c.renders); !ok {
-			why.reason = "reference " + ref.Path + ": " + why.reason
+		key := [3]string{string(ref.Rel), min(p, ref.Path), max(p, ref.Path)}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		to, ok := nodes[ref.Path]
+		if !ok {
+			var next []Ref
+			if page := c.pages[ref.Path]; page != nil {
+				next = page.Refs
+			}
+			to = c.node(ref.Path, next, nodes, seen)
+		}
+		n.refs = append(n.refs, refEdge{to, ref.Rel})
+	}
+	return n
+}
+
+// passes reports whether n relates to one of its references as it says,
+// and that one on to the end of the chain or back to a page on the way
+// there, which path holds; else the outcome of the last tried, with a
+// status when it couldn't be compared.
+func (c *chain) passes(n *refNode, path map[string]bool) (bool, outcome) {
+	last := outcome{reason: "no reference"}
+	for _, ref := range n.refs {
+		to := ref.to.path
+		if why, ok := unusable(to, c.pages, c.failed, c.renders); !ok {
+			why.reason = "reference " + to + ": " + why.reason
 			last = why
 			continue
 		}
-		a, err := c.picture(p)
+		a, err := c.picture(n.path)
 		if err != nil {
 			return false, outcome{Error, err.Error()}
 		}
-		b, err := c.picture(ref.Path)
+		b, err := c.picture(to)
 		if err != nil {
 			return false, outcome{Error, err.Error()}
 		}
 		d := Compare(a, b)
-		fz := FuzzyFor(c.fuzzy, ref.Path)
+		fz := FuzzyFor(c.fuzzy, to)
 		if fz == nil {
-			if page := c.pages[p]; page != nil {
-				fz = FuzzyFor(page.Fuzzy, ref.Path)
+			if page := c.pages[n.path]; page != nil {
+				fz = FuzzyFor(page.Fuzzy, to)
 			}
 		}
-		if !Passes(ref.Rel, d, fz) {
-			last = outcome{reason: fmt.Sprintf("%s %s: %s", ref.Rel, ref.Path, d)}
+		if !Passes(ref.rel, d, fz) {
+			last = outcome{reason: fmt.Sprintf("%s %s: %s", ref.rel, to, d)}
 			continue
 		}
-		next := c.pages[ref.Path].Refs
-		if len(next) == 0 {
+		if len(ref.to.refs) == 0 || path[to] {
 			return true, outcome{}
 		}
-		ok, why := c.passes(ref.Path, next, depth+1)
+		path[to] = true
+		ok, why := c.passes(ref.to, path)
+		delete(path, to)
 		if ok {
 			return true, outcome{}
 		}

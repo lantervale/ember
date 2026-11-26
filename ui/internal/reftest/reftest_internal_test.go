@@ -225,6 +225,14 @@ func TestDecideFollowsAlternativesAndChains(t *testing.T) {
 	add("green", green, Ref{"chained-red", Match})
 	add("chained-red", red)
 	add("plain", green)
+	add("pair", green, Ref{"pair-back", Match})
+	add("pair-back", green, Ref{"pair", Match})
+	add("ring-red", red, Ref{"ring-blue", Mismatch})
+	add("ring-blue", solid(2, 2, color.NRGBA{0, 0, 255, 255}), Ref{"ring-green", Mismatch})
+	add("ring-green", green, Ref{"ring-red", Mismatch})
+	add("open-red", red, Ref{"open-green", Mismatch})
+	add("open-green", green, Ref{"open-twin", Mismatch})
+	add("open-twin", green, Ref{"open-red", Mismatch})
 	cases := []struct {
 		refs []Ref
 		want Status
@@ -233,6 +241,9 @@ func TestDecideFollowsAlternativesAndChains(t *testing.T) {
 		{[]Ref{{"green", Match}}, Fail},
 		{[]Ref{{"red", Mismatch}}, Pass},
 		{[]Ref{{"absent", Match}}, Error},
+		{[]Ref{{"pair", Match}}, Pass},
+		{[]Ref{{"ring-red", Mismatch}}, Pass},
+		{[]Ref{{"open-red", Mismatch}}, Fail},
 	}
 	for _, c := range cases {
 		got := decide(Test{Path: "t", Refs: c.refs}, pages, map[string]error{}, renders)
