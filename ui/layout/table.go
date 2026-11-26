@@ -879,11 +879,16 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	inner := func(cs int) float32 { return sx * float32(cs-1) }
 
 	w := in.known.w
-	if !some(w) {
+	switch {
+	case !some(w):
 		w = resolve(st.Size.Width, in.parent.w)
 		if some(w) && contentBox(st) {
 			w += inset.horizontal()
 		}
+	case st.BorderCollapse && contentBox(st) && st.Size.Width.Kind != style.Auto:
+		// The width given round the content took the borders and padding of the
+		// style; collapsed, the table has half its outer borders instead.
+		w += inset.horizontal() - edges(st.Padding, in.parent.w).add(borders(st)).horizontal()
 	}
 	lo, hi := tableLimits(st, in, inset)
 	w = mClamp(w, lo.w, hi.w)

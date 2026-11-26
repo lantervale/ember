@@ -120,6 +120,25 @@ func TestATableKeepsToItsMinAndMaxSizes(t *testing.T) {
 	assert.Equal(t, float32(40), tr.Of[held].Size.Y, "max-height over height")
 }
 
+func TestACollapsedTableIsItsWidthAndHalfItsOuterBorders(t *testing.T) {
+	collapsed := func(group, own float32) *dom.Node {
+		return el(dom.Table, func(st *style.Computed) {
+			st.BorderCollapse, st.BoxSizing, st.Size.Width = true, style.ContentBox, style.Px(100)
+			st.Border = style.Sides[float32]{Top: own, Right: own, Bottom: own, Left: own}
+			st.BorderStyle = style.Sides[style.BorderStyle]{Top: style.BorderSolid, Right: style.BorderSolid,
+				Bottom: style.BorderSolid, Left: style.BorderSolid}
+		}, el(dom.Tbody, func(st *style.Computed) {
+			st.Border = style.Sides[float32]{Top: group, Right: group, Bottom: group, Left: group}
+			st.BorderStyle = style.Sides[style.BorderStyle]{Top: style.BorderSolid, Right: style.BorderSolid,
+				Bottom: style.BorderSolid, Left: style.BorderSolid}
+		}, row(cell(""), cell(""))))
+	}
+	byGroup, byTable := collapsed(4, 0), collapsed(0, 6)
+	tr := lay(el(dom.Div, block, byGroup, byTable), 400)
+	assert.Equal(t, float32(104), tr.Of[byGroup].Size.X, "a row group's border, half outside the content")
+	assert.Equal(t, float32(106), tr.Of[byTable].Size.X, "the table's own, halved")
+}
+
 func TestAColumnKeepsToItsMinAndMaxWidths(t *testing.T) {
 	a, b := cell(""), cell("")
 	tb := el(dom.Table, func(st *style.Computed) { st.TableLayout = style.TableFixed },
