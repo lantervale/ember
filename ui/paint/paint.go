@@ -835,10 +835,12 @@ func inkReach(st *style.Computed) float32 {
 }
 
 // startsContext reports whether a box paints as a stacking context: a
-// positioned one with a z-index, or one less than opaque, transformed,
-// clipped by a clip-path, filtered, masked, mixed or isolated.
+// positioned one with a z-index, a fixed or sticky one whatever its
+// z-index, as Chrome's, or one less than opaque, transformed, clipped by
+// a clip-path, filtered, masked, mixed or isolated.
 func startsContext(st *style.Computed) bool {
-	return st.Position != style.Static && !st.ZAuto || st.Opacity < 1 || st.Transformed() ||
+	return st.Position != style.Static && !st.ZAuto || st.Position == style.FixedPosition ||
+		st.Position == style.Sticky || st.Opacity < 1 || st.Transformed() ||
 		!st.ClipPath.None() || len(st.Filters) > 0 || len(st.BackdropFilters) > 0 || st.Masked() ||
 		st.BlendMode != style.BlendNormal || st.Isolate
 }
