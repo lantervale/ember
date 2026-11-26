@@ -102,6 +102,35 @@ func TestBorderSpacingSetsTheRoomBetweenCells(t *testing.T) {
 	assert.Equal(t, geom.Vec2{X: 4 + 22 + 4, Y: 12}, at(tr.Of[d]).Sub(at(tr.Of[tb])))
 }
 
+func TestATableKeepsToItsMinAndMaxSizes(t *testing.T) {
+	sized := func(edit func(st *style.Computed)) *dom.Node {
+		return el(dom.Table, func(st *style.Computed) {
+			st.TableLayout = style.TableFixed
+			edit(st)
+		}, row(el(dom.Td, nil)))
+	}
+	narrowed := sized(func(st *style.Computed) { st.Size.Width, st.MaxSize.Width = style.Px(300), style.Px(100) })
+	widened := sized(func(st *style.Computed) { st.MinSize.Width = style.Px(100) })
+	tall := sized(func(st *style.Computed) { st.MinSize.Height = style.Px(50) })
+	held := sized(func(st *style.Computed) { st.Size.Height, st.MaxSize.Height = style.Px(300), style.Px(40) })
+	tr := lay(el(dom.Div, block, narrowed, widened, tall, held), 400)
+	assert.Equal(t, float32(100), tr.Of[narrowed].Size.X, "max-width over width")
+	assert.Equal(t, float32(100), tr.Of[widened].Size.X, "min-width over an auto width")
+	assert.Equal(t, float32(50), tr.Of[tall].Size.Y, "min-height, its row grown to it")
+	assert.Equal(t, float32(40), tr.Of[held].Size.Y, "max-height over height")
+}
+
+func TestAColumnKeepsToItsMinAndMaxWidths(t *testing.T) {
+	a, b := cell(""), cell("")
+	tb := el(dom.Table, func(st *style.Computed) { st.TableLayout = style.TableFixed },
+		el(dom.Col, func(st *style.Computed) { st.Size.Width, st.MaxSize.Width = style.Px(300), style.Px(60) }),
+		el(dom.Col, func(st *style.Computed) { st.MinSize.Width = style.Px(40) }),
+		row(a, b))
+	tr := lay(el(dom.Div, block, tb), 400)
+	assert.Equal(t, float32(60), tr.Of[a].Size.X)
+	assert.Equal(t, float32(40), tr.Of[b].Size.X, "a min-width alone sizes it")
+}
+
 func TestAColumnWithAWidthTakesNoExtra(t *testing.T) {
 	name, size := cell("HH"), cell("H", func(st *style.Computed) { st.Size.Width = style.Px(30) })
 	tb := el(dom.Table, func(st *style.Computed) { st.Size.Width = style.Px(200) }, row(name, size))
