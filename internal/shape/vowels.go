@@ -9,7 +9,7 @@ func (b *buffer) vowelConstraints() {
 	g := b.glyphs
 	next := func(i int) int {
 		i++
-		for i < len(g) && defaultIgnorable(g[i].Char) {
+		for i < len(g) && DefaultIgnorable(g[i].Char) {
 			i++
 		}
 		return i

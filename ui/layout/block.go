@@ -377,15 +377,29 @@ func relativeOffset(it *blockItem, parent size) point {
 	if it.position != style.Relative {
 		return point{}
 	}
-	return insetOffset(it.node.st, parent)
+	dir := it.node.st.Dir
+	if p := it.node.parent; p != nil {
+		dir = p.st.Dir
+	}
+	return insetOffset(it.node.st, parent, dir)
 }
 
 // insetOffset is how far position: relative moves a box of style st in a containing block
-// of size parent.
-func insetOffset(st *style.Computed, parent size) point {
+// of size parent and direction dir: by left, else by right, the other way round in
+// right-to-left, where right wins over left.
+func insetOffset(st *style.Computed, parent size, dir style.Direction) point {
 	l, r := resolve(st.Inset.Left, parent.w), resolve(st.Inset.Right, parent.w)
 	tp, b := resolve(st.Inset.Top, parent.h), resolve(st.Inset.Bottom, parent.h)
-	return point{or(l, or(-r, 0)), or(tp, or(-b, 0))}
+	return point{relativeX(l, r, dir), or(tp, or(-b, 0))}
+}
+
+// relativeX is how far left and right move a relatively positioned box in a containing
+// block of direction dir.
+func relativeX(l, r float32, dir style.Direction) float32 {
+	if dir == style.RTL && some(r) {
+		return -r
+	}
+	return or(l, or(-r, 0))
 }
 
 // inlineOffset is how far position: relative moves an inline element of style st, nothing
@@ -394,7 +408,7 @@ func inlineOffset(st *style.Computed, parent size) geom.Vec2 {
 	if st.Position != style.Relative {
 		return geom.Vec2{}
 	}
-	o := insetOffset(st, parent)
+	o := insetOffset(st, parent, st.Dir)
 	return geom.Vec2{X: o.x, Y: o.y}
 }
 
@@ -472,6 +486,8 @@ func (t *tree) slotBesideFloats(ctx *blockContext, it *blockItem, parent size, m
 		if slot.segment < 0 {
 			return slot
 		}
+		at := slot.segment
+		slot = ctx.slotDown(slot, it.size.h, [2]float32{margin.l, margin.r}, it.clear)
 		stretch := fmax(fmax(slot.stretchWidth, minAuto), 0)
 		w := it.size.w
 		switch {
@@ -485,7 +501,7 @@ func (t *tree) slotBesideFloats(ctx *blockContext, it *blockItem, parent size, m
 		if mClamp(w, it.minSize.w, it.maxSize.w) <= slot.borderWidth+fitTolerance {
 			return slot
 		}
-		after = slot.segment
+		after = at
 	}
 }
 
@@ -612,7 +628,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 
 		yMarginOffset := float32(0)
-		stretchW := fmax(innerW-nonAuto.horizontal(), 0)
+		room := innerW - nonAuto.horizontal()
+		stretchW := fmax(room, 0)
 		avoid, avoidW := point{}, float32(0)
 		avoids, pushedBelow := false, false
 		if !it.inSameBFC {
@@ -629,7 +646,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				pushedBelow = slot.y > minY
 				hasActive = slot.segment >= 0
 				avoids = true
-				stretchW = fmax(fmax(slot.stretchWidth, minAuto), 0)
+				room = fmax(slot.stretchWidth, minAuto)
+				stretchW = fmax(room, 0)
 				avoid, avoidW = point{slot.x, slot.y}, slot.borderWidth
 			}
 		}
@@ -740,7 +758,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		if autoCount == 0 {
 			resolved.l += blockAlignOffset(st, freeX)
 		}
-		if over := stretchW - finalSize.w; over < 0 && st.Dir == style.RTL {
+		if over := room - finalSize.w; over < 0 && st.Dir == style.RTL {
 			// over-constrained, the left margin gives way: the box overflows its left
 			resolved.l += over
 		}

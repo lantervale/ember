@@ -110,3 +110,17 @@ func TestAPointHitsThroughATransformByItsPixelSquare(t *testing.T) {
 	assert.True(t, shifted(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(3, -2)}))
 	assert.False(t, shifted(geom.Transform2D{X: geom.V2(1, 0), Y: geom.V2(0, 1), Origin: geom.V2(0.5, 0)}))
 }
+
+func TestATablesClipLeavesItsCaptionsOut(t *testing.T) {
+	caption := el(0, 0, 100, 10, func(s *style.Computed) { s.TablePart = style.TableCaption })
+	above := el(0, 10, 100, 40, nil)
+	table := el(0, 0, 100, 60, func(s *style.Computed) {
+		s.Table = true
+		s.Overflow = style.Size[style.Overflow]{Width: style.Hidden, Height: style.Hidden}
+	}, caption, above)
+	table.Wrap = box.Edges{Top: 20}
+	root := el(0, 0, 200, 200, nil, table)
+	assert.Same(t, caption, HitTest(tree(root), geom.V2(50, 5)), "the caption stands outside the table's clip")
+	assert.Same(t, root, HitTest(tree(root), geom.V2(50, 15)), "what overflows the grid into the caption's room is cut")
+	assert.Same(t, above, HitTest(tree(root), geom.V2(50, 25)))
+}

@@ -230,7 +230,9 @@ func TestCollapsedBordersMatchChrome(t *testing.T) {
 .odd td { border-width: 1px 2px 3px 4px; }
 .t { display: table; border-collapse: collapse; } .r { display: table-row; }
 .c { display: table-cell; border: 3px solid black; padding: 2px; } .rtl { direction: rtl; }
-.start { border-inline-start: 9px solid; } .tl { border-left: 2px solid; border-right: 8px solid; }`
+.start { border-inline-start: 9px solid; } .tl { border-left: 2px solid; border-right: 8px solid; }
+.cb { box-sizing: content-box; width: 100px; height: 60px; padding: 30px; background: #888; }
+.bb { box-sizing: border-box; }`
 	row := func(class string, cells ...*ui.Node) *ui.Node {
 		tr := ui.Tr(ui.Class(class))
 		for _, c := range cells {
@@ -251,6 +253,8 @@ func TestCollapsedBordersMatchChrome(t *testing.T) {
 		"each side its width":         styled(sheet, grid("odd")),
 		"padding and spacing are not": styled(sheet, grid("pad", "b3")),
 		"in a width and a height":     styled(sheet, grid("w", "h", "b3")),
+		"padding, a content-box width and no rows": styled(sheet,
+			ui.Div(ui.Table(ui.Class("cb")), grid("cb", "bb"))),
 		"a wide cell wins its edges": styled(sheet,
 			ui.Table(ui.Tbody(row("", td("one"), td("two", ui.Class("wide")), td("three")),
 				row("", td("four"), td("five"), td("six"))))),
@@ -381,6 +385,11 @@ table { border-spacing: 5px; } td { padding: 4px 8px; border: 2px solid; } .x { 
 			ui.Table(ui.Class("w"), ui.Style("height: 120px"), cols("", "x"),
 				ui.Tbody(ui.Tr(td("one"), td("two")), ui.Tr(ui.Class("x"), td("three"), td("four")),
 					ui.Tr(td("five"), td("six"))))),
+		"a collapsed row group of a block alone": styled(sheet,
+			ui.Div(ui.Style("display: table"),
+				ui.Div(ui.Class("x"), ui.Style("display: table-row-group"), ui.Div(ui.Text("a block"))),
+				ui.Div(ui.Style("display: table-row-group"), ui.Div(ui.Style("display: table-row"),
+					ui.Div(ui.Style("display: table-cell"), ui.Text("one")))))),
 	}
 	for name, d := range cases {
 		t.Run(name, func(t *testing.T) { chrome.Match(t, d, geom.V2(640, 400)) })
