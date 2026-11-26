@@ -457,6 +457,31 @@ func TestOutOfFlowInsideASpanIsAnchoredInItsLine(t *testing.T) {
 	}
 }
 
+func TestPositionRelativeMovesAnAtomicInlineAndNotItsLine(t *testing.T) {
+	box10 := func(edit func(st *style.Computed)) func(st *style.Computed) {
+		return func(st *style.Computed) {
+			st.Display = style.InlineBlock
+			st.Size = style.Size[style.Length]{Width: style.Px(10), Height: style.Px(10)}
+			if edit != nil {
+				edit(st)
+			}
+		}
+	}
+	moved := el(dom.Span, box10(func(st *style.Computed) {
+		st.Position = style.Relative
+		st.Inset = style.Sides[style.Length]{Top: style.Px(30), Right: style.Px(7)}
+	}))
+	pct := el(dom.Span, box10(func(st *style.Computed) {
+		st.Position = style.Relative
+		st.Inset = style.Sides[style.Length]{Left: style.Percent(10)}
+	}))
+	after := el(dom.Span, box10(nil))
+	tr := lay(el(dom.Div, width(200), moved, pct, after), 200)
+	assert.Equal(t, geom.Rect{X: -7, Y: 30, W: 10, H: 10}, tr.Of[moved].Rect(), "right: 7px moves it left")
+	assert.Equal(t, geom.Rect{X: 30, W: 10, H: 10}, tr.Of[pct].Rect(), "10% of the line's width")
+	assert.Equal(t, geom.Rect{X: 20, W: 10, H: 10}, tr.Of[after].Rect(), "the next stays where it was")
+}
+
 func TestAnInlineTextareaKeepsItsOverflow(t *testing.T) {
 	content := make(map[style.Display]geom.Vec2, 2)
 	for _, d := range []style.Display{style.Block, style.InlineBlock} {
