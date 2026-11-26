@@ -3200,9 +3200,11 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 					// its margin box mirrored across the line, its margins on their sides
 					l.location.y = 2*y + lh - l.location.y - a.height - a.margin.b + a.margin.t
 				}
+				st := a.node.st
+				moved := inlineOffset(st, size{content, none})
+				l.location = point{l.location.x + moved.X, l.location.y + moved.Y}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
-				st := a.node.st
 				l.padding = edges(st.Padding, content)
 				l.border = a.node.borders()
 				g := scrollbarGutter(st)

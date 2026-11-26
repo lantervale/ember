@@ -27,6 +27,17 @@ func TestAnOverConstrainedBlockInRightToLeftGivesWayOnTheLeft(t *testing.T) {
 	assert.InDelta(t, -250, tr.Of[wide].Rect().X, 0.01)
 }
 
+func TestARelativeInlineBlockMovesFromItsPlaceOnTheLine(t *testing.T) {
+	moved := el(dom.Span, func(st *style.Computed) {
+		st.Display, st.Position = style.InlineBlock, style.Relative
+		st.Size.Width, st.Size.Height = style.Px(20), style.Px(10)
+		st.Inset.Left, st.Inset.Top = style.Px(30), style.Px(5)
+	})
+	tr := lay(el(dom.Div, width(100), text("HH"), moved), 200)
+	assert.InDelta(t, 20+30, tr.Of[moved].Rect().X, 0.01)
+	assert.InDelta(t, 5, tr.Of[moved].Rect().Y, 0.01)
+}
+
 func TestRightWinsOverLeftOnARelativeBoxInRightToLeft(t *testing.T) {
 	moved := blockOf(10, func(st *style.Computed) {
 		st.Dir, st.Position = style.RTL, style.Relative
