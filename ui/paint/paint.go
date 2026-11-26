@@ -969,14 +969,27 @@ func (p *painter) snap(r geom.Rect) geom.Rect {
 		return r
 	}
 	xf := p.s.Transform()
+	x0, y0 := p.onPixel(r.X, xf.Origin.X), p.onPixel(r.Y, xf.Origin.Y)
+	return geom.Rect{X: x0, Y: y0, W: p.onPixel(r.X+r.W, xf.Origin.X) - x0, H: p.onPixel(r.Y+r.H, xf.Origin.Y) - y0}
+}
+
+// snapY is y on the nearest row of device pixels, as Chrome draws a line's
+// glyphs on its baseline rounded so, unless snap leaves things as they are.
+func (p *painter) snapY(y float32) float32 {
+	if p.snapScale() <= 0 {
+		return y
+	}
+	return p.onPixel(y, p.s.Transform().Origin.Y)
+}
+
+// onPixel is v, on an axis the transform moves by origin, on the nearest
+// device pixel.
+func (p *painter) onPixel(v, origin float32) float32 {
+	xf := p.s.Transform()
 	// k is device pixels per point of the space the base draws into: the
 	// window's, when the base is a Document's zoom.
 	k := p.scale / xf.X.X
-	round := func(v, origin float32) float32 {
-		return (float32(math.Round(float64((v*xf.X.X+origin)*k)))/k - origin) / xf.X.X
-	}
-	x0, y0 := round(r.X, xf.Origin.X), round(r.Y, xf.Origin.Y)
-	return geom.Rect{X: x0, Y: y0, W: round(r.X+r.W, xf.Origin.X) - x0, H: round(r.Y+r.H, xf.Origin.Y) - y0}
+	return (float32(math.Round(float64((v*xf.X.X+origin)*k)))/k - origin) / xf.X.X
 }
 
 // snapScale is how many device pixels a point of what is drawn takes, 0
