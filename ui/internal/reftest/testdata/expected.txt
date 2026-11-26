@@ -413,6 +413,9 @@ css/CSS2/bidi-text/direction-applies-to-012.xht chrome
 css/CSS2/bidi-text/direction-applies-to-013.xht chrome
 css/CSS2/bidi-text/direction-applies-to-014.xht chrome
 css/CSS2/bidi-text/direction-applies-to-015.xht chrome
+css/CSS2/bidi-text/line-breaking-bidi-001.xht ref
+css/CSS2/bidi-text/line-breaking-bidi-002.xht ref
+css/CSS2/bidi-text/line-breaking-bidi-003.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-001.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-002.xht chrome
 css/CSS2/bidi-text/unicode-bidi-003.xht chrome
@@ -1700,8 +1703,8 @@ css/CSS2/generated-content/before-content-display-018.xht ref chrome
 css/CSS2/generated-content/before-inheritable-001.xht ref chrome
 css/CSS2/generated-content/before-inheritable-002.xht ref chrome
 css/CSS2/generated-content/before-location-001.xht ref chrome
-css/CSS2/generated-content/bidi-generated-content-001.xht chrome
-css/CSS2/generated-content/bidi-generated-content-002.xht chrome
+css/CSS2/generated-content/bidi-generated-content-001.xht ref chrome
+css/CSS2/generated-content/bidi-generated-content-002.xht ref chrome
 css/CSS2/generated-content/content-001.xht ref chrome
 css/CSS2/generated-content/content-002.xht ref chrome
 css/CSS2/generated-content/content-003.xht ref chrome
