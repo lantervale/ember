@@ -1033,7 +1033,7 @@ css/CSS2/cascade/at-import-004.xht ref chrome
 css/CSS2/cascade/at-import-005.xht ref chrome
 css/CSS2/cascade/at-import-006.xht ref chrome
 css/CSS2/cascade/at-import-007.xht ref chrome
-css/CSS2/cascade/at-import-009.xht chrome
+css/CSS2/cascade/at-import-009.xht ref chrome
 css/CSS2/cascade/at-import-010.xht ref chrome
 css/CSS2/cascade/at-import-011.xht ref chrome
 css/CSS2/cascade/cascade-005.xht ref chrome
@@ -4627,7 +4627,7 @@ css/CSS2/syntax/at-charset-035.xht ref chrome
 css/CSS2/syntax/at-charset-036.xht ref chrome
 css/CSS2/syntax/at-charset-037.xht ref chrome
 css/CSS2/syntax/at-charset-038.xht ref chrome
-css/CSS2/syntax/at-charset-039.xht chrome
+css/CSS2/syntax/at-charset-039.xht ref chrome
 css/CSS2/syntax/at-charset-040.xht ref chrome
 css/CSS2/syntax/at-charset-041.xht ref chrome
 css/CSS2/syntax/at-charset-042.xht ref chrome
@@ -4675,8 +4675,8 @@ css/CSS2/syntax/at-rule-003.xht ref chrome
 css/CSS2/syntax/at-rule-004.xht ref chrome
 css/CSS2/syntax/at-rule-005.xht ref chrome
 css/CSS2/syntax/at-rule-006.xht ref chrome
-css/CSS2/syntax/at-rule-007.xht chrome
-css/CSS2/syntax/at-rule-008.xht chrome
+css/CSS2/syntax/at-rule-007.xht ref chrome
+css/CSS2/syntax/at-rule-008.xht ref chrome
 css/CSS2/syntax/at-rule-009.xht ref chrome
 css/CSS2/syntax/at-rule-010.xht ref chrome
 css/CSS2/syntax/at-rule-011.xht ref chrome

@@ -63,6 +63,18 @@ func TestAGamesSheetImportsWithoutLayersOrSupports(t *testing.T) {
 	assert.Contains(t, warns[1].Error(), "@import: supports() is read only as a browser reads a sheet")
 }
 
+func TestOnlyAValidRuleEndsTheImports(t *testing.T) {
+	s, _ := Parse("site.css", "@badat-rule foo;\n@import url(after-unknown.css);\n.a ! {}\n@import url(after-bad.css);"+
+		"\n@media;\n@page;\n@charset;\n@import url(after-blockless.css);\n@layer base;\n@import url(after-layers.css);",
+		Browser())
+	require.Len(t, s.Imports(), 4,
+		"an unknown at-rule, a rule dropped as badly written and an at-rule without its block are no rules")
+	s, _ = Parse("site.css", "@media print {}\n@import url(late.css);", Browser())
+	assert.Empty(t, s.Imports(), "an empty block is a rule")
+	s, _ = Parse("site.css", "foo {}\n@import url(late.css);", Browser())
+	assert.Empty(t, s.Imports(), "a rule naming an element ui has not is a rule all the same")
+}
+
 func TestParseWarnsOfAnImportItCannotRead(t *testing.T) {
 	for src, want := range map[string]string{
 		`@import;`:                          "@import names no sheet",
