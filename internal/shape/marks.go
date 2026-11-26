@@ -55,9 +55,9 @@ const (
 	dottedCircle = 0x25CC
 )
 
-// defaultIgnorable reports whether r is a character drawn as nothing
+// DefaultIgnorable reports whether r is a character drawn as nothing
 // unless a font says otherwise, as HarfBuzz lists them.
-func defaultIgnorable(r rune) bool {
+func DefaultIgnorable(r rune) bool {
 	switch {
 	case r < 0x80:
 		return false
@@ -97,7 +97,7 @@ func hidden(r rune) bool {
 // ignorable reports whether g is of a default ignorable character no
 // substitution has replaced.
 func (b *buffer) ignorable(g *Glyph) bool {
-	return g.props&substituted == 0 && defaultIgnorable(g.Char)
+	return g.props&substituted == 0 && DefaultIgnorable(g.Char)
 }
 
 // isMarkChar reports whether r is a mark, spacing or not.

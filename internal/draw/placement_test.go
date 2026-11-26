@@ -168,3 +168,15 @@ func TestASpaceTheFaceLacksTakesTheRoomChromeGivesIt(t *testing.T) {
 	rects, _ := quads(&c)
 	assert.Empty(t, rects, "and draws nothing, where a '?' stood")
 }
+
+func TestAFormatCharacterTheFaceLacksDrawsAsNothingInNoRoom(t *testing.T) {
+	f := Regular.Size(16)
+	x := f.Measure("ab").X
+	for _, r := range []rune{0x202e, 0x202c, 0x2067, 0x2069, 0x200e, 0x2060} {
+		assert.InDelta(t, x, f.Measure("a"+string(r)+"b").X, 1e-3, "U+%04X takes no room", r)
+		var c List
+		c.Text(geom.Vec2{}, string(r), Style{Size: 16})
+		rects, _ := quads(&c)
+		assert.Empty(t, rects, "U+%04X draws nothing, where a '?' stood", r)
+	}
+}

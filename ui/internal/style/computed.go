@@ -1387,6 +1387,8 @@ type Look struct {
 	// ClipPath is clip-path: the shape the element and all it holds are
 	// painted and hit in (decision 0119).
 	ClipPath ClipPath
+	// Clip is clip, read on absolutely and fixed positioned boxes alone.
+	Clip ClipRect
 	// ObjectFit and ObjectPosition place a replaced element's picture
 	// (an img's) in its content box.
 	// ImageRendering is image-rendering: how pictures scale.
