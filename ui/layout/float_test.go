@@ -166,6 +166,26 @@ func TestTextIndentCountsInShrinkToFitWidths(t *testing.T) {
 	assert.Equal(t, float32(45), tr.Of[s].Size.X)
 }
 
+func TestTextIndentCountsBeforeAnAtomicAtItsNarrowest(t *testing.T) {
+	floated := func(indent float32, kids ...*dom.Node) *dom.Node {
+		return el(dom.Div, func(st *style.Computed) {
+			st.Display, st.Float, st.TextIndent = style.Block, style.FloatLeft, style.Px(indent)
+		}, kids...)
+	}
+	square := func(w float32) *dom.Node {
+		return el(dom.Span, func(st *style.Computed) {
+			st.Display, st.Size.Width, st.Size.Height = style.InlineBlock, style.Px(w), style.Px(10)
+		})
+	}
+	alone, first, later, out := floated(30, square(10)), floated(30, square(10), text("\u200b"), square(20)),
+		floated(30, square(10), el(dom.Br, nil), square(20)), floated(-30, square(50), text("\u200b"), square(10))
+	tr := lay(el(dom.Div, width(1), alone, first, later, out), 200)
+	assert.Equal(t, float32(40), tr.Of[alone].Size.X, "the indent and the square")
+	assert.Equal(t, float32(40), tr.Of[first].Size.X, "the first square past the indent, wider than the second")
+	assert.Equal(t, float32(40), tr.Of[later].Size.X, "the second line is not indented")
+	assert.Equal(t, float32(20), tr.Of[out].Size.X, "a negative indent takes the first square back")
+}
+
 func TestTextAfterABlockIsNotIndentedAgain(t *testing.T) {
 	d := el(dom.Div, func(st *style.Computed) {
 		st.Display, st.TextIndent, st.Size.Width = style.Block, style.Px(10), style.Px(100)

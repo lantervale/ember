@@ -1740,8 +1740,11 @@ func (c *inlineContent) minContent() float32 {
 	var minW float32
 	cur := newPen(c.unit, c.indent(unbounded))
 	cur.origin = 0
-	hung := false
+	hung, bare := false, true
 	for i, p := range c.pieces {
+		if p.kind != edge && p.kind != atomic {
+			bare = false
+		}
 		switch p.kind {
 		case word, marker:
 			cur.step(p, 0)
@@ -1757,7 +1760,12 @@ func (c *inlineContent) minContent() float32 {
 				cur = newPen(c.unit, 0)
 			}
 		case atomic:
-			minW = max(minW, p.width)
+			if bare {
+				minW = max(minW, cur.end()+p.width)
+				bare = false
+			} else {
+				minW = max(minW, p.width)
+			}
 			cur = newPen(c.unit, 0)
 		case gap:
 			switch {
