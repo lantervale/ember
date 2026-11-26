@@ -28,10 +28,10 @@ type piece struct {
 }
 
 // pieces are b's parts in the root's space, b's border box at at: one per
-// line of an inline split over several, the left edge on the first and
-// the right edge on the last; one per column of a block columns cut, the
-// top edge on the first and the bottom edge on the last, as Chrome slices
-// it; else the box itself. Lines past a line-clamp's last are left out, the
+// part of an inline split over lines or by bidi, its left and right edges
+// where its Ends say, else on the first and the last; one per column of a
+// block columns cut, the top edge on the first and the bottom edge on the
+// last, as Chrome slices it; else the box itself. Lines past a line-clamp's last are left out, the
 // last shown with no right edge, as Chrome draws them.
 // They go in p's scratch, valid until the next call.
 func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
@@ -56,6 +56,13 @@ func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
 			}
 			if !last {
 				e.Bottom = 0
+			}
+		case len(b.Ends) == len(b.Fragments):
+			if b.Ends[i]&box.LeftEnd == 0 {
+				e.Left = 0
+			}
+			if b.Ends[i]&box.RightEnd == 0 {
+				e.Right = 0
 			}
 		default:
 			if !first {

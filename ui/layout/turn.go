@@ -428,7 +428,7 @@ func turnBroken(b *box.Box, at geom.Vec2, in size, mode style.WritingMode) {
 // baseline stands at. In vertical-lr the lines stack from the left while the glyphs'
 // tops still face right: what stands on each line is mirrored across it first.
 func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geom.Rect,
-	spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]geom.Rect) {
+	spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]spanLine) {
 	mirror := func(r geom.Rect) geom.Rect {
 		if mode != style.VerticalLR {
 			return r
@@ -464,12 +464,12 @@ func turnLines(c *inlineContent, in size, mode style.WritingMode, runRects []geo
 		if len(lines) == 0 {
 			continue
 		}
-		for i, r := range lines {
-			lines[i] = turn(r)
+		for i, part := range lines {
+			lines[i].r = turn(part.r)
 		}
-		u := lines[0]
-		for _, r := range lines[1:] {
-			u = unionRect(u, r, true)
+		u := lines[0].r
+		for _, part := range lines[1:] {
+			u = unionRect(u, part.r, true)
 		}
 		spanRects[b] = u
 	}
