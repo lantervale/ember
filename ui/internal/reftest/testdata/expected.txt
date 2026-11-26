@@ -393,6 +393,7 @@ css/CSS2/bidi-text/bidi-box-model-044.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-045.xht ref chrome
 css/CSS2/bidi-text/bidi-breaking-001.xht ref
 css/CSS2/bidi-text/bidi-breaking-002.xht ref
+css/CSS2/bidi-text/bidi-breaking-003.xht ref
 css/CSS2/bidi-text/bidi-glyph-mirroring-001.xht chrome
 css/CSS2/bidi-text/bidi-glyph-mirroring-002.xht chrome
 css/CSS2/bidi-text/bidi-inline-001.xht ref chrome

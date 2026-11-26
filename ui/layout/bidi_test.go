@@ -50,6 +50,11 @@ func TestVisualText(t *testing.T) {
 	assert.Equal(t, "(א)", visualText("(א)", 1), "brackets mirrored")
 }
 
+func TestLineAndParagraphSeparatorsEndTheirLines(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, text("ab\u2028cd \u2029 ef"))
+	assert.Equal(t, []string{"ab", "cd", "ef"}, lines(lay(p, 400).Of[p]), "a break each, the spaces after them dropped")
+}
+
 func TestIsolatesSideBySideAreOrderedApart(t *testing.T) {
 	bdo := func(st *style.Computed) { st.Dir, st.Bidi = style.RTL, style.BidiIsolateOverride }
 	cd, ef := el(dom.Span, bdo, text("cd")), el(dom.Span, bdo, text("ef"))
