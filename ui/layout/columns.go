@@ -838,7 +838,11 @@ func relativeShift(n *node) point {
 	}
 	l, r := resolve(st.Inset.Left, w), resolve(st.Inset.Right, w)
 	tp, b := resolve(st.Inset.Top, none), resolve(st.Inset.Bottom, none)
-	return point{or(l, or(-r, 0)), or(tp, or(-b, 0))}
+	dir := st.Dir
+	if n.parent != nil {
+		dir = n.parent.st.Dir
+	}
+	return point{relativeX(l, r, dir), or(tp, or(-b, 0))}
 }
 
 // Appeals of a break, Chrome's: one that breaks no rule, one leaving fewer lines than
