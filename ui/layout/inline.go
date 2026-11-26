@@ -1060,7 +1060,8 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			afterSpace = true
 		case string(ch) == zeroWidthSpace || ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
 			emit(word)
-			c.pieces = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level))
+			// a space after it follows no space: the spaces round it never collapse
+			c.pieces, afterSpace = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level)), false
 		default:
 			b.WriteRune(ch)
 			afterSpace = false
