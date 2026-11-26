@@ -1093,6 +1093,7 @@ css/CSS2/css1/c32-cascading-000.xht ref
 css/CSS2/css1/c412-blockw-000.xht ref chrome
 css/CSS2/css1/c412-hz-box-000.xht chrome
 css/CSS2/css1/c414-flt-fit-000.xht ref chrome
+css/CSS2/css1/c414-flt-fit-001.xht ref
 css/CSS2/css1/c414-flt-fit-002.xht ref
 css/CSS2/css1/c414-flt-fit-003.xht ref
 css/CSS2/css1/c414-flt-fit-004.xht ref
@@ -1103,7 +1104,7 @@ css/CSS2/css1/c42-ibx-pad-000.xht chrome
 css/CSS2/css1/c43-rpl-bbx-002.xht chrome
 css/CSS2/css1/c43-rpl-ibx-000.xht chrome
 css/CSS2/css1/c44-ln-box-000.xht ref chrome
-css/CSS2/css1/c44-ln-box-001.xht chrome
+css/CSS2/css1/c44-ln-box-001.xht ref chrome
 css/CSS2/css1/c44-ln-box-002.xht ref chrome
 css/CSS2/css1/c44-ln-box-003.xht ref chrome
 css/CSS2/css1/c45-bg-canvas-000.xht ref chrome
@@ -1327,12 +1328,16 @@ css/CSS2/floats-clear/float-non-replaced-width-012.xht chrome
 css/CSS2/floats-clear/float-replaced-height-001.xht ref chrome
 css/CSS2/floats-clear/float-replaced-height-002.xht ref chrome
 css/CSS2/floats-clear/float-replaced-height-003.xht ref chrome
+css/CSS2/floats-clear/float-replaced-height-006.xht ref
 css/CSS2/floats-clear/float-replaced-width-001.xht ref chrome
 css/CSS2/floats-clear/float-replaced-width-002.xht ref chrome
 css/CSS2/floats-clear/float-replaced-width-003.xht ref chrome
 css/CSS2/floats-clear/float-replaced-width-004.xht ref chrome
 css/CSS2/floats-clear/float-replaced-width-005.xht ref chrome
 css/CSS2/floats-clear/float-replaced-width-006.xht ref chrome
+css/CSS2/floats-clear/float-replaced-width-007.xht ref
+css/CSS2/floats-clear/float-replaced-width-008.xht ref
+css/CSS2/floats-clear/float-replaced-width-009.xht ref
 css/CSS2/floats-clear/float-replaced-width-011.xht ref chrome
 css/CSS2/floats-clear/floats-001.xht ref chrome
 css/CSS2/floats-clear/floats-002.xht ref chrome
@@ -2958,6 +2963,7 @@ css/CSS2/normal-flow/block-non-replaced-width-006.xht ref chrome
 css/CSS2/normal-flow/block-non-replaced-width-007.xht chrome
 css/CSS2/normal-flow/block-replaced-height-001.xht ref chrome
 css/CSS2/normal-flow/block-replaced-height-002.xht ref chrome
+css/CSS2/normal-flow/block-replaced-height-006.xht ref
 css/CSS2/normal-flow/block-replaced-width-006.xht chrome
 css/CSS2/normal-flow/blocks-011.xht ref chrome
 css/CSS2/normal-flow/blocks-012.xht ref chrome
@@ -3073,8 +3079,14 @@ css/CSS2/normal-flow/inline-block-non-replaced-width-004.xht chrome
 css/CSS2/normal-flow/inline-block-replaced-height-001.xht ref chrome
 css/CSS2/normal-flow/inline-block-replaced-height-002.xht ref chrome
 css/CSS2/normal-flow/inline-block-replaced-height-003.xht ref chrome
+css/CSS2/normal-flow/inline-block-replaced-height-006.xht ref
+css/CSS2/normal-flow/inline-block-replaced-height-009.xht ref
 css/CSS2/normal-flow/inline-block-replaced-width-001.xht ref chrome
+css/CSS2/normal-flow/inline-block-replaced-width-002.xht ref
+css/CSS2/normal-flow/inline-block-replaced-width-003.xht ref
 css/CSS2/normal-flow/inline-block-replaced-width-006.xht ref chrome
+css/CSS2/normal-flow/inline-block-replaced-width-007.xht ref
+css/CSS2/normal-flow/inline-block-replaced-width-008.xht ref
 css/CSS2/normal-flow/inline-block-valign-001.xht ref chrome
 css/CSS2/normal-flow/inline-block-valign-002.xht ref chrome
 css/CSS2/normal-flow/inline-block-width-001a.xht ref chrome
@@ -3095,10 +3107,16 @@ css/CSS2/normal-flow/inline-non-replaced-width-002.xht chrome
 css/CSS2/normal-flow/inline-replaced-height-001.xht ref chrome
 css/CSS2/normal-flow/inline-replaced-height-002.xht ref chrome
 css/CSS2/normal-flow/inline-replaced-height-003.xht ref chrome
+css/CSS2/normal-flow/inline-replaced-height-006.xht ref
+css/CSS2/normal-flow/inline-replaced-height-009.xht ref
 css/CSS2/normal-flow/inline-replaced-height-010.xht ref chrome
 css/CSS2/normal-flow/inline-replaced-height-011.xht ref chrome
 css/CSS2/normal-flow/inline-replaced-width-001.xht ref chrome
+css/CSS2/normal-flow/inline-replaced-width-002.xht ref
+css/CSS2/normal-flow/inline-replaced-width-003.xht ref
 css/CSS2/normal-flow/inline-replaced-width-006.xht ref chrome
+css/CSS2/normal-flow/inline-replaced-width-008.xht ref
+css/CSS2/normal-flow/inline-replaced-width-009.xht ref
 css/CSS2/normal-flow/inline-replaced-width-011.xht ref chrome
 css/CSS2/normal-flow/inline-replaced-width-012.xht ref chrome
 css/CSS2/normal-flow/inline-replaced-width-013.xht ref chrome
@@ -3612,40 +3630,66 @@ css/CSS2/positioning/absolute-non-replaced-width-027.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-001.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-002.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-003.xht ref chrome
+css/CSS2/positioning/absolute-replaced-height-006.xht ref
 css/CSS2/positioning/absolute-replaced-height-008.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-009.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-010.xht ref chrome
+css/CSS2/positioning/absolute-replaced-height-013.xht ref
 css/CSS2/positioning/absolute-replaced-height-016.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-017.xht ref chrome
+css/CSS2/positioning/absolute-replaced-height-020.xht ref
 css/CSS2/positioning/absolute-replaced-height-022.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-023.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-024.xht ref chrome
+css/CSS2/positioning/absolute-replaced-height-027.xht ref
 css/CSS2/positioning/absolute-replaced-height-029.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-030.xht ref chrome
 css/CSS2/positioning/absolute-replaced-height-031.xht ref chrome
+css/CSS2/positioning/absolute-replaced-height-034.xht ref
 css/CSS2/positioning/absolute-replaced-height-036.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-001.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-002.xht ref
+css/CSS2/positioning/absolute-replaced-width-003.xht ref
 css/CSS2/positioning/absolute-replaced-width-003a.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-003b.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-003c.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-004.xht ref
 css/CSS2/positioning/absolute-replaced-width-006.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-008.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-009.xht ref
+css/CSS2/positioning/absolute-replaced-width-010.xht ref
+css/CSS2/positioning/absolute-replaced-width-011.xht ref
 css/CSS2/positioning/absolute-replaced-width-013.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-015.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-020.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-022.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-023.xht ref
+css/CSS2/positioning/absolute-replaced-width-024.xht ref
+css/CSS2/positioning/absolute-replaced-width-025.xht ref
 css/CSS2/positioning/absolute-replaced-width-027.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-029.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-030.xht ref
+css/CSS2/positioning/absolute-replaced-width-031.xht ref
+css/CSS2/positioning/absolute-replaced-width-032.xht ref
 css/CSS2/positioning/absolute-replaced-width-034.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-036.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-037.xht ref
+css/CSS2/positioning/absolute-replaced-width-038.xht ref
+css/CSS2/positioning/absolute-replaced-width-039.xht ref
 css/CSS2/positioning/absolute-replaced-width-041.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-043.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-048.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-050.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-051.xht ref
+css/CSS2/positioning/absolute-replaced-width-052.xht ref
+css/CSS2/positioning/absolute-replaced-width-053.xht ref
 css/CSS2/positioning/absolute-replaced-width-055.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-057.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-062.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-064.xht ref chrome
+css/CSS2/positioning/absolute-replaced-width-065.xht ref
+css/CSS2/positioning/absolute-replaced-width-066.xht ref
+css/CSS2/positioning/absolute-replaced-width-067.xht ref
 css/CSS2/positioning/absolute-replaced-width-069.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-071.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-076.xht ref chrome
@@ -4750,8 +4794,8 @@ css/CSS2/syntax/unterminated-string-001.xht ref chrome
 css/CSS2/syntax/uri-001.xht ref chrome
 css/CSS2/syntax/uri-002.xht ref chrome
 css/CSS2/syntax/uri-003.xht ref chrome
-css/CSS2/syntax/uri-004.xht chrome
-css/CSS2/syntax/uri-005.xht chrome
+css/CSS2/syntax/uri-004.xht ref chrome
+css/CSS2/syntax/uri-005.xht ref chrome
 css/CSS2/syntax/uri-006.xht ref chrome
 css/CSS2/syntax/uri-007.xht ref chrome
 css/CSS2/syntax/uri-008.xht ref chrome
@@ -4900,7 +4944,7 @@ css/CSS2/tables/table-backgrounds-bc-rowgroup-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-table-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-cell-001.xht ref chrome
 css/CSS2/tables/table-backgrounds-bs-table-001.xht ref
-css/CSS2/tables/table-cell-001.xht chrome
+css/CSS2/tables/table-cell-001.xht ref chrome
 css/CSS2/tables/table-column-rendering-001.xht ref chrome
 css/CSS2/tables/table-column-rendering-002.xht ref chrome
 css/CSS2/tables/table-footer-group-001.xht ref chrome
@@ -5066,6 +5110,13 @@ css/CSS2/text/text-indent-109.xht ref chrome
 css/CSS2/text/text-indent-110.xht ref chrome
 css/CSS2/text/text-indent-111.xht ref chrome
 css/CSS2/text/text-indent-112.xht ref chrome
+css/CSS2/text/text-indent-113-ref-margin.xht ref
+css/CSS2/text/text-indent-113.xht ref
+css/CSS2/text/text-indent-114-ref.xht ref
+css/CSS2/text/text-indent-114.xht ref
+css/CSS2/text/text-indent-115-ref-block-margin.xht ref
+css/CSS2/text/text-indent-115-ref-inline-margin.xht ref
+css/CSS2/text/text-indent-115.xht ref
 css/CSS2/text/text-indent-applies-to-001.xht ref chrome
 css/CSS2/text/text-indent-applies-to-002.xht ref chrome
 css/CSS2/text/text-indent-applies-to-003.xht chrome
@@ -5090,6 +5141,10 @@ css/CSS2/text/text-indent-overflow-004.xht ref chrome
 css/CSS2/text/text-indent-percent-001.xht ref chrome
 css/CSS2/text/text-indent-rtl-001.xht ref chrome
 css/CSS2/text/text-indent-rtl-002.xht ref chrome
+css/CSS2/text/text-indent-wrap-001-notref-block-margin.xht ref
+css/CSS2/text/text-indent-wrap-001-ref-float.xht ref
+css/CSS2/text/text-indent-wrap-001-ref-inline-margin.xht ref
+css/CSS2/text/text-indent-wrap-001.xht ref
 css/CSS2/text/text-indent-wrap-002.html ref
 css/CSS2/text/text-transform-001.xht ref
 css/CSS2/text/text-transform-002.xht ref chrome
@@ -5330,9 +5385,9 @@ css/CSS2/ui/overflow-applies-to-014.xht chrome
 css/CSS2/ui/overflow-applies-to-015.xht chrome
 css/CSS2/values/numbers-units-001.xht ref chrome
 css/CSS2/values/numbers-units-003.xht ref chrome
-css/CSS2/values/numbers-units-004.xht chrome
+css/CSS2/values/numbers-units-004.xht ref chrome
 css/CSS2/values/numbers-units-005.xht ref chrome
-css/CSS2/values/numbers-units-006.xht chrome
+css/CSS2/values/numbers-units-006.xht ref chrome
 css/CSS2/values/numbers-units-007.xht chrome
 css/CSS2/values/numbers-units-009.xht chrome
 css/CSS2/values/numbers-units-010.xht chrome

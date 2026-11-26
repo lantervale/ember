@@ -160,6 +160,9 @@ func TestReadPageKeepsXHTMLsEmptyElementsEmpty(t *testing.T) {
 	if div == nil || div.FirstChild != nil || div.NextSibling == nil || div.NextSibling.DataAtom != atom.P {
 		t.Fatalf("the div holds what follows it")
 	}
+	if svg := find(body, atom.Svg); svg == nil || svg.Namespace != nsSVG || svg.FirstChild == nil || svg.FirstChild.Data != "rect" {
+		t.Errorf("an svg element is SVG's, known by its atom as html.Parse knows it")
+	}
 	if p.Skip != "" || len(p.Refs) != 1 || p.Refs[0].Rel != Mismatch {
 		t.Errorf("skip %q, refs %v", p.Skip, p.Refs)
 	}
