@@ -139,6 +139,26 @@ func (c *inlineContent) levels() [][]bidi.Level {
 		}
 	}
 	open(len(c.runs))
+	levels := c.paragraphLevels(text)
+	c.isolated = make(map[int]bidi.Level, len(initiators))
+	for k, at := range initiators {
+		c.isolated[k] = levels[at]
+	}
+	out := make([][]bidi.Level, len(c.runs))
+	for i, r := range c.runs {
+		n := 1
+		if r.atomic == nil {
+			n = utf8.RuneCountInString(collapsedBlanks(r.text, r.st.WhiteSpace))
+		}
+		out[i] = levels[starts[i] : starts[i]+n]
+	}
+	return out
+}
+
+// paragraphLevels resolves the levels of text, a paragraph to each forced break or
+// paragraph separator, each opened by the owner's override, and sets the content's base
+// level, the first paragraph's.
+func (c *inlineContent) paragraphLevels(text []rune) []bidi.Level {
 	levels := make([]bidi.Level, len(text))
 	base := baseLevel(c.owner.st)
 	var override []rune
@@ -164,19 +184,7 @@ func (c *inlineContent) levels() [][]bidi.Level {
 		from = to
 	}
 	openersJoinTheirText(text, levels)
-	c.isolated = make(map[int]bidi.Level, len(initiators))
-	for k, at := range initiators {
-		c.isolated[k] = levels[at]
-	}
-	out := make([][]bidi.Level, len(c.runs))
-	for i, r := range c.runs {
-		n := 1
-		if r.atomic == nil {
-			n = utf8.RuneCountInString(collapsedBlanks(r.text, r.st.WhiteSpace))
-		}
-		out[i] = levels[starts[i] : starts[i]+n]
-	}
-	return out
+	return levels
 }
 
 // openersJoinTheirText gives each embedding or override control of text the level of the
