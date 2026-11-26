@@ -4502,8 +4502,8 @@ css/CSS2/syntax/at-charset-006.xht ref chrome
 css/CSS2/syntax/at-charset-007.xht ref chrome
 css/CSS2/syntax/at-charset-008.xht ref chrome
 css/CSS2/syntax/at-charset-009.xht ref chrome
-css/CSS2/syntax/at-charset-010.xht chrome
-css/CSS2/syntax/at-charset-011.xht chrome
+css/CSS2/syntax/at-charset-010.xht ref chrome
+css/CSS2/syntax/at-charset-011.xht ref chrome
 css/CSS2/syntax/at-charset-012.xht ref chrome
 css/CSS2/syntax/at-charset-014.xht ref chrome
 css/CSS2/syntax/at-charset-015.xht ref chrome
@@ -4606,7 +4606,7 @@ css/CSS2/syntax/character-encoding-036.xht ref chrome
 css/CSS2/syntax/character-encoding-037.xht ref chrome
 css/CSS2/syntax/character-encoding-041.xht ref chrome
 css/CSS2/syntax/characters-0080-009F-001.xht ref chrome
-css/CSS2/syntax/charset-attr-001.xht chrome
+css/CSS2/syntax/charset-attr-001.xht ref chrome
 css/CSS2/syntax/colors-001.xht chrome
 css/CSS2/syntax/colors-002.xht ref chrome
 css/CSS2/syntax/colors-003.xht ref chrome

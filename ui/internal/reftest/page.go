@@ -183,7 +183,11 @@ func (p *Page) link(root string, n *html.Node) {
 		if err != nil {
 			return
 		}
-		text, encoding := css.Decode(servedSheet(data, file), p.Encoding)
+		environment := p.Encoding
+		if name := encodingName(attr(n, "charset")); name != "" {
+			environment = name
+		}
+		text, encoding := css.Decode(servedSheet(data, file), environment)
 		p.Sheets = append(p.Sheets, Sheet{Text: media(text, attr(n, "media")), From: Base + at, Encoding: encoding})
 	}
 }

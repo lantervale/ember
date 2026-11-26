@@ -196,6 +196,11 @@ func TestReadPageDecodesAPageAsABrowser(t *testing.T) {
 		p.Sheets[1].Encoding != "windows-1252" {
 		t.Errorf("linked sheets decoded as %+v", p.Sheets)
 	}
+	write("labelled.xht", page("", `<link rel="stylesheet" href="sjis.css" charset="shift-JIS"/>`))
+	write("sjis.css", ".\x95\xbd\x98\x61 {}")
+	if p, err = ReadPage(root, "labelled.xht"); err != nil || len(p.Sheets) != 1 || p.Sheets[0].Text != ".平和 {}" {
+		t.Errorf("a sheet decoded in its link's charset: %+v (%v)", p, err)
+	}
 	for _, c := range []struct{ path, text, encoding string }{
 		{"ascii.xht", "café", "windows-1252"},
 		{"sjis.xht", "平和", "shift_jis"},
