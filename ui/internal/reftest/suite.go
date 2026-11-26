@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/png"
 	"io/fs"
 	"os"
@@ -77,7 +78,7 @@ func Survey(ctx context.Context, root string, tests []Test, r *Renderer) []Resul
 	var visit func(p string, refs []Ref)
 	seen := map[string]bool{}
 	visit = func(p string, refs []Ref) {
-		if seen[p] {
+		if seen[p] || p == Blank {
 			return
 		}
 		seen[p] = true
@@ -136,7 +137,8 @@ func decide(t Test, pages map[string]*Page, failed map[string]error, renders map
 		}
 		res.Properties = PropertiesOf(page, ref)
 	}
-	c := chain{pages: pages, failed: failed, renders: renders, fuzzy: t.Fuzzy, pictures: map[string]image.Image{}}
+	c := chain{pages: pages, failed: failed, renders: renders, fuzzy: t.Fuzzy,
+		pictures: map[string]image.Image{}, on: map[string]bool{}}
 	ok, why := c.passes(t.Path, t.Refs, 0)
 	switch {
 	case ok:
@@ -177,13 +179,15 @@ func unusable(p string, pages map[string]*Page, failed map[string]error, renders
 
 // chain walks a test's references as WPT's runner does: the references
 // of one page are alternatives, and a reference with its own continues
-// the chain, all of whose links must pass.
+// the chain, all of whose links must pass. A reference already on the
+// chain is dropped, so two references naming each other end it.
 type chain struct {
 	pages    map[string]*Page
 	failed   map[string]error
 	renders  map[string]Render
 	fuzzy    []Fuzzy
 	pictures map[string]image.Image
+	on       map[string]bool
 }
 
 // passes reports whether p relates to one of refs as it says; else the
@@ -193,17 +197,21 @@ func (c *chain) passes(p string, refs []Ref, depth int) (bool, outcome) {
 	if depth > 8 {
 		return false, outcome{Error, "references chained too deep"}
 	}
+	c.on[p] = true
+	defer delete(c.on, p)
 	for _, ref := range refs {
-		if why, ok := unusable(ref.Path, c.pages, c.failed, c.renders); !ok {
-			why.reason = "reference " + ref.Path + ": " + why.reason
-			last = why
-			continue
+		if ref.Path != Blank {
+			if why, ok := unusable(ref.Path, c.pages, c.failed, c.renders); !ok {
+				why.reason = "reference " + ref.Path + ": " + why.reason
+				last = why
+				continue
+			}
 		}
 		a, err := c.picture(p)
 		if err != nil {
 			return false, outcome{Error, err.Error()}
 		}
-		b, err := c.picture(ref.Path)
+		b, err := c.reference(ref.Path, a.Bounds())
 		if err != nil {
 			return false, outcome{Error, err.Error()}
 		}
@@ -218,7 +226,14 @@ func (c *chain) passes(p string, refs []Ref, depth int) (bool, outcome) {
 			last = outcome{reason: fmt.Sprintf("%s %s: %s", ref.Rel, ref.Path, d)}
 			continue
 		}
-		next := c.pages[ref.Path].Refs
+		var next []Ref
+		if page := c.pages[ref.Path]; page != nil {
+			for _, r := range page.Refs {
+				if !c.on[r.Path] {
+					next = append(next, r)
+				}
+			}
+		}
 		if len(next) == 0 {
 			return true, outcome{}
 		}
@@ -229,6 +244,17 @@ func (c *chain) passes(p string, refs []Ref, depth int) (bool, outcome) {
 		last = why
 	}
 	return false, last
+}
+
+// reference is the picture of the reference at p, about:blank a white
+// page of the test's bounds.
+func (c *chain) reference(p string, bounds image.Rectangle) (image.Image, error) {
+	if p != Blank {
+		return c.picture(p)
+	}
+	white := image.NewNRGBA(bounds)
+	draw.Draw(white, bounds, image.White, image.Point{}, draw.Src)
+	return white, nil
 }
 
 func (c *chain) picture(p string) (image.Image, error) {
