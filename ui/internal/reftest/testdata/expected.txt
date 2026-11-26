@@ -4799,6 +4799,73 @@ css/CSS2/tables/empty-cells-applies-to-013.xht ref chrome
 css/CSS2/tables/empty-cells-applies-to-014.xht ref chrome
 css/CSS2/tables/empty-cells-applies-to-016.xht ref chrome
 css/CSS2/tables/empty-cells-applies-to-017.xht ref chrome
+css/CSS2/tables/fixed-table-layout-002a.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003a01.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003a02.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003a03.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003a04.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003a05.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003a06.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b01.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b02.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b03.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b04.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b05.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b06.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b07.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b08.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b09.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b10.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b11.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003b12.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c01.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c02.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c03.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c04.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c05.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c06.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c07.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003c08.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003d01.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003d02.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003d03.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003d04.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003d05.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003d06.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e01.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e02.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e03.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e04.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e05.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e06.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e07.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e08.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e09.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e10.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e11.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003e12.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f01.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f02.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f03.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f04.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f05.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f06.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f07.xht ref chrome
+css/CSS2/tables/fixed-table-layout-003f08.xht ref chrome
+css/CSS2/tables/fixed-table-layout-017.xht chrome
+css/CSS2/tables/fixed-table-layout-018.xht chrome
+css/CSS2/tables/fixed-table-layout-019.xht chrome
+css/CSS2/tables/fixed-table-layout-020.xht chrome
+css/CSS2/tables/fixed-table-layout-021.xht chrome
+css/CSS2/tables/fixed-table-layout-022.xht chrome
+css/CSS2/tables/fixed-table-layout-023.xht chrome
+css/CSS2/tables/fixed-table-layout-025.xht ref chrome
+css/CSS2/tables/fixed-table-layout-026.xht ref chrome
+css/CSS2/tables/fixed-table-layout-027.xht ref chrome
+css/CSS2/tables/fixed-table-layout-028.xht ref chrome
+css/CSS2/tables/fixed-table-layout-029.xht ref chrome
+css/CSS2/tables/fixed-table-layout-030.xht ref chrome
+css/CSS2/tables/fixed-table-layout-031.xht ref chrome
 css/CSS2/tables/height-table-cell-001.xht ref chrome
 css/CSS2/tables/height-width-inline-table-001.xht ref chrome
 css/CSS2/tables/height-width-inline-table-001a.xht ref chrome
@@ -4881,10 +4948,11 @@ css/CSS2/tables/table-backgrounds-bc-rowgroup-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-table-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-cell-001.xht ref chrome
 css/CSS2/tables/table-backgrounds-bs-colgroup-001.xht ref
+css/CSS2/tables/table-backgrounds-bs-column-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-row-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-rowgroup-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-table-001.xht ref
-css/CSS2/tables/table-cell-001.xht chrome
+css/CSS2/tables/table-cell-001.xht ref chrome
 css/CSS2/tables/table-column-rendering-001.xht ref chrome
 css/CSS2/tables/table-column-rendering-002.xht ref chrome
 css/CSS2/tables/table-footer-group-001.xht ref chrome
