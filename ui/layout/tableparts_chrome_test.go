@@ -186,6 +186,35 @@ func TestTableColumnsMatchChrome(t *testing.T) {
 		"columns under a caption, a head and a foot": styled(sheet,
 			ui.Table(ui.Caption(ui.Text("A caption")), ui.Col(), ui.Col(ui.Class("w")),
 				ui.Thead(row("h", "i")), ui.Tbody(row("one", "two")), ui.Tfoot(row("f", "g")))),
+		"a fixed table's first row with padding and borders": styled(sheet+` .p td { padding: 0 30px; border: 3px solid; }`,
+			ui.Table(ui.Class("fixed", "p"), ui.Tbody(
+				ui.Tr(ui.Td(), ui.Td(ui.Class("w"), ui.Text("sized")), ui.Td(ui.Style("box-sizing: border-box; width: 80px"))),
+				row("one", "two", "three")))),
+		"a fixed table's percentages": styled(sheet+` .p td { padding: 0 25px; }`,
+			ui.Table(ui.Class("fixed", "p"), ui.Style("width: 200px"), ui.Col(ui.Class("pc")), ui.Col(),
+				ui.Tbody(ui.Tr(ui.Td(ui.Text("a")), ui.Td(ui.Text("b")), ui.Td(ui.Style("width: 20%"), ui.Text("c")))))),
+		"a fixed table of sized columns alone": styled(sheet,
+			ui.Table(ui.Class("fixed"), ui.Col(ui.Class("w")), ui.Col(ui.Style("width: 30px")),
+				ui.Tbody(row("one", "two")))),
+	}
+	for name, d := range cases {
+		t.Run(name, func(t *testing.T) { chrome.Match(t, d, geom.V2(640, 400)) })
+	}
+}
+
+func TestTableHeightsMatchChrome(t *testing.T) {
+	const sheet = `table { border-spacing: 2px; } td { padding: 2px; } .b { padding: 6px; border: 4px solid; }`
+	one := func() *ui.Node { return ui.Tbody(ui.Tr(ui.Td(ui.Text("a")), ui.Td(ui.Text("b")))) }
+	cases := map[string]*ui.Document{
+		"a height is the border box's": styled(sheet, ui.Table(ui.Class("b"), ui.Style("height: 100px"), one())),
+		"captions stand outside the height": styled(sheet,
+			ui.Table(ui.Style("height: 100px"), ui.Caption(ui.Text("above")), one(),
+				ui.Caption(ui.Style("caption-side: bottom"), ui.Text("below")))),
+		"max-height holds the height": styled(sheet, ui.Table(ui.Style("height: 200px; max-height: 80px"), one())),
+		"min-height is a floor":       styled(sheet, ui.Table(ui.Style("min-height: 90px"), one())),
+		"min-height over height":      styled(sheet, ui.Table(ui.Style("height: 10px; min-height: 60px"), one())),
+		"max-height never shortens the rows": styled(sheet,
+			ui.Table(ui.Style("max-height: 10px"), ui.Tbody(ui.Tr(ui.Td(ui.Style("height: 50px"), ui.Text("tall")))))),
 	}
 	for name, d := range cases {
 		t.Run(name, func(t *testing.T) { chrome.Match(t, d, geom.V2(640, 400)) })

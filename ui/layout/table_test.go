@@ -109,3 +109,55 @@ func TestAColumnWithAWidthTakesNoExtra(t *testing.T) {
 	assert.Equal(t, float32(30), tr.Of[size].Size.X, "the sized column keeps its width")
 	assert.Equal(t, float32(170), tr.Of[name].Size.X, "the rest goes to the auto column")
 }
+
+func fixedTable(w float32, children ...*dom.Node) *dom.Node {
+	return el(dom.Table, func(st *style.Computed) {
+		st.TableLayout, st.Size.Width = style.TableFixed, style.Px(w)
+	}, children...)
+}
+
+func padded(p float32, edit ...func(*style.Computed)) func(*style.Computed) {
+	return func(st *style.Computed) {
+		st.Padding, st.BoxSizing = style.All(style.Px(p)), style.ContentBox
+		for _, e := range edit {
+			e(st)
+		}
+	}
+}
+
+func TestAFixedTablesFirstRowSizesColumnsWithTheirPadding(t *testing.T) {
+	a, c := el(dom.Td, padded(10)), el(dom.Td, padded(10))
+	b := el(dom.Td, padded(10, func(st *style.Computed) { st.Size.Width = style.Px(40) }), text("H"))
+	tr := lay(el(dom.Div, block, fixedTable(300, row(a, b, c))), 400)
+	assert.Equal(t, float32(60), tr.Of[b].Size.X, "40 of content and 20 of padding")
+	assert.Equal(t, float32(120), tr.Of[a].Size.X, "the rest shared evenly")
+	assert.Equal(t, float32(120), tr.Of[c].Size.X)
+}
+
+func TestAFixedTablesPercentageTakesItsCellsPaddingToo(t *testing.T) {
+	a, c := el(dom.Td, padded(25)), el(dom.Td, padded(25))
+	b := el(dom.Td, padded(25, func(st *style.Computed) { st.Size.Width = style.Percent(50) }))
+	tr := lay(el(dom.Div, block, fixedTable(100, row(a, b, c))), 400)
+	assert.Equal(t, float32(100), tr.Of[b].Size.X, "half the table and 50 of padding")
+	assert.Equal(t, float32(0), tr.Of[a].Size.X, "nothing left, whatever the padding")
+	assert.Equal(t, float32(0), tr.Of[c].Size.X)
+}
+
+func TestATablesHeightIsHeldToItsMaxHeightAndLeavesItsCaptionsOut(t *testing.T) {
+	sized := func(h, maxH float32) func(*style.Computed) {
+		return func(st *style.Computed) {
+			st.BorderSpacing = [2]float32{0, 0}
+			st.Size.Height, st.MaxSize.Height = style.Px(h), style.Px(maxH)
+		}
+	}
+	tb := el(dom.Table, sized(200, 80), row(cell("H")))
+	tr := lay(el(dom.Div, block, tb), 400)
+	assert.Equal(t, float32(80), tr.Of[tb].Size.Y)
+	low := el(dom.Table, sized(200, 5), row(cell("H")))
+	tr = lay(el(dom.Div, block, low), 400)
+	assert.Equal(t, float32(12), tr.Of[low].Size.Y, "never below its rows")
+	caption := el(dom.Caption, nil, text("H"))
+	withCaption := el(dom.Table, sized(50, 80), caption, row(cell("H")))
+	tr = lay(el(dom.Div, block, withCaption), 400)
+	assert.Equal(t, float32(60), tr.Of[withCaption].Size.Y, "the caption's 10 beyond the 50")
+}

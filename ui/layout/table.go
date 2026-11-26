@@ -397,7 +397,7 @@ func (t *tree) table(n *node, in input) output {
 		heights[ri] = t.rowHeight(r, widths, content)
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
+	hgt := tableHeight(st, in, heights, sy, inset.vertical(), above+below)
 	s := size{w, hgt}
 	if in.run == computeSize {
 		return sizeOutput(s)
@@ -888,20 +888,27 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	// single are the columns' max-content widths from their single-column cells alone,
 	// which their percentages widen the table by.
 	percent, single := make([]float32, cols), make([]float32, cols)
-	fixedW := slices.Repeat([]float32{-1}, cols)
+	fixedW := make([]fixedColumn, cols)
 	if fixedLayout(st, in) {
 		if len(rows) > 0 {
 			firstRowWidths(cells, fixedW, w-extra, inner)
 		}
 		for _, tr := range tracks {
-			if cw, _ := tr.width(); some(cw) {
+			fc := fixedColumn{kind: columnFixed}
+			fc.width, fc.percent = tr.width()
+			if !some(fc.width) {
+				fc.kind, fc.width = columnPercent, fc.percent*(w-extra)/100
+			}
+			if some(fc.width) && (fc.kind == columnFixed || fc.percent > 0) {
 				for k := tr.first; k < tr.first+tr.span; k++ {
-					fixedW[k] = cw
+					fixedW[k] = fc
 				}
 			}
 		}
-		for k, fw := range fixedW {
-			colMin[k], colMax[k] = max(fw, 0), max(fw, 0)
+		for k, fc := range fixedW {
+			if fc.kind == columnFixed {
+				colMin[k], colMax[k] = fc.width, fc.width
+			}
 		}
 	} else {
 		spannedColumns(cells, colMin, colMax, fixed, inner)
@@ -984,7 +991,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 		w -= colX[cols] - shownX[cols]
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := tableHeight(st, in, heights, sy, inset.vertical()+above+below)
+	hgt := tableHeight(st, in, heights, sy, inset.vertical(), above+below)
 	fullY, _ := shownLines(heights, nil, nil, sy, 0)
 	rowY, rowAt := shownLines(heights, rowGone, rowSections(n, len(rows)), sy, above+inset.t+sy)
 	hgt -= fullY[len(rows)] - (rowY[len(rows)] - rowY[0])
@@ -1231,17 +1238,47 @@ func autoTableWidth(a space, sumMin, sumMax, extra float32) float32 {
 	return min(max(a.v, sumMin+extra), sumMax+extra)
 }
 
+// columnKind is how a column of a fixed table is sized: by the rest of the table, by a
+// width of its own, or by a percentage of the table's.
+type columnKind uint8
+
+const (
+	columnAuto columnKind = iota
+	columnFixed
+	columnPercent
+)
+
+// fixedColumn is a column of a fixed table: its kind and, unless auto, its width, a
+// percentage of the content width resolved with the borders and padding of the cell
+// that gave it.
+type fixedColumn struct {
+	kind           columnKind
+	width, percent float32
+}
+
 // firstRowWidths sets fixedW, by fixed table layout, from the first row's cells with a
-// width, a spanning one's shared evenly between its columns.
-func firstRowWidths(cells []slot, fixedW []float32, content float32, inner func(int) float32) {
+// width, their borders and padding included, a spanning one's shared evenly between its
+// columns.
+func firstRowWidths(cells []slot, fixedW []fixedColumn, content float32, inner func(int) float32) {
 	for _, c := range cells {
 		if c.row != 0 {
 			break
 		}
-		if cw := resolve(c.cell.st.Size.Width, content); some(cw) {
-			for k := c.col; k < c.col+c.cs; k++ {
-				fixedW[k] = (cw - inner(c.cs)) / float32(c.cs)
-			}
+		wl := c.cell.st.Size.Width
+		cw := resolve(wl, content)
+		if !some(cw) {
+			continue
+		}
+		if contentBox(c.cell.st) {
+			cw += edges(c.cell.st.Padding, content).add(c.cell.borders()).horizontal()
+		}
+		fc := fixedColumn{kind: columnFixed}
+		if wl.Kind == style.Fixed && wl.Percent > 0 {
+			fc.kind, fc.percent = columnPercent, wl.Percent
+		}
+		fc.width = (cw - inner(c.cs)) / float32(c.cs)
+		for k := c.col; k < c.col+c.cs; k++ {
+			fixedW[k] = fc
 		}
 	}
 }
@@ -1301,24 +1338,37 @@ func spannedPercents(cells []slot, percent, colMax []float32) {
 	}
 }
 
-// tableHeight is the height of a table whose rows are heights tall, around being its
-// inset and captions: the rows' with the spacing round them, or the height the table is
-// given, which grows the rows where it is above theirs: a floor only, as Chrome's, which
-// never shortens a table below its rows, and for a table that collapses rows one taken
-// from before the collapse.
-func tableHeight(st *style.Computed, in input, heights []float32, sy, around float32) float32 {
-	hgt := around
+// tableHeight is the height of a table whose rows are heights tall, inset being its
+// padding and borders and captions the height of its captions: the rows' with the
+// spacing round them, or the height the table is given, which grows the rows where it is
+// above theirs: a floor only, as Chrome's, which never shortens a table below its rows,
+// and for a table that collapses rows one taken from before the collapse. Its own height,
+// held to its min- and max-height, is its border box's, the captions outside; a height
+// its container gives it, a flex item's, holds them.
+func tableHeight(st *style.Computed, in input, heights []float32, sy, inset, captions float32) float32 {
+	hgt := inset
 	if len(heights) > 0 {
 		hgt += sy
 	}
 	for _, h := range heights {
 		hgt += h + sy
 	}
-	if given := or(in.known.h, resolve(st.Size.Height, in.parent.h)); some(given) && given > hgt {
-		growRows(heights, given-hgt)
-		return given
+	own := resolve(st.Size.Height, in.parent.h)
+	lo, hi := resolve(st.MinSize.Height, in.parent.h), resolve(st.MaxSize.Height, in.parent.h)
+	given := in.known.h
+	switch {
+	case !some(given) && in.sizing == inherentSize:
+		given = fmax(mMin(own, hi), lo)
+	case !some(given):
+		given = own
+	case !some(own) || given != mClamp(own, lo, hi):
+		given -= captions
 	}
-	return hgt
+	if some(given) && given > hgt {
+		growRows(heights, given-hgt)
+		return given + captions
+	}
+	return hgt + captions
 }
 
 // growRows shares extra, the height a table is given beyond its rows', between them in
@@ -1352,27 +1402,47 @@ func share(cols, weights []float32, need float32) {
 	}
 }
 
-// fixedWidths are a fixed table's columns in its content width: those its first row
-// sized at their width, the others sharing what is left evenly; with none left over,
-// the sized ones grow in proportion to fill it.
-func fixedWidths(fixedW []float32, content float32) []float32 {
+// fixedWidths are a fixed table's columns in its content width, as Chrome shares it: the
+// columns with a percentage take theirs, shrunk in proportion where they ask more than
+// there is; those with a width take it; the others share what is left evenly. With no
+// such column to take what is left, the sized ones grow in proportion to fill it, those
+// with a width before those with a percentage.
+func fixedWidths(fixedW []fixedColumn, content float32) []float32 {
 	widths := make([]float32, len(fixedW))
-	sized, free := float32(0), 0
-	for _, fw := range fixedW {
-		if fw >= 0 {
-			sized += fw
-		} else {
-			free++
-		}
+	var sums [3]float32
+	var counts [3]int
+	for _, fc := range fixedW {
+		sums[fc.kind] += fc.width
+		counts[fc.kind]++
 	}
-	for k, fw := range fixedW {
-		switch {
-		case fw < 0:
-			widths[k] = max(content-sized, 0) / float32(free)
-		case free == 0 && sized > 0 && content > sized:
-			widths[k] = fw * content / sized
-		default:
-			widths[k] = fw
+	scale := float32(1)
+	if sums[columnPercent] > content {
+		scale = content / sums[columnPercent]
+	}
+	left := max(content-sums[columnPercent]*scale-sums[columnFixed], 0)
+	grow := columnAuto
+	switch {
+	case counts[columnAuto] > 0:
+	case counts[columnFixed] > 0:
+		grow = columnFixed
+	case counts[columnPercent] > 0:
+		grow = columnPercent
+	}
+	for k, fc := range fixedW {
+		switch fc.kind {
+		case columnAuto:
+			widths[k] = left / float32(counts[columnAuto])
+		case columnPercent:
+			widths[k] = fc.width * scale
+		case columnFixed:
+			widths[k] = fc.width
+		}
+		if fc.kind == grow && fc.kind != columnAuto && left > 0 {
+			if sums[grow] > 0 {
+				widths[k] += left * fc.width / sums[grow]
+			} else {
+				widths[k] += left / float32(counts[grow])
+			}
 		}
 	}
 	return widths
