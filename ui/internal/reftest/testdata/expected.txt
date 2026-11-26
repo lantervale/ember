@@ -3107,11 +3107,11 @@ css/CSS2/normal-flow/inline-block-width-001a.xht ref chrome
 css/CSS2/normal-flow/inline-block-width-001b.xht ref chrome
 css/CSS2/normal-flow/inline-block-width-002a.xht ref chrome
 css/CSS2/normal-flow/inline-block-width-002b.xht ref chrome
-css/CSS2/normal-flow/inline-block-zorder-001.xht chrome
-css/CSS2/normal-flow/inline-block-zorder-002.xht chrome
+css/CSS2/normal-flow/inline-block-zorder-001.xht ref chrome
+css/CSS2/normal-flow/inline-block-zorder-002.xht ref chrome
 css/CSS2/normal-flow/inline-block-zorder-003.xht chrome
-css/CSS2/normal-flow/inline-block-zorder-004.xht chrome
-css/CSS2/normal-flow/inline-block-zorder-005.xht chrome
+css/CSS2/normal-flow/inline-block-zorder-004.xht ref chrome
+css/CSS2/normal-flow/inline-block-zorder-005.xht ref chrome
 css/CSS2/normal-flow/inline-box-border-line-break.html ref chrome
 css/CSS2/normal-flow/inline-box-padding-line-break.html ref chrome
 css/CSS2/normal-flow/inline-non-replaced-height-002.xht chrome
@@ -3148,11 +3148,11 @@ css/CSS2/normal-flow/inline-table-width-001a.xht ref chrome
 css/CSS2/normal-flow/inline-table-width-001b.xht ref chrome
 css/CSS2/normal-flow/inline-table-width-002a.xht ref chrome
 css/CSS2/normal-flow/inline-table-width-002b.xht ref chrome
-css/CSS2/normal-flow/inline-table-zorder-001.xht chrome
-css/CSS2/normal-flow/inline-table-zorder-002.xht chrome
+css/CSS2/normal-flow/inline-table-zorder-001.xht ref chrome
+css/CSS2/normal-flow/inline-table-zorder-002.xht ref chrome
 css/CSS2/normal-flow/inline-table-zorder-003.xht chrome
-css/CSS2/normal-flow/inline-table-zorder-004.xht chrome
-css/CSS2/normal-flow/inline-table-zorder-005.xht chrome
+css/CSS2/normal-flow/inline-table-zorder-004.xht ref chrome
+css/CSS2/normal-flow/inline-table-zorder-005.xht ref chrome
 css/CSS2/normal-flow/inlines-002.xht ref chrome
 css/CSS2/normal-flow/inlines-013.xht ref chrome
 css/CSS2/normal-flow/inlines-016.xht chrome
@@ -5511,6 +5511,7 @@ css/CSS2/zindex/z-index-abspos-003.xht ref chrome
 css/CSS2/zindex/z-index-abspos-004.xht ref chrome
 css/CSS2/zindex/z-index-abspos-005.xht ref chrome
 css/CSS2/zindex/z-index-abspos-007.xht ref chrome
+css/CSS2/zorder/z-index-020.xht ref
 css/css-flexbox/abspos/abspos-autopos-htb-ltr.html ref chrome
 css/css-flexbox/abspos/abspos-autopos-htb-rtl.html ref chrome
 css/css-flexbox/abspos/abspos-autopos-vlr-ltr.html ref chrome
@@ -5668,15 +5669,15 @@ css/css-flexbox/flex-direction.html ref
 css/css-flexbox/flex-flow-001.html ref chrome
 css/css-flexbox/flex-flow-002.html ref chrome
 css/css-flexbox/flex-flow-003.html ref chrome
-css/css-flexbox/flex-flow-004.html ref chrome
-css/css-flexbox/flex-flow-005.html ref chrome
-css/css-flexbox/flex-flow-006.html ref chrome
+css/css-flexbox/flex-flow-004.html chrome
+css/css-flexbox/flex-flow-005.html chrome
+css/css-flexbox/flex-flow-006.html chrome
 css/css-flexbox/flex-flow-007.html ref chrome
 css/css-flexbox/flex-flow-008.html ref chrome
-css/css-flexbox/flex-flow-009.html ref chrome
+css/css-flexbox/flex-flow-009.html chrome
 css/css-flexbox/flex-flow-010.html ref chrome
 css/css-flexbox/flex-flow-011.html ref chrome
-css/css-flexbox/flex-flow-012.html ref chrome
+css/css-flexbox/flex-flow-012.html chrome
 css/css-flexbox/flex-grow-001.xht ref chrome
 css/css-flexbox/flex-grow-002.html ref chrome
 css/css-flexbox/flex-grow-003.html ref chrome
