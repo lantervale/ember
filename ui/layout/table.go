@@ -346,7 +346,7 @@ func (t *tree) table(n *node, in input) output {
 	inset := padding.add(border)
 	rows := n.rows()
 	if fixedLayout(st, in) || len(n.tracks()) > 0 || st.BorderCollapse ||
-		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general || r.st.Collapse }) {
+		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general || r.collapsedRow() }) {
 		return t.spanned(n, in, rows)
 	}
 	sx, sy := st.BorderSpacing[0], st.BorderSpacing[1]
@@ -1158,7 +1158,7 @@ func collapsedTracks(tracks []track, cols int) []bool {
 func collapsedRows(rows []*node) []bool {
 	var gone []bool
 	for ri, r := range rows {
-		if !r.st.Collapse {
+		if !r.collapsedRow() {
 			continue
 		}
 		if gone == nil {
@@ -1167,6 +1167,12 @@ func collapsedRows(rows []*node) []bool {
 		gone[ri] = true
 	}
 	return gone
+}
+
+// collapsedRow reports a row with visibility: collapse, or one, anonymous, in a row group
+// with it.
+func (n *node) collapsedRow() bool {
+	return n.st.Collapse || n.box.Node == nil && n.parent != nil && n.parent.role == roleGroup && n.parent.st.Collapse
 }
 
 // rowSections marks the first row of each of the table's sections: a row group, or a
