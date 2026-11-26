@@ -155,6 +155,38 @@ func TestWithoutAFetcherAnImportIsAWarning(t *testing.T) {
 	assert.EqualError(t, d.Warnings()[0], `ui: @import a.css is not followed; fetch it with FetchSheets`)
 }
 
+func TestAnImportedSheetIsDecodedAsCSSSyntaxSays(t *testing.T) {
+	srv := &server{sheets: map[string]string{
+		"https://site.test/latin.css":    "@import \"inherits.css\"; .caf\xe9 { width: 10px; }",
+		"https://site.test/inherits.css": ".th\xe9 { width: 20px; }",
+		"https://site.test/own.css":      "@charset \"shift_jis\"; .\x95\xbd\x98\x61 { width: 30px; }",
+		"https://site.test/marked.css":   "\xef\xbb\xbf.caf\xc3\xa9-bom { width: 40px; }",
+	}}
+	cafe, the, peace, bom := ui.Div(ui.Class("café")), ui.Div(ui.Class("thé")), ui.Div(ui.Class("平和")),
+		ui.Div(ui.Class("café-bom"))
+	d := ui.NewDocument(ui.FetchSheets(srv.fetch),
+		ui.CSS(`@import "latin.css"; @import "own.css"; @import "marked.css";`,
+			ui.From("https://site.test/page.html"), ui.Encoding("iso-8859-1")))
+	d.Body().Append(cafe, the, peace, bom)
+	settled(t, d, cafe, geom.V2(800, 600))
+	require.Eventually(t, func() bool { return settled(t, d, the, geom.V2(800, 600)) == 20 },
+		5*time.Second, time.Millisecond,
+		"the sheet it imports falls back to the importing sheet's encoding")
+	assert.InDelta(t, 10, cafe.Box().W, 0.01, "decoded in the encoding of the sheet that imports it")
+	assert.InDelta(t, 30, peace.Box().W, 0.01, "its own @charset first")
+	assert.InDelta(t, 40, bom.Box().W, 0.01, "a byte order mark before all")
+	assert.Empty(t, d.Warnings())
+}
+
+func TestAStylesheetIsDecodedAsCSSSyntaxSays(t *testing.T) {
+	files := fstest.MapFS{"ui/screen.css": {Data: []byte("\xef\xbb\xbf.box { width: 50px; }")}}
+	box := ui.Div(ui.Class("box"))
+	d := ui.NewDocument(ui.Stylesheet(files, "ui/screen.css"))
+	d.Body().Append(box)
+	d.Layout(geom.V2(800, 600))
+	assert.InDelta(t, 50, box.Box().W, 0.01, "its byte order mark is no part of its first rule")
+}
+
 func TestAStylesheetImportsFromItsFileSystem(t *testing.T) {
 	files := fstest.MapFS{
 		"ui/screen.css":    {Data: []byte(`@import "parts/hud.css"; .box { height: 10px; }`)},

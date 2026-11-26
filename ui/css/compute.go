@@ -2472,6 +2472,7 @@ var props = func() map[string]prop {
 			wordOf(maskComposites), flips[[]style.MaskComposite]()),
 		"clip-path": field(func(c *style.Computed) *style.ClipPath { return &c.ClipPath }, clipPath,
 			clipPaths).painted(),
+		"clip":        field(func(c *style.Computed) *style.ClipRect { return &c.Clip }, clipRect, clipRects).painted(),
 		"text-shadow": field(func(c *style.Computed) *[]style.Shadow { return &c.TextShadows }, (*ctx).shadows, shadows),
 		// thin, medium and thick are drawn 1, 3 and 5 pixels wide, as a
 		// border's are, though Chrome's getComputedStyle writes them as

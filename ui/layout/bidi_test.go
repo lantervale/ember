@@ -96,3 +96,16 @@ func TestASpanBidiSplitsIsInPartsEachWithItsOwnEdges(t *testing.T) {
 	assert.Equal(t, []box.Ends{box.RightEnd, box.LeftEnd}, b.Ends,
 		"right to left, its start on the right of its first line, its end on the left of its last")
 }
+
+func TestLineAndParagraphSeparatorsEndTheirLines(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, text("ab\u2028cd \u2029 ef"))
+	assert.Equal(t, []string{"ab", "cd", "ef"}, lines(lay(p, 400).Of[p]), "a break each, the spaces after them dropped")
+}
+
+func TestIsolatesSideBySideAreOrderedApart(t *testing.T) {
+	bdo := func(st *style.Computed) { st.Dir, st.Bidi = style.RTL, style.BidiIsolateOverride }
+	cd, ef := el(dom.Span, bdo, text("cd")), el(dom.Span, bdo, text("ef"))
+	tr := lay(el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, text("ab "), cd, ef), 400)
+	assert.Less(t, tr.Of[cd].Pos.X, tr.Of[ef].Pos.X,
+		"each its own isolate, in the order they come, as Chrome's bdo")
+}
