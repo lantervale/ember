@@ -1137,8 +1137,12 @@ func (p *parser) skipAtRule() {
 		case LBrace:
 			p.component()
 			return
+		case RBrace:
+			if p.depth > 0 {
+				return
+			}
 		case Ident, Function, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension,
-			Whitespace, CDO, CDC, Colon, Comma, LBracket, RBracket, LParen, RParen, RBrace:
+			Whitespace, CDO, CDC, Colon, Comma, LBracket, RBracket, LParen, RParen:
 			// nothing special for these tokens
 		}
 		p.component()

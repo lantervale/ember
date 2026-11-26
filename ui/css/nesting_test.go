@@ -78,6 +78,13 @@ func TestNestedRulesDropWhatChromeDrops(t *testing.T) {
 	}
 }
 
+func TestAnAtRuleDroppedInsideARuleEndsWithIt(t *testing.T) {
+	s, _ := Parse("t.css", ".a { color: green; @foo [ color: red; } .a { color: red; } ] }\n.b { color: green }")
+	if len(s.Rules) != 2 || s.Rules[1].Selectors[0].String() != ".b" {
+		t.Errorf("the block's } ends the dropped at-rule, as CSS Syntax reads it in a block: %s", selectorsOf(s))
+	}
+}
+
 func TestNestedRulesWeighAsChromes(t *testing.T) {
 	a := el(dom.Div, "o1", "a", "c")
 	e := el(dom.Div, "o3", "e", "f")
