@@ -612,7 +612,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		}
 
 		yMarginOffset := float32(0)
-		stretchW := fmax(innerW-nonAuto.horizontal(), 0)
+		room := innerW - nonAuto.horizontal()
+		stretchW := fmax(room, 0)
 		avoid, avoidW := point{}, float32(0)
 		avoids, pushedBelow := false, false
 		if !it.inSameBFC {
@@ -629,7 +630,8 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 				pushedBelow = slot.y > minY
 				hasActive = slot.segment >= 0
 				avoids = true
-				stretchW = fmax(fmax(slot.stretchWidth, minAuto), 0)
+				room = fmax(slot.stretchWidth, minAuto)
+				stretchW = fmax(room, 0)
 				avoid, avoidW = point{slot.x, slot.y}, slot.borderWidth
 			}
 		}
@@ -740,7 +742,7 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 		if autoCount == 0 {
 			resolved.l += blockAlignOffset(st, freeX)
 		}
-		if over := stretchW - finalSize.w; over < 0 && st.Dir == style.RTL {
+		if over := room - finalSize.w; over < 0 && st.Dir == style.RTL {
 			// over-constrained, the left margin gives way: the box overflows its left
 			resolved.l += over
 		}
