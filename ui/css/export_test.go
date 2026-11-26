@@ -175,6 +175,23 @@ func ClipPathCSS(c style.ClipPath) string {
 	return out
 }
 
+// ClipCSS is c as Chrome's getComputedStyle writes clip.
+func ClipCSS(c style.ClipRect) string {
+	if !c.Set {
+		return "auto"
+	}
+	edge := func(v float32, auto bool) string {
+		if auto {
+			return "auto"
+		}
+		return strconv.FormatFloat(float64(v), 'f', -1, 32) + "px"
+	}
+	return "rect(" + strings.Join([]string{
+		edge(c.Edges.Top, c.Auto.Top), edge(c.Edges.Right, c.Auto.Right),
+		edge(c.Edges.Bottom, c.Auto.Bottom), edge(c.Edges.Left, c.Auto.Left),
+	}, ", ") + ")"
+}
+
 func shortest(t, r, b, l style.Length) string {
 	vs := []style.Length{t, r, b, l}
 	switch {
