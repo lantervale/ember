@@ -91,7 +91,14 @@ type fetches struct {
 	// onWay are the urls asked for that have not landed, read and
 	// written on the frame.
 	onWay map[string]bool
+	// drawing is how many vector pictures are being drawn off the frame
+	// and not yet landed, read and written on the frame.
+	drawing int
 }
+
+// ImagesLoading is how many of the Document's pictures are on their way:
+// asked for and not yet landed, fetched or drawn at a size off the frame.
+func (d *Document) ImagesLoading() int { return len(d.fetching.onWay) + d.fetching.drawing }
 
 // fetchImage asks the fetcher for url off the frame: during a layout,
 // once it sorted it among the others asked for (fetchQueued).
@@ -224,6 +231,7 @@ func (d *Document) landImages() {
 		d.kept.Landed(func(url string) bool { return shown[url] }, d, d.fonts)
 	}
 	for _, got := range drawn {
+		f.drawing--
 		got.v.land(got.at, got.img, got.err)
 		d.replay.repaint = true
 	}
@@ -370,17 +378,6 @@ func (d *Document) animate() {
 type missingImageError struct{ url string }
 
 func (e *missingImageError) Error() string { return "ui: no image " + e.url }
-
-// ImagesLoading is how many of the pictures the Document fetches are on
-// their way: asked for and not yet landed in a layout, decoded or failed,
-// and the sizes of its vector pictures still being drawn off the frame.
-func (d *Document) ImagesLoading() int {
-	n := len(d.fetching.onWay)
-	for _, v := range d.vectors {
-		n += len(v.drawing)
-	}
-	return n
-}
 
 // ImageSize is the natural size of the image url names, one point per
 // pixel, for layout's replaced elements (box.Images).

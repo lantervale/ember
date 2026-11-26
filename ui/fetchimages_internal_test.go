@@ -60,19 +60,6 @@ func TestAPictureNoFileHoldsIsFetchedOffTheFrameAndShownOnceItLands(t *testing.T
 	assert.Empty(t, d.Warnings())
 }
 
-func TestAPictureCountsAsLoadingUntilALayoutLandsIt(t *testing.T) {
-	a := &asked{pictures: map[string][]byte{"https://art.test/door.png": picture(t, 30, 20)}}
-	d := NewDocument(FetchImages(a.fetch))
-	d.Body().Append(Img(Attr("src", "https://art.test/door.png")), Img(Attr("src", "https://art.test/gone.png")))
-	assert.Zero(t, d.ImagesLoading(), "nothing is asked for before a layout")
-
-	d.Layout(geom.V2(200, 100))
-	d.fetching.Wait()
-	assert.Equal(t, 2, d.ImagesLoading(), "fetched and decoded, but not yet laid out")
-	d.Layout(geom.V2(200, 100))
-	assert.Zero(t, d.ImagesLoading(), "landed, the one that failed too")
-}
-
 func TestAPictureOnItsWayTakesTheProportionsOfItsAttributes(t *testing.T) {
 	a := &asked{pictures: map[string][]byte{"https://art.test/view.png": picture(t, 250, 167)}}
 	view := Img(Attr("src", "https://art.test/view.png"), Attr("width", "250"), Attr("height", "167"))
@@ -167,4 +154,20 @@ func TestAListStyleImageIsLaidOutWhenItLands(t *testing.T) {
 	d.Layout(geom.V2(200, 100))
 	assert.Equal(t, want.Box().X, text.Box().X, "laid out again once it landed")
 	assert.Equal(t, []string{"https://art.test/dot.png"}, a.urls)
+}
+
+func TestImagesLoadingCountsThePicturesUntilTheyLand(t *testing.T) {
+	gate := make(chan struct{})
+	a := &asked{pictures: map[string][]byte{"a.png": picture(t, 4, 4), "b.png": picture(t, 4, 4)}}
+	d := NewDocument(FetchImages(func(url string) ([]byte, error) { <-gate; return a.fetch(url) }))
+	d.Body().Append(Img(Attr("src", "a.png")), Img(Attr("src", "b.png")))
+	assert.Zero(t, d.ImagesLoading(), "nothing asked for before a layout")
+
+	d.Layout(geom.V2(200, 100))
+	assert.Equal(t, 2, d.ImagesLoading(), "asked for, not yet fetched")
+	close(gate)
+	d.fetching.Wait()
+	assert.Equal(t, 2, d.ImagesLoading(), "fetched, not yet taken by a layout")
+	d.Layout(geom.V2(200, 100))
+	assert.Zero(t, d.ImagesLoading())
 }
