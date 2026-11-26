@@ -371,6 +371,17 @@ type missingImageError struct{ url string }
 
 func (e *missingImageError) Error() string { return "ui: no image " + e.url }
 
+// ImagesLoading is how many of the pictures the Document fetches are on
+// their way: asked for and not yet landed in a layout, decoded or failed,
+// and the sizes of its vector pictures still being drawn off the frame.
+func (d *Document) ImagesLoading() int {
+	n := len(d.fetching.onWay)
+	for _, v := range d.vectors {
+		n += len(v.drawing)
+	}
+	return n
+}
+
 // ImageSize is the natural size of the image url names, one point per
 // pixel, for layout's replaced elements (box.Images).
 func (d *Document) ImageSize(url string) (geom.Vec2, bool) {
