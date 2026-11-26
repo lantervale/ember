@@ -30,11 +30,12 @@ func TestInjectPutsTheFontsFirstAndKeepsTheMode(t *testing.T) {
 
 func TestGenericsNameTheFacesEmberDrawsThemWith(t *testing.T) {
 	for in, want := range map[string]string{
-		"p { font-family: serif; color: red }":       `p { font-family: "Go"; color: red }`,
-		"p{font: bold 20px/1 Ahem, monospace}":       `p{font: bold 20px/1 Ahem, "Go Mono"}`,
-		`<div style="font-family: Ahem">`:            `<div style="font-family: Ahem">`,
-		"a { font-family: cursive, sans-serif; }":    `a { font-family: "Go", "Go"; }`,
-		"b { font-size: 12px; font-style: italic; }": "b { font-size: 12px; font-style: italic; }",
+		"p { font-family: serif; color: red }":              `p { font-family: Go; color: red }`,
+		"p{font: bold 20px/1 Ahem, monospace}":              `p{font: bold 20px/1 Ahem, Go Mono}`,
+		`<div style="font-family: Ahem">`:                   `<div style="font-family: Ahem">`,
+		`<body style="font-family: monospace; color: red">`: `<body style="font-family: Go Mono; color: red">`,
+		"a { font-family: cursive, sans-serif; }":           `a { font-family: Go, Go; }`,
+		"b { font-size: 12px; font-style: italic; }":        "b { font-size: 12px; font-style: italic; }",
 	} {
 		if got := Generics(in); got != want {
 			t.Errorf("Generics(%q) = %q, want %q", in, got, want)
