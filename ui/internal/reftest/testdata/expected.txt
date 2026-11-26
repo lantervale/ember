@@ -5369,6 +5369,7 @@ css/CSS2/visufx/overflow-propagation-001a.html ref chrome
 css/CSS2/visufx/visibility-005.xht chrome
 css/CSS2/visufx/visibility-block-001.xht ref chrome
 css/CSS2/visufx/visibility-descendants-002.html ref chrome
+css/CSS2/visuren/anonymous-boxes-001a.xht ref
 css/CSS2/visuren/anonymous-boxes-001b.xht ref chrome
 css/CSS2/visuren/clear-applies-to-016.xht ref chrome
 css/CSS2/visuren/clear-applies-to-017.xht ref chrome
