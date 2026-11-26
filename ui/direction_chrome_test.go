@@ -176,6 +176,8 @@ var rtlCases = map[string]func() []*ui.Node{
 			ui.Div(ui.Attr("dir", "rtl"), ui.Style("width: 300px"), ui.Span(ui.Text("one ")),
 				ui.Span(ui.Style("unicode-bidi: isolate; direction: ltr"), block("10px"), block("20px")),
 				ui.Span(ui.Style("unicode-bidi: embed; direction: ltr"), block("12px"), block("22px"))),
+			ui.Div(ui.Style("width: 300px"), ui.Span(ui.Text("ab "), ui.Bdo(ui.Attr("dir", "rtl"), ui.Text("cd"))),
+				ui.Bdo(ui.Attr("dir", "rtl"), ui.Text("ef")), ui.Bdi(ui.Attr("dir", "rtl"), ui.Text("gh"))),
 			ui.Div(ui.Attr("dir", "rtl"), ui.Style("width: 300px"),
 				ui.Span(ui.Style("padding-left: 10px; padding-right: 20px; border: 2px solid"), ui.Text("abc")),
 				ui.Text(" "), ui.Span(ui.Style("direction: ltr; padding-left: 7px"), block("15px"))),

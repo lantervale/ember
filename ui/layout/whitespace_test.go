@@ -25,6 +25,17 @@ func TestASpanAloneInItsBlockIsAsWideAsItsWords(t *testing.T) {
 	assert.Equal(t, []string{"HH HH"}, lines(tr.Of[a]))
 }
 
+func TestSpacesAZeroWidthSpaceKeepsApartNeverCollapse(t *testing.T) {
+	apart := el(dom.Span, nil, text("\u200b \u200b \u200b \u200b"))
+	inside := el(dom.Span, nil, text(" \u200b \u200b "))
+	tr := lay(el(dom.Div, block,
+		el(dom.P, block, text("H"), apart, text("H")),
+		el(dom.P, block, text("H"), inside, text("H")),
+	), 200)
+	assert.InDelta(t, 30, tr.Of[apart].Rect().W, 1e-3, "three spaces, a zero-width space between each")
+	assert.InDelta(t, 30, tr.Of[inside].Rect().W, 1e-3)
+}
+
 func TestASpaceBeforeASpansEndIsDroppedAtTheLinesEnd(t *testing.T) {
 	s := el(dom.Span, nil, text("HH  "))
 	inner := el(dom.Span, nil, text(" HH "))

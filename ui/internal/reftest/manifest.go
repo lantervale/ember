@@ -28,6 +28,10 @@ const (
 	Mismatch Rel = "!="
 )
 
+// Blank is the path of the reference about:blank, which the manifest
+// lists as "": a white page, never read or drawn.
+const Blank = ""
+
 // Ref is a reference of a page: its path from the checkout's root
 // (css/…, no leading slash) and how the page relates to it.
 type Ref struct {

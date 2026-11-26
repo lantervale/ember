@@ -22,8 +22,12 @@ const (
 
 // FontsSheet is the sheet under every page's: the fonts WPT's runners
 // install on the system, from the checkout's fonts/ folder, so the pages
-// find them by name in ember and in Chrome alike.
-const FontsSheet = `@font-face { font-family: Ahem; src: url(` + Base + `fonts/Ahem.ttf); }`
+// find them by name in ember and in Chrome alike, and glyphs drawn at
+// their exact coverage, without the stem darkening of macOS's font
+// smoothing, which WPT's references, boxes where the tests draw Ahem's
+// squares, leave out (decision 0234).
+const FontsSheet = `@font-face { font-family: Ahem; src: url(` + Base + `fonts/Ahem.ttf); }
+:root { -webkit-font-smoothing: antialiased; }`
 
 // Fetches counts what a Document of the runner is still fetching.
 type Fetches struct{ n atomic.Int32 }
