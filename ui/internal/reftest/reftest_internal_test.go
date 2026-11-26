@@ -188,6 +188,13 @@ func TestReadPageDecodesAPageAsABrowser(t *testing.T) {
 	write("served.css", ".\x95\xbd\x98\x61 {}")
 	write("served.css.headers", "Content-Type: text/css; charset=Shift_JIS\n")
 	write("latin.css", ".caf\xe9 {}")
+	write("plain.css", ".red {}")
+	write("plain.css.headers", "Content-Type: text/plain\n")
+	write("notes.txt", ".red {}")
+	write("typed.xht", page("", `<link rel="stylesheet" href="plain.css"/><link rel="stylesheet" href="notes.txt"/>`))
+	if typed, err := ReadPage(root, "typed.xht"); err != nil || len(typed.Sheets) != 0 {
+		t.Errorf("sheets not served as text/css: %+v (%v)", typed, err)
+	}
 	p, err := ReadPage(root, "sheets.xht")
 	if err != nil {
 		t.Fatal(err)

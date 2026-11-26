@@ -180,7 +180,7 @@ func (p *Page) link(root string, n *html.Node) {
 		}
 		file := filepath.Join(root, filepath.FromSlash(at))
 		data, err := os.ReadFile(file)
-		if err != nil {
+		if err != nil || !servedAsCSS(file) {
 			return
 		}
 		text, encoding := css.Decode(servedSheet(data, file), p.Encoding)

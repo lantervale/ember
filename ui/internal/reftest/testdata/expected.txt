@@ -4622,7 +4622,8 @@ css/CSS2/syntax/comments-006.xht ref chrome
 css/CSS2/syntax/comments-007.xht ref chrome
 css/CSS2/syntax/comments-008.xht ref chrome
 css/CSS2/syntax/comments-009.xht ref chrome
-css/CSS2/syntax/content-type-000.xht chrome
+css/CSS2/syntax/content-type-000.xht ref chrome
+css/CSS2/syntax/content-type-001.xht ref chrome
 css/CSS2/syntax/core-syntax-001.xht ref chrome
 css/CSS2/syntax/core-syntax-006.xht ref chrome
 css/CSS2/syntax/core-syntax-007.xht ref chrome
