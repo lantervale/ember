@@ -377,7 +377,8 @@ func Load(fsys fs.FS, name string, opts ...ParseOption) (*Sheet, []Warning, erro
 	if err != nil {
 		return nil, nil, fmt.Errorf("css: %w", err)
 	}
-	s, warns := Parse(name, string(data), opts...)
+	text, _ := Decode(data, "")
+	s, warns := Parse(name, text, opts...)
 	return s, warns, nil
 }
 
@@ -568,6 +569,7 @@ func (p *parser) selectors(prelude []Component, n *nesting) ([]Selector, []Compo
 			return nil, nil, false
 		}
 		if prelude = matched(prelude); prelude == nil {
+			p.begun = true
 			return nil, nil, false
 		}
 	}
@@ -726,7 +728,8 @@ func (p *parser) atRule(t Token, in scope) {
 		p.skipAtRule()
 		return
 	}
-	if name != "import" && name != "charset" && name != atLayer {
+	began := p.begun
+	if name != "import" && name != "charset" && p.blockFollows() {
 		p.begun = true
 	}
 	switch {
@@ -760,8 +763,11 @@ func (p *parser) atRule(t Token, in scope) {
 		p.supports(t, in)
 	case name == atLayer && p.browser:
 		p.layer(t, in)
+	case name == "charset":
+		p.skipAtRule()
 	default:
 		p.warnf(t.Pos, "@%s is not supported", t.Text)
+		p.begun = began
 		p.skipAtRule()
 	}
 }
@@ -1083,6 +1089,35 @@ func (p *parser) warnf(pos Pos, format string, args ...any) {
 
 func (p *parser) peek() Token { return p.toks[p.i] }
 
+// blockFollows reports whether the at-rule being read has a block after
+// its prelude rather than a ; or the end: an at-rule but a statement
+// (@import, @charset, @layer) is no rule without one, so an @import may
+// still follow it, as Chrome reads @media; and @page;.
+func (p *parser) blockFollows() bool {
+	depth := 0
+	for _, t := range p.toks[p.i:] {
+		switch t.Kind {
+		case Function, LParen, LBracket:
+			depth++
+		case RParen, RBracket:
+			depth = max(depth-1, 0)
+		case LBrace:
+			if depth == 0 {
+				return true
+			}
+		case Semicolon, RBrace:
+			if depth == 0 {
+				return false
+			}
+		case EOF:
+			return false
+		case Ident, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension,
+			Whitespace, CDO, CDC, Colon, Comma:
+		}
+	}
+	return false
+}
+
 func (p *parser) next() Token {
 	t := p.toks[p.i]
 	if t.Kind != EOF {
@@ -1102,8 +1137,12 @@ func (p *parser) skipAtRule() {
 		case LBrace:
 			p.component()
 			return
+		case RBrace:
+			if p.depth > 0 {
+				return
+			}
 		case Ident, Function, AtKeyword, Hash, String, BadString, URL, BadURL, Delim, Number, Percentage, Dimension,
-			Whitespace, CDO, CDC, Colon, Comma, LBracket, RBracket, LParen, RParen, RBrace:
+			Whitespace, CDO, CDC, Colon, Comma, LBracket, RBracket, LParen, RParen:
 			// nothing special for these tokens
 		}
 		p.component()

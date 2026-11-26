@@ -28,7 +28,7 @@ func bound(b *box.Box) (bool, bool) {
 	st := shown(b)
 	r, loose := ownInk(b, st), looseItself(b, st)
 	cuts := st.Overflow.Width != style.Visible && st.Overflow.Height != style.Visible &&
-		(b.Kind == box.Element || b.Kind == box.Viewport)
+		(b.Kind == box.Element || b.Kind == box.Viewport) && !paintsCells(st)
 	canvas := b.Kind == box.Element && b.Node != nil && (b.Node.Tag() == dom.Canvas || b.Node.Tag() == dom.Iframe)
 	for _, c := range b.Children {
 		bl, bd := bound(c)

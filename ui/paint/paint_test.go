@@ -217,6 +217,20 @@ func TestTextOfFontSizeZeroDrawsNothing(t *testing.T) {
 	}
 }
 
+func TestTextStandsOnItsBaselineRoundedToDevicePixels(t *testing.T) {
+	at := func(top, scale float32) float32 {
+		p := el(0, top, 100, 20, nil)
+		p.Append(text(0, 0, "x", p.Style))
+		r := newRecorder()
+		Paint(r, tree(p), Scale(scale))
+		return r.of("text")[0].At.Y
+	}
+	assert.InDelta(t, 15, at(0.3, 1), 1e-4, "15.3 rounds to the row of pixels at 15, as Chrome's")
+	assert.InDelta(t, 16, at(0.5, 1), 1e-4)
+	assert.InDelta(t, 15.5, at(0.3, 2), 1e-4, "on a 2× display, to half points")
+	assert.InDelta(t, 15.3, at(0.3, 0), 1e-4, "where no scale is given, as layout has it")
+}
+
 func TestStackingPaintsNegativeZThenFlowThenPositionedThenPositiveZ(t *testing.T) {
 	pos := func(c color.Color, z int, auto bool) *box.Box {
 		return el(0, 0, 10, 10, func(s *style.Computed) {
@@ -232,6 +246,24 @@ func TestStackingPaintsNegativeZThenFlowThenPositionedThenPositiveZ(t *testing.T
 	r := newRecorder()
 	Paint(r, tree(root))
 	assert.Equal(t, "white blue black green red", r.order(names))
+}
+
+func TestAFixedOrStickyBoxStacksItsNegativeChildrenAboveItsBackground(t *testing.T) {
+	for _, at := range []style.Position{style.Absolute, style.FixedPosition, style.Sticky} {
+		under := el(0, 0, 10, 10, func(s *style.Computed) {
+			s.Background, s.Position, s.ZIndex, s.ZAuto = red, style.Absolute, -1, false
+		})
+		box := el(0, 0, 50, 50, func(s *style.Computed) {
+			s.Background, s.Position, s.ZAuto = green, at, true
+		}, under)
+		r := newRecorder()
+		Paint(r, tree(el(0, 0, 100, 100, bg(white), box)))
+		want := "white green red"
+		if at == style.Absolute {
+			want = "white red green"
+		}
+		assert.Equal(t, want, r.order(names), "position %d", at)
+	}
 }
 
 func TestFlowBackgroundsAllComeBeforeFlowText(t *testing.T) {

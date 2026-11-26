@@ -549,7 +549,8 @@ func (f *Font) glyphAt(r rune, phase int) glyph {
 }
 
 // raster rasterizes r at phase into the atlas, from the first face that
-// has it; '?' when none has it.
+// has it; '?' when none has it, nothing in no room for a default ignorable
+// character (a bidi control, a joiner…), as HarfBuzz draws one.
 func (f *Font) raster(r rune, phase int) glyph {
 	face, idx := -1, sfnt.GlyphIndex(0)
 	for i, src := range f.sources {
@@ -562,7 +563,7 @@ func (f *Font) raster(r rune, phase int) glyph {
 		}
 	}
 	if face < 0 {
-		if r == '?' || (len(f.blank) > 0 && Covers(f.blank, r)) {
+		if r == '?' || shape.DefaultIgnorable(r) || (len(f.blank) > 0 && Covers(f.blank, r)) {
 			return glyph{}
 		}
 		if a, ok := SpaceAdvance(r, f.size*f.looks[0].scale(), f.ownAdvance); ok {
