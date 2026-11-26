@@ -165,6 +165,60 @@ func TestReadPageKeepsXHTMLsEmptyElementsEmpty(t *testing.T) {
 	}
 }
 
+func TestReadPageDecodesAPageAsABrowser(t *testing.T) {
+	root := t.TempDir()
+	write := func(name, text string) {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page := func(decl, text string) string {
+		return decl + `<html xmlns="http://www.w3.org/1999/xhtml"><body><p>` + text + `</p></body></html>`
+	}
+	write("ascii.xht", page(`<?xml version="1.0" encoding="us-ascii"?>`, "caf\xe9"))
+	write("sjis.xht", page(`<?xml version="1.0" encoding="shift-JIS"?>`, "\x95\xbd\x98\x61"))
+	write("plain.xht", page("", "caf\xc3\xa9"))
+	write("served.xht", page(`<?xml version="1.0" encoding="utf-8"?>`, "caf\xe9"))
+	write("served.xht.headers", "Content-Type: application/xhtml+xml; charset=iso-8859-1\n")
+	write("bom.xht", "\xef\xbb\xbf"+page(`<?xml version="1.0" encoding="us-ascii"?>`, "caf\xc3\xa9"))
+	write("bom.xht.headers", "Content-Type: application/xhtml+xml; charset=us-ascii\n")
+	write("meta.html", `<meta charset="shift_jis"><p>`+"\x95\xbd\x98\x61")
+	write("sheets.xht", page(`<?xml version="1.0" encoding="iso-8859-1"?>`,
+		`<link rel="stylesheet" href="served.css"/><link rel="stylesheet" href="latin.css"/>`))
+	write("served.css", ".\x95\xbd\x98\x61 {}")
+	write("served.css.headers", "Content-Type: text/css; charset=Shift_JIS\n")
+	write("latin.css", ".caf\xe9 {}")
+	p, err := ReadPage(root, "sheets.xht")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Sheets) != 2 || p.Sheets[0].Text != ".平和 {}" || p.Sheets[1].Text != ".café {}" ||
+		p.Sheets[1].Encoding != "windows-1252" {
+		t.Errorf("linked sheets decoded as %+v", p.Sheets)
+	}
+	for _, c := range []struct{ path, text, encoding string }{
+		{"ascii.xht", "café", "windows-1252"},
+		{"sjis.xht", "平和", "shift_jis"},
+		{"plain.xht", "café", "utf-8"},
+		{"served.xht", "café", "windows-1252"},
+		{"bom.xht", "café", "utf-8"},
+		{"meta.html", "平和", "shift_jis"},
+	} {
+		got, err := ReadPage(root, c.path)
+		if err != nil {
+			t.Errorf("%s: %v", c.path, err)
+			continue
+		}
+		var text string
+		if para := find(find(find(got.Root, atom.Html), atom.Body), atom.P); para != nil && para.FirstChild != nil {
+			text = para.FirstChild.Data
+		}
+		if text != c.text || got.Encoding != c.encoding {
+			t.Errorf("%s: %q in %s, want %q in %s", c.path, text, got.Encoding, c.text, c.encoding)
+		}
+	}
+}
+
 func TestReadPageSaysWhyAPageIsSkipped(t *testing.T) {
 	for p, why := range map[string]string{
 		"css/css-demo/scripted.html": "script",

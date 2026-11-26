@@ -377,7 +377,8 @@ func Load(fsys fs.FS, name string, opts ...ParseOption) (*Sheet, []Warning, erro
 	if err != nil {
 		return nil, nil, fmt.Errorf("css: %w", err)
 	}
-	s, warns := Parse(name, string(data), opts...)
+	text, _ := Decode(data, "")
+	s, warns := Parse(name, text, opts...)
 	return s, warns, nil
 }
 
@@ -760,6 +761,8 @@ func (p *parser) atRule(t Token, in scope) {
 		p.supports(t, in)
 	case name == atLayer && p.browser:
 		p.layer(t, in)
+	case name == "charset":
+		p.skipAtRule()
 	default:
 		p.warnf(t.Pos, "@%s is not supported", t.Text)
 		p.skipAtRule()

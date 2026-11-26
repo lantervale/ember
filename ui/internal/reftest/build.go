@@ -45,6 +45,16 @@ func (f *Fetches) fetch(root, from, ref string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
 }
 
+// fetchSheet is fetch for a sheet, given back as UTF-8 behind a byte
+// order mark when it is served with a charset, as ui reads one.
+func (f *Fetches) fetchSheet(root, from, ref string) ([]byte, error) {
+	data, err := f.fetch(root, from, ref)
+	if err != nil {
+		return nil, err
+	}
+	return servedSheet(data, filepath.Join(root, filepath.FromSlash(Resolve(from, ref)))), nil
+}
+
 // Document builds p, read from the checkout at root, as a ui Document:
 // its sheets read as a browser's, scrolling as a browser's viewport with
 // its scrollbars over it, the WPT fonts under its own, and its pictures,
@@ -55,13 +65,13 @@ func (p *Page) Document(root string, fetches *Fetches) *ui.Document {
 		ui.CSS(FontsSheet, ui.From(Base)),
 	}
 	for _, s := range p.Sheets {
-		opts = append(opts, ui.CSS(s.Text, ui.From(s.From)))
+		opts = append(opts, ui.CSS(s.Text, ui.From(s.From), ui.Encoding(s.Encoding)))
 	}
 	page := p.Address()
 	opts = append(opts,
 		ui.FetchImages(func(ref string) ([]byte, error) { return fetches.fetch(root, page, ref) }),
 		ui.FetchFonts(func(ref, sheet string) ([]byte, error) { return fetches.fetch(root, or(sheet, page), ref) }),
-		ui.FetchSheets(func(ref, sheet string) ([]byte, error) { return fetches.fetch(root, or(sheet, page), ref) }),
+		ui.FetchSheets(func(ref, sheet string) ([]byte, error) { return fetches.fetchSheet(root, or(sheet, page), ref) }),
 	)
 	d := ui.NewDocument(opts...)
 	b := builder{page: page}

@@ -1024,6 +1024,7 @@ css/CSS2/box/rtl-ib.xht ref chrome
 css/CSS2/box/rtl-linebreak.xht ref chrome
 css/CSS2/box/rtl-span-only-ib.xht ref chrome
 css/CSS2/box/rtl-span-only.xht chrome
+css/CSS2/cascade-import/cascade-import-001.xht ref chrome
 css/CSS2/cascade/at-import-002.xht ref chrome
 css/CSS2/cascade/at-import-003.xht ref chrome
 css/CSS2/cascade/at-import-004.xht ref chrome
@@ -4492,27 +4493,28 @@ css/CSS2/selectors/universal-selector-003.xht ref chrome
 css/CSS2/selectors/universal-selector-004.xht ref chrome
 css/CSS2/selectors/universal-selector-005.xht ref
 css/CSS2/stacking-context/opacity-affects-block-in-inline.html ref chrome
-css/CSS2/syntax/at-charset-001.xht chrome
-css/CSS2/syntax/at-charset-002.xht chrome
-css/CSS2/syntax/at-charset-003.xht chrome
-css/CSS2/syntax/at-charset-004.xht chrome
-css/CSS2/syntax/at-charset-005.xht chrome
-css/CSS2/syntax/at-charset-006.xht chrome
-css/CSS2/syntax/at-charset-007.xht chrome
-css/CSS2/syntax/at-charset-008.xht chrome
-css/CSS2/syntax/at-charset-009.xht chrome
+css/CSS2/syntax/at-charset-001.xht ref chrome
+css/CSS2/syntax/at-charset-002.xht ref chrome
+css/CSS2/syntax/at-charset-003.xht ref chrome
+css/CSS2/syntax/at-charset-004.xht ref chrome
+css/CSS2/syntax/at-charset-005.xht ref chrome
+css/CSS2/syntax/at-charset-006.xht ref chrome
+css/CSS2/syntax/at-charset-007.xht ref chrome
+css/CSS2/syntax/at-charset-008.xht ref chrome
+css/CSS2/syntax/at-charset-009.xht ref chrome
 css/CSS2/syntax/at-charset-010.xht chrome
 css/CSS2/syntax/at-charset-011.xht chrome
-css/CSS2/syntax/at-charset-014.xht chrome
-css/CSS2/syntax/at-charset-015.xht chrome
-css/CSS2/syntax/at-charset-016.xht chrome
-css/CSS2/syntax/at-charset-019.xht chrome
-css/CSS2/syntax/at-charset-020.xht chrome
-css/CSS2/syntax/at-charset-021.xht chrome
-css/CSS2/syntax/at-charset-024.xht chrome
-css/CSS2/syntax/at-charset-025.xht chrome
-css/CSS2/syntax/at-charset-026.xht chrome
-css/CSS2/syntax/at-charset-027.xht chrome
+css/CSS2/syntax/at-charset-012.xht ref chrome
+css/CSS2/syntax/at-charset-014.xht ref chrome
+css/CSS2/syntax/at-charset-015.xht ref chrome
+css/CSS2/syntax/at-charset-016.xht ref chrome
+css/CSS2/syntax/at-charset-019.xht ref chrome
+css/CSS2/syntax/at-charset-020.xht ref chrome
+css/CSS2/syntax/at-charset-021.xht ref chrome
+css/CSS2/syntax/at-charset-024.xht ref chrome
+css/CSS2/syntax/at-charset-025.xht ref chrome
+css/CSS2/syntax/at-charset-026.xht ref chrome
+css/CSS2/syntax/at-charset-027.xht ref chrome
 css/CSS2/syntax/at-charset-028.xht ref chrome
 css/CSS2/syntax/at-charset-029.xht ref chrome
 css/CSS2/syntax/at-charset-030.xht ref chrome
@@ -4525,10 +4527,10 @@ css/CSS2/syntax/at-charset-038.xht ref chrome
 css/CSS2/syntax/at-charset-039.xht chrome
 css/CSS2/syntax/at-charset-040.xht ref chrome
 css/CSS2/syntax/at-charset-041.xht ref chrome
-css/CSS2/syntax/at-charset-042.xht chrome
-css/CSS2/syntax/at-charset-043.xht chrome
+css/CSS2/syntax/at-charset-042.xht ref chrome
+css/CSS2/syntax/at-charset-043.xht ref chrome
 css/CSS2/syntax/at-charset-044.xht ref chrome
-css/CSS2/syntax/at-charset-045.xht chrome
+css/CSS2/syntax/at-charset-045.xht ref chrome
 css/CSS2/syntax/at-charset-046.xht ref chrome
 css/CSS2/syntax/at-charset-047.xht ref chrome
 css/CSS2/syntax/at-charset-048.xht ref chrome
@@ -4536,24 +4538,31 @@ css/CSS2/syntax/at-charset-049.xht ref chrome
 css/CSS2/syntax/at-charset-050.xht ref chrome
 css/CSS2/syntax/at-charset-051.xht ref chrome
 css/CSS2/syntax/at-charset-052.xht ref chrome
-css/CSS2/syntax/at-charset-053.xht chrome
+css/CSS2/syntax/at-charset-053.xht ref chrome
 css/CSS2/syntax/at-charset-054.xht ref chrome
 css/CSS2/syntax/at-charset-055.xht ref chrome
 css/CSS2/syntax/at-charset-056.xht ref chrome
 css/CSS2/syntax/at-charset-057.xht ref chrome
 css/CSS2/syntax/at-charset-058.xht ref chrome
 css/CSS2/syntax/at-charset-059.xht ref chrome
-css/CSS2/syntax/at-charset-060.xht chrome
+css/CSS2/syntax/at-charset-060.xht ref chrome
 css/CSS2/syntax/at-charset-061.xht ref chrome
+css/CSS2/syntax/at-charset-071.xht ref chrome
+css/CSS2/syntax/at-charset-072.xht ref chrome
+css/CSS2/syntax/at-charset-073.xht ref chrome
+css/CSS2/syntax/at-charset-074.xht ref chrome
+css/CSS2/syntax/at-charset-075.xht ref chrome
+css/CSS2/syntax/at-charset-076.xht ref chrome
+css/CSS2/syntax/at-charset-077.xht ref chrome
 css/CSS2/syntax/at-charset-quotes-001.xht ref chrome
 css/CSS2/syntax/at-charset-space-001.xht ref chrome
 css/CSS2/syntax/at-charset-space-002.xht ref chrome
 css/CSS2/syntax/at-charset-utf16-be-001.xht ref chrome
-css/CSS2/syntax/at-charset-utf16-be-002.xht chrome
-css/CSS2/syntax/at-charset-utf16-be-003.xht chrome
+css/CSS2/syntax/at-charset-utf16-be-002.xht ref chrome
+css/CSS2/syntax/at-charset-utf16-be-003.xht ref chrome
 css/CSS2/syntax/at-charset-utf16-le-001.xht ref chrome
-css/CSS2/syntax/at-charset-utf16-le-002.xht chrome
-css/CSS2/syntax/at-charset-utf16-le-003.xht chrome
+css/CSS2/syntax/at-charset-utf16-le-002.xht ref chrome
+css/CSS2/syntax/at-charset-utf16-le-003.xht ref chrome
 css/CSS2/syntax/at-keywords-000.xht ref chrome
 css/CSS2/syntax/at-keywords-001.xht ref chrome
 css/CSS2/syntax/at-keywords-002.xht ref chrome
@@ -4588,6 +4597,14 @@ css/CSS2/syntax/case-sensitive-001.xht ref
 css/CSS2/syntax/case-sensitive-005.xht ref chrome
 css/CSS2/syntax/case-sensitive-006.html ref chrome
 css/CSS2/syntax/case-sensitive-007.xht chrome
+css/CSS2/syntax/character-encoding-031.xht ref chrome
+css/CSS2/syntax/character-encoding-032.xht ref chrome
+css/CSS2/syntax/character-encoding-033.xht ref chrome
+css/CSS2/syntax/character-encoding-034.xht ref chrome
+css/CSS2/syntax/character-encoding-035.xht ref chrome
+css/CSS2/syntax/character-encoding-036.xht ref chrome
+css/CSS2/syntax/character-encoding-037.xht ref chrome
+css/CSS2/syntax/character-encoding-041.xht ref chrome
 css/CSS2/syntax/characters-0080-009F-001.xht ref chrome
 css/CSS2/syntax/charset-attr-001.xht chrome
 css/CSS2/syntax/colors-001.xht chrome

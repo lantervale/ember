@@ -107,7 +107,9 @@ func Generics(css string) string {
 
 // Handler serves the checkout at root to Chrome: its pages with the
 // sheet of chromeSheet first and their generic families named as ember
-// draws them (Generics), as their sheets, XHTML as XML.
+// draws them (Generics), as their sheets, XHTML as XML; with the
+// Content-Type of a file's .headers, as WPT's server, and HTML that
+// declares no encoding as UTF-8, as ember reads it.
 func Handler(root string) http.Handler {
 	sheet, files := chromeSheet()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +121,8 @@ func Handler(root string) http.Handler {
 			}
 		}
 		p := path.Clean("/" + r.URL.Path)[1:]
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p))) //nolint:gosec // cleaned, under root
+		file := filepath.Join(root, filepath.FromSlash(p))
+		data, err := os.ReadFile(file) //nolint:gosec // cleaned, under root
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -131,7 +134,10 @@ func Handler(root string) http.Handler {
 			kind = "application/xhtml+xml"
 			data = Inject([]byte(Generics(string(data))), true, sheet)
 		case ".html", ".htm":
-			kind = "text/html; charset=utf-8"
+			kind = "text/html"
+			if !declaresEncoding(data) {
+				kind += "; charset=utf-8"
+			}
 			data = Inject([]byte(Generics(string(data))), false, sheet)
 		case ".css":
 			kind = "text/css"
@@ -139,6 +145,9 @@ func Handler(root string) http.Handler {
 		}
 		if kind == "" {
 			kind = http.DetectContentType(data)
+		}
+		if served := servedType(file); served != "" {
+			kind = served
 		}
 		w.Header().Set("Content-Type", kind)
 		_, _ = w.Write(data) //nolint:gosec // the checkout's own pages, to a local Chrome
