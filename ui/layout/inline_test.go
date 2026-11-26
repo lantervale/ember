@@ -457,6 +457,19 @@ func TestOutOfFlowInsideASpanIsAnchoredInItsLine(t *testing.T) {
 	}
 }
 
+func TestAPercentageInAnAnonymousBlockIsOfTheBoxRoundIt(t *testing.T) {
+	half := el(dom.Span, func(st *style.Computed) {
+		st.Display = style.InlineBlock
+		st.Size = style.Size[style.Length]{Width: style.Px(10), Height: style.Percent(50)}
+	})
+	div := el(dom.Div, func(st *style.Computed) {
+		st.Display = style.Block
+		st.Size.Height = style.Px(200)
+	}, text("H "), half, el(dom.P, block, text("H")))
+	tr := lay(el(dom.Div, width(200), div), 200)
+	assert.Equal(t, float32(100), tr.Of[half].Rect().H, "half the div's 200 points, not the line's")
+}
+
 func TestAnInlineTextareaKeepsItsOverflow(t *testing.T) {
 	content := make(map[style.Display]geom.Vec2, 2)
 	for _, d := range []style.Display{style.Block, style.InlineBlock} {

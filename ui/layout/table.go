@@ -393,7 +393,7 @@ func (t *tree) table(n *node, in input) output {
 	inset := padding.add(border)
 	rows := n.rows()
 	if fixedLayout(st, in) || len(n.tracks()) > 0 || st.BorderCollapse ||
-		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general || r.st.Collapse }) {
+		slices.ContainsFunc(rows, func(r *node) bool { return t.rowWidths(r).general || r.collapsedRow() }) {
 		return t.spanned(n, in, rows)
 	}
 	sx, sy := st.BorderSpacing[0], st.BorderSpacing[1]
@@ -431,7 +431,8 @@ func (t *tree) table(n *node, in input) output {
 			w += inset.horizontal()
 		}
 	}
-	w = or(w, autoTableWidth(in.avail.w, sumMin, percentMax(colMax, percent, sumMax), extra))
+	lo, hi := tableLimits(st, in, inset)
+	w = mClamp(or(w, autoTableWidth(in.avail.w, sumMin, percentMax(colMax, percent, sumMax), extra)), lo.w, hi.w)
 	w = max(w, sumMin+extra, t.captionMin(n))
 	if in.run == computeSize && in.axis == axisHorizontal {
 		return sizeOutput(size{w, 0})
@@ -444,7 +445,7 @@ func (t *tree) table(n *node, in input) output {
 		heights[ri] = t.rowHeight(r, widths, content)
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := tableHeight(st, in, heights, sy, inset.vertical(), above+below)
+	hgt := tableHeight(st, in, heights, sy, inset.vertical(), above+below, lo.h, hi.h)
 	s := size{w, hgt}
 	if in.run == computeSize {
 		return sizeOutput(s)
@@ -792,8 +793,9 @@ func (tr track) width() (float32, float32) {
 		if c == nil {
 			continue
 		}
-		if w := resolve(c.st.Size.Width, none); some(w) {
-			return w, 0
+		lo := resolve(c.st.MinSize.Width, none)
+		if w := or(resolve(c.st.Size.Width, none), lo); some(w) {
+			return mClamp(w, lo, resolve(c.st.MaxSize.Width, none)), 0
 		}
 		if wl := c.st.Size.Width; wl.Kind == style.Fixed && wl.Px == 0 && wl.Percent > 0 {
 			return none, wl.Percent
@@ -924,12 +926,19 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 	inner := func(cs int) float32 { return sx * float32(cs-1) }
 
 	w := in.known.w
-	if !some(w) {
+	switch {
+	case !some(w):
 		w = resolve(st.Size.Width, in.parent.w)
 		if some(w) && contentBox(st) {
 			w += inset.horizontal()
 		}
+	case st.BorderCollapse && contentBox(st) && st.Size.Width.Kind != style.Auto:
+		// The width given round the content took the borders and padding of the
+		// style; collapsed, the table has half its outer borders instead.
+		w += inset.horizontal() - edges(st.Padding, in.parent.w).add(borders(st)).horizontal()
 	}
+	lo, hi := tableLimits(st, in, inset)
+	w = mClamp(w, lo.w, hi.w)
 	colMin, colMax := make([]float32, cols), make([]float32, cols)
 	fixed := make([]bool, cols)
 	// single are the columns' max-content widths from their single-column cells alone,
@@ -982,7 +991,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 		sumMin += colMin[k]
 		sumMax += colMax[k]
 	}
-	w = or(w, autoTableWidth(in.avail.w, sumMin, percentMax(single, percent, sumMax), extra))
+	w = mClamp(or(w, autoTableWidth(in.avail.w, sumMin, percentMax(single, percent, sumMax), extra)), lo.w, hi.w)
 	w = max(w, sumMin+extra, t.captionMin(n))
 	if in.run == computeSize && in.axis == axisHorizontal {
 		return sizeOutput(size{w, 0})
@@ -1038,7 +1047,7 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 		w -= colX[cols] - shownX[cols]
 	}
 	above, below := t.captionHeights(n, w)
-	hgt := tableHeight(st, in, heights, sy, inset.vertical(), above+below)
+	hgt := tableHeight(st, in, heights, sy, inset.vertical(), above+below, lo.h, hi.h)
 	fullY, _ := shownLines(heights, nil, nil, sy, 0)
 	rowY, rowAt := shownLines(heights, rowGone, rowSections(n, len(rows)), sy, above+inset.t+sy)
 	hgt -= fullY[len(rows)] - (rowY[len(rows)] - rowY[0])
@@ -1212,7 +1221,7 @@ func collapsedTracks(tracks []track, cols int) []bool {
 func collapsedRows(rows []*node) []bool {
 	var gone []bool
 	for ri, r := range rows {
-		if !r.st.Collapse {
+		if !r.collapsedRow() {
 			continue
 		}
 		if gone == nil {
@@ -1221,6 +1230,12 @@ func collapsedRows(rows []*node) []bool {
 		gone[ri] = true
 	}
 	return gone
+}
+
+// collapsedRow reports a row with visibility: collapse, or one, anonymous, in a row group
+// with it.
+func (n *node) collapsedRow() bool {
+	return n.st.Collapse || n.box.Node == nil && n.parent != nil && n.parent.role == roleGroup && n.parent.st.Collapse
 }
 
 // rowSections marks the first row of each of the table's sections: a row group, or a
@@ -1386,13 +1401,14 @@ func spannedPercents(cells []slot, percent, colMax []float32) {
 }
 
 // tableHeight is the height of a table whose rows are heights tall, inset being its
-// padding and borders and captions the height of its captions: the rows' with the
-// spacing round them, or the height the table is given, which grows the rows where it is
-// above theirs: a floor only, as Chrome's, which never shortens a table below its rows,
-// and for a table that collapses rows one taken from before the collapse. Its own height,
-// held to its min- and max-height, is its border box's, the captions outside; a height
-// its container gives it, a flex item's, holds them.
-func tableHeight(st *style.Computed, in input, heights []float32, sy, inset, captions float32) float32 {
+// padding and borders, captions the height of its captions and lo and hi its border
+// box's min and max heights: the rows' with the spacing round them, or the height the
+// table is given, which grows the rows where it is above theirs: a floor only, as
+// Chrome's, which never shortens a table below its rows, and for a table that collapses
+// rows one taken from before the collapse. Its own height, held to lo and hi, is its
+// border box's, the captions outside; a height its container gives it, a flex item's,
+// holds them.
+func tableHeight(st *style.Computed, in input, heights []float32, sy, inset, captions, lo, hi float32) float32 {
 	hgt := inset
 	if len(heights) > 0 {
 		hgt += sy
@@ -1401,7 +1417,6 @@ func tableHeight(st *style.Computed, in input, heights []float32, sy, inset, cap
 		hgt += h + sy
 	}
 	own := resolve(st.Size.Height, in.parent.h)
-	lo, hi := resolve(st.MinSize.Height, in.parent.h), resolve(st.MaxSize.Height, in.parent.h)
 	given := in.known.h
 	switch {
 	case !some(given) && in.sizing == inherentSize:
@@ -1416,6 +1431,20 @@ func tableHeight(st *style.Computed, in input, heights []float32, sy, inset, cap
 		return given + captions
 	}
 	return hgt + captions
+}
+
+// tableLimits are the min and max sizes of a table's border box, none
+// where it has none or is measured for its content alone, as a flex basis is.
+func tableLimits(st *style.Computed, in input, inset rect) (size, size) {
+	if in.sizing == contentSize {
+		return noSize, noSize
+	}
+	lo, hi := resolveSize(st.MinSize, in.parent), resolveSize(st.MaxSize, in.parent)
+	if contentBox(st) {
+		around := size{inset.horizontal(), inset.vertical()}
+		lo, hi = lo.mAdd(around), hi.mAdd(around)
+	}
+	return lo, hi
 }
 
 // growRows shares extra, the height a table is given beyond its rows', between them in

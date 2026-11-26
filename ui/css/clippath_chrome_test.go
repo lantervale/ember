@@ -44,6 +44,24 @@ func TestClipPathsComputeAsInChrome(t *testing.T) {
 	}, 2)
 }
 
+func TestClipComputesAsInChrome(t *testing.T) {
+	clips := []string{"auto", "rect(0, 50px, 50px, 0)", "rect(0px 100px 100px 0px)", "rect( 0 auto auto 0 )",
+		"rect(-50px, auto, auto, -50px)", "rect(1em, 2em, 3em, 0.75em)", "rect(1in, 72pt, 6pc, 2.54cm)",
+		"rect(auto auto auto auto)"}
+	src := "div { position: absolute; font-size: 10px; }\n"
+	for i, c := range clips {
+		src += fmt.Sprintf(".c%d { clip: %s; }\n", i, c)
+	}
+	src += ".in { clip: inherit; }\n"
+	d := ui.NewDocument(ui.Stylesheet(fstest.MapFS{"c.css": {Data: []byte(src)}}, "c.css"))
+	for i := range clips {
+		d.Body().Append(ui.Div(ui.Class(fmt.Sprint("c", i)), ui.Div(ui.Class("in"))))
+	}
+	matchChromeProps(t, d, map[string]func(*style.Computed) string{
+		"clip": func(s *style.Computed) string { return css.ClipCSS(s.Clip) },
+	}, 2)
+}
+
 func TestClipPathTransitionsAndAnimationsMatchChrome(t *testing.T) {
 	src := `
 @keyframes reveal { from { clip-path: circle(0px at 0% 0%) } to { clip-path: circle(80px at 100% 50%) } }

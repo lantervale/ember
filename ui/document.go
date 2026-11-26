@@ -282,8 +282,10 @@ func Stylesheet(fsys fs.FS, name string) DocumentOption {
 			d.warns = append(d.warns, w)
 		}
 		d.addFontFaces(s.FontFaces(), fsys)
-		text, _ := fs.ReadFile(fsys, name)
-		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: string(text), name: name, fsys: fsys})
+		data, _ := fs.ReadFile(fsys, name)
+		text, encoding := css.Decode(data, "")
+		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: text, name: name, fsys: fsys,
+			encoding: encoding})
 		d.resheet = true
 		d.files = append(d.files, fsys)
 	})
@@ -299,13 +301,20 @@ func later(load func(d *Document)) DocumentOption {
 // SheetOption says more of a stylesheet given to CSS.
 type SheetOption func(*sheetSource)
 
-type sheetSource struct{ from, media string }
+type sheetSource struct{ from, media, encoding string }
 
 // From gives a sheet the address it was fetched from, as a browser
 // knows a linked sheet's: a url() in it is then resolved from that
 // address, where it otherwise names a picture as the Document's file
 // systems or its fetcher know it. The sheet's From reads it back.
 func From(address string) SheetOption { return func(s *sheetSource) { s.from = address } }
+
+// Encoding names the encoding a sheet's text was decoded from, as a
+// browser decoded a linked sheet's bytes or the page a style element
+// stands in (an Encoding Standard label): the sheets it imports that
+// say none of their own are decoded in it too. A sheet without one is
+// taken as UTF-8.
+func Encoding(label string) SheetOption { return func(s *sheetSource) { s.encoding = label } }
 
 // Images adds fsys to where url() and an img's src look for pictures, as a
 // stylesheet's own files are: the game's art passed in, read by name, the
@@ -334,7 +343,7 @@ func CSS(text string, opts ...SheetOption) DocumentOption {
 		}
 		d.addFontFaces(s.FontFaces(), nil)
 		d.authored = append(d.authored, &Sheet{doc: d, whole: s, src: text, name: "style", from: src.from,
-			media: src.media})
+			media: src.media, encoding: src.encoding})
 		d.resheet = true
 	})
 }

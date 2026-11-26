@@ -1,7 +1,6 @@
 package reftest
 
 import (
-	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -17,6 +16,8 @@ import (
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+
+	"github.com/lantervale/ember/ui/css"
 )
 
 // The namespaces html gives SVG and MathML elements.
@@ -29,10 +30,10 @@ const (
 // and its path, which its references to other files resolve from.
 const Base = "http://wpt.test/"
 
-// Sheet is a style element's text or a linked sheet's, and the address
-// its url() resolve from.
+// Sheet is a style element's text or a linked sheet's, decoded, the
+// address its url() resolve from, and the encoding it was decoded in.
 type Sheet struct {
-	Text, From string
+	Text, From, Encoding string
 }
 
 // Page is a WPT page read for ui: its tree, its sheets in document order,
@@ -44,6 +45,8 @@ type Page struct {
 	Sheets []Sheet
 	Refs   []Ref
 	Fuzzy  []Fuzzy
+	// Encoding is the WHATWG name of the encoding the page was read in.
+	Encoding string
 	// Skip is why the page is not drawn, "" when it is.
 	Skip string
 }
@@ -76,19 +79,23 @@ var skippedFlags = map[string]string{
 
 // ReadPage reads the page at p, a path from the checkout at root.
 func ReadPage(root, p string) (*Page, error) {
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+	file := filepath.Join(root, filepath.FromSlash(p))
+	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
 	page := &Page{Path: p}
-	switch strings.ToLower(path.Ext(p)) {
+	var text string
+	switch ext := strings.ToLower(path.Ext(p)); ext {
 	case ".svg":
 		page.Skip = "SVG document"
 		return page, nil
 	case ".xht", ".xhtml", ".xml":
-		page.Root, err = parseXML(data)
+		text, page.Encoding = decodePage(data, served(file), true)
+		page.Root, err = parseXML(text)
 	default:
-		page.Root, err = html.Parse(bytes.NewReader(data))
+		text, page.Encoding = decodePage(data, served(file), false)
+		page.Root, err = html.Parse(strings.NewReader(text))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)
@@ -146,7 +153,8 @@ func (p *Page) element(root string, n *html.Node) {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			text.WriteString(c.Data)
 		}
-		p.Sheets = append(p.Sheets, Sheet{Text: media(text.String(), attr(n, "media")), From: p.Address()})
+		p.Sheets = append(p.Sheets, Sheet{Text: media(text.String(), attr(n, "media")), From: p.Address(),
+			Encoding: p.Encoding})
 	case atom.Link:
 		p.link(root, n)
 	case atom.Meta:
@@ -170,11 +178,17 @@ func (p *Page) link(root string, n *html.Node) {
 		if at == "" {
 			return
 		}
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(at)))
-		if err != nil {
+		file := filepath.Join(root, filepath.FromSlash(at))
+		data, err := os.ReadFile(file)
+		if err != nil || !servedAsCSS(file) {
 			return
 		}
-		p.Sheets = append(p.Sheets, Sheet{Text: media(string(data), attr(n, "media")), From: Base + at})
+		environment := p.Encoding
+		if name := encodingName(attr(n, "charset")); name != "" {
+			environment = name
+		}
+		text, encoding := css.Decode(servedSheet(data, file), environment)
+		p.Sheets = append(p.Sheets, Sheet{Text: media(text, attr(n, "media")), From: Base + at, Encoding: encoding})
 	}
 }
 
@@ -277,11 +291,12 @@ func ParseFuzzy(content string) (Fuzzy, error) {
 	return f, nil
 }
 
-// parseXML reads an XHTML page into the tree html.Parse makes, so its
+// parseXML reads a decoded XHTML page into the tree html.Parse makes, so its
 // empty elements (<div/>) stay empty: elements of the XHTML namespace
 // are HTML's, others keep theirs ("svg", "math").
-func parseXML(data []byte) (*html.Node, error) {
-	d := xml.NewDecoder(bytes.NewReader(data))
+func parseXML(text string) (*html.Node, error) {
+	d := xml.NewDecoder(strings.NewReader(text))
+	d.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) { return input, nil }
 	d.Strict = false
 	d.Entity = xml.HTMLEntity
 	d.AutoClose = xml.HTMLAutoClose
@@ -300,8 +315,8 @@ func parseXML(data []byte) (*html.Node, error) {
 			n := &html.Node{Type: html.ElementNode, Data: t.Name.Local, Namespace: namespace(t.Name.Space)}
 			if n.Namespace == "" {
 				n.Data = strings.ToLower(n.Data)
-				n.DataAtom = atom.Lookup([]byte(n.Data))
 			}
+			n.DataAtom = atom.Lookup([]byte(n.Data))
 			for _, a := range t.Attr {
 				if a.Name.Space == "xmlns" || a.Name.Local == "xmlns" {
 					continue

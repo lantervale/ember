@@ -444,6 +444,26 @@ func (c *blockContext) findBFCSlot(minY float32, margins [2]float32, clearing st
 	return s
 }
 
+// slotDown is slot narrowed to the room the floats leave all the way down a box h tall
+// from its top: the bands below its own that start above the box's bottom narrow it too.
+func (c *blockContext) slotDown(slot bfcSlot, h float32, margins [2]float32, clearing style.Clear) bfcSlot {
+	if slot.segment < 0 || !some(h) || h <= 0 {
+		return slot
+	}
+	segments := c.bfc.floats.segments
+	for i := slot.segment + 1; i < len(segments) && segments[i].top-c.y < slot.y+h; i++ {
+		below := c.findBFCSlot(segments[i].top-c.y, margins, clearing, i-1)
+		if below.segment < 0 {
+			continue
+		}
+		left := fmax(slot.x, below.x)
+		right := fmin(slot.x+slot.borderWidth, below.x+below.borderWidth)
+		slot.stretchWidth = fmin(slot.stretchWidth, below.stretchWidth)
+		slot.x, slot.borderWidth = left, right-left
+	}
+	return slot
+}
+
 // lineSlot is the float context's, from the block's border box.
 func (c *blockContext) lineSlot(y, height float32) (float32, float32, float32) {
 	x, w, next := c.bfc.floats.lineSlot(y+c.y, height, c.contentInsets)

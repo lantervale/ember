@@ -43,6 +43,12 @@ li { margin: 0 30% 0 15%; padding: 1em 0; border-top: 1px solid #999; } li a { d
 				ui.Li(ui.A(ui.Attr("href", "#"), ui.Text("Garments")), ui.Text(" by "), ui.A(ui.Attr("href", "#"), ui.Text("Dan"))),
 			), ui.Text("\n"))),
 		),
+		"position: relative moves atomic inlines and those its inlines hold": styled(
+			`.a { display: inline-block; width: 20px; height: 20px; background: #134; } img { width: 20px; height: 20px; }
+.r { position: relative; left: 2px; top: 5px; } .p { position: relative; left: 10%; top: -3px; }`,
+			ui.Div(ui.Class("wide"), ui.Span(ui.Class("a")), ui.Span(ui.Class("a", "r")), ui.Img(ui.Class("r")),
+				ui.Text(" text "), ui.Span(ui.Class("p"), ui.Text("in "), ui.Span(ui.Class("a")), ui.Span(ui.Class("a", "r")))),
+		),
 		"a footer clears the floats of the inline holding them": styled(
 			`main { display: inline; } main div { float: left; clear: left; width: 66%; padding: 8px 5% 8px 10%; }
 footer { clear: both; padding: 20px 10%; text-align: center; background: #134; }`,
