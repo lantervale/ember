@@ -73,6 +73,10 @@ type inlineContent struct {
 	// text, and base is the level of its first paragraph.
 	reorders bool
 	base     bidi.Level
+	// isolated is, for each span that isolates its content (unicode-bidi isolate,
+	// isolate-override or plaintext), the level it stands at in the text round it: its
+	// isolate initiator's.
+	isolated map[int]bidi.Level
 	// line is the style of the block's first line where a ::first-line styles it, nil
 	// elsewhere; firstPieces are the pieces as measured in the first line's styles, and
 	// firstOn is set while they, and each run's and span's first-line style, stand in
@@ -310,7 +314,7 @@ func (t *tree) inlineOf(owner *node, items []item, listItem *node) *inlineConten
 			c.mark, c.marker = &m, &box.Box{Kind: box.Marker, Node: listItem.box.Node, Style: m.st}
 		}
 	}
-	visible := c.marker != nil || framedCut(items)
+	visible := c.marker != nil || framedCut(items) || c.framed()
 	for _, r := range c.runs {
 		if r.atomic != nil || !collapses(r.st.WhiteSpace) || !isCollapsibleSpace(r.text) {
 			visible = true
@@ -339,20 +343,37 @@ func (c *inlineContent) shows() bool {
 	return false
 }
 
+// framed reports an inline element gathered with a margin, a border or a padding on its
+// start or end: a line box holds it, text or none, as CSS 2 keeps a line for it.
+func (c *inlineContent) framed() bool {
+	for _, s := range c.spans {
+		if !s.noStart && edgeRoom(s.st, true) || !s.noEnd && edgeRoom(s.st, false) {
+			return true
+		}
+	}
+	return false
+}
+
+// edgeRoom reports a margin, a padding or a border that is not 0 on the start of an
+// inline of style st, or its end: its right first in right-to-left.
+func edgeRoom(st *style.Computed, start bool) bool {
+	margin, padding, border := st.Margin.Left, st.Padding.Left, st.Border.Left
+	if start == (st.Dir == style.RTL) {
+		margin, padding, border = st.Margin.Right, st.Padding.Right, st.Border.Right
+	}
+	return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
+}
+
 // framedCut reports a part of an inline element blocks cut among items, or inside one,
 // with a margin, a border or a padding on its edge: Chrome keeps a line for it, text or
 // none.
 func framedCut(items []item) bool {
-	room := func(margin, padding style.Length, border float32) bool {
-		return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
-	}
 	for _, it := range items {
 		if it.cut == nil {
 			continue
 		}
 		st := styleOf(it.element)
-		if it.first && room(st.Margin.Left, st.Padding.Left, st.Border.Left) ||
-			it.last && room(st.Margin.Right, st.Padding.Right, st.Border.Right) || framedCut(it.inside) {
+		if it.first && edgeRoom(st, true) || it.last && edgeRoom(st, false) || framedCut(it.inside) {
 			return true
 		}
 	}
@@ -1065,7 +1086,8 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			afterSpace = true
 		case string(ch) == zeroWidthSpace || ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
 			emit(word)
-			c.pieces = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level))
+			// a space after it follows no space: the spaces round it never collapse
+			c.pieces, afterSpace = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level)), false
 		default:
 			b.WriteRune(ch)
 			afterSpace = false
@@ -3189,9 +3211,14 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 					// its margin box mirrored across the line, its margins on their sides
 					l.location.y = 2*y + lh - l.location.y - a.height - a.margin.b + a.margin.t
 				}
+				st := a.node.st
+				moved := inlineOffset(st, size{content, none})
+				for k := c.runs[p.run].span; k >= 0; k = c.spans[k].up {
+					moved = moved.Add(inlineOffset(c.spans[k].st, size{content, none}))
+				}
+				l.location = point{l.location.x + moved.X, l.location.y + moved.Y}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
-				st := a.node.st
 				l.padding = edges(st.Padding, content)
 				l.border = a.node.borders()
 				g := scrollbarGutter(st)
