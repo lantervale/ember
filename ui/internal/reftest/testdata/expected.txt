@@ -1589,6 +1589,45 @@ css/CSS2/fonts/font-family-rule-001.xht ref chrome
 css/CSS2/fonts/font-family-valid-characters-001.xht ref chrome
 css/CSS2/fonts/font-family-valid-characters-002.xht ref chrome
 css/CSS2/fonts/font-matching-rule-009.xht ref chrome
+css/CSS2/fonts/font-size-001.xht ref chrome
+css/CSS2/fonts/font-size-002.xht ref chrome
+css/CSS2/fonts/font-size-004.xht ref
+css/CSS2/fonts/font-size-005.xht ref chrome
+css/CSS2/fonts/font-size-012.xht ref chrome
+css/CSS2/fonts/font-size-013.xht ref chrome
+css/CSS2/fonts/font-size-015.xht ref chrome
+css/CSS2/fonts/font-size-016.xht ref chrome
+css/CSS2/fonts/font-size-023.xht ref chrome
+css/CSS2/fonts/font-size-024.xht ref chrome
+css/CSS2/fonts/font-size-026.xht ref chrome
+css/CSS2/fonts/font-size-027.xht ref chrome
+css/CSS2/fonts/font-size-034.xht ref chrome
+css/CSS2/fonts/font-size-035.xht ref chrome
+css/CSS2/fonts/font-size-037.xht ref chrome
+css/CSS2/fonts/font-size-038.xht ref chrome
+css/CSS2/fonts/font-size-045.xht ref chrome
+css/CSS2/fonts/font-size-046.xht ref chrome
+css/CSS2/fonts/font-size-048.xht ref chrome
+css/CSS2/fonts/font-size-049.xht ref chrome
+css/CSS2/fonts/font-size-056.xht ref chrome
+css/CSS2/fonts/font-size-057.xht ref chrome
+css/CSS2/fonts/font-size-059.xht ref chrome
+css/CSS2/fonts/font-size-060.xht ref chrome
+css/CSS2/fonts/font-size-067.xht ref chrome
+css/CSS2/fonts/font-size-068.xht ref chrome
+css/CSS2/fonts/font-size-070.xht ref chrome
+css/CSS2/fonts/font-size-071.xht ref chrome
+css/CSS2/fonts/font-size-078.xht ref chrome
+css/CSS2/fonts/font-size-079.xht ref chrome
+css/CSS2/fonts/font-size-081.xht ref chrome
+css/CSS2/fonts/font-size-082.xht ref chrome
+css/CSS2/fonts/font-size-089.xht ref chrome
+css/CSS2/fonts/font-size-090.xht ref chrome
+css/CSS2/fonts/font-size-092.xht ref chrome
+css/CSS2/fonts/font-size-093.xht ref chrome
+css/CSS2/fonts/font-size-100.xht ref chrome
+css/CSS2/fonts/font-size-101.xht ref chrome
+css/CSS2/fonts/font-size-102.xht ref chrome
 css/CSS2/fonts/font-size-119.xht ref chrome
 css/CSS2/fonts/font-size-120.xht chrome
 css/CSS2/fonts/font-size-121.xht chrome

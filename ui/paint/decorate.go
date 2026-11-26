@@ -1797,6 +1797,9 @@ func (p *painter) text(e entry, alpha float32) {
 		return
 	}
 	if st.Mode.Vertical() {
+		if st.Font.Size <= 0 {
+			return
+		}
 		p.verticalText(e, alpha)
 		return
 	}
@@ -1841,7 +1844,7 @@ func (p *painter) horizontalText(e entry, alpha float32) {
 // textLines paints the fragments of e's box in st, parts of them selected.
 func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha float32) {
 	b := e.b
-	if !st.Visible {
+	if !st.Visible || st.Font.Size <= 0 {
 		return
 	}
 	if p.glyphsOnly {
