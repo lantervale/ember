@@ -80,6 +80,10 @@ type inlineContent struct {
 	// text, and base is the level of its first paragraph.
 	reorders bool
 	base     bidi.Level
+	// isolated is, for each span that isolates its content (unicode-bidi isolate,
+	// isolate-override or plaintext), the level it stands at in the text round it: its
+	// isolate initiator's.
+	isolated map[int]bidi.Level
 	// line is the style of the block's first line where a ::first-line styles it, nil
 	// elsewhere; firstPieces are the pieces as measured in the first line's styles, and
 	// firstOn is set while they, and each run's and span's first-line style, stand in
@@ -259,6 +263,11 @@ type piece struct {
 const (
 	zeroWidthSpace = "\u200b"
 	softHyphenChar = '\u00ad'
+	// lineSeparator and paragraphSeparator end their line whatever the white space, as
+	// UAX #14 breaks after them, where Chrome does not (decision 0242); a paragraph separator
+	// also ends its bidi paragraph.
+	lineSeparator      = '\u2028'
+	paragraphSeparator = '\u2029'
 )
 
 // unshown drops from s the characters that take no room and show nothing: zero-width
@@ -312,7 +321,7 @@ func (t *tree) inlineOf(owner *node, items []item, listItem *node) *inlineConten
 			c.mark, c.marker = &m, &box.Box{Kind: box.Marker, Node: listItem.box.Node, Style: m.st}
 		}
 	}
-	visible := c.marker != nil || framedCut(items)
+	visible := c.marker != nil || framedCut(items) || c.framed()
 	for _, r := range c.runs {
 		if r.atomic != nil || !collapses(r.st.WhiteSpace) || !isCollapsibleSpace(r.text) {
 			visible = true
@@ -347,20 +356,37 @@ func (c *inlineContent) shows() bool {
 	return false
 }
 
+// framed reports an inline element gathered with a margin, a border or a padding on its
+// start or end: a line box holds it, text or none, as CSS 2 keeps a line for it.
+func (c *inlineContent) framed() bool {
+	for _, s := range c.spans {
+		if !s.noStart && edgeRoom(s.st, true) || !s.noEnd && edgeRoom(s.st, false) {
+			return true
+		}
+	}
+	return false
+}
+
+// edgeRoom reports a margin, a padding or a border that is not 0 on the start of an
+// inline of style st, or its end: its right first in right-to-left.
+func edgeRoom(st *style.Computed, start bool) bool {
+	margin, padding, border := st.Margin.Left, st.Padding.Left, st.Border.Left
+	if start == (st.Dir == style.RTL) {
+		margin, padding, border = st.Margin.Right, st.Padding.Right, st.Border.Right
+	}
+	return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
+}
+
 // framedCut reports a part of an inline element blocks cut among items, or inside one,
 // with a margin, a border or a padding on its edge: Chrome keeps a line for it, text or
 // none.
 func framedCut(items []item) bool {
-	room := func(margin, padding style.Length, border float32) bool {
-		return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
-	}
 	for _, it := range items {
 		if it.cut == nil {
 			continue
 		}
 		st := styleOf(it.element)
-		if it.first && room(st.Margin.Left, st.Padding.Left, st.Border.Left) ||
-			it.last && room(st.Margin.Right, st.Padding.Right, st.Border.Right) || framedCut(it.inside) {
+		if it.first && edgeRoom(st, true) || it.last && edgeRoom(st, false) || framedCut(it.inside) {
 			return true
 		}
 	}
@@ -1062,7 +1088,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			}
 		}
 		switch {
-		case ch == '\n' || ch == '\t':
+		case ch == '\n' || ch == '\t' || ch == lineSeparator || ch == paragraphSeparator:
 			emit(word)
 			afterSpace = c.control(fonts, r.st, i, n-1, ch, level)
 		case ch == ' ':
@@ -1076,7 +1102,8 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			afterSpace = true
 		case string(ch) == zeroWidthSpace || ch == softHyphenChar && r.st.Hyphens != style.HyphensNone:
 			emit(word)
-			c.pieces = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level))
+			// a space after it follows no space: the spaces round it never collapse
+			c.pieces, afterSpace = append(c.pieces, breakAt(fonts, r.st, ch, i, n-1, level)), false
 		default:
 			b.WriteRune(ch)
 			afterSpace = false
@@ -1160,11 +1187,12 @@ func splitsWords(st *style.Computed) bool {
 	return st.WrapsAnywhere() || st.WordBreak == style.BreakAll || st.LineBreak == style.LineBreakAnywhere
 }
 
-// control adds the newline or the tab ch of run i at character at, and reports whether
-// a collapsible space after it is dropped: after a newline.
+// control adds the tab ch of run i at character at, or the forced break of a newline or a
+// line or paragraph separator, and reports whether a collapsible space after it is
+// dropped: after a break.
 func (c *inlineContent) control(fonts box.Fonts, st *style.Computed, i int, at int32, ch rune,
 	level bidi.Level) bool {
-	if ch == '\n' {
+	if ch != '\t' {
 		c.pieces = append(c.pieces, piece{kind: newline, run: i, level: level})
 		return true
 	}
@@ -3161,9 +3189,9 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	t.sizeAtomics(c, def(content), size{content, none})
 	ls := c.lines(content)
 	y := t.textTop(n, ls, inset.t, s.h-inset.vertical())
-	var spanLines map[*box.Box][]geom.Rect
+	var spanLines map[*box.Box][]spanLine
 	if len(c.oofs) > 0 {
-		spanLines = map[*box.Box][]geom.Rect{}
+		spanLines = map[*box.Box][]spanLine{}
 	}
 	for li, l := range ls {
 		lh, lb := t.lineBox(c, l)
@@ -3199,9 +3227,14 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 					// its margin box mirrored across the line, its margins on their sides
 					l.location.y = 2*y + lh - l.location.y - a.height - a.margin.b + a.margin.t
 				}
+				st := a.node.st
+				moved := inlineOffset(st, size{content, none})
+				for k := c.runs[p.run].span; k >= 0; k = c.spans[k].up {
+					moved = moved.Add(inlineOffset(c.spans[k].st, size{content, none}))
+				}
+				l.location = point{l.location.x + moved.X, l.location.y + moved.Y}
 				l.margin = a.margin
 				l.size = size{a.width, a.height}
-				st := a.node.st
 				l.padding = edges(st.Padding, content)
 				l.border = a.node.borders()
 				g := scrollbarGutter(st)
@@ -3222,7 +3255,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 // as CSS defines it for an inline element, moved with the spans position: relative moves
 // round it. o's static place moves with the spans holding it; cb is what their offsets'
 // percentages are of.
-func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect, cb size) {
+func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]spanLine, cb size) {
 	o.positioned = false
 	for k := o.span; k >= 0; k = c.spans[k].up {
 		moved := inlineOffset(c.spans[k].st, cb)
@@ -3237,7 +3270,7 @@ func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.R
 		if len(frags) == 0 {
 			return
 		}
-		first, last := frags[0], frags[len(frags)-1]
+		first, last := frags[0].r, frags[len(frags)-1].r
 		x0 := first.X + sp.border.l
 		x1 := last.X + last.W - sp.border.r
 		y0 := first.Y + sp.border.t
@@ -3298,7 +3331,7 @@ func (t *tree) writeText(n *node) {
 }
 
 // placeSpans gives each span its box from the rectangles its lines took.
-func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]geom.Rect,
+func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]spanLine,
 	hidden map[*box.Box]int, origin func(*box.Box) geom.Vec2, cb size) {
 	for _, s := range c.spans {
 		r := spanRects[s.box]
@@ -3310,9 +3343,24 @@ func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines ma
 		s.box.Margin = box.Edges{Top: m.t, Right: m.r, Bottom: m.b, Left: m.l}
 		s.box.Border = box.Edges{Top: b.t, Right: b.r, Bottom: b.b, Left: b.l}
 		s.box.Padding = box.Edges{Top: p.t, Right: p.r, Bottom: p.b, Left: p.l}
-		s.box.Fragments, s.box.Hidden = s.box.Fragments[:0], hidden[s.box]
-		for _, f := range spanLines[s.box] {
-			s.box.Fragments = append(s.box.Fragments, geom.Rect{X: f.X - r.X, Y: f.Y - r.Y, W: f.W, H: f.H})
+		s.box.Fragments, s.box.Ends, s.box.Hidden = s.box.Fragments[:0], s.box.Ends[:0], hidden[s.box]
+		parts := spanLines[s.box]
+		moved := false
+		for i, f := range parts {
+			s.box.Fragments = append(s.box.Fragments, geom.Rect{X: f.r.X - r.X, Y: f.r.Y - r.Y, W: f.r.W, H: f.r.H})
+			var usual box.Ends
+			if i == 0 {
+				usual |= box.LeftEnd
+			}
+			if i == len(parts)-1 {
+				usual |= box.RightEnd
+			}
+			moved = moved || f.ends != usual
+		}
+		if moved && c.reorders && !mode.Vertical() {
+			for _, f := range parts {
+				s.box.Ends = append(s.box.Ends, f.ends)
+			}
 		}
 	}
 }
@@ -3378,14 +3426,14 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 //
 //nolint:funlen // one pass over the lines, each written whole
 func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32) ([]geom.Rect,
-	map[*box.Box]geom.Rect, map[*box.Box][]geom.Rect, map[*box.Box]int) {
+	map[*box.Box]geom.Rect, map[*box.Box][]spanLine, map[*box.Box]int) {
 	f := n.final
 	ellipsis := n.st.Ellipsis && n.st.Overflow.Width != style.Visible
 	runRects := make([]geom.Rect, len(c.runs))
 	seen := make([]bool, len(c.runs))
 	spanRects := make(map[*box.Box]geom.Rect)
 	spanSeen := make([]bool, len(c.spans))
-	spanLines := make(map[*box.Box][]geom.Rect)
+	spanLines := make(map[*box.Box][]spanLine)
 	hidden := make(map[*box.Box]int)
 	c.back = nil
 	c.lineBoxes = c.lineBoxes[:0]
@@ -3611,11 +3659,19 @@ func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left,
 	return pieces, left + content - w.end(), false, true
 }
 
-// spanRects adds line l's part of each span to its border box: from its start edge (or the
+// spanLine is a span's part on a line: its border box there, and which of the span's left
+// and right edges it holds.
+type spanLine struct {
+	r    geom.Rect
+	ends box.Ends
+}
+
+// spanRects adds line l's parts of each span to its border box: from its start edge (or the
 // line's start) to its end edge (or the line's end), over its content area plus vertical
-// padding and border. The pieces are the line's before any ellipsis, as Chrome's boxes are.
+// padding and border, one part to each run of its pieces the line shows side by side once
+// bidi reorders it. The pieces are the line's before any ellipsis, as Chrome's boxes are.
 func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, x, perGap, y,
-	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]geom.Rect, hidden map[*box.Box]int) {
+	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]spanLine, hidden map[*box.Box]int) {
 	at := make([]float32, len(pieces)+1)
 	walk := l.pen(c.unit, x)
 	for i, p := range pieces {
@@ -3631,49 +3687,72 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, 
 			// a br's box is where its line ends, not the start of the next
 			continue
 		}
+		in := func(v int) bool { i := l.from + logical(order, v); return i >= lo && i <= hi }
 		first, last := -1, -1
 		for v := range pieces {
-			if i := l.from + logical(order, v); i >= lo && i <= hi {
+			if in(v) {
 				if first < 0 {
 					first = v
 				}
 				last = v
 			}
 		}
-		left, right := at[first], at[last+1]
-		if left == right && c.edgeAt(lo, true) && c.opensOnSpace(hi) {
+		if at[first] == at[last+1] && c.edgeAt(lo, true) && c.opensOnSpace(hi) {
 			// a start of no width, the space after it dropped at the line's end, is no box
 			continue
 		}
-		if p := pieces[first]; p.kind == edge && p.span == k && p.start {
-			left += sp.margin.l
+		from := -1
+		for v := first; v <= last; v++ {
+			if !in(v) {
+				continue
+			}
+			if from < 0 {
+				from = v
+			}
+			if v == last || !in(v+1) {
+				t.spanPart(c, sp, k, pieces, at, from, v, l, y, lb, rects, seen, lines, hidden)
+				from = -1
+			}
 		}
-		if p := pieces[last]; p.kind == edge && p.span == k && !p.start {
-			right -= sp.margin.r
-		}
-		m := t.metricsOf(c, sp.st)
-		over, under := m.Ascent, m.Descent
-		switch e := sp.st.TextBoxEdge; sp.st.TextBoxTrim {
-		case style.TrimStart:
-			over = overEdge(m, e)
-		case style.TrimEnd:
-			under = underEdge(m, e)
-		case style.TrimBoth:
-			over, under = overEdge(m, e), underEdge(m, e)
-		case style.TrimNone:
-		}
-		top := y + lb + sp.shift - over - sp.padding.t - sp.border.t
-		bottom := y + lb + sp.shift + under + sp.padding.b + sp.border.b
-		r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
-		if l.phantom {
-			r = geom.Rect{X: left, Y: y}
-		}
-		rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
-		seen[k] = true
-		lines[sp.box] = append(lines[sp.box], r)
-		if hidden != nil {
-			hidden[sp.box]++
-		}
+	}
+}
+
+// spanPart adds the part of span k shown by pieces first to last of line l to its box.
+func (t *tree) spanPart(c *inlineContent, sp *inlineSpan, k int, pieces []piece, at []float32, first, last int,
+	l line, y, lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]spanLine,
+	hidden map[*box.Box]int) {
+	left, right := at[first], at[last+1]
+	var ends box.Ends
+	if p := pieces[first]; p.kind == edge && p.span == k && p.start {
+		left += sp.margin.l
+		ends |= box.LeftEnd
+	}
+	if p := pieces[last]; p.kind == edge && p.span == k && !p.start {
+		right -= sp.margin.r
+		ends |= box.RightEnd
+	}
+	m := t.metricsOf(c, sp.st)
+	over, under := m.Ascent, m.Descent
+	switch e := sp.st.TextBoxEdge; sp.st.TextBoxTrim {
+	case style.TrimStart:
+		over = overEdge(m, e)
+	case style.TrimEnd:
+		under = underEdge(m, e)
+	case style.TrimBoth:
+		over, under = overEdge(m, e), underEdge(m, e)
+	case style.TrimNone:
+	}
+	top := y + lb + sp.shift - over - sp.padding.t - sp.border.t
+	bottom := y + lb + sp.shift + under + sp.padding.b + sp.border.b
+	r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
+	if l.phantom {
+		r = geom.Rect{X: left, Y: y}
+	}
+	rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
+	seen[k] = true
+	lines[sp.box] = append(lines[sp.box], spanLine{r, ends})
+	if hidden != nil {
+		hidden[sp.box]++
 	}
 }
 

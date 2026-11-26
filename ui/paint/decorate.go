@@ -28,10 +28,10 @@ type piece struct {
 }
 
 // pieces are b's parts in the root's space, b's border box at at: one per
-// line of an inline split over several, the left edge on the first and
-// the right edge on the last; one per column of a block columns cut, the
-// top edge on the first and the bottom edge on the last, as Chrome slices
-// it; else the box itself. Lines past a line-clamp's last are left out, the
+// part of an inline split over lines or by bidi, its left and right edges
+// where its Ends say, else on the first and the last; one per column of a
+// block columns cut, the top edge on the first and the bottom edge on the
+// last, as Chrome slices it; else the box itself. Lines past a line-clamp's last are left out, the
 // last shown with no right edge, as Chrome draws them.
 // They go in p's scratch, valid until the next call.
 func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
@@ -56,6 +56,13 @@ func (p *painter) pieces(b *box.Box, at geom.Vec2) []piece {
 			}
 			if !last {
 				e.Bottom = 0
+			}
+		case len(b.Ends) == len(b.Fragments):
+			if b.Ends[i]&box.LeftEnd == 0 {
+				e.Left = 0
+			}
+			if b.Ends[i]&box.RightEnd == 0 {
+				e.Right = 0
 			}
 		default:
 			if !first {
@@ -1737,9 +1744,22 @@ func (p *painter) outline(e entry, alpha float32) {
 	}
 }
 
+// outlined reports whether b draws an outline: a table's column or column group draws
+// none, as Chrome's.
 func outlined(b *box.Box) bool {
 	st := shown(b)
-	return b.Kind == box.Element && st.Visible && st.OutlineStyle != style.BorderNone && st.OutlineWidth > 0
+	return b.Kind == box.Element && st.Visible && st.OutlineStyle != style.BorderNone && st.OutlineWidth > 0 &&
+		!isColumn(b)
+}
+
+// isColumn reports a table's column or column group: a box of that display in a table or
+// a column group, where a replaced element of the display is laid out as an inline.
+func isColumn(b *box.Box) bool {
+	if part := partOf(b); part != style.TableColumn && part != style.TableColumnGroup {
+		return false
+	}
+	p := b.Parent
+	return p != nil && p.Style != nil && (p.Style.Table || partOf(p) == style.TableColumnGroup)
 }
 
 // radii are a box's corner radii, top-left, top-right, bottom-right,
@@ -1797,6 +1817,9 @@ func (p *painter) text(e entry, alpha float32) {
 		return
 	}
 	if st.Mode.Vertical() {
+		if st.Font.Size <= 0 {
+			return
+		}
 		p.verticalText(e, alpha)
 		return
 	}
@@ -1841,7 +1864,7 @@ func (p *painter) horizontalText(e entry, alpha float32) {
 // textLines paints the fragments of e's box in st, parts of them selected.
 func (p *painter) textLines(e entry, st *style.Computed, parts []Selected, alpha float32) {
 	b := e.b
-	if !st.Visible {
+	if !st.Visible || st.Font.Size <= 0 {
 		return
 	}
 	if p.glyphsOnly {
@@ -2069,6 +2092,7 @@ func (p *painter) words(at geom.Vec2, text string, st *style.Computed, opts []tw
 // the fragment ends.
 func (p *painter) fragment(at geom.Vec2, f *box.Fragment, st *style.Computed, opts []twod.TextOption) {
 	shown := f.Text + f.Hyphen
+	at.Y = p.snapY(at.Y)
 	p.around, p.amid = [2]string{f.Before, f.After}, [2]string{f.Lead, f.Trail}
 	defer func() { p.around, p.amid = [2]string{}, [2]string{} }()
 	if !f.RTL {

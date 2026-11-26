@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -40,6 +42,39 @@ func TestGenericsNameTheFacesEmberDrawsThemWith(t *testing.T) {
 	}
 }
 
+func TestHandlerServesAPageInTheEncodingWPTsServerGivesIt(t *testing.T) {
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"served.xht":         `<html xmlns="http://www.w3.org/1999/xhtml"/>`,
+		"served.xht.headers": "Content-Type: application/xhtml+xml; charset=us-ascii\n",
+		"sheet.css":          "p {}",
+		"sheet.css.headers":  "Content-Type: text/css; charset=Shift_JIS\n",
+		"meta.html":          `<meta charset="shift_jis"><p>`,
+		"plain.html":         `<p>`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := httptest.NewServer(Handler(root))
+	defer srv.Close()
+	for name, want := range map[string]string{
+		"served.xht": "application/xhtml+xml; charset=us-ascii",
+		"sheet.css":  "text/css; charset=Shift_JIS",
+		"meta.html":  "text/html",
+		"plain.html": "text/html; charset=utf-8",
+	} {
+		resp, err := srv.Client().Get(srv.URL + "/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if got := resp.Header.Get("Content-Type"); got != want {
+			t.Errorf("%s served as %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestHandlerServesXHTMLAsXMLWithTheFonts(t *testing.T) {
 	srv := httptest.NewServer(Handler(fixture))
 	defer srv.Close()
@@ -50,7 +85,8 @@ func TestHandlerServesXHTMLAsXMLWithTheFonts(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.Header.Get("Content-Type") != "application/xhtml+xml" ||
-		!strings.Contains(string(body), "<head><style>@font-face { font-family: Ahem; src: url(/fonts/Ahem.ttf)") {
+		!strings.Contains(string(body), "<head><style>@font-face { font-family: Ahem; src: url(/fonts/Ahem.ttf)") ||
+		!strings.Contains(string(body), ":root { -webkit-font-smoothing: antialiased; }") {
 		t.Errorf("%s:\n%s", resp.Header.Get("Content-Type"), body)
 	}
 	resp, err = srv.Client().Get(srv.URL + "/../MANIFEST.json")

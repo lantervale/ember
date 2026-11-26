@@ -53,6 +53,9 @@ type Retained struct {
 	turns map[turnKey]*style.Computed
 	// rootStyles is the root's style as the last layout took it.
 	rootStyles rootStyles
+	// unpadded are the styles tables whose borders collapse are laid out with, by their
+	// own.
+	unpadded map[*style.Computed]*style.Computed
 }
 
 // Retain lays out reusing r's nodes, and keeps this layout's in r.
@@ -221,6 +224,8 @@ type tree struct {
 	labelStyles map[*style.Computed]*style.Computed
 	// anonymousTables is the style of the anonymous tables of each parent style.
 	anonymousTables map[*style.Computed]*style.Computed
+	// unpadded is Retained's unpadded for a layout that keeps nothing.
+	unpadded map[*style.Computed]*style.Computed
 	// flowStyles are the styles multi-column containers lay their content out with, by
 	// their own.
 	flowStyles map[*style.Computed]*style.Computed
@@ -373,7 +378,7 @@ func (n *node) context() context {
 	switch {
 	case n.st.Display == style.DisplayNone:
 		return contextNone
-	case n.role == roleTable && len(n.kids) > 0:
+	case n.role == roleTable && (len(n.kids) > 0 || n.st.BorderCollapse):
 		return contextTable
 	case n.inline != nil, len(n.kids) == 0 && !n.isGrid():
 		return contextLeaf
@@ -433,6 +438,28 @@ func (t *tree) styleFor(e *dom.Node) *style.Computed {
 		k.own, k.on = st, &c
 	}
 	return k.on
+}
+
+// unpaddedTable is st, or, for a table whose borders collapse, st without its padding,
+// which such a table has none of (CSS 2 §17.6.2).
+func (t *tree) unpaddedTable(st *style.Computed) *style.Computed {
+	if !st.Table || !st.BorderCollapse || st.Padding == (style.Sides[style.Length]{}) {
+		return st
+	}
+	m := &t.unpadded
+	if t.keep != nil {
+		m = &t.keep.unpadded
+	}
+	if u := (*m)[st]; u != nil {
+		return u
+	}
+	if *m == nil {
+		*m = map[*style.Computed]*style.Computed{}
+	}
+	u := *st
+	u.Padding = style.Sides[style.Length]{}
+	(*m)[st] = &u
+	return &u
 }
 
 // rootStyles holds the root's style own as on, with its body's writing mode and
@@ -512,7 +539,7 @@ func (t *tree) kept(e *dom.Node, parent *node) *node {
 // again with its box and emptied, when e itself is unchanged and only something under it
 // did, else a new one.
 func (t *tree) element(e *dom.Node, parent *node) *node {
-	st := t.styleFor(e)
+	st := t.unpaddedTable(t.styleFor(e))
 	old := t.prevNodes[e]
 	if n := old; n != nil && n.box.Style == st && dom.Data(e).Dirty&dom.DirtyLayout == 0 &&
 		e.SameFlow(n.children) {
