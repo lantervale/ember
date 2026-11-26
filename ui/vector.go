@@ -241,6 +241,7 @@ func (v *vector) drawOffTheFrame(at drawnAt) {
 	}
 	v.drawing[at] = true
 	f := &v.d.fetching
+	f.drawing++
 	f.Add(1)
 	go func() {
 		defer f.Done()
