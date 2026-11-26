@@ -233,6 +233,24 @@ func TestStackingPaintsNegativeZThenFlowThenPositionedThenPositiveZ(t *testing.T
 	assert.Equal(t, "white blue black green red", r.order(names))
 }
 
+func TestAFixedOrStickyBoxStacksItsNegativeChildrenAboveItsBackground(t *testing.T) {
+	for _, at := range []style.Position{style.Absolute, style.FixedPosition, style.Sticky} {
+		under := el(0, 0, 10, 10, func(s *style.Computed) {
+			s.Background, s.Position, s.ZIndex, s.ZAuto = red, style.Absolute, -1, false
+		})
+		box := el(0, 0, 50, 50, func(s *style.Computed) {
+			s.Background, s.Position, s.ZAuto = green, at, true
+		}, under)
+		r := newRecorder()
+		Paint(r, tree(el(0, 0, 100, 100, bg(white), box)))
+		want := "white green red"
+		if at == style.Absolute {
+			want = "white red green"
+		}
+		assert.Equal(t, want, r.order(names), "position %d", at)
+	}
+}
+
 func TestFlowBackgroundsAllComeBeforeFlowText(t *testing.T) {
 	a := el(0, 0, 100, 20, bg(red))
 	a.Append(text(0, 0, "a", a.Style))
