@@ -37,6 +37,25 @@ func TestABlockAloneInAnInlineLeavesNoLines(t *testing.T) {
 	require.Len(t, tr.Of[root].Children, 1)
 }
 
+func TestAnEmptyInlineWithRoomOnItsSidesKeepsALine(t *testing.T) {
+	framed := func(edit func(st *style.Computed)) float32 {
+		root := el(dom.Div, width(100), el(dom.Span, edit), text(" "))
+		return lay(root, 200).Of[root].Size.Y
+	}
+	assert.Equal(t, float32(10), framed(func(st *style.Computed) { st.Border.Left = 3 }), "a border on its start")
+	assert.Equal(t, float32(10), framed(func(st *style.Computed) { st.Padding.Right = style.Px(2) }), "padding on its end")
+	assert.Zero(t, framed(func(st *style.Computed) { st.Border.Top, st.Padding.Bottom = 3, style.Px(2) }),
+		"room above and below keeps none")
+	assert.Zero(t, framed(nil))
+
+	inner := el(dom.Div, block, text("H"))
+	cut := el(dom.Span, func(st *style.Computed) { st.Dir, st.Padding.Right = style.RTL, style.Px(2) }, inner)
+	root := el(dom.Div, width(100), cut)
+	tr := lay(root, 200)
+	assert.Equal(t, float32(10), tr.Of[inner].Rect().Y, "right to left, its right is its start: a line before the block")
+	assert.Equal(t, float32(20), tr.Of[root].Size.Y, "and none after it")
+}
+
 func TestAFramedPartWithoutTextKeepsALine(t *testing.T) {
 	inner := el(dom.Div, block, text("HHH"))
 	span := el(dom.Span, func(st *style.Computed) {

@@ -305,7 +305,7 @@ func (t *tree) inlineOf(owner *node, items []item, listItem *node) *inlineConten
 			c.mark, c.marker = &m, &box.Box{Kind: box.Marker, Node: listItem.box.Node, Style: m.st}
 		}
 	}
-	visible := c.marker != nil || framedCut(items)
+	visible := c.marker != nil || framedCut(items) || c.framed()
 	for _, r := range c.runs {
 		if r.atomic != nil || !collapses(r.st.WhiteSpace) || !isCollapsibleSpace(r.text) {
 			visible = true
@@ -334,20 +334,37 @@ func (c *inlineContent) shows() bool {
 	return false
 }
 
+// framed reports an inline element gathered with a margin, a border or a padding on its
+// start or end: a line box holds it, text or none, as CSS 2 keeps a line for it.
+func (c *inlineContent) framed() bool {
+	for _, s := range c.spans {
+		if !s.noStart && edgeRoom(s.st, true) || !s.noEnd && edgeRoom(s.st, false) {
+			return true
+		}
+	}
+	return false
+}
+
+// edgeRoom reports a margin, a padding or a border that is not 0 on the start of an
+// inline of style st, or its end: its right first in right-to-left.
+func edgeRoom(st *style.Computed, start bool) bool {
+	margin, padding, border := st.Margin.Left, st.Padding.Left, st.Border.Left
+	if start == (st.Dir == style.RTL) {
+		margin, padding, border = st.Margin.Right, st.Padding.Right, st.Border.Right
+	}
+	return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
+}
+
 // framedCut reports a part of an inline element blocks cut among items, or inside one,
 // with a margin, a border or a padding on its edge: Chrome keeps a line for it, text or
 // none.
 func framedCut(items []item) bool {
-	room := func(margin, padding style.Length, border float32) bool {
-		return border != 0 || margin.Px != 0 || margin.Percent != 0 || padding.Px != 0 || padding.Percent != 0
-	}
 	for _, it := range items {
 		if it.cut == nil {
 			continue
 		}
 		st := styleOf(it.element)
-		if it.first && room(st.Margin.Left, st.Padding.Left, st.Border.Left) ||
-			it.last && room(st.Margin.Right, st.Padding.Right, st.Border.Right) || framedCut(it.inside) {
+		if it.first && edgeRoom(st, true) || it.last && edgeRoom(st, false) || framedCut(it.inside) {
 			return true
 		}
 	}
