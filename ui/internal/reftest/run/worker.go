@@ -15,11 +15,11 @@ import (
 	"github.com/lantervale/ember/world"
 )
 
-// Frames a page is given at least, and at most, before it is captured:
-// it is captured once nothing is loading for settled frames in a row.
+// Frames a page is given at least before it is captured: it is captured
+// once nothing is loading for settled frames in a row, however long that
+// takes; one still loading when the renderer stops waiting fails there.
 const (
 	firstFrames = 6
-	lastFrames  = 600
 	settled     = 5
 )
 
@@ -73,7 +73,7 @@ func (d *drawer) step(f world.Frame) {
 		d.reply(reftest.Drawn, "")
 		f.World.RemoveEntity(d.doc)
 		d.doc = nil
-	case d.frames >= lastFrames || d.frames >= firstFrames && d.quiet >= settled:
+	case d.frames >= firstFrames && d.quiet >= settled:
 		d.win.Capture(d.job[1])
 		d.captured = true
 	case d.doc.FontsLoading() == 0 && d.doc.SheetsLoading() == 0 && d.doc.ImagesLoading() == 0 && !d.fetches.Busy():
