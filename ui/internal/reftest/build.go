@@ -35,7 +35,10 @@ type Fetches struct{ n atomic.Int32 }
 // Busy reports whether a fetch is under way.
 func (f *Fetches) Busy() bool { return f.n.Load() > 0 }
 
-var errOutside = errors.New("outside the checkout")
+var (
+	errOutside = errors.New("outside the checkout")
+	errNoSheet = errors.New("not served as text/css")
+)
 
 // fetcher reads ref, resolved from the address from, from the checkout
 // at root.
@@ -56,7 +59,11 @@ func (f *Fetches) fetchSheet(root, from, ref string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return servedSheet(data, filepath.Join(root, filepath.FromSlash(Resolve(from, ref)))), nil
+	file := filepath.Join(root, filepath.FromSlash(Resolve(from, ref)))
+	if !servedAsCSS(file) {
+		return nil, errNoSheet
+	}
+	return servedSheet(data, file), nil
 }
 
 // Document builds p, read from the checkout at root, as a ui Document:
