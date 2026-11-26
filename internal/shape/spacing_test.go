@@ -31,3 +31,9 @@ func TestLetterSpacingFollowsNoLetterOfACursiveScript(t *testing.T) {
 		assert.Equal(t, c.want, shape.LetterSpaced(c.before, c.text), "%q after %q", c.text, c.before)
 	}
 }
+
+func TestLetterSpacingFollowsNoFormatCharacter(t *testing.T) {
+	for _, s := range []string{"a\u202eb\u202cc", "a\u2067b\u2069c", "a\u200bb\u200ec", "a\u2060b\ufeffc"} {
+		assert.Equal(t, 3, shape.LetterSpaced("", s), "%q: its controls take no spacing", s)
+	}
+}

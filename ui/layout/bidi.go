@@ -99,8 +99,8 @@ func closing(st *style.Computed) []rune {
 
 // levels resolves the content's bidi levels, the runs read as one text, atoms as
 // U+FFFC and each inline element's unicode-bidi as controls round its runs, a paragraph
-// to each forced break: per run, the level of each character of its text as cut reads
-// it, the one of an atom. nil when the content needs no reordering.
+// to each forced break or paragraph separator: per run, the level of each character of
+// its text as cut reads it, the one of an atom. nil when the content needs no reordering.
 func (c *inlineContent) levels() [][]bidi.Level {
 	c.base = 0
 	if !c.mixed() {
@@ -108,9 +108,13 @@ func (c *inlineContent) levels() [][]bidi.Level {
 	}
 	var text []rune
 	starts := make([]int, len(c.runs))
+	initiators := map[int]int{}
 	open := func(i int) {
 		for k := len(c.spans) - 1; k >= 0; k-- {
 			if s := c.spans[k]; s.first == i {
+				if s.st.Bidi.Isolates() {
+					initiators[k] = len(text)
+				}
 				text = append(text, opening(s.st)...)
 				if s.end == i {
 					text = append(text, closing(s.st)...)
@@ -137,7 +141,7 @@ func (c *inlineContent) levels() [][]bidi.Level {
 	base := baseLevel(c.owner.st)
 	for from := 0; from < len(text); {
 		to := from
-		for to < len(text) && text[to] != '\n' {
+		for to < len(text) && text[to] != '\n' && text[to] != paragraphSeparator {
 			to++
 		}
 		to = min(to+1, len(text))
@@ -149,6 +153,10 @@ func (c *inlineContent) levels() [][]bidi.Level {
 			levels[i] = p.Level(i - from)
 		}
 		from = to
+	}
+	c.isolated = make(map[int]bidi.Level, len(initiators))
+	for k, at := range initiators {
+		c.isolated[k] = levels[at]
 	}
 	out := make([][]bidi.Level, len(c.runs))
 	for i, r := range c.runs {
@@ -163,7 +171,8 @@ func (c *inlineContent) levels() [][]bidi.Level {
 
 // levelEdges gives the pieces that hold no text of their own a level: a span's start
 // edge that of the first piece inside it, its end edge that of the last, so neither cuts
-// the text round them in two; an anchor that of the text after it, as Chrome's
+// the text round them in two, the edges of one that isolates its content that of its
+// isolate initiator, so they part what it holds from what is round it; an anchor that of the text after it, as Chrome's
 // out-of-flow placeholder takes the level of the run at its offset; the others that of
 // the piece before them.
 func (c *inlineContent) levelEdges() {
@@ -194,7 +203,11 @@ func (c *inlineContent) levelEdges() {
 			if !p.start {
 				step = -1
 			}
-			if l, ok := inside(i, step); ok {
+			l, ok := c.isolated[p.span]
+			if !ok {
+				l, ok = inside(i, step)
+			}
+			if ok {
 				p.level = l
 			}
 		case anchor:
