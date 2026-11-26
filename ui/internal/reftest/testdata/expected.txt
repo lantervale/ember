@@ -1945,7 +1945,7 @@ css/CSS2/linebox/line-height-105.xht chrome
 css/CSS2/linebox/line-height-106.xht chrome
 css/CSS2/linebox/line-height-112.xht chrome
 css/CSS2/linebox/line-height-121.xht ref chrome
-css/CSS2/linebox/line-height-125.xht chrome
+css/CSS2/linebox/line-height-125.xht ref chrome
 css/CSS2/linebox/line-height-126.xht ref chrome
 css/CSS2/linebox/line-height-127.xht ref chrome
 css/CSS2/linebox/line-height-128.xht ref chrome
@@ -3126,7 +3126,7 @@ css/CSS2/normal-flow/inline-block-width-002a.xht ref chrome
 css/CSS2/normal-flow/inline-block-width-002b.xht ref chrome
 css/CSS2/normal-flow/inline-block-zorder-001.xht ref chrome
 css/CSS2/normal-flow/inline-block-zorder-002.xht ref chrome
-css/CSS2/normal-flow/inline-block-zorder-003.xht chrome
+css/CSS2/normal-flow/inline-block-zorder-003.xht ref chrome
 css/CSS2/normal-flow/inline-block-zorder-004.xht ref chrome
 css/CSS2/normal-flow/inline-block-zorder-005.xht ref chrome
 css/CSS2/normal-flow/inline-box-border-line-break.html ref chrome
@@ -3167,7 +3167,7 @@ css/CSS2/normal-flow/inline-table-width-002a.xht ref chrome
 css/CSS2/normal-flow/inline-table-width-002b.xht ref chrome
 css/CSS2/normal-flow/inline-table-zorder-001.xht ref chrome
 css/CSS2/normal-flow/inline-table-zorder-002.xht ref chrome
-css/CSS2/normal-flow/inline-table-zorder-003.xht chrome
+css/CSS2/normal-flow/inline-table-zorder-003.xht ref chrome
 css/CSS2/normal-flow/inline-table-zorder-004.xht ref chrome
 css/CSS2/normal-flow/inline-table-zorder-005.xht ref chrome
 css/CSS2/normal-flow/inlines-002.xht ref chrome

@@ -514,9 +514,9 @@ func (p *painter) context(e entry, alpha float32) { p.stack(e, alpha, false) }
 // hoisted into the context around it.
 // inFlow paints e's in-flow children in their passes: their boxes, the
 // borders tables collapse over them, then
-// the floats, each whole, then their text, markers and inline-blocks,
-// each whole, then e's and their control marks, then e's and
-// their outlines.
+// the floats, each whole, then their text, markers and inline boxes in tree order, and
+// their inline-blocks, each whole, as CSS 2.1's appendix E paints a line's content, then
+// e's and their control marks, then e's and their outlines.
 func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	p.flowBoxes(e, l, alpha)
 	for _, c := range l.floats {
@@ -545,7 +545,13 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		case box.Element:
 			if c.atomic {
 				p.stack(c, alpha, true)
-			} else if p.sel != nil && c.b.Node != nil && c.b.Node.Tag() == dom.Br {
+				break
+			}
+			if inlineBox(c.b) {
+				p.use(c.clip)
+				p.decorate(c, alpha)
+			}
+			if p.sel != nil && c.b.Node != nil && c.b.Node.Tag() == dom.Br {
 				p.use(c.clip)
 				p.lineBreak(c, alpha)
 			}
@@ -572,11 +578,12 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	}
 }
 
-// flowBoxes paints the boxes of e's flow, but those painted whole with
-// their line, then the borders tables collapse over them.
+// flowBoxes paints the boxes of e's flow, but inline boxes, painted with
+// their text, and those painted whole with their line, then the borders
+// tables collapse over them.
 func (p *painter) flowBoxes(e entry, l *layers, alpha float32) {
 	for _, c := range l.flow {
-		if c.b.Kind == box.Element && !c.atomic {
+		if c.b.Kind == box.Element && !c.atomic && !inlineBox(c.b) {
 			p.use(c.clip)
 			p.decorate(c, alpha)
 		}
@@ -1020,6 +1027,10 @@ func padding(b *box.Box, at geom.Vec2) geom.Rect {
 		W: b.Size.X - b.Border.Horizontal(), H: b.Size.Y - b.Border.Vertical(),
 	}
 }
+
+// inlineBox reports the box of an inline element laid out in lines, one
+// fragment a line: not an atomic inline, which takes no fragments.
+func inlineBox(b *box.Box) bool { return b.Kind == box.Element && len(b.Fragments) > 0 }
 
 // shown is the style b is painted with: its node's Shown, which holds
 // running transitions' values, or for an anonymous box the nearest
