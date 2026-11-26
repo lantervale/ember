@@ -202,6 +202,21 @@ func TestTextSitsOnLayoutsBaselineWhateverTheFonts(t *testing.T) {
 	assert.Equal(t, geom.V2(0, 15), r.of("text")[0].At, "the same with or without metrics")
 }
 
+func TestTextOfFontSizeZeroDrawsNothing(t *testing.T) {
+	for _, vertical := range []bool{false, true} {
+		p := el(0, 0, 100, 20, func(s *style.Computed) {
+			s.Font.Size = 0
+			if vertical {
+				s.Mode = style.VerticalRL
+			}
+		})
+		p.Append(text(0, 0, "x", p.Style))
+		r := newRecorder()
+		Paint(r, tree(p), Fonts(ahem{}))
+		assert.Empty(t, r.of("text"), "vertical %v: not drawn at the default size", vertical)
+	}
+}
+
 func TestTextStandsOnItsBaselineRoundedToDevicePixels(t *testing.T) {
 	at := func(top, scale float32) float32 {
 		p := el(0, top, 100, 20, nil)
