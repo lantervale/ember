@@ -49,3 +49,8 @@ func TestVisualText(t *testing.T) {
 	assert.Equal(t, "12 בא", visualText("אב 12", 1))
 	assert.Equal(t, "(א)", visualText("(א)", 1), "brackets mirrored")
 }
+
+func TestLineAndParagraphSeparatorsEndTheirLines(t *testing.T) {
+	p := el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, text("ab\u2028cd \u2029 ef"))
+	assert.Equal(t, []string{"ab", "cd", "ef"}, lines(lay(p, 400).Of[p]), "a break each, the spaces after them dropped")
+}

@@ -99,8 +99,8 @@ func closing(st *style.Computed) []rune {
 
 // levels resolves the content's bidi levels, the runs read as one text, atoms as
 // U+FFFC and each inline element's unicode-bidi as controls round its runs, a paragraph
-// to each forced break: per run, the level of each character of its text as cut reads
-// it, the one of an atom. nil when the content needs no reordering.
+// to each forced break or paragraph separator: per run, the level of each character of
+// its text as cut reads it, the one of an atom. nil when the content needs no reordering.
 func (c *inlineContent) levels() [][]bidi.Level {
 	c.base = 0
 	if !c.mixed() {
@@ -137,7 +137,7 @@ func (c *inlineContent) levels() [][]bidi.Level {
 	base := baseLevel(c.owner.st)
 	for from := 0; from < len(text); {
 		to := from
-		for to < len(text) && text[to] != '\n' {
+		for to < len(text) && text[to] != '\n' && text[to] != paragraphSeparator {
 			to++
 		}
 		to = min(to+1, len(text))

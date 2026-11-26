@@ -252,6 +252,11 @@ type piece struct {
 const (
 	zeroWidthSpace = "\u200b"
 	softHyphenChar = '\u00ad'
+	// lineSeparator and paragraphSeparator end their line whatever the white space, as
+	// UAX #14 breaks after them, where Chrome does not (decision 0242); a paragraph separator
+	// also ends its bidi paragraph.
+	lineSeparator      = '\u2028'
+	paragraphSeparator = '\u2029'
 )
 
 // unshown drops from s the characters that take no room and show nothing: zero-width
@@ -1046,7 +1051,7 @@ func (c *inlineContent) cutRun(fonts box.Fonts, i int, r *textRun, soft map[int]
 			}
 		}
 		switch {
-		case ch == '\n' || ch == '\t':
+		case ch == '\n' || ch == '\t' || ch == lineSeparator || ch == paragraphSeparator:
 			emit(word)
 			afterSpace = c.control(fonts, r.st, i, n-1, ch, level)
 		case ch == ' ':
@@ -1144,11 +1149,12 @@ func splitsWords(st *style.Computed) bool {
 	return st.WrapsAnywhere() || st.WordBreak == style.BreakAll || st.LineBreak == style.LineBreakAnywhere
 }
 
-// control adds the newline or the tab ch of run i at character at, and reports whether
-// a collapsible space after it is dropped: after a newline.
+// control adds the tab ch of run i at character at, or the forced break of a newline or a
+// line or paragraph separator, and reports whether a collapsible space after it is
+// dropped: after a break.
 func (c *inlineContent) control(fonts box.Fonts, st *style.Computed, i int, at int32, ch rune,
 	level bidi.Level) bool {
-	if ch == '\n' {
+	if ch != '\t' {
 		c.pieces = append(c.pieces, piece{kind: newline, run: i, level: level})
 		return true
 	}
