@@ -300,8 +300,8 @@ func parseXML(data []byte) (*html.Node, error) {
 			n := &html.Node{Type: html.ElementNode, Data: t.Name.Local, Namespace: namespace(t.Name.Space)}
 			if n.Namespace == "" {
 				n.Data = strings.ToLower(n.Data)
-				n.DataAtom = atom.Lookup([]byte(n.Data))
 			}
+			n.DataAtom = atom.Lookup([]byte(n.Data))
 			for _, a := range t.Attr {
 				if a.Name.Space == "xmlns" || a.Name.Local == "xmlns" {
 					continue

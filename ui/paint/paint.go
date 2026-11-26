@@ -463,6 +463,10 @@ type entry struct {
 	// place as if it made a stacking context, though its positioned
 	// descendants and the contexts in it belong to the context around it.
 	pseudo bool
+	// atomic marks an inline-level box laid out whole, an inline-block or
+	// an inline table, flex or grid: in the flow, painted whole with its
+	// line's text, as if it made a stacking context.
+	atomic bool
 }
 
 // layers are a stacking context's descendants in paint order.
@@ -507,25 +511,11 @@ func (p *painter) context(e entry, alpha float32) { p.stack(e, alpha, false) }
 // hoisted into the context around it.
 // inFlow paints e's in-flow children in their passes: their boxes, the
 // borders tables collapse over them, then
-// the floats, each whole, then their text and markers, then e's and their control marks, then e's and
+// the floats, each whole, then their text, markers and inline-blocks,
+// each whole, then e's and their control marks, then e's and
 // their outlines.
 func (p *painter) inFlow(e entry, l *layers, alpha float32) {
-	for _, c := range l.flow {
-		if c.b.Kind == box.Element {
-			p.use(c.clip)
-			p.decorate(c, alpha)
-		}
-	}
-	if e.b.Collapsed != nil {
-		p.use(e.clip)
-		p.collapsedBorders(e, alpha)
-	}
-	for _, c := range l.flow {
-		if c.b.Collapsed != nil {
-			p.use(c.clip)
-			p.collapsedBorders(c, alpha)
-		}
-	}
+	p.flowBoxes(e, l, alpha)
 	for _, c := range l.floats {
 		p.stack(c, alpha, true)
 	}
@@ -536,7 +526,7 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		p.marks(e, alpha)
 	}
 	for _, c := range l.flow {
-		if marked(c.b) && parted(c.b) {
+		if marked(c.b) && parted(c.b) && !c.atomic {
 			p.use(c.clip)
 			p.marks(c, alpha)
 		}
@@ -550,7 +540,9 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 			p.use(c.clip)
 			p.marker(c, alpha)
 		case box.Element:
-			if p.sel != nil && c.b.Node != nil && c.b.Node.Tag() == dom.Br {
+			if c.atomic {
+				p.stack(c, alpha, true)
+			} else if p.sel != nil && c.b.Node != nil && c.b.Node.Tag() == dom.Br {
 				p.use(c.clip)
 				p.lineBreak(c, alpha)
 			}
@@ -562,7 +554,7 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 		p.marks(e, alpha)
 	}
 	for _, c := range l.flow {
-		if marked(c.b) && !parted(c.b) {
+		if marked(c.b) && !parted(c.b) && !c.atomic {
 			p.use(c.clip)
 			p.marks(c, alpha)
 		}
@@ -570,9 +562,30 @@ func (p *painter) inFlow(e entry, l *layers, alpha float32) {
 	p.use(e.clip)
 	p.outline(e, alpha)
 	for _, c := range l.flow {
-		if outlined(c.b) {
+		if outlined(c.b) && !c.atomic {
 			p.use(c.clip)
 			p.outline(c, alpha)
+		}
+	}
+}
+
+// flowBoxes paints the boxes of e's flow, but those painted whole with
+// their line, then the borders tables collapse over them.
+func (p *painter) flowBoxes(e entry, l *layers, alpha float32) {
+	for _, c := range l.flow {
+		if c.b.Kind == box.Element && !c.atomic {
+			p.use(c.clip)
+			p.decorate(c, alpha)
+		}
+	}
+	if e.b.Collapsed != nil {
+		p.use(e.clip)
+		p.collapsedBorders(e, alpha)
+	}
+	for _, c := range l.flow {
+		if c.b.Collapsed != nil && !c.atomic {
+			p.use(c.clip)
+			p.collapsedBorders(c, alpha)
 		}
 	}
 }
@@ -701,6 +714,7 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		run = append(run[:len(run):len(run)], extra)
 	}
 	see := p.sight(inner)
+	items := b.Kind == box.Element && holdsItems(shown(b))
 	for _, c := range run {
 		at := origin.Add(c.Pos)
 		if see.misses(c, at) {
@@ -734,18 +748,46 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		case st.Position != style.Static:
 			ce.pseudo = true
 			outer.positioned = append(outer.positioned, ce)
-			var flow layers
-			p.collect(ce, &flow, outer)
+			p.hoist(ce, outer)
 		case st.Float != style.FloatNone:
 			ce.pseudo = true
 			own.floats = append(own.floats, ce)
-			var flow layers
-			p.collect(ce, &flow, outer)
+			p.hoist(ce, outer)
 		default:
+			ce.atomic = items || atomicInline(st)
 			own.flow = append(own.flow, ce)
-			p.collect(ce, own, outer)
+			if ce.atomic {
+				p.hoist(ce, outer)
+			} else {
+				p.collect(ce, own, outer)
+			}
 		}
 	}
+}
+
+// hoist collects into outer the positioned boxes and stacking contexts
+// under e, a box painted whole in its place, which collects its flow
+// itself.
+func (p *painter) hoist(e entry, outer *layers) {
+	var flow layers
+	p.collect(e, &flow, outer)
+}
+
+// atomicInline reports a box laid out whole on a line, painted with its
+// line's text as CSS 2's appendix E paints an inline-block.
+func atomicInline(st *style.Computed) bool {
+	return st.Display == style.InlineBlock || st.Display == style.InlineFlex || st.Display == style.InlineGrid
+}
+
+// holdsItems reports a flex or grid container, whose items paint as
+// inline-blocks do.
+func holdsItems(st *style.Computed) bool {
+	switch st.Display {
+	case style.FlexDisplay, style.InlineFlex, style.GridDisplay, style.InlineGrid:
+		return true
+	case style.Inline, style.Block, style.InlineBlock, style.DisplayNone, style.Contents:
+	}
+	return false
 }
 
 // collectPositioned collects into outer the positioned boxes under e, a box past a
