@@ -150,6 +150,7 @@ func (c *inlineContent) levels() [][]bidi.Level {
 		}
 		from = to
 	}
+	openersJoinTheirText(text, levels)
 	out := make([][]bidi.Level, len(c.runs))
 	for i, r := range c.runs {
 		n := 1
@@ -159,6 +160,27 @@ func (c *inlineContent) levels() [][]bidi.Level {
 		out[i] = levels[starts[i] : starts[i]+n]
 	}
 	return out
+}
+
+// openersJoinTheirText gives each embedding or override control of text the level of the
+// first character after it in its paragraph that X9 keeps, where UAX #9 leaves it the
+// level of the one before: it stands with the text it opens, so an element holding it
+// and that text is not cut in two round the text between.
+func openersJoinTheirText(text []rune, levels []bidi.Level) {
+	next, known := bidi.Level(0), false
+	for i := len(text) - 1; i >= 0; i-- {
+		switch ch := text[i]; {
+		case ch == '\n':
+			known = false
+		case ch == lre || ch == rle || ch == lro || ch == rlo:
+			if known {
+				levels[i] = next
+			}
+		case ch == pdf || bidi.Class(ch) == xbidi.BN:
+		default:
+			next, known = levels[i], true
+		}
+	}
 }
 
 // levelEdges gives the pieces that hold no text of their own a level: a span's start
