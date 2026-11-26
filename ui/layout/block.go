@@ -486,6 +486,8 @@ func (t *tree) slotBesideFloats(ctx *blockContext, it *blockItem, parent size, m
 		if slot.segment < 0 {
 			return slot
 		}
+		at := slot.segment
+		slot = ctx.slotDown(slot, it.size.h, [2]float32{margin.l, margin.r}, it.clear)
 		stretch := fmax(fmax(slot.stretchWidth, minAuto), 0)
 		w := it.size.w
 		switch {
@@ -499,7 +501,7 @@ func (t *tree) slotBesideFloats(ctx *blockContext, it *blockItem, parent size, m
 		if mClamp(w, it.minSize.w, it.maxSize.w) <= slot.borderWidth+fitTolerance {
 			return slot
 		}
-		after = slot.segment
+		after = at
 	}
 }
 

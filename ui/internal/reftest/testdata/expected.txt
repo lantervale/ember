@@ -1515,6 +1515,13 @@ css/CSS2/floats/floats-wrap-bfc-with-margin-006.tentative.html ref
 css/CSS2/floats/floats-wrap-bfc-with-margin-007.tentative.html ref
 css/CSS2/floats/floats-wrap-bfc-with-margin-008.tentative.html ref
 css/CSS2/floats/floats-wrap-bfc-with-margin-009.tentative.html ref
+css/CSS2/floats/floats-wrap-bfc-with-margin-010.html ref
+css/CSS2/floats/floats-wrap-top-below-bfc-001l.xht ref
+css/CSS2/floats/floats-wrap-top-below-bfc-001r.xht ref
+css/CSS2/floats/floats-wrap-top-below-bfc-002l.xht ref
+css/CSS2/floats/floats-wrap-top-below-bfc-002r.xht ref
+css/CSS2/floats/floats-wrap-top-below-bfc-003l.xht ref
+css/CSS2/floats/floats-wrap-top-below-bfc-003r.xht ref
 css/CSS2/floats/floats-wrap-top-below-inline-001l.xht ref chrome
 css/CSS2/floats/floats-wrap-top-below-inline-001r.xht ref chrome
 css/CSS2/floats/floats-wrap-top-below-inline-002l.xht ref chrome
