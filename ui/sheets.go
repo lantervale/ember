@@ -32,6 +32,7 @@ type Sheet struct {
 	name     string
 	from     string
 	media    string
+	encoding string
 	disabled bool
 }
 
@@ -50,7 +51,7 @@ func (d *Document) InsertSheet(before *Sheet, text string, opts ...SheetOption) 
 	for _, o := range opts {
 		o(&src)
 	}
-	s := &Sheet{doc: d, name: "style", from: src.from, media: src.media}
+	s := &Sheet{doc: d, name: "style", from: src.from, media: src.media, encoding: src.encoding}
 	s.Replace(text)
 	at := len(d.authored)
 	if i := slices.Index(d.authored, before); before != nil && i >= 0 {
@@ -238,7 +239,7 @@ func (s *Sheet) sheet() *css.Sheet {
 	if s.from != "" {
 		chain = []string{s.from}
 	}
-	s.read = s.doc.imported(read, s.fsys, chain, s.from)
+	s.read = s.doc.imported(read, s.fsys, chain, s.from, s.encoding)
 	return s.read
 }
 

@@ -120,6 +120,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | an `@import` inserted with `InsertRule` after other rules | followed, where Chrome refuses the insertion |
+| the charset a sheet is served with, through `web.Sheets` | not read: the sheet is decoded by its byte order mark, its `@charset` and the importing sheet's encoding alone ([decision 0230](../99-decisions/0230-a-sheet-is-decoded-as-css-syntax-decodes-bytes.md)) |
 | an animated `border-image-slice` from a percentage to a number, `border-image-width` from a length to a percentage | interpolates the numbers and flips, where Chrome flips and makes a `calc()` |
 | an animated `background-image`, `mask-image` or `border-image-source` between two pictures | flips halfway, where Chrome cross-fades them |
 | `content-visibility` and `overlay`, in a transition or anywhere | not read |

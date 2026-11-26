@@ -19,8 +19,12 @@ func Cursive(script Tag) bool { return slices.Contains(cursiveScripts, script) }
 
 // SpacedIn reports whether letter-spacing follows a cluster starting with
 // r in a run of script: every cluster but those of a cursive run other
-// than a space or a no-break space, as Chrome spaces them.
-func SpacedIn(script Tag, r rune) bool { return r == ' ' || r == ' ' || !Cursive(script) }
+// than a space or a no-break space, and none starting with a default
+// ignorable character (a bidi control, a zero-width space…), as Chrome
+// spaces them.
+func SpacedIn(script Tag, r rune) bool {
+	return !DefaultIgnorable(r) && (r == ' ' || r == ' ' || !Cursive(script))
+}
 
 // ScriptAfter is the script the characters of no script at the start of
 // s take after before: the last of before's characters' of a script, else
