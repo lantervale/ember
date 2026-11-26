@@ -352,6 +352,11 @@ table { border-spacing: 5px; } td { padding: 4px 8px; border: 2px solid; } .x { 
 			ui.Table(ui.Class("w"), ui.Style("height: 120px"), cols("", "x"),
 				ui.Tbody(ui.Tr(td("one"), td("two")), ui.Tr(ui.Class("x"), td("three"), td("four")),
 					ui.Tr(td("five"), td("six"))))),
+		"a collapsed row group of a block alone": styled(sheet,
+			ui.Div(ui.Style("display: table"),
+				ui.Div(ui.Class("x"), ui.Style("display: table-row-group"), ui.Div(ui.Text("a block"))),
+				ui.Div(ui.Style("display: table-row-group"), ui.Div(ui.Style("display: table-row"),
+					ui.Div(ui.Style("display: table-cell"), ui.Text("one")))))),
 	}
 	for name, d := range cases {
 		t.Run(name, func(t *testing.T) { chrome.Match(t, d, geom.V2(640, 400)) })
