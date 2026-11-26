@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/dom"
 	"github.com/lantervale/ember/ui/internal/style"
 )
@@ -48,6 +50,51 @@ func TestVisualText(t *testing.T) {
 	assert.Equal(t, "גבא", visualText("אבג", 0))
 	assert.Equal(t, "12 בא", visualText("אב 12", 1))
 	assert.Equal(t, "(א)", visualText("(א)", 1), "brackets mirrored")
+}
+
+func TestABlockOverridingBidiShowsItsTextInItsDirection(t *testing.T) {
+	override := func(dir style.Direction) func(*style.Computed) {
+		return func(st *style.Computed) {
+			st.Dir = dir
+			st.Bidi = style.BidiOverride
+			st.Display = style.Block
+		}
+	}
+	shown := func(b *box.Box) []string {
+		var out []string
+		for _, c := range b.Children {
+			for _, f := range c.Lines {
+				out = append(out, f.Shown())
+			}
+		}
+		return out
+	}
+	rtlP := el(dom.P, override(style.RTL), text("txeT relliF"), el(dom.Br, nil), text("dc"))
+	ltrP := el(dom.P, override(style.LTR), text("ab אבג"))
+	tr := lay(el(dom.Div, block, rtlP, ltrP), 400)
+	assert.Equal(t, []string{"Filler Text", "cd"}, shown(tr.Of[rtlP]), "each line, past the break too")
+	assert.Equal(t, []string{"ab אבג"}, shown(tr.Of[ltrP]), "Hebrew left to right, as written")
+}
+
+func TestASpanBidiSplitsIsInPartsEachWithItsOwnEdges(t *testing.T) {
+	framed := func(st *style.Computed) {
+		st.Border, st.BorderStyle = style.All[float32](2), style.All(style.BorderSolid)
+	}
+	bdo := func(st *style.Computed) { st.Dir, st.Bidi = style.RTL, style.BidiOverride }
+	span := el(dom.Span, framed, text("ab"), el(dom.Span, bdo, text("cd")))
+	tr := lay(el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, span, el(dom.Span, bdo, text("ef"))), 400)
+	b := tr.Of[span]
+	require.Len(t, b.Fragments, 2, "ab, then fe of the other span, then dc")
+	assert.Nil(t, b.Ends, "its start before ab on the first, its end after dc on the last")
+	assert.Equal(t, float32(2*10+2), b.Fragments[0].W, "ab and its left border")
+	assert.Equal(t, b.Fragments[0].X+b.Fragments[0].W+2*10, b.Fragments[1].X, "fe stands between them")
+
+	rtlSpan := el(dom.Span, func(st *style.Computed) { framed(st); st.Dir = style.RTL }, text("aaaa bbbb"))
+	tr = lay(el(dom.P, func(st *style.Computed) { block(st); width(50)(st) }, rtlSpan), 400)
+	b = tr.Of[rtlSpan]
+	require.Len(t, b.Fragments, 2)
+	assert.Equal(t, []box.Ends{box.RightEnd, box.LeftEnd}, b.Ends,
+		"right to left, its start on the right of its first line, its end on the left of its last")
 }
 
 func TestLineAndParagraphSeparatorsEndTheirLines(t *testing.T) {

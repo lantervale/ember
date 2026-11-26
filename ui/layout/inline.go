@@ -3173,9 +3173,9 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	t.sizeAtomics(c, def(content), size{content, none})
 	ls := c.lines(content)
 	y := t.textTop(n, ls, inset.t, s.h-inset.vertical())
-	var spanLines map[*box.Box][]geom.Rect
+	var spanLines map[*box.Box][]spanLine
 	if len(c.oofs) > 0 {
-		spanLines = map[*box.Box][]geom.Rect{}
+		spanLines = map[*box.Box][]spanLine{}
 	}
 	for li, l := range ls {
 		lh, lb := t.lineBox(c, l)
@@ -3239,7 +3239,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 // as CSS defines it for an inline element, moved with the spans position: relative moves
 // round it. o's static place moves with the spans holding it; cb is what their offsets'
 // percentages are of.
-func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.Rect, cb size) {
+func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]spanLine, cb size) {
 	o.positioned = false
 	for k := o.span; k >= 0; k = c.spans[k].up {
 		moved := inlineOffset(c.spans[k].st, cb)
@@ -3254,7 +3254,7 @@ func (c *inlineContent) containingSpan(o *inlineOOF, lines map[*box.Box][]geom.R
 		if len(frags) == 0 {
 			return
 		}
-		first, last := frags[0], frags[len(frags)-1]
+		first, last := frags[0].r, frags[len(frags)-1].r
 		x0 := first.X + sp.border.l
 		x1 := last.X + last.W - sp.border.r
 		y0 := first.Y + sp.border.t
@@ -3315,7 +3315,7 @@ func (t *tree) writeText(n *node) {
 }
 
 // placeSpans gives each span its box from the rectangles its lines took.
-func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]geom.Rect,
+func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines map[*box.Box][]spanLine,
 	hidden map[*box.Box]int, origin func(*box.Box) geom.Vec2, cb size) {
 	for _, s := range c.spans {
 		r := spanRects[s.box]
@@ -3327,9 +3327,24 @@ func placeSpans(c *inlineContent, spanRects map[*box.Box]geom.Rect, spanLines ma
 		s.box.Margin = box.Edges{Top: m.t, Right: m.r, Bottom: m.b, Left: m.l}
 		s.box.Border = box.Edges{Top: b.t, Right: b.r, Bottom: b.b, Left: b.l}
 		s.box.Padding = box.Edges{Top: p.t, Right: p.r, Bottom: p.b, Left: p.l}
-		s.box.Fragments, s.box.Hidden = s.box.Fragments[:0], hidden[s.box]
-		for _, f := range spanLines[s.box] {
-			s.box.Fragments = append(s.box.Fragments, geom.Rect{X: f.X - r.X, Y: f.Y - r.Y, W: f.W, H: f.H})
+		s.box.Fragments, s.box.Ends, s.box.Hidden = s.box.Fragments[:0], s.box.Ends[:0], hidden[s.box]
+		parts := spanLines[s.box]
+		moved := false
+		for i, f := range parts {
+			s.box.Fragments = append(s.box.Fragments, geom.Rect{X: f.r.X - r.X, Y: f.r.Y - r.Y, W: f.r.W, H: f.r.H})
+			var usual box.Ends
+			if i == 0 {
+				usual |= box.LeftEnd
+			}
+			if i == len(parts)-1 {
+				usual |= box.RightEnd
+			}
+			moved = moved || f.ends != usual
+		}
+		if moved && c.reorders && !mode.Vertical() {
+			for _, f := range parts {
+				s.box.Ends = append(s.box.Ends, f.ends)
+			}
 		}
 	}
 }
@@ -3393,14 +3408,14 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 // writeLines writes each line's fragments into its runs' boxes, and returns the rectangles
 // the runs and spans took, and how many of each span's lines are past a line-clamp's last.
 func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32) ([]geom.Rect,
-	map[*box.Box]geom.Rect, map[*box.Box][]geom.Rect, map[*box.Box]int) {
+	map[*box.Box]geom.Rect, map[*box.Box][]spanLine, map[*box.Box]int) {
 	f := n.final
 	ellipsis := n.st.Ellipsis && n.st.Overflow.Width != style.Visible
 	runRects := make([]geom.Rect, len(c.runs))
 	seen := make([]bool, len(c.runs))
 	spanRects := make(map[*box.Box]geom.Rect)
 	spanSeen := make([]bool, len(c.spans))
-	spanLines := make(map[*box.Box][]geom.Rect)
+	spanLines := make(map[*box.Box][]spanLine)
 	hidden := make(map[*box.Box]int)
 	c.back = nil
 	c.lineBoxes = c.lineBoxes[:0]
@@ -3619,11 +3634,19 @@ func (t *tree) ellipsizeLine(n *node, c *inlineContent, pieces []piece, x, left,
 	return pieces, left + content - w.end(), false, true
 }
 
-// spanRects adds line l's part of each span to its border box: from its start edge (or the
+// spanLine is a span's part on a line: its border box there, and which of the span's left
+// and right edges it holds.
+type spanLine struct {
+	r    geom.Rect
+	ends box.Ends
+}
+
+// spanRects adds line l's parts of each span to its border box: from its start edge (or the
 // line's start) to its end edge (or the line's end), over its content area plus vertical
-// padding and border. The pieces are the line's before any ellipsis, as Chrome's boxes are.
+// padding and border, one part to each run of its pieces the line shows side by side once
+// bidi reorders it. The pieces are the line's before any ellipsis, as Chrome's boxes are.
 func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, x, perGap, y,
-	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]geom.Rect, hidden map[*box.Box]int) {
+	lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]spanLine, hidden map[*box.Box]int) {
 	at := make([]float32, len(pieces)+1)
 	walk := l.pen(c.unit, x)
 	for i, p := range pieces {
@@ -3639,49 +3662,72 @@ func (t *tree) spanRects(c *inlineContent, l line, pieces []piece, order []int, 
 			// a br's box is where its line ends, not the start of the next
 			continue
 		}
+		in := func(v int) bool { i := l.from + logical(order, v); return i >= lo && i <= hi }
 		first, last := -1, -1
 		for v := range pieces {
-			if i := l.from + logical(order, v); i >= lo && i <= hi {
+			if in(v) {
 				if first < 0 {
 					first = v
 				}
 				last = v
 			}
 		}
-		left, right := at[first], at[last+1]
-		if left == right && c.edgeAt(lo, true) && c.opensOnSpace(hi) {
+		if at[first] == at[last+1] && c.edgeAt(lo, true) && c.opensOnSpace(hi) {
 			// a start of no width, the space after it dropped at the line's end, is no box
 			continue
 		}
-		if p := pieces[first]; p.kind == edge && p.span == k && p.start {
-			left += sp.margin.l
+		from := -1
+		for v := first; v <= last; v++ {
+			if !in(v) {
+				continue
+			}
+			if from < 0 {
+				from = v
+			}
+			if v == last || !in(v+1) {
+				t.spanPart(c, sp, k, pieces, at, from, v, l, y, lb, rects, seen, lines, hidden)
+				from = -1
+			}
 		}
-		if p := pieces[last]; p.kind == edge && p.span == k && !p.start {
-			right -= sp.margin.r
-		}
-		m := t.metricsOf(c, sp.st)
-		over, under := m.Ascent, m.Descent
-		switch e := sp.st.TextBoxEdge; sp.st.TextBoxTrim {
-		case style.TrimStart:
-			over = overEdge(m, e)
-		case style.TrimEnd:
-			under = underEdge(m, e)
-		case style.TrimBoth:
-			over, under = overEdge(m, e), underEdge(m, e)
-		case style.TrimNone:
-		}
-		top := y + lb + sp.shift - over - sp.padding.t - sp.border.t
-		bottom := y + lb + sp.shift + under + sp.padding.b + sp.border.b
-		r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
-		if l.phantom {
-			r = geom.Rect{X: left, Y: y}
-		}
-		rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
-		seen[k] = true
-		lines[sp.box] = append(lines[sp.box], r)
-		if hidden != nil {
-			hidden[sp.box]++
-		}
+	}
+}
+
+// spanPart adds the part of span k shown by pieces first to last of line l to its box.
+func (t *tree) spanPart(c *inlineContent, sp *inlineSpan, k int, pieces []piece, at []float32, first, last int,
+	l line, y, lb float32, rects map[*box.Box]geom.Rect, seen []bool, lines map[*box.Box][]spanLine,
+	hidden map[*box.Box]int) {
+	left, right := at[first], at[last+1]
+	var ends box.Ends
+	if p := pieces[first]; p.kind == edge && p.span == k && p.start {
+		left += sp.margin.l
+		ends |= box.LeftEnd
+	}
+	if p := pieces[last]; p.kind == edge && p.span == k && !p.start {
+		right -= sp.margin.r
+		ends |= box.RightEnd
+	}
+	m := t.metricsOf(c, sp.st)
+	over, under := m.Ascent, m.Descent
+	switch e := sp.st.TextBoxEdge; sp.st.TextBoxTrim {
+	case style.TrimStart:
+		over = overEdge(m, e)
+	case style.TrimEnd:
+		under = underEdge(m, e)
+	case style.TrimBoth:
+		over, under = overEdge(m, e), underEdge(m, e)
+	case style.TrimNone:
+	}
+	top := y + lb + sp.shift - over - sp.padding.t - sp.border.t
+	bottom := y + lb + sp.shift + under + sp.padding.b + sp.border.b
+	r := geom.Rect{X: left, Y: top, W: max(right-left, 0), H: bottom - top}
+	if l.phantom {
+		r = geom.Rect{X: left, Y: y}
+	}
+	rects[sp.box] = unionRect(rects[sp.box], r, seen[k])
+	seen[k] = true
+	lines[sp.box] = append(lines[sp.box], spanLine{r, ends})
+	if hidden != nil {
+		hidden[sp.box]++
 	}
 }
 

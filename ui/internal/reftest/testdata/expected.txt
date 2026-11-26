@@ -353,12 +353,13 @@ css/CSS2/backgrounds/background-root-023.xht ref chrome
 css/CSS2/backgrounds/background-root-024.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-001.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-002.xht ref chrome
+css/CSS2/bidi-text/bidi-box-model-003.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-004.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-005.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-006.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-007.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-008.xht ref chrome
-css/CSS2/bidi-text/bidi-box-model-009.xht chrome
+css/CSS2/bidi-text/bidi-box-model-009.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-010.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-011.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-012.xht ref chrome
@@ -394,7 +395,7 @@ css/CSS2/bidi-text/bidi-box-model-045.xht ref chrome
 css/CSS2/bidi-text/bidi-breaking-001.xht ref
 css/CSS2/bidi-text/bidi-breaking-002.xht ref
 css/CSS2/bidi-text/bidi-breaking-003.xht ref
-css/CSS2/bidi-text/bidi-glyph-mirroring-001.xht chrome
+css/CSS2/bidi-text/bidi-glyph-mirroring-001.xht ref chrome
 css/CSS2/bidi-text/bidi-glyph-mirroring-002.xht chrome
 css/CSS2/bidi-text/bidi-inline-001.xht ref chrome
 css/CSS2/bidi-text/bidi-inline-002.xht ref chrome
@@ -419,21 +420,21 @@ css/CSS2/bidi-text/line-breaking-bidi-002.xht ref
 css/CSS2/bidi-text/line-breaking-bidi-003.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-001.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-002.xht chrome
-css/CSS2/bidi-text/unicode-bidi-003.xht chrome
-css/CSS2/bidi-text/unicode-bidi-004.xht chrome
+css/CSS2/bidi-text/unicode-bidi-003.xht ref chrome
+css/CSS2/bidi-text/unicode-bidi-004.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-001.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-002.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-003.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-004.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-005.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-006.xht ref chrome
-css/CSS2/bidi-text/unicode-bidi-applies-to-007.xht chrome
+css/CSS2/bidi-text/unicode-bidi-applies-to-007.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-008.xht ref chrome
-css/CSS2/bidi-text/unicode-bidi-applies-to-009.xht chrome
-css/CSS2/bidi-text/unicode-bidi-applies-to-012.xht chrome
+css/CSS2/bidi-text/unicode-bidi-applies-to-009.xht ref chrome
+css/CSS2/bidi-text/unicode-bidi-applies-to-012.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-013.xht ref chrome
 css/CSS2/bidi-text/unicode-bidi-applies-to-014.xht ref chrome
-css/CSS2/bidi-text/unicode-bidi-applies-to-015.xht chrome
+css/CSS2/bidi-text/unicode-bidi-applies-to-015.xht ref chrome
 css/CSS2/border-seams-001.xht ref chrome
 css/CSS2/borders/border-001.xht ref chrome
 css/CSS2/borders/border-003.xht ref chrome

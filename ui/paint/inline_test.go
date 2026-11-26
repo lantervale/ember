@@ -69,6 +69,21 @@ func TestASplitSpansSideBordersAreOnItsEnds(t *testing.T) {
 	}, sides, "top and bottom on every line, left on the first, right on the last")
 }
 
+func TestASplitSpansSideBordersAreWhereItsEndsSay(t *testing.T) {
+	b := split()
+	b.Ends = []box.Ends{box.RightEnd, box.LeftEnd}
+	var sides []geom.Rect
+	for _, o := range paintOne(b).of("rect") {
+		if o.Color == blue {
+			sides = append(sides, o.Rect)
+		}
+	}
+	assert.ElementsMatch(t, []geom.Rect{
+		{X: 50, Y: 10, W: 60, H: 2}, {X: 50, Y: 28, W: 60, H: 2}, {X: 108, Y: 10, W: 2, H: 20},
+		{X: 10, Y: 30, W: 40, H: 2}, {X: 10, Y: 30, W: 2, H: 20}, {X: 10, Y: 48, W: 40, H: 2},
+	}, sides, "right to left: its right edge on the first line, its left on the last")
+}
+
 func TestAnUnbrokenSpanPaintsLikeABox(t *testing.T) {
 	b := split()
 	b.Fragments = []geom.Rect{{W: 100, H: 40}}
