@@ -756,6 +756,9 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		switch {
 		case p.topLayer(c):
 			p.top = append(p.top, entry{b: c, at: ce.at})
+		case b.Kind == box.Viewport && c.Kind == box.Element:
+			// the root element makes the root stacking context, under its viewport
+			outer.positioned = append(outer.positioned, ce)
 		case c.Kind != box.Element:
 			own.flow = append(own.flow, ce)
 			p.collect(ce, own, outer)
