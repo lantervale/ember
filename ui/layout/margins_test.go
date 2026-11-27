@@ -24,3 +24,13 @@ func TestMarginsCollapsingThroughEveryChildLeaveTheTopOnce(t *testing.T) {
 	assert.Equal(t, float32(10), tr.Of[framed].Rect().H, "its border alone below them, as Chrome")
 	assert.Equal(t, float32(26), tr.Of[root].Rect().H)
 }
+
+func TestTheRootsAutoMarginsShareTheViewportsWidth(t *testing.T) {
+	root := el(dom.Div, func(st *style.Computed) {
+		st.Display = style.Block
+		st.Size.Width = style.Px(100)
+		st.Margin.Left, st.Margin.Right = style.Length{Kind: style.Auto}, style.Length{Kind: style.Auto}
+	})
+	tr := lay(root, 300)
+	assert.Equal(t, float32(100), tr.Of[root].Rect().X, "centred, as Chrome centres html")
+}

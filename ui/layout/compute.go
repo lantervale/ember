@@ -548,6 +548,7 @@ func (t *tree) inFlowRoot(n *node, avail spaces) (placed, []oofCandidate) {
 	})
 	padding := edges(st.Padding, parent.w)
 	gutter := scrollbarGutter(st)
+	margin.l, margin.r = rootAutoMargins(st, avail.w, out.size.w, margin)
 	location := point{margin.l, margin.t}
 	if st.Position == style.Relative {
 		inset := optionalEdges(st.Inset, none)
@@ -567,6 +568,23 @@ func (t *tree) inFlowRoot(n *node, avail spaces) (placed, []oofCandidate) {
 	}
 	n.unrounded = layout
 	return layout, out.oof
+}
+
+// rootAutoMargins are the root's left and right margins, its auto ones sharing what of
+// the viewport's width w its box leaves, as a block's in its container.
+func rootAutoMargins(st *style.Computed, w space, boxW float32, margin rect) (float32, float32) {
+	auto := optionalEdges(st.Margin, w.value())
+	if w.kind != definite || some(auto.l) && some(auto.r) {
+		return margin.l, margin.r
+	}
+	free := fmax(0, w.value()-boxW-or(auto.l, 0)-or(auto.r, 0))
+	switch {
+	case !some(auto.l) && !some(auto.r):
+		return free / 2, free / 2
+	case !some(auto.l):
+		return free, margin.r
+	}
+	return margin.l, free
 }
 
 func definiteMinMax(lo, hi float32) float32 {
