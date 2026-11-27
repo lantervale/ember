@@ -34,3 +34,17 @@ func TestTheRootsAutoMarginsShareTheViewportsWidth(t *testing.T) {
 	tr := lay(root, 300)
 	assert.Equal(t, float32(100), tr.Of[root].Rect().X, "centred, as Chrome centres html")
 }
+
+func TestAMaxHeightThatCutsTheContentKeepsItsLastMarginIn(t *testing.T) {
+	last := func(h float32) *dom.Node {
+		return el(dom.Div, func(st *style.Computed) {
+			st.Display, st.Size.Height, st.Margin.Bottom = style.Block, style.Px(h), style.Px(10)
+		})
+	}
+	held := func(st *style.Computed) { st.Display, st.MaxSize.Height = style.Block, style.Px(20) }
+	cut, fits := el(dom.Div, held, last(30)), el(dom.Div, held, last(15))
+	after, next := el(dom.Div, block), el(dom.Div, block)
+	tr := lay(el(dom.Div, func(st *style.Computed) { st.Display, st.FlowRoot = style.Block, true }, cut, after, fits, next), 200)
+	assert.Equal(t, float32(20), tr.Of[after].Rect().Y, "the cut content's margin stays inside, as Chrome's")
+	assert.Equal(t, float32(20+15+10), tr.Of[next].Rect().Y, "content the max-height doesn't cut lets it out")
+}

@@ -165,7 +165,9 @@ func (t *tree) blockInner(n *node, in input, ctx *blockContext) output {
 		pbSize.h)
 	final := size{outerW, outerH}
 	constrainedByMin := some(minSize.h) && minSize.h > 0 && minSize.h >= outerH
-	ownBottomCollapse := ownCollapse[1] && !constrainedByMin
+	// a max-height that cuts the content short keeps its last margin in, as Chrome's
+	constrainedByMax := some(maxSize.h) && sizedHeight(st, res.height, adj.h, in.parent.h) > maxSize.h
+	ownBottomCollapse := ownCollapse[1] && !constrainedByMin && !constrainedByMax
 	alignContent := contentAlign(n)
 	if alignContent != style.AlignNormal {
 		innerH := outerH - rInset.vertical()
