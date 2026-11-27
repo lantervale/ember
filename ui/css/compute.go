@@ -2967,10 +2967,17 @@ var (
 	monospaceSizes = [...]float32{9, 10, 12, 13, 16, 20, 26, 39}
 )
 
-// fontRelative are the units of lengths that measure the parent's font.
-//
-//nolint:gochecknoglobals // a fixed set
-var fontRelative = map[string]bool{"em": true, "ex": true, "ch": true, "ic": true, "cap": true, "lh": true}
+// fontRelative reports whether a length in unit measures the parent's font.
+func fontRelative(unit string) bool {
+	switch u, ok := relativeUnits[unit]; {
+	case unit == "em":
+		return true
+	case !ok:
+		return false
+	default:
+		return u == unitEx || u == unitCh || u == unitCap || u == unitIc || u == unitLh
+	}
+}
 
 func (x *ctx) fontSize(v []Component) float32 {
 	c := v[0]
@@ -2988,11 +2995,11 @@ func (x *ctx) fontSize(v []Component) float32 {
 		default:
 			f.Absolute = false
 			i := slices.Index(fontKeywords, w)
-			f.Keyword = int8(i + 1)
+			f.Keyword = int8(i + 1) //nolint:gosec // one of eight
 			return x.keywordSize(f.Keyword, x.monospace(f))
 		}
 	}
-	f.Absolute = p.Absolute || c.Kind == Dimension && !fontRelative[strings.ToLower(c.Unit)]
+	f.Absolute = p.Absolute || c.Kind == Dimension && !fontRelative(strings.ToLower(c.Unit))
 	l := x.length(c)
 	return l.Px + l.Percent*x.parent.Font.Size/100
 }
