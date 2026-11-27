@@ -142,6 +142,22 @@ func TestParseSelectorsErrors(t *testing.T) {
 	}
 }
 
+func TestSelectorNamesFoldOnlyASCIICase(t *testing.T) {
+	for _, src := range []string{"p:FiRSt-cHIlD", ":LinK", "P", ":lAnG(en)", "p::BeFoRe"} {
+		if _, err := ParseSelectors(src); err != nil {
+			t.Errorf("%q: %v", src, err)
+		}
+	}
+	for _, src := range []string{"p:fİrst-child", "p:fırst-child", ":linK"} {
+		if _, err := ParseSelectors(src); err == nil {
+			t.Errorf("%q: a letter outside ASCII folds to none of a name's", src)
+		}
+	}
+	if langMatches("kl", "Kl") || !langMatches("KL", "kl") {
+		t.Error(":lang() folds ASCII letters alone")
+	}
+}
+
 func TestNthChild(t *testing.T) {
 	var rows []*dom.Node
 	body := el(dom.Tbody, "")

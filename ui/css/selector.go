@@ -136,7 +136,7 @@ func (a Attr) matches(v string, fold bool) bool {
 	}
 	want := a.Value
 	if fold {
-		v, want = strings.ToLower(v), strings.ToLower(want)
+		v, want = asciiLower(v), asciiLower(want)
 	}
 	switch a.Op {
 	case '~':
@@ -448,7 +448,7 @@ func required(e *dom.Node) bool {
 	}
 	if e.Tag() == dom.Input {
 		kind, _ := e.Attr("type")
-		return !slices.Contains(unrequired, strings.ToLower(kind))
+		return !slices.Contains(unrequired, asciiLower(kind))
 	}
 	return e.Tag() == dom.Select || e.Tag() == dom.Textarea
 }
@@ -469,7 +469,7 @@ const (
 func directionOf(e *dom.Node) string {
 	for p := e; p != nil; p = p.Parent() {
 		v, _ := p.Attr("dir")
-		if v = strings.ToLower(v); v == dirLTR || v == dirRTL {
+		if v = asciiLower(v); v == dirLTR || v == dirRTL {
 			return v
 		}
 		if dir := autoDirection(p); dir != "" {
@@ -483,7 +483,7 @@ func directionOf(e *dom.Node) string {
 // dir="auto" or a bdi without a valid dir, "" for another element.
 func autoDirection(e *dom.Node) string {
 	v, _ := e.Attr("dir")
-	if v = strings.ToLower(v); v != kwAuto && (e.Tag() != dom.Bdi || v == dirLTR || v == dirRTL) {
+	if v = asciiLower(v); v != kwAuto && (e.Tag() != dom.Bdi || v == dirLTR || v == dirRTL) {
 		return ""
 	}
 	if dir := textDirection(e); dir != "" {
@@ -510,7 +510,7 @@ func textDirection(e *dom.Node) string {
 			continue
 		}
 		v, _ := c.Attr("dir")
-		if v = strings.ToLower(v); c.Tag() == dom.Bdi || c.Tag() == dom.Textarea || c.Tag() == dom.Input ||
+		if v = asciiLower(v); c.Tag() == dom.Bdi || c.Tag() == dom.Textarea || c.Tag() == dom.Input ||
 			v == dirLTR || v == dirRTL || v == kwAuto {
 			continue
 		}
@@ -552,7 +552,7 @@ func language(e *dom.Node) string {
 // was given, as Chrome has it: the range or it followed by a hyphen,
 // whatever the case, both well formed, and a wildcard matching nothing.
 func langMatches(tag, rng string) bool {
-	if !wellFormed(tag) || !wellFormed(rng) || len(tag) < len(rng) || !strings.EqualFold(tag[:len(rng)], rng) {
+	if !wellFormed(tag) || !wellFormed(rng) || len(tag) < len(rng) || !asciiEqualFold(tag[:len(rng)], rng) {
 		return false
 	}
 	return len(tag) == len(rng) || tag[len(rng)] == '-'
@@ -581,14 +581,14 @@ func wellFormed(s string) bool {
 func editable(e *dom.Node) bool {
 	if e.Tag() == dom.Input {
 		kind, _ := e.Attr("type")
-		return !slices.Contains(uneditable, strings.ToLower(kind)) && usable(e)
+		return !slices.Contains(uneditable, asciiLower(kind)) && usable(e)
 	}
 	if e.Tag() == dom.Textarea {
 		return usable(e)
 	}
 	for p := e; p != nil; p = p.Parent() {
 		if v, ok := p.Attr("contenteditable"); ok {
-			switch strings.ToLower(v) {
+			switch asciiLower(v) {
 			case "", "true", "plaintext-only":
 				return true
 			case "false":
@@ -654,7 +654,7 @@ func placeAmong(e *dom.Node, dir int, sameType bool) int {
 
 // parseNth reads :nth-child()'s argument, odd, even or An+B, as a and b.
 func parseNth(src string) (int, int, bool) {
-	s := strings.ToLower(strings.Join(strings.Fields(src), ""))
+	s := asciiLower(strings.Join(strings.Fields(src), ""))
 	switch s {
 	case "odd":
 		return 2, 1, true
@@ -969,9 +969,9 @@ func parseCompound(cs []Component) (Compound, int, *SelectorError) {
 	if i < len(cs) {
 		switch t := cs[i]; {
 		case t.Kind == Ident:
-			tag, ok := dom.TagNamed(strings.ToLower(t.Text))
+			tag, ok := dom.TagNamed(asciiLower(t.Text))
 			if !ok {
-				unknown = selErr(t, "ui has no <%s> element", strings.ToLower(t.Text))
+				unknown = selErr(t, "ui has no <%s> element", asciiLower(t.Text))
 				unknown.unmatched = true
 			}
 			c.Tag = tag
@@ -1030,7 +1030,7 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 	switch t.Kind {
 	case Colon:
 		if len(cs) > 2 && (cs[2].Kind == Ident || cs[2].Kind == Function) {
-			name := strings.ToLower(cs[2].Text)
+			name := asciiLower(cs[2].Text)
 			if _, ok := pseudoElements[name]; ok {
 				return pseudo{}, 0, selErr(t, "::%s must end its selector: nothing may follow a pseudo-element", name)
 			}
@@ -1050,7 +1050,7 @@ func parsePseudo(cs []Component) (pseudo, int, *SelectorError) {
 
 // pseudoClass reads the pseudo-class a name after ':' is.
 func pseudoClass(t Component) (pseudo, int, *SelectorError) {
-	name := strings.ToLower(t.Text)
+	name := asciiLower(t.Text)
 	if pseudoElements[name].legacy {
 		return pseudo{}, 0, selErr(t, ":%s must end its selector: nothing may follow a pseudo-element", name)
 	}
@@ -1102,7 +1102,7 @@ func pseudoClass(t Component) (pseudo, int, *SelectorError) {
 
 // pseudoFunction reads the pseudo-class a function after ':' is.
 func pseudoFunction(t Component) (pseudo, int, *SelectorError) {
-	name := strings.ToLower(t.Text)
+	name := asciiLower(t.Text)
 	if kind, counts := nthKinds[name]; counts {
 		a, b, ok := parseNth(join(t.Args))
 		if !ok {
@@ -1125,7 +1125,7 @@ func pseudoFunction(t Component) (pseudo, int, *SelectorError) {
 		return pseudo{}, 0, selErr(t, ":lang() takes one language range, as an identifier")
 	case "dir":
 		if v := trim(t.Args); len(v) == 1 && v[0].Kind == Ident {
-			return pseudo{kind: pseudoDir, dir: strings.ToLower(v[0].Text)}, 2, nil
+			return pseudo{kind: pseudoDir, dir: asciiLower(v[0].Text)}, 2, nil
 		}
 		return pseudo{}, 0, selErr(t, ":dir() takes ltr or rtl")
 	case "not":
@@ -1265,7 +1265,7 @@ func parseAttr(b Component) (Attr, *SelectorError) {
 	if len(v) == 0 || v[0].Kind != Ident {
 		return Attr{}, selErr(b, "expected an attribute name in [ ]")
 	}
-	a := Attr{Name: strings.ToLower(v[0].Text), Op: '='}
+	a := Attr{Name: asciiLower(v[0].Text), Op: '='}
 	a.caseless = caselessAttrs[a.Name]
 	if len(v) == 1 {
 		return a, nil
@@ -1548,3 +1548,18 @@ func (s Selector) hasFrom(outer []*Compound, apart, beside bool,
 		}
 	}
 }
+
+// asciiLower is s with its ASCII letters lowered, as CSS folds the case of
+// names: no other letter, such as the Kelvin sign, stands for one of them.
+func asciiLower(s string) string {
+	return strings.Map(func(r rune) rune {
+		if 'A' <= r && r <= 'Z' {
+			return r + 'a' - 'A'
+		}
+		return r
+	}, s)
+}
+
+// asciiEqualFold reports whether a and b are equal but for the case of
+// their ASCII letters.
+func asciiEqualFold(a, b string) bool { return asciiLower(a) == asciiLower(b) }
