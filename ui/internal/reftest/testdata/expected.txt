@@ -5362,7 +5362,9 @@ css/CSS2/text/text-indent-applies-to-013.xht ref chrome
 css/CSS2/text/text-indent-applies-to-014.xht ref chrome
 css/CSS2/text/text-indent-applies-to-015.xht ref chrome
 css/CSS2/text/text-indent-inherited-001.xht ref chrome
+css/CSS2/text/text-indent-intrinsic-001.xht ref chrome
 css/CSS2/text/text-indent-intrinsic-002.xht ref chrome
+css/CSS2/text/text-indent-intrinsic-003.xht ref chrome
 css/CSS2/text/text-indent-intrinsic-004.xht ref chrome
 css/CSS2/text/text-indent-on-blank-line-rtl-left-align.html ref chrome
 css/CSS2/text/text-indent-overflow-001.xht ref chrome
