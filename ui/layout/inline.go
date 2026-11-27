@@ -2219,6 +2219,7 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 	for i < len(c.pieces) {
 		p := c.pieces[i]
 		if p.kind == newline {
+			b.keepPreserved(i)
 			end := b.closingAfter(i)
 			b.cur.forced = true
 			b.finish(end)
@@ -2389,6 +2390,7 @@ func (b *breaker) breakInside(i, end int, width float32) (int, bool) {
 // close ends the breaking: the line left open joins the lines when it holds something,
 // more than the ends of the spans a forced break ended the line before in.
 func (b *breaker) close() []line {
+	b.keepPreserved(len(b.c.pieces))
 	trails := b.trails()
 	if !b.empty && !trails || len(b.out) == 0 && b.cur.to > b.cur.from {
 		b.cur.width = b.kept.end()
@@ -2404,6 +2406,30 @@ func (b *breaker) close() []line {
 		b.out = []line{}
 	}
 	return b.out
+}
+
+// keepPreserved puts the spaces pending before piece end, a newline or the content's
+// end, on the open line where they neither collapse nor wrap (white-space: pre), as
+// Chrome's line holds them, a line of its own after a forced break.
+func (b *breaker) keepPreserved(end int) {
+	c := b.c
+	if b.pending < 0 {
+		return
+	}
+	for _, p := range c.pieces[b.pending:end] {
+		if p.kind != gap && p.kind != tab {
+			return
+		}
+		if ws := c.runs[p.run].st.WhiteSpace; collapses(ws) || wraps(ws) {
+			return
+		}
+	}
+	for _, p := range c.pieces[b.pending:end] {
+		b.at.step(p, 0)
+	}
+	b.kept = b.at
+	b.cur.to, b.pending = end, -1
+	b.empty, b.blank = false, false
 }
 
 // trails reports an open line after a forced break that holds only span edges of no
