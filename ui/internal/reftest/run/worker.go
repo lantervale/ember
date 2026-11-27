@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/lantervale/ember"
 	"github.com/lantervale/ember/color"
@@ -15,12 +16,14 @@ import (
 	"github.com/lantervale/ember/world"
 )
 
-// Frames a page is given at least, and at most, before it is captured:
-// it is captured once nothing is loading for settled frames in a row.
+// Frames a page is given at least before it is captured: it is captured
+// once nothing is loading for settled frames in a row, or once it has
+// loaded for longest, by the clock rather than by frames, which run
+// faster than a page loads on a busy machine.
 const (
 	firstFrames = 6
-	lastFrames  = 600
 	settled     = 5
+	longest     = 10 * time.Second
 )
 
 // drawer draws one page after another in its window.
@@ -32,6 +35,7 @@ type drawer struct {
 	doc      *ui.Document
 	fetches  *reftest.Fetches
 	job      [2]string
+	shown    time.Time
 	frames   int
 	quiet    int
 	captured bool
@@ -73,7 +77,7 @@ func (d *drawer) step(f world.Frame) {
 		d.reply(reftest.Drawn, "")
 		f.World.RemoveEntity(d.doc)
 		d.doc = nil
-	case d.frames >= lastFrames || d.frames >= firstFrames && d.quiet >= settled:
+	case d.frames >= firstFrames && (d.quiet >= settled || time.Since(d.shown) >= longest):
 		d.win.Capture(d.job[1])
 		d.captured = true
 	case d.doc.FontsLoading() == 0 && d.doc.SheetsLoading() == 0 && d.doc.ImagesLoading() == 0 && !d.fetches.Busy():
@@ -101,7 +105,7 @@ func (d *drawer) next(f world.Frame) {
 		default:
 			d.fetches = &reftest.Fetches{}
 			d.doc = page.Document(d.root, d.fetches)
-			d.frames, d.quiet, d.captured = 0, 0, false
+			d.frames, d.quiet, d.captured, d.shown = 0, 0, false, time.Now()
 			d.win.Add(d.doc)
 		}
 	}

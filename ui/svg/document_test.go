@@ -21,8 +21,9 @@ const bare = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="
 
 // samples are a sheet and pictures of each kind: sized.svg asks for
 // 200×100, shaped.svg has a view box of 48×24 alone, plain.svg asks for
-// 60×40 with no view box, bare.svg for nothing, and effect.svg and
-// object.svg use what is not drawn.
+// 60×40 with no view box, squashed.svg for 50×25 over a square view box,
+// bare.svg for nothing, and effect.svg and object.svg use what is not
+// drawn.
 func samples(t *testing.T, css string) fstest.MapFS {
 	t.Helper()
 	files := fstest.MapFS{
@@ -30,6 +31,8 @@ func samples(t *testing.T, css string) fstest.MapFS {
 		"effect.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">` +
 			`<rect width="24" height="24" vector-effect="non-rotation"/></svg>`)},
 		"object.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><foreignObject/></svg>`)},
+		"squashed.svg": {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="50" height="25" ` +
+			`viewBox="0 0 100 100" preserveAspectRatio="none"><rect width="100" height="100"/></svg>`)},
 	}
 	for name, file := range map[string]string{
 		"sized.svg": "own-fill-rules.svg", "shaped.svg": "own-joins.svg", "plain.svg": "own-no-viewbox.svg",
