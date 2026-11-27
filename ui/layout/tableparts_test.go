@@ -109,6 +109,16 @@ func TestAnInlineTableStandsInItsLine(t *testing.T) {
 	assert.Equal(t, geom.Vec2{X: 20, Y: 10}, tr.Of[tb].Size)
 }
 
+func TestAnInlineTableOfEmptyBaselineCellsStandsOnTheirBottom(t *testing.T) {
+	empty := el(dom.Td, func(st *style.Computed) { st.VerticalAlign = style.AlignBaselineText })
+	tb := el(dom.Span, func(st *style.Computed) {
+		st.Display, st.Table = style.InlineBlock, true
+		st.Size.Height = style.Px(100)
+	}, row(empty))
+	tr := lay(el(dom.Div, block, text("H"), tb), 400)
+	assert.Equal(t, float32(0), at(tr.Of[tb]).Y, "its baseline the cell's bottom, 100 down")
+}
+
 func TestCellsInAnInlineStandInAnAnonymousInlineTable(t *testing.T) {
 	b, c := el(dom.Span, part(style.TableCell), text("H")), el(dom.Span, part(style.TableCell), text("HH"))
 	d := el(dom.Span, nil, text("H"))
