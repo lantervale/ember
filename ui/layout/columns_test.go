@@ -376,7 +376,7 @@ func TestARetainedLayoutMovesKeptTextToItsNewColumn(t *testing.T) {
 
 func TestASpannerHoldsAPositionedBoxWhereItsLineHasIt(t *testing.T) {
 	abs := el(dom.Span, func(st *style.Computed) {
-		st.Display, st.Position = style.Block, style.Absolute
+		st.Display, st.Position, st.StaticInline = style.Block, style.Absolute, true
 		st.Size.Width, st.Size.Height = style.Px(10), style.Px(10)
 	})
 	s := el(dom.Div, func(st *style.Computed) { st.Display, st.ColumnSpanAll = style.Block, true },

@@ -31,10 +31,17 @@ func absBox(edit func(*style.Computed)) *dom.Node {
 }
 
 func TestAnOutOfFlowBoxInASpanStartsWhereItStandsInTheLine(t *testing.T) {
-	abs := absBox(nil)
+	abs := absBox(func(st *style.Computed) { st.StaticInline = true })
 	p := el(dom.P, width(200), text("HHH "), el(dom.Span, nil, text("HH"), abs, text("H")))
 	tr := Layout(el(dom.Div, block, p), geom.V2(400, 300), ahemFonts{})
 	assert.Equal(t, onPage(tr.Of[p]).Add(geom.V2(60, 0)), onPage(tr.Of[abs]), "after HHH, the space and HH")
+}
+
+func TestABlockLevelOutOfFlowBoxInASpanStartsTheNextLine(t *testing.T) {
+	abs := absBox(nil)
+	p := el(dom.P, width(200), text("HHH "), el(dom.Span, nil, text("HH"), abs, text("H")))
+	tr := Layout(el(dom.Div, block, p), geom.V2(400, 300), ahemFonts{})
+	assert.Equal(t, onPage(tr.Of[p]).Add(geom.V2(0, 10)), onPage(tr.Of[abs]), "below the line, at its start, as Chrome's")
 }
 
 func TestAPositionedSpanIsTheContainingBlockOfWhatItHolds(t *testing.T) {
@@ -51,4 +58,14 @@ func TestAPositionedSpanIsTheContainingBlockOfWhatItHolds(t *testing.T) {
 	tr := Layout(el(dom.Div, block, outer), geom.V2(400, 300), ahemFonts{})
 	p := onPage(tr.Of[outer.Children()[0]])
 	assert.Equal(t, p.Add(geom.V2(40+2+30-5, 10-5)), onPage(tr.Of[abs]), "the span's padding box, not the outer div")
+}
+
+func TestABlockLevelOutOfFlowBoxStartsARightToLeftLineAtItsRight(t *testing.T) {
+	rtl := func(st *style.Computed) { width(200)(st); st.Dir = style.RTL }
+	first, after := absBox(nil), absBox(nil)
+	a := el(dom.P, rtl, first, text("HHH"))
+	b := el(dom.P, rtl, text("HHH"), after)
+	tr := Layout(el(dom.Div, block, a, b), geom.V2(400, 300), ahemFonts{})
+	assert.Equal(t, onPage(tr.Of[a]).Add(geom.V2(195, 0)), onPage(tr.Of[first]), "at the line's right, on it")
+	assert.Equal(t, onPage(tr.Of[b]).Add(geom.V2(195, 10)), onPage(tr.Of[after]), "at the right, below the text")
 }

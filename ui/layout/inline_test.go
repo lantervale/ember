@@ -425,8 +425,8 @@ func laidNodes(root *dom.Node, w float32) map[*dom.Node]*node {
 }
 
 func TestOutOfFlowInsideASpanIsAnchoredInItsLine(t *testing.T) {
-	abs := el(dom.Div, func(st *style.Computed) {
-		st.Display = style.Block
+	abs := el(dom.Span, func(st *style.Computed) {
+		st.Display, st.StaticInline = style.Block, true
 		st.Position = style.Absolute
 		st.Size = style.Size[style.Length]{Width: style.Px(5), Height: style.Px(5)}
 	})
@@ -434,8 +434,8 @@ func TestOutOfFlowInsideASpanIsAnchoredInItsLine(t *testing.T) {
 		st.Position = style.Relative
 		st.Padding.Left = style.Px(2)
 	}, text("HH"), abs, text("H"))
-	plain := el(dom.Div, func(st *style.Computed) {
-		st.Display = style.Block
+	plain := el(dom.Span, func(st *style.Computed) {
+		st.Display, st.StaticInline = style.Block, true
 		st.Position = style.Absolute
 	})
 	still := el(dom.Span, nil, text("H"), plain)
