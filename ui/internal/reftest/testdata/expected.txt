@@ -5618,6 +5618,15 @@ css/CSS2/visudet/line-height-202.html ref chrome
 css/CSS2/visudet/line-height-203.html ref chrome
 css/CSS2/visudet/line-height-205.html ref chrome
 css/CSS2/visudet/line-height-206.html ref chrome
+css/CSS2/visudet/replaced-elements-all-auto.html ref
+css/CSS2/visudet/replaced-elements-height-20.html ref
+css/CSS2/visudet/replaced-elements-max-height-20.html ref
+css/CSS2/visudet/replaced-elements-max-width-40.html ref
+css/CSS2/visudet/replaced-elements-min-height-20.html ref
+css/CSS2/visudet/replaced-elements-min-height-40.html ref
+css/CSS2/visudet/replaced-elements-min-width-40.html ref
+css/CSS2/visudet/replaced-elements-min-width-80.html ref
+css/CSS2/visudet/replaced-elements-width-40.html ref
 css/CSS2/visufx/clip-004.xht ref chrome
 css/CSS2/visufx/clip-005.xht ref chrome
 css/CSS2/visufx/clip-006.xht ref chrome
