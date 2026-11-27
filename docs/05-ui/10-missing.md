@@ -7,7 +7,7 @@ Every table reads the same way: **Missing** is what a browser does, **Today** wh
 | Section | Gaps |
 |---|---|
 | [Text](#text) | 47 |
-| [Controls, scrollbars and generated content](#controls-scrollbars-and-generated-content) | 15 |
+| [Controls, scrollbars and generated content](#controls-scrollbars-and-generated-content) | 16 |
 | [Layout](#layout) | 29 |
 | [Backgrounds and borders](#backgrounds-and-borders) | 5 |
 | [Styles](#styles) | 88 |
@@ -101,6 +101,7 @@ Selects, fields, meters, scrollbars, lists and counters.
 
 | Missing | Today |
 |---|---|
+| the pickers of `input` types `color`, `date`, `datetime-local`, `month`, `time` and `week`, and a `file` input's chooser | a plain one-line text field, as an unknown type is |
 | a space typed while finding a select's option, and typing in an open select's list | the space passed over (it opens a dropdown, turns a listbox's option on or off), the open list's highlight moved as a closed select's choice; not compared: Chrome on macOS shows the list as a native menu, and its rule for a space amid type-ahead was not measured ([decision 0206](../99-decisions/0206-a-selects-type-ahead-and-a-listboxs-autoscroll-follow-chromes.md)) |
 | an empty listbox's rows | as tall as ui's line of the font and a point, a point more than Chrome's for Arial at 13.33px |
 | a control's 13.33px Arial under `ui.BrowserSheets()` (a bare `select` dropdown's or a text field's height, a bold select's text) | drawn and measured in Go, ember shipping no Arial and `ui.SystemFonts()` not waited for: Go's normal line is 16 points where Chrome's Arial's is 15, so a bare dropdown or a text field is a point taller than Chrome's, and Go Bold's "Wand" 36.3 points wide where Arial Bold's is 35.8; the listbox geometry test sets its dropdowns' height and names its bold option "Staff" to step round it |
