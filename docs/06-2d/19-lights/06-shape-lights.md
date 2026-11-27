@@ -1,5 +1,7 @@
 # Shape lights and Emissive
 
+A shape light glows from a rectangle, circle, capsule, line or polygon, such as a neon tube or a lava pool. `Emissive` makes a sprite glow onto what is round it.
+
 ![The hero walking past a glowing rune to a lava pool that warms the grass, a neon tube and a crystal glowing behind](shape.gif "ember · shape lights")
 
 ```go

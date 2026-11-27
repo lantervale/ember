@@ -1,5 +1,7 @@
 # Light
 
+`twod/light` lights a 2D scene: layers marked lit are dark but for an ambient level and the lights that reach them, and what blocks light casts shadows. The pages below go one kind of light or option at a time.
+
 ![The hero walking between pillars at night, a flickering torch in his hand, the shadows swinging round him](point.gif "ember · light")
 
 ![Ambient, plus a light, plus shadows, plus an unlit crate: the four parts of a lit picture](parts.png "ember · light")

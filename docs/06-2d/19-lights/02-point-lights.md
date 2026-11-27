@@ -1,5 +1,7 @@
 # Point lights
 
+A point light shines all round a spot, out to its radius, such as a torch or a lamp.
+
 ![The hero walking between pillars at night, a flickering torch in his hand, the shadows swinging round him](point.gif "ember · point lights")
 
 ```go

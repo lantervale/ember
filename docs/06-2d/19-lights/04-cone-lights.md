@@ -1,5 +1,7 @@
 # Cone lights
 
+A cone light shines one way, in a spread either side of its angle, such as a flashlight.
+
 ![A flashlight's cone sweeping round the hero, the trees and pillars throwing shadows out of it](cone.gif "ember · cone lights")
 
 ```go
