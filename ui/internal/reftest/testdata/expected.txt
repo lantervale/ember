@@ -199,6 +199,9 @@ css/CSS2/backgrounds/background-image-transparency-001.xht ref chrome
 css/CSS2/backgrounds/background-intrinsic-001.xht ref
 css/CSS2/backgrounds/background-intrinsic-002.xht ref
 css/CSS2/backgrounds/background-intrinsic-003.xht ref
+css/CSS2/backgrounds/background-intrinsic-004.xht chrome
+css/CSS2/backgrounds/background-intrinsic-005.xht chrome
+css/CSS2/backgrounds/background-intrinsic-006.xht chrome
 css/CSS2/backgrounds/background-intrinsic-007.xht ref
 css/CSS2/backgrounds/background-intrinsic-008.xht ref
 css/CSS2/backgrounds/background-intrinsic-009.xht ref
@@ -1451,6 +1454,7 @@ css/CSS2/floats-clear/floats-clear-multicol-003.html ref chrome
 css/CSS2/floats-clear/floats-clear-multicol-balancing-000.html ref chrome
 css/CSS2/floats-clear/floats-clear-multicol-balancing-001.html ref chrome
 css/CSS2/floats-clear/floats-clear-multicol-balancing-002.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-balancing-003.html chrome
 css/CSS2/floats-clear/margin-collapse-018.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-023.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-024.xht ref chrome
@@ -3823,6 +3827,7 @@ css/CSS2/positioning/absolute-replaced-width-071.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-076.xht ref chrome
 css/CSS2/positioning/abspos-001.xht ref chrome
 css/CSS2/positioning/abspos-002.xht ref chrome
+css/CSS2/positioning/abspos-007.xht chrome
 css/CSS2/positioning/abspos-008.xht ref chrome
 css/CSS2/positioning/abspos-009.xht ref chrome
 css/CSS2/positioning/abspos-011.xht ref chrome
@@ -5162,6 +5167,7 @@ css/CSS2/tables/table-anonymous-objects-197.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-198.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-199.xht chrome
 css/CSS2/tables/table-anonymous-objects-200.xht chrome
+css/CSS2/tables/table-anonymous-objects-211.xht chrome
 css/CSS2/tables/table-anonymous-objects-212.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-213.xht ref chrome
 css/CSS2/tables/table-backgrounds-bc-cell-001.xht ref chrome
