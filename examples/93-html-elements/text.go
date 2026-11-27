@@ -361,7 +361,7 @@ func data(*ui.Document) *ui.Node {
 	)
 }
 
-// font is the old font element, its attributes styling nothing.
+// font is the old font element, its attributes styling it as Chrome's.
 func font(*ui.Document) *ui.Node {
 	return ui.P(
 		ui.Text("Gold: "),

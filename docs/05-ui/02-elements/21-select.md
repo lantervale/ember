@@ -52,7 +52,13 @@ With `multiple`, or a `size` above 1, the select is a listbox, as in a browser: 
 | `doc.Values(n)` | what a form submits: each selected, enabled option's value |
 | `doc.Selected(n)`, `doc.Value(n)` | the first selected, as `selectedIndex` and `value` |
 
-A run passes over disabled options, and a group's label takes no press. `required` holds once an option is selected. Each change fires `ui.Edited` then `ui.Changed` (`OnInput`, `OnChange`), once a press lets go. Selected rows are grey, light blue while the listbox has the focus (`select:-ember-listbox option:checked` in the default sheet); under forced colours `Highlight` under `HighlightText`, a disabled one's `GrayText`. Typing fires a change alone for each option found until a press or a key has moved the listbox, as Chrome's. Automation's `select` takes a list of options, which it selects alone, and a `multiple` listbox's value is the list of those selected.
+A run passes over disabled options, and a group's label takes no press.
+
+- `required` holds once an option is selected.
+- Each change fires `ui.Edited` then `ui.Changed` (`OnInput`, `OnChange`), once a press lets go.
+- Selected rows are grey, light blue while the listbox has the focus (`select:-ember-listbox option:checked` in the default sheet); under forced colours `Highlight` under `HighlightText`, a disabled one's `GrayText`.
+- Typing fires a change alone for each option found until a press or a key has moved the listbox, as Chrome's.
+- Automation's `select` takes a list of options, which it selects alone, and a `multiple` listbox's value is the list of those selected.
 
 ```
 go run ./examples/93-html-elements -element select
