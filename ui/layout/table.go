@@ -578,6 +578,13 @@ func (t *tree) rowWidths(r *node) *tableRow {
 				w += edges(c.st.Padding, 0).add(c.borders()).horizontal()
 			}
 			lo, hi = max(lo, w), max(lo, w)
+			if most := resolve(c.st.MaxSize.Width, none); some(most) {
+				// a max-width holds the width the cell asks for, as Chrome's
+				if contentBox(c.st) {
+					most += edges(c.st.Padding, 0).add(c.borders()).horizontal()
+				}
+				lo, hi = min(lo, most), min(hi, most)
+			}
 			tr.fixed[i] = true
 		} else if wl := c.st.Size.Width; wl.Kind == style.Fixed && wl.Px == 0 && wl.Percent > 0 {
 			tr.percent[i] = wl.Percent
@@ -1352,6 +1359,7 @@ func firstRowWidths(cells []slot, fixedW []fixedColumn, content float32, inner f
 		if !some(cw) {
 			continue
 		}
+		cw = mClamp(cw, resolve(c.cell.st.MinSize.Width, content), resolve(c.cell.st.MaxSize.Width, content))
 		if contentBox(c.cell.st) {
 			cw += edges(c.cell.st.Padding, content).add(c.cell.borders()).horizontal()
 		}

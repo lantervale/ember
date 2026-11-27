@@ -3441,6 +3441,7 @@ css/CSS2/normal-flow/max-width-applies-to-003.xht ref chrome
 css/CSS2/normal-flow/max-width-applies-to-004.xht ref chrome
 css/CSS2/normal-flow/max-width-applies-to-005.xht ref chrome
 css/CSS2/normal-flow/max-width-applies-to-006.xht ref chrome
+css/CSS2/normal-flow/max-width-applies-to-007.xht ref chrome
 css/CSS2/normal-flow/max-width-applies-to-008.xht ref chrome
 css/CSS2/normal-flow/max-width-applies-to-009.xht ref chrome
 css/CSS2/normal-flow/max-width-applies-to-012.xht ref chrome
