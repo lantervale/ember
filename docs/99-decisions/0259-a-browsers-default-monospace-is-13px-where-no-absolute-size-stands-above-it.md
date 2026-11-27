@@ -1,6 +1,6 @@
 # 0259. A browser's default monospace is 13px where no absolute size stands above it
 
-- Status: Accepted
+- Status: Superseded by [0263](0263-the-reftests-chrome-sizes-its-default-monospace-and-draws-it-in-go-mono.md)
 - Date: 2026-11-27
 - Area: rendering
 - Owner: engine
