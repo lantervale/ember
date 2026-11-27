@@ -1411,6 +1411,13 @@ css/CSS2/floats-clear/floats-153.xht ref chrome
 css/CSS2/floats-clear/floats-154.xht ref chrome
 css/CSS2/floats-clear/floats-bfc-001.xht ref chrome
 css/CSS2/floats-clear/floats-bfc-002.xht ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-000.html ref
+css/CSS2/floats-clear/floats-clear-multicol-001.html ref
+css/CSS2/floats-clear/floats-clear-multicol-002.html ref
+css/CSS2/floats-clear/floats-clear-multicol-003.html ref
+css/CSS2/floats-clear/floats-clear-multicol-balancing-000.html ref
+css/CSS2/floats-clear/floats-clear-multicol-balancing-001.html ref
+css/CSS2/floats-clear/floats-clear-multicol-balancing-002.html ref
 css/CSS2/floats-clear/margin-collapse-018.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-023.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-024.xht ref chrome
