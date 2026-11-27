@@ -21,8 +21,8 @@ Each gesture is how much happened this frame, and 0 when nothing did:
 
 - `in.Pinch()`: how much the fingers spread apart (positive) or closed (negative). Multiply a size by `1 + Pinch()`.
 - `in.Rotation()`: how far the fingers turned, in radians, the same way as a twod rotation. Add it to a rotation.
-- `in.Pan()`: how far two or more fingers moved together, in trackpad units, 0 to 1 across the pad. Scale it to the distance you want.
-- `in.Swipe()`: the direction of a quick swipe, on the one frame it happens.
+- `in.Pan()`: how far two or more fingers moved together, their mean movement, in trackpad units, 0 to 1 across the pad. Scale it to the distance you want.
+- `in.Swipe()`: the direction of a quick swipe, on the one frame it happens: -1, 0 or 1 on each axis, y down.
 
 A two-finger slide also scrolls: it arrives as `Wheel()` too, so a page that scrolls with the wheel scrolls with the trackpad.
 

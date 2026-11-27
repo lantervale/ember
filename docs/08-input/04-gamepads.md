@@ -57,13 +57,13 @@ Sticks and triggers are not just on or off. `in.Value(b)` says how far they are 
 
 - `in.Value(input.GamepadRightTrigger)` is how far the right trigger is pulled.
 - `in.Value(input.GamepadLeftStickLeft)` is how far the left stick leans left. Each stick has four of these: `…StickLeft`, `…StickRight`, `…StickUp` and `…StickDown`.
-- `in.Stick(input.LeftStick)` gives the whole stick as a direction. Y is down, as on screen.
+- `in.Stick(input.LeftStick)` gives the whole stick as a direction. Y is down, as on screen. With several pads, it is the pad that leans it most.
 
 A trigger or a stick direction also counts as held once it is past half way, so `Down` and `Pressed` work on them too.
 
 ## The deadzone
 
-A stick at rest is never exactly centred. So a small lean, under 0.2, reads as no lean at all. The lean past it is scaled back to 0–1. Change it with `in.SetDeadzone(0.1)`.
+A stick at rest is never exactly centred. So a small lean, under 0.2, reads as no lean at all. The lean past it is scaled back to 0–1. `in.Deadzone()` reads it, and `in.SetDeadzone(0.1)` changes it from the next frame, kept between 0 and 0.99.
 
 ## Binding a pad in an action map
 
@@ -79,13 +79,15 @@ input.Bind(Left, input.KeyLeft, input.GamepadLeftStickLeft, input.GamepadLeft)
 
 ## Two players
 
-`in.Gamepad(1)` is the pad in slot 1 only. Read it, or give it to the action map, for a second player:
+`in.Gamepad(1)` is the pad in slot 1 only. It has the same reads as the input (`Down`, `Pressed`, `Released`, `Value`, `Axis`, `Direction`, `Stick`), and the action map takes it, for a second player:
 
 ```go
 controls.Down(in.Gamepad(1), Left)
 ```
 
-`in.Gamepads()` lists the pads plugged in. A pad also has `ID()`, `Name()` and `Connected()`.
+- `in.Gamepads()` lists the pads plugged in.
+- A pad's ID is its slot, below `input.MaxGamepads` (16). A slot with no pad reads as idle.
+- A pad also has `ID()`, `Name()` and `Connected()`.
 
 ## Plugging in and out
 

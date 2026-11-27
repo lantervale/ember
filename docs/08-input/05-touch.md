@@ -30,6 +30,8 @@ A trackpad touch is **not** a point in the window. Its `At` runs from 0 to 1 acr
 - `At`: where it is, 0 to 1 on the pad.
 - `Phase`: `input.TouchBegan` on the frame it lands, `TouchMoving` while it moves, `TouchResting` while it stays still, and `TouchLifted` on the one frame it leaves. The example prints them as `began`, `moving`, `resting` and `lifted`.
 
+A tap too quick to last a frame still shows: began on one frame, lifted on the next.
+
 The World also gets events: `input.TouchStarted`, `input.TouchMoved` and `input.TouchEnded`, each with its touch. The example adds a spot on `TouchStarted`, moves it with `Touches()` and removes it on `TouchEnded`.
 
 [fingers.go](../../examples/51-touch/fingers.go)
