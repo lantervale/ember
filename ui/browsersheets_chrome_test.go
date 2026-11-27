@@ -128,3 +128,26 @@ func TestMediaRulesFollowAResizeAsChromes(t *testing.T) {
 		})
 	}
 }
+
+// TestABrowsersMonospaceSizesAsChromes sizes boxes in ems of text in a
+// browser's default monospace font, which is 13px where no absolute
+// size stands above it (decision 0259).
+func TestABrowsersMonospaceSizesAsChromes(t *testing.T) {
+	d := ui.NewDocument(ui.BrowserSheets(), ui.CSS(`.b { width: 10em; height: 1em; }`))
+	box := func(style string, kids ...ui.Arg) *ui.Node {
+		return ui.Div(append([]ui.Arg{ui.Class("b"), ui.Style(style)}, kids...)...)
+	}
+	d.Body().Append(
+		box("font-family: monospace", box("font-size: 2em"), box("font-family: serif")),
+		box("font-size: 20px", box("font-family: monospace")),
+		box("font-family: monospace, monospace"),
+		box("font-size: 2em", box("font-family: monospace")),
+		box("font-family: monospace; font-size: x-large"), box("font-family: monospace; font-size: small"),
+		box("font-family: monospace; font-size: larger"), box("font-family: monospace; font-size: 1rem"),
+		box("font-family: monospace", box("font-size: 150%", box("font-family: serif"))),
+		ui.Pre(ui.Class("b")), box("font-size: 12px", ui.Pre(ui.Class("b"))),
+		box("", ui.Code(ui.Style("display: block; width: 10em; height: 1em"))),
+	)
+	r := chrome.Match(t, d, geom.V2(800, 600))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

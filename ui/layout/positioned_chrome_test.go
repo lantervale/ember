@@ -42,3 +42,15 @@ background: #c00 } .r { position: relative; left: 20px; top: 10px; padding: 2px 
 		})
 	}
 }
+
+func TestAnAbsoluteTableKeepsItsOwnSizeBetweenInsetsAsChromes(t *testing.T) {
+	d := styled(`.cb { position: relative; height: 300px; } .t { position: absolute; left: 1px; right: 1px; }`,
+		ui.Div(ui.Class("cb"),
+			ui.Table(ui.Class("t"), ui.Style("top: 0; bottom: 0"), ui.Tr(ui.Td(ui.Text("x")))),
+			ui.Div(ui.Class("t"), ui.Style("display: table; top: 100px"), ui.Text("x")),
+			ui.Div(ui.Class("t"), ui.Style("display: inline-table; top: 150px; justify-self: stretch"), ui.Text("x")),
+			ui.Div(ui.Class("t"), ui.Style("top: 200px"), ui.Text("a block stretches")),
+		))
+	r := chrome.Match(t, d, geom.V2(800, 600))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

@@ -29,8 +29,13 @@ func DefaultImages() map[string][]byte {
 // text field takes its parent's white-space, a button's or a select's
 // keeps it as written, and an option's on one line. A textarea takes
 // resize: auto, Chrome's grip the user drags, where a game's takes none
-// but where its sheet asks (decision 0213).
+// but where its sheet asks (decision 0213). The root's size is medium
+// and code's font monospace, at the size a browser gives text in its
+// default monospace font (decision 0259), where a game's is 16px and its
+// code's 0.8125em of Go Mono.
 const BrowserDefault = `* { box-sizing: content-box; }
+html { font-size: medium; }
+code, kbd, samp, pre { font-family: monospace; font-size: inherit; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
 input, select, textarea { color: FieldText; }

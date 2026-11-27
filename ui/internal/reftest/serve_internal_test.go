@@ -35,6 +35,8 @@ func TestGenericsNameTheFacesEmberDrawsThemWith(t *testing.T) {
 		`<div style="font-family: Ahem">`:            `<div style="font-family: Ahem">`,
 		"a { font-family: cursive, sans-serif; }":    `a { font-family: "Go", "Go"; }`,
 		"b { font-size: 12px; font-style: italic; }": "b { font-size: 12px; font-style: italic; }",
+		"pre { font-family: monospace; }":            "pre { font-family: monospace; }",
+		"pre { font: 1em/1 Monospace }":              "pre { font: 1em/1 Monospace }",
 	} {
 		if got := Generics(in); got != want {
 			t.Errorf("Generics(%q) = %q, want %q", in, got, want)

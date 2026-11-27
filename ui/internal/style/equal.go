@@ -110,7 +110,7 @@ func (r *TrackRepeat) equal(o *TrackRepeat) bool {
 // compares them.
 func (f Font) Equal(o Font) bool {
 	return sameSlice(f.Family, o.Family) &&
-		f.Size == o.Size &&
+		f.Size == o.Size && f.Keyword == o.Keyword && f.Absolute == o.Absolute &&
 		f.Weight == o.Weight &&
 		f.Italic == o.Italic && f.Stretch == o.Stretch && f.Synthesis == o.Synthesis &&
 		f.Caps == o.Caps && f.Features == o.Features && sameSlice(f.Variations, o.Variations) &&

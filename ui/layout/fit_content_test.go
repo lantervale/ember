@@ -80,3 +80,19 @@ func TestATextNodesBoxIsItsTextsOnTheLines(t *testing.T) {
 		assert.Equal(t, geom.Rect{X: 20, Y: 0, W: 60, H: 10}, b.Rect(), "centred in 100")
 	}
 }
+
+func TestAnAbsoluteTableKeepsItsOwnSizeBetweenInsets(t *testing.T) {
+	inset := style.Sides[style.Length]{Top: style.Px(0), Right: style.Px(1), Bottom: style.Px(0), Left: style.Px(1)}
+	table := el(dom.Table, func(st *style.Computed) {
+		st.Display, st.Table, st.Position, st.Inset = style.Block, true, style.Absolute, inset
+	}, el(dom.Tr, nil, el(dom.Td, nil, text("HH"))))
+	box := el(dom.Div, func(st *style.Computed) {
+		st.Display, st.Position, st.Inset = style.Block, style.Absolute, inset
+	}, text("HH"))
+	cb := el(dom.Div, func(st *style.Computed) {
+		st.Display, st.Position, st.Size.Height = style.Block, style.Relative, style.Px(100)
+	}, table, box)
+	tr := lay(el(dom.Div, block, cb), 400)
+	assert.Equal(t, geom.V2(20, 10), tr.Of[table].Size, "a table is as large as its cells")
+	assert.Equal(t, geom.V2(398, 100), tr.Of[box].Size, "a block fills the room between its insets")
+}
