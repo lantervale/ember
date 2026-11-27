@@ -5150,6 +5150,10 @@ css/CSS2/tables/table-backgrounds-bc-row-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-rowgroup-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-table-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-cell-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-colgroup-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-column-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-row-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-rowgroup-001.xht ref chrome
 css/CSS2/tables/table-backgrounds-bs-table-001.xht ref
 css/CSS2/tables/table-cell-001.xht ref chrome
 css/CSS2/tables/table-column-rendering-001.xht ref chrome
