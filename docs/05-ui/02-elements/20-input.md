@@ -19,8 +19,10 @@ ui.Input(ui.Type("radio"), ui.Attr("name", "camera"), ui.Value("follow"), ui.Che
 | `radio` | one checked among those of its `name` in its form (the `form` above it, or the one its `form` attribute names), as in Chrome; arrows move the check, and the group is one Tab stop |
 | `search` | text; Escape or the pad's East clears it |
 | `password` | text shown as dots |
+| `email`, `url`, `tel` | text; `email` and `url` checked by constraint validation ([`:invalid`](../03-css.md#selectors)) |
 | `hidden` | a value a form carries: no box, no focus |
 | `button`, `submit`, `reset` | a button saying its value, as wide as it; without a value a submit says Submit, a reset Reset |
+| `color`, `date`, `datetime-local`, `month`, `time`, `week`, `file`, `image`, or an unknown type | a plain text field: no picker and no file chooser ([What is missing](../10-missing.md)) |
 
 No spin buttons on `number`, no clear button on `search`: `kit.NumberField` and `kit.SearchField` add them as real elements.
 
