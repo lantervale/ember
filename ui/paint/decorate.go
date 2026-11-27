@@ -107,24 +107,24 @@ func around(r, gap geom.Rect) []geom.Rect {
 // rows (CSS 2.1 §17.5.1): a row below never paints over a cell spanning
 // into it from above, and the gaps border-spacing leaves show what's
 // under the row.
-func (p *painter) rowBackground(row *box.Box, at geom.Vec2, c color.Color) {
+func (p *painter) rowBackground(row *box.Box, at geom.Vec2, paint func(geom.Rect)) {
 	for _, cell := range row.Children {
-		p.fill(p.snap(geom.Rect{X: at.X + cell.Pos.X, Y: at.Y + cell.Pos.Y, W: cell.Size.X, H: cell.Size.Y}), radii{}, c)
+		paint(p.snap(geom.Rect{X: at.X + cell.Pos.X, Y: at.Y + cell.Pos.Y, W: cell.Size.X, H: cell.Size.Y}))
 	}
 }
 
 // groupBackground paints a row group's background behind the cells of
 // its rows, as a row's.
-func (p *painter) groupBackground(group *box.Box, at geom.Vec2, c color.Color) {
+func (p *painter) groupBackground(group *box.Box, at geom.Vec2, paint func(geom.Rect)) {
 	for _, row := range group.Children {
-		p.rowBackground(row, at.Add(row.Pos), c)
+		p.rowBackground(row, at.Add(row.Pos), paint)
 	}
 }
 
 // columnBackground paints the background of a table's column, or of a
 // group of them, behind what its cells have between its sides: the
 // layer under the rows' (CSS 2.1 §17.5.1). at is the column's place.
-func (p *painter) columnBackground(col *box.Box, at geom.Vec2, c color.Color) {
+func (p *painter) columnBackground(col *box.Box, at geom.Vec2, paint func(geom.Rect)) {
 	table, origin := col.Parent, at.Sub(col.Pos)
 	if table != nil && table.Style != nil && table.Style.TablePart == style.TableColumnGroup {
 		table, origin = table.Parent, origin.Sub(table.Pos)
@@ -136,7 +136,7 @@ func (p *painter) columnBackground(col *box.Box, at geom.Vec2, c color.Color) {
 		for _, cell := range row.Children {
 			l, r := max(rowAt.X+cell.Pos.X, at.X), min(rowAt.X+cell.Pos.X+cell.Size.X, at.X+col.Size.X)
 			if r > l {
-				p.fill(p.snap(geom.Rect{X: l, Y: rowAt.Y + cell.Pos.Y, W: r - l, H: cell.Size.Y}), radii{}, c)
+				paint(p.snap(geom.Rect{X: l, Y: rowAt.Y + cell.Pos.Y, W: r - l, H: cell.Size.Y}))
 			}
 		}
 	}
@@ -270,14 +270,10 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 	mixing := p.beginLayers(st)
 	defer mixing.end()
 	if st.Background.A > 0 && !tracked(b) {
+		c := fade(st.Background, alpha)
 		switch {
-		case st.TablePart == style.TableRow:
-			p.rowBackground(b, e.at, fade(st.Background, alpha))
-		case st.TablePart == style.TableRowGroup || st.TablePart == style.TableHeaderGroup ||
-			st.TablePart == style.TableFooterGroup:
-			p.groupBackground(b, e.at, fade(st.Background, alpha))
-		case st.TablePart == style.TableColumn || st.TablePart == style.TableColumnGroup:
-			p.columnBackground(b, e.at, fade(st.Background, alpha))
+		case paintsCells(st):
+			p.behindCells(b, e.at, st, func(r geom.Rect) { p.fill(r, radii{}, c) })
 		case silhouetted(b, st):
 			p.maskedFill(b, r, edges, radius, st, alpha)
 		default:
@@ -288,10 +284,33 @@ func (p *painter) background(e entry, r, strip geom.Rect, edges box.Edges, radiu
 	}
 	for i := n - 1; i >= 0; i-- {
 		if l := st.BackgroundLayer(i); l.Image.Source != "" || l.Image.Gradient != nil {
-			mixing.layer(l.Blend, func() {
-				p.throughText(text, l.Clip, func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) })
-			})
+			layer := func() { p.backgroundLayer(b, r, strip, edges, radius, &l, st, alpha) }
+			if paintsCells(st) && !tracked(b) {
+				mixing.layer(l.Blend, func() {
+					p.behindCells(b, e.at, st, func(cell geom.Rect) {
+						p.s.PushClip(cell)
+						layer()
+						p.s.PopClip()
+					})
+				})
+				continue
+			}
+			mixing.layer(l.Blend, func() { p.throughText(text, l.Clip, layer) })
 		}
+	}
+}
+
+// behindCells paints, with paint, what a table's row, row group, column or
+// column group b, at at, shows behind each of its cells.
+func (p *painter) behindCells(b *box.Box, at geom.Vec2, st *style.Computed, paint func(geom.Rect)) {
+	switch st.TablePart {
+	case style.TableRow:
+		p.rowBackground(b, at, paint)
+	case style.TableRowGroup, style.TableHeaderGroup, style.TableFooterGroup:
+		p.groupBackground(b, at, paint)
+	case style.TableColumn, style.TableColumnGroup:
+		p.columnBackground(b, at, paint)
+	case style.NoTablePart, style.TableCell, style.TableCaption:
 	}
 }
 
