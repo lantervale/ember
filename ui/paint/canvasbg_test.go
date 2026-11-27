@@ -120,3 +120,23 @@ func TestTheModalBackdropCoversTheViewport(t *testing.T) {
 		Controls(func(*dom.Node) any { return m }), Viewport(geom.Rect{W: 400, H: 300}))
 	assert.Equal(t, geom.Rect{W: 400, H: 300}, r.of("rect")[0].Rect)
 }
+
+func TestTheRootElementUnderItsViewportIsTheRootStackingContext(t *testing.T) {
+	body := el(0, 0, 100, 100, func(st *style.Computed) {
+		st.Background, st.Position, st.ZIndex, st.ZAuto = green, style.Relative, -1, false
+	})
+	body.Node = dom.NewElement(dom.Body)
+	html := el(0, 0, 100, 100, func(st *style.Computed) {
+		st.Background = white
+		st.Border, st.BorderStyle, st.BorderColor = style.All[float32](10), style.All(style.BorderSolid), style.All(red)
+	}, body)
+	html.Node = dom.NewElement(dom.HTML)
+	html.Node.Append(body.Node)
+	port := style.Initial()
+	v := &box.Box{Kind: box.Viewport, Node: html.Node, Style: &port, Size: geom.V2(400, 300)}
+	v.Append(html)
+	r := newRecorder()
+	Paint(r, tree(v), Viewport(geom.Rect{W: 400, H: 300}))
+	assert.Equal(t, "root root root root body", r.order(map[color.Color]string{red: "root", green: "body"}),
+		"a negative z-index paints over the root element's own border, as Chrome's")
+}

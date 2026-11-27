@@ -131,6 +131,18 @@ func (c *floatContext) segmentFrom(from int, minY float32) int {
 	return len(c.segments)
 }
 
+// floatInsets is how far the floats of s reach from each side, 0 for a side without
+// one: the box that made the segment may have stood further in than the one placed.
+func (s segment) floatInsets() [2]float32 {
+	var in [2]float32
+	for side := range in {
+		if s.hasFloat[side] {
+			in[side] = fmax(0, s.insets[side])
+		}
+	}
+	return in
+}
+
 // place puts a float's margin box in the context, at or below minY, and returns its
 // top-left corner.
 func (c *floatContext) place(box size, minY float32, cbInsets [2]float32, side floatSide, clearing style.Clear) point {
@@ -176,21 +188,22 @@ outer:
 			break
 		}
 		first := c.segments[start]
-		if !floatFits(box.w, side, c.width, first.insets, cbInsets) {
+		if !floatFits(box.w, side, c.width, first.floatInsets(), cbInsets) {
 			start++
 			end = max(end, start)
 			continue
 		}
 		startY = fmax(startY, first.top)
 		height := float64(first.bottom - startY)
-		insets := [2]float32{fmax(0, first.insets[0]), fmax(0, first.insets[1])}
+		insets := first.floatInsets()
 		for {
 			if end >= len(c.segments) {
 				found, inset = true, fmax(insets[slot], cbInsets[slot])
 				break outer
 			}
 			last := c.segments[end]
-			insets = [2]float32{fmax(insets[0], last.insets[0]), fmax(insets[1], last.insets[1])}
+			more := last.floatInsets()
+			insets = [2]float32{fmax(insets[0], more[0]), fmax(insets[1], more[1])}
 			if !floatFits(box.w, side, c.width, insets, cbInsets) {
 				start++
 				end = max(end, start)
@@ -225,7 +238,7 @@ outer:
 		startY = fmax(lastEnd, startY)
 		s := segment{top: startY, bottom: startY + box.h, insets: cbInsets}
 		s.insets[slot] += box.w
-		s.hasFloat[slot] = true
+		s.hasFloat[slot] = box.w > 0
 		c.segments = append(c.segments, s)
 		c.notePlaced(side, len(c.segments)-1, len(c.segments))
 		return placedFloat{width: box.w, height: box.h, y: startY, inset: cbInsets[slot]}
@@ -254,7 +267,7 @@ outer:
 	}
 	for i := start; i <= end; i++ {
 		c.segments[i].insets[slot] = inset + box.w
-		c.segments[i].hasFloat[slot] = true
+		c.segments[i].hasFloat[slot] = c.segments[i].hasFloat[slot] || box.w > 0
 	}
 	c.notePlaced(side, start, end+1)
 	return placedFloat{width: box.w, height: box.h, y: startY, inset: inset}

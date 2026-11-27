@@ -199,6 +199,9 @@ css/CSS2/backgrounds/background-image-transparency-001.xht ref chrome
 css/CSS2/backgrounds/background-intrinsic-001.xht ref
 css/CSS2/backgrounds/background-intrinsic-002.xht ref
 css/CSS2/backgrounds/background-intrinsic-003.xht ref
+css/CSS2/backgrounds/background-intrinsic-004.xht chrome
+css/CSS2/backgrounds/background-intrinsic-005.xht chrome
+css/CSS2/backgrounds/background-intrinsic-006.xht chrome
 css/CSS2/backgrounds/background-intrinsic-007.xht ref
 css/CSS2/backgrounds/background-intrinsic-008.xht ref
 css/CSS2/backgrounds/background-intrinsic-009.xht ref
@@ -1451,6 +1454,7 @@ css/CSS2/floats-clear/floats-clear-multicol-003.html ref chrome
 css/CSS2/floats-clear/floats-clear-multicol-balancing-000.html ref chrome
 css/CSS2/floats-clear/floats-clear-multicol-balancing-001.html ref chrome
 css/CSS2/floats-clear/floats-clear-multicol-balancing-002.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-balancing-003.html chrome
 css/CSS2/floats-clear/margin-collapse-018.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-023.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-024.xht ref chrome
@@ -1594,6 +1598,8 @@ css/CSS2/floats/new-fc-separates-from-float.html ref chrome
 css/CSS2/floats/overflow-scroll-float-paint-order.html ref chrome
 css/CSS2/floats/overhanging-float-paint-order.html ref chrome
 css/CSS2/floats/zero-available-space-float-positioning.html ref chrome
+css/CSS2/floats/zero-width-floats-positioning.tentative.html chrome
+css/CSS2/floats/zero-width-floats.html ref chrome
 css/CSS2/fonts/font-003.xht ref chrome
 css/CSS2/fonts/font-011.xht ref chrome
 css/CSS2/fonts/font-012.xht ref chrome
@@ -3522,6 +3528,7 @@ css/CSS2/normal-flow/min-height-applies-to-008.xht ref chrome
 css/CSS2/normal-flow/min-height-applies-to-009.xht ref chrome
 css/CSS2/normal-flow/min-height-applies-to-012.xht ref chrome
 css/CSS2/normal-flow/min-height-applies-to-013.xht ref
+css/CSS2/normal-flow/min-height-applies-to-014.xht chrome
 css/CSS2/normal-flow/min-height-applies-to-015.xht ref chrome
 css/CSS2/normal-flow/min-height-percentage-001.xht ref chrome
 css/CSS2/normal-flow/min-height-percentage-002.xht ref chrome
@@ -3689,6 +3696,7 @@ css/CSS2/normal-flow/width-applies-to-002.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-003.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-004.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-005.xht ref chrome
+css/CSS2/normal-flow/width-applies-to-006.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-007.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-008.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-009.xht ref chrome
@@ -3822,6 +3830,7 @@ css/CSS2/positioning/absolute-replaced-width-071.xht ref chrome
 css/CSS2/positioning/absolute-replaced-width-076.xht ref chrome
 css/CSS2/positioning/abspos-001.xht ref chrome
 css/CSS2/positioning/abspos-002.xht ref chrome
+css/CSS2/positioning/abspos-007.xht chrome
 css/CSS2/positioning/abspos-008.xht ref chrome
 css/CSS2/positioning/abspos-009.xht ref chrome
 css/CSS2/positioning/abspos-011.xht ref chrome
@@ -4688,6 +4697,7 @@ css/CSS2/selectors/universal-selector-003.xht ref chrome
 css/CSS2/selectors/universal-selector-004.xht ref chrome
 css/CSS2/selectors/universal-selector-005.xht ref
 css/CSS2/stacking-context/opacity-affects-block-in-inline.html ref chrome
+css/CSS2/stacking-context/root-element-creates-stacking-context.html ref chrome
 css/CSS2/stacking-context/zindex-affects-block-in-inline.html ref chrome
 css/CSS2/syntax/at-charset-001.xht ref chrome
 css/CSS2/syntax/at-charset-002.xht ref chrome
@@ -5161,6 +5171,7 @@ css/CSS2/tables/table-anonymous-objects-197.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-198.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-199.xht chrome
 css/CSS2/tables/table-anonymous-objects-200.xht chrome
+css/CSS2/tables/table-anonymous-objects-211.xht chrome
 css/CSS2/tables/table-anonymous-objects-212.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-213.xht ref chrome
 css/CSS2/tables/table-backgrounds-bc-cell-001.xht ref chrome
