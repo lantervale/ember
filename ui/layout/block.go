@@ -927,6 +927,10 @@ func (t *tree) blockChildren(run runMode, items []*blockItem, outerW, percentH, 
 	switch {
 	case activeHasClearance:
 		lastBottom = marginSet{}
+	case collapsingWithFirst && ownCollapse[0] && !ownCollapse[1]:
+		// the margins of blocks that all collapse through went out of the block's top,
+		// which its end stands at
+		bottomOffset, lastBottom = 0, marginSet{}
 	case ownCollapse[1]:
 		bottomOffset = 0
 	}
