@@ -109,6 +109,29 @@ func TestAnInlineTableStandsInItsLine(t *testing.T) {
 	assert.Equal(t, geom.Vec2{X: 20, Y: 10}, tr.Of[tb].Size)
 }
 
+func TestCellsInAnInlineStandInAnAnonymousInlineTable(t *testing.T) {
+	b, c := el(dom.Span, part(style.TableCell), text("H")), el(dom.Span, part(style.TableCell), text("HH"))
+	d := el(dom.Span, nil, text("H"))
+	span := el(dom.Span, nil, text("H "), b, text(" "), c, text(" "), d)
+	tr := lay(el(dom.Div, block, span), 400)
+	assert.Equal(t, geom.Vec2{X: 20, Y: 0}, at(tr.Of[b]), "after the text and its space, on its line")
+	assert.Equal(t, geom.Vec2{X: 30, Y: 0}, at(tr.Of[c]), "beside it in one row, the space between them dropped")
+	assert.Equal(t, geom.Vec2{X: 50, Y: 0}, at(tr.Of[d]), "the space after the table dropped too, as Chrome's")
+	table := tr.Of[b].Parent.Parent
+	require.Equal(t, box.AnonymousBlock, table.Kind)
+	assert.Equal(t, geom.Vec2{X: 30, Y: 10}, table.Size)
+}
+
+func TestWhiteSpaceAloneInARowIsNoCellWhateverItsWhiteSpace(t *testing.T) {
+	pre := func(st *style.Computed) { st.WhiteSpace = style.Pre }
+	a, b := el(dom.Div, part(style.TableCell), text("HH")), el(dom.Div, part(style.TableCell), text("H"))
+	r := el(dom.Div, part(style.TableRow, pre), text("\n  "), a, text("\t "), b, text(" "))
+	tb := el(dom.Div, func(st *style.Computed) { asTable(st); pre(st) }, r)
+	tr := lay(el(dom.Div, block, tb), 400)
+	assert.Equal(t, geom.Vec2{X: 30, Y: 10}, tr.Of[tb].Size, "two cells, no others")
+	assert.Equal(t, geom.Vec2{X: 20, Y: 0}, at(tr.Of[b]))
+}
+
 func baselineCell(s string, edit ...func(*style.Computed)) *dom.Node {
 	return el(dom.Td, func(st *style.Computed) {
 		st.VerticalAlign = style.AlignBaselineText

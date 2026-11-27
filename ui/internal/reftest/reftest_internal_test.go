@@ -394,3 +394,21 @@ func TestTheSummaryRanksChromeFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestXMLLangIsTheLanguageOfAnXHTMLPagesElement(t *testing.T) {
+	for page, want := range map[string]map[string]string{
+		"css/css-demo/empty.xht":  {"p": "fr"},
+		"css/css-demo/green.html": {"b": ""},
+	} {
+		p, err := ReadPage(fixture, page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := p.Document(fixture, &Fetches{})
+		for id, lang := range want {
+			if v, _ := d.ByID(id).Attr("lang"); v != lang {
+				t.Errorf("%s: #%s's lang %q, want %q: xml:lang wins in XHTML only", page, id, v, lang)
+			}
+		}
+	}
+}

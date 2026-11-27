@@ -18,6 +18,7 @@ func TestTablesOfAnyElementsMatchChrome(t *testing.T) {
 	c := func(text string, args ...ui.Arg) *ui.Node {
 		return ui.Div(append([]ui.Arg{ui.Class("c"), ui.Text(text)}, args...)...)
 	}
+	sc := func(text string) *ui.Node { return ui.Span(ui.Class("c"), ui.Text(text)) }
 	cases := map[string]*ui.Document{
 		"a table of divs": styled(parts,
 			ui.Div(ui.Class("t", "sp"),
@@ -82,6 +83,18 @@ func TestTablesOfAnyElementsMatchChrome(t *testing.T) {
 				ui.Div(ui.Class("c"), ui.Style("float: left"), ui.Text("floated")),
 				ui.Div(ui.Class("c"), ui.Style("position: absolute; right: 0; top: 30px"), ui.Text("absolute")),
 				c("a cell"), c("another"))),
+		"cells in an inline stand in an inline table": styled(parts,
+			ui.P(ui.Span(ui.Text("Before "), ui.Span(ui.Text("a")), ui.Text(" "), ui.Span(ui.Class("c"), ui.Text("one")),
+				ui.Text(" "), ui.Span(ui.Class("c"), ui.Text("two")), ui.Text(" "), ui.Span(ui.Text("after")))),
+			ui.P(ui.Span(ui.Style("white-space: pre"), ui.Text("kept "), ui.Span(ui.Class("c"), ui.Text("cell")),
+				ui.Text(" kept")))),
+		"rows in an inline": styled(parts,
+			ui.P(ui.Text("Lines "), ui.Span(ui.Span(ui.Class("r"), sc("a"), sc("b")), ui.Span(ui.Class("r"), sc("c"), sc("d"))),
+				ui.Text(" go on."))),
+		"white space alone in a row of pre": styled(parts+` .pre { white-space: pre; }`,
+			ui.Div(ui.Class("t", "pre"),
+				ui.Div(ui.Class("r"), ui.Text("\n  "), c("one"), ui.Text("\t "), c("two"), ui.Text("  ")),
+				ui.Div(ui.Class("r"), ui.Text(" "), ui.Span(ui.Text("a")), ui.Text(" "), ui.Span(ui.Text("b")), c("three")))),
 		"cells in a flex container are items": styled(parts,
 			ui.Div(ui.Style("display: flex; width: 300px; gap: 4px"), c("one"), c("two"), c("three"))),
 	}
