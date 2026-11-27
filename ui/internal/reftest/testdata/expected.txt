@@ -1452,6 +1452,7 @@ css/CSS2/floats-clear/margin-collapse-125.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-134.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-135.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-142.xht ref chrome
+css/CSS2/floats-clear/margin-collapse-157.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-158.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-165.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-clear-002.xht ref chrome
@@ -4645,6 +4646,7 @@ css/CSS2/selectors/id-selector-004.xht ref chrome
 css/CSS2/selectors/id-selector-005.xht ref chrome
 css/CSS2/selectors/id-selector-006.xht ref chrome
 css/CSS2/selectors/lang-pseudoclass-001.html ref
+css/CSS2/selectors/lang-pseudoclass-002.xht ref
 css/CSS2/selectors/lang-selector-001.xht ref chrome
 css/CSS2/selectors/lang-selector-002.xht ref chrome
 css/CSS2/selectors/lang-selector-003.xht ref chrome
@@ -4773,6 +4775,7 @@ css/CSS2/syntax/blocks-006.xht ref chrome
 css/CSS2/syntax/blocks-and-strings-001.xht ref chrome
 css/CSS2/syntax/case-sensitive-000.xht ref chrome
 css/CSS2/syntax/case-sensitive-001.xht ref
+css/CSS2/syntax/case-sensitive-004.xht ref chrome
 css/CSS2/syntax/case-sensitive-005.xht ref chrome
 css/CSS2/syntax/case-sensitive-006.html ref chrome
 css/CSS2/syntax/case-sensitive-007.xht chrome
@@ -5123,24 +5126,24 @@ css/CSS2/tables/table-anonymous-objects-097.xht ref
 css/CSS2/tables/table-anonymous-objects-098.xht ref
 css/CSS2/tables/table-anonymous-objects-167.xht chrome
 css/CSS2/tables/table-anonymous-objects-168.xht chrome
-css/CSS2/tables/table-anonymous-objects-177.xht chrome
-css/CSS2/tables/table-anonymous-objects-178.xht chrome
-css/CSS2/tables/table-anonymous-objects-179.xht chrome
-css/CSS2/tables/table-anonymous-objects-180.xht chrome
+css/CSS2/tables/table-anonymous-objects-177.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-178.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-179.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-180.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-181.xht chrome
 css/CSS2/tables/table-anonymous-objects-182.xht chrome
 css/CSS2/tables/table-anonymous-objects-183.xht chrome
 css/CSS2/tables/table-anonymous-objects-184.xht chrome
-css/CSS2/tables/table-anonymous-objects-189.xht chrome
-css/CSS2/tables/table-anonymous-objects-190.xht chrome
-css/CSS2/tables/table-anonymous-objects-191.xht chrome
-css/CSS2/tables/table-anonymous-objects-192.xht chrome
+css/CSS2/tables/table-anonymous-objects-189.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-190.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-191.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-192.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-197.xht chrome
 css/CSS2/tables/table-anonymous-objects-198.xht chrome
 css/CSS2/tables/table-anonymous-objects-199.xht chrome
 css/CSS2/tables/table-anonymous-objects-200.xht chrome
 css/CSS2/tables/table-anonymous-objects-212.xht ref chrome
-css/CSS2/tables/table-anonymous-objects-213.xht chrome
+css/CSS2/tables/table-anonymous-objects-213.xht ref chrome
 css/CSS2/tables/table-backgrounds-bc-cell-001.xht ref chrome
 css/CSS2/tables/table-backgrounds-bc-colgroup-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-column-001.xht ref
