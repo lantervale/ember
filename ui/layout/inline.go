@@ -3194,10 +3194,15 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			if p.kind == anchor {
 				k := c.anchors[p.span].node
 				c.oofs[k].static = point{x, y}
-				if c.anchors[p.span].top && !k.st.StaticInline {
+				if !k.st.StaticInline {
 					// a block-level one starts a line: below this one when text is before it
 					c.oofs[k].static = point{inset.l, y}
-					if x > start {
+					before := x > start
+					if n.st.Dir == style.RTL {
+						c.oofs[k].static.x = inset.l + content
+						before = c.showsBefore(l, p.span)
+					}
+					if before {
 						c.oofs[k].static.y += lh
 					}
 				}
@@ -3232,6 +3237,20 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	for _, o := range c.oofs {
 		c.containingSpan(o, spanLines, size{content, none})
 	}
+}
+
+// showsBefore reports whether anything with a width stands before the anchor of
+// out-of-flow box k on line l, in the content's order.
+func (c *inlineContent) showsBefore(l line, k int) bool {
+	for _, p := range c.pieces[l.from:l.to] {
+		if p.kind == anchor && p.span == k {
+			return false
+		}
+		if p.width > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // containingSpan makes the nearest positioned span holding o its containing block: the
