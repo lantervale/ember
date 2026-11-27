@@ -52,6 +52,16 @@ func TestVisualText(t *testing.T) {
 	assert.Equal(t, "(א)", visualText("(א)", 1), "brackets mirrored")
 }
 
+func TestAnOverrideControlStandsWithTheTextItOpens(t *testing.T) {
+	inner := text("\u202eTSET")
+	p := el(dom.P, func(st *style.Computed) { block(st); width(400)(st) }, text("TE"), inlineEl(inner),
+		text("\u202dST"))
+	lines := lay(p, 400).Of[inner].Lines
+	if assert.Len(t, lines, 1, "the control and its text one fragment, at one level") {
+		assert.Equal(t, "TEST\u202e", lines[0].Shown())
+	}
+}
+
 func TestABlockOverridingBidiShowsItsTextInItsDirection(t *testing.T) {
 	override := func(dir style.Direction) func(*style.Computed) {
 		return func(st *style.Computed) {
