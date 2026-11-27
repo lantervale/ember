@@ -58,6 +58,18 @@ func TestCounterStylesResolveWhatTheyExtendAndFallBack(t *testing.T) {
 	assert.True(t, strings.HasSuffix(styles.marker("hiragana", 1), "、"))
 }
 
+func TestAMathFunctionWeightCountsAsAWholeNumberAtLeastZero(t *testing.T) {
+	s, warns := Parse("t.css", `
+@counter-style foo { system: additive; additive-symbols: 1 'I', calc(-1) 'X'; range: infinite infinite; }
+@counter-style bar { system: additive; additive-symbols: calc(2.6) 'V', 1 'I'; }
+`)
+	require.Empty(t, warns)
+	styles := authorStyles([]*Sheet{s}, Media{})
+	assert.Equal(t, "X", styles.represent("foo", 0), "calc(-1) is 0")
+	assert.Equal(t, "I", styles.represent("foo", 1))
+	assert.Equal(t, "VI", styles.represent("bar", 4), "calc(2.6) rounds to 3")
+}
+
 func TestComplexPredefinedStylesWriteByTheirAlgorithm(t *testing.T) {
 	for _, c := range []struct {
 		name string

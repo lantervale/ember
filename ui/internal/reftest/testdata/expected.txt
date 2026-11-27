@@ -2208,38 +2208,38 @@ css/CSS2/lists/increment-counter-001.xht ref chrome
 css/CSS2/lists/list-style-019.xht ref chrome
 css/CSS2/lists/list-style-020.xht ref chrome
 css/CSS2/lists/list-style-021.xht ref
-css/CSS2/lists/list-style-applies-to-001.xht chrome
-css/CSS2/lists/list-style-applies-to-002.xht chrome
-css/CSS2/lists/list-style-applies-to-003.xht chrome
-css/CSS2/lists/list-style-applies-to-004.xht chrome
-css/CSS2/lists/list-style-applies-to-007.xht chrome
-css/CSS2/lists/list-style-applies-to-008.xht chrome
-css/CSS2/lists/list-style-applies-to-009.xht chrome
-css/CSS2/lists/list-style-applies-to-010.xht chrome
-css/CSS2/lists/list-style-applies-to-012.xht chrome
-css/CSS2/lists/list-style-applies-to-013.xht chrome
-css/CSS2/lists/list-style-applies-to-014.xht chrome
-css/CSS2/lists/list-style-applies-to-015.xht chrome
-css/CSS2/lists/list-style-applies-to-016.html chrome
-css/CSS2/lists/list-style-applies-to-017.html chrome
+css/CSS2/lists/list-style-applies-to-001.xht ref chrome
+css/CSS2/lists/list-style-applies-to-002.xht ref chrome
+css/CSS2/lists/list-style-applies-to-003.xht ref chrome
+css/CSS2/lists/list-style-applies-to-004.xht ref chrome
+css/CSS2/lists/list-style-applies-to-007.xht ref chrome
+css/CSS2/lists/list-style-applies-to-008.xht ref chrome
+css/CSS2/lists/list-style-applies-to-009.xht ref chrome
+css/CSS2/lists/list-style-applies-to-010.xht ref chrome
+css/CSS2/lists/list-style-applies-to-012.xht ref chrome
+css/CSS2/lists/list-style-applies-to-013.xht ref chrome
+css/CSS2/lists/list-style-applies-to-014.xht ref chrome
+css/CSS2/lists/list-style-applies-to-015.xht ref chrome
+css/CSS2/lists/list-style-applies-to-016.html ref chrome
+css/CSS2/lists/list-style-applies-to-017.html ref chrome
 css/CSS2/lists/list-style-image-004.xht ref chrome
 css/CSS2/lists/list-style-image-005.xht ref chrome
 css/CSS2/lists/list-style-image-007.html ref chrome
-css/CSS2/lists/list-style-image-applies-to-001.xht chrome
-css/CSS2/lists/list-style-image-applies-to-002.xht chrome
-css/CSS2/lists/list-style-image-applies-to-003.xht chrome
-css/CSS2/lists/list-style-image-applies-to-004.xht chrome
-css/CSS2/lists/list-style-image-applies-to-005.xht chrome
-css/CSS2/lists/list-style-image-applies-to-006.xht chrome
-css/CSS2/lists/list-style-image-applies-to-007.xht chrome
-css/CSS2/lists/list-style-image-applies-to-008.xht chrome
-css/CSS2/lists/list-style-image-applies-to-009.xht chrome
-css/CSS2/lists/list-style-image-applies-to-010.xht chrome
-css/CSS2/lists/list-style-image-applies-to-012.xht chrome
-css/CSS2/lists/list-style-image-applies-to-013.xht chrome
-css/CSS2/lists/list-style-image-applies-to-014.xht chrome
-css/CSS2/lists/list-style-image-applies-to-015.xht chrome
-css/CSS2/lists/list-style-image-applies-to-016.html chrome
+css/CSS2/lists/list-style-image-applies-to-001.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-002.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-003.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-004.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-005.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-006.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-007.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-008.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-009.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-010.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-012.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-013.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-014.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-015.xht ref chrome
+css/CSS2/lists/list-style-image-applies-to-016.html ref chrome
 css/CSS2/lists/list-style-image-applies-to-017.html chrome
 css/CSS2/lists/list-style-position-018.xht ref chrome
 css/CSS2/lists/list-style-position-023.xht ref chrome
@@ -2260,20 +2260,20 @@ css/CSS2/lists/list-style-position-applies-to-014.xht ref chrome
 css/CSS2/lists/list-style-position-applies-to-015.xht ref chrome
 css/CSS2/lists/list-style-position-applies-to-016.html ref chrome
 css/CSS2/lists/list-style-position-applies-to-017.html ref chrome
-css/CSS2/lists/list-style-type-applies-to-001.xht chrome
-css/CSS2/lists/list-style-type-applies-to-002.xht chrome
-css/CSS2/lists/list-style-type-applies-to-003.xht chrome
-css/CSS2/lists/list-style-type-applies-to-004.xht chrome
-css/CSS2/lists/list-style-type-applies-to-007.xht chrome
-css/CSS2/lists/list-style-type-applies-to-008.xht chrome
-css/CSS2/lists/list-style-type-applies-to-009.xht chrome
-css/CSS2/lists/list-style-type-applies-to-010.xht chrome
-css/CSS2/lists/list-style-type-applies-to-012.xht chrome
-css/CSS2/lists/list-style-type-applies-to-013.xht chrome
-css/CSS2/lists/list-style-type-applies-to-014.xht chrome
-css/CSS2/lists/list-style-type-applies-to-015.xht chrome
-css/CSS2/lists/list-style-type-applies-to-016.html chrome
-css/CSS2/lists/list-style-type-applies-to-017.html chrome
+css/CSS2/lists/list-style-type-applies-to-001.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-002.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-003.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-004.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-007.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-008.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-009.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-010.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-012.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-013.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-014.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-015.xht ref chrome
+css/CSS2/lists/list-style-type-applies-to-016.html ref chrome
+css/CSS2/lists/list-style-type-applies-to-017.html ref chrome
 css/CSS2/lists/reset-counter-001.xht ref chrome
 css/CSS2/margin-padding-clear/margin-001.xht ref chrome
 css/CSS2/margin-padding-clear/margin-002.xht ref chrome

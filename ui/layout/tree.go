@@ -855,6 +855,11 @@ func (t *tree) buildInline(n *node, items []item) {
 	n.inline = t.inlineOf(n, items, insideMarked(n, false))
 }
 
+// outsideMarked reports n a list item whose marker stands outside it.
+func outsideMarked(n *node) bool {
+	return n.st.ListItem && !n.st.ListInside && n.box.Kind == box.Element
+}
+
 // insideMarked is n where it is a list item whose marker stands inside it, nil
 // otherwise or when it lays its children out as a flex or grid container.
 func insideMarked(n *node, flexOrGrid bool) *node {
@@ -1465,8 +1470,9 @@ func (m markerContent) place(b *box.Box, r geom.Rect, lb float32) {
 
 // listMarker gives a list item its ::marker box, outside the item beside its first line,
 // ending where the item's content starts, a bullet or a picture Chrome's distance before
-// it, the picture on the line's baseline. An item without a line has none, and one whose
-// marker stands inside it has it among its lines.
+// it, the picture on the line's baseline. An item with nothing else to show has the line
+// its marker makes (outside); one with blocks but no line has none, and one whose marker
+// stands inside it has it among its lines.
 func (t *tree) listMarker(n *node) {
 	if n.box.Kind != box.Element || n.st.ListInside {
 		return
@@ -1475,7 +1481,7 @@ func (t *tree) listMarker(n *node) {
 	if !ok {
 		return
 	}
-	line, at, ok := firstLine(n.box, geom.Vec2{})
+	lineRect, baseline, ok := markedLine(n)
 	if !ok {
 		return
 	}
@@ -1483,7 +1489,9 @@ func (t *tree) listMarker(n *node) {
 	left := n.final.border.l + n.final.padding.l
 	rtl := n.st.Dir == style.RTL
 	right := n.final.size.w - n.final.border.r - n.final.padding.r
-	baseline := at.Y + line.Baseline
+	if n.inline != nil && n.inline.outside {
+		left, right = lineRect.X, lineRect.X+lineRect.W
+	}
 	switch {
 	case mark.picture.X > 0:
 		m.Pos = geom.Vec2{X: left - mark.picture.X - markerGap, Y: baseline - mark.picture.Y}
@@ -1504,14 +1512,29 @@ func (t *tree) listMarker(n *node) {
 	default:
 		text := mark.text
 		w := t.fonts.Advance(mark.st.Font, text) + mark.st.Spacing(text)
-		m.Pos = geom.Vec2{X: left - w, Y: at.Y + line.Rect.Y}
+		m.Pos = geom.Vec2{X: left - w, Y: lineRect.Y}
 		if rtl {
 			m.Pos.X, text = right, visualText(text, 1)
 		}
-		m.Size = geom.Vec2{X: w, Y: line.Rect.H}
-		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: line.Rect.H}, Baseline: baseline - m.Pos.Y}}
+		m.Size = geom.Vec2{X: w, Y: lineRect.H}
+		m.Lines = []box.Fragment{{Text: text, Rect: geom.Rect{W: w, H: lineRect.H}, Baseline: baseline - m.Pos.Y}}
 	}
 	n.box.Append(m)
+}
+
+// markedLine is the line an outside marker stands beside, in n's box, and its baseline:
+// n's first line, or the one its marker makes alone.
+func markedLine(n *node) (geom.Rect, float32, bool) {
+	if c := n.inline; c != nil && c.outside {
+		return c.markerLine, c.markerBaseline, true
+	}
+	line, at, ok := firstLine(n.box, geom.Vec2{})
+	if !ok {
+		return geom.Rect{}, 0, false
+	}
+	r := line.Rect
+	r.Y += at.Y
+	return r, at.Y + line.Baseline, true
 }
 
 // markerArea is what an outside marker box m of a bullet or a picture takes the pointer

@@ -202,7 +202,8 @@ func checkAdditiveSymbols(v []Component) error {
 }
 
 // weighted reads a whole number at least 0 and a symbol, in either order,
-// as additive-symbols and pad take them.
+// as additive-symbols and pad take them: a math function of numbers
+// rounds to the nearest and counts as 0 below it.
 func weighted(part []Component) (int, string, bool) {
 	if len(part) != 2 {
 		return 0, "", false
@@ -211,7 +212,21 @@ func weighted(part []Component) (int, string, bool) {
 	if isSymbol(n) {
 		n, s = s, n
 	}
-	if n.Kind != Number || !n.Int || n.Num < 0 || !isSymbol(s) {
+	if !isSymbol(s) {
+		return 0, "", false
+	}
+	if n.Kind == Function {
+		d, err := parseDim(n)
+		if err != nil || !d.IsNumber() {
+			return 0, "", false
+		}
+		v := math.Floor(d.Absolute(&Units{}).Resolve(0) + 0.5)
+		if math.IsNaN(v) {
+			v = 0
+		}
+		return int(max(0, min(v, math.MaxInt32))), s.Text, true
+	}
+	if n.Kind != Number || !n.Int || n.Num < 0 {
 		return 0, "", false
 	}
 	return int(n.Num), s.Text, true
