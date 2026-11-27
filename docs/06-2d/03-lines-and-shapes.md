@@ -6,7 +6,17 @@ Lines and filled shapes are 2D entities like sprites, made from a list of points
 
 ## The program
 
-`twod.NewLine` draws through its points with a `Width`. `Joints` says how it turns at each point and `Caps` how its ends look; from left to right, the zigzags are `Miter` with `Flat` caps, `Bevel` with `Square` caps, and `RoundJoint` with `RoundCap` ends. `Closed` joins a line's last point back to its first, for the star. `twod.NewPolygon` fills a shape, concave ones such as the arrow included. Points are relative to the entity's `At`, and `Color` paints it.
+`twod.NewLine` draws through its points with a `Width`:
+
+- `Joints` says how it turns at each point: `Miter`, `Bevel` or `RoundJoint`.
+- `Caps` says how its ends look: `Flat`, `Square` or `RoundCap`.
+- `Closed` joins its last point back to its first, as for the star.
+
+From left to right, the zigzags are `Miter` with `Flat` caps, `Bevel` with `Square` caps, and `RoundJoint` with `RoundCap` ends.
+
+`twod.NewPolygon` fills a shape, concave ones such as the arrow included.
+
+For both, points are relative to the entity's `At`, and `Color` paints it.
 
 [main.go](../../examples/21-lines-and-shapes/main.go)
 
