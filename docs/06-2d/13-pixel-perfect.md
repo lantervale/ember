@@ -6,7 +6,19 @@ Pixel art looks right when every one of its pixels is a square on screen, the sa
 
 ## The camera's resolution
 
-`twod.Resolution(320, 180)` on the camera draws the world at that size, then scales it up by the largest whole factor that fits the window, centred, with the window's background as bars around it, so every art pixel stays square. Resize the window and the factor follows. `Upscale(twod.Linear)` smooths the picture instead of the default `Nearest`, and `FitWindow()` fills the window at any factor, keeping its shape. `cam.SetResolution` changes it while the game runs, and `SetResolution(0, 0)` goes back to the window's own resolution, with no offscreen picture, for a setting the player toggles; `Resolution()` reads 0, 0 then. Fixed layers and the UI, such as the hint at the top, draw at the window's own resolution, so text stays smooth. To point at the world with the mouse, `cam.ScreenToWorld` turns a window point into a world one. The scaled world is drawn as one picture at its first layer, so a fixed layer numbered between two world layers ends up beneath it.
+`twod.Resolution(320, 180)` on the camera draws the world at that size. It then scales it up by the largest whole factor that fits the window, centred, with the window's background as bars around it, so every art pixel stays square. Resize the window and the factor follows.
+
+| Option or method | What it does |
+|---|---|
+| `Upscale(twod.Linear)` | Smooths the picture instead of the default `Nearest`. |
+| `FitWindow()` | Fills the window at any factor, keeping its shape. |
+| `cam.SetResolution(w, h)` | Changes it while the game runs. |
+| `cam.SetResolution(0, 0)` | Goes back to the window's own resolution, with no offscreen picture, for a setting the player toggles. `Resolution()` reads 0, 0 then. |
+| `cam.ScreenToWorld(p)` | Turns a window point, such as the mouse, into a world one. |
+
+Fixed layers and the UI, such as the hint at the top, draw at the window's own resolution, so text stays smooth.
+
+The scaled world is drawn as one picture at its first layer. So a fixed layer numbered between two world layers ends up beneath it.
 
 [main.go](../../examples/30-pixel-perfect/main.go)
 
