@@ -46,10 +46,11 @@ func Inject(page []byte, xml bool, css string) []byte {
 const engineFonts = "/.ember-fonts/"
 
 // The families ember draws the generic ones with (ui/internal/fonts),
-// and those it has none for.
+// and those it has none for, unquoted, so a style attribute's quotes
+// still hold them.
 const (
-	defaultFamily = `"Go"`
-	monoFamily    = `"Go Mono"`
+	defaultFamily = `Go`
+	monoFamily    = `Go Mono`
 )
 
 // chromeSheet is the sheet Handler puts first in every page: the WPT
