@@ -373,6 +373,7 @@ css/CSS2/bidi-text/bidi-009a.xht ref chrome
 css/CSS2/bidi-text/bidi-009b.xht ref chrome
 css/CSS2/bidi-text/bidi-010a.xht ref chrome
 css/CSS2/bidi-text/bidi-010b.xht ref chrome
+css/CSS2/bidi-text/bidi-011.xht ref
 css/CSS2/bidi-text/bidi-box-model-001.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-002.xht ref chrome
 css/CSS2/bidi-text/bidi-box-model-003.xht ref chrome
@@ -1880,8 +1881,7 @@ css/CSS2/generated-content/content-157.xht ref chrome
 css/CSS2/generated-content/content-158.xht ref chrome
 css/CSS2/generated-content/content-159.xht ref chrome
 css/CSS2/generated-content/content-171.xht ref chrome
-css/CSS2/generated-content/content-172.xht chrome
-css/CSS2/generated-content/content-174.xht ref chrome
+css/CSS2/generated-content/content-174.xht ref
 css/CSS2/generated-content/content-175.xht ref chrome
 css/CSS2/generated-content/content-attr-001.xht ref chrome
 css/CSS2/generated-content/content-attr-case-001.html ref chrome
@@ -5118,6 +5118,10 @@ css/CSS2/tables/table-anonymous-objects-075.xht ref
 css/CSS2/tables/table-anonymous-objects-076.xht ref
 css/CSS2/tables/table-anonymous-objects-077.xht ref
 css/CSS2/tables/table-anonymous-objects-078.xht ref
+css/CSS2/tables/table-anonymous-objects-081.xht ref
+css/CSS2/tables/table-anonymous-objects-082.xht ref
+css/CSS2/tables/table-anonymous-objects-083.xht ref
+css/CSS2/tables/table-anonymous-objects-084.xht ref
 css/CSS2/tables/table-anonymous-objects-093.xht ref
 css/CSS2/tables/table-anonymous-objects-094.xht ref
 css/CSS2/tables/table-anonymous-objects-095.xht ref
@@ -5340,7 +5344,8 @@ css/CSS2/text/text-indent-applies-to-013.xht ref chrome
 css/CSS2/text/text-indent-applies-to-014.xht ref chrome
 css/CSS2/text/text-indent-applies-to-015.xht ref chrome
 css/CSS2/text/text-indent-inherited-001.xht ref chrome
-css/CSS2/text/text-indent-intrinsic-004.xht chrome
+css/CSS2/text/text-indent-intrinsic-002.xht ref chrome
+css/CSS2/text/text-indent-intrinsic-004.xht ref chrome
 css/CSS2/text/text-indent-on-blank-line-rtl-left-align.html ref chrome
 css/CSS2/text/text-indent-overflow-001.xht ref chrome
 css/CSS2/text/text-indent-overflow-002.xht ref chrome
@@ -5545,9 +5550,9 @@ css/CSS2/text/word-spacing-applies-to-012.xht ref chrome
 css/CSS2/text/word-spacing-applies-to-013.xht ref chrome
 css/CSS2/text/word-spacing-applies-to-014.xht ref chrome
 css/CSS2/text/word-spacing-applies-to-015.xht ref chrome
-css/CSS2/text/word-spacing-characters-001.xht ref chrome
+css/CSS2/text/word-spacing-characters-001.xht ref
 css/CSS2/text/word-spacing-characters-002.xht ref
-css/CSS2/text/word-spacing-characters-003.xht ref chrome
+css/CSS2/text/word-spacing-characters-003.xht ref
 css/CSS2/text/word-spacing-justify-001.xht ref chrome
 css/CSS2/text/word-spacing-remove-space-001.xht ref chrome
 css/CSS2/text/word-spacing-remove-space-002.xht ref chrome
@@ -6294,7 +6299,7 @@ css/css-flexbox/flexbox_align-self-stretch.html ref chrome
 css/css-flexbox/flexbox_block.html ref chrome
 css/css-flexbox/flexbox_box-clear.html ref chrome
 css/css-flexbox/flexbox_columns-flexitems-2.html ref chrome
-css/css-flexbox/flexbox_columns-flexitems.html ref chrome
+css/css-flexbox/flexbox_columns-flexitems.html ref
 css/css-flexbox/flexbox_direction-column-reverse.html ref chrome
 css/css-flexbox/flexbox_direction-column.html ref chrome
 css/css-flexbox/flexbox_direction-row-reverse.html ref chrome

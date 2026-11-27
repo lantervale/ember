@@ -78,17 +78,11 @@ func chromeSheet() (string, map[string][]byte) {
 // Generics names, in the font and font-family declarations of css, the
 // generic families by the faces ember draws them with, so Chrome draws
 // them alike: those ember has no face for (cursive, fantasy…) in its
-// default one, as ember does. A family of monospace alone stays, as its
-// default size is a browser's 13px (decision 0259): Chrome draws it in
-// its own monospace face, as wide as ember's.
+// default one, as ember does.
 func Generics(css string) string {
 	return fontDeclaration.ReplaceAllStringFunc(css, func(decl string) string {
 		m := fontDeclaration.FindStringSubmatch(decl)
 		parts := strings.Split(m[2], ",")
-		if words := strings.Fields(m[2]); len(parts) == 1 && len(words) > 0 &&
-			strings.EqualFold(words[len(words)-1], "monospace") {
-			return decl
-		}
 		for i, part := range parts {
 			words := strings.Fields(part)
 			if len(words) == 0 {
