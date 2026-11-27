@@ -1017,6 +1017,7 @@ func (n *node) placeCuts(of map[*dom.Node]*box.Box) {
 				moved[b] = true
 				b.Pos = b.Pos.Add(movedBy(e, nil))
 				b.Dim = dimOf(e, n.box.Node)
+				b.Stacked, b.StackZ = stackOf(e, n.box.Node)
 			}
 		}
 	}
@@ -1063,6 +1064,20 @@ func dimOf(e, upTo *dom.Node) float32 {
 		}
 	}
 	return 1 - shown
+}
+
+// stackOf is whether the nearest positioned inline element holding e below upTo stacks
+// it, and at which z-index.
+func stackOf(e, upTo *dom.Node) (bool, int) {
+	for p := e.Parent(); p != nil && p != upTo; p = p.Parent() {
+		if st := styleOf(p); isInline(p) && st.Position != style.Static {
+			if st.ZAuto {
+				return true, 0
+			}
+			return true, st.ZIndex
+		}
+	}
+	return false, 0
 }
 
 // inFlowBlock reports an element that is a block in the flow of its container.

@@ -759,8 +759,13 @@ func (p *painter) collect(e entry, own, outer *layers) {
 		case c.Kind != box.Element:
 			own.flow = append(own.flow, ce)
 			p.collect(ce, own, outer)
-		case c.Dim > 0 && !startsContext(st):
-			// A block a faded inline element holds stacks with it, as that element does.
+		case c.Stacked && !startsContext(st) && c.StackZ < 0:
+			outer.negative = append(outer.negative, ce)
+		case c.Stacked && !startsContext(st) && c.StackZ > 0:
+			outer.positive = append(outer.positive, ce)
+		case (c.Dim > 0 || c.Stacked) && !startsContext(st):
+			// A block a faded or positioned inline element holds stacks with it, as that
+			// element does.
 			outer.positioned = append(outer.positioned, ce)
 		case startsContext(st) && st.ZIndex < 0 && !st.ZAuto:
 			outer.negative = append(outer.negative, ce)
@@ -938,8 +943,16 @@ func startsContext(st *style.Computed) bool {
 		st.BlendMode != style.BlendNormal || st.Isolate
 }
 
+// zOf is b's z-index, that of the inline element stacking it for a block one holds.
+func zOf(b *box.Box) int {
+	if b.Stacked && !startsContext(shown(b)) {
+		return b.StackZ
+	}
+	return shown(b).ZIndex
+}
+
 func sortZ(es []entry) []entry {
-	slices.SortStableFunc(es, func(a, b entry) int { return shown(a.b).ZIndex - shown(b.b).ZIndex })
+	slices.SortStableFunc(es, func(a, b entry) int { return zOf(a.b) - zOf(b.b) })
 	return es
 }
 

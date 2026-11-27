@@ -4685,6 +4685,7 @@ css/CSS2/selectors/universal-selector-003.xht ref chrome
 css/CSS2/selectors/universal-selector-004.xht ref chrome
 css/CSS2/selectors/universal-selector-005.xht ref
 css/CSS2/stacking-context/opacity-affects-block-in-inline.html ref chrome
+css/CSS2/stacking-context/zindex-affects-block-in-inline.html ref chrome
 css/CSS2/syntax/at-charset-001.xht ref chrome
 css/CSS2/syntax/at-charset-002.xht ref chrome
 css/CSS2/syntax/at-charset-003.xht ref chrome
