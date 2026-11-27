@@ -33,6 +33,13 @@ type inlineContent struct {
 	// marker stands inside it, which mark draws; nil elsewhere.
 	marker *box.Box
 	mark   *markerContent
+	// outside is set where mark is the outside marker of a list item with nothing else
+	// to show: its piece takes no room on the one line it makes, the marker's line height
+	// tall, as Chrome's, and markerLine and markerBaseline keep where that line went, from
+	// its start to its end past the floats, for listMarker to stand the marker beside it.
+	outside        bool
+	markerLine     geom.Rect
+	markerBaseline float32
 	// oofs are the out-of-flow elements inside the content, by their node.
 	oofs map[*node]*inlineOOF
 	// anchors are where in the runs each sits: before run i.
@@ -320,6 +327,12 @@ func (t *tree) inlineOf(owner *node, items []item, listItem *node) *inlineConten
 			visible = true
 		}
 	}
+	if !visible && listItem == nil && outsideMarked(owner) {
+		if m, ok := t.markerOf(owner); ok {
+			c.mark, c.marker, c.outside = &m, &box.Box{Kind: box.Marker, Node: owner.box.Node, Style: m.st}, true
+			visible = true
+		}
+	}
 	if !visible {
 		return nil
 	}
@@ -585,9 +598,12 @@ func (c *inlineContent) cut(fonts box.Fonts) {
 	soft := c.softBreaks()
 	levels := c.levels()
 	c.reorders = levels != nil
-	if c.mark != nil {
+	switch {
+	case c.outside:
+		c.pieces = append(c.pieces, piece{kind: marker})
+	case c.mark != nil:
 		c.pieces = append(c.pieces, piece{kind: marker, width: c.mark.insideWidth(fonts)})
-	} else if c.marker != nil {
+	case c.marker != nil:
 		c.pieces = append(c.pieces, piece{kind: marker, width: markerWidth(fonts, c.owner.st)})
 	}
 	for i, r := range c.runs {
@@ -3194,10 +3210,15 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			if p.kind == anchor {
 				k := c.anchors[p.span].node
 				c.oofs[k].static = point{x, y}
-				if c.anchors[p.span].top && !k.st.StaticInline {
+				if !k.st.StaticInline {
 					// a block-level one starts a line: below this one when text is before it
 					c.oofs[k].static = point{inset.l, y}
-					if x > start {
+					before := x > start
+					if n.st.Dir == style.RTL {
+						c.oofs[k].static.x = inset.l + content
+						before = c.showsBefore(l, p.span)
+					}
+					if before {
 						c.oofs[k].static.y += lh
 					}
 				}
@@ -3232,6 +3253,20 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	for _, o := range c.oofs {
 		c.containingSpan(o, spanLines, size{content, none})
 	}
+}
+
+// showsBefore reports whether anything with a width stands before the anchor of
+// out-of-flow box k on line l, in the content's order.
+func (c *inlineContent) showsBefore(l line, k int) bool {
+	for _, p := range c.pieces[l.from:l.to] {
+		if p.kind == anchor && p.span == k {
+			return false
+		}
+		if p.width > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // containingSpan makes the nearest positioned span holding o its containing block: the
@@ -3370,7 +3405,7 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 	if c.back != nil {
 		add(n.box, c.back)
 	}
-	if c.marker != nil {
+	if c.marker != nil && !c.outside {
 		add(n.box, c.marker)
 	}
 	for i, r := range c.runs {
@@ -3407,6 +3442,8 @@ func (t *tree) attachInline(n *node, c *inlineContent, runRects []geom.Rect, ori
 
 // writeLines writes each line's fragments into its runs' boxes, and returns the rectangles
 // the runs and spans took, and how many of each span's lines are past a line-clamp's last.
+//
+//nolint:funlen // one pass over the lines, each written whole
 func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32) ([]geom.Rect,
 	map[*box.Box]geom.Rect, map[*box.Box][]spanLine, map[*box.Box]int) {
 	f := n.final
@@ -3433,6 +3470,9 @@ func (t *tree) writeLines(n *node, c *inlineContent, inset rect, content float32
 		}
 		off, perGap := c.align(n.st, l, li == len(ls)-1, l.avail-l.width)
 		x := inset.l + l.x + off
+		if c.outside {
+			c.markerLine.X, c.markerLine.W = inset.l+l.x, l.avail
+		}
 		pieces, order := c.ordered(l)
 		if c.firstOn {
 			t.backOf(c, n, geom.Rect{X: x, Y: y, W: l.width, H: lh}, lb)
@@ -3609,6 +3649,10 @@ func (t *tree) fragment(st *style.Computed, text string, r geom.Rect, baseline f
 
 // placeMarker puts the ::marker box at r, its triangle on baseline lb.
 func (c *inlineContent) placeMarker(r geom.Rect, lb float32) {
+	if c.outside {
+		c.markerLine.Y, c.markerLine.H, c.markerBaseline = r.Y, r.H, r.Y+lb
+		return
+	}
 	if c.mark != nil {
 		c.mark.place(c.marker, r, lb)
 		return

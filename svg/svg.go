@@ -195,16 +195,16 @@ func (p *Picture) Height() (float64, bool) {
 	return 0, false
 }
 
-// Ratio is the picture's width over its height: its view box's, else its
-// width and height attributes'. ok is false when it has neither, and a
-// picture with a Ratio but no Width keeps it at whatever size it is
-// given.
+// Ratio is the picture's width over its height: its width and height
+// attributes', when it has both, else its view box's, as Chrome sizes an
+// image of it. ok is false when it has neither, and a picture with a
+// Ratio but no Width keeps it at whatever size it is given.
 func (p *Picture) Ratio() (float64, bool) {
-	if !p.ViewBox.Empty() {
-		return p.ViewBox.W / p.ViewBox.H, true
-	}
 	if p.hasWidth && p.hasHeight && p.width > 0 && p.height > 0 {
 		return p.width / p.height, true
+	}
+	if !p.ViewBox.Empty() {
+		return p.ViewBox.W / p.ViewBox.H, true
 	}
 	return 0, false
 }
