@@ -4645,6 +4645,7 @@ css/CSS2/selectors/id-selector-004.xht ref chrome
 css/CSS2/selectors/id-selector-005.xht ref chrome
 css/CSS2/selectors/id-selector-006.xht ref chrome
 css/CSS2/selectors/lang-pseudoclass-001.html ref
+css/CSS2/selectors/lang-pseudoclass-002.xht ref
 css/CSS2/selectors/lang-selector-001.xht ref chrome
 css/CSS2/selectors/lang-selector-002.xht ref chrome
 css/CSS2/selectors/lang-selector-003.xht ref chrome
@@ -4773,6 +4774,7 @@ css/CSS2/syntax/blocks-006.xht ref chrome
 css/CSS2/syntax/blocks-and-strings-001.xht ref chrome
 css/CSS2/syntax/case-sensitive-000.xht ref chrome
 css/CSS2/syntax/case-sensitive-001.xht ref
+css/CSS2/syntax/case-sensitive-004.xht ref chrome
 css/CSS2/syntax/case-sensitive-005.xht ref chrome
 css/CSS2/syntax/case-sensitive-006.html ref chrome
 css/CSS2/syntax/case-sensitive-007.xht chrome
