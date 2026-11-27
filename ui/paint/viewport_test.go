@@ -21,6 +21,7 @@ func scrolledPage(y float32, edit func(body *style.Computed)) (*box.Tree, *box.B
 	body.Node = dom.NewElement(dom.Body)
 	html := el(0, 0, 400, 1000, func(s *style.Computed) { s.Border = style.All[float32](10) }, body)
 	html.Node = dom.NewElement(dom.HTML)
+	html.Node.Append(body.Node)
 	port := style.Initial()
 	port.Overflow = style.Size[style.Overflow]{Width: style.OverflowAuto, Height: style.OverflowAuto}
 	v := &box.Box{
