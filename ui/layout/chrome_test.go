@@ -165,6 +165,11 @@ func TestLayoutMatchesChrome(t *testing.T) {
 				ui.Div(ui.Style("position: absolute; top: 40px; left: 20px; right: 20px"), ui.Text(sentence)),
 			),
 		),
+		"a root narrower than the viewport centred by its auto margins": styled(
+			"html { width: 300px; margin: 0 auto; } body { margin: 0; }", ui.Div(ui.Style("height: 40px"))),
+		"a root table centred by its auto margins": styled(
+			"html { display: table; margin: 0 auto 0 0; margin-left: auto; } body { display: table-cell; margin: 0; }",
+			ui.Div(ui.Style("width: 120px; height: 40px"))),
 		"block margins collapse": page(
 			ui.Div(
 				ui.Div(ui.Style("margin: 10px 0"), ui.Div(ui.Style("margin-top: 20px; height: 10px"))),
