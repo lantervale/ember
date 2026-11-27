@@ -19,6 +19,7 @@ css/CSS2/abspos/abspos-containing-block-initial-009e.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-009f.xht ref chrome
 css/CSS2/abspos/hypothetical-inline-alone-on-second-line.html ref chrome
 css/CSS2/abspos/static-fixed-inside-abspos.html ref chrome
+css/CSS2/abspos/static-inside-float-inside-inline.html ref chrome
 css/CSS2/abspos/static-inside-inline-001.html ref chrome
 css/CSS2/abspos/static-inside-inline-003.html ref chrome
 css/CSS2/abspos/static-inside-inline-block.html ref chrome
@@ -609,6 +610,7 @@ css/CSS2/borders/border-conflict-style-103.xht ref chrome
 css/CSS2/borders/border-conflict-style-104.xht ref chrome
 css/CSS2/borders/border-conflict-style-105.xht ref chrome
 css/CSS2/borders/border-conflict-style-106.xht ref chrome
+css/CSS2/borders/border-conflict-style-107.html ref chrome
 css/CSS2/borders/border-left-001.xht ref chrome
 css/CSS2/borders/border-left-003.xht ref chrome
 css/CSS2/borders/border-left-005.xht ref chrome
@@ -1529,9 +1531,9 @@ css/CSS2/floats/floats-placement-vertical-001a.xht chrome
 css/CSS2/floats/floats-placement-vertical-001b.xht chrome
 css/CSS2/floats/floats-placement-vertical-001c.xht chrome
 css/CSS2/floats/floats-placement-vertical-003.xht ref chrome
-css/CSS2/floats/floats-placement-vertical-004-ref.xht chrome
-css/CSS2/floats/floats-placement-vertical-004-ref2.xht chrome
-css/CSS2/floats/floats-placement-vertical-004.xht chrome
+css/CSS2/floats/floats-placement-vertical-004-ref.xht ref chrome
+css/CSS2/floats/floats-placement-vertical-004-ref2.xht ref chrome
+css/CSS2/floats/floats-placement-vertical-004.xht ref chrome
 css/CSS2/floats/floats-rule3-outside-left-001.xht ref chrome
 css/CSS2/floats/floats-rule3-outside-left-002.xht ref
 css/CSS2/floats/floats-rule3-outside-right-001.xht ref chrome
