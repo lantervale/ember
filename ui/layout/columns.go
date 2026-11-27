@@ -763,10 +763,10 @@ func (t *tree) touchPositioned(n *node) {
 	}
 }
 
-// breaksInside reports a box columns may cut: a block container in the flow that holds
+// breaksInside reports a box columns may cut: a block container in the flow, a float too, that holds
 // blocks or lines, a flex container between its lines and inside its items, a table or
 // a row group between its rows. The others go into one column whole, as Chrome keeps
-// monolithic boxes; so do a float, a row, a grid container and a nested multi-column
+// monolithic boxes; so do a row, a grid container and a nested multi-column
 // container, which Chrome would cut.
 func breaksInside(n *node) bool { return !outOfFlow(n.st.Position) && cuttable(n) }
 
@@ -776,7 +776,7 @@ func cuttable(n *node) bool {
 	st := n.st
 	if n.atomic || n.replaced || n.control != noControl ||
 		st.Display != style.Block && st.Display != style.FlexDisplay && st.Display != style.GridDisplay ||
-		st.Float != style.FloatNone || st.BreakInsideAvoid && !forcesBreak(n) || st.Multicol() || isScrollContainer(st) {
+		st.BreakInsideAvoid && !forcesBreak(n) || st.Multicol() || isScrollContainer(st) {
 		return false
 	}
 	switch c := n.context(); n.role {
@@ -944,11 +944,48 @@ func (t *tree) flowUnits(n *node, s size, inset rect) ([]flowUnit, []lane) {
 }
 
 // settle puts units in the flow's order and makes those that overlap one: a float and the
-// lines beside it can't be cut apart.
+// lines beside it can't be cut apart. Empty room, as an empty float's, is cut round the
+// content beside it instead, which takes what of the room it overlaps.
 func settle(units []flowUnit, sorted bool) []flowUnit {
 	if !sorted {
 		slices.SortStableFunc(units, func(a, b flowUnit) int { return cmp.Compare(a.top, b.top) })
 	}
+	var rooms []flowUnit
+	content := units[:0]
+	for _, u := range units {
+		if u.space && !u.forced && len(u.lanes) == 0 {
+			rooms = append(rooms, u)
+			continue
+		}
+		content = append(content, u)
+	}
+	content = overlapped(content)
+	if len(rooms) == 0 {
+		return content
+	}
+	out := slices.Clone(content)
+	for _, r := range rooms {
+		for _, c := range content {
+			if c.bottom <= r.top+columnEpsilon || c.top >= r.bottom-columnEpsilon {
+				continue
+			}
+			if c.top > r.top+columnEpsilon {
+				piece := r
+				piece.bottom = c.top
+				out = append(out, piece)
+			}
+			r.top = c.bottom
+		}
+		if r.bottom > r.top+columnEpsilon {
+			out = append(out, r)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b flowUnit) int { return cmp.Compare(a.top, b.top) })
+	return overlapped(out)
+}
+
+// overlapped makes the units of sorted units that overlap one.
+func overlapped(units []flowUnit) []flowUnit {
 	out := units[:0]
 	for _, u := range units {
 		if last := len(out) - 1; last >= 0 && u.top < out[last].bottom-columnEpsilon && !u.forced {
