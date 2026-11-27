@@ -423,13 +423,7 @@ func (p *painter) canvasBackground(root *box.Box) {
 	border := geom.Rect{X: at.X, Y: at.Y, W: root.Size.X, H: root.Size.Y}
 	src := root
 	if !hasBackground(shown(root)) {
-		src = nil
-		for _, c := range root.Children {
-			if c.Kind == box.Element && c.Node != nil && c.Node.Tag() == dom.Body {
-				src = c
-				break
-			}
-		}
+		src = bodyBox(root)
 	}
 	if src == nil || !hasBackground(shown(src)) {
 		if st := shown(root); st != nil && st.Dark {
@@ -452,6 +446,25 @@ func (p *painter) canvasBackground(root *box.Box) {
 		}
 		mixing.layer(l.Blend, func() { p.backgroundImage(p.viewport, area, radii{}, &l, st, 1) })
 	}
+}
+
+// bodyBox is the box of the root element's body child, wherever the
+// root's display or the body's position put it: an anonymous table
+// wrapper, or a positioned body's containing block.
+func bodyBox(root *box.Box) *box.Box { return bodyUnder(root, root.Node) }
+
+func bodyUnder(b *box.Box, html *dom.Node) *box.Box {
+	for _, c := range b.Children {
+		if c.Kind == box.Element && c.Node != nil && c.Node.Tag() == dom.Body && c.Node.Parent() == html {
+			return c
+		}
+		if c.Node == nil || c.Node == html {
+			if body := bodyUnder(c, html); body != nil {
+				return body
+			}
+		}
+	}
+	return nil
 }
 
 func hasBackground(st *style.Computed) bool { return st.Background.A > 0 || st.HasBackgroundImage() }
