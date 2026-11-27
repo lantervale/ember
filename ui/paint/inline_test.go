@@ -3,6 +3,7 @@ package paint //nolint:testpackage // white-box: builds box trees by hand and re
 import (
 	"testing"
 
+	"github.com/lantervale/ember/color"
 	"github.com/lantervale/ember/geom"
 	"github.com/lantervale/ember/ui/internal/box"
 	"github.com/lantervale/ember/ui/internal/style"
@@ -111,6 +112,20 @@ func TestASplitSpansOutlineCirclesEachFragment(t *testing.T) {
 	outlines := paintOne(b).of("border")
 	require.Len(t, outlines, 2)
 	assert.Equal(t, geom.Rect{X: 49, Y: 9, W: 62, H: 22}, outlines[0].Rect)
+}
+
+func TestABlockAPositionedSpanHoldsStacksWithIt(t *testing.T) {
+	over := el(0, 0, 100, 100, func(st *style.Computed) {
+		st.Background, st.Position, st.ZIndex = red, style.Relative, 1
+	})
+	held := el(0, 0, 100, 100, bg(green))
+	held.Stacked, held.StackZ = true, 2
+	under := el(0, 100, 100, 100, bg(blue))
+	under.Stacked, under.StackZ = true, -1
+	r := newRecorder()
+	Paint(r, tree(el(0, 0, 400, 300, nil, over, held, under)))
+	assert.Equal(t, "under over held", r.order(map[color.Color]string{red: "over", green: "held", blue: "under"}),
+		"at the z-index of the span holding it, not in the flow below the positioned boxes")
 }
 
 func TestABlockAFadedSpanHoldsFadesWithIt(t *testing.T) {

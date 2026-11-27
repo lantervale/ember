@@ -193,6 +193,10 @@ type Box struct {
 	// less the product of their opacities: Chrome fades a block in a
 	// faded span with the span.
 	Dim float32
+	// Stacked marks a block a positioned inline element cut round it holds: it stacks
+	// with that element, at its z-index StackZ (0 for auto), as Chrome paints it.
+	Stacked bool
+	StackZ  int
 	// Collapsed is the borders of a table that collapses them, which it
 	// draws over its cells: nil for any other box.
 	Collapsed []Edge
