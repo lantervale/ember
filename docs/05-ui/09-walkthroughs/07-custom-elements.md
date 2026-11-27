@@ -12,7 +12,19 @@ A game can make its own UI elements and draw them itself. Here a red health orb 
 
 ## Drawing on the canvas
 
-`c.RoundRectCorners(rect, radii, colour)` fills a box whose corners each take their own radius, top-left, top-right, bottom-right then bottom-left as in CSS, scaled down together when two on one side would overlap: `[4]float32{8, 8, 0, 0}` is a tab, one sharp corner a speech bubble; `c.BorderCorners(rect, radii, thickness, colour)` strokes the same outline inside the box. `c.Glow(rect, radius, spread, colour)` draws a soft halo around a rectangle with corners rounded by radius, fading out over spread points, as a kit panel's glow does. `c.Triangles(points, indices, colour)` fills any shape cut into triangles, and `c.TrianglesColored(points, colours, indices)` gives each point its own colour, blended across, so a shape can fade at its rim: a light disc on a `Blend(Multiply)` layer, bright in the middle and gone at its edge, or a line-of-sight polygon. `c.Image(rect, texture, uv, tint)` draws a picture; `c.SmoothImage` draws it alike, but under a rotation or a skew its edges are anti-aliased over a pixel, as ui draws a turned `img` ([decision 0220](../../99-decisions/0220-a-turned-pictures-and-borders-edges-are-covered-by-their-distance.md)), where `Image` keeps a turned sprite's edges as its pixels fall.
+Beyond the orb, a `twod.Canvas` draws:
+
+| Call | Draws |
+|---|---|
+| `c.RoundRectCorners(rect, radii, colour)` | a box whose corners each take their own radius, top-left, top-right, bottom-right then bottom-left as in CSS, scaled down together when two on one side would overlap: `[4]float32{8, 8, 0, 0}` is a tab, one sharp corner a speech bubble |
+| `c.BorderCorners(rect, radii, thickness, colour)` | the same outline, stroked inside the box |
+| `c.Glow(rect, radius, spread, colour)` | a soft halo around a rectangle with corners rounded by radius, fading out over spread points, as a kit panel's glow does |
+| `c.Triangles(points, indices, colour)` | any shape cut into triangles |
+| `c.TrianglesColored(points, colours, indices)` | the same, each point its own colour, blended across, so a shape can fade at its rim: a light disc on a `Blend(Multiply)` layer, bright in the middle and gone at its edge, or a line-of-sight polygon |
+| `c.Image(rect, texture, uv, tint)` | a picture; turned, its edges stay as its pixels fall, as a sprite's |
+| `c.SmoothImage(rect, texture, uv, tint)` | the same, but under a rotation or a skew its edges are anti-aliased over a pixel, as ui draws a turned `img` ([decision 0220](../../99-decisions/0220-a-turned-pictures-and-borders-edges-are-covered-by-their-distance.md)) |
+
+A disc that fades at its rim:
 
 ```go
 points, colours := []geom.Vec2{{}}, []color.Color{color.White}

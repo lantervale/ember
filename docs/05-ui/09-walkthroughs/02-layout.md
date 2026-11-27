@@ -4,9 +4,19 @@ A game's main menu that fills its window at any size: a title at the top, a grid
 
 ![The menu following its window as it grows wide and shrinks small](layout.gif)
 
-## The rule
+## How kit lays out
 
-Layout is CSS flex and grid. `kit.Column` stacks its children, `kit.Row` lines them up; `kit.Gap` spaces them and `kit.Padding` keeps room inside the edge. A child with `kit.Expand()` takes the room left over, shared alike; `kit.Fill()` stretches one across. `kit.AlignCenter()` centres the children across, `kit.JustifyBetween()` and the rest place them along ([Row and Column](../07-kit/06-row-and-column.md)). A height in percent needs its parents' heights, so the page's sheet, written in the code with `ui.CSS`, gives `html`, `body` and the menu `height: 100%`, and styles the title by its `id`.
+Layout is CSS flex and grid, through kit's helpers ([Row and Column](../07-kit/06-row-and-column.md)):
+
+| Helper | Does |
+|---|---|
+| `kit.Column`, `kit.Row` | stacks its children, or lines them up |
+| `kit.Gap`, `kit.Padding` | spaces the children, keeps room inside the edge |
+| `kit.Expand()` | a child takes the room left over, shared alike |
+| `kit.Fill()` | a child stretches across |
+| `kit.AlignCenter()`, `kit.JustifyBetween()` and the rest | place the children across, and along |
+
+A height in percent needs its parents' heights. So the page's sheet, written in the code with `ui.CSS`, gives `html`, `body` and the menu `height: 100%`, and styles the title by its `id`.
 
 ## The menu
 
