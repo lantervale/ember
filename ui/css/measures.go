@@ -33,6 +33,8 @@ type measures struct {
 	// dark is whether the Document prefers the dark scheme, and
 	// prefersRead whether an element took its scheme from it since then.
 	dark, prefersRead bool
+	// browser is whether the sheets are read as a browser's.
+	browser bool
 	// inactive is whether the Document's window is inactive, and
 	// inactiveRead whether a :window-inactive was matched since the tree
 	// was last styled whole.

@@ -46,7 +46,7 @@ func Initial() Computed {
 			AlignSelf: AlignAuto, JustifyItems: AlignNormal, JustifySelf: AlignAuto, LineCount: 1,
 		},
 		Text: Text{
-			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Weight: 400, Stretch: 100},
+			Font:       Font{Family: []string{"sans-serif"}, Size: 16, Keyword: 4, Weight: 400, Stretch: 100},
 			LineHeight: LineHeight{Normal: true},
 			Color:      color.Color{A: 1},
 			TextAlign:  Start,
@@ -522,8 +522,15 @@ type Font struct {
 	// Family is font-family's list, generic names last.
 	Family []string
 	Size   float32
-	Weight float32
-	Italic bool
+	// Keyword is the font-size keyword Size comes from, 1 for xx-small
+	// to 8 for xxx-large, 0 for none; Absolute is set where it comes
+	// from no keyword, percentage or font-relative length on the way
+	// down. They are what Chrome's default monospace size reads
+	// (decision 0259).
+	Keyword  int8
+	Absolute bool
+	Weight   float32
+	Italic   bool
 	// Stretch is font-stretch as a percentage of the normal width, 0
 	// standing for 100.
 	Stretch float32

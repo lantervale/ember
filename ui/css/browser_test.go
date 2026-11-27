@@ -260,3 +260,49 @@ text-shadow: 1px 1px #f00; }`)}
 		t.Errorf("a paragraph keeps the page's: %v %v %v", s.WordGap(), s.LetterGap(), s.TextTransform)
 	}
 }
+
+func TestABrowsersDefaultMonospaceIs13PxWhereItsSizeIsNotAbsolute(t *testing.T) {
+	styled := func(css string, kids ...*dom.Node) *dom.Node {
+		n := dom.NewElement(dom.Div)
+		n.SetAttr("style", css)
+		n.Append(kids...)
+		return n
+	}
+	const mono = "font-family: monospace"
+	want := map[*dom.Node]float32{}
+	names := map[*dom.Node]string{}
+	add := func(size float32, name string, n *dom.Node) *dom.Node {
+		want[n], names[n] = size, name
+		return n
+	}
+	alone := add(13, "alone", styled(mono,
+		add(26, "at 2em", styled("font-size: 2em")),
+		add(16, "back in another family", styled("font-family: serif"))))
+	root := page(
+		alone,
+		styled("font-size: 20px", add(20, "under an absolute size", styled(mono))),
+		add(16, "beside another family", styled("font-family: monospace, monospace")),
+		styled("font-size: 2em", add(26, "under 2em", styled(mono))),
+		add(20, "x-large", styled(mono+"; font-size: x-large")),
+		add(12, "small", styled(mono+"; font-size: small")),
+		add(39, "xxx-large", styled(mono+"; font-size: xxx-large")),
+		add(15.6, "larger", styled(mono+"; font-size: larger")),
+		add(16, "at 1rem", styled(mono+"; font-size: 1rem")),
+		styled(mono, styled("font-size: 150%", add(24, "out of it at 150%", styled("font-family: serif")))),
+		add(13, "a pre", dom.NewElement(dom.Pre)),
+		styled("font-size: 12px", add(12, "a pre under 12px", dom.NewElement(dom.Pre))),
+	)
+	tr := NewTransitions()
+	tr.BrowserSheets()
+	tr.Compute(root, nil)
+	for n, size := range want {
+		if got := styleOf(n).Font.Size; got < size-0.001 || got > size+0.001 {
+			t.Errorf("%s: %vpx, want %vpx as Chrome", names[n], got, size)
+		}
+	}
+	root.Walk(func(n *dom.Node) bool { dom.Data(n).Style = nil; return true })
+	NewTransitions().Compute(root, nil)
+	if got := styleOf(alone).Font.Size; got != 16 {
+		t.Errorf("a game's monospace is %vpx, want 16px", got)
+	}
+}

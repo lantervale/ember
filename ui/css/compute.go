@@ -186,7 +186,7 @@ func (r *restyler) run(root *dom.Node, stale bool) {
 	if r.env == nil {
 		r.env = &measures{}
 	}
-	r.env.root = root
+	r.env.root, r.env.browser = root, r.browser
 	if stale {
 		r.env.used, r.env.prefersRead, r.env.titleBarRead, r.env.inactiveRead = 0, false, false, false
 		r.env.mediaRead = false
@@ -1099,6 +1099,13 @@ func (x *ctx) envValue(c Component) ([]Component, bool) {
 // inheritance or its initial value when it has none.
 func (x *ctx) apply(l *longhand, d *Declaration) {
 	name, p := l.name, l.prop
+	if name == propFontSize {
+		x.c.Font.Keyword, x.c.Font.Absolute = x.parent.Font.Keyword, x.parent.Font.Absolute
+		if x.root {
+			x.c.Font.Keyword, x.c.Font.Absolute = initial.Font.Keyword, initial.Font.Absolute
+		}
+		defer x.monospaced()
+	}
 	if d == nil {
 		if l.inherited {
 			x.inherit(l)
@@ -2952,14 +2959,36 @@ func gridLine(_ *ctx, v []Component) style.GridLine {
 	return g
 }
 
-//nolint:gochecknoglobals,goconst // lookup table
-var fontSizes = map[string]float32{
-	"xx-small": 9, "x-small": 10, "small": 13, "medium": 16, "large": 18, "x-large": 24, "xx-large": 32,
-	"xxx-large": 48,
+// fontKeywords are font-size's keywords, Font.Keyword counting from 1,
+// and their sizes: a browser's for text in its default monospace font
+// (decision 0259) and for the rest.
+//
+//nolint:gochecknoglobals,goconst // lookup tables
+var (
+	fontKeywords   = []string{"xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large", "xxx-large"}
+	fontSizes      = [...]float32{9, 10, 13, 16, 18, 24, 32, 48}
+	monospaceSizes = [...]float32{9, 10, 12, 13, 16, 20, 26, 39}
+)
+
+// fontRelative reports whether a length in unit measures the parent's font.
+func fontRelative(unit string) bool {
+	switch u, ok := relativeUnits[unit]; {
+	case unit == "em":
+		return true
+	case !ok:
+		return false
+	default:
+		return u == unitEx || u == unitCh || u == unitCap || u == unitIc || u == unitLh
+	}
 }
 
 func (x *ctx) fontSize(v []Component) float32 {
 	c := v[0]
+	f, p := &x.c.Font, x.parent.Font
+	if x.root {
+		p = initial.Font
+	}
+	f.Keyword = 0
 	if c.Kind == Ident {
 		switch w := strings.ToLower(c.Text); w {
 		case "smaller":
@@ -2967,11 +2996,54 @@ func (x *ctx) fontSize(v []Component) float32 {
 		case "larger":
 			return x.parent.Font.Size * 1.2
 		default:
-			return fontSizes[w]
+			f.Absolute = false
+			i := slices.Index(fontKeywords, w)
+			f.Keyword = int8(i + 1) //nolint:gosec // one of eight
+			return x.keywordSize(f.Keyword, x.monospace(f))
 		}
 	}
+	f.Absolute = p.Absolute || c.Kind == Dimension && !fontRelative(strings.ToLower(c.Unit))
 	l := x.length(c)
 	return l.Px + l.Percent*x.parent.Font.Size/100
+}
+
+// keywordSize is the size of font-size's keyword k, in the default
+// monospace font's table where mono is set.
+func (x *ctx) keywordSize(k int8, mono bool) float32 {
+	if mono {
+		return monospaceSizes[k-1]
+	}
+	return fontSizes[k-1]
+}
+
+// monospace reports whether f is drawn in a browser's default monospace
+// font: its family is monospace alone, under a browser's sheets.
+func (x *ctx) monospace(f *style.Font) bool {
+	return x.env.browser && len(f.Family) == 1 && strings.EqualFold(f.Family[0], "monospace")
+}
+
+// monospaced scales the font's size where it goes into or out of a
+// browser's default monospace font, from 16px to 13px and back, as
+// Chrome's FontBuilder does, but where it is absolute: a keyword's is
+// that of its table.
+func (x *ctx) monospaced() {
+	f := &x.c.Font
+	parent := x.parent.Font
+	if x.root {
+		parent = initial.Font
+	}
+	mono := x.monospace(f)
+	if f.Absolute || mono == x.monospace(&parent) {
+		return
+	}
+	switch {
+	case f.Keyword > 0:
+		f.Size = x.keywordSize(f.Keyword, mono)
+	case mono:
+		f.Size *= monospaceSizes[3] / fontSizes[3]
+	default:
+		f.Size *= fontSizes[3] / monospaceSizes[3]
+	}
 }
 
 func (x *ctx) fontWeight(v []Component) float32 {
