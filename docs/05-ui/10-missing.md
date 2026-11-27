@@ -79,6 +79,7 @@ What ui does not do yet, where a page written for a browser would expect it. Eac
 | Missing | Today |
 |---|---|
 | a positioned box beside the lines of a flex or grid item or a table cell columns cut, their lines not lining up | cut only where none of them has a line across the column's end, where Chrome cuts each where its own content allows |
+| a `br` with nothing but white space and floats after it | has no box (`Box()` is empty), where Chrome gives it one on its line |
 | in columns, a block of no height holding a float they cut, and a float holding lines beside other lines | the block stays in the float's first column, where Chrome gives it a part in each; the float's lines and those beside it stay together, where Chrome cuts each by its own |
 | a selector naming an element ui has none of inside `:not()` under `ui.BrowserSheets()` | its rule is dropped with a warning, where Chrome's matches every element |
 | a picture of `height: 100%` in a grid item of `height: 100%` in an auto row | the item's row grows with the picture its own stretched height resolves, 3px past Chrome's row for a square picture (and its bottom margin's worth more with one), where Chrome keeps the row it sized (WPT css/css-grid/grid-items/replaced-element-015.html, which matches its reference all the same) |

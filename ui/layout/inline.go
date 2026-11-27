@@ -2540,6 +2540,10 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 			break
 		}
 	}
+	for _, f := range floats {
+		// after the last line's content, as one after a br ending the lines: below it
+		f.at, f.placed = c.flow.place(f.box, y, f.side, f.clearing, false), true
+	}
 	c.clearedAfter = y - bottom
 	return c.reshaped(b.close())
 }
@@ -2564,9 +2568,19 @@ func (c *inlineContent) restartFloats() []*lineFloat {
 // follows it, as only a forced break does not.
 func (c *inlineContent) floatsOn(floats []*lineFloat, l line, after int, ended bool) []*lineFloat {
 	n := 0
+	br := -1
+	if l.forced {
+		for i := l.from; i < l.to; i++ {
+			if c.pieces[i].kind == newline {
+				br = i
+			}
+		}
+	}
 	for _, f := range floats {
 		k := c.pieceOf(f.run)
-		if k > after || k == after && ended && l.forced {
+		if k > after || k == after && ended && l.forced || br >= 0 && k > br {
+			// a float after the br ending the line, past the white space the line keeps
+			// after it, is the next line's
 			break
 		}
 		n++
