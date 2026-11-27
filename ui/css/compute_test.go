@@ -1097,6 +1097,19 @@ func TestABorderStyleAloneIsAMediumBorder(t *testing.T) {
 	}
 }
 
+func TestABorderWidthInheritsWhatBorderStyleNoneLeavesUnused(t *testing.T) {
+	child, parent := el(dom.P, "child"), el(dom.Div, "parent")
+	parent.Append(child)
+	Compute(page(parent), []*Sheet{sheet(t,
+		"#parent { border-width: 2em; font-size: 10px } #child { border-width: inherit; border-style: solid }")})
+	if got := styleOf(parent).Border; got != (style.Sides[float32]{}) {
+		t.Errorf("no style draws no border: %v", got)
+	}
+	if got, want := styleOf(child).Border, (style.Sides[float32]{Top: 20, Right: 20, Bottom: 20, Left: 20}); got != want {
+		t.Errorf("inherited: %v, want the parent's computed %v, as Chrome", got, want)
+	}
+}
+
 func TestOutlineStyleAutoIsTheFocusRing(t *testing.T) {
 	d := el(dom.Div, "d")
 	root := page(d)

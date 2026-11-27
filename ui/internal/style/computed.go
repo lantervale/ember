@@ -1400,7 +1400,10 @@ type Look struct {
 	// BorderHidden marks the sides whose border-style is hidden: none, and
 	// in a table of collapsed borders no border at all on that edge.
 	BorderHidden Sides[bool]
-	BorderImage  Image
+	// BorderWidth is the computed border widths, which border-style none
+	// leaves as they are: what border-width: inherit takes.
+	BorderWidth Sides[float32]
+	BorderImage Image
 	// BorderImageRepeat is border-image-repeat across and down.
 	BorderImageRepeat [2]ImageRepeat
 	// BorderImageWidth is border-image-width: how thick the border image's

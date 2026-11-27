@@ -30,6 +30,7 @@ var (
 func initialStyle() style.Computed {
 	c := style.Initial()
 	c.Border = style.Sides[float32]{Top: 3, Right: 3, Bottom: 3, Left: 3}
+	c.BorderWidth = c.Border
 	c.OutlineWidth = 3
 	c.ColumnRuleWidth = 3
 	zero := style.Size[style.Length]{Width: style.Px(0), Height: style.Px(0)}
@@ -1264,6 +1265,8 @@ func (x *ctx) propagateOverflow(root bool) {
 func (x *ctx) finish(root bool) {
 	c := x.c
 	none := func(s style.BorderStyle) bool { return s == style.BorderNone }
+	x.snapWidths()
+	c.BorderWidth = c.Border
 	if none(c.BorderStyle.Top) {
 		c.Border.Top = 0
 	}
@@ -1276,7 +1279,6 @@ func (x *ctx) finish(root bool) {
 	if none(c.BorderStyle.Left) {
 		c.Border.Left = 0
 	}
-	x.snapWidths()
 	ox, oy := c.Overflow.Width, c.Overflow.Height
 	scrolls := func(o style.Overflow) bool {
 		return o == style.Hidden || o == style.Scroll || o == style.OverflowAuto
@@ -2590,8 +2592,9 @@ var props = func() map[string]prop {
 		maps.Copy(m, sideProps(prefix, "", how[prefix], get))
 	}
 	for i, side := range []string{"top", "right", "bottom", "left"} {
-		m["border-"+side+"-width"] = field(func(c *style.Computed) *float32 { return sideOf(&c.Border, i) }, borderWidthOf,
-			widths)
+		width := field(func(c *style.Computed) *float32 { return sideOf(&c.Border, i) }, borderWidthOf, widths)
+		width.inherit = func(dst, src *style.Computed) { *sideOf(&dst.Border, i) = *sideOf(&src.BorderWidth, i) }
+		m["border-"+side+"-width"] = width
 		m["border-"+side+"-style"] = prop{
 			set: func(x *ctx, v []Component) {
 				*sideOf(&x.c.BorderStyle, i) = borderStyles[strings.ToLower(v[0].Text)]
