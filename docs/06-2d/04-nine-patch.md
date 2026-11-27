@@ -10,7 +10,15 @@ The panel, with its 8-pixel frame:
 
 ## The program
 
-`twod.NewNinePatch` takes the texture, and `Margins` the width of its left, top, right and bottom borders, in texture pixels. The four corners are drawn as they are, the edges stretch along their length, and the middle fills the rest; `Size` sets the size it fills. Here `Pivot(0, 0)` places each panel by its top-left corner. As with sprites, `Scale` enlarges the whole of it, here three times, so the pixel art stays crisp: with pixel-art frames, keep the scale a whole number, so every corner pixel stays whole.
+`twod.NewNinePatch` takes the texture, and `Margins` the width of its left, top, right and bottom borders, in texture pixels. The picture is cut in nine:
+
+- the four corners are drawn as they are;
+- the edges stretch along their length;
+- the middle fills the rest.
+
+`Size` sets the size it fills. `Pivot(0, 0)` places each panel by its top-left corner.
+
+As with sprites, `Scale` enlarges the whole of it, here three times. With pixel-art frames, keep the scale a whole number, so every corner pixel stays whole.
 
 [main.go](../../examples/22-nine-patch/main.go)
 
