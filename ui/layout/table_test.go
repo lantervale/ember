@@ -222,3 +222,12 @@ func TestATableWhoseBordersCollapseHasNoPadding(t *testing.T) {
 	assert.Equal(t, geom.Vec2{X: 100, Y: 100}, tr.Of[empty].Size, "empty, its padding dropped all the same")
 	assert.Equal(t, geom.Vec2{X: 100, Y: 100}, tr.Of[full].Size)
 }
+
+func TestAnEmptyCellStandsOnNoBaselineBesideCellsHoldingSomething(t *testing.T) {
+	onBase := func(st *style.Computed) { st.VerticalAlign = style.AlignBaselineText }
+	tall := func(st *style.Computed) { onBase(st); st.Size.Height = style.Px(40) }
+	empty := el(dom.Td, tall)
+	r := row(cell("H", onBase), empty)
+	tr := lay(el(dom.Div, block, table(r)), 400)
+	assert.Equal(t, float32(40), tr.Of[r].Size.Y, "its height alone, not lowered to the text's baseline, as Chrome's")
+}
