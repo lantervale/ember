@@ -1452,6 +1452,7 @@ css/CSS2/floats-clear/margin-collapse-125.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-134.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-135.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-142.xht ref chrome
+css/CSS2/floats-clear/margin-collapse-157.xht ref
 css/CSS2/floats-clear/margin-collapse-158.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-165.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-clear-002.xht ref chrome
@@ -1849,7 +1850,7 @@ css/CSS2/generated-content/content-076.xht ref
 css/CSS2/generated-content/content-077.xht ref chrome
 css/CSS2/generated-content/content-080.xht ref chrome
 css/CSS2/generated-content/content-081.xht chrome
-css/CSS2/generated-content/content-082.xht ref chrome
+css/CSS2/generated-content/content-082.xht ref
 css/CSS2/generated-content/content-083.xht ref chrome
 css/CSS2/generated-content/content-086.xht ref chrome
 css/CSS2/generated-content/content-089.xht ref chrome
@@ -1864,7 +1865,7 @@ css/CSS2/generated-content/content-132.xht ref chrome
 css/CSS2/generated-content/content-135.xht ref chrome
 css/CSS2/generated-content/content-136.xht ref chrome
 css/CSS2/generated-content/content-141.xht ref chrome
-css/CSS2/generated-content/content-143.xht ref chrome
+css/CSS2/generated-content/content-143.xht ref
 css/CSS2/generated-content/content-144.xht ref chrome
 css/CSS2/generated-content/content-145.xht ref chrome
 css/CSS2/generated-content/content-146.xht ref chrome
