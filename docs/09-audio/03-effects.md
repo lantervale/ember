@@ -1,22 +1,36 @@
 # Effects
 
-Sound changes with the place it is heard in. Here a corridor opens into a great hall: the hero's footsteps and claps ring longer as he walks in, and drums play muffled behind a door until he opens it. The lines at the top show the reverb and the filter, since a GIF can't play them. Run it to hear it.
+Make sound change with the place it is heard in: a room's reverb, a wall that muffles, an echo. Here a corridor opens into a great hall: the hero's footsteps and claps ring longer as he walks in, and drums play muffled behind a door until he opens it. The lines at the top show the reverb and the filter, since a GIF can't play them. Run it to hear it.
 
 ![The hero walks out of the corridor into the hall, the reverb growing, then opens the door and the drums' filter opens](effects.gif "ember · audio effects")
 
-## The effects
+## The four effects
 
-ember has four effects, each made with its own options:
+Each effect is made with its own options:
 
-- `audio.NewReverb(RoomSize, Damping, Wet)`: the sound of a room, from a small one to a large one.
-- `audio.NewLowPass(Cutoff, Resonance)`: lets the low sounds through and muffles the high ones, as through a wall or under water. `audio.NewHighPass` does the opposite, as through a radio.
-- `audio.NewEcho(Delay, Feedback, Wet)`: the sound repeated, fading.
+| Effect | Sounds like | Options (default, range) |
+|---|---|---|
+| `audio.NewReverb` | a room, from a closet to a hall | `RoomSize` (0.5, 0–1), `Damping`: how fast high notes fade (0.5, 0–1), `Wet` (0.3, 0–1) |
+| `audio.NewLowPass` | through a wall or under water: keeps the lows | `Cutoff` in Hz (1000, 10–24000), `Resonance`: the filter's Q (0.707, flat; 0.1–20) |
+| `audio.NewHighPass` | a radio or a small speaker: keeps the highs | the same as the low-pass |
+| `audio.NewEcho` | the sound repeated, fading | `Delay` (300 ms, up to 2 s), `Feedback`: each repeat against the one before (0.4, 0–0.95), `Wet` (0.3, 0–1) |
 
-Every option has a getter and a setter of the same name, `Cutoff()` and `SetCutoff`, so an effect can change while it plays. A change glides over 10 ms by itself, so setting an effect every frame never clicks.
+`Wet` is the effect's share of the output, from 0, the dry sound, to 1, the effect alone.
+
+## Changing an effect while it plays
+
+Every option has a getter and a setter of the same name, `Cutoff()` and `SetCutoff`. A change glides over 10 ms by itself, so setting an effect every frame never clicks.
 
 ## On a bus, or on one sound
 
-`audio.Effects(…)` puts effects on a bus, with `WithBus`, or on one sound, with `Play`, `PlayMusic` or `NewEmitter`. A sound goes through its own effects first, then its bus's, then the master bus's. A bus's reverb rings on after its sounds end; a sound's own effects end with it. An effect belongs to one bus or one sound. `Bus.SetEffects` and `Voice.SetEffects` change them while the game runs.
+`audio.Effects(…)` runs a sound through effects, in order:
+
+- on a bus, with `WithBus(name, volume, audio.Effects(…))`;
+- on one sound, with `Play`, `PlayMusic` or `NewEmitter`.
+
+A sound goes through its own effects first, then its bus's, then the master bus's. A bus's reverb rings on after its sounds end; a sound's own effects end with it.
+
+An effect keeps its own state, so one effect value belongs to one bus or one sound. `Bus.SetEffects` and `Voice.SetEffects` change them while the game runs, and `Effects()` reads them back.
 
 Here the sound effects bus has a reverb, so every footstep and clap rings in the room the hero is in.
 
