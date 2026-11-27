@@ -322,6 +322,16 @@ func TestAFloatStaysWithTheLinesBesideIt(t *testing.T) {
 	assert.Equal(t, fragmentAt{"H", 50, 0}, fragments(tr.Of[p])[0], "the lines beside the float start after it")
 }
 
+func TestAnEmptyFloatIsCutAsRoomBesideTheLines(t *testing.T) {
+	f := el(dom.Div, float(style.FloatRight, 50, 100))
+	p := para(1, nil)
+	m := multicol(2, nil, f, p)
+	tr := lay(m, 600)
+	assert.Equal(t, float32(50), tr.Of[m].Size.Y, "the float's room shared by two")
+	assert.Equal(t, []geom.Rect{{X: 140, W: 50, H: 50}, {X: 350, W: 50, H: 50}}, parts(tr.Of[f]))
+	assert.Equal(t, geom.Rect{W: 190, H: 10}, tr.Of[p].Rect(), "the line beside it stays in the first column")
+}
+
 func TestANestedMultiColumnContainerIsOneBox(t *testing.T) {
 	inner := multicol(2, func(st *style.Computed) { st.Size.Width = style.Length{} }, para(4, nil))
 	a, c := para(2, nil), para(2, nil)

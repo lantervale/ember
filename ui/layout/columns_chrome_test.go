@@ -324,6 +324,13 @@ table { border-spacing: 0; background: #cdf; } td { padding: 0; vertical-align: 
 			m("", rows("", 1), ui.Div(ui.Class("f"), ui.Style("padding: 3px; gap: 4px"),
 				rows("line-height: 13px", 7), rows("line-height: 21px", 4))),
 		),
+		"empty floats cut beside the lines": styled(base+`
+.fl { float: left; width: 15px; height: 150px; background: #fc8; } .fr { float: right; width: 15px; height: 120px; }`,
+			m("", ui.Div(ui.Class("fl")), ui.Div(ui.Class("fr")), ui.Div(ui.Style("border-bottom: 3px solid"),
+				ui.Br(ui.Attr("clear", "all")))),
+			m("", ui.Div(ui.Div(ui.Class("fl"))), rows("", 2)),
+			m("height: 50px; column-fill: auto", ui.Div(ui.Class("fr")), ui.Div(ui.Style("clear: both; height: 5px"))),
+		),
 	}
 	for name, page := range cases {
 		t.Run(name, func(t *testing.T) {
