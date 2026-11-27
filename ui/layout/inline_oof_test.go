@@ -69,3 +69,15 @@ func TestABlockLevelOutOfFlowBoxStartsARightToLeftLineAtItsRight(t *testing.T) {
 	assert.Equal(t, onPage(tr.Of[a]).Add(geom.V2(195, 0)), onPage(tr.Of[first]), "at the line's right, on it")
 	assert.Equal(t, onPage(tr.Of[b]).Add(geom.V2(195, 10)), onPage(tr.Of[after]), "at the right, below the text")
 }
+
+func TestABlockLevelOutOfFlowBoxAfterAFramedInlineStartStartsTheNextLine(t *testing.T) {
+	abs := absBox(nil)
+	framed := func(st *style.Computed) {
+		st.Border.Left, st.BorderStyle.Left = 20, style.BorderSolid
+		st.Margin.Left = style.Px(-20)
+	}
+	p := el(dom.P, width(200), el(dom.Span, framed, abs, text("H")))
+	tr := Layout(el(dom.Div, block, p), geom.V2(400, 300), ahemFonts{})
+	assert.Equal(t, onPage(tr.Of[p]).Add(geom.V2(0, 10)), onPage(tr.Of[abs]),
+		"a border and a margin adding up to nothing still make the line hold something, as Chrome's")
+}
