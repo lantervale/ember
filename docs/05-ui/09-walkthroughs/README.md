@@ -1,8 +1,8 @@
 # Walkthroughs
 
-Each page builds one small program on ui and kit, file by file.
+Each page builds one small program on ui and kit, file by file, and ends with how to run it.
 
-| Page | |
+| Page | What you build |
 |---|---|
 | [UI elements](01-ui-elements.md) | a panel, labels, buttons and their clicks |
 | [Layout](02-layout.md) | a menu that follows its window: Column, Row, Grid, Expand, Fill |

@@ -6,7 +6,12 @@ A notes app: a title and a note that edit the way any desktop app does. You sele
 
 ## One line, or many
 
-`kit.TextInput` edits one line, as on the [Controls](03-controls.md) page. `kit.TextArea` edits many: it wraps long lines at words, scrolls with the wheel, the trackpad or its scrollbar, and keeps the caret in view; `kit.Rows(12)` is its natural height in lines. A kit text field has a width of its own, so the page's sheet gives the title and the note `width: 100%` of the panel. The note's `ui.OnInput` updates the count at each key, and the Wrap check's `ui.OnChange` calls `kit.SetNoWrap`: unchecked, the note's lines stay whole and scroll sideways. Their other options, `MaxLength`, `ReadOnly` and `Password`, are on the [Text input](../07-kit/14-text-input.md) and [Text area](../07-kit/15-text-area.md) pages.
+`kit.TextInput` edits one line, as on the [Controls](03-controls.md) page.
+
+- `kit.TextArea` edits many: it wraps long lines at words, scrolls with the wheel, the trackpad or its scrollbar, and keeps the caret in view; `kit.Rows(12)` is its natural height in lines.
+- A kit text field has a width of its own, so the page's sheet gives the title and the note `width: 100%` of the panel.
+- The note's `ui.OnInput` updates the count at each key, and the Wrap check's `ui.OnChange` calls `kit.SetNoWrap`: unchecked, the note's lines stay whole and scroll sideways.
+- Their other options, `MaxLength`, `ReadOnly` and `Password`, are on the [Text input](../07-kit/14-text-input.md) and [Text area](../07-kit/15-text-area.md) pages.
 
 [main.go](../../../examples/14-text-editing/main.go)
 

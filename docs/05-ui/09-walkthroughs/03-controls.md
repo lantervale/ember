@@ -8,7 +8,10 @@ A settings window with one of each control: a text input, a slider, two checks, 
 
 ## The settings
 
-`kit.Window("Settings", kit.Resizable(), …)` holds a `kit.Form` of named fields, a row of checks and a `kit.CollapsiblePanel` round a `kit.Scroll`. Each control takes its value and options: `kit.TextInput` its text and a `ui.Placeholder`, `kit.Slider` and `kit.Progress` a value in their `kit.Range`, the slider moving by `kit.Step`, `kit.Check` its text and `ui.Checked(true)`. The page's sheet places the window, caps its size, gives the list its height and pins the status line to the window's foot.
+`kit.Window("Settings", kit.Resizable(), …)` holds a `kit.Form` of named fields, a row of checks and a `kit.CollapsiblePanel` round a `kit.Scroll`.
+
+- Each control takes its value and options: `kit.TextInput` its text and a `ui.Placeholder`, `kit.Slider` and `kit.Progress` a value in their `kit.Range`, the slider moving by `kit.Step`, `kit.Check` its text and `ui.Checked(true)`.
+- The page's sheet places the window, caps its size, gives the list its height and pins the status line to the window's foot.
 
 [main.go](../../../examples/13-controls/main.go)
 
