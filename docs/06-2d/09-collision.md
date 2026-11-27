@@ -1,20 +1,41 @@
 # Collision
 
-Walls that stop the hero, and a plate that opens a door when he steps on it. Here a walled garden and a stone room stand side by side, with a wall between them; walking right, the hero crosses the sand plate in the garden, the door in the wall opens, and he walks into the room.
+`collide` gives walls that stop the hero and plates that open doors when he steps on them. Here a walled garden and a stone room stand side by side, with a wall between them. Walking right, the hero crosses the sand plate in the garden, the door in the wall opens, and he walks into the room.
 
 ![The hero walks onto the plate, the door opens, and he walks through](collision.gif "ember · collision")
 
 ## The room
 
-The room is a tile map like any other, from a picture in text. What stops bodies is `collide/tiles`' to say, not the drawing's: `tiles.Solid(wall)` on the tileset makes every wall tile stop things, each blocking its whole cell, and in Tiled it is the `solid` [tile property](12-classes-and-properties.md) ([decision 0071](../99-decisions/0071-each-system-reads-its-own-tile-properties.md)).
+The room is a tile map like any other, from a picture in text. What stops bodies is for `collide/tiles` to say, not the drawing ([decision 0071](../99-decisions/0071-each-system-reads-its-own-tile-properties.md)):
 
-A tile can instead collide by shapes of its own: `tiles.Collision(bar, rects…)` gives it rectangles in its pixels from its top-left, such as a thin wall bar, and `LoadTiledTileset` reads them from Tiled's collision editor (polygons and ellipses by their bounds). A body then stops at the bar where it is drawn and slides along it. A shape may reach past its cell, as a wall's top often does, and the map finds it from the neighbouring cells too. For `Find` and `Route`, the cell of any solid tile is blocked whole, so their paths never go through a thin wall's cell; a flow field given a body's size routes through what's left of it, as below. `tiles.Rects(tileset, id)` reads the shapes back, and `tiles.Stops(tileset, id)` is true for a tile with shapes too ([decision 0035](../99-decisions/0035-a-tile-collides-by-its-shapes.md)).
+- `tiles.Solid(wall)` on the tileset makes every wall tile stop things, each blocking its whole cell.
+- In Tiled, it is the `solid` [tile property](12-classes-and-properties.md).
 
 [room.go](../../examples/27-collision/room.go)
 
+## Tiles that collide by their own shapes
+
+A tile can collide by shapes of its own rather than its whole cell, such as a thin wall bar ([decision 0035](../99-decisions/0035-a-tile-collides-by-its-shapes.md)):
+
+- `tiles.Collision(bar, rects…)` gives it rectangles in its pixels from its top-left, which stop bodies and cast shadows.
+- `tiles.BodyShapes(id, rects…)` gives it rectangles that stop bodies only.
+- `LoadTiledTileset` reads them from Tiled's collision editor, polygons and ellipses by their bounds.
+
+A body then stops at the bar where it is drawn and slides along it. A shape may reach past its cell, as a wall's top often does, and the map finds it from the neighbouring cells too.
+
+`tiles.Rects(tileset, id)` reads the shapes back, and `tiles.Stops(tileset, id)` is true for a tile with shapes too.
+
+For `Find` and `Route`, the cell of any solid tile is blocked whole, so their paths never go through a thin wall's cell. A flow field given a body's size routes through what's left of it, as below.
+
 ## Bodies and the space
 
-`collide.NewSpace` holds what can collide, and `AddSolid(tiles.Of(walls))` puts the walls in it: `tiles.Of(map)` is the map as collision and paths see it, a `collide.Solid` and a grid for `nav`, for a tile map or an endless one. Keep it and give the same one to the space and to `nav`, so they share what it has read. It lists only the solids that touch the area asked, a flipped tile's shape spilling past its cell included, into a slice the space keeps, so a move among tile maps allocates nothing; a solid of the game's own does the same with `AppendSolidIn(dst, area)`, a `collide.SolidAppender`. The plate is an invisible sprite with a body that is a `Trigger`: it stops nothing, but tells when something enters it. `collide.NewTracker` is the system that notices those entries every frame.
+`collide.NewSpace` holds what can collide. `AddSolid(tiles.Of(walls))` puts the walls in it.
+
+`tiles.Of(map)` is the map as collision and paths see it, for a tile map or an endless one: a `collide.Solid`, and a grid for `nav`. Keep it, and give the same one to the space and to `nav`, so they share what it has read.
+
+It lists only the solids that touch the area asked, a flipped tile's shape spilling past its cell included, into a slice the space keeps, so a move among tile maps allocates nothing. A solid of the game's own does the same with `AppendSolidIn(dst, area)`, a `collide.SolidAppender`.
+
+The plate is an invisible sprite with a body that is a `Trigger`: it stops nothing, but tells when something enters it. `collide.NewTracker` is the system that notices those entries every frame.
 
 [main.go](../../examples/27-collision/main.go)
 
@@ -26,7 +47,11 @@ A body is a child of what it belongs to. The hero's is a box at its feet, as wid
 
 ## Moving
 
-`space.Move` moves the hero by as much as it can: it stops at a wall and slides along it, so walking diagonally into a wall keeps going sideways. A body put down overlapping a solid, spawned or teleported into one, can slide along it or step out, but a move never takes it deeper. `space.Clear(from, to)` asks whether a straight line between two points crosses no solid, bodies aside: whether a wall stands between an enemy and the hero it means to hit, for instance.
+`space.Move` moves the hero by as much as it can. It stops at a wall and slides along it, so walking diagonally into a wall keeps going sideways.
+
+A body put down overlapping a solid, spawned or teleported into one, can slide along it or step out, but a move never takes it deeper.
+
+`space.Clear(from, to)` asks whether a straight line between two points crosses no solid, bodies aside: whether a wall stands between an enemy and the hero it means to hit, for instance.
 
 [walk.go](../../examples/27-collision/walk.go)
 
@@ -38,7 +63,16 @@ When something enters the plate, the tracker emits a `collide.BodyEntered` event
 
 ## A crowd's bodies
 
-A horde of hundreds that all collide with each other jams: each blocks the next, and they pile up on one spot. `collide.Soft(push)` makes a body soft instead. Soft bodies never stop at each other, `Move` reporting no hit between two of them, but still stop exactly at solid tiles and at bodies that aren't soft, such as the hero or a door, which they never push. Instead a soft body never walks into the soft bodies about it: the part of its move that would go into one is dropped and the rest kept, so it slides along the crowd and round it. Once a fixed step the tracker pushes apart bodies that overlap, as fast as `push` says, from 0 to 1, and spreads a pile packed past what touching bodies fill. A crowd chasing the hero presses round him, body against body, in no rows. It is deterministic: the same steps give the same positions. A few hundred soft bodies cost about 0.1 ms a step; twenty thousand about 6 ms spread out and 13 ms piled on one spot ([decision 0079](../99-decisions/0079-a-soft-crowd-presses-body-against-body.md)).
+A horde of hundreds that all collide with each other jams: each blocks the next, and they pile up on one spot. `collide.Soft(push)` makes a body soft instead ([decision 0079](../99-decisions/0079-a-soft-crowd-presses-body-against-body.md)):
+
+- Soft bodies never stop at each other: `Move` reports no hit between two of them.
+- They still stop exactly at solid tiles and at bodies that aren't soft, such as the hero or a door, which they never push.
+- A soft body never walks into the soft bodies about it: the part of its move that would go into one is dropped and the rest kept, so it slides along the crowd and round it.
+- Once a fixed step, the tracker pushes apart bodies that overlap, as fast as `push` says, from 0 to 1, and spreads a pile packed past what touching bodies fill.
+
+A crowd chasing the hero presses round him, body against body, in no rows. It is deterministic: the same steps give the same positions.
+
+A few hundred soft bodies cost about 0.1 ms a step; twenty thousand about 6 ms spread out and 13 ms piled on one spot.
 
 ```go
 enemy.Add(collide.NewBody(collide.Box(16, 10), collide.Group(foes), collide.CollidesWith(foes), collide.Soft(1)))
@@ -48,26 +82,45 @@ enemy.Add(collide.NewBody(collide.Box(16, 10), collide.Group(foes), collide.Coll
 
 ## Pathfinding
 
-`ember/nav` finds ways round the solid cells of a grid, such as a tile map, in pure Go for games and servers alike. Paths move diagonally but never cut a wall's corner, and are pulled straight wherever the way is clear; `nav.NoDiagonals()` keeps them to the four straight directions.
+`ember/nav` finds ways round the solid cells of a grid, such as a tile map, in pure Go for games and servers alike.
 
-A grid is anything with `Columns`, `Rows`, `Solid`, `Cell` and `Center` (a `nav.Grid`), and nav never compares two, so a game's own grid type may hold funcs, maps or slices.
+- Paths move diagonally but never cut a wall's corner, and are pulled straight wherever the way is clear.
+- `nav.NoDiagonals()` keeps them to the four straight directions.
+- A grid is anything with `Columns`, `Rows`, `Solid`, `Cell` and `Center` (a `nav.Grid`). nav never compares two, so a game's own grid type may hold funcs, maps or slices.
 
-For one walker, `nav.New(tiles.Of(level))` is a map over the grid. `Find(from, to)` is the way as waypoints, and `ok` is false when `to` is solid or out of reach, the way then ending as near as it gets. `Route(from, to)` is a way to walk: each step, `route.Toward(at, reach)` is the direction to the next waypoint, moving on once within `reach` of it, and it plans again by itself when the grid changes or the way ahead closes. `Clear(a, b)` says whether the straight line between two points crosses no solid cell.
+### One walker
+
+`nav.New(tiles.Of(level))` is a map over the grid:
+
+| Method | What it gives |
+|---|---|
+| `Find(from, to)` | The way as waypoints. `ok` is false when `to` is solid or out of reach; the way then ends as near as it gets. |
+| `Route(from, to)` | A way to walk. Each step, `route.Toward(at, reach)` is the direction to the next waypoint, moving on once within `reach` of it. It plans again by itself when the grid changes or the way ahead closes. |
+| `Clear(a, b)` | Whether the straight line between two points crosses no solid cell. |
 
 ```go
 route := level.Route(hero.Position(), click)
 hero.Translate(route.Toward(hero.Position(), 4).Scale(speed * dt))
 ```
 
-Some ground is slower to cross, such as shallow water. A grid that also has `Cost(x, y int) float32` (a `nav.Coster`) says how many times longer each cell takes: 1 for quick ground, 3 for a third of the speed, anything below 1 counting as 1. `Find` and `Route` then give the quickest way, going round slow ground when that is quicker and through it when round is longer, and a way is pulled straight only where that is no slower. A grid without `Cost` routes as before; flow fields don't read it. A cell nothing may cross stays solid.
+### Slow ground
 
-For a horde going to one place, a flow field leads every cell to its target at once ([decision 0024](../99-decisions/0024-a-horde-follows-one-flow-field.md)). `nav.NewFlowField(grid)` makes it, `SetTarget` points it at the target each frame and rebuilds it only when the target changes cell or the grid changes, and `Toward(at)` gives each walker a smooth unit direction in constant time, so a thousand enemies cost a lookup each. Where the target is in clear sight, `Toward` aims straight at it, so a horde in the open comes from wherever each one stands, spread like a crowd; only behind obstacles does it follow the field's way round, rather than falling into single file along the eight directions of the grid. It returns false off the grid, on a solid cell or where the target can't be reached; walk straight then. Over an endless map, `nav.Around(tiles.Of(things).AreaAround, 128, 128)` makes the field a window of cells around the target, moved when the target strays from its middle half; a 128 × 128 field rebuilds in under a millisecond. With `nav.Background()`, `SetTarget` reads the grid at once and makes the new field on another goroutine; the next `SetTarget` waits for it and shows it, so `Toward` leads by the field made for the call before, exactly one call late and the same every run. The first field is made at once. It suits a big field retargeted every frame, taking the rebuild off the frame.
+Some ground is slower to cross, such as shallow water. A grid that also has `Cost(x, y int) float32` (a `nav.Coster`) says how many times longer each cell takes: 1 for quick ground, 3 for a third of the speed, anything below 1 counting as 1.
 
-`nav.Body(w, h)` routes a field for a body of that size, over a grid that knows its tiles' shapes, a `nav.Roomy` such as an endless map's `tiles.Of(things).AreaAround`. A solid cell whose shapes leave room for the body is passable, entered where the body fits nearest the cell's middle, and a step to or from a partly filled cell counts only if the body walks it straight clear of every shape; cells solid all over stay blocked, and lines of sight still stop at solid tiles. `field.Point(at)` is where the field routes a body through the cell under `at`. A game's own grid joins in by having `Room(x, y, body)`, where a body's centre fits in a cell, and `Pass(from, to, body)`, whether it walks straight between two points ([decision 0040](../99-decisions/0040-routing-follows-where-a-body-fits.md), superseding [0036](../99-decisions/0036-a-solid-tile-blocks-its-cell-for-paths.md)).
+- `Find` and `Route` then give the quickest way: round slow ground when that is quicker, through it when round is longer.
+- A way is pulled straight only where that is no slower.
+- A grid without `Cost` routes as before, and flow fields don't read it.
+- A cell nothing may cross stays solid.
 
-```go
-field := nav.NewFlowField(nil, nav.Around(tiles.Of(things).AreaAround, 128, 128), nav.Background(), nav.Body(16, 10))
-```
+### A horde
+
+For a horde going to one place, a flow field leads every cell to its target at once ([decision 0024](../99-decisions/0024-a-horde-follows-one-flow-field.md)):
+
+- `nav.NewFlowField(grid)` makes it.
+- `SetTarget` points it at the target each frame. It rebuilds only when the target changes cell or the grid changes.
+- `Toward(at)` gives each walker a smooth unit direction in constant time, so a thousand enemies cost a lookup each. It returns false off the grid, on a solid cell or where the target can't be reached; walk straight then.
+
+Where the target is in clear sight, `Toward` aims straight at it, so a horde in the open comes from wherever each one stands, spread like a crowd. Only behind obstacles does it follow the field's way round, rather than falling into single file along the eight directions of the grid.
 
 ```go
 field := nav.NewFlowField(nil, nav.Around(tiles.Of(things).AreaAround, 128, 128))
@@ -80,6 +133,29 @@ for e := range enemies {
 	}
 	e.Walk = dir
 }
+```
+
+Flow field options:
+
+| Option | What it does |
+|---|---|
+| `nav.Around(tiles.Of(things).AreaAround, 128, 128)` | Over an endless map, makes the field a window of cells around the target, moved when the target strays from its middle half. A 128 × 128 field rebuilds in under a millisecond. |
+| `nav.Background()` | `SetTarget` reads the grid at once and makes the new field on another goroutine; the next `SetTarget` waits for it and shows it. `Toward` then leads by the field made for the call before, exactly one call late and the same every run. The first field is made at once. It suits a big field retargeted every frame, taking the rebuild off the frame. |
+| `nav.Body(w, h)` | Routes for a body of that size, below. |
+
+### Routing a body through partly filled cells
+
+`nav.Body(w, h)` routes a field for a body of that size over a grid that knows its tiles' shapes, a `nav.Roomy`, such as an endless map's `tiles.Of(things).AreaAround` ([decision 0040](../99-decisions/0040-routing-follows-where-a-body-fits.md), superseding [0036](../99-decisions/0036-a-solid-tile-blocks-its-cell-for-paths.md)):
+
+- A solid cell whose shapes leave room for the body is passable, entered where the body fits nearest the cell's middle.
+- A step to or from a partly filled cell counts only if the body walks it straight, clear of every shape.
+- Cells solid all over stay blocked, and lines of sight still stop at solid tiles.
+- `field.Point(at)` is where the field routes a body through the cell under `at`.
+
+A game's own grid joins in by having `Room(x, y, body)`, where a body's centre fits in a cell, and `Pass(from, to, body)`, whether it walks straight between two points.
+
+```go
+field := nav.NewFlowField(nil, nav.Around(tiles.Of(things).AreaAround, 128, 128), nav.Background(), nav.Body(16, 10))
 ```
 
 ## Try it
