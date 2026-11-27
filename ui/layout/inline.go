@@ -2219,6 +2219,7 @@ func (b *breaker) one(i int, width float32) (int, bool) {
 	for i < len(c.pieces) {
 		p := c.pieces[i]
 		if p.kind == newline {
+			b.keepPreserved(i)
 			end := b.closingAfter(i)
 			b.cur.forced = true
 			b.finish(end)
@@ -2389,6 +2390,7 @@ func (b *breaker) breakInside(i, end int, width float32) (int, bool) {
 // close ends the breaking: the line left open joins the lines when it holds something,
 // more than the ends of the spans a forced break ended the line before in.
 func (b *breaker) close() []line {
+	b.keepPreserved(len(b.c.pieces))
 	trails := b.trails()
 	if !b.empty && !trails || len(b.out) == 0 && b.cur.to > b.cur.from {
 		b.cur.width = b.kept.end()
@@ -2404,6 +2406,30 @@ func (b *breaker) close() []line {
 		b.out = []line{}
 	}
 	return b.out
+}
+
+// keepPreserved puts the spaces pending before piece end, a newline or the content's
+// end, on the open line where they neither collapse nor wrap (white-space: pre), as
+// Chrome's line holds them, a line of its own after a forced break.
+func (b *breaker) keepPreserved(end int) {
+	c := b.c
+	if b.pending < 0 {
+		return
+	}
+	for _, p := range c.pieces[b.pending:end] {
+		if p.kind != gap && p.kind != tab {
+			return
+		}
+		if ws := c.runs[p.run].st.WhiteSpace; collapses(ws) || wraps(ws) {
+			return
+		}
+	}
+	for _, p := range c.pieces[b.pending:end] {
+		b.at.step(p, 0)
+	}
+	b.kept = b.at
+	b.cur.to, b.pending = end, -1
+	b.empty, b.blank = false, false
 }
 
 // trails reports an open line after a forced break that holds only span edges of no
@@ -3234,19 +3260,7 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 			x := at.step(p, perGap)
 			if p.kind == anchor {
 				k := c.anchors[p.span].node
-				c.oofs[k].static = point{x, y}
-				if !k.st.StaticInline {
-					// a block-level one starts a line: below this one when text is before it
-					c.oofs[k].static = point{inset.l, y}
-					before := x > start
-					if n.st.Dir == style.RTL {
-						c.oofs[k].static.x = inset.l + content
-						before = c.showsBefore(l, p.span)
-					}
-					if before {
-						c.oofs[k].static.y += lh
-					}
-				}
+				c.oofs[k].static = c.staticOf(k, l, p.span, point{x, y}, start, lh, inset.l, content)
 			}
 			if p.kind == atomic {
 				a := c.runs[p.run].atomic
@@ -3278,6 +3292,26 @@ func (t *tree) placeText(n *node, s size, inset rect) {
 	for _, o := range c.oofs {
 		c.containingSpan(o, spanLines, size{content, none})
 	}
+}
+
+// staticOf is the static place of out-of-flow box k anchored at at on line l, which
+// starts at start and is lh tall, in content from left: there for an inline-level one;
+// a block-level one starts a line, below this one when content is before it, at its
+// start, the right in a right-to-left block.
+func (c *inlineContent) staticOf(k *node, l line, span int, at point, start, lh, left, content float32) point {
+	if k.st.StaticInline {
+		return at
+	}
+	static := point{left, at.y}
+	before := at.x > start
+	if c.owner.st.Dir == style.RTL {
+		static.x = left + content
+		before = c.showsBefore(l, span)
+	}
+	if before {
+		static.y += lh
+	}
+	return static
 }
 
 // showsBefore reports whether anything with a width stands before the anchor of

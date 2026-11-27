@@ -131,3 +131,13 @@ func TestBreakAllBreaksPunctuationAndElementsAsChrome(t *testing.T) {
 		})
 	}
 }
+
+func TestPreservedSpacesEndingTheContentTakeRoomAsChrome(t *testing.T) {
+	pre := func(s string) *ui.Node {
+		return ui.Pre(ui.Style("float: left; clear: left; margin: 0; background: #ddd"), ui.Text(s))
+	}
+	d := page(pre("ab   "), pre("   "), pre("ab\n   "), pre("ab\n   \n"), pre("ab\t"),
+		ui.Div(ui.Style("float: left; clear: left; white-space: break-spaces"), ui.Text("ab   ")))
+	r := chrome.Match(t, d, geom.V2(800, 600))
+	t.Logf("%d boxes, max delta %.3f pt", r.Boxes, r.MaxDelta)
+}

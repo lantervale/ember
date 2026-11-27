@@ -950,6 +950,8 @@ css/CSS2/borders/border-width-007.xht ref chrome
 css/CSS2/borders/border-width-008.xht ref chrome
 css/CSS2/borders/border-width-009.xht ref chrome
 css/CSS2/borders/border-width-010.xht ref chrome
+css/CSS2/borders/border-width-011.xht ref chrome
+css/CSS2/borders/border-width-012.xht ref chrome
 css/CSS2/borders/border-width-013.xht ref chrome
 css/CSS2/borders/border-width-014.xht ref chrome
 css/CSS2/borders/border-width-applies-to-008.xht ref chrome
@@ -1167,6 +1169,7 @@ css/CSS2/css1/c545-txttrans-000.xht ref chrome
 css/CSS2/css1/c547-indent-000.xht ref chrome
 css/CSS2/css1/c547-indent-001.xht ref chrome
 css/CSS2/css1/c548-leadin-000.xht ref chrome
+css/CSS2/css1/c548-ln-ht-000.xht ref chrome
 css/CSS2/css1/c548-ln-ht-001.xht ref chrome
 css/CSS2/css1/c548-ln-ht-002.xht ref chrome
 css/CSS2/css1/c548-ln-ht-003.xht ref chrome
@@ -1438,6 +1441,13 @@ css/CSS2/floats-clear/floats-153.xht ref chrome
 css/CSS2/floats-clear/floats-154.xht ref chrome
 css/CSS2/floats-clear/floats-bfc-001.xht ref chrome
 css/CSS2/floats-clear/floats-bfc-002.xht ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-000.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-001.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-002.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-003.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-balancing-000.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-balancing-001.html ref chrome
+css/CSS2/floats-clear/floats-clear-multicol-balancing-002.html ref chrome
 css/CSS2/floats-clear/margin-collapse-018.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-023.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-024.xht ref chrome
@@ -1881,6 +1891,7 @@ css/CSS2/generated-content/content-157.xht ref chrome
 css/CSS2/generated-content/content-158.xht ref chrome
 css/CSS2/generated-content/content-159.xht ref chrome
 css/CSS2/generated-content/content-171.xht ref chrome
+css/CSS2/generated-content/content-173.xht ref
 css/CSS2/generated-content/content-174.xht ref
 css/CSS2/generated-content/content-175.xht ref chrome
 css/CSS2/generated-content/content-attr-001.xht ref chrome
@@ -5142,8 +5153,8 @@ css/CSS2/tables/table-anonymous-objects-189.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-190.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-191.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-192.xht ref chrome
-css/CSS2/tables/table-anonymous-objects-197.xht chrome
-css/CSS2/tables/table-anonymous-objects-198.xht chrome
+css/CSS2/tables/table-anonymous-objects-197.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-198.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-199.xht chrome
 css/CSS2/tables/table-anonymous-objects-200.xht chrome
 css/CSS2/tables/table-anonymous-objects-212.xht ref chrome
@@ -5155,6 +5166,10 @@ css/CSS2/tables/table-backgrounds-bc-row-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-rowgroup-001.xht ref
 css/CSS2/tables/table-backgrounds-bc-table-001.xht ref
 css/CSS2/tables/table-backgrounds-bs-cell-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-colgroup-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-column-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-row-001.xht ref chrome
+css/CSS2/tables/table-backgrounds-bs-rowgroup-001.xht ref chrome
 css/CSS2/tables/table-backgrounds-bs-table-001.xht ref
 css/CSS2/tables/table-cell-001.xht ref chrome
 css/CSS2/tables/table-column-rendering-001.xht ref chrome
@@ -5174,6 +5189,7 @@ css/CSS2/tables/table-vertical-align-baseline-004.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-005.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-006.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-007.xht ref chrome
+css/CSS2/tables/table-vertical-align-baseline-008.xht ref chrome
 css/CSS2/tables/table-vertical-align-baseline-009.xht ref chrome
 css/CSS2/tables/table-visual-layout-017.xht ref chrome
 css/CSS2/tables/table-visual-layout-018.xht ref chrome
@@ -5432,6 +5448,8 @@ css/CSS2/text/white-space-nowrap-005.xht ref chrome
 css/CSS2/text/white-space-nowrap-006.xht ref chrome
 css/CSS2/text/white-space-nowrap-attribute-001.xht ref chrome
 css/CSS2/text/white-space-p-element-001.xht ref chrome
+css/CSS2/text/white-space-pre-001.xht ref chrome
+css/CSS2/text/white-space-pre-002.xht ref chrome
 css/CSS2/text/white-space-pre-005.xht ref chrome
 css/CSS2/text/white-space-pre-006.xht ref chrome
 css/CSS2/text/white-space-pre-element-001.xht ref chrome

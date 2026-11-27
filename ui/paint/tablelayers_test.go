@@ -123,3 +123,19 @@ func TestAnEmptyCellDrawsNoBorderNorBackgroundWhereEmptyCellsHides(t *testing.T)
 	Paint(r, tree(table))
 	assert.Len(t, rectsOf(r, white), 4, "a table that collapses its borders draws every cell")
 }
+
+func TestATablePartsPicturePaintsBehindEachOfItsCellsFromItsOwnBox(t *testing.T) {
+	table := layered(color.Color{}, color.Color{}, color.Color{}, color.Color{})
+	row := table.Children[2].Children[0]
+	stacked(row.Style, style.BackgroundLayer{
+		Image: style.Image{Gradient: &style.Gradient{Angle: 90, Stops: stops(red, blue)}}, Position: style.TopLeft,
+	})
+	r := newRecorder()
+	Paint(r, tree(table))
+	g := r.of("gradient")
+	require.Len(t, g, 2, "once a cell")
+	for i, clip := range []geom.Rect{{X: 12, Y: 12, W: 40, H: 20}, {X: 54, Y: 12, W: 40, H: 20}} {
+		assert.Equal(t, clip, g[i].Clip, "cut to the cell, the spacing left clear")
+		assert.Equal(t, geom.Rect{X: 12, Y: 12, W: 82, H: 20}, g[i].Rect, "sized and placed by the row")
+	}
+}

@@ -251,6 +251,7 @@ func (l *Look) equal(o *Look) bool {
 		l.BorderColor == o.BorderColor &&
 		l.BorderStyle == o.BorderStyle &&
 		l.BorderHidden == o.BorderHidden &&
+		l.BorderWidth == o.BorderWidth &&
 		l.BorderImage.equal(&o.BorderImage) &&
 		l.BorderImageRepeat == o.BorderImageRepeat &&
 		l.BorderImageWidth == o.BorderImageWidth &&
