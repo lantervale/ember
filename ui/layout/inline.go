@@ -394,13 +394,18 @@ func framedCut(items []item) bool {
 }
 
 func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
-	for _, it := range items {
+	for at := 0; at < len(items); at++ {
+		it := items[at]
 		if it.text != nil {
 			t.gatherText(c, parent, it.text)
 			continue
 		}
 		st := styleOf(it.element)
 		if st.Display == style.DisplayNone {
+			continue
+		}
+		if it.cut == nil && partOf(it.element) != style.NoTablePart {
+			at = t.gatherTable(c, parent, items, at) - 1
 			continue
 		}
 		if st.Float != style.FloatNone {
@@ -459,6 +464,26 @@ func (t *tree) gather(c *inlineContent, parent *box.Box, items []item) {
 		}
 		c.hold(s, inner)
 	}
+}
+
+// gatherTable adds the anonymous inline table round the table parts from items[at], and
+// is the index after them and the white space right after them, which makes no box as
+// in Chrome.
+func (t *tree) gatherTable(c *inlineContent, parent *box.Box, items []item, at int) int {
+	parts, next := tableParts(items, at)
+	n := t.anonymousInlineTable(c.owner, parent.Style, parts)
+	c.runs = append(c.runs,
+		&textRun{box: n.box, parent: parent, st: n.st, lineSt: n.st, span: -1, atomic: &atomicInline{node: n}})
+	for next < len(items) && items[next].text != nil && droppedSpace(items[next].text) {
+		next++
+	}
+	return next
+}
+
+// droppedSpace reports a text of collapsible white space alone.
+func droppedSpace(text *dom.Node) bool {
+	p := text.Parent()
+	return isCollapsibleSpace(text.Text()) && (p == nil || collapses(styleOf(p).WhiteSpace))
 }
 
 // firstLineOf is the style of the first line of owner's block, nil where no
