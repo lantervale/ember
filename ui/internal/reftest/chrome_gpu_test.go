@@ -88,6 +88,7 @@ func shoot(t *testing.T, server string, renderer *reftest.Renderer, p string) *r
 		t.Fatal(err)
 	}
 	s := chrome.Open(t, server+"/"+p, geom.V2(reftest.Width, reftest.Height), 1, "--hide-scrollbars")
+	s.Eval(reftest.MonospaceFace, nil)
 	s.Eval(settle, nil)
 	d := chrome.Compare(ember, s.Shot())
 	return &reftest.ChromeResult{Mean: d.Mean, Threshold: reftest.ChromeThreshold, Pixels: d.Pixels,

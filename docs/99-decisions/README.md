@@ -235,6 +235,7 @@ The choices that shape ember, one short file each: what was decided, what else w
 | 0242 | [Line and paragraph separators break their line, where Chrome does not](0242-line-and-paragraph-separators-break-their-line-where-chrome-does-not.md) | rendering |
 | 0246 | [clip cuts a positioned box to its rect, as an overflow clip its fixed boxes keep](0246-clip-cuts-a-positioned-box-to-its-rect-as-an-overflow-clip-its-fixed-boxes-keep.md) | rendering |
 | 0259 | [A browser's default monospace is 13px where no absolute size stands above it](0259-a-browsers-default-monospace-is-13px-where-no-absolute-size-stands-above-it.md) | rendering |
+| 0263 | [The reftests' Chrome sizes its default monospace, and draws it in Go Mono](0263-the-reftests-chrome-sizes-its-default-monospace-and-draws-it-in-go-mono.md) | tools |
 
 ## Writing one
 

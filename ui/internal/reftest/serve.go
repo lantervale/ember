@@ -78,7 +78,9 @@ func chromeSheet() (string, map[string][]byte) {
 // Generics names, in the font and font-family declarations of css, the
 // generic families by the faces ember draws them with, so Chrome draws
 // them alike: those ember has no face for (cursive, fantasy…) in its
-// default one, as ember does.
+// default one, as ember does. A monospace alone in its list stays, for
+// Chrome to size it by its default monospace size, and MonospaceFace
+// then draws it in Go Mono.
 func Generics(css string) string {
 	return fontDeclaration.ReplaceAllStringFunc(css, func(decl string) string {
 		m := fontDeclaration.FindStringSubmatch(decl)
@@ -93,7 +95,12 @@ func Generics(css string) string {
 			case "serif", "sans-serif", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif",
 				"ui-rounded", "emoji", "fangsong":
 				words[last] = defaultFamily
-			case "monospace", "ui-monospace":
+			case "monospace":
+				if len(parts) == 1 {
+					continue
+				}
+				words[last] = monoFamily
+			case "ui-monospace":
 				words[last] = monoFamily
 			default:
 				continue
@@ -105,6 +112,33 @@ func Generics(css string) string {
 		return m[1] + strings.Join(parts, ",")
 	})
 }
+
+// MonospaceFace is the script that, run in Chrome once a page Handler
+// served has loaded, draws in Go Mono the text Chrome draws in its default
+// monospace, at the size Chrome gave it: every element's size and its
+// pseudo-elements' set as Chrome computed them, the generic's own sizes
+// (13px for medium) and its scaling going in and out of it included
+// (decision 0263), then the family of those in monospace alone swapped.
+const MonospaceFace = `(() => {
+  const els = [...document.querySelectorAll('*')], pseudos = ['::before', '::after', '::marker', '::first-letter', '::first-line'];
+  const seen = els.map(e => [getComputedStyle(e), ...pseudos.map(p => getComputedStyle(e, p))].map(c => [c.fontFamily, c.fontSize]));
+  const rules = [];
+  els.forEach((e, i) => {
+    const [own, ...rest] = seen[i];
+    if (own[0] === 'monospace') e.style.setProperty('font-family', '"` + monoFamily + `"', 'important');
+    e.style.setProperty('font-size', own[1], 'important');
+    rest.forEach(([family, size], k) => {
+      if (family !== 'monospace') return;
+      e.setAttribute('data-ember-mono-' + i, '');
+      rules.push('[data-ember-mono-' + i + ']' + pseudos[k] + ' { font-family: "` + monoFamily + `" !important; font-size: ' + size + ' !important; }');
+    });
+  });
+  if (rules.length) {
+    const s = document.createElement('style');
+    s.textContent = rules.join('\n');
+    (document.head || document.documentElement).appendChild(s);
+  }
+})()`
 
 // Handler serves the checkout at root to Chrome: its pages with the
 // sheet of chromeSheet first and their generic families named as ember
