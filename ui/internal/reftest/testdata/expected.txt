@@ -1142,6 +1142,7 @@ css/CSS2/css1/c545-txttrans-000.xht ref chrome
 css/CSS2/css1/c547-indent-000.xht ref chrome
 css/CSS2/css1/c547-indent-001.xht ref chrome
 css/CSS2/css1/c548-leadin-000.xht ref chrome
+css/CSS2/css1/c548-ln-ht-000.xht ref chrome
 css/CSS2/css1/c548-ln-ht-001.xht ref chrome
 css/CSS2/css1/c548-ln-ht-002.xht ref chrome
 css/CSS2/css1/c548-ln-ht-003.xht ref chrome
@@ -1853,6 +1854,7 @@ css/CSS2/generated-content/content-158.xht ref chrome
 css/CSS2/generated-content/content-159.xht ref chrome
 css/CSS2/generated-content/content-171.xht ref chrome
 css/CSS2/generated-content/content-172.xht chrome
+css/CSS2/generated-content/content-173.xht ref
 css/CSS2/generated-content/content-174.xht ref chrome
 css/CSS2/generated-content/content-175.xht ref chrome
 css/CSS2/generated-content/content-attr-001.xht ref chrome
@@ -5103,8 +5105,8 @@ css/CSS2/tables/table-anonymous-objects-189.xht chrome
 css/CSS2/tables/table-anonymous-objects-190.xht chrome
 css/CSS2/tables/table-anonymous-objects-191.xht chrome
 css/CSS2/tables/table-anonymous-objects-192.xht chrome
-css/CSS2/tables/table-anonymous-objects-197.xht chrome
-css/CSS2/tables/table-anonymous-objects-198.xht chrome
+css/CSS2/tables/table-anonymous-objects-197.xht ref chrome
+css/CSS2/tables/table-anonymous-objects-198.xht ref chrome
 css/CSS2/tables/table-anonymous-objects-199.xht chrome
 css/CSS2/tables/table-anonymous-objects-200.xht chrome
 css/CSS2/tables/table-anonymous-objects-212.xht ref chrome
@@ -5388,6 +5390,8 @@ css/CSS2/text/white-space-normal-009.xht ref chrome
 css/CSS2/text/white-space-nowrap-001.xht ref chrome
 css/CSS2/text/white-space-nowrap-attribute-001.xht ref chrome
 css/CSS2/text/white-space-p-element-001.xht ref chrome
+css/CSS2/text/white-space-pre-001.xht ref chrome
+css/CSS2/text/white-space-pre-002.xht ref chrome
 css/CSS2/text/white-space-pre-005.xht ref chrome
 css/CSS2/text/white-space-pre-006.xht ref chrome
 css/CSS2/text/white-space-pre-element-001.xht ref chrome

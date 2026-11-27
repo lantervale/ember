@@ -13,9 +13,9 @@ import (
 func TestPreservedSpacesEndingTheContentTakeRoom(t *testing.T) {
 	pre := func(st *style.Computed) { st.Display, st.WhiteSpace = style.Block, style.Pre }
 	sizes := map[string]geom.Vec2{
-		"HH   ":    geom.V2(50, 10),
-		"   ":      geom.V2(30, 10),
-		"HH\n   ":  geom.V2(30, 20),
+		"HH   ":     geom.V2(50, 10),
+		"   ":       geom.V2(30, 10),
+		"HH\n   ":   geom.V2(30, 20),
 		"HH\n   \n": geom.V2(30, 20),
 	}
 	for s, want := range sizes {
