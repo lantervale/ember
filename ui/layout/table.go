@@ -1172,15 +1172,22 @@ func (t *tree) spanned(n *node, in input, rows []*node) output {
 // and each row's baseline from its top, none in a row with no cell on it (an inline
 // table then stands on the lowest content box of its first row, as Chrome's): the lowest
 // first baseline of its cells that are on it, with cellW their widths in a table of
-// content width. A cell without a line has its content box's bottom for one; lined
+// content width. A cell without a line has its content box's bottom for one, and an
+// empty cell none beside cells holding something; lined
 // marks the rows where a cell on the baseline has a line.
 func (t *tree) baselines(
 	cells []slot, rows int, cellW func(slot) float32, content float32,
 ) ([]float32, []float32, []bool) {
 	lowered, own := make([]float32, len(cells)), make([]float32, len(cells))
 	rowBase, lined := slices.Repeat([]float32{none}, rows), make([]bool, rows)
+	alone := make([]bool, rows)
+	for _, c := range cells {
+		if onBaseline(c.cell) && !emptyCell(c.cell) {
+			alone[c.row] = true
+		}
+	}
 	for i, c := range cells {
-		if !onBaseline(c.cell) {
+		if !onBaseline(c.cell) || emptyCell(c.cell) && alone[c.row] {
 			c.cell.lower(0)
 			continue
 		}
@@ -1195,12 +1202,16 @@ func (t *tree) baselines(
 		rowBase[c.row] = fmax(or(rowBase[c.row], 0), own[i])
 	}
 	for i, c := range cells {
-		if onBaseline(c.cell) {
+		if onBaseline(c.cell) && (!emptyCell(c.cell) || !alone[c.row]) {
 			lowered[i] = rowBase[c.row] - own[i]
 		}
 	}
 	return lowered, rowBase, lined
 }
+
+// emptyCell reports a cell holding nothing in its flow, which stands on no row's
+// baseline beside cells that hold something, as Chrome's.
+func emptyCell(n *node) bool { return len(n.kids) == 0 && n.inline == nil }
 
 // inFlexRow reports whether n is an item of a flex row, its width the main size its
 // container gives it.

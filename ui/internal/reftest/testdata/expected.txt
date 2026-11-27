@@ -3521,6 +3521,7 @@ css/CSS2/normal-flow/min-height-applies-to-008.xht ref chrome
 css/CSS2/normal-flow/min-height-applies-to-009.xht ref chrome
 css/CSS2/normal-flow/min-height-applies-to-012.xht ref chrome
 css/CSS2/normal-flow/min-height-applies-to-013.xht ref
+css/CSS2/normal-flow/min-height-applies-to-014.xht chrome
 css/CSS2/normal-flow/min-height-applies-to-015.xht ref chrome
 css/CSS2/normal-flow/min-height-percentage-001.xht ref chrome
 css/CSS2/normal-flow/min-height-percentage-002.xht ref chrome
@@ -3688,6 +3689,7 @@ css/CSS2/normal-flow/width-applies-to-002.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-003.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-004.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-005.xht ref chrome
+css/CSS2/normal-flow/width-applies-to-006.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-007.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-008.xht ref chrome
 css/CSS2/normal-flow/width-applies-to-009.xht ref chrome
