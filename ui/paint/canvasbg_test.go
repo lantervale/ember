@@ -20,6 +20,7 @@ func rootPage(htmlBg, bodyBg color.Color) *box.Tree {
 	body.Node = dom.NewElement(dom.Body)
 	html := el(0, 0, 400, 50, bg(htmlBg), body)
 	html.Node = dom.NewElement(dom.HTML)
+	html.Node.Append(body.Node)
 	return tree(html)
 }
 
@@ -51,6 +52,30 @@ func TestWithoutARootBackgroundBodysPropagatesToTheCanvas(t *testing.T) {
 	require.Len(t, f, 1, "body's box doesn't paint it again")
 	assert.Equal(t, geom.Rect{W: 400, H: 300}, f[0].Rect)
 	assert.Equal(t, blue, f[0].Color)
+}
+
+func TestBodysBackgroundPropagatesFromUnderTheRootsAnonymousBoxes(t *testing.T) {
+	page := rootPage(color.Color{}, blue)
+	html := page.Root
+	body := html.Children[0]
+	html.Children = nil
+	html.Append(&box.Box{Kind: box.AnonymousBlock, Style: &style.Computed{}, Children: []*box.Box{body}})
+	inner := dom.NewElement(dom.Body)
+	body.Node.Append(inner)
+	r := newRecorder()
+	Paint(r, page, Viewport(geom.Rect{W: 400, H: 300}))
+	f := fills(r)
+	require.Len(t, f, 1, "a root of display: table wraps body in anonymous boxes")
+	assert.Equal(t, geom.Rect{W: 400, H: 300}, f[0].Rect)
+	assert.Equal(t, blue, f[0].Color)
+
+	html.Children = nil
+	nested := el(10, 10, 380, 30, bg(blue))
+	nested.Node = inner
+	html.Append(nested)
+	r = newRecorder()
+	Paint(r, page, Viewport(geom.Rect{W: 400, H: 300}))
+	assert.Equal(t, geom.Rect{X: 10, Y: 10, W: 380, H: 30}, fills(r)[0].Rect, "only html's own body child propagates")
 }
 
 func TestWithoutAViewportTheCanvasIsTheRootsBox(t *testing.T) {

@@ -146,11 +146,11 @@ func (b builder) element(n *html.Node) *ui.Node {
 
 func (b builder) attributes(n *html.Node, e *ui.Node) {
 	for _, a := range n.Attr {
-		if a.Namespace != "" || strings.HasPrefix(a.Key, "on") || a.Key == "autofocus" || a.Key == "tabindex" {
+		if a.Namespace != "" || strings.HasPrefix(a.Key, "on") || a.Key == "autofocus" {
 			continue
 		}
 		value := a.Val
-		if a.Key == "src" || (a.Key == "href" && n.DataAtom == atom.A) {
+		if a.Key == "src" {
 			if at := Resolve(b.page, value); at != "" {
 				value = Base + at
 			}
