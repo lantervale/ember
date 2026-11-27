@@ -1594,6 +1594,8 @@ css/CSS2/floats/new-fc-separates-from-float.html ref chrome
 css/CSS2/floats/overflow-scroll-float-paint-order.html ref chrome
 css/CSS2/floats/overhanging-float-paint-order.html ref chrome
 css/CSS2/floats/zero-available-space-float-positioning.html ref chrome
+css/CSS2/floats/zero-width-floats-positioning.tentative.html chrome
+css/CSS2/floats/zero-width-floats.html ref chrome
 css/CSS2/fonts/font-003.xht ref chrome
 css/CSS2/fonts/font-011.xht ref chrome
 css/CSS2/fonts/font-012.xht ref chrome

@@ -275,3 +275,17 @@ func TestBlocksAfterOneWhoseMarginsLeaveTheirParentClearItsFloatsWhereTheyStand(
 	bottom := tr.Of[outer].Pos.Y + tr.Of[p].Pos.Y + tr.Of[f].Pos.Y + tr.Of[f].Size.Y
 	assert.Equal(t, bottom, tr.Of[cleared].Pos.Y)
 }
+
+func TestAZeroWidthFloatLeavesABlockFormattingContextItsRoom(t *testing.T) {
+	bfc := el(dom.Div, func(st *style.Computed) {
+		st.Display, st.FlowRoot = style.Block, true
+		st.Margin.Left, st.Margin.Right = style.Px(-50), style.Px(-50)
+		st.Size.Height = style.Px(100)
+	})
+	tr := lay(el(dom.Div, func(st *style.Computed) {
+		width(100)(st)
+		st.Margin.Left = style.Px(50)
+	}, el(dom.Div, float(style.FloatRight, 0, 150)), bfc), 400)
+	assert.Equal(t, geom.Rect{W: 200, H: 100}, geom.Rect{W: tr.Of[bfc].Rect().W, H: tr.Of[bfc].Rect().H},
+		"its negative margins reach past the float of no width, as Chrome's")
+}
