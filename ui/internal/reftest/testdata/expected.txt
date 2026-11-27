@@ -6,6 +6,8 @@ css/CSS2/abspos/abspos-containing-block-initial-004a.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-004b.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-004c.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-004d.xht ref chrome
+css/CSS2/abspos/abspos-containing-block-initial-004e.xht ref chrome
+css/CSS2/abspos/abspos-containing-block-initial-004f.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-005a.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-005b.xht ref chrome
 css/CSS2/abspos/abspos-containing-block-initial-005c.xht ref chrome
