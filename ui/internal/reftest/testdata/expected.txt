@@ -2408,7 +2408,7 @@ css/CSS2/margin-padding-clear/margin-collapse-025.xht ref chrome
 css/CSS2/margin-padding-clear/margin-collapse-026.xht ref chrome
 css/CSS2/margin-padding-clear/margin-collapse-028.xht ref chrome
 css/CSS2/margin-padding-clear/margin-collapse-037.xht chrome
-css/CSS2/margin-padding-clear/margin-collapse-038.xht ref
+css/CSS2/margin-padding-clear/margin-collapse-038.xht chrome
 css/CSS2/margin-padding-clear/margin-collapse-039.xht ref chrome
 css/CSS2/margin-padding-clear/margin-collapse-040.xht ref chrome
 css/CSS2/margin-padding-clear/margin-collapse-041.xht ref chrome
@@ -3363,6 +3363,7 @@ css/CSS2/normal-flow/max-height-applies-to-018.html ref chrome
 css/CSS2/normal-flow/max-height-percentage-001.xht ref chrome
 css/CSS2/normal-flow/max-height-percentage-002.xht ref chrome
 css/CSS2/normal-flow/max-height-percentage-003.xht ref chrome
+css/CSS2/normal-flow/max-height-separates-margin.html ref chrome
 css/CSS2/normal-flow/max-width-001.xht ref chrome
 css/CSS2/normal-flow/max-width-002.xht ref chrome
 css/CSS2/normal-flow/max-width-003.xht ref chrome
