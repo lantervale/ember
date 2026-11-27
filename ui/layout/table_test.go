@@ -222,3 +222,14 @@ func TestATableWhoseBordersCollapseHasNoPadding(t *testing.T) {
 	assert.Equal(t, geom.Vec2{X: 100, Y: 100}, tr.Of[empty].Size, "empty, its padding dropped all the same")
 	assert.Equal(t, geom.Vec2{X: 100, Y: 100}, tr.Of[full].Size)
 }
+
+func TestACellsMaxWidthHoldsTheWidthItAsksFor(t *testing.T) {
+	for name, layout := range map[string]style.TableLayout{"auto": style.TableAuto, "fixed": style.TableFixed} {
+		c := el(dom.Td, func(st *style.Computed) {
+			st.Size.Width, st.Size.Height, st.MaxSize.Width = style.Px(288), style.Px(96), style.Px(96)
+		})
+		tb := el(dom.Table, func(st *style.Computed) { st.TableLayout = layout }, row(c))
+		tr := lay(el(dom.Div, block, tb), 600)
+		assert.Equal(t, float32(96), tr.Of[c].Size.X, "%s: as Chrome's", name)
+	}
+}
