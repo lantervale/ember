@@ -1891,7 +1891,6 @@ css/CSS2/generated-content/content-157.xht ref chrome
 css/CSS2/generated-content/content-158.xht ref chrome
 css/CSS2/generated-content/content-159.xht ref chrome
 css/CSS2/generated-content/content-171.xht ref chrome
-css/CSS2/generated-content/content-173.xht ref
 css/CSS2/generated-content/content-174.xht ref
 css/CSS2/generated-content/content-175.xht ref chrome
 css/CSS2/generated-content/content-attr-001.xht ref chrome
