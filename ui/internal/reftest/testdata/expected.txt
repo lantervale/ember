@@ -949,6 +949,8 @@ css/CSS2/borders/border-width-007.xht ref chrome
 css/CSS2/borders/border-width-008.xht ref chrome
 css/CSS2/borders/border-width-009.xht ref chrome
 css/CSS2/borders/border-width-010.xht ref chrome
+css/CSS2/borders/border-width-011.xht ref chrome
+css/CSS2/borders/border-width-012.xht ref chrome
 css/CSS2/borders/border-width-013.xht ref chrome
 css/CSS2/borders/border-width-014.xht ref chrome
 css/CSS2/borders/border-width-applies-to-008.xht ref chrome
