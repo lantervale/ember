@@ -3792,6 +3792,7 @@ css/CSS2/positioning/abspos-025.xht ref chrome
 css/CSS2/positioning/abspos-026.xht ref chrome
 css/CSS2/positioning/abspos-027.xht ref chrome
 css/CSS2/positioning/abspos-028.xht ref chrome
+css/CSS2/positioning/abspos-block-level-001.html ref chrome
 css/CSS2/positioning/abspos-containing-block-001.xht ref chrome
 css/CSS2/positioning/abspos-containing-block-002.xht ref chrome
 css/CSS2/positioning/abspos-containing-block-003.xht ref chrome
@@ -3803,7 +3804,7 @@ css/CSS2/positioning/abspos-containing-block-008.xht ref chrome
 css/CSS2/positioning/abspos-containing-block-009.xht ref chrome
 css/CSS2/positioning/abspos-containing-block-010.xht ref chrome
 css/CSS2/positioning/abspos-inline-007.xht chrome
-css/CSS2/positioning/abspos-negative-margin-001.html chrome
+css/CSS2/positioning/abspos-negative-margin-001.html ref chrome
 css/CSS2/positioning/abspos-overflow-001.xht ref chrome
 css/CSS2/positioning/abspos-overflow-002.xht ref chrome
 css/CSS2/positioning/abspos-overflow-003.xht ref chrome
