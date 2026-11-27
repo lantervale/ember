@@ -33,6 +33,11 @@ func TestDocumentBuildsThePageWithItsSheets(t *testing.T) {
 	if v, _ := d.ComputedValue(d.ByID("t"), "-webkit-font-smoothing"); v != "antialiased" {
 		t.Errorf("-webkit-font-smoothing %q: glyphs at their exact coverage, as the references draw boxes", v)
 	}
+	for name, want := range map[string]string{"href": "#top", "tabindex": "5"} {
+		if v, _ := d.ByID("a").Attr(name); v != want {
+			t.Errorf("the link's %s %q, want %q as written, which attr() reads", name, v, want)
+		}
+	}
 }
 
 const fixture = "testdata/wpt"
