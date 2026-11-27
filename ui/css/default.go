@@ -34,8 +34,6 @@ func DefaultImages() map[string][]byte {
 // default monospace font (decision 0259), where a game's is 16px and its
 // code's 0.8125em of Go Mono.
 const BrowserDefault = `* { box-sizing: content-box; }
-html { font-size: medium; }
-code, kbd, samp, pre { font-family: monospace; font-size: inherit; }
 button, select, table, progress, meter, input[type="checkbox"], input[type="radio"], input[type="button"],
 input[type="submit"], input[type="reset"], input[type="search"], input[type="color"] { box-sizing: border-box; }
 input, select, textarea { color: FieldText; }
@@ -51,6 +49,8 @@ textarea { font-family: monospace; resize: auto; }
 input { white-space: inherit; }
 input[type="button"], input[type="submit"], input[type="reset"], select { white-space: pre; }
 select:-ember-listbox, option { white-space: nowrap; }
+html { font-size: medium; }
+code, kbd, samp, pre { font-family: monospace; font-size: inherit; }
 `
 
 // Default is the user-agent sheet: what every element looks like before
