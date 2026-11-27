@@ -1452,6 +1452,7 @@ css/CSS2/floats-clear/margin-collapse-125.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-134.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-135.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-142.xht ref chrome
+css/CSS2/floats-clear/margin-collapse-157.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-158.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-165.xht ref chrome
 css/CSS2/floats-clear/margin-collapse-clear-002.xht ref chrome
