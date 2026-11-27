@@ -13,8 +13,8 @@ import (
 
 // An img is sized as Chrome sizes it for each kind of file: one asking
 // for a width and a height, one with a view box alone, one with neither,
-// and one with a size and no view box, by itself and under each way a
-// page sizes it.
+// one with a size and no view box, and one whose size has another ratio
+// than its view box, by itself and under each way a page sizes it.
 func TestSVGImagesAreSizedAsChromeSizesThem(t *testing.T) {
 	ways := [][]ui.Arg{
 		nil,
@@ -32,7 +32,7 @@ func TestSVGImagesAreSizedAsChromeSizesThem(t *testing.T) {
 		{ui.Style("margin: 0 10px; padding: 5px; border: 2px solid")},
 		{ui.Attr("width", "100"), ui.Style("width: 60px")},
 	}
-	for _, src := range []string{"sized.svg", "shaped.svg", "bare.svg", "plain.svg"} {
+	for _, src := range []string{"sized.svg", "shaped.svg", "bare.svg", "plain.svg", "squashed.svg"} {
 		t.Run(src, func(t *testing.T) {
 			d := ui.NewDocument(ui.Stylesheet(samples(t, "body { margin: 0; width: 500px; }"), "page.css"))
 			for _, way := range ways {

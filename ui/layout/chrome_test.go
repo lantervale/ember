@@ -169,6 +169,11 @@ func TestLayoutMatchesChrome(t *testing.T) {
 			ui.Div(
 				ui.Div(ui.Style("margin: 10px 0"), ui.Div(ui.Style("margin-top: 20px; height: 10px"))),
 				ui.Div(ui.Style("margin-top: 5px; height: 10px")),
+				ui.Div(ui.Style("border-bottom: 10px solid"), ui.Div(ui.Style("margin: 16px 0"))),
+				ui.Div(ui.Style("border-bottom: 10px solid"), ui.Div(ui.Div(ui.Style("margin: 7px 0")),
+					ui.Div(ui.Style("margin: 12px 0")))),
+				ui.Div(ui.Style("border-bottom: 10px solid; margin-top: 4px"), ui.Div(ui.Style("margin: 8px 0")),
+					ui.Div(ui.Style("height: 5px"))),
 			),
 		),
 		"order in flex and grid": page(

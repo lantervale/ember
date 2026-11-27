@@ -428,7 +428,7 @@ func TestIntrinsicSize(t *testing.T) {
 		ratio      float64
 	}{
 		`width="40" height="30"`:                       {40, 30, true, true, 4.0 / 3},
-		`width="40" height="30" viewBox="0 0 100 100"`: {40, 30, true, true, 1},
+		`width="40" height="30" viewBox="0 0 100 100"`: {40, 30, true, true, 4.0 / 3},
 		`width="40"`:                        {40, 150, true, false, 0},
 		`height="30"`:                       {300, 30, false, true, 0},
 		`width="40" viewBox="0 0 200 100"`:  {40, 20, true, true, 2},
@@ -437,7 +437,7 @@ func TestIntrinsicSize(t *testing.T) {
 		``:                                  {300, 150, false, false, 0},
 		`width="100%" height="100%" viewBox="0 0 200 100"`: {300, 150, false, false, 2},
 		`width="50%" height="100%"`:                        {300, 150, false, false, 0},
-		`width="1in" height="10mm" viewBox="0 0 200 100"`:  {96, 37.795, true, true, 2},
+		`width="1in" height="10mm" viewBox="0 0 200 100"`:  {96, 37.795, true, true, 96 / 37.795275590551185},
 		`width="2em" height="1em"`:                         {32, 16, true, true, 2},
 		`width="40" height="30" viewBox="0 0 0 100"`:       {40, 30, true, true, 4.0 / 3},
 		`width="-40" height="30" viewBox="0 0 100 100"`:    {0, 30, true, true, 1},

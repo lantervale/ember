@@ -3,6 +3,7 @@ package reftest
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -146,17 +147,35 @@ func (b builder) element(n *html.Node) *ui.Node {
 
 func (b builder) attributes(n *html.Node, e *ui.Node) {
 	for _, a := range n.Attr {
-		if a.Namespace != "" || strings.HasPrefix(a.Key, "on") || a.Key == "autofocus" || a.Key == "tabindex" {
+		if a.Namespace != "" || strings.HasPrefix(a.Key, "on") || a.Key == "autofocus" {
 			continue
 		}
 		value := a.Val
-		if a.Key == "src" || (a.Key == "href" && n.DataAtom == atom.A) {
+		if a.Key == "src" {
 			if at := Resolve(b.page, value); at != "" {
 				value = Base + at
 			}
 		}
 		e.SetAttr(a.Key, value)
 	}
+	if !b.xml() {
+		return
+	}
+	for _, a := range n.Attr {
+		if a.Key == "xml:lang" && a.Namespace == "" {
+			e.SetAttr("lang", a.Val)
+		}
+	}
+}
+
+// xml reports whether the page is XHTML, where xml:lang is an element's
+// language, over its lang.
+func (b builder) xml() bool {
+	switch strings.ToLower(path.Ext(b.page)) {
+	case ".xht", ".xhtml", ".xml":
+		return true
+	}
+	return false
 }
 
 // markup is what an svg element holds, as SVG.

@@ -33,6 +33,11 @@ func TestDocumentBuildsThePageWithItsSheets(t *testing.T) {
 	if v, _ := d.ComputedValue(d.ByID("t"), "-webkit-font-smoothing"); v != "antialiased" {
 		t.Errorf("-webkit-font-smoothing %q: glyphs at their exact coverage, as the references draw boxes", v)
 	}
+	for name, want := range map[string]string{"href": "#top", "tabindex": "5"} {
+		if v, _ := d.ByID("a").Attr(name); v != want {
+			t.Errorf("the link's %s %q, want %q as written, which attr() reads", name, v, want)
+		}
+	}
 }
 
 const fixture = "testdata/wpt"
@@ -386,6 +391,24 @@ func TestTheSummaryRanksChromeFirst(t *testing.T) {
 		"Matching the reference but not Chrome (1", "Matching Chrome but not the reference (1", "| script | 1 |"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("the summary lacks %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestXMLLangIsTheLanguageOfAnXHTMLPagesElement(t *testing.T) {
+	for page, want := range map[string]map[string]string{
+		"css/css-demo/empty.xht":  {"p": "fr"},
+		"css/css-demo/green.html": {"b": ""},
+	} {
+		p, err := ReadPage(fixture, page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := p.Document(fixture, &Fetches{})
+		for id, lang := range want {
+			if v, _ := d.ByID(id).Attr("lang"); v != lang {
+				t.Errorf("%s: #%s's lang %q, want %q: xml:lang wins in XHTML only", page, id, v, lang)
+			}
 		}
 	}
 }
