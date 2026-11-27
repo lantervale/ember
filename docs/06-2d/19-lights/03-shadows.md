@@ -1,5 +1,7 @@
 # Shadows
 
+What blocks light casts shadows: solid tiles, tile shapes and sprites marked as occluders. A light's options say how long, soft and dark its shadows are, and groups say which shadows fall where.
+
 ![A lamp moving through the garden: its shadows shortening as it rises, then softening, then fading](shadows.gif "ember · shadows")
 
 ```go
@@ -30,7 +32,12 @@ crate := twod.NewSprite(tex, light.Occluder())                // a sprite, over 
 camera := twod.NewCamera(light.OccludersFrom(space))          // a collide space's bodies and own solids
 ```
 
-Light finds the tile maps of a window itself, hidden or not, and each casts there: a tile blocks light with its collision and its `shadow` shapes, or its whole cell when it's solid with no shapes, unless its `shadow` is `none` ([decision 0071](../../99-decisions/0071-each-system-reads-its-own-tile-properties.md)). A tile map in a collide space and in no window casts nothing. `light.OccludersFrom(space)` adds a space's hard bodies and the game's own solids, never its tile maps, which already cast. Changing a tile with `Set` costs light nothing until its next look at the map, which reads the map again whole: a `Set` then one light's reach on a 40 × 109 map, 81 µs.
+Light finds the tile maps of a window itself, hidden or not, and each casts there ([decision 0071](../../99-decisions/0071-each-system-reads-its-own-tile-properties.md)):
+
+- A tile blocks light with its collision and its `shadow` shapes, or its whole cell when it's solid with no shapes, unless its `shadow` is `none`.
+- A tile map in a collide space and in no window casts nothing.
+- `light.OccludersFrom(space)` adds a space's hard bodies and the game's own solids, never its tile maps, which already cast.
+- Changing a tile with `Set` costs light nothing until its next look at the map, which reads the map again whole: a `Set` then one light's reach on a 40 × 109 map, 81 µs.
 
 ```go
 ruins := twod.NewTileMap(set, twod.CSV(cells), light.NoShadows()) // drawn only: its walls cast nothing
@@ -39,7 +46,16 @@ light.NoShadowsOf(ruins)                                          // true
 seen := light.TileShadowsIn(nil, walls, area) // []light.TileShadowRect{Rect, Group, Height}
 ```
 
-`light.NoShadows()` keeps a map from casting, whatever its tiles say: a map drawn as a picture only, whose walls something else stands for. A Tiled tile object made a sprite by `level.Sprite(o)` casts as its tile does on the cell under its foot: its shapes, or its whole cell when it is solid with none, scaled to the object and flipped as it is, at its tile's `height` and in its `occluder_group`; it is lit as that tile is in a map too, a tall one at its base, round what it blocks with, and `light.NoShadows()` on the sprite stops it casting ([decision 0076](../../99-decisions/0076-a-tile-object-casts-as-its-tile.md)). `light.TileShadowsIn(dst, m, area)` appends what a map's tiles block light with in `area`, as light casts it, in the map's parent's space: for a game's rules that follow light, such as what blocks sight. It needs no window and reads the map as it is, `NoShadows` or not.
+`light.NoShadows()` keeps a map from casting, whatever its tiles say: a map drawn as a picture only, whose walls something else stands for.
+
+A Tiled tile object made a sprite by `level.Sprite(o)` casts as its tile does on the cell under its foot ([decision 0076](../../99-decisions/0076-a-tile-object-casts-as-its-tile.md)):
+
+- its shapes, or its whole cell when it is solid with none, scaled to the object and flipped as it is;
+- at its tile's `height` and in its `occluder_group`;
+- lit as that tile is in a map too: a tall one at its base, round what it blocks with;
+- `light.NoShadows()` on the sprite stops it casting.
+
+`light.TileShadowsIn(dst, m, area)` appends what a map's tiles block light with in `area`, as light casts it, in the map's parent's space: for a game's rules that follow light, such as what blocks sight. It needs no window and reads the map as it is, `NoShadows` or not.
 
 ## Height
 
@@ -159,7 +175,21 @@ All the properties, and the system that declares each, are on [Classes and prope
 
 ![The tileset tool with wall tile 0 picked: its Inspector window a table of names and values, tall off with (default) after it, solid switched on, then the objectgroup with object 1 on one line, body · rectangle · 0,0 · 16×20, and object 2 unfolded, type shadow](tileset-tool.png "tileset · walls.tsj")
 
-`go run ./tools/tileset path/to/tiles.tsj` edits a tile as Tiled stores it, in one table of names and values: its engine `properties`, then its `objectgroup`, the selected `object` unfolded with its `type` none, `shadow` or `body` (orange, blue, violet), its `shape` rectangle, ellipse or polygon, `x · y` and `width · height`, the others one line each. Its Preview, folded at first, lights the tile, its lamp's `shadows` switch off for a light through everything: hold the mouse in it to move the light, click it and walk the body with WASD, View › Static light (baked) bakes the lamp; View › Preview room…, or `-room path/to/room.tmj` on the command line, shows a room of the game with the tileset as edited. `-props props.json` adds the game's own tile properties to the table, and `-dir folder` sets where the open dialog starts until a tileset is opened.
+### The tileset tool
+
+`go run ./tools/tileset path/to/tiles.tsj` edits a tile as Tiled stores it, in one table of names and values:
+
+- its engine `properties`;
+- its `objectgroup`: the selected `object` unfolded with its `type` none, `shadow` or `body` (orange, blue, violet), its `shape` rectangle, ellipse or polygon, `x · y` and `width · height`; the others one line each.
+
+Its Preview, folded at first, lights the tile:
+
+- its lamp's `shadows` switch off for a light through everything;
+- hold the mouse in it to move the light; click it and walk the body with WASD;
+- View › Static light (baked) bakes the lamp;
+- View › Preview room…, or `-room path/to/room.tmj` on the command line, shows a room of the game with the tileset as edited.
+
+On the command line, `-props props.json` adds the game's own tile properties to the table, and `-dir folder` sets where the open dialog starts until a tileset is opened.
 
 ![The tool previewing a crypt room: its walls and pillars outlined, the lamp lighting the floor, their shadows falling across it](tileset-tool-room.png "tileset · walls.tsj")
 

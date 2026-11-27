@@ -1,5 +1,7 @@
 # Lit layers and ambient
 
+A lit layer shows only where light reaches it. Mark which layers are lit, set the dark everywhere else with an ambient, and keep some things, such as a crate the player must always see, unlit.
+
 ![The crypt built up: ambient only, then a lamp, then its shadows, then a crate drawn unlit](parts.png "ember · light")
 
 ```go
@@ -75,7 +77,20 @@ things := twod.NewTileMap(set, twod.TallIn(room), light.PerPixel())
 pillar := twod.NewSprite(tex, light.LitAt(0, 24)) // one light, taken at its base
 ```
 
-A tall tile that blocks light takes the brightest light just past its sides; a flat wall tile takes it past its left, right and bottom sides, so it lights from the room, not from behind. A wall seen from above, such as the rim of rock round a cave, may have its floor on any side: its tile property `lit` set to `around`, or `light.TileLitAround(ids…)` in code, lights it from every side, the brightest light just past any of its sides or corners, so a rim tile meeting its floor only at a corner is lit too ([decision 0075](../../99-decisions/0075-a-wall-seen-from-above-is-lit-from-every-side.md), [0077](../../99-decisions/0077-what-is-lit-around-takes-light-past-its-corners.md)). Such a tile is lit round its body shapes as well as what it blocks light with: a rim one tile thick, with floor on both sides at its steps, casts only from a thin `shadow` strip on its far side, the side of the dark behind it, so a light beside a step throws no wedge onto the floor past it, while a `body` over its whole cell stops bodies and is what it is lit round ([decision 0078](../../99-decisions/0078-a-tile-lit-around-is-lit-round-its-bodies-too.md)).
+How a tile that blocks light is lit:
+
+| Tile | Takes the brightest light |
+|---|---|
+| a tall tile | just past its sides |
+| a flat wall tile | past its left, right and bottom sides, so it lights from the room, not from behind |
+| a wall seen from above, `lit` = `around` | just past any of its sides or corners |
+
+A wall seen from above, such as the rim of rock round a cave, may have its floor on any side. Its tile property `lit` set to `around`, or `light.TileLitAround(ids…)` in code, lights it from every side, so a rim tile meeting its floor only at a corner is lit too ([decision 0075](../../99-decisions/0075-a-wall-seen-from-above-is-lit-from-every-side.md), [0077](../../99-decisions/0077-what-is-lit-around-takes-light-past-its-corners.md)).
+
+Such a tile is lit round its body shapes as well as what it blocks light with ([decision 0078](../../99-decisions/0078-a-tile-lit-around-is-lit-round-its-bodies-too.md)). Take a rim one tile thick, with floor on both sides at its steps:
+
+- it casts only from a thin `shadow` strip on its far side, the side of the dark behind it, so a light beside a step throws no wedge onto the floor past it;
+- a `body` over its whole cell stops bodies, and is what it is lit round.
 
 ## Affects
 
@@ -87,5 +102,7 @@ glow := light.NewPoint(140, warm, light.Affects(floor)) // the floor and what it
 glow.SetAffects()                                         // every lit layer again
 ```
 
-A sprite follows its layer, and static lights light everything. Each set of lights left out costs one more light picture, shared with `ShadedBy`, up to four a window; past that, the extra layers take the window's own picture, lit by every light ([decision 0048](../../99-decisions/0048-a-light-affects-layers-through-a-picture-per-set-of-lights-left-out.md)).
+- A sprite follows its layer.
+- Static lights light everything.
+- Each set of lights left out costs one more light picture, shared with `ShadedBy`, up to four a window. Past that, the extra layers take the window's own picture, lit by every light ([decision 0048](../../99-decisions/0048-a-light-affects-layers-through-a-picture-per-set-of-lights-left-out.md)).
 

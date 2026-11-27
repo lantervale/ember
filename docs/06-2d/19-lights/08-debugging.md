@@ -1,5 +1,7 @@
 # Debugging and performance
 
+Debug views show the light, what blocks it and the shadow maps; static lights, budgets and priorities keep many lights cheap.
+
 ![The light picture, the occluders outlined, and the shadow maps, over the same crypt](debug-views.png "ember · light")
 
 | Key, with F3 shown | Call | Shows |
@@ -73,4 +75,6 @@ Fades run on the World's scaled time, so a paused game holds them, and a fading 
 | occluder groups | 3 |
 | probes | 1,024 |
 
-A camera drawing `Into` a render texture draws lit layers unlit. A light without Elevation, Size or a fade costs what it did before they existed, and a light with no occluder of its groups within its radius (box `Occluder` sprites, solids, tile shadows; silhouettes don't count) costs no shadow work at all, as with `Shadows(false)`.
+- A camera drawing `Into` a render texture draws lit layers unlit.
+- Elevation, Size and a fade cost nothing on a light that doesn't use them.
+- A light with no occluder of its groups within its radius (box `Occluder` sprites, solids, tile shadows; silhouettes don't count) costs no shadow work at all, as with `Shadows(false)`.

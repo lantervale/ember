@@ -1,5 +1,7 @@
 # Probes
 
+A probe reads how much light falls on a spot, so game rules can follow light: a monster that hides in the dark, a stealth meter.
+
 ![The hero walking with his torch, violet slimes showing where the light reaches them and only their eyes in the dark](probe.gif "ember · probes")
 
 ```go

@@ -1,5 +1,7 @@
 # Directional lights
 
+A directional light lights the whole scene from one direction, such as the sun or the moon, with shadows of one length.
+
 ![A day over the garden: the shadows swing and shorten at noon, then night falls](directional.gif "ember · directional lights")
 
 ```go
