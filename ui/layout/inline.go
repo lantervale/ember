@@ -3303,19 +3303,19 @@ func (c *inlineContent) staticOf(k *node, l line, span int, at point, start, lh,
 		return at
 	}
 	static := point{left, at.y}
-	before := at.x > start
 	if c.owner.st.Dir == style.RTL {
 		static.x = left + content
-		before = c.showsBefore(l, span)
 	}
-	if before {
+	if at.x > start && c.owner.st.Dir != style.RTL || c.showsBefore(l, span) {
 		static.y += lh
 	}
 	return static
 }
 
-// showsBefore reports whether anything with a width stands before the anchor of
-// out-of-flow box k on line l, in the content's order.
+// showsBefore reports whether anything stands before the anchor of out-of-flow box k
+// on line l, in the content's order: something with a width, or the start of an inline
+// box with a margin, a border or padding at its start, whatever they add up to, as
+// Chrome counts a line that isn't empty.
 func (c *inlineContent) showsBefore(l line, k int) bool {
 	for _, p := range c.pieces[l.from:l.to] {
 		if p.kind == anchor && p.span == k {
@@ -3324,8 +3324,19 @@ func (c *inlineContent) showsBefore(l line, k int) bool {
 		if p.width > 0 {
 			return true
 		}
+		if p.kind == edge && p.start && c.framedStart(c.spans[p.span]) {
+			return true
+		}
 	}
 	return false
+}
+
+// framedStart reports an inline box with a margin, a border or padding at its start.
+func (c *inlineContent) framedStart(sp *inlineSpan) bool {
+	if c.owner.st.Dir == style.RTL {
+		return sp.margin.r != 0 || sp.border.r != 0 || sp.padding.r != 0
+	}
+	return sp.margin.l != 0 || sp.border.l != 0 || sp.padding.l != 0
 }
 
 // containingSpan makes the nearest positioned span holding o its containing block: the
