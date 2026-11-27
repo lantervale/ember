@@ -6,7 +6,16 @@ A camera can draw into a texture instead of the window, and the texture then sho
 
 ## The program
 
-The window's camera follows the hero at three times the size; `SnapToPixels` keeps the pixel art on whole pixels as it moves. `twod.NewRenderTexture(240, 128, twod.Pixelated())` is a texture with no picture of its own. A second camera with `Into(minimap)` draws into it at half size, centred on the meadow; a camera into a texture is never the window's camera, and leaves out fixed layers and the UI. On a fixed layer, a dark frame and a sprite of the minimap show it, like any texture. Inside a render texture, blended, masked and effect layers draw plainly, and masks are skipped.
+1. The window's camera follows the hero at three times the size. `SnapToPixels` keeps the pixel art on whole pixels as it moves.
+2. `twod.NewRenderTexture(240, 128, twod.Pixelated())` is a texture with no picture of its own.
+3. A second camera with `Into(minimap)` draws into it at half size, centred on the meadow.
+4. On a fixed layer, a dark frame and a sprite of the minimap show it, like any texture.
+
+A camera into a texture:
+
+- is never the window's camera;
+- leaves out fixed layers and the UI;
+- draws a layer shown as one picture (a blend, an effect, `AsMask`, `MaskedBy`) as one there too, at the texture's size, through passes of its own: a disc `AsMask` layer leaves the texture's corners clear.
 
 [main.go](../../examples/32-render-to-texture/main.go)
 
@@ -14,7 +23,9 @@ A texture shown much smaller than its own size, such as a minimap drawn at a thi
 
 ## Drawing only some layers
 
-A camera draws every layer by default. `twod.Layers(…)` makes it draw only the layers listed, and what's in them; a window's fixed layers and its UI always show. Give a minimap's camera a layer of markers, and the main camera the world's layers, and each view shows only its own. `Layers()` reads them back and `SetLayers(…)` changes them.
+A camera draws every layer by default. `twod.Layers(…)` makes it draw only the layers listed, and what's in them; a window's fixed layers and its UI always show.
+
+Give a minimap's camera a layer of markers, and the main camera the world's layers, and each view shows only its own. `Layers()` reads them back and `SetLayers(…)` changes them.
 
 ## As before
 
