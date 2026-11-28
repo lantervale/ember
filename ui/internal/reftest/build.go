@@ -3,7 +3,6 @@ package reftest
 import (
 	"errors"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -171,11 +170,7 @@ func (b builder) attributes(n *html.Node, e *ui.Node) {
 // xml reports whether the page is XHTML, where xml:lang is an element's
 // language, over its lang.
 func (b builder) xml() bool {
-	switch strings.ToLower(path.Ext(b.page)) {
-	case ".xht", ".xhtml", ".xml":
-		return true
-	}
-	return false
+	return xmlPage(b.page)
 }
 
 // markup is what an svg element holds, as SVG.

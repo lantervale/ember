@@ -2535,25 +2535,35 @@ func (t *tree) flowLines(c *inlineContent, width float32) []line {
 				top, _ := t.trims(c, []line{l})
 				y -= top
 			}
-			for _, f := range on {
-				f.at, f.placed = c.flow.place(f.box, y, f.side, f.clearing, false), true
-			}
+			c.placeFloats(on, y)
 			floats = floats[len(on):]
 			bottom = y
-			if side := c.brClear(l); side != style.ClearNone {
-				if below := c.flow.clearedThreshold(side); some(below) && below > y {
-					y = below
-				}
-			}
+			y = c.clearedBelow(l, y)
 			break
 		}
 	}
-	for _, f := range floats {
-		// after the last line's content, as one after a br ending the lines: below it
-		f.at, f.placed = c.flow.place(f.box, y, f.side, f.clearing, false), true
-	}
+	// after the last line's content, as one after a br ending the lines: below it
+	c.placeFloats(floats, y)
 	c.clearedAfter = y - bottom
 	return c.reshaped(b.close())
+}
+
+// placeFloats places floats in c's flow at y.
+func (c *inlineContent) placeFloats(floats []*lineFloat, y float32) {
+	for _, f := range floats {
+		f.at, f.placed = c.flow.place(f.box, y, f.side, f.clearing, false), true
+	}
+}
+
+// clearedBelow is where the line after l starts, l ending at y: below the floats a br
+// ending l clears.
+func (c *inlineContent) clearedBelow(l line, y float32) float32 {
+	if side := c.brClear(l); side != style.ClearNone {
+		if below := c.flow.clearedThreshold(side); some(below) && below > y {
+			return below
+		}
+	}
+	return y
 }
 
 // restartFloats has the floats of c's context be those before its lines, and returns the

@@ -120,8 +120,10 @@ func Generics(css string) string {
 // (13px for medium) and its scaling going in and out of it included
 // (decision 0263), then the family of those in monospace alone swapped.
 const MonospaceFace = `(() => {
-  const els = [...document.querySelectorAll('*')], pseudos = ['::before', '::after', '::marker', '::first-letter', '::first-line'];
-  const seen = els.map(e => [getComputedStyle(e), ...pseudos.map(p => getComputedStyle(e, p))].map(c => [c.fontFamily, c.fontSize]));
+  const els = [...document.querySelectorAll('*')];
+  const pseudos = ['::before', '::after', '::marker', '::first-letter', '::first-line'];
+  const seen = els.map(e => [getComputedStyle(e), ...pseudos.map(p => getComputedStyle(e, p))]
+    .map(c => [c.fontFamily, c.fontSize]));
   const rules = [];
   els.forEach((e, i) => {
     const [own, ...rest] = seen[i];
@@ -130,7 +132,8 @@ const MonospaceFace = `(() => {
     rest.forEach(([family, size], k) => {
       if (family !== 'monospace') return;
       e.setAttribute('data-ember-mono-' + i, '');
-      rules.push('[data-ember-mono-' + i + ']' + pseudos[k] + ' { font-family: "` + monoFamily + `" !important; font-size: ' + size + ' !important; }');
+      rules.push('[data-ember-mono-' + i + ']' + pseudos[k] +
+        ' { font-family: "` + monoFamily + `" !important; font-size: ' + size + ' !important; }');
     });
   });
   if (rules.length) {

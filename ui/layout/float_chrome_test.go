@@ -290,9 +290,9 @@ func TestTextIndentMatchesChrome(t *testing.T) {
 		"before an inline-block at the narrowest": styled(
 			`div { float: left; clear: left; border: 1px solid; } span { display: inline-block; height: 10px; }`,
 			ui.Div(ui.Style("width: 1px"),
-				ui.Div(ui.Style("text-indent: 30px"), ui.Span(ui.Style("width: 10px")), ui.Text("​"),
+				ui.Div(ui.Style("text-indent: 30px"), ui.Span(ui.Style("width: 10px")), ui.Text("\u200b"),
 					ui.Span(ui.Style("width: 20px"))),
-				ui.Div(ui.Style("text-indent: -30px"), ui.Span(ui.Style("width: 50px")), ui.Text("​"),
+				ui.Div(ui.Style("text-indent: -30px"), ui.Span(ui.Style("width: 50px")), ui.Text("\u200b"),
 					ui.Span(ui.Style("width: 10px"))),
 			),
 		),

@@ -574,15 +574,11 @@ func (t *tree) rowWidths(r *node) *tableRow {
 			spaces{minContentSpace, maxContentSpace}, inherentSize, horizontal, [2]bool{})
 		hi := t.measureChildSize(c, noSize, noSize, maxContentSpaces, inherentSize, horizontal, [2]bool{})
 		if w := resolve(c.st.Size.Width, none); some(w) {
-			if contentBox(c.st) {
-				w += edges(c.st.Padding, 0).add(c.borders()).horizontal()
-			}
+			w = cellBorderWidth(c, w)
 			lo, hi = max(lo, w), max(lo, w)
 			if most := resolve(c.st.MaxSize.Width, none); some(most) {
 				// a max-width holds the width the cell asks for, as Chrome's
-				if contentBox(c.st) {
-					most += edges(c.st.Padding, 0).add(c.borders()).horizontal()
-				}
+				most = cellBorderWidth(c, most)
 				lo, hi = min(lo, most), min(hi, most)
 			}
 			tr.fixed[i] = true
@@ -593,6 +589,14 @@ func (t *tree) rowWidths(r *node) *tableRow {
 	}
 	r.row = tr
 	return tr
+}
+
+// cellBorderWidth is the width of cell c's border box when its width property says w.
+func cellBorderWidth(c *node, w float32) float32 {
+	if contentBox(c.st) {
+		w += edges(c.st.Padding, 0).add(c.borders()).horizontal()
+	}
+	return w
 }
 
 // rowHeight is r's height with its cells at widths in a table of content width, measured

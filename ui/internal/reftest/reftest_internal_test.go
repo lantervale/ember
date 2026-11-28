@@ -228,9 +228,9 @@ func TestReadPageDecodesAPageAsABrowser(t *testing.T) {
 		{"bom.xht", "café", "utf-8"},
 		{"meta.html", "平和", "shift_jis"},
 	} {
-		got, err := ReadPage(root, c.path)
-		if err != nil {
-			t.Errorf("%s: %v", c.path, err)
+		got, readErr := ReadPage(root, c.path)
+		if readErr != nil {
+			t.Errorf("%s: %v", c.path, readErr)
 			continue
 		}
 		var text string
