@@ -67,21 +67,37 @@ func flagAt(shot image.Image, x, y int) int {
 	return -1
 }
 
+const (
+	// drawLag is how late Chrome may draw a picture after the scroll that
+	// shows it: the frame of Chrome's it is first drawn on.
+	drawLag = 0.05
+	// scrollSettle is the length of the frames ui takes to show a scroll.
+	scrollSettle = 0.001
+	// chromeTries is how many loads Chrome is given to play its pictures
+	// on time.
+	chromeTries = 3
+)
+
 // framesWithin are the frames a picture of n frames, each delay seconds,
-// playing from began, shows between from and to, give or take the frame
-// of Chrome's it is first drawn on.
+// playing from began, shows between from and to, give or take drawLag.
 func framesWithin(began, from, to, delay float64, n int) []int {
 	var out []int
-	for i := max(int(math.Floor((from-0.05-began)/delay)), 0); i <= int(math.Floor((to-began)/delay)); i++ {
+	for i := max(int(math.Floor((from-drawLag-began)/delay)), 0); i <= int(math.Floor((to-began)/delay)); i++ {
 		out = append(out, i%n)
 	}
 	return out
 }
 
-// runUntil runs w's frames until its real time reaches s seconds.
-func runUntil(w *world.World, s float64) {
-	for float64(w.Time().RealElapsed) < s {
-		w.RunFrames(1)
+// runTo runs w's frames, none longer than its fixed step, until its real
+// time is s seconds, the last one shortened to land on it: ui's clock
+// is then Chrome's moment, however long the test took to get there.
+func runTo(w *world.World, s float64) {
+	for {
+		left := float32(s) - w.Time().RealElapsed
+		if left < 1e-5 {
+			return
+		}
+		w.Frame(min(left, w.Time().FixedDelta))
 	}
 }
 
@@ -101,9 +117,10 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	// its play's end, begins the next play when drawn again, and out of
 	// view within a play comes back in step. Chrome's frame was drawn
 	// somewhere between the asking for the shot and its coming back, a
-	// while on a loaded machine, so ui is to show it somewhere in that
-	// span, scrolled when Chrome was, past the one frame a picture drawn
-	// again shows as it left.
+	// while on a loaded machine; ui's clock is run to the very moments
+	// Chrome scrolled and shot, never raced against the test's own, so ui
+	// is to show that frame somewhere in the same span, give or take
+	// drawLag, past the one frame a picture drawn again shows as it left.
 	steps := []struct {
 		at     float64
 		scroll float32
@@ -111,38 +128,56 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	}{{1.0, 3000, "below.gif"}, {2.4, 0, "top.gif"}, {2.7, 3000, ""}, {3.4, 0, "top.gif"}}
 	srv, _ := chrome.Serve(t, build(), files, 0)
 	s := chrome.Open(t, srv.URL, geom.V2(400, 300), 1)
-	var loaded float64
-	s.Eval(`performance.getEntriesByType("navigation")[0].loadEventEnd / 1000`, &loaded)
 	var want []int
 	var scrolled, shotFrom, shotTo []float64
-	sinceLoad := func() float64 {
-		var now float64
-		s.Eval(`performance.now() / 1000`, &now)
-		return now - loaded
-	}
-	for _, step := range steps {
-		var now float64
-		s.Eval(fmt.Sprintf(`new Promise(r => setTimeout(r, Math.max(0, %f * 1000 - performance.now())))
-			.then(() => (scrollTo(0, %g), performance.now() / 1000))`, step.at+loaded, step.scroll), &now)
-		scrolled = append(scrolled, now-loaded)
-		if step.url == "" {
-			continue
+	play := func() {
+		want, scrolled, shotFrom, shotTo = nil, nil, nil, nil
+		var loaded float64
+		s.Eval(`performance.getEntriesByType("navigation")[0].loadEventEnd / 1000`, &loaded)
+		sinceLoad := func() float64 {
+			var now float64
+			s.Eval(`performance.now() / 1000`, &now)
+			return now - loaded
 		}
-		shotFrom = append(shotFrom, sinceLoad())
-		want = append(want, flagAt(s.Shot(), 20, 20))
-		shotTo = append(shotTo, sinceLoad())
-	}
-	require.Len(t, want, 3)
-	for i, w := range want {
-		require.NotEqual(t, -1, w, "Chrome's frame at step %d", i)
+		for _, step := range steps {
+			var now float64
+			s.Eval(fmt.Sprintf(`new Promise(r => setTimeout(r, Math.max(0, %f * 1000 - performance.now())))
+				.then(() => (scrollTo(0, %g), performance.now() / 1000))`, step.at+loaded, step.scroll), &now)
+			scrolled = append(scrolled, now-loaded)
+			if step.url == "" {
+				continue
+			}
+			shotFrom = append(shotFrom, sinceLoad())
+			want = append(want, flagAt(s.Shot(), 20, 20))
+			shotTo = append(shotTo, sinceLoad())
+		}
+		require.Len(t, want, 3)
+		for i, w := range want {
+			require.NotEqual(t, -1, w, "Chrome's frame at step %d", i)
+		}
 	}
 	// Chrome's own timing: below.gif plays from when it is first drawn,
 	// top.gif drawn again after its play's end plays again from then, and
-	// comes back in step with that play.
-	for i, began := range []float64{scrolled[0], scrolled[1], scrolled[1]} {
-		assert.Contains(t, framesWithin(began, shotFrom[i], shotTo[i], 0.4, len(flags)), want[i],
-			"Chrome's frame at step %d, shot between %gs and %gs", i, shotFrom[i], shotTo[i])
+	// comes back in step with that play. A loaded runner can push Chrome's
+	// frames off those plays (on macOS CI a frame ahead at both of top.gif's
+	// steps): such a run is taken again on a fresh load, never compared.
+	off := func() []string {
+		var out []string
+		for i, began := range []float64{scrolled[0], scrolled[1], scrolled[1]} {
+			if !slices.Contains(framesWithin(began, shotFrom[i], shotTo[i], 0.4, len(flags)), want[i]) {
+				out = append(out, fmt.Sprintf("step %d showed frame %d, shot between %gs and %gs",
+					i, want[i], shotFrom[i], shotTo[i]))
+			}
+		}
+		return out
 	}
+	play()
+	for try := 1; try < chromeTries && len(off()) > 0; try++ {
+		t.Logf("Chrome's frames left its plays, taken again: %s", strings.Join(off(), "; "))
+		s.Navigate(fmt.Sprintf("%s/?try=%d", srv.URL, try))
+		play()
+	}
+	require.Empty(t, off(), "Chrome's frames against its plays, in %d tries", chromeTries)
 
 	mapFS := fstest.MapFS{}
 	for name, data := range files {
@@ -155,18 +190,20 @@ func TestAnAnimationOutOfViewStandsAndComesBackAsChromes(t *testing.T) {
 	w.RunFrames(1)
 	k := 0
 	for i, step := range steps {
-		runUntil(w, scrolled[i])
+		// Scrolled just before Chrome was, ui draws the picture again on
+		// one frame and moves its play on the next, at Chrome's moment.
+		runTo(w, scrolled[i]-2*scrollSettle)
 		ui.ScrollTo(d, d.HTML(), geom.V2(0, step.scroll))
+		runTo(w, scrolled[i]-scrollSettle)
+		runTo(w, scrolled[i])
 		if step.url == "" {
 			continue
 		}
-		w.RunFrames(1)
-		runUntil(w, shotFrom[k])
 		var shown []int
-		for {
-			w.RunFrames(1)
+		for at := max(shotFrom[k]-drawLag, scrolled[i]); ; at = min(at+1.0/60, shotTo[k]) {
+			runTo(w, at)
 			shown = append(shown, ui.ShownFrame(d, step.url))
-			if float64(w.Time().RealElapsed) >= shotTo[k] {
+			if at >= shotTo[k] {
 				break
 			}
 		}
