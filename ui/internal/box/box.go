@@ -177,6 +177,8 @@ type Box struct {
 	Hidden int
 	// Columns is a multi-column container's columns, nil for any other box.
 	Columns *Columns
+	// Grid is a grid container's tracks, nil for any other box.
+	Grid *GridTracks
 	// Baseline is the first baseline's y, for alignment.
 	Baseline float32
 	// Wrap is the room a table's captions take inside its box, above and below
@@ -200,6 +202,20 @@ type Box struct {
 	// Collapsed is the borders of a table that collapses them, which it
 	// draws over its cells: nil for any other box.
 	Collapsed []Edge
+}
+
+// GridTracks are a grid container's columns and rows as laid out.
+type GridTracks struct {
+	Columns, Rows GridAxis
+}
+
+// GridAxis is one axis of a grid's tracks: each track's size from the first, Implicit of
+// them before the explicit grid, and the names its track list gives each line of the
+// explicit grid from its first.
+type GridAxis struct {
+	Sizes    []float32
+	Implicit int
+	Names    [][]string
 }
 
 // Columns are a multi-column container's columns, side by side from its
