@@ -160,20 +160,27 @@ func Open(t testing.TB, url string, size geom.Vec2, scale float32, flags ...stri
 	// headless Chrome's on Linux is: the page is told it has the focus.
 	s.call("Emulation.setFocusEmulationEnabled", map[string]any{"enabled": true}, nil)
 	s.Resize(size, scale)
+	s.Navigate(url)
+	var agent string
+	s.Eval(`navigator.userAgent`, &agent)
+	knowAgent(agent)
+	return s
+}
+
+// Navigate opens url, served from this machine, in the session's page
+// and waits for its load event.
+func (s *Session) Navigate(url string) {
+	s.t.Helper()
 	s.call("Page.navigate", map[string]any{"url": url}, nil)
 	for range 500 {
 		var ready string
 		s.Eval(`document.readyState`, &ready)
 		if ready == "complete" {
-			var agent string
-			s.Eval(`navigator.userAgent`, &agent)
-			knowAgent(agent)
-			return s
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("chrome: the page never loaded")
-	return nil
+	s.t.Fatal("chrome: the page never loaded")
 }
 
 // closeWait is how long Chrome may take to close its pages and helpers
