@@ -57,6 +57,25 @@ func TestASpansBackgroundPaintsOverTheTextBeforeItInTheTree(t *testing.T) {
 		"a line's boxes and text in tree order, as CSS 2.1's appendix E, never every background first")
 }
 
+func TestABlockColumnsCutPaintsUnderTheBlocksItHolds(t *testing.T) {
+	inner := el(0, 0, 100, 20, bg(red))
+	cut := el(0, 0, 100, 40, bg(blue), inner)
+	cut.Fragments, cut.Broken = []geom.Rect{{W: 100, H: 20}, {X: 120, W: 100, H: 20}}, true
+	r := newRecorder()
+	Paint(r, tree(el(0, 0, 400, 300, nil, cut)))
+	var order []string
+	for _, o := range r.of("rect") {
+		switch o.Color {
+		case blue:
+			order = append(order, "cut")
+		case red:
+			order = append(order, "inner")
+		}
+	}
+	assert.Equal(t, []string{"cut", "cut", "inner"}, order,
+		"a block's parts in its columns paint with the flow's boxes, as Chrome's, never over what it holds")
+}
+
 func TestASplitSpansSideBordersAreOnItsEnds(t *testing.T) {
 	var sides []geom.Rect
 	for _, o := range paintOne(split()).of("rect") {

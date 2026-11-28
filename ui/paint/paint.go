@@ -1061,8 +1061,9 @@ func padding(b *box.Box, at geom.Vec2) geom.Rect {
 }
 
 // inlineBox reports the box of an inline element laid out in lines, one
-// fragment a line: not an atomic inline, which takes no fragments.
-func inlineBox(b *box.Box) bool { return b.Kind == box.Element && len(b.Fragments) > 0 }
+// fragment a line: not an atomic inline, which takes no fragments, nor a
+// block whose fragments are its parts in the columns that cut it.
+func inlineBox(b *box.Box) bool { return b.Kind == box.Element && len(b.Fragments) > 0 && !b.Broken }
 
 // shown is the style b is painted with: its node's Shown, which holds
 // running transitions' values, or for an anonymous box the nearest
