@@ -753,45 +753,53 @@ func (p *painter) collect(e entry, own, outer *layers) {
 			p.collectPositioned(ce, outer)
 			continue
 		}
-		switch {
-		case p.topLayer(c):
-			p.top = append(p.top, entry{b: c, at: ce.at})
-		case b.Kind == box.Viewport && c.Kind == box.Element:
-			// the root element makes the root stacking context, under its viewport
-			outer.positioned = append(outer.positioned, ce)
-		case c.Kind != box.Element:
-			own.flow = append(own.flow, ce)
+		p.sortChild(ce, st, b, items, own, outer)
+	}
+}
+
+// sortChild puts ce, a box under b with style st, into the layer of own or
+// outer it paints in, then collects what it holds; items says b lays out
+// flex or grid items.
+func (p *painter) sortChild(ce entry, st *style.Computed, b *box.Box, items bool, own, outer *layers) {
+	c := ce.b
+	switch {
+	case p.topLayer(c):
+		p.top = append(p.top, entry{b: c, at: ce.at})
+	case b.Kind == box.Viewport && c.Kind == box.Element:
+		// the root element makes the root stacking context, under its viewport
+		outer.positioned = append(outer.positioned, ce)
+	case c.Kind != box.Element:
+		own.flow = append(own.flow, ce)
+		p.collect(ce, own, outer)
+	case c.Stacked && !startsContext(st) && c.StackZ < 0:
+		outer.negative = append(outer.negative, ce)
+	case c.Stacked && !startsContext(st) && c.StackZ > 0:
+		outer.positive = append(outer.positive, ce)
+	case (c.Dim > 0 || c.Stacked) && !startsContext(st):
+		// A block a faded or positioned inline element holds stacks with it, as that
+		// element does.
+		outer.positioned = append(outer.positioned, ce)
+	case startsContext(st) && st.ZIndex < 0 && !st.ZAuto:
+		outer.negative = append(outer.negative, ce)
+	case startsContext(st) && st.ZIndex > 0 && !st.ZAuto:
+		outer.positive = append(outer.positive, ce)
+	case startsContext(st):
+		outer.positioned = append(outer.positioned, ce)
+	case st.Position != style.Static:
+		ce.pseudo = true
+		outer.positioned = append(outer.positioned, ce)
+		p.hoist(ce, outer)
+	case st.Float != style.FloatNone:
+		ce.pseudo = true
+		own.floats = append(own.floats, ce)
+		p.hoist(ce, outer)
+	default:
+		ce.atomic = items || atomicInline(st)
+		own.flow = append(own.flow, ce)
+		if ce.atomic {
+			p.hoist(ce, outer)
+		} else {
 			p.collect(ce, own, outer)
-		case c.Stacked && !startsContext(st) && c.StackZ < 0:
-			outer.negative = append(outer.negative, ce)
-		case c.Stacked && !startsContext(st) && c.StackZ > 0:
-			outer.positive = append(outer.positive, ce)
-		case (c.Dim > 0 || c.Stacked) && !startsContext(st):
-			// A block a faded or positioned inline element holds stacks with it, as that
-			// element does.
-			outer.positioned = append(outer.positioned, ce)
-		case startsContext(st) && st.ZIndex < 0 && !st.ZAuto:
-			outer.negative = append(outer.negative, ce)
-		case startsContext(st) && st.ZIndex > 0 && !st.ZAuto:
-			outer.positive = append(outer.positive, ce)
-		case startsContext(st):
-			outer.positioned = append(outer.positioned, ce)
-		case st.Position != style.Static:
-			ce.pseudo = true
-			outer.positioned = append(outer.positioned, ce)
-			p.hoist(ce, outer)
-		case st.Float != style.FloatNone:
-			ce.pseudo = true
-			own.floats = append(own.floats, ce)
-			p.hoist(ce, outer)
-		default:
-			ce.atomic = items || atomicInline(st)
-			own.flow = append(own.flow, ce)
-			if ce.atomic {
-				p.hoist(ce, outer)
-			} else {
-				p.collect(ce, own, outer)
-			}
 		}
 	}
 }

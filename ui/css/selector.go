@@ -828,19 +828,9 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 	cs, s.part = partStatesOf(cs)
 	cs, s.inactive = windowInactive(cs)
 	s.part, s.inactive = s.part&^partWindowInactive, s.inactive || s.part&partWindowInactive != 0
-	name, n, err := pseudoElementAt(cs)
+	cs, err := s.takePseudoElement(cs)
 	if err != nil {
 		return Selector{}, err
-	}
-	if n > 0 {
-		s.PseudoElement = name
-		if last := cs[len(cs)-1]; last.Kind == Function {
-			s.pseudoArgs = join(last.Args)
-		}
-		cs = cs[:len(cs)-n]
-		if len(cs) == 0 || cs[len(cs)-1].Kind == Whitespace || cs[len(cs)-1].Kind == Delim && cs[len(cs)-1].Text != "*" {
-			cs = append(slices.Clip(cs), Component{Token: Token{Kind: Delim, Text: "*", Pos: cs0Pos(cs)}})
-		}
 	}
 	i := 0
 	var unknown *SelectorError
@@ -892,6 +882,25 @@ func parseComplex(cs []Component) (Selector, *SelectorError) {
 	}
 	s.Specificity = s.specificity()
 	return s, nil
+}
+
+// takePseudoElement moves a trailing pseudo-element of cs onto s and
+// returns what stands before it, a universal selector in its place when
+// nothing does.
+func (s *Selector) takePseudoElement(cs []Component) ([]Component, *SelectorError) {
+	name, n, err := pseudoElementAt(cs)
+	if err != nil || n == 0 {
+		return cs, err
+	}
+	s.PseudoElement = name
+	if last := cs[len(cs)-1]; last.Kind == Function {
+		s.pseudoArgs = join(last.Args)
+	}
+	cs = cs[:len(cs)-n]
+	if len(cs) == 0 || cs[len(cs)-1].Kind == Whitespace || cs[len(cs)-1].Kind == Delim && cs[len(cs)-1].Text != "*" {
+		cs = append(slices.Clip(cs), Component{Token: Token{Kind: Delim, Text: "*", Pos: cs0Pos(cs)}})
+	}
+	return cs, nil
 }
 
 // specificity is the selector's: its compounds', a pseudo-element's, and

@@ -26,6 +26,16 @@ const (
 	nsMath = "math"
 )
 
+// xmlPage reports whether the page at p is XML, XHTML or not, by its
+// extension.
+func xmlPage(p string) bool {
+	switch strings.ToLower(path.Ext(p)) {
+	case ".xht", ".xhtml", ".xml":
+		return true
+	}
+	return false
+}
+
 // Base is the address the pages are read at: a page's address is Base
 // and its path, which its references to other files resolve from.
 const Base = "http://wpt.test/"
@@ -86,11 +96,11 @@ func ReadPage(root, p string) (*Page, error) {
 	}
 	page := &Page{Path: p}
 	var text string
-	switch ext := strings.ToLower(path.Ext(p)); ext {
-	case ".svg":
+	switch ext := strings.ToLower(path.Ext(p)); {
+	case ext == ".svg":
 		page.Skip = "SVG document"
 		return page, nil
-	case ".xht", ".xhtml", ".xml":
+	case xmlPage(p):
 		text, page.Encoding = decodePage(data, served(file), true)
 		page.Root, err = parseXML(text)
 	default:

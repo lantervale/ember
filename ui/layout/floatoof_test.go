@@ -20,12 +20,12 @@ func TestAFloatAfterABrStandsBelowItsLineWithWhatItHolds(t *testing.T) {
 
 	abs = absBox(nil)
 	f = el(dom.Div, float(style.FloatLeft, 50, 50), abs)
-	tall := func(st *style.Computed) { st.LineHeight = style.LineHeight{Px: 40} }
+	tallLine := func(st *style.Computed) { st.LineHeight = style.LineHeight{Px: 40} }
 	p = el(dom.Div, func(st *style.Computed) {
 		st.Display = style.Block
 		st.Overflow = style.Size[style.Overflow]{Width: style.Hidden, Height: style.Hidden}
 	},
-		el(dom.Span, tall, el(dom.Br, nil), f))
+		el(dom.Span, tallLine, el(dom.Br, nil), f))
 	tr = Layout(el(dom.Div, block, p), geom.V2(400, 300), ahemFonts{})
 	assert.Equal(t, float32(40), onPage(tr.Of[f]).Y, "below the first line")
 	assert.Equal(t, onPage(tr.Of[f]), onPage(tr.Of[abs]), "alone on its line too")
@@ -36,7 +36,7 @@ func TestAFloatAfterABrStandsBelowItsLineWithWhatItHolds(t *testing.T) {
 		st.Display = style.Block
 		st.Overflow = style.Size[style.Overflow]{Width: style.Hidden, Height: style.Hidden}
 	},
-		el(dom.Span, tall, text("\n  "), el(dom.Br, nil), text("\n  "), f, text("\n")))
+		el(dom.Span, tallLine, text("\n  "), el(dom.Br, nil), text("\n  "), f, text("\n")))
 	tr = Layout(el(dom.Div, block, p), geom.V2(400, 300), ahemFonts{})
 	assert.Equal(t, float32(40), onPage(tr.Of[f]).Y, "below the first line, the white space round it collapsed")
 	assert.Equal(t, onPage(tr.Of[f]), onPage(tr.Of[abs]), "and what it holds with it")

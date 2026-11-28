@@ -236,8 +236,8 @@ func TestACellsMaxWidthHoldsTheWidthItAsksFor(t *testing.T) {
 
 func TestAnEmptyCellStandsOnNoBaselineBesideCellsHoldingSomething(t *testing.T) {
 	onBase := func(st *style.Computed) { st.VerticalAlign = style.AlignBaselineText }
-	tall := func(st *style.Computed) { onBase(st); st.Size.Height = style.Px(40) }
-	empty := el(dom.Td, tall)
+	tallCell := func(st *style.Computed) { onBase(st); st.Size.Height = style.Px(40) }
+	empty := el(dom.Td, tallCell)
 	r := row(cell("H", onBase), empty)
 	tr := lay(el(dom.Div, block, table(r)), 400)
 	assert.Equal(t, float32(40), tr.Of[r].Size.Y, "its height alone, not lowered to the text's baseline, as Chrome's")
